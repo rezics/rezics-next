@@ -100,7 +100,7 @@ export type ArchiveMergeReviewInput =
       kind: 'journal';
       subjectId: string;
       sessionId: string;
-      fields: { startDate?: ArchiveFieldChoice; finishDate?: ArchiveFieldChoice };
+      fields: { startDate?: ArchiveFieldChoice; finishDate?: ArchiveFieldChoice; reflection?: ArchiveFieldChoice };
     };
 
 export type ArchiveMergeSelection = { ordinal: number; reviewRevision: number };
@@ -247,7 +247,7 @@ function unchangedPersonalResult(item: Item): Record<string, unknown> {
       },
     };
   const fields = Object.fromEntries(
-    ['startDate', 'finishDate']
+    ['startDate', 'finishDate', 'reflection']
       .filter((field) => choices[field] !== undefined)
       .map((field) => [field, choices[field] === 'preserve' ? 'preserved' : 'unchanged']),
   );
@@ -807,7 +807,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       if (item.section !== 'journals' || !sameIdentity(item.source_subject_id, evidence.subjectId))
         throw new ProblemError('invalid_request');
       if (!isRoutedId(decision.subjectId) || !isRoutedId(decision.sessionId)) throw new ProblemError('invalid_request');
-      const choices = selectedFields(decision.fields, ['startDate', 'finishDate']);
+      const choices = selectedFields(decision.fields, ['startDate', 'finishDate', 'reflection']);
       return identityTime(async (at) => {
         const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
         const observation = await readLibraryProfileSourceObservation(
@@ -854,6 +854,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           journalRevision: current.revision,
           startDate: current.startDate,
           finishDate: current.finishDate,
+          reflection: current.reflection,
         };
         if (session.subjectId !== source.subjectId)
           return {
@@ -866,7 +867,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         const archiveJournal = object(evidence.journal) ?? {};
         const patch: Record<string, unknown> = { revision: current.revision };
         let unsupportedField: string | null = null;
-        for (const field of ['startDate', 'finishDate'] as const) {
+        for (const field of ['startDate', 'finishDate', 'reflection'] as const) {
           const choice = choices[field];
           if (choice === undefined || choice === 'preserve') continue;
           if (choice === 'clear') patch[field] = null;
@@ -884,10 +885,15 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         if (!parsed.ok)
           return {
             status: 'unsupported',
-            review: { ...base, current: currentBinding, reason: 'invalid-journal-date', field: parsed.field },
+            review: {
+              ...base,
+              current: currentBinding,
+              reason: parsed.field === 'reflection' ? 'invalid-journal-reflection' : 'invalid-journal-date',
+              field: parsed.field,
+            },
           };
 
-        const changes = (['startDate', 'finishDate'] as const).some((field) => {
+        const changes = (['startDate', 'finishDate', 'reflection'] as const).some((field) => {
           const choice = choices[field];
           if (choice === undefined || choice === 'preserve') return false;
           const next = choice === 'clear' ? null : archiveJournal[field];
@@ -1092,21 +1098,26 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         },
       };
     }
-    if (item.status === 'mapped' && item.section === 'journals' && object(decision.current)) {
+    if (
+      (item.status === 'mapped' || item.status === 'already_equal') &&
+      item.section === 'journals' &&
+      object(decision.current)
+    ) {
       const profile = object(decision.profile);
       if (!profile) return null;
       const evidence = object(decodeRecord(item).journal);
       if (!evidence) return null;
       const choices = object(decision.fields) ?? {};
       const fields: Record<string, unknown> = {};
+      const patch: Record<string, unknown> = { revision: object(decision.current)!.journalRevision };
       const current = object(decision.current)!;
-      for (const field of ['startDate', 'finishDate'] as const) {
+      for (const field of ['startDate', 'finishDate', 'reflection'] as const) {
         const choice = choices[field] as ArchiveFieldChoice | undefined;
         if (choice !== undefined) {
           const value = choice === 'set' ? evidence[field] : null;
+          if (choice !== 'preserve') patch[field] = value;
           fields[field] = {
             choice,
-            value,
             outcome:
               choice === 'preserve'
                 ? 'preserved'
@@ -1125,6 +1136,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           sessionRevision: object(decision.current)!.sessionRevision,
           state: object(decision.current)!.state,
           journalRevision: object(decision.current)!.journalRevision,
+          patch,
           profile,
           fields,
         },
@@ -1164,6 +1176,23 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       if (item.status === 'applying') {
         if (!item.native_command_kind || !item.native_request_key || !item.native_operands)
           throw new Error('Archive merge applying row is missing its native command binding');
+        if (item.native_command_kind === 'journal' && !Object.hasOwn(item.native_operands, 'patch')) {
+          const operands = item.native_operands;
+          const patch: Record<string, unknown> = { revision: operands.journalRevision };
+          const fields = object(operands.fields) ?? {};
+          for (const field of ['startDate', 'finishDate']) {
+            const selected = object(fields[field]);
+            if (selected?.choice === 'set') patch[field] = selected.value;
+            else if (selected?.choice === 'clear') patch[field] = null;
+          }
+          operands.patch = patch;
+          operands.archive = { uploadId: id, ordinal, reviewRevision };
+          await tx.query(
+            `UPDATE library.library_archive_merge_item SET native_operands=$5::jsonb
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+            [route, accountId, id, ordinal, canonicalize(operands)],
+          );
+        }
         return {
           mode: 'run' as const,
           section: item.section,
@@ -1177,7 +1206,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       if (upload.cancelled_at !== null) throw conflict();
       if (
         (item.status === 'mapped' && !isPersonalRecovery(item.section)) ||
-        item.status === 'already_equal' ||
+        (item.status === 'already_equal' && item.section !== 'journals') ||
         item.status === 'preserved'
       ) {
         let result = item.result;
@@ -1213,7 +1242,14 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         return { mode: 'done' as const, section: item.section, status: item.status, result };
       }
       const key = commandKey(id, ordinal, item.review_revision);
-      const binding = { ...proposed, key };
+      const binding = {
+        ...proposed,
+        key,
+        operands: {
+          ...proposed.operands,
+          ...(proposed.kind === 'journal' ? { archive: { uploadId: id, ordinal, reviewRevision } } : {}),
+        },
+      };
       const updated = await tx.query(
         `UPDATE library.library_archive_merge_item
         SET status='applying',native_command_kind=$5,native_request_key=$6,native_operands=$7::jsonb,result=NULL
@@ -1321,13 +1357,13 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         !fields
       )
         throw new Error('Archive journal binding is invalid');
-      const patch: Record<string, unknown> = { revision: effect.operands.journalRevision };
+      // The entire original native body was retained before dispatch; never rebuild at a newer revision.
+      const patch = effect.operands.patch;
       const fieldOutcomes: Record<string, string> = {};
-      for (const field of ['startDate', 'finishDate'] as const) {
+      for (const field of ['startDate', 'finishDate', 'reflection'] as const) {
         const selected = object(fields[field]);
         if (!selected || (selected.choice !== 'preserve' && selected.choice !== 'set' && selected.choice !== 'clear'))
           continue;
-        if (selected.choice !== 'preserve') patch[field] = selected.choice === 'clear' ? null : selected.value;
         fieldOutcomes[field] = typeof selected.outcome === 'string' ? selected.outcome : 'unchanged';
       }
       const parsedPatch = parseProgressSessionJournalPatch(patch);
@@ -1342,6 +1378,15 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           state: effect.operands.state,
         },
         assert: async (tx: CommandTransaction) => {
+          const archive = object(effect.operands.archive);
+          if (!archive || typeof archive.uploadId !== 'string') throw new ProgressConflictError();
+          const upload = await readUpload(tx, ownerRoute, owner.accountId, archive.uploadId, true);
+          const at = commandTime(tx);
+          if (!at || uploadState(upload, Date.parse(authoritativeTimeValue(at))) !== 'ready')
+            throw new ProgressConflictError();
+          const item = await readItem(tx, ownerRoute, owner.accountId, archive.uploadId, archive.ordinal as number);
+          if (item.review_revision !== archive.reviewRevision || item.native_request_key !== effect.key)
+            throw new ProgressConflictError();
           const session = await tx.query<{ subjectId: string; revision: number; state: string }>(
             `SELECT subject_id::text AS "subjectId",revision,state FROM library.progress_session
              WHERE route=$1 AND account_id=$2 AND session_id=$3`,

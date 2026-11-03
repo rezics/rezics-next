@@ -17,43 +17,50 @@ authority.
 
 The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET /:id`, `GET /:id/preview`,
 `PATCH /:id/review`, `POST /:id/apply`, `GET /:id/results`, `DELETE /:id`, and `POST /:id/prune` journey. Review
-and preview are private and no-store. The canonical archive consumer8bb owns the only archive interface; manual
-Entry and journal editing retain their existing interface owners.
+and preview are private and no-store. Canonical archive8bb/Web323 owns the only archive interface; Web318/142 continues to own the existing
+occurrence editor.
 
-The retained generated client exposes `libraryArchiveMerges.post(body: unknown)` and owner `.preview.get`,
-`.review.patch`, and `.apply.post({ordinals: number[]})`. Preview records and review results currently omit the
-native `reviewRevision`; this generated surface cannot confirm personal fact recovery. The required installed
-upload operand is `string | {manifest: Record<string, unknown>; records: Record<string, unknown>[]}`, and apply
-must take `{items: {ordinal: number; reviewRevision: number}[]}` from the returned review. Canonical Web file
-admission remains unavailable until that complete generated handoff is delivered.
-
-| Retained row  | Explicit current target                         | Selected fields           | Native operation                                |
-| ------------- | ----------------------------------------------- | ------------------------- | ----------------------------------------------- |
-| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`        | `createEntryPersonalCommands().saveAnnotations` |
-| `journals`    | Canonical Subject, existing non-retired Session | `startDate`, `finishDate` | `createSessionCommands().patchSessionJournal`   |
+| Retained row  | Explicit current target                         | Selected fields                         | Native operation                                |
+| ------------- | ----------------------------------------------- | --------------------------------------- | ----------------------------------------------- |
+| `annotations` | Canonical Subject, existing Entry incarnation   | `note`, `priority`                      | `createEntryPersonalCommands().saveAnnotations` |
+| `journals`    | Canonical Subject, existing non-retired Session | `startDate`, `finishDate`, `reflection` | `createSessionCommands().patchSessionJournal`   |
 
 Each field choice is `preserve`, `set`, or `clear`. Missing selection preserves the current field. An explicit clear
 uses the native null/clear operation. Setting an absent or null archived value is unsupported. Empty notes and
 invalid priorities are rejected by the installed native parsers. Journal dates retain year, year/month, or
-year/month/day precision and pass through the existing calendar-date parser. Reflection is evidence only; no
-archived reflection, Session creation, completion, repeat counter, state, progress, or unit checklist is replayed.
+year/month/day precision and pass through the existing calendar-date parser. Reflection uses the same native parser:
+`set` preserves exact plain text, including empty text and whitespace; `clear` explicitly writes null. Absent fields
+and null cannot be set. Unsupported reflection evidence remains visible with `unsupported-field-value` or
+`invalid-journal-reflection`; no text is truncated. The native bounds are 2,000 Unicode characters, 4,096 UTF-8 bytes
+and a 16,384-byte escaped PATCH frame. Malformed Unicode reflection evidence is retained encoded for review, while
+other malformed archive strings remain rejected. Session creation, completion, repeat counters, state, progress,
+assessment and unit checklists are never replayed.
+
+Decision: native reflection text excludes malformed Unicode and U+0000, which the native text column cannot store;
+archive review retains that evidence and explicitly refuses its adoption. Omitted assessment remains native-owned;
+its coordinated producer uses journal-local CAS and version 3 exports, with V1/V2 absence never inferred.
 
 Entry application binds the current incarnation, Entry revision, annotation revision, canonical Subject anchor,
 profile pin, and selected field values. The native annotation command rechecks that binding and always records the
 visibility outcome as private. Journal application binds current Session and journal revisions, state, Subject,
-profile anchor, and selected dates. Journal application also needs the caller's current `progress_session:update`
+profile anchor, and the selected dates/reflection. Review exposes current reflection for comparison. Journal application also needs the caller's current `progress_session:update`
 scope for the native journal command; the archive route's `library_entry:update` scope alone is insufficient. The
 native journal command rechecks owner authority and that binding. Imported consumption dates do not change Session
 start/completion timestamps, progress history, or native command audit time. Journal patch state and its native
 receipt remain independent of archive progress recovery commands, revisions and checkpoints.
 
 Outcomes are per item: `accepted`, `unchanged`, `stale`, `unsupported`, or `failed`. A changed target, incarnation,
-revision, profile, or review epoch cannot reuse an earlier confirmation or native receipt. Preview/review expose `reviewRevision`; apply requires `{items:[{ordinal,reviewRevision}]}` and checks the
-whole selection before effects (409 for any replaced review, including a mixed batch). A second revision check
-precedes each native execution or receipt replay. Accepted items cannot be reviewed again. Item keys retain the
+revision, profile, or review epoch cannot reuse an earlier confirmation or native receipt. Preview and review expose
+`reviewRevision`; apply requires `{items:[{ordinal,reviewRevision}]}` and rejects an old or mixed confirmation before
+any effect. Accepted items cannot be refreshed. Item keys retain the
 original upload/ordinal/review-revision identity. Stored review JSON is canonicalized so JSONB key order does not
 change a binding. Lost acknowledgements replay through the native receipt and return the original field outcomes.
-Partial application is retained across cancellation and evidence expiry.
+Partial application is retained across cancellation and evidence expiry. One selected journal item retains the original
+native key and entire PATCH body before dispatch, combining dates and reflection at one reviewed journal revision.
+The native admission guard checks the exact session/profile and live retained upload in the real command transaction;
+receipt replay recovers an original commit without rechecking an obsolete CAS or applying at a later revision.
+Native receipts and archive results contain identifiers, revision, change and field outcomes only. Current reflection
+and selected text stay exclusively in existing retained review/intent rows, removed by existing prune/account erasure.
 
 ## Retention and cost
 
@@ -62,14 +69,31 @@ The consumer keeps its existing single retained upload per owner for seven days.
 apply accept at most 20 selected rows; cleanup and account-erasure steps remove at most 100 retained rows. Selected
 annotation and journal rows share the existing retained item table and lifecycle.
 
-The [merge owner's complete caller derivation](library-archive-merge.md#bounds-and-verification) charges every archive
-operation and repeated caller authority/receipt read, producer pages (16 rows/120,000 bytes), consumer pages
-(100 rows plus lookahead), retained canonical operands, full simultaneous JSON serialization, and each native
-command's preparation, locks, receipts, History, export fences and summaries. Each apply attempt adds preflight,
-one begin per reached selection and one acknowledgement/refusal per completed dispatch; retries repeat their
-actual work. Cleanup selects at most 100 retained keys; native cascades retain their own bounds. No payer allowance
-is increased. Source-derived bounds do not establish measured growth; native64/512/4096, final-page, negative-target,
-maximum-field, replay, disclosure-cancellation, expiry and physical cleanup measurements remain deferred to integration.
+The [merge owner caller derivation](library-archive-merge.md#bounds-and-verification) remains authoritative for
+shared archive and nested native work.
+
+For fixed addressed selections `R <= 20`, journal fields `F <= 3`, reflection bytes `B <= 4096` and
+escaped frame `J <= 16384`, whole-caller work is `Cupload + Cpages + R × (Creview + Cintent + Cnative + Cresult)
+
+- Ccleanup`, repeating only the reached terms on retries. Upload remains `O(encoded bytes + N)`under existing caps;
+  preview/results seek at most`P+1 <= 101`indexed retained rows. Review performs exact retained-row, canonical
+  Subject/profile, owner/session and journal reads per selection; no owner-history search is involved. The native
+  current-profile/access reads and preparation remain charged per target, including their independent authority gates.
+  Apply preflights`R`retained keys under the upload lock, repeats each revision check at begin, serializes one original
+  patch and bounded guard into existing durable operands, then records one small result per reached item. Text appears
+  once in the original PATCH operands, keeping maximum escaped frames inside the existing 16,384-byte JSONB bound.
+  Review retains at most one bounded current reflection for comparison. JSON parsing, equality, hashing and full caller
+  serialization cost`O(R × (F + J))`, including simultaneous source, review and operand copies.
+
+Each native command charges current owner/scopes/currentness and terminal fencing, exact session/journal locking,
+profile checks, upload lifetime/cancellation lock, one native receipt lookup, at most one journal CAS, ordinary command
+fence and ID-only event/export-source invalidation. Native receipts retain only identifiers/revision/change. Replay
+repeats current native authority and receipt work, returns the original acknowledgement, and adds no write/event.
+Cancellation/expiry blocks uncommitted native effects under the upload lock and preserves accepted edits. Cleanup
+uses existing indexed pages of at most 100 retained keys and native account erasure; no new payer, reservation, scan,
+side store or background task is added. Holding `R,F,B` fixed keeps this addressed work independent of unrelated
+sessions/history/evidence. Native64/512/4096, browser/root and composed growth measurements remain controller-owned
+and unmeasured here; source derivation does not establish those execution results.
 
 ## Verification and ownership
 
@@ -79,5 +103,5 @@ missing targets, per-item replay, cancellation, expiry pruning, foreign-owner de
 checks Session progress and command timestamps remain separate from imported dates. Focused tests and workspace
 typechecks are worker checks; frozen acceptance and composed native growth measurements run after integration.
 
-After landing, Commerce receives the exact installed review/apply methods and field outcomes. The canonical archive consumer8bb remains the
+After landing, Commerce receives the exact installed review/apply methods and field outcomes. Web323 remains the
 single coordinated archive consumer; no second restoration interface is introduced.

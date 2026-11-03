@@ -132,17 +132,26 @@ function parse(bytes: Uint8Array): unknown {
   } catch {
     fail('invalid_json');
   }
-  const pending = [value];
+  // Malformed reflection text is retained only in the original encoded evidence row,
+  // so review can explain why it cannot enter a native journal. All other strings stay strict.
+  const journalObjects = new WeakSet<object>();
+  if (value && typeof value === 'object' && Array.isArray((value as ObjectValue).records))
+    for (const row of (value as { records: unknown[] }).records)
+      if (row && typeof row === 'object' && (row as ObjectValue).section === 'journals') {
+        const journal = (row as ObjectValue).journal;
+        if (journal && typeof journal === 'object') journalObjects.add(journal);
+      }
+  const pending = [{ value, reflection: false }];
   while (pending.length) {
-    const next = pending.pop();
-    if (typeof next === 'string' && !next.isWellFormed()) fail('invalid_json');
+    const { value: next, reflection } = pending.pop()!;
+    if (typeof next === 'string' && !next.isWellFormed() && !reflection) fail('invalid_json');
     if (typeof next === 'number' && !Number.isFinite(next)) fail('invalid_json');
     if (next && typeof next === 'object') {
-      if (Array.isArray(next)) for (const child of next) pending.push(child);
+      if (Array.isArray(next)) for (const child of next) pending.push({ value: child, reflection: false });
       else
         for (const [key, child] of Object.entries(next)) {
           if (!key.isWellFormed()) fail('invalid_json');
-          pending.push(child);
+          pending.push({ value: child, reflection: key === 'reflection' && journalObjects.has(next) });
         }
     }
   }
@@ -330,7 +339,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
         'lastChangedAt',
         'journal',
       ]) ||
-      !exactKeys(journal, ['sessionId', 'revision', 'reflection'], ['startDate', 'finishDate']) ||
+      !exactKeys(journal, ['sessionId', 'revision'], ['startDate', 'finishDate', 'reflection']) ||
       !uuid(row.accountId) ||
       !uuid(row.sessionId) ||
       !uuid(row.subjectId) ||
@@ -349,7 +358,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
       (journal.revision as number) < 0 ||
       (Object.hasOwn(journal, 'startDate') && journal.startDate !== null && !validJournalDate(journal.startDate)) ||
       (Object.hasOwn(journal, 'finishDate') && journal.finishDate !== null && !validJournalDate(journal.finishDate)) ||
-      (journal.reflection !== null && typeof journal.reflection !== 'string')
+      (Object.hasOwn(journal, 'reflection') && journal.reflection !== null && typeof journal.reflection !== 'string')
     )
       fail('invalid_record');
     return;

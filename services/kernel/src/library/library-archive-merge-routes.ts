@@ -108,7 +108,14 @@ const reviewItem = t.Union([
       kind: t.Literal('journal'),
       subjectId: id,
       sessionId: id,
-      fields: t.Object({ startDate: t.Optional(fieldChoice), finishDate: t.Optional(fieldChoice) }, closed),
+      fields: t.Object(
+        {
+          startDate: t.Optional(fieldChoice),
+          finishDate: t.Optional(fieldChoice),
+          reflection: t.Optional(fieldChoice),
+        },
+        closed,
+      ),
     },
     closed,
   ),
