@@ -8,8 +8,13 @@ import { partitionReadClient } from '../database/read-snapshot.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readVisibleRatingQuestion, ratingQuestionIdentity, ratingQuestionView } from '../rating/question-directory.ts';
-import { readOwnCountedVotes, readOwnVotes } from '../rating/own-votes.ts';
-import { VOTE_SCOPE } from '../rating/votes.ts';
+import {
+  createOwnCountedVoteReader,
+  type OwnCountedVotePreparation,
+  type OwnCountedVoteReadResult,
+  type OwnCountedVoteRequest,
+} from '../rating/register.ts';
+import { STANDARD_QUESTION_ID, VOTE_SCOPE } from '../rating/votes.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
@@ -33,16 +38,26 @@ export type ViewerEntryFact =
   | Readonly<{ state: 'present'; incarnationId: string | null; entryState: string | null; revision: number }>
   | Readonly<{ state: 'absent' }>
   | Readonly<{ state: 'unavailable'; reason: 'scope' }>;
+type VoteIdentity = Readonly<{ requestedTargetId: string; countingTargetId: string; sourceEpoch: string }>;
+type VoteRevision = Readonly<{ originalTargetId: string; revision: number; countedRevision: number }>;
 export type ViewerVoteFact =
-  | Readonly<{
-      state: 'present';
-      questionId: string;
-      questionRevision: number;
-      units: number;
-      revision: number;
-    }>
-  | Readonly<{ state: 'absent'; questionId: string; questionRevision: number }>
-  | Readonly<{ state: 'unavailable'; reason: 'scope' | 'question' }>;
+  | (VoteIdentity &
+      VoteRevision &
+      Readonly<{
+        state: 'present';
+        questionId: string;
+        questionRevision: number;
+        units: number;
+      }>)
+  | (VoteIdentity &
+      VoteRevision &
+      Readonly<{
+        state: 'clear';
+        questionId: string;
+        questionRevision: number;
+      }>)
+  | (VoteIdentity & Readonly<{ state: 'absent'; questionId: string; questionRevision: number }>)
+  | Readonly<{ state: 'unavailable'; reason: 'scope' | 'question' | 'subject' }>;
 export type ViewerFact = Readonly<{
   rowKey: string;
   subjectId: string;
@@ -60,6 +75,16 @@ export type ViewerFactsPage =
 const closed = { additionalProperties: false } as const;
 const idSchema = t.String({ format: 'uuid' });
 const nullableStringSchema = t.Union([t.String(), t.Null()]);
+const voteIdentitySchema = {
+  requestedTargetId: idSchema,
+  countingTargetId: idSchema,
+  sourceEpoch: t.String(),
+};
+const voteRevisionSchema = {
+  originalTargetId: idSchema,
+  revision: t.Integer({ minimum: 1 }),
+  countedRevision: t.Integer({ minimum: 1 }),
+};
 const viewerFactSchema = t.Object(
   {
     rowKey: t.String(),
@@ -81,19 +106,38 @@ const viewerFactSchema = t.Object(
       t.Object(
         {
           state: t.Literal('present'),
+          ...voteIdentitySchema,
+          ...voteRevisionSchema,
           questionId: idSchema,
           questionRevision: t.Integer({ minimum: 1 }),
           units: t.Integer(),
-          revision: t.Integer({ minimum: 1 }),
         },
         closed,
       ),
       t.Object(
-        { state: t.Literal('absent'), questionId: idSchema, questionRevision: t.Integer({ minimum: 1 }) },
+        {
+          state: t.Literal('clear'),
+          ...voteIdentitySchema,
+          ...voteRevisionSchema,
+          questionId: idSchema,
+          questionRevision: t.Integer({ minimum: 1 }),
+        },
         closed,
       ),
       t.Object(
-        { state: t.Literal('unavailable'), reason: t.Union([t.Literal('scope'), t.Literal('question')]) },
+        {
+          state: t.Literal('absent'),
+          ...voteIdentitySchema,
+          questionId: idSchema,
+          questionRevision: t.Integer({ minimum: 1 }),
+        },
+        closed,
+      ),
+      t.Object(
+        {
+          state: t.Literal('unavailable'),
+          reason: t.Union([t.Literal('scope'), t.Literal('question'), t.Literal('subject')]),
+        },
         closed,
       ),
     ]),
@@ -136,7 +180,14 @@ export type PreparedViewerFacts = Readonly<{
 }>;
 
 type EntryRow = Awaited<ReturnType<typeof viewerEntries.run>>[number];
-type CountedVote = { units: number; revision: number; at: string };
+// Native preparations belong to this reader instance and never cross the staged API as DTOs.
+type NativeStage = {
+  reader: ReturnType<typeof createOwnCountedVoteReader>;
+  request: OwnCountedVoteRequest;
+  preparation?: OwnCountedVotePreparation;
+  read?: OwnCountedVoteReadResult;
+};
+const nativeStages = new WeakMap<PreparedViewerFacts, NativeStage>();
 
 function unavailable(reason: Extract<ViewerFactsPage, { state: 'unavailable' }>['reason']): ViewerFactsPage {
   return { state: 'unavailable', reason, retryable: reason !== 'response_limit' };
@@ -234,7 +285,7 @@ export async function prepareViewerFacts(
     canReadVotes ? readVisibleRatingQuestion(dependencies, actor, questionId, deadline, false) : Promise.resolve(null),
   ]);
   const records = originals.map((subjectId, index) => ({ subjectId, mapping: mappings[index]! }));
-  return Object.freeze({
+  const prepared = Object.freeze({
     accountId: actor.accountId,
     actorIdentity: actorIdentity(actor),
     questionId,
@@ -244,6 +295,17 @@ export async function prepareViewerFacts(
     canReadEntries,
     canReadVotes,
   });
+  if (canReadVotes && questionId === STANDARD_QUESTION_ID && question) {
+    const reader = createOwnCountedVoteReader(dependencies);
+    const request = Object.freeze({ actor, targetIds: Object.freeze(originals) });
+    const result = await reader.prepare(request, deadline);
+    nativeStages.set(prepared, {
+      reader,
+      request,
+      ...(result.status === 'prepared' ? { preparation: result.preparation } : {}),
+    });
+  }
+  return prepared;
 }
 
 /** Read all private facts on the consumer's already-owned repeatable-read client. */
@@ -281,29 +343,18 @@ export async function readViewerFacts(
   }
   const entries = new Map(entryRows.map((row) => [row.subjectId, row]));
 
-  let directVotes = new Map<string, CountedVote>();
-  let canonicalVotes = new Map<string, CountedVote>();
-  if (prepared.canReadVotes && prepared.question) {
-    const directIds = [
-      ...new Set(
-        prepared.rows.flatMap((row) => {
-          const mapping = mappingByOriginal.get(row.subjectId)!;
-          return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [] : [row.subjectId];
-        }),
-      ),
-    ];
-    const redirectedIds = [
-      ...new Set(
-        prepared.rows.flatMap((row) => {
-          const mapping = mappingByOriginal.get(row.subjectId)!;
-          return mapping.state === 'mapped' && mapping.terminal !== row.subjectId ? [mapping.terminal] : [];
-        }),
-      ),
-    ];
-    if (directIds.length) directVotes = await readOwnVotes(client, actor, prepared.questionId, directIds);
-    if (redirectedIds.length)
-      canonicalVotes = await readOwnCountedVotes(client, actor, prepared.questionId, redirectedIds);
+  const native = nativeStages.get(prepared);
+  if (prepared.canReadVotes && prepared.questionId === STANDARD_QUESTION_ID && prepared.question && !native)
+    return unavailable('currentness');
+  if (native && (!native.preparation || actor !== native.request.actor)) return unavailable('currentness');
+  if (native?.preparation) {
+    native.read = await native.reader.read(client, native.request, native.preparation);
+    if (native.read.status !== 'read') return unavailable('currentness');
   }
+  const nativeTargets = new Map(native?.preparation?.targets.map((target) => [target.requestedTargetId, target]));
+  const nativeRows = new Map(
+    native?.read?.status === 'read' ? native.read.rows.map((row) => [row.countingTargetId, row]) : [],
+  );
 
   const rows = prepared.rows.map((input): ViewerFact => {
     const mapping = mappingByOriginal.get(input.subjectId)!;
@@ -322,28 +373,30 @@ export async function readViewerFacts(
             } as const;
           })()
         : ({ state: 'absent' } as const);
-    const vote = !prepared.canReadVotes
-      ? ({ state: 'unavailable', reason: 'scope' } as const)
-      : !prepared.question
-        ? ({ state: 'unavailable', reason: 'question' } as const)
+    const vote: ViewerVoteFact = !prepared.canReadVotes
+      ? { state: 'unavailable', reason: 'scope' }
+      : !native?.preparation || !prepared.question
+        ? { state: 'unavailable', reason: 'question' }
         : (() => {
-            const own =
-              mapping.state === 'mapped' && mapping.terminal !== input.subjectId
-                ? canonicalVotes.get(target)
-                : directVotes.get(input.subjectId);
-            return own
-              ? ({
-                  state: 'present',
-                  questionId: prepared.question!.id,
-                  questionRevision: prepared.question!.revision,
-                  units: own.units,
-                  revision: own.revision,
-                } as const)
-              : ({
-                  state: 'absent',
-                  questionId: prepared.question!.id,
-                  questionRevision: prepared.question!.revision,
-                } as const);
+            const target = nativeTargets.get(input.subjectId);
+            if (!target || 'state' in target) return { state: 'unavailable', reason: 'subject' } as const;
+            const identity = {
+              requestedTargetId: target.requestedTargetId,
+              countingTargetId: target.countingTargetId,
+              sourceEpoch: target.sourceEpoch,
+              questionId: prepared.question.id,
+              questionRevision: prepared.question.revision,
+            };
+            const own = nativeRows.get(target.countingTargetId);
+            if (!own) return { ...identity, state: 'absent' } as const;
+            const revision = {
+              originalTargetId: own.originalTargetId,
+              revision: own.revision,
+              countedRevision: own.countedRevision,
+            };
+            return own.units === null
+              ? ({ ...identity, ...revision, state: 'clear' } as const)
+              : ({ ...identity, ...revision, state: 'present', units: own.units } as const);
           })();
     return { rowKey: input.rowKey, subjectId: input.subjectId, entry, vote };
   });
@@ -366,6 +419,14 @@ export async function viewerFactsCurrent(
     currentAccount(deadlineClient(client, deadline), actor),
   );
   if (!accountCurrent) return false;
+  const native = nativeStages.get(prepared);
+  if (prepared.canReadVotes && prepared.questionId === STANDARD_QUESTION_ID && prepared.question && !native)
+    return false;
+  if (native) {
+    if (actor !== native.request.actor || !native.preparation || !native.read) return false;
+    const result = await native.reader.finish(native.request, native.preparation, native.read, deadline);
+    if (result.status !== 'current') return false;
+  }
 
   const originals = prepared.mappings.map(({ subjectId }) => subjectId);
   const mappings = await readIdentityMappings(dependencies.pool, originals);

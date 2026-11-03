@@ -25,6 +25,28 @@ Missing/incomplete evidence returns typed retryable
 `dependency_unavailable`, including for an apparently empty owner. It never becomes ready zero counts. No native
 readiness, source-currentness, full shelf outcome or growth proof is claimed by these callable readers or source typing.
 
+## Bounded viewer facts
+
+`viewer-facts.ts` composes Content's installed staged counted-own-vote factory from `rating/register.ts` for every
+standard-question requested Subject, including survivors with inherited source votes. `prepareViewerFacts` runs
+before the caller checkout; `readViewerFacts` uses the existing account-home repeatable-read client;
+`viewerFactsCurrent` invokes the retained reader's finish after release and rechecks Library's own authority terms.
+Preparations and selected rows stay instance-local; callers keep the exact actor and ordered input and must discard
+provisional facts on false currentness. `readViewerFactsPage` performs that sequence for actual Library list and
+Collection member consumers. Search retains admission, source witnesses, private assembly and its final guard.
+
+The [owning wire and complete caller cost](../../../../docs/library-and-collections.md) distinguish score zero,
+clear, absence and unavailable disclosure/meaning. Available votes carry requested/counting/source-epoch evidence;
+present/clear carry original-target and original/counted revisions separately. Exact requested Entry precedence
+is unchanged. Nonstandard questions explicitly return vote unavailable/question; no native standard interpretation
+is applied. The mounted schema drives generated clients through the real kernel generator. Generated evidence is
+separate from source/native outcome coverage; no shelf score-ordering installation is claimed.
+
+`test/library/viewer-facts.test.ts` uses actual native vote and merge commands and the existing figure worker to
+exercise survivor/redirected/duplicate rows, Entry precedence, zero/clear/absence, pending identity and late selected
+row, account/scope and disclosure changes. Full frozen acceptance and independent native growth remain controller
+checks. No raw vote slot, parallel reader, route, writer, score cache or GET repair is introduced.
+
 ## Scope and implementation boundary
 
 [Library and Collections](../../../../docs/library-and-collections.md) owns the capability. This README adopts its
