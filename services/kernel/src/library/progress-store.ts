@@ -65,9 +65,10 @@ function asState(value: string): ProgressState {
 
 function asSession(row: SessionResult): ProgressSession {
   const additionalMeasures = decodeAdditionalMeasures(row.additionalMeasures);
-  const measures = row.mode === 'scalar_amount' && additionalMeasures.length > 0
-    ? [{ unit: row.unit, total: row.total, amount: row.amount }, ...additionalMeasures]
-    : undefined;
+  const measures =
+    row.mode === 'scalar_amount' && additionalMeasures.length > 0
+      ? [{ unit: row.unit, total: row.total, amount: row.amount }, ...additionalMeasures]
+      : undefined;
   return {
     id: row.id,
     accountId: row.accountId,

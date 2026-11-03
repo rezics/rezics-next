@@ -289,10 +289,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
             unit: unitInput,
             total: t.Optional(nullableString),
             additionalMeasures: t.Optional(
-              t.Array(
-                t.Object({ unit: unitInput, total: t.Optional(nullableString) }, closed),
-                { minItems: 1, maxItems: MAX_PROGRESS_MEASURES - 1 },
-              ),
+              t.Array(t.Object({ unit: unitInput, total: t.Optional(nullableString) }, closed), {
+                minItems: 1,
+                maxItems: MAX_PROGRESS_MEASURES - 1,
+              }),
             ),
           },
           closed,
@@ -378,7 +378,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
                 params.sessionId,
                 async (session, presentation, disclosure, measurePresentations) => {
                   const value = {
-                    ...sessionView(session, new Map(measurePresentations.map((measure) => [measure.unit, measure.presentation]))),
+                    ...sessionView(
+                      session,
+                      new Map(measurePresentations.map((measure) => [measure.unit, measure.presentation])),
+                    ),
                     presentation,
                   };
                   if (query.view !== 'FULL') return { progressSession: value };

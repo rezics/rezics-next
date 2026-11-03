@@ -20,7 +20,8 @@ export async function clearProgressValues(
   measureId?: string,
 ): Promise<ProgressSessionUpdate> {
   if (measureId !== undefined) {
-    if (session.mode !== 'scalar_amount') throw new TypeError('Only scalar progress measures can be cleared separately');
+    if (session.mode !== 'scalar_amount')
+      throw new TypeError('Only scalar progress measures can be cleared separately');
     if (measureId === session.unit)
       return {
         amount: null,

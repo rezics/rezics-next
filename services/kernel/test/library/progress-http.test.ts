@@ -371,12 +371,11 @@ test('owners keep chapter and volume measures independent in one session with re
     expect(measure.presentation).toMatchObject({ meaning: 'known', recording: { state: 'supported' } });
   expect((await request('other', 'GET', `/v1/progressSessions/${created.id}`)).response.status).toBe(404);
 
-  const chapter = await request(
-    'owner',
-    'POST',
-    `/v1/progressSessions/${created.id}:record`,
-    { revision: 1, measureId: 'chapter', amount: '0' },
-  );
+  const chapter = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 1,
+    measureId: 'chapter',
+    amount: '0',
+  });
   expect(chapter.response.status).toBe(200);
   expect(chapter.body.progressSession.measures).toEqual([
     { unit: 'chapter', amount: '0', total: '24' },

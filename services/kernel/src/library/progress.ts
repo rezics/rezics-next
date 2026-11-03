@@ -269,7 +269,8 @@ export function parseSessionCreate(
   }
   let additionalMeasures: ProgressMeasureCreate[] | undefined;
   if (Object.hasOwn(value, 'additionalMeasures')) {
-    if (value.mode !== 'scalar_amount' || !Array.isArray(value.additionalMeasures)) return invalid('additionalMeasures');
+    if (value.mode !== 'scalar_amount' || !Array.isArray(value.additionalMeasures))
+      return invalid('additionalMeasures');
     if (value.additionalMeasures.length < 1 || value.additionalMeasures.length >= MAX_PROGRESS_MEASURES)
       return invalid('additionalMeasures');
     const seen = new Set<string>([value.unit]);
@@ -354,7 +355,8 @@ function sortedIds(ids: readonly string[]): string[] {
 
 /** The history row for a validated record. Unit ids stay the given ids, in code-unit order. */
 export function changeIntent(record: ProgressRecord, measureId?: string): ProgressIntent {
-  if ('amount' in record) return measureId === undefined ? { amount: record.amount } : { measureId, amount: record.amount };
+  if ('amount' in record)
+    return measureId === undefined ? { amount: record.amount } : { measureId, amount: record.amount };
   if ('locator' in record) return { locator: record.locator, position: record.position };
   if ('add' in record && 'remove' in record) return { add: sortedIds(record.add), remove: sortedIds(record.remove) };
   if ('add' in record) return { add: sortedIds(record.add) };
