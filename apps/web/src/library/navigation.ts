@@ -1,8 +1,20 @@
-import { BookOpenText, Compass, Download, FolderPlus, Import, Star } from 'lucide-react';
+import { BookOpenText, Compass, Download, FolderPlus, Import, ListChecks, Star } from 'lucide-react';
 import type { NavigationContribution } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 
 export const libraryNavigation: readonly NavigationContribution[] = [
+  {
+    id: 'library.own-classifications',
+    kind: 'navigation',
+    group: 'personal',
+    order: 14.5,
+    href: '/library/classification-assessments',
+    match: 'exact',
+    signedIn: true,
+    operation: 'classification_ballot.own_page',
+    label: ({ locale }) => m.own_classifications_title({}, { locale }),
+    icon: ListChecks,
+  },
   {
     id: 'library.discover-collections',
     kind: 'navigation',

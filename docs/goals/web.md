@@ -552,6 +552,17 @@ independently of native ballots, provider SourceStatistics and enjoyment. Intern
 transport. Require delivered generated types and reached native outcomes before readiness, followed by inspection of
 the existing interface; no additional frontend owner.
 
+The private [classification assessment inventory](../../apps/web/src/ratings/own-classifications/README.md) owns
+`/library/classification-assessments`, separately from My ratings and Subject assessment. Native
+`classification_ballot.own_page` supplies a current retained inventory, not history or Library membership. The
+route remains explicitly unavailable until the installed generated page and exact advice-compatible writers are
+published; the source-contract presentation does not grant command authority. Its bound is native page20 plus
+selected1, cursor4096 characters, response1,048,576 bytes, one page and one selection, with no per-row reads.
+Decision: disclosed Subject/Concept links use neutral localized slugs through the existing route helper so private
+labels never enter browser URLs. Full current-origin binding, admitted withdrawal and uncertain-intent recovery
+remain required before this journey is complete; source, generated delivery and executed native outcomes are
+separate facts.
+
 ### Shared navigation and subject purchase entry
 
 Journey owners supply leaves and creation links through `AppShellProps.navigation` in
