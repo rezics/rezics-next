@@ -1,213 +1,189 @@
-import { describe, expect, test } from 'bun:test';
-import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { fromPlainText } from '@rezics/document';
+import { createThread, revisePost } from '../../src/content/commands.ts';
+import { erasePost } from '../../src/content/moderation.ts';
+import { restorePost } from '../../src/content/restore-post.ts';
+import { createNativeReviewDiscoveryAdapter, createReviewDiscoveryAdapter } from '../../src/search/review-discovery.ts';
 import type { DiscoveryReadContext } from '../../src/search/discovery.ts';
-import {
-  createReviewDiscoveryAdapter,
-  reviewDiscoveryDocument,
-  type ContentReviewDiscoverySource,
-  type ReviewDiscoveryObservation,
-  type ReviewDiscoveryRecord,
-} from '../../src/search/review-discovery.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { standingFixture } from '../access/standing-fixture.ts';
 
-function id(suffix: number): string {
-  return `00000000-0000-7000-8000-${suffix.toString(16).padStart(12, '0')}`;
-}
+const fixture = await standingFixture();
+afterAll(() => fixture.close());
 
-function review(value: string, version: bigint): ReviewDiscoveryRecord {
-  const route = routeOf(value);
-  if (route === null) throw new Error('Test review id must be routable');
-  return {
-    id: value,
-    route,
-    version,
-    openingRevisionId: `revision-${version}`,
-    canonicalDestination: `/threads/${value}`,
-    title: `Review ${version}`,
-    text: `Opening text ${version}`,
-  };
-}
-
-function source(overrides: Partial<ContentReviewDiscoverySource> = {}): ContentReviewDiscoverySource {
-  return {
-    readiness: async () => 'ready',
-    count: async (partition) => ({ partition, position: 20n, count: 0 }),
-    page: async (partition, _after, _limit, atPosition) => ({
-      partition,
-      position: atPosition,
-      reviews: [],
-      next: null,
-    }),
-    read: async (partition, ids, atLeast) => ({
-      partition,
-      position: atLeast > 0n ? atLeast : 1n,
-      observations: ids.map((value) => {
-        const route = routeOf(value)!;
-        return { state: 'concealed' as const, id: value, route, version: 1n };
-      }),
-    }),
-    summaries: async () => [],
-    ...overrides,
-  };
-}
+const routeKey = new Uint8Array(32).fill(73);
+const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
+const request = () => ({ idempotencyKey: Bun.randomUUIDv7(), deadline: Date.now() + 30_000, requestId: Bun.randomUUIDv7() });
 
 describe('public review discovery adapter', () => {
-  test('keeps absent coverage unavailable and incomplete coverage preparing', async () => {
-    const first = review(id(1), 5n);
-    const partition = partitionOf(first.route);
-    const absent = createReviewDiscoveryAdapter();
-    expect(await absent.readiness()).toBe('unavailable');
-    expect(await absent.count(partition)).toEqual({ status: 'unavailable' });
+  test('uses Content pages and current hydration for sparse progress, publication and lifecycle', async () => {
+    const unavailable = createReviewDiscoveryAdapter();
+    expect(await unavailable.readiness()).toBe('unavailable');
+    expect(await unavailable.count(0)).toEqual({ status: 'unavailable' });
 
-    let pageCalls = 0;
-    const preparing = createReviewDiscoveryAdapter(
-      source({
-        readiness: async () => 'preparing',
-        page: async (...args) => {
-          pageCalls += 1;
-          return source().page(...args);
+    const author = (await fixture.context()).actor;
+    const dependencies = { pool: fixture.pool, access: fixture.access, tokens };
+    const board = (
+      await fixture.reader.query<{ route: number; board_id: string }>(
+        "SELECT route, board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews' AND visibility='published'",
+      )
+    ).rows[0]!;
+    await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
+
+    async function subject(ordinal: number): Promise<string> {
+      const id = newId(0x6b30 + ordinal);
+      await fixture.reader.query(
+        `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
+         VALUES ($1,$2,'schema:Book',$2,'visible',1)`,
+        [routeOf(id), id],
+      );
+      return id;
+    }
+
+    async function publish(target: string, ordinal: number) {
+      const result = await createThread(
+        { pool: fixture.pool, access: fixture.access, routeKey },
+        author,
+        {
+          kind: 'review',
+          title: `Native review ${ordinal}`,
+          body: fromPlainText(`Public review opening ${ordinal}.`),
+          licence: 'MIT',
+          subjectIds: [target],
+          boardId: board.board_id,
+          visibility: 'published',
         },
-      }),
-    );
-    const census = { partition, position: 20n, count: 1 };
-    expect(await preparing.page(partition, null, 1, census, 0)).toEqual({ status: 'preparing' });
-    expect(pageCalls).toBe(0);
-  });
+        request(),
+      );
+      return { id: result.value.threadId, postId: result.value.itemId, subjectId: target };
+    }
 
-  test('validates whole native pages before exposing their review frontier and documents', async () => {
-    const partition = partitionOf(routeOf(id(1))!);
-    const rows = [review(id(1), 6n), review(id(2), 7n)].sort((a, b) => a.route - b.route || a.id.localeCompare(b.id));
-    const native = source({
-      count: async () => ({ partition, position: 20n, count: rows.length }),
-      page: async (_partition, after, limit, atPosition) => {
-        const start = after ? rows.findIndex((row) => row.id === after.id) + 1 : 0;
-        const reviews = rows.slice(start, start + limit);
-        const last = reviews.at(-1);
-        const more = start + reviews.length < rows.length;
-        return {
-          partition,
-          position: atPosition,
-          reviews,
-          next: more && last ? { route: last.route, id: last.id } : null,
-        };
-      },
-    });
-    const adapter = createReviewDiscoveryAdapter(native);
-    const counted = await adapter.count(partition);
-    expect(counted.status).toBe('ready');
-    if (counted.status !== 'ready') return;
-    const census = counted.value;
-    const first = await adapter.page(partition, null, 1, census, 0);
-    expect(first.status).toBe('ready');
-    if (first.status !== 'ready') return;
-    expect(first.value.next).toEqual({ route: rows[0]!.route, id: rows[0]!.id });
-    expect(first.value.documents[0]).toMatchObject({
-      identity: `content:review:${rows[0]!.id}`,
+    const initial = [];
+    for (let ordinal = 0; ordinal < 5; ordinal += 1) initial.push(await publish(await subject(ordinal), ordinal));
+    initial.sort((left, right) => left.id.localeCompare(right.id));
+    const route = routeOf(author.accountId)!;
+    const partition = partitionOf(route);
+    for (const row of initial.slice(0, 4)) {
+      await fixture.reader.query(
+        "UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE route=$1 AND subject_id=$2",
+        [routeOf(row.subjectId), row.subjectId],
+      );
+    }
+
+    const adapter = createNativeReviewDiscoveryAdapter(dependencies, () => ({
+      actor: { kind: 'anonymous' },
+      deadline: Date.now() + 30_000,
+    }));
+    const context: DiscoveryReadContext = { access: fixture.access, actor: author, deadline: Date.now() + 30_000 };
+    expect(await adapter.readiness()).toBe('ready');
+    const count = await adapter.count(partition);
+    expect(count).toMatchObject({ status: 'ready', value: { partition, unavailable: true } });
+    if (count.status !== 'ready') return;
+    expect(count.value).not.toHaveProperty('count');
+
+    const sparse = await adapter.page(partition, null, 1);
+    expect(sparse.status).toBe('ready');
+    if (sparse.status !== 'ready') return;
+    expect(sparse.value.documents).toEqual([]);
+    expect(sparse.value.next).toEqual({ route, id: initial[3]!.id });
+    expect((await adapter.readCurrent([initial[0]!.id], context)).size).toBe(0);
+
+    const late = await publish(await subject(9), 9);
+    expect(late.id.localeCompare(initial[4]!.id)).toBeGreaterThan(0);
+    const fifth = await adapter.page(partition, sparse.value.next, 1);
+    expect(fifth.status).toBe('ready');
+    if (fifth.status !== 'ready') return;
+    const fifthDocument = fifth.value.documents[0]!;
+    expect(fifthDocument).toMatchObject({
+      identity: `content:review:${initial[4]!.id}`,
       owner: 'content',
       kind: 'review',
-      source_position: '20',
-      opening_revision_id: rows[0]!.openingRevisionId,
-      canonical_destination: rows[0]!.canonicalDestination,
-      text: rows[0]!.text,
+      route,
+      id: initial[4]!.id,
+      source_position: fifth.value.position.toString(),
+      version: fifth.value.position.toString(),
+      opening_revision_id: expect.any(String),
+      text: 'Public review opening 4.',
     });
-    expect(first.value.documents[0]).not.toHaveProperty('vote');
-    const last = await adapter.page(partition, first.value.next, 1, census, first.value.consumed);
-    expect(last).toMatchObject({ status: 'ready', value: { next: null, consumed: 2 } });
+    expect(fifthDocument).not.toHaveProperty('authorId');
+    expect(fifthDocument).not.toHaveProperty('voteCitation');
+    expect(fifth.value.position).toBeGreaterThan(sparse.value.position);
+    expect(fifth.value.next).toEqual({ route, id: initial[4]!.id });
 
-    const wrongPosition = createReviewDiscoveryAdapter(
-      source({
-        page: async () => ({
-          partition,
-          position: 21n,
-          reviews: [rows[0]!],
-          next: { route: rows[0]!.route, id: rows[0]!.id },
-        }),
-      }),
-    );
-    await expect(wrongPosition.page(partition, null, 1, census, 0)).rejects.toThrow();
-    const wrongFrontier = createReviewDiscoveryAdapter(
-      source({
-        page: async () => ({
-          partition,
-          position: 20n,
-          reviews: [rows[0]!],
-          next: { route: rows[1]!.route, id: rows[1]!.id },
-        }),
-      }),
-    );
-    await expect(wrongFrontier.page(partition, null, 1, census, 0)).rejects.toThrow();
-  });
+    const latePage = await adapter.page(partition, fifth.value.next, 1);
+    expect(latePage).toMatchObject({ status: 'ready', value: { next: null } });
+    if (latePage.status !== 'ready') return;
+    expect(latePage.value.documents[0]?.identity).toBe(`content:review:${late.id}`);
+    const lateCard = await adapter.currentSummaries(latePage.value.documents, context);
+    expect(lateCard).toMatchObject({ status: 'ready' });
+    if (lateCard.status === 'ready') {
+      expect(lateCard.value.get(`content:review:${late.id}`)).toEqual({
+        kind: 'review',
+        id: late.id,
+        route,
+        openingRevisionId: latePage.value.documents[0]!.opening_revision_id,
+        title: 'Native review 9',
+        text: 'Public review opening 9.',
+      });
+      expect(lateCard.value.get(`content:review:${late.id}`)).not.toHaveProperty('authorId');
+    }
 
-  test('withdrawal and deletion suppress lagging hits; restoration needs its newer indexed revision', async () => {
-    const active = review(id(3), 6n);
-    const partition = partitionOf(active.route);
-    let current: { position: bigint; observation: ReviewDiscoveryObservation } = {
-      position: 21n,
-      observation: { state: 'withdrawn', id: active.id, route: active.route, version: 7n },
-    };
-    let authorizedSummary = active;
-    let summaryCalls = 0;
-    const native = source({
-      read: async () => ({ partition, position: current.position, observations: [current.observation] }),
-      summaries: async () => {
-        summaryCalls += 1;
-        return [authorizedSummary];
-      },
-    });
-    const adapter = createReviewDiscoveryAdapter(native);
-    const stale = reviewDiscoveryDocument(partition, 20n, active);
-    const context = {} as DiscoveryReadContext;
-
-    const afterWithdrawal = await adapter.currentSummaries([stale], context);
-    expect(afterWithdrawal.status).toBe('ready');
-    if (afterWithdrawal.status !== 'ready') return;
-    expect(afterWithdrawal.value.size).toBe(0);
-    current = {
-      position: 22n,
-      observation: { state: 'deleted', id: active.id, route: active.route, version: 8n },
-    };
-    const afterDeletion = await adapter.currentSummaries([stale], context);
-    expect(afterDeletion.status).toBe('ready');
-    if (afterDeletion.status !== 'ready') return;
-    expect(afterDeletion.value.size).toBe(0);
-    const restored = review(active.id, 9n);
-    current = { position: 23n, observation: { state: 'eligible', ...restored } };
-    const beforeReindex = await adapter.currentSummaries([stale], context);
-    expect(beforeReindex.status).toBe('ready');
-    if (beforeReindex.status !== 'ready') return;
-    expect(beforeReindex.value.size).toBe(0);
-
-    const restoredDocument = reviewDiscoveryDocument(partition, 23n, restored);
-    authorizedSummary = restored;
-    const summaries = await adapter.currentSummaries([restoredDocument], context);
-    expect(summaryCalls).toBe(1);
-    expect(summaries.status).toBe('ready');
-    if (summaries.status !== 'ready') return;
-    expect(summaries.value.get(`content:review:${active.id}`)).toEqual({
-      kind: 'review',
-      id: restored.id,
-      route: restored.route,
-      openingRevisionId: restored.openingRevisionId,
-      canonicalDestination: restored.canonicalDestination,
-      title: restored.title,
-      text: restored.text,
+    const firstCard = await adapter.currentSummaries([fifthDocument], context);
+    expect(firstCard.status).toBe('ready');
+    if (firstCard.status !== 'ready') return;
+    expect(firstCard.value.get(fifthDocument.identity)?.text).toBe('Public review opening 4.');
+    const authorSummary = await adapter.readCurrent([initial[4]!.id], context);
+    expect(authorSummary.get(initial[4]!.id)).toEqual({
+      id: initial[4]!.id,
+      title: 'Native review 4',
+      summary: 'Public review opening 4.',
     });
 
-    const wrongKey = createReviewDiscoveryAdapter(
-      source({
-        read: async (_partition, _ids, atLeast) => ({
-          partition,
-          position: atLeast,
-          observations: [
-            {
-              state: 'concealed' as const,
-              id: id(4),
-              route: routeOf(id(4))!,
-              version: 1n,
-            },
-          ],
-        }),
-      }),
+    await revisePost(
+      { pool: fixture.pool, access: fixture.access, routeKey },
+      author,
+      { threadId: initial[4]!.id, itemId: initial[4]!.postId, body: fromPlainText('Revised public opening.') } as never,
+      request(),
     );
-    await expect(wrongKey.currentSummaries([restoredDocument], context)).rejects.toThrow();
+    const withdrawn = await adapter.currentSummaries([fifthDocument], context);
+    expect(withdrawn).toEqual({ status: 'ready', value: new Map() });
+
+    const revisedPage = await adapter.page(partition, sparse.value.next, 1);
+    expect(revisedPage.status).toBe('ready');
+    if (revisedPage.status !== 'ready') return;
+    const revisedDocument = revisedPage.value.documents[0]!;
+    expect(revisedDocument.id).toBe(initial[4]!.id);
+    expect(revisedDocument.opening_revision_id).not.toBe(fifthDocument.opening_revision_id);
+    expect((await adapter.currentSummaries([revisedDocument], context)).status).toBe('ready');
+
+    await fixture.grant(author.accountId, 'post:erase', {
+      route: routeOf(initial[4]!.postId)!,
+      id: initial[4]!.postId,
+    });
+    await erasePost(
+      { pool: fixture.pool, access: fixture.access, routeKey },
+      author,
+      { postId: initial[4]!.postId, reason: 'Author withdrew the review opening' },
+      request(),
+    );
+    expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'ready', value: new Map() });
+    await restorePost(
+      { pool: fixture.pool, access: fixture.access, routeKey },
+      author,
+      initial[4]!.postId,
+      request(),
+    );
+    expect(await adapter.currentSummaries([revisedDocument], context)).toEqual({ status: 'preparing' });
+
+    const restoredPage = await adapter.page(partition, sparse.value.next, 1);
+    expect(restoredPage.status).toBe('ready');
+    if (restoredPage.status !== 'ready') return;
+    const restoredDocument = restoredPage.value.documents[0]!;
+    expect(restoredDocument.id).toBe(initial[4]!.id);
+    expect(restoredDocument.opening_revision_id).toBe(revisedDocument.opening_revision_id);
+    expect(BigInt(restoredDocument.source_position)).toBeGreaterThan(BigInt(revisedDocument.source_position));
+    const restoredCard = await adapter.currentSummaries([restoredDocument], context);
+    expect(restoredCard.status).toBe('ready');
+    if (restoredCard.status === 'ready') expect(restoredCard.value.get(restoredDocument.identity)?.text).toBe('Revised public opening.');
   });
 });
