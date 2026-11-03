@@ -245,6 +245,7 @@ export function validateSourceClassificationProjection(input: unknown): SourceCl
     'sourceRecordId',
     'sourceRevision',
     ...(Object.hasOwn(provenance, 'sourceDigest') ? ['sourceDigest'] : []),
+    ...(Object.hasOwn(provenance, 'sourceAssociationId') ? ['sourceAssociationId'] : []),
     'converterRevision',
     'observedAt',
     'coverage',
@@ -255,4 +256,23 @@ export function validateSourceClassificationProjection(input: unknown): SourceCl
   const checked = projectSourceClassification({ ...provenance, value: projection.value });
   if (checked.state !== 'available') throw new TypeError('Invalid source classification projection');
   return checked;
+}
+
+export type ClassificationSourceVersion =
+  | Readonly<{ kind: 'revision'; revision: string }>
+  | Readonly<{ kind: 'unversioned'; digest: string }>;
+
+/** Maps admitted provenance onto the native source-version tuple. A missing instant is not invented. */
+export function classificationSourceVersion(
+  provenance: SourceClassificationProvenance,
+): ClassificationSourceVersion | null {
+  if (provenance.sourceRevision !== null) return { kind: 'revision', revision: provenance.sourceRevision };
+  return typeof provenance.sourceDigest === 'string' ? { kind: 'unversioned', digest: provenance.sourceDigest } : null;
+}
+
+export function classificationObservedInstant(observedAt: string | null): string | null {
+  if (observedAt === null) return null;
+  const parsed = new Date(observedAt);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return parsed.toISOString();
 }

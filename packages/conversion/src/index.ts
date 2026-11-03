@@ -48,8 +48,14 @@ export type ConvertedRecord<Proposal = unknown> = {
   sourceClassification?: SourceClassificationProjection;
 };
 
-export { projectSourceClassification, validateSourceClassificationProjection } from './source-classification.ts';
+export {
+  classificationObservedInstant,
+  classificationSourceVersion,
+  projectSourceClassification,
+  validateSourceClassificationProjection,
+} from './source-classification.ts';
 export type {
+  ClassificationSourceVersion,
   SourceClassificationCoverage,
   SourceClassificationProjection,
   SourceClassificationProvenance,

@@ -300,6 +300,7 @@ const KNOWN_SAFE_TABLES = new Set([
   'run_reference_signatures',
   'run_payloads',
   'run_aggregate_heads',
+  'run_classification_heads',
   'run_retention_work',
   'import_owners',
   'binding_records',
