@@ -49,16 +49,17 @@ test('the supported GraphQL wrappers preserve distinct zero, missing, fuzzy, inv
   expect(invalid.rows[0]!.fields.map((f) => f.validity)).toEqual(['invalid', 'unknown', 'invalid', 'invalid']);
   const precise = parseAniList('[{"score":1.0000000000000001}]', 'POINT_100');
   expect(precise.rows[0]!.scoreLexeme).toBe('1.0000000000000001');
-  expect(precise.rows[0]!.fields[0]).toMatchObject({ validity: 'invalid', reason: expect.stringContaining('POINT_100') });
+  expect(precise.rows[0]!.fields[0]).toMatchObject({
+    validity: 'invalid',
+    reason: expect.stringContaining('POINT_100'),
+  });
   expect(parseAniList('[{"score":0.31}]', 'POINT_10_DECIMAL').rows[0]!.fields[0]!.validity).toBe('invalid');
   const point3 = parseAniList('[{"score":2}]', 'POINT_3');
   expect(point3.rows[0]!.fields[0]).toMatchObject({ validity: 'valid', reason: expect.stringContaining('POINT_3') });
   const absentAndNull = parseAniList('[{"score":null},{},{"score":0}]', 'POINT_10');
-  expect(absentAndNull.rows.map((item) => item.fields.find((field) => field.field === 'score')?.validity ?? 'absent')).toEqual([
-    'unknown',
-    'absent',
-    'valid',
-  ]);
+  expect(
+    absentAndNull.rows.map((item) => item.fields.find((field) => field.field === 'score')?.validity ?? 'absent'),
+  ).toEqual(['unknown', 'absent', 'valid']);
   expect(parseAniList(JSON.stringify([{ id: 9 }])).rows[0]!.identifiers).toEqual([]);
   for (const upload of [
     '{',

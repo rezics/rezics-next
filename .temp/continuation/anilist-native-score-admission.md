@@ -1,36 +1,29 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/library/list-import-anilist*",
-    "services/kernel/test/library/list-import-anilist*",
-    "services/kernel/src/http/kernel.ts",
-    "packages/client/src/kernel/library/list-import-anilist*",
-    "docs/library-import-anilist.md",
-    "docs/goals/library.capabilities.md"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": {
-    "lines": 650,
-    "files": 6
-  },
-  "acceptance": [
-    "Content exposes an atomic guarded native vote command that binds question revision, current counted vote or absence, canonical/counting identity and local correction before receipt lookup or mutation.",
-    "AniList applies only the reviewed, separately confirmed vote or explicit clear through the actual Content writer and its receipt/component result; retries retain original operands and key.",
-    "Question changes, counted-vote changes, target identity changes, local corrections, cancellation, lost acknowledgement, foreign ownership and terminal denial have focused coverage.",
-    "Generated AniList requests/results are consumed by Web325 without a second interface, casts or handwritten client types."
-  ]
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/library/list-import-anilist*',
+      'services/kernel/test/library/list-import-anilist*',
+      'services/kernel/src/http/kernel.ts',
+      'packages/client/src/kernel/library/list-import-anilist*',
+      'docs/library-import-anilist.md',
+      'docs/goals/library.capabilities.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 650, 'files': 6 },
+  'acceptance':
+    [
+      'Content exposes an atomic guarded native vote command that binds question revision, current counted vote or absence, canonical/counting identity and local correction before receipt lookup or mutation.',
+      'AniList applies only the reviewed, separately confirmed vote or explicit clear through the actual Content writer and its receipt/component result; retries retain original operands and key.',
+      'Question changes, counted-vote changes, target identity changes, local corrections, cancellation, lost acknowledgement, foreign ownership and terminal denial have focused coverage.',
+      'Generated AniList requests/results are consumed by Web325 without a second interface, casts or handwritten client types.',
+    ],
 }
 ---
 

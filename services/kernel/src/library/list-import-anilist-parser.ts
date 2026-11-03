@@ -86,8 +86,7 @@ function sourceTree(source: string): SourceNode {
 }
 
 function sourceRows(tree: SourceNode): SourceNode[] {
-  const property = (node: SourceNode, key: string) =>
-    node.kind === 'object' ? node.properties.get(key) : undefined;
+  const property = (node: SourceNode, key: string) => (node.kind === 'object' ? node.properties.get(key) : undefined);
   let payload = property(tree, 'data') ?? tree;
   payload = property(payload, 'MediaListCollection') ?? payload;
   if (payload.kind === 'array') return payload.items;
@@ -196,13 +195,14 @@ export function parseAniList(upload: string, scoreFormat?: string) {
           value <= scales[scoreFormat]! &&
           !!scoreLexeme &&
           hasAtMostDecimalPlaces(scoreLexeme, scoreFormat === 'POINT_10_DECIMAL' ? 1 : 0);
-        reason = value === null
-          ? 'The source score is null and remains unknown.'
-          : !scoreFormat
-            ? 'The source score scale is unknown; its original value is retained.'
-            : valid
-              ? `Original ${scoreFormat}; no exact conversion to native units. Owner choice is required.`
-              : `Invalid value for original ${scoreFormat}; its original evidence is retained.`;
+        reason =
+          value === null
+            ? 'The source score is null and remains unknown.'
+            : !scoreFormat
+              ? 'The source score scale is unknown; its original value is retained.'
+              : valid
+                ? `Original ${scoreFormat}; no exact conversion to native units. Owner choice is required.`
+                : `Invalid value for original ${scoreFormat}; its original evidence is retained.`;
       } else if (field === 'startedAt' || field === 'completedAt') {
         valid =
           object(value) &&

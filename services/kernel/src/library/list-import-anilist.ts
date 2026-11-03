@@ -635,7 +635,8 @@ export function createAniListImport(deps: Dependencies) {
     if (input.progress && (!selected || !profile || !profileBinding)) throw new LibraryConflictError();
     let score: AniListScoreReview | undefined;
     if (input.score) {
-      if (!selected || !observation || !Object.hasOwn(stored.source.evidence, 'score')) throw new LibraryConflictError();
+      if (!selected || !observation || !Object.hasOwn(stored.source.evidence, 'score'))
+        throw new LibraryConflictError();
       if (input.score.questionId !== STANDARD_QUESTION_ID || input.score.questionRevision !== 1)
         throw new LibraryConflictError();
       const question = await readScoreQuestion(actor);

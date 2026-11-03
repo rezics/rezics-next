@@ -59,9 +59,9 @@ Limits: 1,048,576 UTF-8 upload bytes, JSON depth 24, 200 rows (65,536 bytes/128 
 8,192-byte group metadata, valid Unicode without NUL, five retained uploads per owner, 20 rows per
 read/apply page. Upload is JSON text inside the request envelope. Headers carry the ordinary quoted Idempotency-Key
 on preview/review/cancel. Apply confirms stored review ids; each review binds a stable native command key, original
-  operands and client attribution. Failed commands resume with those operands. Acknowledged row outcomes replay
-  without new effects. Outcomes are applied, skipped, stale, unsupported, failed or unavailable; native score outcomes
-  are nested per row. Retained lists identify fields not admitted. Failed attempts remain retryable. Stale started attempts retain their original identity for inspection;
+operands and client attribution. Failed commands resume with those operands. Acknowledged row outcomes replay
+without new effects. Outcomes are applied, skipped, stale, unsupported, failed or unavailable; native score outcomes
+are nested per row. Retained lists identify fields not admitted. Failed attempts remain retryable. Stale started attempts retain their original identity for inspection;
 start a fresh upload for a new choice. Pages stop starting rows at cancellation, disconnection or the request
 deadline (20 seconds outside HTTP). Cancellation does not undo committed native effects. An in-flight command may
 finish after cancellation. `complete:false` leaves remaining confirmations resumable. Evidence remains until explicit
