@@ -183,9 +183,7 @@ test('Appeals Next preserves forms on Reports metadata and Stay, focuses admitte
   try {
     const ready = await loadModerationAppeals({ data: input });
     expect(ready.viewerId).toBe(originalSession.subject);
-    expect(ready.targets).toMatchObject([
-      { key: `post:${targetId}`, kind: 'post', value: { moderationEvidence: { state: 'unavailable', post: null } } },
-    ]);
+    expect(ready.targets).toEqual([]);
     mode = 'unavailable';
     const unavailable = await loadModerationAppeals({ data: input });
     expect(unavailable.state).toBe('unavailable');
@@ -326,7 +324,7 @@ test('Appeals Next preserves forms on Reports metadata and Stay, focuses admitte
       await act(async () => release?.());
       await flush();
       assertClosed();
-      expect(calls).toHaveLength(beforeSettlement + (scenario === 'pending-success' ? 1 : 0));
+      expect(calls).toHaveLength(beforeSettlement);
       gate = undefined;
       release = undefined;
     }

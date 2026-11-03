@@ -45,6 +45,7 @@ export function WorkbenchPage({
         reports: [],
         appeals: [],
         selectedTarget: null,
+        selectedAppeal: undefined,
         realms: [],
         boards: [],
         next: null,
@@ -83,6 +84,7 @@ export function WorkbenchPage({
   return (
     <WorkbenchSelectionBoundary>
       <WorkbenchView
+        key={identity}
         page={view}
         onSearch={onSearch}
         selection={controller}

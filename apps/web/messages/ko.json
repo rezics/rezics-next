@@ -5858,7 +5858,7 @@
   "saved_filter_review_value_labels_unavailable": "정확한 Collection의 값 레이블을 사용할 수 없습니다. 전역 값을 대신 사용하지 않았습니다. 저장된 피연산자는 그대로 둔 채 다시 시도할 수 있습니다.",
   "saved_filter_review_value_unlabelled": "이 정확한 피연산자에 대해 현재 공개된 값 레이블이 없습니다.",
   "moderation_workbench_selection_identity": "게시판 {board}. 이 페이지의 신고: {reports}.",
-  "moderation_workbench_appeal_unavailable": "이 이의는 현재 대기열 페이지에 없습니다.",
+  "moderation_workbench_appeal_unavailable": "이 이의 신청을 확인할 수 없습니다. 대기열로 돌아가거나 다시 확인해 주세요.",
   "people_biography_title": "전기",
   "people_biography_help": "작성된 전기 문서는 언어, 문서 신원, 출처를 유지합니다. 짧은 설명은 이름과 설명에 남습니다.",
   "people_biography_unsupported": "현재 릴리스에서 이 필드는 인정되지 않습니다.",

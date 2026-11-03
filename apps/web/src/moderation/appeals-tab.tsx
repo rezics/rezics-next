@@ -498,13 +498,17 @@ function AppealCard({
       ? m.moderation_queue_post()
       : identity?.kind === 'thread'
         ? m.moderation_queue_thread()
-        : m.moderation_target_unavailable();
+        : identity?.kind === 'board'
+          ? m.reporter_status_board()
+          : m.moderation_target_unavailable();
   const targetKind =
     identity?.kind === 'post'
       ? m.reporter_status_post()
       : identity?.kind === 'thread'
         ? m.reporter_status_thread()
-        : m.moderation_target_unavailable();
+        : identity?.kind === 'board'
+          ? m.reporter_status_board()
+          : m.moderation_target_unavailable();
 
   return (
     <li>

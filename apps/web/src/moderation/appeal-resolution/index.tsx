@@ -196,7 +196,9 @@ function ResolutionForm({
     cancelFocusHandoff();
     if (!current() || !admitted || result) return;
     const attempt = ++focusAttempt.current;
-    const command = outcome === undefined ? intent.retry() : intent.begin(outcome);
+    // Capture credentials and transport once. A later render or read must never
+    // provide a replacement sender for an uncertain command.
+    const command = outcome === undefined ? intent.retry() : intent.begin(outcome, captureSender());
     if (!command) return;
     if (keyboardTarget) startFocusHandoff(attempt, command, keyboardTarget);
     // Notify synchronously: a second click must not unmount this command before React renders.
@@ -204,7 +206,7 @@ function ResolutionForm({
     redraw();
     try {
       if (!current()) return;
-      const response = await onResolve(command);
+      const response = await intent.send(command);
       if (current()) {
         intent.settle(response);
         // A validated receipt acknowledges this frozen statement without waiting for any parent read.
@@ -222,6 +224,12 @@ function ResolutionForm({
         redraw();
       }
     }
+  }
+
+  function captureSender(): ResolveAppeal {
+    if (onResolve !== resolveAppeal) return onResolve;
+    const headers = new Headers(csrfHeaders());
+    return (data) => actionOnAppeal({ data, headers });
   }
 
   if (intent.phase === 'retired') return <p role="alert">{m.moderation_appeal_intent_retired()}</p>;

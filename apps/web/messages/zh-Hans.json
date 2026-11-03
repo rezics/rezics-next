@@ -5858,7 +5858,7 @@
   "saved_filter_review_value_labels_unavailable": "确切 Collection 的值标签当前不可用。未使用全局值替代；重试时已保存操作数仍保持不变。",
   "saved_filter_review_value_unlabelled": "此确切操作数当前没有已披露的值标签。",
   "moderation_workbench_selection_identity": "版块 {board}。本页举报：{reports}。",
-  "moderation_workbench_appeal_unavailable": "当前队列页没有这项申诉。",
+  "moderation_workbench_appeal_unavailable": "此申诉暂时无法查看。请返回队列或重试查看。",
   "people_biography_title": "传记",
   "people_biography_help": "撰写的传记文档保留其语言、文档身份与来源。简短描述仍在名称与描述中。",
   "people_biography_unsupported": "当前发行未承认此字段。",

@@ -15,9 +15,9 @@ advances through pages to search for an ID. If the report is absent from that ex
 unavailable.
 
 Subject reports stay on `/moderation/catalogue`, where the catalogue report reader independently loads the subject and
-its reports. A Subject is never converted to a board, thread or post target. A pending appeal keeps its native ID on
-`/moderation/workbench?queue=appeals&board={boardId}&case={appealId}` with the same cursor; an absent ID on that exact
-page is unavailable and is never found by scanning. This report case page does not imply a platform-wide appeal.
+its reports. A Subject is never converted to a board, thread or post target. An appeal keeps its native ID on
+`/moderation/workbench?queue=appeals&board={boardId}&case={appealId}` with the same cursor. Native `inspect` must select that exact ID independently of the pending page, including
+resolved appeals. Missing inspection is unavailable and never triggers scanning or a refill. This report case page does not imply a platform-wide appeal.
 
 ## Read and disclosure boundary
 
@@ -42,8 +42,9 @@ result permits only the existing exact retry, retaining the original sender, cre
 denied and definitive refusal require refresh or a fresh read; unavailable current or reported content remains visibly
 unavailable. Appeal resolution continues to use the existing minimal owner-scoped `AppealResolution` controls and native
 `POST /v1/moderation-appeals/{appealId}:resolve` command on the selected workbench appeal. The original decision and
-statement come from the captured appeals page; the current target is one independent post or thread read for that
-selected appeal only. Queue rows still do not hydrate targets.
+statement remain separate from current target context. Appeal reads no longer hydrate target bodies, identities or
+media independently; composed disclosure belongs to Content. The independent selected presentation consumes one
+exact appeal and its existing resolution representation, never a matching row from the pending page.
 
 A session, board, queue, page or reader replacement retires the mounted case or appeal and its command authority.
 Uncertain retry keeps the original sender, credentials, key and operands. Authoring departure uses the existing
@@ -51,7 +52,28 @@ report-review and appeal navigation contexts.
 
 ## Remaining binding
 
-The case page, selected appeal view and typed reference builder are complete against existing report-list, appeal-list
-and command clients. Rows bind the stable native ID and current queue snapshot; no producer API is pending. Content
-still owns native authorization, conflict and command semantics. There is no moderator case-detail GET; absence on the
-referenced page stays unavailable.
+The report case page and typed return builder remain bound to their existing clients. The installed generated
+board/thread Appeals GET still declares only `cursor`, `limit`, `appeals` and `next`; it lacks `inspect`,
+`selectedAppeal`, `appellantIdentity`, `targetContext`, `resolutionCommand`, `source` and `provenance`.
+The producer implements these in `services/kernel/src/content/appeal-routes.ts`, but generated delivery and genuine
+populated/concealed/failed recordings have not arrived. The named `native-appeal-inspect` seam returns unavailable
+without an undeclared request or a page-only fallback. No new native DTO or endpoint is authored by Web.
+
+Decision: retain the installed pending list and make exact inspection explicitly unavailable until generated composed
+inspection types arrive; keep the independent selection consumer ready without deriving selection from queue rows.
+
+The next binding must preserve actor/session/source provenance and the opaque native session header, project the
+allowlisted appellant and current destination, retain exact pending/resolved status, and bind the original command.
+Native authorization remains authoritative at execution; `canResolve` is advice. Current context has no target body,
+and original evidence must never be relabelled as current content. Source delivery, installed declarations, executed
+acceptance and public publication remain separate boundaries.
+
+## Cost
+
+- **Touches:** one board or thread Appeals GET per explicit pending read; no Account, Media or current-target reads.
+  An unsupported exact inspection performs zero native calls. Resolution uses the existing command owner.
+- **Bound:** one page of at most 20, one optional exact selection, the native continuation and one original command.
+  An empty page with `next` stays sparse. A missing selection is unavailable even when the page contains its ID.
+- **Growth:** pending adaptation retains the native page in O(rows + admitted bytes), with no deduplicated enrichment
+  graph. Inspection does not advance or refill the queue. Command retries retain the same sender, CSRF headers,
+  frozen body, key and operands; they do not reread or recover request identity.

@@ -3,7 +3,13 @@ import { preparePrivateReaderRead, type PrivateReaderRead } from './private-read
 import type { AppealPage } from './appeals-read';
 import type { ModerationTarget } from './target-content';
 
-export type AppealReadInput = { boardId: string; threadId?: string; postId?: string; cursor?: string };
+export type AppealReadInput = {
+  boardId: string;
+  threadId?: string;
+  postId?: string;
+  cursor?: string;
+  inspect?: string;
+};
 export type AppealReadState = 'ready' | 'loading' | 'unavailable' | 'stale' | 'closed';
 export type PrivateAppealPage = AppealPage &
   PrivateReaderRead & {
@@ -12,6 +18,7 @@ export type PrivateAppealPage = AppealPage &
     readKey: string;
     generation: string;
     state: AppealReadState;
+    unavailableReason?: 'native-appeal-inspect';
   };
 
 /** Post identity is return context; native Appeals reads only board or thread scope. */
@@ -23,10 +30,19 @@ export function moderationAppealInput(boardId: string, search: Record<string, un
     ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 && search.cursor
       ? { cursor: search.cursor }
       : {}),
+    ...(typeof search.inspect === 'string' && search.inspect.length > 0 && search.inspect.length <= 128
+      ? { inspect: search.inspect }
+      : {}),
   };
 }
 export function appealReadKey(input: AppealReadInput): string {
-  return JSON.stringify([input.boardId, input.threadId ?? '', input.postId ?? '', input.cursor ?? '']);
+  return JSON.stringify([
+    input.boardId,
+    input.threadId ?? '',
+    input.postId ?? '',
+    input.cursor ?? '',
+    input.inspect ?? '',
+  ]);
 }
 
 /** Only location changes that replace the admitted queue are departures. */

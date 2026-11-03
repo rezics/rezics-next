@@ -5858,7 +5858,7 @@
   "saved_filter_review_value_labels_unavailable": "確切 Collection 的值標籤目前無法使用。未以全域值取代；重試時已儲存運算元仍保持不變。",
   "saved_filter_review_value_unlabelled": "此確切運算元目前沒有已揭露的值標籤。",
   "moderation_workbench_selection_identity": "版塊 {board}。本頁檢舉：{reports}。",
-  "moderation_workbench_appeal_unavailable": "目前佇列頁沒有這項申訴。",
+  "moderation_workbench_appeal_unavailable": "目前無法檢視此申訴。請返回佇列或重試檢視。",
   "people_biography_title": "傳記",
   "people_biography_help": "撰寫的傳記文件保留其語言、文件身分與來源。簡短描述仍在名稱與描述中。",
   "people_biography_unsupported": "目前發行未承認此欄位。",

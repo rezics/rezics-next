@@ -5858,7 +5858,7 @@
   "saved_filter_review_value_labels_unavailable": "Wertlabels dieser exakten Collection sind nicht verfügbar. Es wurden keine globalen Werte eingesetzt; erneutes Lesen ändert die gespeicherten Operanden nicht.",
   "saved_filter_review_value_unlabelled": "Für diesen exakten Operanden wurde kein aktuelles Wertlabel offengelegt.",
   "moderation_workbench_selection_identity": "Board {board}. Meldungen auf dieser Seite: {reports}.",
-  "moderation_workbench_appeal_unavailable": "Dieser Einspruch steht nicht auf der aktuellen Warteschlangenseite.",
+  "moderation_workbench_appeal_unavailable": "Dieser Einspruch ist nicht verfügbar. Kehren Sie zur Warteschlange zurück oder versuchen Sie es erneut.",
   "people_biography_title": "Biografie",
   "people_biography_help": "Verfasste Biografiedokumente behalten Sprache, Dokumentidentität und Quellen. Kurzbeschreibungen bleiben bei Namen und Beschreibungen.",
   "people_biography_unsupported": "Dieses Feld ist in der aktuellen Veröffentlichung nicht zugelassen.",

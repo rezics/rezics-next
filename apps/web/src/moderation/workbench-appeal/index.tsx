@@ -65,13 +65,17 @@ export function WorkbenchAppealDetail({
       ? m.moderation_queue_post()
       : identity?.kind === 'thread'
         ? m.moderation_queue_thread()
-        : m.moderation_target_unavailable();
+        : identity?.kind === 'board'
+          ? m.reporter_status_board()
+          : m.moderation_target_unavailable();
   const targetKind =
     identity?.kind === 'post'
       ? m.reporter_status_post()
       : identity?.kind === 'thread'
         ? m.reporter_status_thread()
-        : m.moderation_target_unavailable();
+        : identity?.kind === 'board'
+          ? m.reporter_status_board()
+          : m.moderation_target_unavailable();
   return (
     <article className="space-y-5">
       <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>

@@ -9,7 +9,7 @@ import { prepareSession, viewerCredential } from '../../session/request';
 import { catalogueReportsClient } from '../catalogue-reports-client';
 import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from '../private-reader-origin';
 import { preparePrivateReaderRead, type PrivateReaderRead } from '../private-reader-lifetime';
-import { appealTarget, readModerationAppeals, type Appeal } from '../appeals-read';
+import { appealTarget, readModerationAppeals, type Appeal, type AppealPage } from '../appeals-read';
 import { readModerationReports, type Report, type ResolvedReportTarget } from '../reports-read';
 import {
   WORKBENCH_PAGE_SIZE,
@@ -50,8 +50,10 @@ export type WorkbenchRead = PrivateReaderRead & {
   reports: Report[];
   /** Original board appeals from this read generation. */
   appeals: Appeal[];
-  /** Independent current target for the selected appeal on this exact page. */
+  selectedAppeal?: Appeal;
+  /** Legacy presentation input; native appeal reads never hydrate current targets. */
   selectedTarget: ResolvedReportTarget | null;
+  unavailableReason?: 'native-appeal-inspect';
 };
 export type WorkbenchNativeSource = {
   realms: (cursor?: string) => Promise<{ items: WorkbenchDirectoryItem[]; next: string | null }>;
@@ -65,7 +67,7 @@ export type WorkbenchNativeSource = {
       order: WorkbenchSearch['order'];
     },
   ) => Promise<{ reports: Report[]; next: string | null }>;
-  boardAppeals: (boardId: string, cursor?: string) => Promise<{ appeals: Appeal[]; next: string | null }>;
+  boardAppeals: (boardId: string, cursor?: string, inspect?: string) => Promise<AppealPage>;
   catalogueReports: (
     cursor: string | undefined,
     selection: { status: 'pending' | 'resolved'; order: WorkbenchSearch['order'] },
@@ -73,11 +75,13 @@ export type WorkbenchNativeSource = {
     reports: Array<Omit<Report, 'target'> & { target: { kind: 'subject'; id: string } }>;
     next: string | null;
   }>;
-  readTarget?: (kind: 'post' | 'thread', id: string) => Promise<ResolvedReportTarget['value']>;
 };
 
 class WorkbenchReadFailure extends Error {
-  constructor(readonly state: Exclude<WorkbenchReadState, 'ready'>) {
+  constructor(
+    readonly state: Exclude<WorkbenchReadState, 'ready'>,
+    readonly reason?: 'native-appeal-inspect',
+  ) {
     super(state);
   }
 }
@@ -190,28 +194,18 @@ export async function readWorkbench(
     return { ...identity, state: 'ready', ...idle, cases: bounded(page.reports).map(reportCase), next: page.next };
   }
   if (search.queue === 'appeals') {
-    const page = await source.boardAppeals(scope.boardId, search.cursor);
+    const page = await source.boardAppeals(scope.boardId, search.cursor, search.case);
     const listed = bounded(page.appeals).flatMap((appeal) => {
       const item = appealCase(appeal);
       return item ? [{ item, appeal }] : [];
     });
-    const selected = search.case ? listed.find((entry) => entry.appeal.id === search.case) : undefined;
-    const target = selected ? appealTarget(selected.appeal) : undefined;
-    const selectedTarget =
-      target && source.readTarget
-        ? {
-            key: `${target.kind}:${target.id}`,
-            kind: target.kind,
-            value: await source.readTarget(target.kind, target.id),
-          }
-        : null;
     return {
       ...identity,
       state: 'ready',
       ...idle,
       cases: listed.map((entry) => entry.item),
       appeals: listed.map((entry) => entry.appeal),
-      selectedTarget,
+      ...(page.selectedAppeal?.id === search.case ? { selectedAppeal: page.selectedAppeal } : {}),
       next: page.next,
     };
   }
@@ -271,7 +265,9 @@ function nativeSource(client: KernelClient, authorization: string): WorkbenchNat
         { boardId, status: selection.status, targetKind: selection.targetKind, order: selection.order },
       );
     },
-    async boardAppeals(boardId, cursor) {
+    async boardAppeals(boardId, cursor, inspect) {
+      // Bind here only after the generated GET exposes inspect, selectedAppeal and provenance.
+      if (inspect) throw new WorkbenchReadFailure('unavailable', 'native-appeal-inspect');
       const result = await client.boards({ id: boardId }).appeals.get({
         ...headers,
         query: { limit: WORKBENCH_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
@@ -280,16 +276,11 @@ function nativeSource(client: KernelClient, authorization: string): WorkbenchNat
       if (!result.data) throw new WorkbenchReadFailure('unavailable');
       return readModerationAppeals(
         {
-          boardAppeals: async () => result.data as { appeals: Appeal[]; next: string | null },
+          boardAppeals: async () => result.data,
           threadAppeals: async () => ({ appeals: [], next: null }),
         },
         { boardId },
       );
-    },
-    async readTarget(kind, id) {
-      const result =
-        kind === 'post' ? await client.posts({ id }).get(headers) : await client.threads({ id }).get(headers);
-      return result.error ? null : ((result.data as ResolvedReportTarget['value'] | undefined) ?? null);
     },
     async catalogueReports(cursor, selection) {
       const result = await catalogueReportsClient(client).catalogue.reports.get({
@@ -337,7 +328,10 @@ export async function readWorkbenchPage(
     const page = await readWorkbench(nativeSource(client, authorization), search);
     return { ...page, generation: crypto.randomUUID(), readerOrigin };
   } catch (error) {
-    return emptyRead(search, readerOrigin, error instanceof WorkbenchReadFailure ? error.state : 'unavailable');
+    return {
+      ...emptyRead(search, readerOrigin, error instanceof WorkbenchReadFailure ? error.state : 'unavailable'),
+      ...(error instanceof WorkbenchReadFailure && error.reason ? { unavailableReason: error.reason } : {}),
+    };
   }
 }
 

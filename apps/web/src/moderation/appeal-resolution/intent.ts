@@ -6,6 +6,7 @@ export type ResolutionCommand = Readonly<{
   statement: string;
   idempotencyKey: string;
 }>;
+export type ResolutionSender = (command: ResolutionCommand) => Promise<AppealResolutionResult>;
 
 /** Memory belongs to one mounted private view. Retirement is irreversible; retries never create intent. */
 export function createAppealResolutionIntent(appealId: string) {
@@ -13,6 +14,7 @@ export function createAppealResolutionIntent(appealId: string) {
   let admitted = false;
   let statement = '';
   let command: ResolutionCommand | null = null;
+  let sender: ResolutionSender | null = null;
   let phase: 'draft' | 'pending' | 'uncertain' | 'settled' | 'retired' = 'draft';
   let result: AppealResolutionResult | null = null;
   const retire = () => {
@@ -20,6 +22,7 @@ export function createAppealResolutionIntent(appealId: string) {
     phase = 'retired';
     statement = '';
     command = null;
+    sender = null;
     result = null;
     return true;
   };
@@ -60,11 +63,12 @@ export function createAppealResolutionIntent(appealId: string) {
       statement = value;
       return true;
     },
-    begin(outcome: ResolutionCommand['outcome']): ResolutionCommand | null {
+    begin(outcome: ResolutionCommand['outcome'], originalSender?: ResolutionSender): ResolutionCommand | null {
       const trimmed = statement.trim();
       const count = Array.from(trimmed).length;
       if (phase !== 'draft' || !admitted || count < 1 || count > 2000) return null;
       command = Object.freeze({ id: appealId, outcome, statement: trimmed, idempotencyKey: crypto.randomUUID() });
+      sender = originalSender ?? null;
       phase = 'pending'; // Lock synchronously, before React renders or the transport starts.
       return command;
     },
@@ -72,6 +76,12 @@ export function createAppealResolutionIntent(appealId: string) {
       if (phase !== 'uncertain') return null;
       phase = 'pending';
       return command;
+    },
+    /** A retry may use only the sender captured with this exact command. */
+    send(original: ResolutionCommand): Promise<AppealResolutionResult> {
+      if (phase !== 'pending' || original !== command || !sender)
+        return Promise.reject(new Error('Appeal command is unavailable'));
+      return sender(original);
     },
     settle(response: AppealResolutionResult) {
       if (phase !== 'pending') return;

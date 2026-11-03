@@ -108,34 +108,23 @@ test('workbench rows open the exact report or appeal and catalogue stays on cata
   expect(workbenchQueueHref({ ...appeals, case: undefined })).not.toContain('case=');
 });
 
-test('an absent selected appeal on the exact page is unavailable and later pages are not scanned', async () => {
-  const targets: string[] = [];
+test('exact appeal inspection stays independent of the captured sparse page and never scans', async () => {
+  const calls: unknown[] = [];
   const page = await readWorkbench(
     source({
-      async readTarget(kind, id) {
-        targets.push(`${kind}:${id}`);
-        return { post: { id, body: 'Independent current target.' } };
+      async boardAppeals(board, cursor, inspect) {
+        calls.push([board, cursor, inspect]);
+        return { appeals: [], next: 'later-page', selectedAppeal: appeal };
       },
     }),
-    workbenchSearch({ board: boardId, queue: 'appeals', case: appeal.id }),
+    workbenchSearch({ board: boardId, queue: 'appeals', cursor: 'captured-page', case: appeal.id }),
   );
+  expect(calls).toEqual([[boardId, 'captured-page', appeal.id]]);
   expect(workbenchAppealFromPage(page, appeal.id).state).toBe('ready');
-  expect(targets).toEqual(['post:post-1']);
+  expect(page.next).toBe('later-page');
   expect(workbenchAppealFromPage(page, 'missing-appeal').state).toBe('unavailable');
-  const missing = await readWorkbench(
-    source({
-      async boardAppeals() {
-        return { appeals: [appeal], next: 'later-page' };
-      },
-      async readTarget() {
-        throw new Error('do not read a target for a missing selection');
-      },
-    }),
-    workbenchSearch({ board: boardId, queue: 'appeals', case: 'missing-appeal' }),
-  );
-  expect(missing.next).toBe('later-page');
-  expect(workbenchAppealFromPage(missing, 'missing-appeal').state).toBe('unavailable');
-  expect(workbenchAppealFromPage({ state: 'ready', appeals: [] }, appeal.id).state).toBe('empty');
+  expect(workbenchAppealFromPage({ state: 'ready', appeals: [appeal] }, appeal.id).state).toBe('unavailable');
+  expect(workbenchAppealFromPage({ state: 'ready', appeals: [] }, appeal.id).state).toBe('unavailable');
 });
 
 test('the selected report page returns to the workbench snapshot', () => {

@@ -8,7 +8,6 @@ import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
 import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from './private-reader-origin';
 import type { ResolvedReportTarget as ModerationTarget } from './reports-read';
-import { enrichModerationTargets } from './target-context';
 import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './appeals-read-model';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
@@ -21,8 +20,8 @@ export type Appeal = {
   createdAt: string;
   decision: {
     statement: string;
-    target?: { kind: 'post' | 'thread'; id: string };
-    targetKind?: 'post' | 'thread';
+    target?: { kind: 'board' | 'post' | 'thread'; id: string };
+    targetKind?: 'board' | 'post' | 'thread';
     targetId?: string;
     /** Retained for existing component fixtures; native lists expose only canResolve. */
     deciderId?: string;
@@ -30,83 +29,44 @@ export type Appeal = {
   };
   canResolve?: boolean;
 };
-export type AppealPage = { appeals: Appeal[]; next: string | null };
+/** Consumer presentation, independent of the pending page. Native binding remains unavailable. */
+export type AppealPage = { appeals: Appeal[]; next: string | null; selectedAppeal?: Appeal };
 export type AppealReadSource = {
-  boardAppeals: (id: string, cursor?: string) => Promise<AppealPage>;
-  threadAppeals: (id: string, cursor?: string) => Promise<AppealPage>;
+  boardAppeals: (id: string, cursor?: string, inspect?: string) => Promise<AppealPage>;
+  threadAppeals: (id: string, cursor?: string, inspect?: string) => Promise<AppealPage>;
 };
 export type AppealTargetReads = {
   post: (id: string) => Promise<ModerationTarget['value']>;
   thread: (id: string) => Promise<ModerationTarget['value']>;
 };
 
-function parseAppealPage(value: unknown): AppealPage {
-  if (!value || typeof value !== 'object') throw new Error('Invalid appeals page');
-  const page = value as Record<string, unknown>;
-  if (
-    !Array.isArray(page.appeals) ||
-    page.appeals.length > MODERATION_APPEALS_PAGE_SIZE ||
-    (page.next !== null && typeof page.next !== 'string')
-  )
+/** Use the installed declaration, including every field its producer supplies. */
+type NativeAppealPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['boards']>['appeals']['get']>>['data']>;
+
+function boundedAppealPage(page: NativeAppealPage | null | undefined): AppealPage {
+  if (!page || !Array.isArray(page.appeals) || page.appeals.length > MODERATION_APPEALS_PAGE_SIZE)
     throw new Error('Invalid appeals page');
-  const appeals = page.appeals.map((item): Appeal => {
-    if (!item || typeof item !== 'object') throw new Error('Invalid appeals page');
-    const appeal = item as Record<string, unknown>;
-    const decision =
-      appeal.decision && typeof appeal.decision === 'object' ? (appeal.decision as Record<string, unknown>) : null;
-    if (
-      typeof appeal.id !== 'string' ||
-      typeof appeal.decisionId !== 'string' ||
-      typeof appeal.appellantId !== 'string' ||
-      typeof appeal.statement !== 'string' ||
-      typeof appeal.createdAt !== 'string' ||
-      typeof appeal.canResolve !== 'boolean' ||
-      !decision ||
-      typeof decision.statement !== 'string' ||
-      !decision.target ||
-      typeof decision.target !== 'object'
-    )
-      throw new Error('Invalid appeals page');
-    const target = decision.target as Record<string, unknown>;
-    if ((target.kind !== 'post' && target.kind !== 'thread') || typeof target.id !== 'string')
-      throw new Error('Invalid appeals page');
-    return {
-      id: appeal.id,
-      decisionId: appeal.decisionId,
-      appellantId: appeal.appellantId,
-      statement: appeal.statement,
-      createdAt: appeal.createdAt,
-      decision: {
-        statement: decision.statement,
-        target: { kind: target.kind, id: target.id },
-      },
-      canResolve: appeal.canResolve,
-    };
-  });
-  return { appeals, next: page.next as string | null };
+  return page;
 }
 
-/** Reads one native page, then resolves each distinct target with at most one ordinary read. */
-export async function readModerationAppeals(
-  source: AppealReadSource,
-  input: { boardId: string; threadId?: string; cursor?: string },
-): Promise<AppealPage> {
+/** One bounded native page; optional context belongs to its native producer. */
+export async function readModerationAppeals(source: AppealReadSource, input: AppealReadInput): Promise<AppealPage> {
   return input.threadId
-    ? source.threadAppeals(input.threadId, input.cursor)
-    : source.boardAppeals(input.boardId, input.cursor);
+    ? source.threadAppeals(input.threadId, input.cursor, input.inspect)
+    : source.boardAppeals(input.boardId, input.cursor, input.inspect);
 }
 
 export async function resolveAppealTargets(appeals: Appeal[], reads: AppealTargetReads): Promise<ModerationTarget[]> {
   const unique = new Map<string, NonNullable<Appeal['decision']['target']>>();
   for (const appeal of appeals) {
     const target = appealTarget(appeal);
-    if (target) unique.set(`${target.kind}:${target.id}`, target);
+    if (target && target.kind !== 'board') unique.set(`${target.kind}:${target.id}`, target);
   }
   return Promise.all(
     [...unique].map(async ([key, target]) => ({
       key,
       kind: target.kind,
-      value: await reads[target.kind](target.id).catch(() => null),
+      value: target.kind === 'board' ? null : await reads[target.kind](target.id).catch(() => null),
     })),
   );
 }
@@ -132,8 +92,14 @@ export const loadModerationAppeals = createServerFn({ method: 'GET' })
     if (value.postId !== undefined && (typeof value.postId !== 'string' || value.postId.length > 128)) throw notFound();
     if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 4096))
       throw notFound();
+    if (
+      value.inspect !== undefined &&
+      (typeof value.inspect !== 'string' || value.inspect.length === 0 || value.inspect.length > 128)
+    )
+      throw notFound();
     return {
       boardId: value.boardId,
+      ...(typeof value.inspect === 'string' ? { inspect: value.inspect } : {}),
       ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
       ...(typeof value.postId === 'string' ? { postId: value.postId } : {}),
       ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
@@ -172,7 +138,10 @@ class AppealReadFailure extends Error {
     super(state);
   }
 }
-function appealResult(result: { data?: unknown; error?: { status: number; value: unknown } | null }): AppealPage {
+function appealResult(result: {
+  data?: NativeAppealPage | null;
+  error?: { status: number; value: unknown } | null;
+}): AppealPage {
   if (result.error) {
     const { status, value } = result.error;
     if (
@@ -184,10 +153,14 @@ function appealResult(result: { data?: unknown; error?: { status: number; value:
       throw new AppealReadFailure('stale');
     throw new AppealReadFailure([401, 403, 404].includes(status) ? 'closed' : 'unavailable');
   }
-  return parseAppealPage(result.data);
+  return boundedAppealPage(result.data);
 }
 
-/** The default route's one native page and deduplicated ordinary target reads. */
+/**
+ * The installed client declares only pending pages. Exact inspection must not silently
+ * degrade into page search or an undeclared request. Bind the generated inspect reader
+ * here when Content installs its composed response and examples.
+ */
 export async function readModerationAppealPage(
   client: KernelClient,
   input: AppealReadInput,
@@ -201,6 +174,15 @@ export async function readModerationAppealPage(
     readerOrigin: readerOrigin ?? null,
     generation: crypto.randomUUID(),
   };
+  if (input.inspect)
+    return {
+      ...identity,
+      appeals: [],
+      targets: [],
+      next: null,
+      state: 'unavailable',
+      unavailableReason: 'native-appeal-inspect',
+    };
   try {
     const headers = auth(authorization);
     const page = await readModerationAppeals(
@@ -222,18 +204,7 @@ export async function readModerationAppealPage(
       },
       input,
     );
-    const targets = await resolveAppealTargets(page.appeals, {
-      post: async (id) => {
-        const result = await client.posts({ id }).get(headers);
-        return result.error ? null : ((result.data as ModerationTarget['value'] | undefined) ?? null);
-      },
-      thread: async (id) => {
-        const result = await client.threads({ id }).get(headers);
-        return result.error ? null : ((result.data as ModerationTarget['value'] | undefined) ?? null);
-      },
-    });
-    const enriched = await enrichModerationTargets(client, targets, [], [], authorization, viewerId);
-    return { ...page, targets: enriched.targets, ...identity, state: 'ready' };
+    return { ...page, targets: [], ...identity, state: 'ready' };
   } catch (error) {
     return {
       ...identity,

@@ -385,10 +385,7 @@ test('The default private Appeals route recovers bounded reads and retires priva
   expect(ready.state).toBe('ready');
   expect(ready.viewerId).toBe(id(900));
   expect(ready.appeals.map((row) => row.canResolve)).toEqual([true, false]);
-  expect(calls.map((request) => new URL(request.url).pathname)).toEqual([
-    `/v1/threads/${id(2)}/appeals`,
-    `/v1/posts/${id(50)}`,
-  ]); // One native page and one point read for the repeated withheld target.
+  expect(calls.map((request) => new URL(request.url).pathname)).toEqual([`/v1/threads/${id(2)}/appeals`]); // One bounded native page; no per-row target or identity hydration.
   const initial = renderToStaticMarkup(createElement(ModerationAppealsPage, { page: ready, input: first }));
   expect(initial).toContain('PRIVATE decision 1');
   expect(initial).toContain('PRIVATE appeal 1');

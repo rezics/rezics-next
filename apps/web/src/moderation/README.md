@@ -24,7 +24,7 @@ Catalogue has no appeal list; that control stays visible and explains the missin
 the sealed native cursor, not report target IDs. Each row carries a stable report or appeal ID into the existing
 detail surface (`/moderation/cases/{reportId}`, the selected workbench appeal, or `/moderation/catalogue`).
 
-The queue reads native list DTOs only. It does not hydrate target documents or reported revisions. Private evidence
+The queue reads installed native list declarations only. It does not hydrate target documents or reported revisions. Private evidence
 and appeal statements appear only when that list returned them. Unavailable, denied and retired reads render no
 cases. Viewer or session replacement retires the mounted private owner.
 
@@ -37,3 +37,16 @@ existing review pages and retain original sender, credentials, key and operands.
 `/moderation/cases/{reportId}` or the selected workbench appeal (`case`) and return to `/moderation/workbench` with
 the captured snapshot. Loaded pending board reports can be dismissed through the existing per-report command, at most
 twenty on the current page.
+
+## Exact appeal inspection
+
+The existing selected workbench consumer accepts one exact selection independently of the bounded pending page.
+It never selects by searching pending rows. Board and thread pending reads retain their native fields and do no
+per-row target, identity or media hydration. Board targets remain operational appeals.
+
+The generated client has not installed Content's composed `inspect` response or genuine response examples.
+Production exact selection therefore exposes `native-appeal-inspect` as unavailable, preserving the captured return
+queue. Binding the composed appellant, destination, provenance and original command remains continuation work;
+no successful native exact inspection is claimed. See the [case and appeal guide](workbench-case.md) for the source,
+retirement and cost boundaries. Existing AppealResolution captures its sender and CSRF headers with its immutable
+command, retaining them through explicit uncertain retry.

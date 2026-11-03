@@ -5858,7 +5858,7 @@
   "saved_filter_review_value_labels_unavailable": "このCollectionの値ラベルは利用できません。Global値で置き換えていません。保存オペランドを変更せず再試行できます。",
   "saved_filter_review_value_unlabelled": "この正確なオペランドについて現在公開された値ラベルはありません。",
   "moderation_workbench_selection_identity": "ボード {board}。このページの通報: {reports}。",
-  "moderation_workbench_appeal_unavailable": "この不服申立ては現在のキューのページにありません。",
+  "moderation_workbench_appeal_unavailable": "この異議申し立ては利用できません。キューに戻るか、確認を再試行してください。",
   "people_biography_title": "伝記",
   "people_biography_help": "執筆された伝記文書は言語、文書の識別子、出典を保ちます。短い説明は名前と説明のままです。",
   "people_biography_unsupported": "この項目は現在のリリースでは認められていません。",

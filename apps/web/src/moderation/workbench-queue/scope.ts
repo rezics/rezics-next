@@ -14,7 +14,7 @@ export type WorkbenchSearch = ReportSelection & {
   cursor?: string;
   realmsCursor?: string;
   boardsCursor?: string;
-  /** Selected appeal on this exact bounded appeals page. Never a later-page scan. */
+  /** Exact appeal inspection beside the captured bounded page; never a later-page scan. */
   case?: string;
 };
 export type WorkbenchScope =

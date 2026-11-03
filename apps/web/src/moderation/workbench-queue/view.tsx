@@ -25,7 +25,9 @@ const control =
 
 export type WorkbenchViewProps = {
   page: Pick<WorkbenchRead, 'state' | 'realms' | 'realmsNext' | 'boards' | 'boardsNext' | 'cases' | 'next' | 'search'> &
-    Partial<Pick<WorkbenchRead, 'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget'>>;
+    Partial<
+      Pick<WorkbenchRead, 'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal'>
+    >;
   onSearch: (search: WorkbenchSearch) => void;
   onRetry?: () => void;
   onRestart?: () => void;
@@ -336,6 +338,7 @@ export function WorkbenchView({
                 state: page.state,
                 appeals: page.appeals ?? [],
                 selectedTarget: page.selectedTarget ?? null,
+                ...(page.selectedAppeal ? { selectedAppeal: page.selectedAppeal } : {}),
               }}
               queueHref={localizeHref(workbenchQueueHref(workbenchSearch({ ...search, case: '' })))}
               {...(isCurrent ? { isCurrent } : {})}

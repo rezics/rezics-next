@@ -5915,7 +5915,7 @@
   "saved_filter_review_value_labels_unavailable": "Exact-Collection value labels are unavailable. No Global values were substituted; retry while the saved operands remain unchanged.",
   "saved_filter_review_value_unlabelled": "No current value label was disclosed for this exact operand.",
   "moderation_workbench_selection_identity": "Board {board}. Reports on this page: {reports}.",
-  "moderation_workbench_appeal_unavailable": "This appeal is not on the current queue page.",
+  "moderation_workbench_appeal_unavailable": "This appeal is unavailable. Return to the queue or retry this inspection.",
   "people_biography_title": "Biography",
   "people_biography_help": "Authored biography documents keep their language, document identity and sources. Short descriptions stay on names and descriptions.",
   "people_biography_unsupported": "This field is not admitted in the current release.",

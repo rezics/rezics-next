@@ -165,7 +165,11 @@ independent rather than making shared files or unfinished producer delivery into
   catalogue. Submitted reports, pending appeals and resolved cases are exclusive native queues with their own
   cursor; a board moderator is not given catalogue authority. Rows carry a stable report or appeal ID into the
   existing review routes. Resolution forms stay on those pages. Catalogue has no appeal list. There is no
-  aggregate case search or platform-wide adjudication. Decision: board decision history is reachable only from a
+  aggregate case search or platform-wide adjudication. Exact appeal selection now has an independent consumer beside
+  the captured pending page, with no row scan or target enrichment. The generated Appeals client still lacks
+  Content's composed inspection declaration and response examples, so production exact selection remains the named
+  unavailable `native-appeal-inspect` seam. Appellant/current context and provenance binding remain continuation
+  work; see the [case and appeal guide](../../apps/web/src/moderation/workbench-case.md). Decision: board decision history is reachable only from a
   selected board; the Global catalogue has no history queue. The Web entry stays explicitly unavailable until
   Content delivers its private native history reader. It never
   derives history from report or appeal scans.
