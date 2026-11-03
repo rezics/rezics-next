@@ -114,6 +114,28 @@ export function aniListImportRoutes(
             skip: t.Optional(t.Boolean()),
             fields: t.Array(t.String({ maxLength: 100 }), { maxItems: 30, uniqueItems: true }),
             replace: t.Optional(t.Boolean()),
+            progress: t.Optional(
+              t.Object(
+                {
+                  occurrence: t.Union([
+                    t.Object({ kind: t.Literal('existing'), sessionId: id }, closed),
+                    t.Object({ kind: t.Literal('start'), primaryUnit: t.String({ minLength: 1, maxLength: 128 }) }, closed),
+                  ]),
+                  measures: t.Array(
+                    t.Object(
+                      {
+                        field: t.String({ minLength: 1, maxLength: 100 }),
+                        action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+                        replace: t.Optional(t.Boolean()),
+                      },
+                      closed,
+                    ),
+                    { minItems: 1, maxItems: 8 },
+                  ),
+                },
+                closed,
+              ),
+            ),
           },
           closed,
         ),

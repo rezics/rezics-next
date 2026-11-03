@@ -484,10 +484,20 @@ remains an integration responsibility, and source delivery does not assert its r
 
 Mounted source: [MAL contract and Web transport examples](../library-import-mal.md). The implementation binds
 current authority, admitted external identifiers, released state roles, native entry revisions and original command
-receipts. Private evidence retains fields without native admission, including simultaneous chapter/volume values.
+receipts. Private evidence retains fields without an exact current profile/unit match, including simultaneous
+chapter/volume values when the accepting profile does not admit them.
 `services/kernel/test/library/list-import-mal.test.ts` covers parser losses and HTTP preview/review/apply,
 unmatched selection, conflicts, retry, owner isolation, malformed input, cancellation and terminal denial.
 Broader acceptance and integration remain deferred; constructed transport examples are not execution evidence.
+
+## MAL and AniList scalar progress adoption
+
+[Reviewed progress adoption](../library-import-progress-adoption.md) composes each retained provider row with an
+explicit existing session or explicit new occurrence. Only current same-ID scalar units are admitted; `episode` is
+currently available for Anime series/season, while standard Book profiles do not admit MAL/AniList `chapter` or
+`volume`. The result reports independent per-measure outcomes, including preserve-local, zero, absent, unknown,
+unsupported, stale and partial-start/update states. Episode counts do not create canonical Episode facts, dates,
+holdings, votes or lifecycle changes. Focused native provider cases and full growth evidence remain integration work.
 
 # Native archive holdings inspection
 

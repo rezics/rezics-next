@@ -111,7 +111,37 @@ export function malImportRoutes(
       {
         params,
         headers,
-        body: t.Object({ row, target: t.Union([id, t.Null()]), skip: t.Boolean(), replace: t.Boolean() }, closed),
+        body: t.Object(
+          {
+            row,
+            target: t.Union([id, t.Null()]),
+            skip: t.Boolean(),
+            replace: t.Boolean(),
+            progress: t.Optional(
+              t.Object(
+                {
+                  occurrence: t.Union([
+                    t.Object({ kind: t.Literal('existing'), sessionId: id }, closed),
+                    t.Object({ kind: t.Literal('start'), primaryUnit: t.String({ minLength: 1, maxLength: 128 }) }, closed),
+                  ]),
+                  measures: t.Array(
+                    t.Object(
+                      {
+                        field: t.String({ minLength: 1, maxLength: 128 }),
+                        action: t.Union([t.Literal('adopt'), t.Literal('clear')]),
+                        replace: t.Optional(t.Boolean()),
+                      },
+                      closed,
+                    ),
+                    { minItems: 1, maxItems: 8 },
+                  ),
+                },
+                closed,
+              ),
+            ),
+          },
+          closed,
+        ),
         response: { 200: result, ...failures },
         detail: detail('review'),
       },

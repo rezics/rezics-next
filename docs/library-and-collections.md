@@ -29,6 +29,10 @@ is background evidence, not implementation evidence.
 and cancellation. Only uniquely mapped released state roles enter native entry commands; every other source field
 remains visible private evidence. This replaces the AniList personal-import deferral only, not other sources or sync.
 
+[Reviewed MAL and AniList scalar progress adoption](library-import-progress-adoption.md) composes retained row review
+with an explicitly selected native consumption occurrence. Exact current profile unit IDs govern admission; unsupported
+source units remain private evidence. It creates no dates, Episode facts, holdings or inferred lifecycle state.
+
 For one account and stored subject there is at most one explicit exclusive entry state, independent labels, progress
 sessions and copies (holdings). These are separate private native facts; ratings remain with ratings. Profiles in
 immutable definitions releases supply state sets, progress modes/units, copy kinds/statuses and import mappings.
