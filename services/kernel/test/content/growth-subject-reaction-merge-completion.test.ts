@@ -206,19 +206,22 @@ async function setReactionSlot(actor: AccountActor, targetId: string, kind: 'lik
 }
 
 async function setSelectedSlots(cases: readonly MergeCase[]): Promise<void> {
-  if (actors.length !== selectedActors) throw new Error('The selected reaction actor set must contain exactly 100 accounts');
+  if (actors.length !== selectedActors)
+    throw new Error('The selected reaction actor set must contain exactly 100 accounts');
   for (const item of cases) {
     for (let start = 0; start < actors.length; start += 20) {
       await Promise.all(
-        actors.slice(start, start + 20).map((actor) =>
-          setReactionSlot(actor, item.source, 'like', `${item.scenario}-${item.scale}-${item.phase}`),
-        ),
+        actors
+          .slice(start, start + 20)
+          .map((actor) => setReactionSlot(actor, item.source, 'like', `${item.scenario}-${item.scale}-${item.phase}`)),
       );
     }
     await Promise.all(
-      actors.slice(0, survivorCollisions).map((actor) =>
-        setReactionSlot(actor, item.final, 'love', `${item.scenario}-${item.scale}-${item.phase}-survivor`),
-      ),
+      actors
+        .slice(0, survivorCollisions)
+        .map((actor) =>
+          setReactionSlot(actor, item.final, 'love', `${item.scenario}-${item.scale}-${item.phase}-survivor`),
+        ),
     );
   }
 }
@@ -247,7 +250,10 @@ async function waitForInitialProjection(item: MergeCase): Promise<void> {
   }
 }
 
-async function provisionCases(scenario: Scenario, route: number): Promise<Map<number, { warmup: MergeCase; measured: MergeCase }>> {
+async function provisionCases(
+  scenario: Scenario,
+  route: number,
+): Promise<Map<number, { warmup: MergeCase; measured: MergeCase }>> {
   if (!runtime) throw new Error('Registered Content runtime is not ready');
   const cases = new Map<number, { warmup: MergeCase; measured: MergeCase }>();
   for (const scale of scales) {
@@ -289,10 +295,7 @@ async function captureActorEvents(): Promise<ActorEventCheckpoint> {
   return { consumer, partitions };
 }
 
-async function mergeWorkflowId(
-  result: Awaited<ReturnType<typeof mergeSubjects>>,
-  mergedId: string,
-): Promise<string> {
+async function mergeWorkflowId(result: Awaited<ReturnType<typeof mergeSubjects>>, mergedId: string): Promise<string> {
   if (!growth) throw new Error('Growth database is not ready');
   const { partition, epoch, position } = result.component;
   const consumer = `merge_event_${randomUUID().replaceAll('-', '')}`;
@@ -552,8 +555,7 @@ async function runCostSeries(scenario: Scenario, axis: Axis, route: number): Pro
     },
   });
   assertCostReport(name, report.samples, pressureRelation(axis));
-  for (const sample of report.samples)
-    expect(sample.seeding.rowsWritten).toBe(seededRows.get(sample.scale)!);
+  for (const sample of report.samples) expect(sample.seeding.rowsWritten).toBe(seededRows.get(sample.scale)!);
   expect(evidence.map(({ scale }) => scale)).toEqual([...scales]);
   for (const item of evidence) {
     expect(item.pageReads).toBe(scenario === 'checkpoint-replay' ? 3 : 2);
@@ -564,46 +566,44 @@ async function runCostSeries(scenario: Scenario, axis: Axis, route: number): Pro
   }
 }
 
-test(
-  'registered Content completion and checkpoint retry retain fixed 100-actor pages across independent growth axes',
-  async () => {
-    base = await createReactionRelayBase();
-    const identities = await registerNativeActors(base, selectedActors + 1);
-    await installReactionGrants(
-      base.system.database.pool,
-      identities.slice(0, selectedActors).map(({ accountId }) => accountId),
-    );
-    growth = await openGrowthDatabase(base.system.database.pool.options.connectionString!);
-    author = await base.system.access.authenticate(base.author.bearer, {
-      pool: growth.pool,
-      deadline: Date.now() + 30_000,
-    });
-    governance = await base.system.access.authenticate(base.governance.bearer, {
-      pool: growth.pool,
-      deadline: Date.now() + 30_000,
-    });
-    actors = await Promise.all(
-      identities.slice(0, selectedActors).map(async ({ bearer }) =>
+test('registered Content completion and checkpoint retry retain fixed 100-actor pages across independent growth axes', async () => {
+  base = await createReactionRelayBase();
+  const identities = await registerNativeActors(base, selectedActors + 1);
+  await installReactionGrants(
+    base.system.database.pool,
+    identities.slice(0, selectedActors).map(({ accountId }) => accountId),
+  );
+  growth = await openGrowthDatabase(base.system.database.pool.options.connectionString!);
+  author = await base.system.access.authenticate(base.author.bearer, {
+    pool: growth.pool,
+    deadline: Date.now() + 30_000,
+  });
+  governance = await base.system.access.authenticate(base.governance.bearer, {
+    pool: growth.pool,
+    deadline: Date.now() + 30_000,
+  });
+  actors = await Promise.all(
+    identities
+      .slice(0, selectedActors)
+      .map(async ({ bearer }) =>
         base!.system.access.authenticate(bearer, { pool: growth!.pool, deadline: Date.now() + 30_000 }),
       ),
-    );
-    if (author.kind !== 'account' || governance.kind !== 'account' || actors.some((actor) => actor.kind !== 'account'))
-      throw new Error('Native Auth did not restore each selected reaction actor');
-    deniedActor = await base.system.access.authenticate(identities.at(-1)!.bearer, {
-      pool: growth.pool,
-      deadline: Date.now() + 30_000,
-    });
-    const subjectRoute = requiredRoute(base.mainBoardId);
-    runtime = await startRegisteredMergeRuntime({
-      pool: growth.pool,
-      databaseUrl: growth.url,
-      routeKey: base.system.routeKey,
-      executorId: `subject-reaction-merge-growth-${randomUUID()}`,
-    });
-    await primeEffectRelayAtCurrentHead(growth.pool);
+  );
+  if (author.kind !== 'account' || governance.kind !== 'account' || actors.some((actor) => actor.kind !== 'account'))
+    throw new Error('Native Auth did not restore each selected reaction actor');
+  deniedActor = await base.system.access.authenticate(identities.at(-1)!.bearer, {
+    pool: growth.pool,
+    deadline: Date.now() + 30_000,
+  });
+  const subjectRoute = requiredRoute(base.mainBoardId);
+  runtime = await startRegisteredMergeRuntime({
+    pool: growth.pool,
+    databaseUrl: growth.url,
+    routeKey: base.system.routeKey,
+    executorId: `subject-reaction-merge-growth-${randomUUID()}`,
+  });
+  await primeEffectRelayAtCurrentHead(growth.pool);
 
-    for (const scenario of ['terminal', 'checkpoint-replay'] as const)
-      for (const axis of ['subjects', 'actors', 'history'] as const) await runCostSeries(scenario, axis, subjectRoute);
-  },
-  900_000,
-);
+  for (const scenario of ['terminal', 'checkpoint-replay'] as const)
+    for (const axis of ['subjects', 'actors', 'history'] as const) await runCostSeries(scenario, axis, subjectRoute);
+}, 900_000);

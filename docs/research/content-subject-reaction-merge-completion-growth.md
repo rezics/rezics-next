@@ -30,11 +30,11 @@ inside the measured process and its runner SQL remains in the shared growth capt
 Each report varies one unrelated population at 256, 1024, and 4096 while keeping each selected source page at exactly
 100 actors and all command, page, and relay limits fixed:
 
-| Axis | Seeded population |
-| --- | --- |
-| Subjects | `semantic.subject` rows on unrelated routed subjects |
-| Actors | `content.reaction` and `content.subject_reactor` rows for unrelated actors on a separate subject |
-| History | Retained `subject.merge` and `content.reaction.set` receipts in the source command partition |
+| Axis     | Seeded population                                                                                |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| Subjects | `semantic.subject` rows on unrelated routed subjects                                             |
+| Actors   | `content.reaction` and `content.subject_reactor` rows for unrelated actors on a separate subject |
+| History  | Retained `subject.merge` and `content.reaction.set` receipts in the source command partition     |
 
 The Content Cost contract bounds each selected page to at most 100 actor commands, constant statements and rows at a
 fixed page size, and logarithmic block growth. These measurements claim bounded page completion and checkpoint retry;
