@@ -32,7 +32,11 @@ test('private annotations and reviewed provider observations have independent re
   expect(saved.status).toBe(200);
   const savedBody = await saved.json();
   expect(saved.headers.get('cache-control')).toBe('private, no-store');
-  expect(savedBody.personalEntry).toMatchObject({ annotationRevision: 1, note: 'Read the revised edition.', priority: 8 });
+  expect(savedBody.personalEntry).toMatchObject({
+    annotationRevision: 1,
+    note: 'Read the revised edition.',
+    priority: 8,
+  });
   const replay = await f.send(
     'owner',
     'PUT',
@@ -44,19 +48,25 @@ test('private annotations and reviewed provider observations have independent re
 
   const records = [
     {
-      provider: 'mal', recordId: 'list/17', confirmReviewed: true,
+      provider: 'mal',
+      recordId: 'list/17',
+      confirmReviewed: true,
       privacy: { status: 'known', meaning: 'private' },
       sourceCreated: { status: 'known', value: '2004-02' },
       sourceUpdated: { status: 'known', value: '2004-02-29T23:59:01.123+08:00' },
     },
     {
-      provider: 'vndb', recordId: 'entry-2', confirmReviewed: true,
+      provider: 'vndb',
+      recordId: 'entry-2',
+      confirmReviewed: true,
       privacy: { status: 'known', meaning: 'source_visible' },
       sourceCreated: { status: 'known', value: '2005' },
       sourceUpdated: { status: 'known', value: '2005-04-01T00:00-00:00' },
     },
     {
-      provider: 'anilist', recordId: 'entry-3', confirmReviewed: true,
+      provider: 'anilist',
+      recordId: 'entry-3',
+      confirmReviewed: true,
       privacy: { status: 'unknown', sourceValue: 'private_flag_v2' },
       sourceCreated: { status: 'absent' },
       sourceUpdated: { status: 'unknown', sourceValue: 'early 2004' },
@@ -64,10 +74,22 @@ test('private annotations and reviewed provider observations have independent re
   ];
   for (const [index, record] of records.entries()) {
     const admissionKey = entryKey();
-    const response = await f.send('owner', 'POST', `/v1/libraryEntries/${subjectId}/sourceObservations`, record, admissionKey);
+    const response = await f.send(
+      'owner',
+      'POST',
+      `/v1/libraryEntries/${subjectId}/sourceObservations`,
+      record,
+      admissionKey,
+    );
     expect(response.status).toBe(201);
     if (index === 0) {
-      const replay = await f.send('owner', 'POST', `/v1/libraryEntries/${subjectId}/sourceObservations`, record, admissionKey);
+      const replay = await f.send(
+        'owner',
+        'POST',
+        `/v1/libraryEntries/${subjectId}/sourceObservations`,
+        record,
+        admissionKey,
+      );
       expect(await replay.json()).toEqual(await response.json());
     }
   }
@@ -107,20 +129,26 @@ test('private annotations and reviewed provider observations have independent re
     clearKey,
   );
   expect(cleared.status).toBe(200);
-  expect(await cleared.json()).toMatchObject({ personalEntry: { annotationRevision: 2, note: null, priority: 8, sourceObservations: expect.any(Array) } });
-  const stale = await f.send(
-    'owner',
-    'PUT',
-    `/v1/libraryEntries/${subjectId}/annotations`,
-    { revision: 1, note: { op: 'set', value: 'stale' }, priority: { op: 'unchanged' } },
-  );
+  expect(await cleared.json()).toMatchObject({
+    personalEntry: { annotationRevision: 2, note: null, priority: 8, sourceObservations: expect.any(Array) },
+  });
+  const stale = await f.send('owner', 'PUT', `/v1/libraryEntries/${subjectId}/annotations`, {
+    revision: 1,
+    note: { op: 'set', value: 'stale' },
+    priority: { op: 'unchanged' },
+  });
   expect(stale.status).toBe(409);
 
   const correctionKey = entryKey();
   clockTime = Date.parse('2025-02-03T04:05:06.000Z');
   const correctionBody = {
-    provider: 'mal', recordId: 'list/17', revision: 1, confirmReviewed: true,
-    privacy: { op: 'clear' }, sourceCreated: { op: 'unchanged' }, sourceUpdated: { op: 'clear' },
+    provider: 'mal',
+    recordId: 'list/17',
+    revision: 1,
+    confirmReviewed: true,
+    privacy: { op: 'clear' },
+    sourceCreated: { op: 'unchanged' },
+    sourceUpdated: { op: 'clear' },
   };
   const corrected = await f.send(
     'owner',
@@ -133,7 +161,11 @@ test('private annotations and reviewed provider observations have independent re
   expect(corrected.headers.get('cache-control')).toBe('private, no-store');
   const correctedBody = await corrected.json();
   const correctionReplay = await f.send(
-    'owner', 'PATCH', `/v1/libraryEntries/${subjectId}/sourceObservations`, correctionBody, correctionKey,
+    'owner',
+    'PATCH',
+    `/v1/libraryEntries/${subjectId}/sourceObservations`,
+    correctionBody,
+    correctionKey,
   );
   expect(await correctionReplay.json()).toEqual(correctedBody);
   expect(correctedBody).toMatchObject({
@@ -146,15 +178,24 @@ test('private annotations and reviewed provider observations have independent re
     },
   });
   const staleCorrection = await f.send('owner', 'PATCH', `/v1/libraryEntries/${subjectId}/sourceObservations`, {
-    provider: 'mal', recordId: 'list/17', revision: 1, confirmReviewed: true,
-    privacy: { op: 'unchanged' }, sourceCreated: { op: 'clear' }, sourceUpdated: { op: 'unchanged' },
+    provider: 'mal',
+    recordId: 'list/17',
+    revision: 1,
+    confirmReviewed: true,
+    privacy: { op: 'unchanged' },
+    sourceCreated: { op: 'clear' },
+    sourceUpdated: { op: 'unchanged' },
   });
   expect(staleCorrection.status).toBe(409);
   const duplicate = await f.send('owner', 'POST', `/v1/libraryEntries/${subjectId}/sourceObservations`, records[0]);
   expect(duplicate.status).toBe(409);
   const impossible = await f.send('owner', 'POST', `/v1/libraryEntries/${subjectId}/sourceObservations`, {
-    provider: 'mal', recordId: 'bad-date', confirmReviewed: true, privacy: { status: 'unknown' },
-    sourceCreated: { status: 'known', value: '2023-02-29' }, sourceUpdated: { status: 'absent' },
+    provider: 'mal',
+    recordId: 'bad-date',
+    confirmReviewed: true,
+    privacy: { status: 'unknown' },
+    sourceCreated: { status: 'known', value: '2023-02-29' },
+    sourceUpdated: { status: 'absent' },
   });
   expect(impossible.status).toBe(400);
 });
@@ -174,15 +215,27 @@ test('annotation-only and provenance-only facts support Everything without creat
 
   const annotationOnly = await f.createSubject('recipe');
   const annotation = await f.send('owner', 'PUT', `/v1/libraryEntries/${annotationOnly}/annotations`, {
-    revision: 0, note: { op: 'set', value: 'Owner-only note' }, priority: { op: 'unchanged' },
+    revision: 0,
+    note: { op: 'set', value: 'Owner-only note' },
+    priority: { op: 'unchanged' },
   });
   expect(annotation.status).toBe(200);
   expect((await truth(annotationOnly)).presence).toBe(true);
   expect(await supported(annotationOnly)).toBe(true);
-  expect((await f.pool.query('SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3', [route, f.owner.actor.accountId, annotationOnly])).rowCount).toBe(0);
+  expect(
+    (
+      await f.pool.query('SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3', [
+        route,
+        f.owner.actor.accountId,
+        annotationOnly,
+      ])
+    ).rowCount,
+  ).toBe(0);
 
   const cleared = await f.send('owner', 'PUT', `/v1/libraryEntries/${annotationOnly}/annotations`, {
-    revision: 1, note: { op: 'clear' }, priority: { op: 'unchanged' },
+    revision: 1,
+    note: { op: 'clear' },
+    priority: { op: 'unchanged' },
   });
   expect(cleared.status).toBe(200);
   expect((await truth(annotationOnly)).presence).toBe(false);
@@ -190,11 +243,23 @@ test('annotation-only and provenance-only facts support Everything without creat
 
   const provenanceOnly = await f.createSubject('record');
   const source = await f.send('owner', 'POST', `/v1/libraryEntries/${provenanceOnly}/sourceObservations`, {
-    provider: 'vndb', recordId: 'record-only', confirmReviewed: true,
-    privacy: { status: 'unknown' }, sourceCreated: { status: 'absent' }, sourceUpdated: { status: 'absent' },
+    provider: 'vndb',
+    recordId: 'record-only',
+    confirmReviewed: true,
+    privacy: { status: 'unknown' },
+    sourceCreated: { status: 'absent' },
+    sourceUpdated: { status: 'absent' },
   });
   expect(source.status).toBe(201);
   expect((await truth(provenanceOnly)).presence).toBe(true);
   expect(await supported(provenanceOnly)).toBe(true);
-  expect((await f.pool.query('SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3', [route, f.owner.actor.accountId, provenanceOnly])).rowCount).toBe(0);
+  expect(
+    (
+      await f.pool.query('SELECT 1 FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3', [
+        route,
+        f.owner.actor.accountId,
+        provenanceOnly,
+      ])
+    ).rowCount,
+  ).toBe(0);
 });

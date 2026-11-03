@@ -60,10 +60,20 @@ test('terminal account fact pages erase bounded native rows exactly once preserv
   expect(second.value.removed).toBe(1);
   expect(second.value.exhausted).toBe(true);
   expect(
-    (await pool.query(`SELECT count(*)::int AS n FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2`, [route, id(1)])).rows,
+    (
+      await pool.query(`SELECT count(*)::int AS n FROM library.entry_personal_fact WHERE route=$1 AND account_id=$2`, [
+        route,
+        id(1),
+      ])
+    ).rows,
   ).toEqual([{ n: 0 }]);
   expect(
-    (await pool.query(`SELECT count(*)::int AS n FROM library.entry_source_observation WHERE route=$1 AND account_id=$2`, [route, id(1)])).rows,
+    (
+      await pool.query(
+        `SELECT count(*)::int AS n FROM library.entry_source_observation WHERE route=$1 AND account_id=$2`,
+        [route, id(1)],
+      )
+    ).rows,
   ).toEqual([{ n: 0 }]);
   expect(
     (await pool.query(`SELECT account_id FROM library.entry WHERE route=$1 ORDER BY account_id`, [route])).rows,
