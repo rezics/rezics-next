@@ -84,7 +84,7 @@ test('saved member pages compose across source depth and retained-label growth',
 
       const report = await checkGrowth(f.database, {
         name,
-        scales,
+        scales: [...scales],
         bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
         byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
         async grow(database, scale, previous) {
@@ -141,14 +141,14 @@ test('saved member pages compose across source depth and retained-label growth',
           expect(cost.requestBytes).toBeDefined();
           expect(cost.responseBytes).toBeDefined();
         }
-    }
-    for (const scale of scales) {
-      expect(cases.get(scale)).toBeGreaterThan(0);
-      const settled = settlements.get(scale);
-      expect(settled).toBeDefined();
-      expect(settled!.rows).toBeGreaterThan(0);
-      expect(settled!.statements).toBeGreaterThan(0);
-      expect(settled!.bytes).toBeGreaterThan(0);
+      for (const scale of scales) {
+        expect(cases.get(scale)).toBeGreaterThan(0);
+        const settled = settlements.get(scale);
+        expect(settled).toBeDefined();
+        expect(settled!.rows).toBeGreaterThan(0);
+        expect(settled!.statements).toBeGreaterThan(0);
+        expect(settled!.bytes).toBeGreaterThan(0);
+      }
     }
 
     const restore = await f.unidentifiedWitness();
