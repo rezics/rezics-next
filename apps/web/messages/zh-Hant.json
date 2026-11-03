@@ -2207,6 +2207,8 @@
   "inbox_triage_mark_help": "這會將伺服器的已讀標記推進至此處最新載入的通知；更早的通知也會一併標記為已讀。",
   "inbox_triage_marked": "伺服器已將通知標記為已讀，範圍截至最新的已載入通知。",
   "discovery_loading": "正在載入結果…",
+  "discovery_not_in_library": "不在你的收藏庫中。",
+  "discovery_viewer_unavailable": "你的收藏庫與評分詳情目前無法使用。請重新載入此搜尋再試一次。",
   "discovery_not_ready": "搜尋正在準備中，請稍後再試。",
   "discovery_unnamed_account": "未命名帳號",
   "discovery_verified_as": "已認證為 {name}",

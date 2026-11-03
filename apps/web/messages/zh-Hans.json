@@ -2207,6 +2207,8 @@
   "inbox_triage_mark_help": "这会将服务器的已读标记推进到此处最新加载的通知；更早的通知也会一并标记为已读。",
   "inbox_triage_marked": "服务器已将通知标记为已读，范围截至最新的已加载通知。",
   "discovery_loading": "正在加载结果…",
+  "discovery_not_in_library": "不在你的收藏库中。",
+  "discovery_viewer_unavailable": "你的收藏库和评分详情暂时不可用。请重新加载此搜索并重试。",
   "discovery_not_ready": "搜索正在准备中。请稍后重试。",
   "discovery_unnamed_account": "未命名帐号",
   "discovery_verified_as": "已认证为 {name}",

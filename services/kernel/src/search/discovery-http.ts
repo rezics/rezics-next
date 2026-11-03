@@ -6,6 +6,10 @@ import { Compile } from 'typebox/compile';
 import { routeOf } from '../route/route.ts';
 import { LIST_CURSOR_BOUNDS } from '../tokens/list-cursor.ts';
 import { CoverSummarySchema, SubjectSummarySchema } from '../semantic/http/summaries.ts';
+import { viewerFactsResponseSchema } from '../library/viewer-facts.ts';
+import { PublicFigureSchema } from '../rating/public-figure-http.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const nullableText = t.Union([t.String(), t.Null()]);
@@ -49,6 +53,48 @@ const spaceKey = t.Object(
   closed,
 );
 const collectionSummary = t.Object({ id, title: t.String({ minLength: 1 }), description: nullableText }, closed);
+const collectionCard = t.Union([
+  t.Object(
+    {
+      kind: t.Literal('collection'),
+      id,
+      destination: t.String({ minLength: 1 }),
+      title: t.String({ minLength: 1 }),
+      description: nullableText,
+      visibility: t.Literal('public'),
+      revision: t.Integer({ minimum: 0 }),
+      presentationKind: t.Union([t.String(), t.Null()]),
+      presentationKindSource: t.Union([t.Literal('mixed'), t.Literal('owner')]),
+      cover: t.Union([CoverSummarySchema, t.Null()]),
+      coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
+      membershipKind: t.Literal('curated'),
+      memberCount: t.Integer({ minimum: 0 }),
+      orderEpoch: t.Integer({ minimum: 0 }),
+      createdAt: t.String({ format: 'date-time' }),
+      updatedAt: t.String({ format: 'date-time' }),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      kind: t.Literal('collection'),
+      id,
+      destination: t.String({ minLength: 1 }),
+      title: t.String({ minLength: 1 }),
+      description: nullableText,
+      visibility: t.Literal('public'),
+      revision: t.Integer({ minimum: 0 }),
+      presentationKind: t.Union([t.String(), t.Null()]),
+      presentationKindSource: t.Union([t.Literal('mixed'), t.Literal('owner')]),
+      cover: t.Union([CoverSummarySchema, t.Null()]),
+      coverSource: t.Union([t.Literal('owner'), t.Literal('member'), t.Literal('none'), t.Literal('pending')]),
+      membershipKind: t.Literal('dynamic'),
+      outputGeneration: t.String({ minLength: 1 }),
+    },
+    closed,
+  ),
+]);
+const collectionDiscoverySummary = t.Object({ ...collectionSummary.properties, card: collectionCard }, closed);
 const reviewAuthor = t.Object({ displayName: nullableText, handle: nullableText }, closed);
 const reviewSubject = t.Object({ id, title: nullableText }, closed);
 const reviewSummary = t.Object(
@@ -116,6 +162,36 @@ const characterPersonContexts = t.Object(
   },
   closed,
 );
+const discoveryFact = t.Union([
+  t.Object({ kind: t.Literal('item'), id, labels: t.Record(t.String(), t.String()) }, closed),
+  t.Object(
+    {
+      kind: t.Literal('time'),
+      year: t.Integer(),
+      month: t.Optional(t.Integer()),
+      day: t.Optional(t.Integer()),
+    },
+    closed,
+  ),
+  t.Object({ kind: t.Literal('quantity'), amount: t.Number(), unit: t.String() }, closed),
+  t.Object({ kind: t.Literal('code'), value: t.String() }, closed),
+]);
+const listPresentation = t.Object(
+  {
+    imageAspect: t.Union([t.Literal('portrait'), t.Literal('landscape'), t.Literal('square')]),
+    keyFacts: t.Array(t.String(), { maxItems: 4 }),
+  },
+  closed,
+);
+const viewerFactsUnavailable = t.Object(
+  {
+    state: t.Literal('unavailable'),
+    reason: t.Union([t.Literal('identity'), t.Literal('currentness'), t.Literal('response_limit')]),
+    retryable: t.Boolean(),
+  },
+  closed,
+);
+const viewerFacts = t.Union([t.Null(), viewerFactsResponseSchema, viewerFactsUnavailable]);
 /** The owner-tagged key and non-null native summary close together; no Account Subject shell. */
 export const DiscoveryPageSchema = t.Object(
   {
@@ -127,6 +203,10 @@ export const DiscoveryPageSchema = t.Object(
             summary: t.Object({ kind: t.Literal('subject'), value: SubjectSummarySchema }, closed),
             labels: t.Optional(t.Record(t.String(), t.String())),
             aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
+            descriptions: t.Optional(t.Record(t.String(), t.String())),
+            facts: t.Optional(t.Record(t.String(), t.Array(discoveryFact, { maxItems: 3 }), { maxProperties: 4 })),
+            figure: t.Optional(PublicFigureSchema),
+            listPresentation: t.Optional(listPresentation),
             contexts: t.Optional(characterPersonContexts),
           },
           closed,
@@ -138,7 +218,7 @@ export const DiscoveryPageSchema = t.Object(
         t.Object(
           {
             key: collectionKey,
-            summary: t.Object({ kind: t.Literal('collection'), value: collectionSummary }, closed),
+            summary: t.Object({ kind: t.Literal('collection'), value: collectionDiscoverySummary }, closed),
           },
           closed,
         ),
@@ -168,6 +248,7 @@ export const DiscoveryPageSchema = t.Object(
     ),
     next: continuation,
     as_of: t.String({ format: 'date-time' }),
+    viewerFacts: t.Optional(viewerFacts),
   },
   closed,
 );
@@ -188,6 +269,9 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
   if (routeOf(key.id) !== key.route || key.id !== summary.value.id) unavailable();
   if (summary.kind === 'subject') {
     if (key.owner !== 'semantic' || key.kind !== summary.value.type) unavailable();
+    const figure = (value as { figure?: { questionId: string; populationId: string } }).figure;
+    if (figure && (figure.questionId !== STANDARD_QUESTION_ID || figure.populationId !== GLOBAL_CONTEXT.id))
+      unavailable();
     const contexts = (
       value as {
         contexts?: { credits: { items: unknown[]; next: boolean }; appearances: { items: unknown[]; next: boolean } };
@@ -197,7 +281,18 @@ export function admitDiscoveryHit(value: unknown): asserts value is DiscoveryUni
       unavailable();
   }
   if (summary.kind === 'account' && (key.owner !== 'accounts' || key.kind !== 'account')) unavailable();
-  if (summary.kind === 'collection' && (key.owner !== 'library' || key.kind !== 'collection')) unavailable();
+  if (summary.kind === 'collection') {
+    if (key.owner !== 'library' || key.kind !== 'collection') unavailable();
+    const { card } = summary.value;
+    if (
+      card.id !== key.id ||
+      card.title !== summary.value.title ||
+      card.description !== summary.value.description ||
+      card.revision < 0 ||
+      card.destination !== `/collections/${key.id}`
+    )
+      unavailable();
+  }
   if (summary.kind === 'review' && (key.owner !== 'content' || key.kind !== 'review')) unavailable();
   if (summary.kind === 'space' && (key.owner !== 'community' || key.kind !== 'space')) unavailable();
 }
@@ -212,6 +307,24 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
     const identity = JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
     if (identities.has(identity)) unavailable();
     identities.add(identity);
+  }
+  if (page.viewerFacts && page.viewerFacts !== null && page.viewerFacts.state === 'current') {
+    const subjects = page.hits.filter((hit) => hit.summary.kind === 'subject');
+    if (
+      page.viewerFacts.rows.length !== subjects.length ||
+      page.viewerFacts.rows.some(
+        (row, index) =>
+          row.subjectId !== subjects[index]!.key.id ||
+          row.rowKey !==
+            JSON.stringify([
+              subjects[index]!.key.owner,
+              subjects[index]!.key.kind,
+              subjects[index]!.key.route,
+              subjects[index]!.key.id,
+            ]),
+      )
+    )
+      unavailable();
   }
   const kinds = new Set<string>();
   for (const kind of page.kinds.values) {
@@ -256,6 +369,21 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
                   Object.entries(hit.aliases).map(([language, values]) => [language, [...values]]),
                 ),
               }),
+          ...(hit.descriptions === undefined ? {} : { descriptions: { ...hit.descriptions } }),
+          ...(hit.facts === undefined
+            ? {}
+            : {
+                facts: Object.fromEntries(
+                  Object.entries(hit.facts).map(([property, values]) => [
+                    property,
+                    values.map((fact) => structuredClone(fact)),
+                  ]),
+                ),
+              }),
+          ...(hit.figure === undefined ? {} : { figure: { ...hit.figure, scale: { ...hit.figure.scale } } }),
+          ...(hit.listPresentation === undefined
+            ? {}
+            : { listPresentation: { ...hit.listPresentation, keyFacts: [...hit.listPresentation.keyFacts] } }),
           ...(hit.contexts === undefined
             ? {}
             : {
@@ -275,7 +403,31 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       const value = hit.summary.value;
       if (hit.summary.kind === 'collection') {
         if (hit.key.owner !== 'library') throw new SearchUnavailableError('Discovery summary owner disagrees');
-        return { key: { ...hit.key }, summary: { kind: 'collection' as const, value: { ...value } } };
+        return {
+          key: { ...hit.key },
+          summary: {
+            kind: 'collection' as const,
+            value: {
+              ...value,
+              card: {
+                ...value.card,
+                cover: value.card.cover
+                  ? {
+                      ...value.card.cover,
+                      placeholder: { ...value.card.cover.placeholder },
+                      variants: value.card.cover.variants.map((variant) => ({ ...variant })),
+                      focalPoint: value.card.cover.focalPoint ? { ...value.card.cover.focalPoint } : null,
+                      credit: {
+                        ...value.card.cover.credit,
+                        via: { ...value.card.cover.credit.via },
+                        obligations: [...value.card.cover.credit.obligations],
+                      },
+                    }
+                  : null,
+              },
+            },
+          },
+        };
       }
       if (hit.summary.kind === 'review') {
         if (hit.key.owner !== 'content') throw new SearchUnavailableError('Discovery summary owner disagrees');
@@ -300,5 +452,6 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
         },
       };
     }),
+    ...(page.viewerFacts === undefined ? {} : { viewerFacts: structuredClone(page.viewerFacts) }),
   };
 }

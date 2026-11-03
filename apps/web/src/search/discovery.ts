@@ -127,10 +127,46 @@ const legacyPage = v.object({
 });
 const route = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(65535));
 const resourceId = v.pipe(v.string(), v.minLength(1));
+const publicCollectionCard = v.variant('membershipKind', [
+  v.strictObject({
+    kind: v.literal('collection'),
+    id: resourceId,
+    destination: v.pipe(v.string(), v.minLength(1)),
+    title: v.pipe(v.string(), v.minLength(1)),
+    description: v.nullable(v.string()),
+    visibility: v.literal('public'),
+    revision: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    presentationKind: v.nullable(v.string()),
+    presentationKindSource: v.picklist(['mixed', 'owner']),
+    cover: v.nullable(cover),
+    coverSource: v.picklist(['owner', 'member', 'none', 'pending']),
+    membershipKind: v.literal('curated'),
+    memberCount: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    orderEpoch: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }),
+  v.strictObject({
+    kind: v.literal('collection'),
+    id: resourceId,
+    destination: v.pipe(v.string(), v.minLength(1)),
+    title: v.pipe(v.string(), v.minLength(1)),
+    description: v.nullable(v.string()),
+    visibility: v.literal('public'),
+    revision: v.pipe(v.number(), v.integer(), v.minValue(0)),
+    presentationKind: v.nullable(v.string()),
+    presentationKindSource: v.picklist(['mixed', 'owner']),
+    cover: v.nullable(cover),
+    coverSource: v.picklist(['owner', 'member', 'none', 'pending']),
+    membershipKind: v.literal('dynamic'),
+    outputGeneration: v.pipe(v.string(), v.minLength(1)),
+  }),
+]);
 const publicCollectionSummary = v.strictObject({
   id: resourceId,
   title: v.pipe(v.string(), v.minLength(1)),
   description: v.nullable(v.string()),
+  card: publicCollectionCard,
 });
 const reviewSubject = v.strictObject({
   id: resourceId,
@@ -202,11 +238,62 @@ const count = v.union([
 const kind = v.object({ id: v.string(), labels: textMap, icon: v.string(), count: v.exactOptional(count) });
 const kinds = v.object({ values: v.pipe(v.array(kind), v.maxLength(8)), next: v.nullable(v.string()) });
 const kindPage = v.object({ kinds, as_of: v.string() });
+const viewerQuestion = v.strictObject({
+  id: resourceId,
+  revision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  grain: v.string(),
+  scale: v.strictObject({
+    min: v.number(),
+    max: v.number(),
+    displayStep: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  }),
+  meaning: v.string(),
+});
+const viewerEntry = v.variant('state', [
+  v.strictObject({
+    state: v.literal('present'),
+    incarnationId: v.nullable(resourceId),
+    entryState: v.nullable(v.string()),
+    revision: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  }),
+  v.strictObject({ state: v.literal('absent') }),
+  v.strictObject({ state: v.literal('unavailable'), reason: v.literal('scope') }),
+]);
+const viewerVote = v.variant('state', [
+  v.strictObject({
+    state: v.literal('present'),
+    questionId: resourceId,
+    questionRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+    units: v.pipe(v.number(), v.integer()),
+    revision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  }),
+  v.strictObject({
+    state: v.literal('absent'),
+    questionId: resourceId,
+    questionRevision: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  }),
+  v.strictObject({ state: v.literal('unavailable'), reason: v.picklist(['scope', 'question']) }),
+]);
+const viewerFact = v.strictObject({ rowKey: v.string(), subjectId: resourceId, entry: viewerEntry, vote: viewerVote });
+const viewerFacts = v.union([
+  v.null(),
+  v.strictObject({
+    state: v.literal('current'),
+    question: v.nullable(viewerQuestion),
+    rows: v.pipe(v.array(viewerFact), v.maxLength(100)),
+  }),
+  v.strictObject({
+    state: v.literal('unavailable'),
+    reason: v.picklist(['identity', 'currentness', 'response_limit']),
+    retryable: v.boolean(),
+  }),
+]);
 const page = v.object({
   hits: v.pipe(v.array(hit), v.maxLength(100)),
   kinds,
   next: v.nullable(v.string()),
   as_of: v.string(),
+  viewerFacts: v.exactOptional(viewerFacts),
 });
 
 export type DiscoveryPage = v.InferOutput<typeof page>;
@@ -218,6 +305,8 @@ export type PublicCollectionSummary = v.InferOutput<typeof publicCollectionSumma
 export type PublicReviewSummary = v.InferOutput<typeof publicReviewSummary>;
 export type PublicSpaceSummary = v.InferOutput<typeof publicSpaceSummary>;
 export type PublicDiscoveryHit = Extract<DiscoveryHit, { summary: { kind: 'collection' | 'review' | 'space' } }>;
+export type DiscoveryViewerFact = v.InferOutput<typeof viewerFact>;
+export type DiscoveryViewerQuestion = v.InferOutput<typeof viewerQuestion>;
 export type DiscoveryRequest = Parameters<KernelClient['subjects']['$search']['post']>[0] & {
   representation: 'discovery-v1';
   languages: string[];
@@ -257,6 +346,7 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
     switch (hit.summary.kind) {
       case 'subject':
         if (hit.key.owner !== 'semantic' || hit.key.kind !== hit.summary.value.type) return;
+        if (hit.facts && Object.keys(hit.facts).length > 4) return;
         const contexts = (hit as Extract<DiscoveryHit, { summary: { kind: 'subject' } }>).contexts;
         if (contexts && [contexts.credits, contexts.appearances].some((list) => list.next && list.items.length !== 3))
           return;
@@ -265,7 +355,14 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
         if (hit.key.owner !== 'accounts' || hit.key.kind !== 'account') return;
         break;
       case 'collection':
-        if (hit.key.owner !== 'library' || hit.key.kind !== 'collection') return;
+        if (
+          hit.key.owner !== 'library' ||
+          hit.key.kind !== 'collection' ||
+          hit.summary.value.card.id !== hit.key.id ||
+          hit.summary.value.card.title !== hit.summary.value.title ||
+          hit.summary.value.card.description !== hit.summary.value.description
+        )
+          return;
         break;
       case 'review':
         if (hit.key.owner !== 'content' || hit.key.kind !== 'review' || hit.summary.value.kind !== 'review') return;
@@ -273,6 +370,28 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
       case 'space':
         if (hit.key.owner !== 'community' || hit.key.kind !== 'space') return;
         break;
+    }
+  }
+  if (result.viewerFacts && result.viewerFacts !== null && result.viewerFacts.state === 'current') {
+    const subjects = result.hits.filter((hit) => hit.summary.kind === 'subject');
+    if (
+      result.viewerFacts.rows.length !== subjects.length ||
+      result.viewerFacts.rows.some(
+        (row, index) => row.subjectId !== subjects[index]!.key.id || row.rowKey !== discoveryKey(subjects[index]!),
+      )
+    )
+      return;
+    for (const row of result.viewerFacts.rows) {
+      if (row.vote.state === 'unavailable') continue;
+      const question = result.viewerFacts.question;
+      if (!question || row.vote.questionId !== question.id || row.vote.questionRevision !== question.revision) return;
+      if (
+        row.vote.state === 'present' &&
+        (row.vote.units < question.scale.min ||
+          row.vote.units > question.scale.max ||
+          (row.vote.units - question.scale.min) % question.scale.displayStep !== 0)
+      )
+        return;
     }
   }
   if (new Set(result.hits.map(discoveryKey)).size !== result.hits.length || !validKinds(result.kinds)) return;

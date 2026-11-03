@@ -2207,6 +2207,8 @@
   "inbox_triage_mark_help": "Dadurch wird der serverseitige Lesemarker bis zur neuesten hier geladenen Mitteilung vorgerückt und schließt frühere Mitteilungen ein.",
   "inbox_triage_marked": "Der Server hat Mitteilungen bis zur neuesten geladenen Mitteilung als gelesen markiert.",
   "discovery_loading": "Ergebnisse werden geladen…",
+  "discovery_not_in_library": "Nicht in deiner Bibliothek.",
+  "discovery_viewer_unavailable": "Deine Bibliotheks- und Bewertungsdetails sind nicht verfügbar. Lade diese Suche erneut, um es noch einmal zu versuchen.",
   "discovery_not_ready": "Die Suche wird vorbereitet. Versuche es gleich noch einmal.",
   "discovery_unnamed_account": "Unbenanntes Konto",
   "discovery_verified_as": "Verifiziert als {name}",

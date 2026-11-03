@@ -2,9 +2,10 @@ import { expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { compileDiscoveryFilter, currentDiscoveryFilter } from '../../src/search/discovery-filter.ts';
 import { currentDiscoveryCandidates } from '../../src/search/discovery-current.ts';
-import { admitDiscoveryHit } from '../../src/search/discovery-http.ts';
+import { admitDiscoveryHit, admitDiscoveryPage } from '../../src/search/discovery-http.ts';
 import { discoveryKindDirectory } from '../../src/search/discovery-registry.ts';
 import { compareDiscoveryTuple, type DiscoveryCandidate } from '../../src/search/discovery-query.ts';
+import { ownDiscoveryRequest } from '../../src/search/discovery-request.ts';
 import { routeOf } from '../../src/route/route.ts';
 import type {
   DiscoveryKey,
@@ -77,7 +78,32 @@ test('ready owner kinds enter the directory and their public variants pass the c
   for (const hit of [
     {
       key: { owner: 'library', kind: 'collection', route, id },
-      summary: { kind: 'collection', value: { id, title: 'Library', description: null } },
+      summary: {
+        kind: 'collection',
+        value: {
+          id,
+          title: 'Library',
+          description: null,
+          card: {
+            kind: 'collection',
+            id,
+            destination: `/collections/${id}`,
+            title: 'Library',
+            description: null,
+            visibility: 'public',
+            revision: 1,
+            presentationKind: null,
+            presentationKindSource: 'owner',
+            cover: null,
+            coverSource: 'none',
+            membershipKind: 'curated',
+            memberCount: 0,
+            orderEpoch: 0,
+            createdAt: '2026-11-01T00:00:00Z',
+            updatedAt: '2026-11-01T00:00:00Z',
+          },
+        },
+      },
     },
     {
       key: { owner: 'content', kind: 'review', route, id },
@@ -89,4 +115,59 @@ test('ready owner kinds enter the directory and their public variants pass the c
     },
   ])
     expect(() => admitDiscoveryHit(hit)).not.toThrow();
+});
+
+test('viewer rows stay ordered by original Search identity and rating figures remain Global-only', () => {
+  const route = routeOf(id)!;
+  const hit = {
+    key: { owner: 'semantic', kind: 'schema:Person', route, id },
+    summary: {
+      kind: 'subject',
+      value: { id, type: 'schema:Person', types: ['schema:Person'], label: null, creativeWork: true, cover: null },
+    },
+    facts: { 'schema:genre': [{ kind: 'item', id, labels: { en: 'Drama' } }] },
+    figure: {
+      questionId: '00000000-0000-7000-8000-000000000001',
+      populationId: '00000000-0000-8000-8000-000000000000',
+      scale: { min: 0, max: 100, displayStep: 1 },
+      count: 1,
+      state: 'ready',
+      mean: 0,
+      score: 0,
+    },
+  };
+  const page = {
+    hits: [hit],
+    kinds: { values: [], next: null },
+    next: null,
+    as_of: '2026-11-01T00:00:00Z',
+    viewerFacts: {
+      state: 'current',
+      question: null,
+      rows: [
+        {
+          rowKey: JSON.stringify(['semantic', 'schema:Person', route, id]),
+          subjectId: id,
+          entry: { state: 'absent' },
+          vote: { state: 'unavailable', reason: 'question' },
+        },
+      ],
+    },
+  };
+  expect(() => admitDiscoveryPage(page)).not.toThrow();
+  expect(() =>
+    admitDiscoveryPage({
+      ...page,
+      viewerFacts: { ...page.viewerFacts, rows: [{ ...page.viewerFacts.rows[0]!, rowKey: 'different' }] },
+    }),
+  ).toThrow();
+  expect(() => admitDiscoveryHit({ ...hit, figure: { ...hit.figure, populationId: id } })).toThrow();
+});
+
+test('omitted mixed Search languages default to English while explicit locale preference survives', () => {
+  expect(ownDiscoveryRequest({ representation: 'discovery-v1' }).languages).toEqual(['en']);
+  expect(ownDiscoveryRequest({ representation: 'discovery-v1', languages: ['ja', 'en'] }).languages).toEqual([
+    'ja',
+    'en',
+  ]);
 });

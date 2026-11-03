@@ -2241,6 +2241,8 @@
   "inbox_triage_mark_help": "This advances the server read marker through the latest notification loaded here, marking earlier notifications read too.",
   "inbox_triage_marked": "The server marked notifications through the latest loaded notification as read.",
   "discovery_loading": "Loading results…",
+  "discovery_not_in_library": "Not in your Library.",
+  "discovery_viewer_unavailable": "Your Library and rating details are unavailable. Reload this search to try again.",
   "discovery_not_ready": "Search is getting ready. Try again in a moment.",
   "discovery_unnamed_account": "Unnamed account",
   "discovery_verified_as": "Verified as {name}",

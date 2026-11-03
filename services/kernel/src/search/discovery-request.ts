@@ -53,6 +53,7 @@ export function ownDiscoveryRequest(request: MixedDiscoveryRequest): MixedDiscov
         ? structuredClone(value)
         : value;
   }
+  if (owned.languages === undefined) owned.languages = ['en'];
   return owned as MixedDiscoveryRequest;
 }
 

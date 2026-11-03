@@ -357,7 +357,8 @@ export function searchRoutes<App>(
         },
       },
       ({ body, authorize, admission, job, actor, set }) => {
-        if (body.population !== undefined) set.headers['cache-control'] = 'private, no-store';
+        if (body.population !== undefined || body.representation === 'discovery-v1')
+          set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
           throw new ProblemError('unsupported_query', { errors: [{ pointer: '/population', code: 'unsupported' }] });
         async function prepare(): Promise<AccessCheck> {
@@ -406,6 +407,7 @@ export function searchRoutes<App>(
                   actor,
                   deadline: job.deadline,
                   ...(body.languages === undefined ? {} : { languages: body.languages }),
+                  descriptions: body.descriptions === true,
                   ...(body.spoilerThreshold === undefined ? {} : { spoilerThreshold: body.spoilerThreshold }),
                   observeRelationRelease,
                 },

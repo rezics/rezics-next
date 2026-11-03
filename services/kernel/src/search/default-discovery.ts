@@ -6,12 +6,33 @@ import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import { createWorkClient } from '../work/client.ts';
 import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
 import type { Pool } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
+import { discardConnection, withConnection } from '../database/pool.ts';
+import { readListPresentationFacts } from '../semantic/list-presentation.ts';
+import {
+  prepareViewerFacts,
+  readViewerFacts,
+  viewerFactsCurrent,
+  type ViewerFactInput,
+  type ViewerFactsPage,
+  type PreparedViewerFacts,
+} from '../library/viewer-facts.ts';
+import { readPublicFigureViews } from '../rating/public-figure-http.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
+import type { AccountActor } from '../request/access.ts';
+import { SearchUnavailableError } from './opensearch.ts';
 import { nativeDiscoveryRegistry } from './account-discovery.ts';
 import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
 import { createReviewDiscoveryAdapter } from './review-discovery.ts';
 import { nativeSpaceDiscoveryAdapter } from './space-discovery.ts';
 import type { SpaceDiscoverySummary } from '../community/space-discovery.ts';
-import type { DiscoveryOwnerAdapterSlots, DiscoveryOwnerMetadataSummary, DiscoveryReadContext } from './discovery.ts';
+import type {
+  DiscoveryOwnerAdapterSlots,
+  DiscoveryOwnerMetadataSummary,
+  DiscoveryPage,
+  DiscoveryReadContext,
+  DiscoveryUnionHit,
+} from './discovery.ts';
 import type { DiscoveryMetadataProducer, DiscoveryMetadataProducers } from './generations.ts';
 import type { SecondScopeDiscoveryKey, SecondScopeDiscoveryRecord } from './discovery-documents.ts';
 import { routeOf, partitionOf } from '../route/route.ts';
@@ -50,6 +71,143 @@ export type DefaultDiscoverySearch = Readonly<{
 
 export type DefaultDiscoveryOwnerAdapters = DiscoveryOwnerAdapterSlots &
   Readonly<{ metadataProducers: DiscoveryMetadataProducers }>;
+
+type SemanticDiscoveryHit = Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>;
+type EnrichedDiscoveryPage = Readonly<{
+  page: DiscoveryPage;
+  semanticOriginals: readonly string[];
+  semanticPresentation: Awaited<ReturnType<typeof readListPresentationFacts>>;
+  figureIds: readonly string[];
+  figures: Awaited<ReturnType<typeof readPublicFigureViews>>;
+  viewer: Readonly<{ actor: AccountActor; prepared: PreparedViewerFacts }> | null;
+}>;
+
+function viewerRowKey(hit: SemanticDiscoveryHit) {
+  return JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
+}
+
+async function enrichDiscoveryPage(
+  config: DefaultDiscoverySearchConfig,
+  principal: string,
+  page: DiscoveryPage,
+  context: DiscoveryReadContext,
+): Promise<EnrichedDiscoveryPage> {
+  const subjects = page.hits.filter((hit): hit is SemanticDiscoveryHit => hit.summary.kind === 'subject');
+  const originals = subjects.map(({ key }) => key.id);
+  const presentation = await readListPresentationFacts(
+    {
+      pool: config.pool,
+      access: config.access,
+      actor: context.actor,
+      routeKey: config.routeKey,
+      deadline: context.deadline,
+    },
+    originals,
+    { languages: context.languages },
+  );
+  const facts = subjects.map((hit) => {
+    const value = presentation.get(hit.key.id);
+    if (!value) throw new SearchUnavailableError('Current Search facts are incomplete');
+    return { rowKey: viewerRowKey(hit), subjectId: hit.key.id, facts: structuredClone(value.facts) };
+  });
+  const figureIds = [...new Set(subjects.filter(({ summary }) => summary.value.creativeWork).map(({ key }) => key.id))];
+  let prepared: PreparedViewerFacts | undefined;
+  let viewerActor: AccountActor | undefined;
+  let viewerFacts: ViewerFactsPage | null =
+    context.actor.kind === 'anonymous'
+      ? null
+      : {
+          state: 'unavailable',
+          reason: 'currentness',
+          retryable: true,
+        };
+  if (context.actor.kind === 'account' && principal === `account:${context.actor.accountId}`) {
+    viewerActor = context.actor;
+    try {
+      prepared = await prepareViewerFacts(
+        { pool: config.pool, access: config.access },
+        viewerActor,
+        facts.map(({ rowKey, subjectId }) => ({ rowKey, subjectId }) satisfies ViewerFactInput),
+        STANDARD_QUESTION_ID,
+        context.deadline,
+      );
+    } catch (error) {
+      if (!(error instanceof RangeError) || error.message !== 'Viewer facts input exceeds 16384 encoded bytes')
+        throw error;
+      viewerFacts = { state: 'unavailable', reason: 'response_limit', retryable: false };
+      viewerActor = undefined;
+    }
+  }
+  const snapshot = await withConnection(config.pool, async (connection) => {
+    const client = deadlineClient(connection, context.deadline);
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const viewerFacts = prepared && viewerActor ? await readViewerFacts(client, viewerActor, prepared) : null;
+      const figures = await readPublicFigureViews(client, figureIds);
+      await client.query('COMMIT');
+      return { viewerFacts, figures };
+    } catch (error) {
+      try {
+        await connection.query('ROLLBACK');
+      } catch (rollbackError) {
+        discardConnection(
+          connection,
+          rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)),
+        );
+      }
+      throw error;
+    }
+  });
+  if (prepared && viewerActor) viewerFacts = snapshot.viewerFacts;
+  if (snapshot.figures) {
+    for (const id of figureIds)
+      if (!snapshot.figures.has(id)) throw new SearchUnavailableError('Current public figure is incomplete');
+  }
+  const bySubject = new Map(subjects.map((hit, index) => [hit.key.id, facts[index]!]));
+  return {
+    page: {
+      ...page,
+      hits: page.hits.map((hit) => {
+        if (hit.summary.kind !== 'subject') return hit;
+        const current = bySubject.get(hit.key.id);
+        const figure = snapshot.figures?.get(hit.key.id)?.figure;
+        return {
+          ...hit,
+          ...(current ? { facts: current.facts } : {}),
+          ...(figure && hit.summary.value.creativeWork ? { figure: { ...figure, scale: { ...figure.scale } } } : {}),
+        };
+      }),
+      viewerFacts,
+    },
+    semanticOriginals: originals,
+    semanticPresentation: presentation,
+    figureIds,
+    figures: snapshot.figures,
+    viewer: prepared && viewerActor ? { actor: viewerActor, prepared } : null,
+  };
+}
+
+async function readDiscoveryFigures(config: DefaultDiscoverySearchConfig, ids: readonly string[], deadline: number) {
+  return withConnection(config.pool, async (connection) => {
+    const client = deadlineClient(connection, deadline);
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const figures = await readPublicFigureViews(client, ids);
+      await client.query('COMMIT');
+      return figures;
+    } catch (error) {
+      try {
+        await connection.query('ROLLBACK');
+      } catch (rollbackError) {
+        discardConnection(
+          connection,
+          rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError)),
+        );
+      }
+      throw error;
+    }
+  });
+}
 
 function metadataKey(owner: 'commerce' | 'content', kind: 'collection' | 'review' | 'space', id: string) {
   const route = routeOf(id);
@@ -437,6 +595,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
   const open: RetainedDiscoverySearch = (principal, request, context) => {
     if (closed) return Promise.reject(new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } }));
     request = ownDiscoveryRequest(request);
+    context = { ...context, languages: request.languages };
     const deadline = context.deadline;
     const actor =
       context.actor.kind === 'account'
@@ -538,7 +697,13 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
           await assertDiscoveryCapabilityBinding(config.pool, target, ownerAdapters.metadataProducers);
           return (await readFreshness(config.pool, discoveryConsumer(config.prefix, generation))).asOf.toISOString();
         },
-      })(principal, request, { ...context, deadline, actor, access: config.access });
+      })(principal, request, {
+        ...context,
+        deadline,
+        actor,
+        access: config.access,
+        descriptions: request.descriptions === true,
+      });
       const wrapped: RetainedDiscoveryRead = Object.freeze({
         search: () => read.search(),
         currentPrimaryCandidates: (keys) => read.currentPrimaryCandidates(keys),
@@ -564,12 +729,52 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
     return operation;
   };
   const search: DiscoverySearch = (...args) => {
+    const [principal, inputRequest, inputContext] = args;
+    const request = ownDiscoveryRequest(inputRequest);
+    const context = { ...inputContext, languages: request.languages };
     const operation = (async () => {
-      const read = await open(...args);
+      const read = await open(principal, request, context);
       try {
         const page = await read.search();
+        let enriched: EnrichedDiscoveryPage;
+        try {
+          enriched = await enrichDiscoveryPage(config, principal, page, {
+            ...context,
+            descriptions: request.descriptions === true,
+          });
+          const finalPresentation = await readListPresentationFacts(
+            {
+              pool: config.pool,
+              access: config.access,
+              actor: context.actor,
+              routeKey: config.routeKey,
+              deadline: context.deadline,
+            },
+            enriched.semanticOriginals,
+            { languages: context.languages },
+          );
+          if (!isDeepStrictEqual(enriched.semanticPresentation, finalPresentation))
+            throw new ProblemError('search_restart_required');
+          const finalFigures = enriched.figureIds.length
+            ? await readDiscoveryFigures(config, enriched.figureIds, context.deadline)
+            : enriched.figures;
+          if (!isDeepStrictEqual(enriched.figures, finalFigures)) throw new ProblemError('search_restart_required');
+          if (
+            enriched.viewer &&
+            !(await viewerFactsCurrent(
+              { pool: config.pool, access: config.access },
+              enriched.viewer.actor,
+              enriched.viewer.prepared,
+              context.deadline,
+            ))
+          )
+            enriched.page.viewerFacts = { state: 'unavailable', reason: 'currentness', retryable: true };
+        } catch (error) {
+          if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
+          throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+        }
         await read.finish();
-        return page;
+        return enriched.page;
       } finally {
         await read.close();
       }

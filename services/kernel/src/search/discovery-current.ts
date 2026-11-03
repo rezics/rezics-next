@@ -25,7 +25,7 @@ import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { admitDiscoveryHit } from './discovery-http.ts';
 import type { IndexedSubject, SubjectSnapshot, SubjectSource } from './source.ts';
 import { projectCharacterPersonContexts } from './character-person.ts';
-import { chooseTexts } from './hits.ts';
+import { chooseTexts, projectHit } from './hits.ts';
 import { ProblemError } from '../http/problem.ts';
 
 function unavailable(): never {
@@ -364,6 +364,9 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
                 ...(context.spoilerThreshold === undefined ? {} : { spoilerThreshold: context.spoilerThreshold }),
                 observeRelationRelease: context.observeRelationRelease,
               });
+        const descriptions = context.descriptions
+          ? projectHit(subject, { descriptions: true, languages: context.languages }).descriptions
+          : undefined;
         if (
           context.observeRelationRelease !== undefined &&
           (subject.type === 'schema:Person' || subject.type === 'schema:Character') &&
@@ -381,6 +384,10 @@ export async function currentDiscoveryCandidates<Candidate extends DiscoveryCand
           },
           labels,
           ...(Object.keys(aliases).length ? { aliases } : {}),
+          ...(descriptions === undefined ? {} : { descriptions }),
+          ...(release.types[subject.type]?.listPresentation
+            ? { listPresentation: release.types[subject.type]!.listPresentation }
+            : {}),
           ...(contexts === null ? {} : { contexts }),
         };
         admitDiscoveryHit(hit);

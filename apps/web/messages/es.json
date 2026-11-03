@@ -2207,6 +2207,8 @@
   "inbox_triage_mark_help": "Esto adelanta el marcador de lectura del servidor hasta la última notificación cargada aquí e incluye las anteriores.",
   "inbox_triage_marked": "El servidor ha marcado como leídas las notificaciones hasta la última que se cargó.",
   "discovery_loading": "Cargando resultados…",
+  "discovery_not_in_library": "No está en tu biblioteca.",
+  "discovery_viewer_unavailable": "Los detalles de tu biblioteca y tus valoraciones no están disponibles. Vuelve a cargar esta búsqueda para intentarlo de nuevo.",
   "discovery_not_ready": "La búsqueda se está preparando. Inténtalo de nuevo en un momento.",
   "discovery_unnamed_account": "Cuenta sin nombre",
   "discovery_verified_as": "Identidad verificada: {name}",

@@ -7,18 +7,82 @@ import { coverSrc } from '../media/cover-src';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
+import { displayRating } from '../features/pages/subject-ratings';
 import { ResultRow, localizedLabel } from './results';
 import {
   discoveryKey,
   isAccountHit,
   isPublicDiscoveryHit,
   type AccountDiscoverySummary,
+  type DiscoveryViewerFact,
+  type DiscoveryViewerQuestion,
   type DiscoveryState,
 } from './discovery';
 import { DiscoveryPublicRow } from './discovery-public-rows';
 
 function messageOptions(locale?: string) {
   return locale === undefined ? {} : { locale: locales.find((value) => value === locale) ?? 'en' };
+}
+
+function viewerFactsUnavailable(page: Extract<DiscoveryState, { status: 'ready' }>['page']): boolean {
+  return page.viewerFacts !== undefined && page.viewerFacts !== null && page.viewerFacts.state === 'unavailable';
+}
+
+function stateText(state: string, locale: string): string {
+  const options = messageOptions(locale);
+  switch (state) {
+    case 'planned':
+      return m.library_state_planned({}, options);
+    case 'in_progress':
+      return m.library_state_in_progress({}, options);
+    case 'completed':
+      return m.library_state_completed({}, options);
+    case 'paused':
+      return m.library_state_paused({}, options);
+    case 'dropped':
+      return m.library_state_dropped({}, options);
+    default:
+      return m.library_other({}, options);
+  }
+}
+
+function ViewerFactsRow({
+  title,
+  row,
+  question,
+  locale,
+}: {
+  title: string;
+  row: DiscoveryViewerFact;
+  question: DiscoveryViewerQuestion | null;
+  locale: string;
+}) {
+  const options = messageOptions(locale);
+  const labels: string[] = [];
+  if (row.entry.state === 'absent') labels.push(m.discovery_not_in_library({}, options));
+  if (row.entry.state === 'present')
+    labels.push(m.library_entry_state_label({ title, state: stateText(row.entry.entryState ?? '', locale) }, options));
+  if (row.vote.state === 'present' && question)
+    labels.push(
+      m.subject_ratings_yours(
+        {
+          score: new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(
+            displayRating(row.vote.units, question.scale),
+          ),
+        },
+        options,
+      ),
+    );
+  if (row.vote.state === 'absent') labels.push(m.subject_rating_control_unrated({}, options));
+  if (labels.length === 0) return null;
+  return (
+    <li
+      data-slot="discovery-viewer-facts"
+      className="ml-6 list-none rounded-md border px-3 py-2 text-sm text-muted-foreground"
+    >
+      {labels.join(' · ')}
+    </li>
+  );
 }
 
 /** Only a current native handle can address the supported public account route. */
@@ -123,6 +187,11 @@ export function DiscoveryResults({
         <EmptyHeader>
           <EmptyTitle className="text-base font-normal">{message}</EmptyTitle>
         </EmptyHeader>
+        {state.status === 'ready' && viewerFactsUnavailable(state.page) ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {m.discovery_viewer_unavailable({}, options)}
+          </p>
+        ) : null}
         {restartHref && state.status !== 'ready' && state.status !== 'loading' && (
           <a href={restartHref} className={buttonVariants({ variant: 'outline' })}>
             {state.status === 'restart' ? m.discovery_restart_action({}, options) : m.search_facet_retry({}, options)}
@@ -132,63 +201,81 @@ export function DiscoveryResults({
     );
   }
   const kinds = Object.fromEntries(state.page.kinds.values.map((kind) => [kind.id, kind.labels]));
+  const viewer = state.page.viewerFacts;
+  const viewerRows = new Map(viewer?.state === 'current' ? viewer.rows.map((row) => [row.rowKey, row]) : []);
+  const viewerQuestion = viewer?.state === 'current' ? viewer.question : null;
   return (
-    <ul role="list" className="space-y-2" data-slot="discovery-results">
-      {state.page.hits.map((hit) => {
-        const kind = localizedLabel(kinds[hit.key.kind] ?? {}, locale).text || hit.key.kind;
-        if (isAccountHit(hit))
-          return <AccountRow key={discoveryKey(hit)} account={hit.summary.value} kind={kind} locale={locale} />;
-        if (isPublicDiscoveryHit(hit))
-          return <DiscoveryPublicRow key={discoveryKey(hit)} hit={hit} kind={kind} locale={locale} />;
-        const summary = hit.summary.value;
-        const label = summary.label;
-        const contextLists = hit.contexts
-          ? [
-              { key: 'credits', label: m.subject_credits({}, messageOptions(locale)), value: hit.contexts.credits },
-              {
-                key: 'appearances',
-                label: m.subject_appearances({}, messageOptions(locale)),
-                value: hit.contexts.appearances,
-              },
-            ].filter(({ value }) => value.items.length > 0)
-          : [];
-        return (
-          <Fragment key={discoveryKey(hit)}>
-            <ResultRow
-              hit={{
-                id: hit.key.id,
-                type: hit.key.kind,
-                ...hit,
-                labels: hit.labels ?? (label ? { [label.language]: label.value } : {}),
-                summary,
-              }}
-              locale={locale}
-              hitTypes={kinds}
-              yearProperties={yearProperties}
-            />
-            {contextLists.map(({ key, label: heading, value }) => (
-              <li key={`${discoveryKey(hit)}:${key}`} className="ml-6 list-none rounded-md border px-3 py-2 text-sm">
-                <p className="font-medium">{heading}</p>
-                <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                  {value.items.map((context) => {
-                    const contextLabel = localizedLabel(context.labels, locale).text || context.id;
-                    return (
-                      <li key={context.id}>
-                        <a
-                          className="text-primary underline underline-offset-4"
-                          href={subjectHref({ id: context.id, label: contextLabel }, locale).href}
-                        >
-                          {contextLabel}
-                        </a>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
-            ))}
-          </Fragment>
-        );
-      })}
-    </ul>
+    <>
+      {viewerFactsUnavailable(state.page) ? (
+        <p role="status" className="mb-2 text-sm text-muted-foreground">
+          {m.discovery_viewer_unavailable({}, messageOptions(locale))}
+        </p>
+      ) : null}
+      <ul role="list" className="space-y-2" data-slot="discovery-results">
+        {state.page.hits.map((hit) => {
+          const kind = localizedLabel(kinds[hit.key.kind] ?? {}, locale).text || hit.key.kind;
+          if (isAccountHit(hit))
+            return <AccountRow key={discoveryKey(hit)} account={hit.summary.value} kind={kind} locale={locale} />;
+          if (isPublicDiscoveryHit(hit))
+            return <DiscoveryPublicRow key={discoveryKey(hit)} hit={hit} kind={kind} locale={locale} />;
+          const summary = hit.summary.value;
+          const label = summary.label;
+          const contextLists = hit.contexts
+            ? [
+                { key: 'credits', label: m.subject_credits({}, messageOptions(locale)), value: hit.contexts.credits },
+                {
+                  key: 'appearances',
+                  label: m.subject_appearances({}, messageOptions(locale)),
+                  value: hit.contexts.appearances,
+                },
+              ].filter(({ value }) => value.items.length > 0)
+            : [];
+          return (
+            <Fragment key={discoveryKey(hit)}>
+              <ResultRow
+                hit={{
+                  id: hit.key.id,
+                  type: hit.key.kind,
+                  ...hit,
+                  labels: hit.labels ?? (label ? { [label.language]: label.value } : {}),
+                  summary,
+                }}
+                locale={locale}
+                hitTypes={kinds}
+                yearProperties={yearProperties}
+              />
+              {viewerRows.get(discoveryKey(hit)) ? (
+                <ViewerFactsRow
+                  title={label?.value ?? summary.label?.value ?? hit.key.id}
+                  row={viewerRows.get(discoveryKey(hit))!}
+                  question={viewerQuestion}
+                  locale={locale}
+                />
+              ) : null}
+              {contextLists.map(({ key, label: heading, value }) => (
+                <li key={`${discoveryKey(hit)}:${key}`} className="ml-6 list-none rounded-md border px-3 py-2 text-sm">
+                  <p className="font-medium">{heading}</p>
+                  <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                    {value.items.map((context) => {
+                      const contextLabel = localizedLabel(context.labels, locale).text || context.id;
+                      return (
+                        <li key={context.id}>
+                          <a
+                            className="text-primary underline underline-offset-4"
+                            href={subjectHref({ id: context.id, label: contextLabel }, locale).href}
+                          >
+                            {contextLabel}
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              ))}
+            </Fragment>
+          );
+        })}
+      </ul>
+    </>
   );
 }

@@ -9,6 +9,15 @@ Decision: Search owns the shared hit and summary union, ready kind directory and
 supply their native populations and current disclosure. A kind is queryable only when its native current reader is
 ready and cannot contribute a count otherwise.
 
+Decision: Render current viewer entry state and rating inline on each admitted Subject card; when the one viewer-facts
+envelope is unavailable, suppress its private rows and show one localized page notice while keeping current public hits.
+
+Decision: Open a Subject card's native destination for Library and rating actions; their existing subject-page command
+ports remain the only write path and reauthorize each action.
+
+Decision: Mixed Search uses English when the caller omits languages; the web caller continues to send its selected
+locale preferences, keeping every current label and alias projection bounded to the requested languages.
+
 ## Kinds and applicability
 
 The closed registry supplies the kinds admitted to one `discovery-v1` request. The native query searches the full
@@ -79,3 +88,30 @@ source row still excludes that candidate. Summary objects are copied before late
 admits the closed transport shape, full identity ties and metadata even for an empty final page before signing its
 cursors, and the endpoint applies the same admission at serialization. Hit pages and metadata-only pages retain
 separate shapes.
+
+## Complete-page work and retained state
+
+For an admitted hit limit `L` from 1 through 100, the retained Search reader examines at most
+`R = min(600, 6L + 3)` raw candidates across at most three windows of at most 200. The `examined` total includes
+rejected rows, duplicate identities, replayed candidates and empty lookahead; refill does not restart that allowance.
+The existing current-candidate and owner-hydration bounds apply within those same raw windows. The response retains at
+most `H = L` complete mixed hits, eight kind rows and one existing hit cursor plus the independent kind cursor.
+
+Enrichment receives `S <= H` Subject identities. Search passes the ordered **raw** list, including duplicates, to
+`readListPresentationFacts` once for display and once immediately before Search's final guard. Each call admits at
+most 100 raw originals, and its own complete mapping, original/terminal, selected fact, provenance, consent, account,
+source-fence, related-item and active-release rechecks are bounded by the Semantic producer contract. The second
+original-keyed result must match both terminal identity and display facts or the retained Search cut restarts. Public
+figures cover at most `F <= S` creative works, use the Global standard question on one page snapshot, and are read
+again before the final guard; each producer call admits at most 256 IDs. No per-result reads are added.
+
+For an authenticated principal, the one Library envelope has at most `V <= S` ordered rows, at most 100 inputs and
+16,384 UTF-8 input bytes. `readViewerFacts` uses the caller-owned account-home repeatable-read client; the client is
+released before `viewerFactsCurrent`, which rechecks the actor, identity mappings and question. The producer enforces
+65,536 UTF-8 output bytes. An input or output response-limit outcome withholds all private rows while retaining the
+public Search page. The web page retains only the current `H` hits and their at most `V` viewer rows; cursors remain
+transient under the existing request owner.
+
+Search does not issue Library or rating mutations from result rows. The Subject destination opens the existing
+command-port surface, where each write reauthorizes. Native all-pool accounting and connected browser inspection
+remain controller acceptance; no per-seek cap, second cursor or runtime funding protocol is introduced here.

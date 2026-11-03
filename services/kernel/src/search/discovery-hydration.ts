@@ -216,14 +216,21 @@ export async function hydrateOwnerDiscoveryHits(
     const { candidate, value } = entry;
     const key = publicKey(candidate.key);
     switch (candidate.key.kind) {
-      case 'collection':
+      case 'collection': {
+        const collection = value as Extract<DiscoveryOwnerMetadataSummary, { card: unknown }>;
         return {
           key,
           summary: {
             kind: 'collection',
-            value: { id: value.id, title: value.title, description: value.summary },
+            value: {
+              id: collection.id,
+              title: collection.title,
+              description: collection.summary,
+              card: structuredClone(collection.card),
+            },
           },
         };
+      }
       case 'review': {
         const review = value as Extract<DiscoveryOwnerMetadataSummary, { authorId: string }>;
         const author = accountSummaries.get(review.authorId);

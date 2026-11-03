@@ -38,7 +38,32 @@ const account: DiscoveryUnionHit = {
 };
 const collection: DiscoveryUnionHit = {
   key: { owner: 'library', kind: 'collection', route: 0, id: collectionId },
-  summary: { kind: 'collection', value: { id: collectionId, title: 'Reading shelf', description: 'Short novels.' } },
+  summary: {
+    kind: 'collection',
+    value: {
+      id: collectionId,
+      title: 'Reading shelf',
+      description: 'Short novels.',
+      card: {
+        kind: 'collection',
+        id: collectionId,
+        destination: `/collections/${collectionId}`,
+        title: 'Reading shelf',
+        description: 'Short novels.',
+        visibility: 'public',
+        revision: 1,
+        presentationKind: null,
+        presentationKindSource: 'owner',
+        cover: null,
+        coverSource: 'none',
+        membershipKind: 'curated',
+        memberCount: 2,
+        orderEpoch: 1,
+        createdAt: '2026-11-01T00:00:00Z',
+        updatedAt: '2026-11-01T00:00:00Z',
+      },
+    },
+  },
 };
 const review: DiscoveryUnionHit = {
   key: { owner: 'content', kind: 'review', route: 0, id: reviewId },

@@ -1,6 +1,8 @@
 import { ContentItem } from '@rezics/ui/content-item';
+import { Cover } from '@rezics/ui/cover';
 import { m } from '../paraglide/messages.js';
 import type { Locale } from '../paraglide/runtime.js';
+import { coverSrc } from '../media/cover-src';
 import { subjectHref } from '../subject/subject-href';
 import { discoveryCollectionHref, discoveryReviewHref, discoverySpaceHref } from './discovery-public-links';
 import type { PublicCollectionSummary, PublicDiscoveryHit, PublicReviewSummary, PublicSpaceSummary } from './discovery';
@@ -29,7 +31,29 @@ function PublicCollectionRow({
       data-discovery-collection={id}
       title={summary.title}
       href={discoveryCollectionHref(id, locale)}
-      metadata={<span>{kind}</span>}
+      visual={
+        <div className="w-[72px] sm:w-24">
+          <Cover
+            subject={{
+              id,
+              title: summary.title,
+              types: summary.card.presentationKind ? [summary.card.presentationKind] : [],
+            }}
+            cover={summary.card.cover}
+            src={coverSrc}
+            size="fill"
+            decorative
+          />
+        </div>
+      }
+      metadata={
+        <span>
+          {kind}
+          {summary.card.membershipKind === 'curated'
+            ? ` · ${m.library_collection_item_count({ count: summary.card.memberCount }, options(locale))}`
+            : ''}
+        </span>
+      }
       preview={summary.description ? <p className="line-clamp-2 break-words">{summary.description}</p> : undefined}
     />
   );

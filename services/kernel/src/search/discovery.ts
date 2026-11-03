@@ -6,7 +6,11 @@ export { compileDiscoveryConsumerCapture } from './discovery-filter.ts';
 import type { Release } from '@rezics/definitions';
 import type { AvatarSummary } from '../content/avatar.ts';
 import type { SubjectSummary, SummaryReaderDependencies } from '../semantic/summaries.ts';
+import type { PublicCollectionDiscoverySummary as CollectionDiscoveryCard } from '../library/collection-discovery-summaries.ts';
+import type { ViewerFactsPage } from '../library/viewer-facts.ts';
+import type { PublicFigureView } from '../rating/public-figure-http.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { Fact } from './hits.ts';
 import type { SubjectDocument } from './document.ts';
 import type { SearchRequest } from './service.ts';
 import type { IndexedSubject, SubjectSource, SubjectSnapshot } from './source.ts';
@@ -103,9 +107,18 @@ export type DiscoveryHit = {
   summary: DiscoverySummary;
   labels?: Record<string, string>;
   aliases?: Record<string, string[]>;
+  descriptions?: Record<string, string>;
+  facts?: Record<string, Fact[]>;
+  figure?: PublicFigureView;
+  listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: string[] };
   contexts?: CharacterPersonDiscoveryContexts;
 };
-export type PublicCollectionDiscoverySummary = Readonly<{ id: string; title: string; description: string | null }>;
+export type PublicCollectionDiscoverySummary = Readonly<{
+  id: string;
+  title: string;
+  description: string | null;
+  card: CollectionDiscoveryCard;
+}>;
 export type PublicReviewDiscoverySummary = Readonly<{
   id: string;
   kind: 'review';
@@ -143,6 +156,8 @@ export type DiscoveryPage = {
   kinds: { values: DiscoveryKindMetadata[]; next: string | null };
   next: string | null;
   as_of: string;
+  /** One current private envelope, present on the installed HTTP response and never cached publicly. */
+  viewerFacts?: ViewerFactsPage | null;
 };
 /** Opt-in wire; omitted representation retains the Subject response. */
 export type DiscoveryRequest = SearchRequest & {
@@ -154,6 +169,7 @@ export type DiscoveryRequest = SearchRequest & {
 /** Reuse native reader authorization/deadline and token custody, never a caller-supplied permission flag. */
 export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'actor' | 'deadline'> & {
   languages?: readonly string[];
+  descriptions?: boolean;
   spoilerThreshold?: 0 | 1 | 2;
   observeRelationRelease?: () => Promise<{
     digest: string;
