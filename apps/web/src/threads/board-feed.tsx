@@ -255,7 +255,7 @@ function BoardFeedVisit({
                 thread={thread}
                 authors={authors}
                 now={now}
-                pin={row}
+                {...(row === undefined ? {} : { pin: row })}
                 pinControl={pinControl}
               />
             );
