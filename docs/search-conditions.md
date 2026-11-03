@@ -32,6 +32,22 @@ projection, sorted result producer, current disclosure, explicit condition domai
 live. Content owns Realm, thread and post producers; community is under Content. A label in the registry is
 not a producer, and a resource point read does not establish search enumeration.
 
+## Second-scope producer boundaries
+
+The [second-scope plan](research/search-second-scope-plan.md) sequences implementation; it adds no native
+readiness or grant. Public Collection metadata initially supports text and kind only, using the existing
+`collection` primary identity. Public review discovery preserves the `thread` primary identity with a review
+discriminator; ordinary discussion discovery is outside that slice. Space metadata uses one Space identity,
+with its carried Realm enriching the same hit under current disclosure rather than creating a duplicate.
+These kinds initially support text and kind only; Subject resource/membership predicates remain inapplicable.
+Searchable fields are limited to each owner's approved public metadata or disclosed review opening text.
+Their owners must supply complete populations, revisions, reductions and current disclosure before activation.
+
+Selected Realm rating order uses the standard question and that Realm population's own frozen prior. Keep all
+Realm ordering native, including public Realms; no Realm rating fields enter the public index. Existing Global
+rating semantics and its Global-only figure validator remain unchanged. A separate population-bound adapter
+must check Realm authority and native figure eligibility, with typed readiness for missing evidence.
+
 ## Conditions and resource meaning
 
 Use the one released Boolean grammar, typed properties, units and same-statement qualifiers. Expand user,
