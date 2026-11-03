@@ -180,8 +180,8 @@ export function createFacetNativeOperations(
         seen.add(read.queried.snapshot.observation);
         const start = await observe(read.queried, context);
         add(meter, start.cost);
-        if (start.status === 'unready' || start.status === 'unavailable') return { ...start, cost: meter };
-        if (!clean(start)) return { status: 'preparing' as const, cost: meter };
+        if (start.status === 'unready' || start.status === 'unavailable' || !clean(start))
+          return { status: 'preparing' as const, cost: meter };
       }
       const facets: Extract<FacetNativePageResult, { status: 'ready' }>['facets'][number][] = [];
       let asOf = '';
@@ -220,8 +220,8 @@ export function createFacetNativeOperations(
         seen.add(read.queried.snapshot.observation);
         const final = await observe(read.queried, context);
         add(meter, final.cost);
-        if (final.status === 'unready' || final.status === 'unavailable') return { ...final, cost: meter };
-        if (!clean(final)) return { status: 'preparing' as const, cost: meter };
+        if (final.status === 'unready' || final.status === 'unavailable' || !clean(final))
+          return { status: 'preparing' as const, cost: meter };
       }
       return { status: 'ready' as const, facets, asOf, cost: meter };
     },

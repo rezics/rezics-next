@@ -433,13 +433,14 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
       return track(async () => {
         const current = await activeRelease(config.pool);
         const state = await subjectGenerations(config.search, config.prefix);
-        if (!current || state.active === null || !current.release.types['schema:Thing']) return undefined;
-        const physicalTarget = subjectIndexName(config.prefix, state.active);
+        const generation = state.active;
+        if (!current || generation === null || !current.release.types['schema:Thing']) return undefined;
+        const physicalTarget = subjectIndexName(config.prefix, generation);
         const meaning = { digest: current.digest, release: current.release, type: 'schema:Thing' };
         return {
           source: config.prefix,
           meaning,
-          generation: state.active,
+          generation,
           operations: createFacetNativeOperations({
             pool: config.pool,
             routeKey: config.routeKey,
@@ -451,7 +452,7 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             subjects: nativeSource,
             capture: async (plan, snapshot, context) => {
               const handle = await subjectOperations(physicalTarget, current, context);
-              return handle.capture({ plan: { ...plan, generation: state.active }, snapshot }, context);
+              return handle.capture({ plan: { ...plan, generation }, snapshot }, context);
             },
             async repair(job, context) {
               const digest = job.consumer.meaningDigest;
