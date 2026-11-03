@@ -45,8 +45,9 @@ change, no page scan and no variable batch limit. The selected source bytes and 
 
 `checkGrowth` supplies native auto_explain rows, buffers, statements and wire-byte captures, normal warmups/repetitions,
 settling and the shared classifier. Bounds remain constant rows/statements/bytes and logarithmic blocks. Assertions
-also require stable statement counts, actual Realm work, at most four exact revision metadata/body rows and 66 post
-rows over the source's two rounds, and the shared growing-relation access-path check wherever that branch touches it.
+also require stable statement counts, actual Realm work for admitted operations, at most six revision rows (current
+root-post head, exact pin metadata and body in each source round) and 66 post rows over the source's two rounds,
+and the shared growing-relation access-path check wherever that branch touches it.
 No planner settings or tolerance overrides are installed.
 
 Each axis covers adoption, empty selection, idempotent replay, stale CAS, missing post/revision, foreign Realm pin,

@@ -187,10 +187,13 @@ export async function presentationSettingsFixture() {
     for (const sample of report.samples) for (const cost of sample.repetitions) {
       expect(cost.statements).toBeGreaterThan(0);
       expect(cost.blocks).toBeGreaterThan(0);
-      expect(cost.relations['community.realm']?.rows).toBeGreaterThan(0);
-      // One rules source, two rounds, one exact revision metadata/body row per round.
-      expect(cost.relations['content.revision']?.rows ?? 0).toBeLessThanOrEqual(4);
+      if (name !== 'denied' && name !== 'revoked-replay')
+        expect(cost.relations['community.realm']?.rows).toBeGreaterThan(0);
+      // One root post, two rounds: current head, exact pin metadata and exact pin body.
+      expect(cost.relations['content.revision']?.rows ?? 0).toBeLessThanOrEqual(6);
       expect(cost.relations['content.post']?.rows ?? 0).toBeLessThanOrEqual(66);
+      if (name === 'adopt' || name === 'replay')
+        expect(cost.relations['content.revision']?.rows).toBeGreaterThan(0);
     }
     const growing = axis === 'unrelated-realms' ? 'community.realm'
       : axis === 'realm-revisions' ? 'community.realm_revision' : 'content.revision';
