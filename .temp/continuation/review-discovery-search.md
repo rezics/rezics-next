@@ -1,35 +1,31 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/search/discovery*",
-    "services/kernel/src/search/discovery-registry.ts",
-    "services/kernel/src/search/default-discovery.ts",
-    "services/kernel/src/search/discovery-hydration.ts",
-    "services/kernel/src/search/discovery-documents.ts",
-    "services/kernel/src/search/account-discovery.ts",
-    "services/kernel/test/search/review-discovery*",
-    "services/kernel/src/content/review-discovery.ts"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": [
-    "Search registers the Content review source in its closed kind union and generation writer using the existing review thread ID.",
-    "Bootstrap and incremental refresh consume exact source positions and sparse page continuation; current ineligible source reads write native deletions.",
-    "Final hits hydrate current safe title and excerpt through Content and current author presentation through Accounts; protected reviews, stale hits, takedown and erasure are covered.",
-    "The Search kind count uses unavailable evidence, and Realm discussion-popularity counts remain unchanged."
-  ],
-  "estimate": "one implementation increment"
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/search/discovery*',
+      'services/kernel/src/search/discovery-registry.ts',
+      'services/kernel/src/search/default-discovery.ts',
+      'services/kernel/src/search/discovery-hydration.ts',
+      'services/kernel/src/search/discovery-documents.ts',
+      'services/kernel/src/search/account-discovery.ts',
+      'services/kernel/test/search/review-discovery*',
+      'services/kernel/src/content/review-discovery.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    [
+      'Search registers the Content review source in its closed kind union and generation writer using the existing review thread ID.',
+      'Bootstrap and incremental refresh consume exact source positions and sparse page continuation; current ineligible source reads write native deletions.',
+      'Final hits hydrate current safe title and excerpt through Content and current author presentation through Accounts; protected reviews, stale hits, takedown and erasure are covered.',
+      'The Search kind count uses unavailable evidence, and Realm discussion-popularity counts remain unchanged.',
+    ],
+  'estimate': 'one implementation increment',
 }
 ---
 
