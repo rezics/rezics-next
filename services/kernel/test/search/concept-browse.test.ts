@@ -6,7 +6,14 @@ import {
   type ConceptBrowseSource,
 } from '../../src/search/concept-browse.ts';
 
-const binding: ConceptBrowseBinding = { release: 'release-a', graph: 'graph-a', scheme: 'scheme-a' };
+const binding: ConceptBrowseBinding = {
+  release: 'release-a',
+  graph: 'graph-a',
+  scheme: 'scheme-a',
+  membership: 'membership-a',
+  principal: 'anonymous',
+  request: 'request-a',
+};
 const selection = { concept: 'root', property: 'schema:keywords', scheme: 'scheme-a', includeChildren: true } as const;
 
 function sourceFor(graph: Readonly<Record<string, readonly string[]>>, observed = binding) {
@@ -39,18 +46,24 @@ test('descendant pages finish polyhierarchy and cycles without duplicate expansi
   expect(calls.filter(({ parent }) => parent === 'c')).toHaveLength(1);
 });
 
-test('a changed graph restarts and an unavailable branch never becomes an empty closure', async () => {
-  const changed = sourceFor({}, { ...binding, graph: 'graph-b' });
-  expect(
-    await advanceConceptBrowse(changed.source, startConceptBrowse(selection, binding)!, {
-      pages: 1,
-      edges: 1,
-      pageSize: 1,
-    }),
-  ).toEqual({
-    status: 'restart',
-  });
-  expect(changed.calls).toHaveLength(0);
+test('changed graph, release, membership, principal or request restarts before reading children', async () => {
+  for (const changedBinding of [
+    { ...binding, graph: 'graph-b' },
+    { ...binding, release: 'release-b' },
+    { ...binding, membership: 'membership-b' },
+    { ...binding, principal: 'account:other' },
+    { ...binding, request: 'request-b' },
+  ]) {
+    const changed = sourceFor({}, changedBinding);
+    expect(
+      await advanceConceptBrowse(changed.source, startConceptBrowse(selection, binding)!, {
+        pages: 1,
+        edges: 1,
+        pageSize: 1,
+      }),
+    ).toEqual({ status: 'restart' });
+    expect(changed.calls).toHaveLength(0);
+  }
 
   const unavailable: ConceptBrowseSource = {
     observe: async () => ({ status: 'current', binding }),

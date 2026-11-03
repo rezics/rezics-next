@@ -6,22 +6,26 @@ export type ConceptDescendantSelection = Readonly<{
   includeChildren: true;
 }>;
 
-export type ConceptGraphBinding = Readonly<{
+/** A retained traversal is usable only for this release, graph, membership, principal and request. */
+export type ConceptBrowseBinding = Readonly<{
   release: string;
   graph: string;
   scheme: string;
+  membership: string;
+  principal: string;
+  request: string;
 }>;
 
 export type ConceptBrowseState = Readonly<{
   version: 1;
   selection: ConceptDescendantSelection;
-  binding: ConceptGraphBinding;
+  binding: ConceptBrowseBinding;
   discovered: readonly string[];
   frontier: readonly Readonly<{ parent: string; after: string | null }>[];
 }>;
 
 export type ConceptBrowsePage = Readonly<{
-  binding: ConceptGraphBinding;
+  binding: ConceptBrowseBinding;
   /** Distinct child IDs in the native reader's full-key order. */
   children: readonly string[];
   /** Number of native relation rows examined by this indexed seek. */
@@ -30,7 +34,7 @@ export type ConceptBrowsePage = Readonly<{
 }>;
 
 export type ConceptBrowseObservation =
-  | Readonly<{ status: 'current'; binding: ConceptGraphBinding }>
+  | Readonly<{ status: 'current'; binding: ConceptBrowseBinding }>
   | Readonly<{ status: 'preparing' | 'unavailable' | 'rejected' }>;
 
 export type ConceptBrowseRead =
@@ -42,7 +46,7 @@ export type ConceptBrowseSource = Readonly<{
   observe(): Promise<ConceptBrowseObservation>;
   children(
     input: Readonly<{
-      binding: ConceptGraphBinding;
+      binding: ConceptBrowseBinding;
       parent: string;
       after: string | null;
       limit: number;
@@ -57,17 +61,26 @@ export type ConceptBrowseLimits = Readonly<{
 }>;
 
 export type ConceptBrowseResult =
-  | Readonly<{ status: 'complete'; binding: ConceptGraphBinding; concepts: readonly string[] }>
+  | Readonly<{ status: 'complete'; binding: ConceptBrowseBinding; concepts: readonly string[] }>
   | Readonly<{ status: 'preparing'; state: ConceptBrowseState; pages: number; edges: number }>
   | Readonly<{ status: 'unavailable' | 'rejected' }>
   | Readonly<{ status: 'restart' }>;
 
-function sameBinding(left: ConceptGraphBinding, right: ConceptGraphBinding): boolean {
-  return left.release === right.release && left.graph === right.graph && left.scheme === right.scheme;
+function sameBinding(left: ConceptBrowseBinding, right: ConceptBrowseBinding): boolean {
+  return (
+    left.release === right.release &&
+    left.graph === right.graph &&
+    left.scheme === right.scheme &&
+    left.membership === right.membership &&
+    left.principal === right.principal &&
+    left.request === right.request
+  );
 }
 
-function validBinding(binding: ConceptGraphBinding): boolean {
-  return Boolean(binding.release && binding.graph && binding.scheme);
+function validBinding(binding: ConceptBrowseBinding): boolean {
+  return Boolean(
+    binding.release && binding.graph && binding.scheme && binding.membership && binding.principal && binding.request,
+  );
 }
 
 function validLimits(limits: ConceptBrowseLimits): boolean {
@@ -84,7 +97,7 @@ function validLimits(limits: ConceptBrowseLimits): boolean {
 
 export function startConceptBrowse(
   selection: ConceptDescendantSelection,
-  binding: ConceptGraphBinding,
+  binding: ConceptBrowseBinding,
 ): ConceptBrowseState | null {
   if (
     !selection.concept ||
