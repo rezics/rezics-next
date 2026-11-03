@@ -732,6 +732,68 @@ Leave never unfollows, and an explicit unfollow remains authoritative when a lat
 its implied Space follow. There is no Realm follow. A native leave denial remains a denial; the interface does
 not transfer ownership or introduce a separate holder authority.
 
+## My Realms current inventory
+
+`GET /v1/me/realms` (`account.realms`) retains the account inverse, page20, scan-page20,
+raw80 budget and account/operation/partition-epoch cursor. A raw key is consumed only after its
+Realm-home confirmation succeeds. Selection snapshots release before native Realm observations;
+no account transaction covers another home's calls. The final observation compares the exact
+reservation, membership publication transaction and interval, Realm revision/lifecycle and partition epoch.
+A changed selected source returns `transaction_retry_exhausted`; the client retries the same cursor.
+Registration and legacy-cut completeness use Accounts' `requireMembershipInverseReady`, including
+empty pages, rather than treating an empty inverse as readiness.
+
+Decision: omit concealed memberships after bounded selection, consistent with the ordinary own-membership
+read; never refill the disclosed page or retain its previously readable name or presentation.
+
+Each disclosed item retains `realmId`, `name`, `role: member` and adds a closed `current` projection:
+description, optional avatar/banner, Realm destination, separate carrying Space identity, current membership
+start and independently checked participation. Realm entry uses `readRealm` with its real resource eligibility.
+Presentation uses `readCommunityPresentations`, grouped by native partition, including that owner's source and
+optional media checks. An optional absent image is `none`; an unavailable optional producer is `unavailable`.
+Operational errors fail the page and preserve the caller's continuation. No cached description or image fallback
+is permitted. No count, rank, join, follow, owner or administrator status is inferred.
+
+The action projection currently says `{ state: 'unavailable' }`. This is a partial native delivery:
+the installed mounted action catalogue does not supply a current observation of the leave holder invariant
+or a composed Realm-home management destination. Those owner protocols and transition advice remain in the
+continuation; do not infer them from `role`, successful entry, or presentation. Commands keep their existing
+authorization, `202`, replay, last-owner refusal and uncertain-outcome behaviour.
+
+### Cost
+
+- **Touches:** Let R be consumed inverse candidates, F fetched candidates (including the optional unconsumed
+  lookahead), S selected memberships and H represented native partitions. Accounts performs initial/final readiness
+  and partition checks plus at most four released scan transactions. Inverse traversal uses the physical
+  `(route, account_id, kind = realm, group_id > after)` prefix and full-key ordering. Every confirmation uses
+  `(route, realm_id, account_id)` with `upper_inf(valid)` before the exact Realm head and revision joins. There
+  are R selection and S final membership observations, each with its own partition/control round. Hydration adds
+  two ordinary Realm reads and two participation checks per initially readable selected item. Each home composes
+  one native presentation batch: two Realm/Space/membership/ban/Access snapshots, two native count reads per
+  visible Realm, exact rules hydration and up to two media sources per Realm. Discarded count/rules still cost work.
+  Nested Access prepares, account/session checks, container bindings, native membership proofs, ban checks and
+  optional media/currentness are charged to their producers, including denied, empty, changed and retry attempts.
+- **Bound:** F <= 80, R <= F, S <= 20, H <= S. Account selection/finalization has at most six transactions,
+  twelve point observations, four inverse statements and twelve BEGIN/COMMIT controls. Confirmation has at most
+  100 released snapshots, 100 partition reads, 100 full-key membership/head statements and 200 controls; each
+  statement addresses at most one open interval, head and exact revision. Failed attempts repeat these terms,
+  never increase F to fill disclosure. Presentation and Access retain their native admitted bounds; this is not
+  a fitted ceiling on their physical work. Realm producers admit 1024 title and 4096 summary code points: at most
+  4096/16384 UTF-8 source bytes, 6144/24576 JSON string-content bytes with JSON.stringify escaping, and 4096/16384
+  bytes of UTF-16 character storage, before object overhead and each retained copy. Twenty items therefore admit
+  409600 source bytes or 614400 JSON text bytes for these two fields alone. UUIDs add 36 ASCII bytes per occurrence;
+  dates and enum punctuation are fixed. Image summaries admit two slots and twelve variants per slot, but their
+  credit/placeholder and optional rules have separate producer caps and intermediate copies. Their full wire/bind,
+  retained-memory, executor/control/fence, warm/cold release and runner terms remain unproved; do not substitute the
+  output size or a LIMIT for those bounds. This partial engine creates no new command or runner work; completed
+  membership transitions retain all work in their native producers.
+- **Growth check:** The existing inventory suite retains native page20/21, stale inverse, leave, account cursor
+  rejection and growth cases. `own-realms-current.test.ts` adds the installed client, current title/description,
+  empty and incomplete-cut recovery, separate Realm/Space identity, actual leave/rejoin and removed-host disclosure.
+  Complete three-scale 256/1024/4096 coverage of independent histories, sparse/raw80, provisional/stale/retry,
+  image replacement, final credential/authority races and all participating pools/runner phases remains in the
+  continuation. No growth pass or complete nested physical bound is asserted by this partial delivery.
+
 ## Account erasure
 
 The account-partition `party_locator` projects the committing ban, membership-operation and curator-verdict
@@ -927,7 +989,7 @@ there is no catalogue, grant, membership or descendant scan and no per-card requ
 | Set or read board scheme                                     | Admission for Realm management and subject eligibility; Realm head and Semantic subject/type point reads; setting appends one revision and compare-and-sets the head, while reading uses the head seek.                                                                                                                                                  | Constant rows and statements; logarithmic blocks in Realm and subject indexes, plus bounded Access checks.                                                                                                     | `test/community/board-scheme.test.ts`: `Realm board scheme set and read`.                                                                                                                                                                                                                                                                           |
 | Publish membership, read terminal or change, or prove a role | Publish reads the Realm and opens or closes one membership interval, with at most one terminal insert. Terminal/change reads use one primary-key point read; role proof uses two membership index seeks and the Realm existence point.                                                                                                                   | Constant rows and statements per operation; logarithmic blocks in Realm membership indexes, plus bounded Access.                                                                                               | `test/community/growth-membership.test.ts`: “publish, terminal reads and role proofs stay within their bound as Realms and members grow”.                                                                                                                                                                                                           |
 | Read current Realm membership                                | One unique `realm_member_open` index point read filtered at T; closed history does not widen the lookup.                                                                                                                                                                                                                                                 | One row and statement; logarithmic blocks in the Realm's membership history, including closed intervals.                                                                                                       | `test/community/growth-membership-history.test.ts`: “current membership is one index point read as the same account and Realm accumulate closed intervals”.                                                                                                                                                                                         |
-| List own Realms                                              | Keyset-read at most 80 caller-route inverse rows, then confirm each candidate with one current `realm_member` primary-key read.                                                                                                                                                                                                                          | At most 160 rows and a constant number of statements; logarithmic blocks in the inverse and membership indexes.                                                                                                | `test/community/own-realms.test.ts`: “own Realm pages use confirmed memberships, signed cursors and bounded inverse scans”.                                                                                                                                                                                                                         |
+| List own Realms | Bounded account inverse, released Realm confirmation, current read/presentation hydration and final episode checks; see My Realms current inventory. | Raw80/selected20; nested owner work and remaining growth obligations are listed in that subsection. | `test/community/own-realms.test.ts`, `test/community/own-realms-current.test.ts`. |
 | List Realm and Space sitemap pages                           | Keyset-read at most four candidates per requested item (limit at most 1,000); fixed same-home current Realm/Space/head/slot and board seeks, independently prepared anonymous Access before and at disclosure, one separately released exact active-address claim lookup, and final unchanged-head/lifecycle/slot validation. No refill or history scan. | Linear rows in page limit with at most four times the limit candidates; logarithmic indexed seeks in source, head, slot, board and address indexes; fixed statements per candidate kind.                       | `test/community/growth-sitemap.test.ts`: “Realm sitemap page stays within its bound as listed items grow”; “Space sitemap page stays within its bound as listed items grow”; “Realm sitemap page stays within its bound as protected Realms grow”; “Space sitemap page stays within its bound as protected Realms grow”.                            |
 | Check Realm participation or ensure its member grant         | Participation checks `realm:participate`, the independent `realm:read` eligibility and one exact Realm head at shared T. Grant ensure reads the exact Realm head and idempotently inserts the member-group grant in the command.                                                                                                                         | Constant rows and statements; logarithmic blocks, plus bounded Access membership proof.                                                                                                                        | `test/community/participation.test.ts`: “Realm participation stays bounded as Realms, members and grants grow”.                                                                                                                                                                                                                                     |
 | Join a Realm                                                 | Acceptance command reads the Realm and current-ban key, inserts one operation and receipt; reserve and publish workflow steps restore the initiator; follow is one point upsert on the member account partition. Publication rechecks the ban.                                                                                                           | Constant rows and statements per step; logarithmic blocks, plus bounded Access and initiator restoration; independent of member history.                                                                       | `test/community/growth-join.test.ts`: “Join a Realm has constant rows and statements as Realms and its members grow”.                                                                                                                                                                                                                               |

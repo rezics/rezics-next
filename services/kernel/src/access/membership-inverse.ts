@@ -13,6 +13,7 @@ import {
 } from './realm-membership-transition.ts';
 import accountRead from './lifecycle-account.sql';
 import read from './membership-inverse-20261025093747-read.sql';
+import ready from './membership-inverse-ready.sql';
 import reserve from './membership-inverse-20261025093747-reserve.sql';
 import release from './membership-inverse-20261025093747-release.sql';
 import terminal from './membership-inverse-20261025093747-terminal.sql';
@@ -69,6 +70,35 @@ function admission(input: MembershipAdmission) {
   return { accountId: input.accountId, principal, key: input.key };
 }
 
+function requireCompleteAnchor(account: {
+  accountKind: string;
+  state: string;
+  fenced: boolean;
+  operatorAccountId: string | null;
+  complete: boolean;
+} | null | undefined): asserts account {
+  requireAllowed(
+    account &&
+      account.accountKind === 'actor' &&
+      account.state === 'active' &&
+      !account.fenced &&
+      account.operatorAccountId === null,
+  );
+  if (!account.complete) throw new MembershipInverseIncompleteError();
+}
+
+/** Point-read the same registration/cut barrier without expanding the inverse.
+ * A bounded personal inventory must check this even when its raw page is empty.
+ */
+export async function requireMembershipInverseReady(
+  client: AccessClient,
+  input: { accountId: string; authnEpoch: number },
+): Promise<void> {
+  const account = await ready.run(client, { route: route(input.accountId), account_id: input.accountId });
+  requireCompleteAnchor(account);
+  requireAllowed(Number.isSafeInteger(input.authnEpoch) && BigInt(input.authnEpoch) >= BigInt(account.minimumAuthnEpoch));
+}
+
 /** Exact actor-anchor superset read: never use its rows to prove membership.
  * Authorization must separately verify matched authoritative group memberships
  * at the attempt's T. Missing coverage, malformed rows and overflow deny access;
@@ -80,14 +110,7 @@ export async function readMembershipInverse(
 ): Promise<readonly MembershipPrincipal[]> {
   const rows = await read.run(client, { route: route(input.accountId), account_id: input.accountId });
   const account = rows[0];
-  requireAllowed(
-    account &&
-      account.accountKind === 'actor' &&
-      account.state === 'active' &&
-      !account.fenced &&
-      account.operatorAccountId === null,
-  );
-  if (!account.complete) throw new MembershipInverseIncompleteError();
+  requireCompleteAnchor(account);
   const result: MembershipPrincipal[] = [];
   for (const row of rows) {
     if (row.kind === null && row.id === null) continue;

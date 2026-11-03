@@ -898,7 +898,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return admission.run('normal', job, () =>
           listOwnRealms(
-            { pool: dependencies.pool, tokens: dependencies.tokens },
+            { ...realmDependencies(), tokens: dependencies.tokens },
             actor,
             { deadline: job.deadline, at: observedAt() },
             query,
