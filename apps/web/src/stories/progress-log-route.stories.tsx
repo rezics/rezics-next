@@ -62,7 +62,9 @@ function searchOf(link: HTMLElement) {
 }
 
 function sessionOf(link: HTMLElement) {
-  return decodeURIComponent(new URL(link.getAttribute('href')!, document.baseURI).pathname.split('/library/progress/')[1]!);
+  return decodeURIComponent(
+    new URL(link.getAttribute('href')!, document.baseURI).pathname.split('/library/progress/')[1]!,
+  );
 }
 
 export const LongUnavailableSummaries: Story = {

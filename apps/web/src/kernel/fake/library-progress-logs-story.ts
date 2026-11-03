@@ -39,7 +39,8 @@ function answer(request: Request) {
   if (mode === 'later-empty')
     return cursor === progressLogsStoryCursors.later ? page([], progressLogsStoryCursors.next) : undefined;
   if (mode === 'restart') {
-    if (cursor === progressLogsStoryCursors.stale) return { status: 409, code: 'stale_cursor', headers: privateHeaders };
+    if (cursor === progressLogsStoryCursors.stale)
+      return { status: 409, code: 'stale_cursor', headers: privateHeaders };
     return cursor ? undefined : page([snapshot()], null);
   }
   if (cursor) return undefined;
