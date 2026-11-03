@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import { readRealm } from '../community/realm.ts';
 import { withConnection } from '../database/pool.ts';
@@ -48,8 +49,11 @@ export async function requireGlobalQuestionRead(
 export async function requireRealmQuestionRead(
   deps: Dependencies, actor: Actor, realmId: string, deadline: number,
 ): Promise<void> {
-  if (routeOf(realmId) === null || realmId === GLOBAL_CONTEXT.id ||
-      !(await readRealm(deps, actor, realmId, { deadline }))) throw new ProblemError('not_found');
+  requireAccessDeadline(deadline);
+  if (routeOf(realmId) === null || realmId === GLOBAL_CONTEXT.id) throw new ProblemError('not_found');
+  const realm = await readRealm(deps, actor, realmId, { deadline });
+  requireAccessDeadline(deadline);
+  if (!realm) throw new ProblemError('not_found');
 }
 
 /** Exactly one question-home observation followed by one current authority check.
