@@ -74,8 +74,7 @@ export function addonClassificationAdmitted(read: FactsCurrent, property: string
 
 export function addonClassificationStructuredParts(statement: StatementInput): number {
   return (
-    (statement.qualifiers?.length ?? 0) +
-    statement.references.reduce((count, group) => count + group.parts.length, 0)
+    (statement.qualifiers?.length ?? 0) + statement.references.reduce((count, group) => count + group.parts.length, 0)
   );
 }
 
@@ -88,9 +87,9 @@ export function addonClassificationConfirmable(input: {
   return classificationConfirmable({
     drafts: input.drafts,
     reviewCurrent: input.reviewCurrent,
-    admitted: new Set(addonClassificationProperties(input.read).filter((property) =>
-      addonClassificationAdmitted(input.read, property),
-    )),
+    admitted: new Set(
+      addonClassificationProperties(input.read).filter((property) => addonClassificationAdmitted(input.read, property)),
+    ),
     readFailed: input.readFailed,
   });
 }
@@ -111,10 +110,7 @@ export function addonClassificationLeavesBaseMembership(
   return JSON.stringify(before) === JSON.stringify(after);
 }
 
-export function addonClassificationIgnoresSuggestedWork(
-  draft: FactDraft,
-  workId: string | undefined,
-): boolean {
+export function addonClassificationIgnoresSuggestedWork(draft: FactDraft, workId: string | undefined): boolean {
   if (!workId) return true;
   const uses = (part: { value: { type: string; content?: unknown } }) =>
     part.value.type === 'value' && part.value.content === workId;
@@ -215,7 +211,11 @@ export function retainAddonClassificationOrphan(
   return retainOrphanedClassificationDiagnostic(draft, previous);
 }
 
-export function withdrawnAddonClassificationBlocksIntent(read: FactsCurrent, property: string, sealed: boolean): boolean {
+export function withdrawnAddonClassificationBlocksIntent(
+  read: FactsCurrent,
+  property: string,
+  sealed: boolean,
+): boolean {
   if (addonClassificationAdmitted(read, property)) return false;
   return !sealed;
 }

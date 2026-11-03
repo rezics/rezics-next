@@ -151,7 +151,9 @@ test('Add-on classification correction reviews two changed fields, copies eviden
   const writes = candidatePosts(addon.id);
   expect(writes.some((request) => !request.failure && request.responseStatus === 201)).toBe(true);
   const bodies = writes.filter((request) => request.responseStatus === 201).map((request) => request.body!);
-  expect(new Set(bodies.map((body) => proposalProperty(body!)))).toEqual(new Set(['schema:gamePlatform', 'schema:genre']));
+  expect(new Set(bodies.map((body) => proposalProperty(body!)))).toEqual(
+    new Set(['schema:gamePlatform', 'schema:genre']),
+  );
   expect(bodies.every((body) => proposalTarget(body!) === fixture.concept.id)).toBe(true);
   expect(await publicField(addon.id, 'schema:gamePlatform')).toEqual([]);
 

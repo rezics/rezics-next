@@ -95,12 +95,7 @@ async function classified() {
   if (!loaded.ok) throw new Error('Expected add-on facts');
   const read = loaded;
   const seed = read.public.subject.statements['schema:inLanguage']![0]!;
-  const statement = (
-    property: string,
-    id: string,
-    target: string,
-    extra: Record<string, unknown> = {},
-  ) => ({
+  const statement = (property: string, id: string, target: string, extra: Record<string, unknown> = {}) => ({
     ...structuredClone(seed),
     id,
     property: { id: property, data_type: 'wikibase-item' },
@@ -134,7 +129,10 @@ test('Add-on classifications review the changed set, copy evidence, repair a nes
             hash: 'grouped',
             parts: [
               { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: evidence } },
-              { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: `${evidence}/note` } },
+              {
+                property: { id: 'schema:url', data_type: 'url' },
+                value: { type: 'value', content: `${evidence}/note` },
+              },
             ],
           },
         ],
@@ -174,7 +172,13 @@ test('Add-on classifications review the changed set, copy evidence, repair a nes
         read,
         locale: 'en',
         search: async () => [
-          { id: addonPlatformId, title: 'Desktop platform', types: ['skos:Concept'], typeLabel: 'Concept', cover: null },
+          {
+            id: addonPlatformId,
+            title: 'Desktop platform',
+            types: ['skos:Concept'],
+            typeLabel: 'Concept',
+            cover: null,
+          },
         ],
         transport,
         review,

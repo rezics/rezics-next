@@ -121,9 +121,9 @@ test('Add-on classification admits released item fields and keeps base membershi
   expect(
     addonClassificationConfirmable({ drafts: [platformDraft], reviewCurrent: true, read, readFailed: false }),
   ).toBe(true);
-  expect(
-    addonClassificationConfirmable({ drafts: [platformDraft], reviewCurrent: true, read, readFailed: true }),
-  ).toBe(false);
+  expect(addonClassificationConfirmable({ drafts: [platformDraft], reviewCurrent: true, read, readFailed: true })).toBe(
+    false,
+  );
   expect(withdrawnAddonClassificationBlocksIntent(read, 'schema:inLanguage', false)).toBe(true);
 });
 
@@ -153,7 +153,10 @@ test('deliberate copy adds only an independent citation group and explains ineli
     type: 'value',
     content: 'https://archive.example/addon/platform',
   });
-  const succeeded: FactDraft = { ...target, result: { ok: true, kind: 'proposed-awaiting-review', candidate: 'c1', revision: 2 } };
+  const succeeded: FactDraft = {
+    ...target,
+    result: { ok: true, kind: 'proposed-awaiting-review', candidate: 'c1', revision: 2 },
+  };
   expect(
     addonClassificationCopyPlan(
       [source, succeeded],
@@ -178,13 +181,18 @@ test('unknown delivery keeps the sealed key while a succeeded holder cannot rese
   };
   const succeeded: FactDraft = {
     ...draft(read, genre),
-    result: { ok: true, kind: 'proposed-awaiting-review', candidate: '00000000-0000-4000-8000-00000000a202', revision: 2 },
+    result: {
+      ok: true,
+      kind: 'proposed-awaiting-review',
+      candidate: '00000000-0000-4000-8000-00000000a202',
+      revision: 2,
+    },
   };
   expect(addonClassificationResendAllowed(uncertain)).toBe(true);
   expect(addonClassificationResendAllowed(succeeded)).toBe(false);
-  expect(
-    addonClassificationConfirmable({ drafts: [uncertain], reviewCurrent: false, read, readFailed: true }),
-  ).toBe(true);
+  expect(addonClassificationConfirmable({ drafts: [uncertain], reviewCurrent: false, read, readFailed: true })).toBe(
+    true,
+  );
   const invalid: FactDraft = {
     ...draft(read, genre),
     result: { ok: false, reason: 'invalid', errors: [{ pointer: '/statement/value', code: 'required' }] },
