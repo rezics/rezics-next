@@ -38,11 +38,22 @@ test('native shelf growth reaches independent relation totals without changing t
     expect(unrelatedSessions.filter((session) => session.state === 'active')).toHaveLength(4);
     expect(activeAccountId).not.toBe(entryAccountId);
     expect(ownerHistory).toHaveLength(4);
-    expect(ownerHistory.map((session) => session.state).sort()).toEqual(['abandoned', 'abandoned', 'completed', 'completed']);
-    expect(grown.completedUnits.filter((unit) => ownerHistory.some((session) => session.id === unit.sessionId))).toHaveLength(1);
+    expect(ownerHistory.map((session) => session.state).sort()).toEqual([
+      'abandoned',
+      'abandoned',
+      'completed',
+      'completed',
+    ]);
+    expect(
+      grown.completedUnits.filter((unit) => ownerHistory.some((session) => session.id === unit.sessionId)),
+    ).toHaveLength(1);
     expect(grown.heads.filter((head) => head.accountId === activeAccountId)).toHaveLength(4);
     expect(grown.typeKeys.filter((key) => key.accountId === entryAccountId)).toHaveLength(1);
-    expect(grown.counts.some((count) => count.accountId === entryAccountId && count.bucket === 'planned' && count.count === 4)).toBe(true);
+    expect(
+      grown.counts.some(
+        (count) => count.accountId === entryAccountId && count.bucket === 'planned' && count.count === 4,
+      ),
+    ).toBe(true);
     expect(repeated.entries).toEqual(grown.entries);
     expect(repeated.sessions).toEqual(grown.sessions);
     expect(repeated.completedUnits).toEqual(grown.completedUnits);

@@ -33,7 +33,8 @@ function seedTime(now: string): string {
 
 function assertTotals(input: ShelvesSeed): void {
   for (const [name, value] of Object.entries(input))
-    if (!Number.isSafeInteger(value) || value < 0) throw new RangeError(`Shelf growth ${name} must be a non-negative integer`);
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new RangeError(`Shelf growth ${name} must be a non-negative integer`);
 }
 
 export function createNativeShelvesGrowthFixture(
@@ -64,7 +65,13 @@ export function createNativeShelvesGrowthFixture(
     return world.native.subject(input.type);
   }
 
-  async function command<T>(actor: Actor, method: 'POST' | 'PUT', path: string, body: unknown, status: number): Promise<T> {
+  async function command<T>(
+    actor: Actor,
+    method: 'POST' | 'PUT',
+    path: string,
+    body: unknown,
+    status: number,
+  ): Promise<T> {
     const response = await world.native.bearerRequest(actor.credential, path, {
       method,
       headers: { 'content-type': 'application/json', 'Idempotency-Key': requestKey() },
@@ -132,7 +139,13 @@ export function createNativeShelvesGrowthFixture(
         const unitId = `native-shelf-growth:${ordinal}`;
         const recorded = await command<{
           progressSession: { id: string; subjectId: string; revision: number; state: 'active' };
-        }>(owner, 'POST', `/v1/progressSessions/${session.id}:record`, { revision: session.revision, add: [unitId] }, 200);
+        }>(
+          owner,
+          'POST',
+          `/v1/progressSessions/${session.id}:record`,
+          { revision: session.revision, add: [unitId] },
+          200,
+        );
         session = recorded.progressSession;
         completedUnitSessions.add(session.id);
       }
@@ -222,7 +235,9 @@ export function createNativeShelvesGrowthFixture(
         (!population.counterRows.some((row) => row.bucket === 'planned' && row.count === entrySubjects.length) ||
           !population.counterRows.some((row) => row.bucket === 'all' && row.count === entrySubjects.length)))
     )
-      throw new Error(`Native shelf growth population did not settle to its requested relations: ${JSON.stringify(population)}`);
+      throw new Error(
+        `Native shelf growth population did not settle to its requested relations: ${JSON.stringify(population)}`,
+      );
   }
 
   return {
