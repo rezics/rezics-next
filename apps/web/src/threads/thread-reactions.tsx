@@ -16,7 +16,12 @@ import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { csrfHeaders } from './composer';
 import { changeReaction, readReaction } from './reactions';
-import { subjectReactionKinds, type ReactionFailure, type ReactionSnapshot } from './reaction-request';
+import {
+  subjectReactionKinds,
+  type ChangeReactionInput,
+  type ReactionFailure,
+  type ReactionSnapshot,
+} from './reaction-request';
 import { Button } from '@rezics/ui/shadcn/button';
 import type { useSession } from '../session/query';
 
@@ -92,8 +97,8 @@ export type ThreadReactionsProps = {
   locale?: string;
   /** Explicitly illustrative transports for isolated stories; production callers leave this absent. */
   preparedTransport?: {
-    change: typeof changeReaction;
-    read: typeof readReaction;
+    change(input: { data: ChangeReactionInput; headers: HeadersInit }): Promise<{ ok: true } | ReactionFailure>;
+    read(input: { data: ChangeReactionInput; headers: HeadersInit }): Promise<ReactionSnapshot | ReactionFailure>;
   };
 };
 

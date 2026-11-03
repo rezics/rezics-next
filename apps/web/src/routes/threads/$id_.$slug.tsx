@@ -938,9 +938,9 @@ export function ThreadReadingPost({
               href={threadLocation(getLocale(), { id: post.threadId }, undefined, post.id)}
               title={m.threads_untitled()}
               signedIn={signedIn}
-              plain={post.parentId !== null}
+              plain={target.kind === 'post'}
               layout="detail"
-              origin={{ key: lifetime.id, isCurrent: () => current() }}
+              origin={{ key: String(lifetime.id), isCurrent: () => current() }}
               reaction={{
                 target,
                 counts,
@@ -948,7 +948,7 @@ export function ThreadReadingPost({
                 onMutation,
                 personalReady,
                 settleWithRead: false,
-                reactionOrigin: { key: lifetime.id, reader: viewerId ?? null, isCurrent: () => current() },
+                reactionOrigin: { key: String(lifetime.id), reader: viewerId ?? null, isCurrent: () => current() },
               }}
               reply={{ onReply, disabled: replyPending || !personalReady }}
               overflow={

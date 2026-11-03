@@ -96,7 +96,16 @@ export function FeedActionBar(props: FeedActionBarProps) {
   const client = useContext(QueryClientContext);
   const observation = useMemo(() => observeReactionSession(client), [client]);
   const revision = useSyncExternalStore(observation.subscribe, observation.snapshot, observation.serverSnapshot);
-  const identity = JSON.stringify([props.href, props.signedIn, props.origin?.key, props.reaction?.target, revision]);
+  const [provider, setProvider] = useState({ observation, visit: 0 });
+  if (provider.observation !== observation) setProvider({ observation, visit: provider.visit + 1 });
+  const identity = JSON.stringify([
+    props.href,
+    props.signedIn,
+    props.origin?.key,
+    props.reaction?.target,
+    revision,
+    provider.visit,
+  ]);
   const desired = useRef(identity);
   desired.current = identity;
   return (
