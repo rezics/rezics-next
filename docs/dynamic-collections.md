@@ -407,9 +407,9 @@ original/terminal/foreign disclosure still requires its actual producer; missing
 public execution remains unavailable without the complete Publication provider. Preserve the native saved
 creation, CAS/replay, useful member, clear/Undo, and unavailable-public-provider outcomes.
 
-<<<<<<< HEAD
-Public dynamic execution requires the actual complete explicit Publication provider. Native episode, work,
-staging and final-command bodies are present; their saved-source composition and complete output must be proved.
+Public dynamic execution requires the actual complete explicit Publication provider. Native episodes, saved-source
+preparation, bounded staging and restored activation now compose the existing publication operation; only complete
+native output is shareable. Missing producer evidence remains unavailable.
 Non-private saved creation requires the bound native Publication provider and its full source/rule admission;
 without it creation returns `dependency_unavailable`. The creation command atomically stores the Collection,
 grants, Publication operation, work and original receipt; failed admission leaves none of them. Decision: the
@@ -421,13 +421,6 @@ empty success. Public Collections enter public listing; unlisted Collections all
 and unknown Collections remain identically concealed from other accounts and anonymous viewers. Shared DTOs
 omit rules, release/profile pins, fact values and private counts. An explicit admitted owner filter continues
 to select the private working graph. Source presence is no successful public
-=======
-Public dynamic execution requires the actual complete explicit Publication provider. Native episode, saved-source
-preparation, bounded staging and restored activation now compose the existing publication operation; only its
-complete native output is shareable. Missing producer evidence remains unavailable.
-Non-private saved creation currently refuses with `dependency_unavailable`. Public/unlisted requests, including an
-editor's public request, cannot evaluate current private curator facts. Source presence is no successful public
->>>>>>> cb9aaa5161 (Squash worker branch changes)
 membership claim. Generated artifacts and native outcome checks remain controller-owned after integration.
 
 Saved-rule drafts compare exact title, description and filter structure (including operand order) with their initial
@@ -439,6 +432,8 @@ sender, credential, request and key. Confirmed saves and authority retirement cl
 <a id="selected-whole-query-publication-contract-native-bodies-pending"></a>
 
 ### Selected whole-query publication runtime
+
+Decision: saved-query publication reuses installed non-private creation and per-action restored authority, retaining native retirement custody.
 
 [`collection-publication-work-admission.ts`](../services/kernel/src/library/collection-publication-work-admission.ts)
 owns the literal server-only `CollectionPublicationLocator` (`route`, `ownerAccountId`, `collectionId`,
