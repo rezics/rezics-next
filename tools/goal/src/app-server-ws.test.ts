@@ -62,7 +62,14 @@ test('pool policy bounds readiness diagnostics and request deadlines', async () 
       "if (message.id === undefined || message.method === 'no-response') return;",
     ),
   );
-  const server = await connectPool({ id: 'policy', codexHome: directory, executable }, undefined, undefined, policy);
+  // The request deadline is independent of the intentionally tiny startup diagnostic tail above.
+  const requestPolicy = readControlPolicy({ appServer: { requestTimeoutMs: 25, terminationGraceMs: 25 } }).appServer;
+  const server = await connectPool(
+    { id: 'policy', codexHome: directory, executable },
+    undefined,
+    undefined,
+    requestPolicy,
+  );
   try {
     await expect(server.request('no-response', {})).rejects.toThrow('App-server request timed out: no-response');
   } finally {
