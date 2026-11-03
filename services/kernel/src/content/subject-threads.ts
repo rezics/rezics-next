@@ -195,8 +195,8 @@ export async function listSubjectThreads(
     {
       observeThreads: (threadIds, current) =>
         Promise.all(
-          threadIds.map(async (threadId) =>
-            await readSubjectThread(dependencies, threadId, subjectId, input.place, current)
+          threadIds.map(
+            async (threadId) => await readSubjectThread(dependencies, threadId, subjectId, input.place, current),
           ),
         ),
     },

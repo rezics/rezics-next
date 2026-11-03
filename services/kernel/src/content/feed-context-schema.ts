@@ -79,8 +79,5 @@ const parent = t.Union([
 ]);
 
 export const FeedParentContextSchema = t.Unsafe<FeedParentContext>(
-  t.Union([
-    t.Object({ kind: t.Literal('opening') }, closed),
-    t.Object({ kind: t.Literal('reply'), parent }, closed),
-  ]),
+  t.Union([t.Object({ kind: t.Literal('opening') }, closed), t.Object({ kind: t.Literal('reply'), parent }, closed)]),
 );

@@ -1,45 +1,38 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/feed*.ts",
-    "services/kernel/src/content/feed*.sql",
-    "services/kernel/src/content/reads.ts",
-    "services/kernel/src/content/model.ts",
-    "services/kernel/src/content/schemas.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/*feed*.ts",
-    "services/kernel/test/content/support/*feed*.ts",
-    "docs/feeds.md",
-    "packages/client/src/kernel/**",
-    "contracts/openapi.json",
-    "packages/client/src/index.ts",
-    "packages/client/tests/feed-response.test.ts",
-    "services/kernel/src/content/subject-threads*.ts",
-    "services/kernel/test/content/*subject-thread*.ts",
-    "apps/web/**"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [
-    "a99aa260-84bc-4a92-894d-dec4d184ca99",
-    "61c22655-8419-4792-864c-0aa89aadc8f7",
-    "f0faf5f4-b4f6-48df-857b-5f6dcb788b2a"
-  ],
-  "estimate": {
-    "lines": 2200,
-    "files": 18
-  },
-  "inseparable": true
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/feed*.ts',
+      'services/kernel/src/content/feed*.sql',
+      'services/kernel/src/content/reads.ts',
+      'services/kernel/src/content/model.ts',
+      'services/kernel/src/content/schemas.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/*feed*.ts',
+      'services/kernel/test/content/support/*feed*.ts',
+      'docs/feeds.md',
+      'packages/client/src/kernel/**',
+      'contracts/openapi.json',
+      'packages/client/src/index.ts',
+      'packages/client/tests/feed-response.test.ts',
+      'services/kernel/src/content/subject-threads*.ts',
+      'services/kernel/test/content/*subject-thread*.ts',
+      'apps/web/**',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after':
+    [
+      'a99aa260-84bc-4a92-894d-dec4d184ca99',
+      '61c22655-8419-4792-864c-0aa89aadc8f7',
+      'f0faf5f4-b4f6-48df-857b-5f6dcb788b2a',
+    ],
+  'estimate': { 'lines': 2200, 'files': 18 },
+  'inseparable': true,
 }
 ---
 

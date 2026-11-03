@@ -2,13 +2,7 @@ import type { FeedAuthor } from './feed-contract.ts';
 import { feedAuthor, feedExcerpt } from './feed-summary.ts';
 import { ContentNotFoundError, discloseThreads, readCitationDisclosure, readPost } from './reads.ts';
 import type { ContentReadDependencies, PostEntry, ThreadView } from './reads.ts';
-import type {
-  AnchoredPosition,
-  FeedParentAuthor,
-  FeedParentContext,
-  FeedReviewContext,
-  ReadContext,
-} from './model.ts';
+import type { AnchoredPosition, FeedParentAuthor, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
 import type { AccountDiscoverySummary } from '../search/discovery.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
@@ -103,7 +97,9 @@ async function readPostBatch(
   references: readonly Readonly<{ threadId: string; postId: string }>[],
   context: ReadContext,
 ): Promise<Readonly<{ values: ReadonlyMap<string, PostObservation>; anchors: readonly AnchoredPosition[] }>> {
-  const unique = [...new Map(references.map((reference) => [postKey(reference.threadId, reference.postId), reference])).values()];
+  const unique = [
+    ...new Map(references.map((reference) => [postKey(reference.threadId, reference.postId), reference])).values(),
+  ];
   if (unique.length > FEED_CONTEXT_MAX_REFERENCES * 2)
     throw new RangeError('Feed context selected-post and parent bound exceeded');
   const rows = await Promise.all(
@@ -163,9 +159,7 @@ async function observeThreads(
 ): Promise<Readonly<{ values: ReadonlyMap<string, ThreadView | null>; anchors: readonly AnchoredPosition[] }>> {
   if (!ids.length) return { values: new Map(), anchors: [] };
   const unique = [...new Set(ids)];
-  const rows = observer
-    ? await observer(unique, context)
-    : await discloseThreads(dependencies, unique, context);
+  const rows = observer ? await observer(unique, context) : await discloseThreads(dependencies, unique, context);
   if (rows.length !== unique.length) throw new ProblemError('dependency_unavailable');
   return {
     values: new Map(unique.map((id, index) => [id, rows[index]!.value])),
@@ -196,10 +190,10 @@ async function loadContent(
     threadAnchors = selected.anchors;
   }
 
-  const postRefs = references.flatMap(({ threadId, postId }) =>
-    postId ? [{ threadId, postId }] : [],
+  const postRefs = references.flatMap(({ threadId, postId }) => (postId ? [{ threadId, postId }] : []));
+  const missingPosts = postRefs.filter(
+    ({ threadId, postId }) => !useInitial || !initialPosts.has(postKey(threadId, postId)),
   );
-  const missingPosts = postRefs.filter(({ threadId, postId }) => !useInitial || !initialPosts.has(postKey(threadId, postId)));
   const selectedPosts = missingPosts.length
     ? await readPostBatch(dependencies, missingPosts, context)
     : { values: new Map<string, PostObservation>(), anchors: [] as readonly AnchoredPosition[] };
@@ -246,14 +240,14 @@ async function loadOwners(
     const thread = content.threads.get(reference.threadId);
     if (!thread) continue;
     if ('authorId' in thread.firstPost) accountIds.add(thread.firstPost.authorId);
-    if (thread.kind === 'review' && thread.availability === 'available' && thread.firstPost.availability === 'available') {
+    if (
+      thread.kind === 'review' &&
+      thread.availability === 'available' &&
+      thread.firstPost.availability === 'available'
+    ) {
       const threadSubjects = thread.subjectIds;
       const openingSubjects = thread.firstPost.subjectIds;
-      if (
-        threadSubjects.length === 1 &&
-        openingSubjects.length === 1 &&
-        threadSubjects[0] === openingSubjects[0]
-      )
+      if (threadSubjects.length === 1 && openingSubjects.length === 1 && threadSubjects[0] === openingSubjects[0])
         subjectIds.add(threadSubjects[0]!);
       if (readCitationDisclosure(thread.firstPost) === 'visible' && thread.firstPost.voteCitation)
         questionIds.add(thread.firstPost.voteCitation.questionId);
@@ -270,7 +264,12 @@ async function loadOwners(
   if (accountIds.size > FEED_CONTEXT_MAX_AUTHORS) throw new RangeError('Feed context author bound exceeded');
   if (questionIds.size > FEED_CONTEXT_MAX_QUESTIONS) throw new RangeError('Feed context question bound exceeded');
 
-  const ownerContext = { pool: dependencies.pool, access: dependencies.access, actor: context.actor, deadline: context.deadline };
+  const ownerContext = {
+    pool: dependencies.pool,
+    access: dependencies.access,
+    actor: context.actor,
+    deadline: context.deadline,
+  };
   const [subjects, accounts, questions] = await Promise.all([
     subjectIds.size
       ? readSubjectSummaries(ownerContext, [...subjectIds], { languages: [...languages] })
@@ -385,9 +384,13 @@ function composeValues(
   return new Map(
     references.map((reference) => {
       const thread = content.threads.get(reference.threadId) ?? null;
-      const post = reference.postId ? (content.posts.get(postKey(reference.threadId, reference.postId))?.value ?? null) : null;
+      const post = reference.postId
+        ? (content.posts.get(postKey(reference.threadId, reference.postId))?.value ?? null)
+        : null;
       const threadSummary =
-        thread && 'authorId' in thread.firstPost ? feedAuthor(owners.accounts.get(thread.firstPost.authorId)) : undefined;
+        thread && 'authorId' in thread.firstPost
+          ? feedAuthor(owners.accounts.get(thread.firstPost.authorId))
+          : undefined;
       const postSummary = post && 'authorId' in post ? feedAuthor(owners.accounts.get(post.authorId)) : undefined;
       const review = thread ? reviewContext(thread, owners) : undefined;
       const parent = post ? parentContext(reference, post, content, owners) : undefined;
@@ -421,7 +424,7 @@ export async function prepareFeedContentContext(
   if (new Set(references.map(({ key }) => key)).size !== references.length)
     throw new TypeError('Duplicate feed context reference key');
   for (const reference of references)
-    if (reference.postId && (reference.initialPost?.id !== undefined && reference.initialPost.id !== reference.postId))
+    if (reference.postId && reference.initialPost?.id !== undefined && reference.initialPost.id !== reference.postId)
       throw new TypeError('Feed context selected post key mismatch');
 
   const initialThreads = initialThreadMap(references);
@@ -446,8 +449,7 @@ export async function prepareFeedContentContext(
         if (!reference.postId) continue;
         const before = initial.posts.get(postKey(reference.threadId, reference.postId))?.value;
         const after = current.posts.get(postKey(reference.threadId, reference.postId))?.value;
-        if (before && after && before.parentId !== after.parentId)
-          throw new ProblemError('dependency_unavailable');
+        if (before && after && before.parentId !== after.parentId) throw new ProblemError('dependency_unavailable');
       }
       const owners = await loadOwners(dependencies, references, current, context, languages);
       return { contexts: composeValues(references, current, owners), anchors: current.anchors };

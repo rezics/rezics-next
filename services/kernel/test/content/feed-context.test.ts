@@ -8,15 +8,11 @@ import { createReviewLifecycleFixture, requestKey } from './review-native-lifecy
 test('native Home context retains a review target, zero citation and only the immediate reply parent', async () => {
   const fixture = await createReviewLifecycleFixture();
   try {
-    const vote = await fixture.call(
-      'PUT',
-      `/v1/subjects/${fixture.subjectId}/ratings/${STANDARD_QUESTION_ID}/vote`,
-      {
-        bearer: fixture.author.bearer,
-        key: requestKey('feed-context-vote'),
-        body: { units: 0 },
-      },
-    );
+    const vote = await fixture.call('PUT', `/v1/subjects/${fixture.subjectId}/ratings/${STANDARD_QUESTION_ID}/vote`, {
+      bearer: fixture.author.bearer,
+      key: requestKey('feed-context-vote'),
+      body: { units: 0 },
+    });
     expect(vote.response.status, vote.text).toBe(200);
     const citation = {
       questionId: STANDARD_QUESTION_ID,

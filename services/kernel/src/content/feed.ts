@@ -21,7 +21,14 @@ import { openFollowingSpace, type FollowingSpace } from './feed-space.ts';
 import { openSpaceSubjectPopulation } from './feed-subject-scope.ts';
 import { readSubjectSummaries } from '../semantic/summaries.ts';
 import { readPublication } from '../community/publication.ts';
-import { ContentNotFoundError, discloseThreads, readBoard, readPost, type PostEntry, type ThreadView } from './reads.ts';
+import {
+  ContentNotFoundError,
+  discloseThreads,
+  readBoard,
+  readPost,
+  type PostEntry,
+  type ThreadView,
+} from './reads.ts';
 import { createFeedActivityStore, feedRoute, type ActivityRef } from './feed-activity.ts';
 import { decodeFeedCursor, encodeFeedCursor, feedBinding, fingerprint, type FeedPosition } from './feed-cursor.ts';
 import {
@@ -444,7 +451,16 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
                 page.activities.map(async (activity) => {
                   try {
                     return {
-                      item: await hydrate(activity, actor, deadline, summaries, threads, authorIds, contextSources, space),
+                      item: await hydrate(
+                        activity,
+                        actor,
+                        deadline,
+                        summaries,
+                        threads,
+                        authorIds,
+                        contextSources,
+                        space,
+                      ),
                     };
                   } catch (error) {
                     if (
@@ -558,14 +574,24 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       }
       if (contextReferences.length) {
         try {
-          const composition = await prepareFeedContentContext(content, contextReferences, { actor, deadline }, languages);
+          const composition = await prepareFeedContentContext(
+            content,
+            contextReferences,
+            { actor, deadline },
+            languages,
+          );
           const composed = await composition.finish();
           const concealed = new Set<string>();
           for (const reference of contextReferences) {
             const item = feedItems.find((candidate) => candidate.id === reference.key);
             const context = composed.contexts.get(reference.key);
             const thread = context?.thread;
-            if (!item || !thread || thread.availability !== 'available' || thread.firstPost.availability !== 'available') {
+            if (
+              !item ||
+              !thread ||
+              thread.availability !== 'available' ||
+              thread.firstPost.availability !== 'available'
+            ) {
               concealed.add(reference.key);
               continue;
             }
