@@ -51,7 +51,8 @@ partial date into an instant. Reported `startDate` and `finishDate` remain separ
 
 Reflection is plain text, retained without trimming, limited to 2,000 Unicode characters and 4,096 UTF-8 bytes.
 The empty string is a value; `null` clears it. TypeBox checks the character limit and the native parser enforces
-both limits.
+both limits. The PATCH route caps the complete JSON frame at 16,384 bytes, leaving room for worst-case JSON
+escaping and the bounded date/revision fields while limiting parse work to a constant multiple of `B`.
 
 The values are columns on the owned `progress_session` row and use its exact `(route, session_id)` key plus the
 account owner predicate. They do not enter progress-change history, public logs, public Collections, Search, public
@@ -74,22 +75,30 @@ identity intact. The precision above is the complete supported date shape.
 
 ## Derived cost
 
-For a fixed admitted field set `F <= 3` and reflection byte cap `B = 4096`, one addressed read or edit is bounded by
-`Cfixed-authority + Csession + Cmetadata + Cnative-command/history + Ccleanup`. This is a source derivation, not a
-measured total:
+For a fixed admitted field set `F <= 3`, reflection byte cap `B = 4096`, and PATCH frame cap `16,384`, one addressed
+read or edit is bounded by `Cfixed-authority + Csession + Cmetadata + Cnative-command/history + Ccleanup`. This is a
+source derivation, not a measured total:
 
-- `Cfixed-authority` is the existing authenticated admission and current account/scope check in the Kernel route and
-  `createLibraryCommandRunner`; it uses owner-keyed account reads and the installed Access/command authorization.
-- `Csession` is one indexed session-key read for GET, or one exact owner/session `FOR UPDATE` plus one primary-key
-  compare-and-swap UPDATE for a changed PATCH. Missing, foreign and stale rows do not add a history traversal.
+- `Cfixed-authority` is the installed `deriveAccess` route admission plus the current-account lifecycle check. GET
+  reads the account once by `(route, account_id)` inside its read transaction. PATCH holds that exact account row
+  `FOR SHARE` and rereads it by the same key before receipt lookup; the command gate and request deadline bound
+  contention independently of history size.
+- `Csession` uses the primary key `(route, session_id)` and owner seek index `(route, account_id, session_id)`. GET
+  probes one `(route, account_id, session_id)` row. PATCH locks that exact owner/session row once and, only for a
+  changed value, performs one primary-key owner/revision compare-and-swap UPDATE. Missing, foreign and stale rows do
+  not add a history traversal; stale edits roll back without a write or event.
 - `Cmetadata` is no separate row: the at-most-six date integers and one bounded reflection share that session row.
-  The request and selected-field work are `O(B + F)` and independent of owner history `H`.
-- `Cnative-command/history` uses the existing owner command receipt keyed by request identity and the existing
-  owner-only event. A changed PATCH emits at most one event containing only the session ID; the replay response
-  contains only session ID, revision and `changed`. Omitted, clear, unchanged, stale and rollback paths stay within
-  the same fixed key probes and receipt envelope; a replay uses the receipt and does not repeat the session update.
-- `Ccleanup` remains the installed account-owned progress-session and command-receipt lifecycle. Journal values add
-  no side-table page or traversal; deleting the session row removes its dates and reflection with it.
+  The request frame is at most 16,384 bytes, and selected-field work is `O(B + F)`, independent of owner history
+  `H`. GET returns at most the 4,096-byte reflection plus fixed identifiers, revision and six date components.
+- `Cnative-command/history` uses one indexed original-receipt lookup by principal, kind and candidate key after
+  current authority; stored receipts have a 32-byte digest and a 1..255-character key. A fresh changed PATCH adds
+  the ordinary command fence and one ID-only progress event. Its receipt response is only session ID, revision and
+  `changed`; no journal value is copied there. Omitted, clear, unchanged and stale paths use the same fixed receipt
+  envelope; a replay returns the stored acknowledgement and does not relock or update the session or emit an event.
+- `Ccleanup` uses the installed owner erasure seek `(route, account_id, session_id)` with `LIMIT 1`; deletion targets
+  that exact key after an existence check on each possible `(route, session_id)` child key for progress units and
+  changes. Shared account command-receipt retention remains authoritative. Journal values add no side-table page or
+  traversal; deleting the session row removes its dates and reflection with it.
 
 Native growth acceptance remains controller-owned and unmeasured here. It must compare 64, 512 and 4,096 same-owner
 occurrences, unrelated owners, and retained versus cleared journal values with a fixed addressed response, and record

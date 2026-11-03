@@ -7638,6 +7638,7 @@ type ProgressSessionJournalRoute = {
                                 403: unknown;
                                 404: unknown;
                                 409: unknown;
+                                413: unknown;
                                 503: unknown;
                             };
                             error: never;

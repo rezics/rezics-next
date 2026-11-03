@@ -17,6 +17,8 @@ import { createPublishedLogCommands } from './published-logs.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
 import { MAX_JOURNAL_REFLECTION_CHARACTERS } from './progress-journal.ts';
 
+const MAX_JOURNAL_PATCH_BODY_BYTES = 16_384;
+
 import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
 
 type Dependencies = { routeKey: Uint8Array; pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
@@ -476,9 +478,13 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           403: forbidden,
           404: notFound,
           409: problemSchema('conflict'),
+          413: problemSchema('content_too_large'),
           503: unavailable,
         },
-        detail: detail('progress_session.journal.update', 'progress_session:update'),
+        detail: {
+          ...detail('progress_session.journal.update', 'progress_session:update'),
+          'x-body-limit': MAX_JOURNAL_PATCH_BODY_BYTES,
+        },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
