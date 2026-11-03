@@ -26,6 +26,13 @@ The installed declarations still lack `action: 'score'`, `nativeScore`, `scoreDe
 aliases remain the minimal seam for their publication. Score review can become usable when those types are published;
 vote effects separately require Content's conditional writer.
 
+Decision: derive score-only aliases from generated fields, leaving unpublished fields as `never`; source replacement
+immediately retires private review authority even if deletion fails, and a credential change permanently retires its visit.
+Replacement retains only the upload identifier and exact cleanup/new-preview retry commands until native cleanup
+succeeds. It cannot reread the retired source, recover its selection or confirm an older review. A lost cleanup
+acknowledgement retries the same deletion before submitting the replacement XML. Score review, consent and vote
+effects remain unavailable on the current state-only client; completing them requires the published score contract.
+
 The native source accepts only the person's uploaded `vndb-export version="1.0"` XML. It does not claim another
 account, fetch provider data, create catalogue subjects or identities, publish reviews, or turn private notes into
 public facts. VN and release identifiers remain distinct. Titles can assist display and explicit catalogue search;

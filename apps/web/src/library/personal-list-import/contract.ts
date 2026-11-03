@@ -7,6 +7,17 @@ export type GeneratedVndbPage = NonNullable<Awaited<ReturnType<UploadedVndb['get
 export type GeneratedVndbDecision = NonNullable<Awaited<ReturnType<UploadedVndb['$review']['post']>>['data']>;
 export type GeneratedVndbApplyResult = NonNullable<Awaited<ReturnType<UploadedVndb['$apply']['post']>>['data']>;
 
+/** Absent producer fields stay uninhabitable until the installed generated contract publishes them. */
+type PublishedField<T, K extends PropertyKey> = T extends unknown ? (K extends keyof T ? T[K] : never) : never;
+export type GeneratedVndbScoreReview = Extract<GeneratedVndbReview, { action: 'score' }>;
+export type GeneratedVndbNativeScore = PublishedField<GeneratedVndbPage['rows'][number], 'nativeScore'>;
+export type GeneratedVndbScoreDecision = PublishedField<GeneratedVndbPage['rows'][number], 'scoreDecision'>;
+export type GeneratedVndbScoreApplyRow = Extract<GeneratedVndbApply['rows'][number], { scoreReviewId: string }>;
+export type GeneratedVndbScoreApplyOutcome = Extract<
+  GeneratedVndbApplyResult['outcomes'][number],
+  { scoreReviewId: string }
+>;
+
 export const VNDB_XML_BYTES = 2 * 1024 * 1024;
 export const VNDB_JSON_WIRE_BYTES = 12 * 1024 * 1024 + 64;
 export const VNDB_ROWS = 5_000;
@@ -40,6 +51,7 @@ export type VndbPreview = {
 export type VndbPage = Omit<GeneratedVndbPage, 'rows'> & { rows: VndbRow[] };
 export type VndbDecision = GeneratedVndbDecision;
 export type VndbApplyResult = GeneratedVndbApplyResult;
+export type VndbOutcome = VndbApplyResult['outcomes'][number];
 
 export type VndbReviewInput = GeneratedVndbReview &
   (

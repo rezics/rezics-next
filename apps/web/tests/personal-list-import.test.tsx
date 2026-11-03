@@ -249,36 +249,95 @@ test('keeps acknowledged outcomes and the remaining selection after native cance
   expect(snap.unattempted).toEqual([1]);
 });
 
-test('viewer replacement retires private source and late page reads', async () => {
-  const current = visit();
-  let pages = 0;
-  const late = Promise.withResolvers<{ kind: 'page'; value: ReturnType<typeof pageValue> }>();
+test.each(['retire', 'subject', 'csrfToken'] as const)(
+  '%s replacement retires private source and late page reads',
+  async (change) => {
+    const current = visit();
+    let pages = 0;
+    const late = Promise.withResolvers<{ kind: 'page'; value: ReturnType<typeof pageValue> }>();
+    const journey = createVndbJourney({
+      visit: current,
+      port: makePort({
+        preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+        page: async () => {
+          pages += 1;
+          if (pages === 2) return late.promise;
+          return { kind: 'page', value: pageValue([row(0)]) };
+        },
+        source: async () => ({ kind: 'source', xml: '<private-source/>' }),
+      }),
+    });
+
+    await journey.preview('<vndb-export version="1.0"/>');
+    expect(pages).toBe(1);
+    expect(journey.snapshot().rows.map((item) => item.title)).toEqual(['Novel 1']);
+    await journey.source();
+    const loading = journey.loadPage(0);
+    if (change === 'retire') {
+      current.retire();
+      journey.retire();
+    } else {
+      const previous = current[change];
+      current[change] = 'replacement';
+      expect(journey.snapshot().sourceXML).toBeNull();
+      current[change] = previous;
+    }
+    late.resolve({ kind: 'page', value: pageValue([row(1)]) });
+    await loading;
+    await journey.loadPage(0);
+    expect(pages).toBe(2);
+    expect(journey.live()).toBe(false);
+    expect(journey.snapshot()).toMatchObject({ uploadId: null, rows: [], selection: [], page: null, sourceXML: null });
+  },
+);
+
+test.each(['denied', 'unknown'] as const)('source replacement retires review before %s cleanup', async (kind) => {
+  const cleanup = Promise.withResolvers<Awaited<ReturnType<VndbPort['delete']>>>();
+  const deletes: VndbCommand[] = [];
+  const previews: string[] = [];
+  const selected = row(0);
+  selected.decision = {
+    reviewId: reviewIds[0]!,
+    status: 'skipped',
+    targetId: null,
+    state: null,
+    baseline: null,
+    replace: false,
+  };
   const journey = createVndbJourney({
-    visit: current,
+    visit: visit(),
     port: makePort({
-      preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
-      page: async () => {
-        pages += 1;
-        if (pages === 2) return late.promise;
-        return { kind: 'page', value: pageValue([row(0)]) };
+      preview: async (command) => {
+        previews.push(command.xml);
+        return { kind: 'previewed', value: previewValue(1) };
       },
+      page: async () => ({ kind: 'page', value: pageValue([selected]) }),
       source: async () => ({ kind: 'source', xml: '<private-source/>' }),
+      delete: async (command) => {
+        deletes.push(command);
+        return deletes.length === 1 ? cleanup.promise : { kind: 'deleted' };
+      },
     }),
   });
-
-  await journey.preview('<vndb-export version="1.0"/>');
-  expect(pages).toBe(1);
-  expect(journey.snapshot().rows.map((item) => item.title)).toEqual(['Novel 1']);
+  await journey.preview('<original/>');
   await journey.source();
-  const loading = journey.loadPage(0);
-  current.retire();
-  journey.retire();
-  late.resolve({ kind: 'page', value: pageValue([row(1)]) });
-  await loading;
+  expect(journey.openConfirm().stage).toBe('confirm');
+  const replacing = journey.preview('<replacement/>');
+  expect(journey.snapshot()).toMatchObject({ stage: 'upload', sourceXML: null, rows: [], selection: [], page: null });
+  cleanup.resolve(kind === 'denied' ? { kind, status: 403 } : { kind, command: deletes[0]! });
+  await replacing;
   await journey.loadPage(0);
-  expect(pages).toBe(2);
-  expect(journey.live()).toBe(false);
-  expect(journey.snapshot()).toMatchObject({ uploadId: null, rows: [], selection: [], page: null, sourceXML: null });
+  await journey.source();
+  await journey.confirm();
+  expect(journey.snapshot()).toMatchObject({ sourceXML: null, rows: [], selection: [], outcomes: [] });
+  expect(previews).toEqual(['<original/>']);
+  if (kind === 'unknown') {
+    await journey.retryUnknown();
+    expect(deletes[1]).toBe(deletes[0]);
+  } else {
+    await journey.preview('<replacement/>');
+  }
+  expect(previews).toEqual(['<original/>', '<replacement/>']);
 });
 
 test('a lost review acknowledgement freezes its body and key and a new review needs confirmation again', async () => {

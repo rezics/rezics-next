@@ -5,6 +5,7 @@ import {
   VNDB_ID,
   type VndbCommand,
   type VndbFailure,
+  type VndbOutcome,
   type VndbPage,
   type VndbPort,
   type VndbPreview,
@@ -25,7 +26,7 @@ export type VndbJourneySnapshot = {
   page: VndbPage | null;
   rows: VndbRow[];
   selection: VndbRow[];
-  outcomes: { ordinal: number; reviewId: string; status: string }[];
+  outcomes: VndbOutcome[];
   unattempted: number[];
   applying: number;
   applied: number;
@@ -50,7 +51,7 @@ function isVndbUnknown(value: unknown): value is VndbUnknown {
   );
 }
 
-function chooseRows(rows: VndbRow[], outcomes: Map<string, { ordinal: number; reviewId: string; status: string }>) {
+function chooseRows(rows: VndbRow[], outcomes: Map<string, VndbOutcome>) {
   return rows
     .filter(
       (row) =>
@@ -71,7 +72,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   let total = 0;
   let page: VndbPage | null = null;
   const rows = new Map<number, VndbRow>();
-  const outcomes = new Map<string, { ordinal: number; reviewId: string; status: string }>();
+  const outcomes = new Map<string, VndbOutcome>();
   let applyQueue: Extract<VndbCommand, { kind: 'apply' }>[] = [];
   let currentApply: Extract<VndbCommand, { kind: 'apply' }> | null = null;
   let confirmed: Extract<VndbCommand, { kind: 'apply' }>[] = [];
@@ -85,10 +86,15 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   let applying = 0;
   let sourceXML: string | null = null;
   let sourceVisible = false;
+  let sourceRetired = false;
   let retired = false;
 
   function live(): boolean {
-    return !retired && visit.current() && sender.subject === visit.subject && sender.csrfToken === visit.csrfToken;
+    if (!retired && (!visit.current() || sender.subject !== visit.subject || sender.csrfToken !== visit.csrfToken)) {
+      retired = true;
+      clearForReplacement();
+    }
+    return !retired;
   }
 
   function selection(): VndbRow[] {
@@ -144,6 +150,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     applying = 0;
     sourceXML = null;
     sourceVisible = false;
+    sourceRetired = false;
     stage = 'upload';
   }
 
@@ -188,7 +195,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
 
   async function loadPage(offset: number, retry = false): Promise<VndbJourneySnapshot> {
     const id = uploadId;
-    if (!id || !live()) return snapshot();
+    if (!id || !live() || sourceRetired) return snapshot();
     const command: Extract<VndbCommand, { kind: 'page' }> = { kind: 'page', uploadId: id, offset };
     const response = await run(command, () => port.page(command), { retry });
     if (!response || response.kind !== 'page' || !live()) return snapshot();
@@ -225,6 +232,12 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     const command: Extract<VndbCommand, { kind: 'preview' }> = { kind: 'preview', key: newVndbKey(), xml };
     pendingPreview = command;
     if (uploadId) {
+      const previousUploadId = uploadId;
+      // Replacement retires private review authority before cleanup can fail or lose its acknowledgement.
+      clearForReplacement();
+      uploadId = previousUploadId;
+      sourceRetired = true;
+      pendingPreview = command;
       replacementXML = xml;
       const remove: Extract<VndbCommand, { kind: 'delete' }> = {
         kind: 'delete',
@@ -245,7 +258,7 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
   }
 
   async function source(retryCommand?: Extract<VndbCommand, { kind: 'source' }>): Promise<VndbJourneySnapshot> {
-    if (!uploadId || !live() || (pending > 0 && !retryCommand)) return snapshot();
+    if (!uploadId || !live() || sourceRetired || (pending > 0 && !retryCommand)) return snapshot();
     const command = retryCommand ?? { kind: 'source' as const, uploadId };
     const response = await run(command, () => port.source(command), { retry: !!retryCommand });
     if (response?.kind === 'source' && live()) {
@@ -269,7 +282,14 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     body: VndbReviewInput,
     retryCommand?: Extract<VndbCommand, { kind: 'review' }>,
   ): Promise<VndbJourneySnapshot> {
-    if (!uploadId || !live() || stage === 'applying' || (pending > 0 && !retryCommand) || (unknown && !retryCommand))
+    if (
+      !uploadId ||
+      !live() ||
+      sourceRetired ||
+      stage === 'applying' ||
+      (pending > 0 && !retryCommand) ||
+      (unknown && !retryCommand)
+    )
       return snapshot();
     const row = rows.get(body.ordinal);
     if (!row || (row.kind === 'retained' && body.action === 'state')) return snapshot();
