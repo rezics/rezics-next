@@ -32,8 +32,8 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Each authorized finite retained Search page derives and retains its complete per-pool work bound before the first native dispatch from deduplicated indexed probe keys and every retained source cut, including distinct work/character/threshold appearance keys introduced by voice credits; any actual pool exceeding its bound retires the window."
-    - "First, next, and final pages remain useful, deterministic, and repairable through dense rejections and current source or runtime release activation mutations."
+    - 'Each authorized finite retained Search page derives and retains its complete per-pool work bound before the first native dispatch from deduplicated indexed probe keys and every retained source cut, including distinct work/character/threshold appearance keys introduced by voice credits; any actual pool exceeding its bound retires the window.'
+    - 'First, next, and final pages remain useful, deterministic, and repairable through dense rejections and current source or runtime release activation mutations.'
 workerOwned: true
 estimate:
   lines: 650

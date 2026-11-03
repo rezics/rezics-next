@@ -64,12 +64,16 @@ export function planCharacterPersonWitnesses(
       if (!matches(probe, row)) continue;
       for (const character of characters(row.statement)) {
         const key = appearanceKey(row.subject, character, threshold);
-        appearances.set(key, [key, {
-          subject: row.subject,
-          property: 'schema:character',
-          value: character,
-          qualifiers: [{ property: 'rezics:spoilerLevel', in: ['0', '1', '2'].slice(0, threshold + 1) }],
-        }, subjectPartition(row.subject)]);
+        appearances.set(key, [
+          key,
+          {
+            subject: row.subject,
+            property: 'schema:character',
+            value: character,
+            qualifiers: [{ property: 'rezics:spoilerLevel', in: ['0', '1', '2'].slice(0, threshold + 1) }],
+          },
+          subjectPartition(row.subject),
+        ]);
       }
     }
   }
@@ -121,7 +125,10 @@ export async function matchCharacterPersonWitnessPlan(
   const evidence = new Map<string, RelationFacetMatch>();
   const dispatched = new Map<number, number>();
   for (const { partition, entries } of plan.appearanceBatches) {
-    const results = await matchAppearances(entries.map(([, probe]) => probe), partition);
+    const results = await matchAppearances(
+      entries.map(([, probe]) => probe),
+      partition,
+    );
     if (!Array.isArray(results) || results.length !== entries.length)
       throw new Error('Malformed appearance probe results');
     for (const [index, [key]] of entries.entries()) {
