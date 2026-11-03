@@ -15,7 +15,6 @@ import {
   type FeedInput,
   type FeedItem,
   type FeedPage,
-  type HomeSpaceFeedItem,
   type HomeFeedResult,
 } from '../src/features/pages/home-feed-read';
 import { locales, setLocale } from '../src/paraglide/runtime.js';
@@ -48,81 +47,87 @@ const discussionId = '01a1a000-0000-7000-8000-000000000823';
 const subjectId = '01a1a000-0000-7000-8000-000000000824';
 const spaceId = '01a1a000-0000-7000-8000-000000000825';
 
-function mixedRows(spaceAddress: string | null = 'quiet-room'): FeedItem[] {
+function mixedRows(): FeedItem[] {
   const collection: FeedItem = {
-    id: `discovery:library:${collectionId}`,
+    id: `discovery:commerce:${collectionId}`,
     source: 'discovery',
-    key: { owner: 'library', kind: 'collection', route: 4660, id: collectionId },
+    key: { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId },
     occurredAt: null,
     summary: { id: collectionId, title: 'Reading shelf', description: 'Short novels.' },
     destination: { kind: 'collection', id: collectionId, title: 'Reading shelf' },
   };
   const review: FeedItem = {
-    id: `following:review:${reviewId}`,
-    source: 'following',
-    key: { owner: 'content', kind: 'thread', route: 4660, id: reviewId },
+    id: `discovery:content:${reviewId}`,
+    source: 'discovery',
+    key: { owner: 'content', kind: 'review', route: 4660, id: reviewId },
     occurredAt: null,
-    summary: { id: reviewId, kind: 'review', title: 'A careful reread', createdAt: '2026-11-03T00:00:00Z' },
+    summary: {
+      id: reviewId,
+      kind: 'review',
+      title: 'A careful reread',
+      author: { displayName: 'Current Reader', handle: 'reader' },
+      excerpt: 'The opening holds.',
+      subject: { id: subjectId, title: 'The Little Prince' },
+    },
     destination: { kind: 'thread', id: reviewId, title: 'A careful reread' },
   };
-  const discussion: FeedItem = {
-    id: `following:thread:${discussionId}`,
+  const followingReview: FeedItem = {
+    id: `following:review:${discussionId}`,
     source: 'following',
     key: { owner: 'content', kind: 'thread', route: 4660, id: discussionId },
     occurredAt: null,
-    summary: { id: discussionId, kind: 'discussion', title: 'A discussion', createdAt: '2026-11-03T00:00:00Z' },
-    destination: { kind: 'thread', id: discussionId, title: 'A discussion' },
+    summary: { id: discussionId, kind: 'review', title: 'A followed review', createdAt: '2026-11-03T00:00:00Z' },
+    destination: { kind: 'thread', id: discussionId, title: 'A followed review' },
   };
-  const space: HomeSpaceFeedItem = {
-    id: `discovery:space:${spaceId}`,
+  const discussion: FeedItem = {
+    id: 'following:thread:discussion',
+    source: 'following',
+    key: { owner: 'content', kind: 'thread', route: 4660, id: '01a1a000-0000-7000-8000-000000000827' },
+    occurredAt: null,
+    summary: { id: '01a1a000-0000-7000-8000-000000000827', kind: 'discussion', title: 'A discussion', createdAt: '2026-11-03T00:00:00Z' },
+    destination: { kind: 'thread', id: '01a1a000-0000-7000-8000-000000000827', title: 'A discussion' },
+  };
+  const space: FeedItem = {
+    id: `discovery:content:${spaceId}`,
     source: 'discovery',
-    key: { owner: 'community', kind: 'space', route: 4660, id: spaceId },
+    key: { owner: 'content', kind: 'space', route: 4660, id: spaceId },
     occurredAt: null,
     summary: {
       id: spaceId,
       title: 'Quiet room',
-      address: spaceAddress,
+      address: 'quiet-room',
       summary: 'A quiet reading room.',
       realm: { id: '01a1a000-0000-7000-8000-000000000826', title: 'Atlas Realm' },
     },
-    destination: { kind: 'space', id: spaceId, title: 'Quiet room', address: spaceAddress },
+    destination: { kind: 'space', id: spaceId, title: 'Quiet room', address: 'quiet-room' },
   };
-  return [collection, review, discussion, space];
+  return [collection, review, followingReview, discussion, space];
 }
 
-test('Home makes missing public native variants visible in every launch locale', () => {
-  for (const locale of locales) {
-    setLocale(locale, { reload: false });
-    const html = renderToStaticMarkup(<HomeFeed result={page('initial')} locale={locale} onNext={() => undefined} />);
-    expect(html).toContain(m.home_feed_public_discovery_unavailable({}, { locale }));
-  }
-  setLocale('en', { reload: false });
-});
-
-test('mixed Collection, review and Space seams keep exact identity and hide an undisclosed Subject', () => {
+test('native Collection, review and Space cards keep their supplied context and destinations', () => {
   const rows = mixedRows();
   const cards = rows.map((item) => renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(item, 'en')} />));
   const collection = cards[0]!;
   const review = cards[1]!;
-  const discussion = cards[2]!;
-  const space = cards[3]!;
+  const followedReview = cards[2]!;
+  const discussion = cards[3]!;
+  const space = cards[4]!;
   expect(collection).toContain('Reading shelf');
   expect(collection).toContain('Short novels.');
   expect(collection).toContain('/en/collections/01a1a000-0000-7000-8000-000000000821');
   expect(collection).not.toContain('members');
   expect(review).toContain('Review');
   expect(review).toContain('A careful reread');
-  expect(review).not.toContain(subjectId);
-  expect(review).not.toContain('/subjects/');
+  expect(review).toContain('Current Reader');
+  expect(review).toContain('The opening holds.');
+  expect(review).toContain(`/en/subjects/${subjectId}`);
+  expect(followedReview).toContain('A followed review');
   expect(discussion).toContain('A discussion');
   expect(space).toContain('Quiet room');
   expect(space).toContain('A quiet reading room.');
   expect(space).toContain('Atlas Realm');
   expect(space).toContain('/en/spaces/quiet-room');
   expect(space).not.toContain('/realms/');
-  const unavailable = homeFeedItemPresentation(mixedRows(null)[3]!, 'en');
-  expect(unavailable.href).toBeUndefined();
-
   const result = renderToStaticMarkup(
     <HomeFeed
       result={{
@@ -138,12 +143,13 @@ test('mixed Collection, review and Space seams keep exact identity and hide an u
     />,
   );
   expect(result.indexOf('Reading shelf')).toBeLessThan(result.indexOf('A careful reread'));
-  expect(result.indexOf('A careful reread')).toBeLessThan(result.indexOf('A discussion'));
+  expect(result.indexOf('A careful reread')).toBeLessThan(result.indexOf('A followed review'));
+  expect(result.indexOf('A followed review')).toBeLessThan(result.indexOf('A discussion'));
   expect(result.indexOf('A discussion')).toBeLessThan(result.indexOf('Quiet room'));
   for (const locale of locales) {
     const collectionLocale = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(rows[0]!, locale)} />);
     const reviewLocale = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(rows[1]!, locale)} />);
-    const spaceLocale = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(rows[3]!, locale)} />);
+    const spaceLocale = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(rows[4]!, locale)} />);
     expect(collectionLocale).toContain(m.library_following_kind_collection({}, { locale }));
     expect(reviewLocale).toContain(m.home_feed_kind_review({}, { locale }));
     expect(spaceLocale).toContain(m.library_following_kind_space({}, { locale }));

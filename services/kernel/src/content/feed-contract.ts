@@ -5,7 +5,12 @@ import { ProblemError } from '../http/problem.ts';
 import { SubjectSummarySchema } from '../semantic/http/summaries.ts';
 import type { ThreadView } from './reads.ts';
 import type { ItemView } from './model.ts';
-import type { AccountDiscoverySummary } from '../search/discovery.ts';
+import type {
+  AccountDiscoverySummary,
+  PublicCollectionDiscoverySummary,
+  PublicReviewDiscoverySummary,
+  PublicSpaceDiscoverySummary,
+} from '../search/discovery.ts';
 import type { CollectionResourceView } from '../library/collection-reads.ts';
 import { continuePageSchema } from '../library/continue-routes.ts';
 import { REACTION_KINDS } from './events.ts';
@@ -144,6 +149,39 @@ const postSummary = t.Unsafe<
 const collectionSummary = t.Unsafe<Pick<CollectionResourceView, 'id' | 'title' | 'description'>>(
   t.Object({ id: uuid, title: t.String(), description: nullable }, closed),
 );
+const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(
+  t.Object({ id: uuid, title: t.String({ minLength: 1 }), description: nullable }, closed),
+);
+const discoveryReviewSummary = t.Unsafe<
+  PublicReviewDiscoverySummary & Pick<FeedContentSummary, 'reactionTarget' | 'reactions' | 'viewerReaction'>
+>(
+  t.Object(
+    {
+      id: uuid,
+      kind: t.Literal('review'),
+      title: nullable,
+      author: t.Optional(t.Object({ displayName: nullable, handle: nullable }, closed)),
+      excerpt: t.Optional(t.String({ maxLength: 640 })),
+      subject: t.Optional(t.Union([t.Object({ id: uuid, title: nullable }, closed), t.Null()])),
+      reactionTarget: t.Optional(reactionTarget),
+      reactions: t.Optional(reactionCounts),
+      viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
+    },
+    closed,
+  ),
+);
+const discoverySpaceSummary = t.Unsafe<PublicSpaceDiscoverySummary>(
+  t.Object(
+    {
+      id: uuid,
+      title: t.String({ minLength: 1 }),
+      address: t.String({ minLength: 1, maxLength: 256 }),
+      summary: t.Optional(t.String()),
+      realm: t.Optional(t.Union([t.Object({ id: uuid, title: nullable }, closed), t.Null()])),
+    },
+    closed,
+  ),
+);
 const key = <Owner extends string, Kind extends string>(owner: Owner, kind: Kind) =>
   t.Object(
     {
@@ -167,6 +205,7 @@ const postDestination = t.Object(
   { kind: t.Literal('post'), id: uuid, title: nullable, threadId: uuid, postId: uuid },
   closed,
 );
+const spaceDestination = t.Object({ kind: t.Literal('space'), id: uuid, title: nullable, address: t.String() }, closed);
 const common = { id: t.String({ minLength: 1, maxLength: 512 }), occurredAt: nullable };
 const semanticKey = t.Object(
   {
@@ -195,6 +234,36 @@ export const FeedItemSchema = t.Union([
       key: key('accounts', 'account'),
       summary: accountSummary,
       destination: destination('account'),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ...common,
+      source: t.Literal('discovery'),
+      key: key('commerce', 'collection'),
+      summary: discoveryCollectionSummary,
+      destination: destination('collection'),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ...common,
+      source: t.Literal('discovery'),
+      key: key('content', 'review'),
+      summary: discoveryReviewSummary,
+      destination: destination('thread'),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ...common,
+      source: t.Literal('discovery'),
+      key: key('content', 'space'),
+      summary: discoverySpaceSummary,
+      destination: spaceDestination,
     },
     closed,
   ),

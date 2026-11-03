@@ -261,10 +261,13 @@ source/parent revisions, takedown and restoration retain native read authority a
 ## Mixed Home summaries
 
 [The feed contract](../../../../docs/feeds.md) owns selection, source limits and sparse cursors.
-`feed-discovery.ts` maps Search's delivered native Subject/Account summaries with exhaustive dispatch and exact
-primary identity checks. Unsupported or inconsistent variants fail the discovery lane without rewriting their
-owner/kind or advancing its retry position. Public Collection/review/Space cards are adopted, but their Search
-union, registry and native hydrators have not landed on this base; no feed-local population replaces them.
+`feed-discovery.ts` maps Search's delivered Subject/Account and public Collection/review/Space summaries with
+exhaustive dispatch and exact route, kind and primary identity checks. It translates only the public
+`library/collection` and `community/space` keys to Content's `commerce/collection` and `content/space` feed
+identities; Review keeps `content/review`. Unsupported or inconsistent variants fail the discovery lane without
+advancing its retry position. The mapper performs no owner reads or refill. Search's current Collection summary
+supplies only title and description, and its Review summary supplies no rating; the feed leaves curator, cover and
+rating absent instead of filling those facts locally.
 Thread and post summaries add optional `author` (Accounts display name, handle and avatar) and `excerpt`.
 Projection consumes only the opening/post revision that passed native disclosure; one deduplicated page-level
 Accounts summary batch supplies at most 20 current identities with its own final checks. A missing summary
@@ -276,6 +279,18 @@ source freshness and the bounded cost for disclosed thread/post cards.
 The producer constants derive at most 91 mixed candidates plus 21 author keys (seven identities, each with
 at most one avatar and one verified-agent Subject), 123 anonymous candidates, or 20 Following candidates plus
 60 author keys; the composed maxima 112, 123 and 80 remain below the 160 ceiling.
+
+Decision: Keep Search's bounded public owner summaries authoritative; translate only validated owner keys and leave Collection curator/cover and Review rating absent until their current public summaries supply those fields.
+
+The Review census still cannot certify ready eligibility coverage, and Community has not yet supplied the complete
+current Space/Realm tuple capability. These feed projections do not promote installation, an empty page, or
+preparing coverage into native readiness; those source authorities remain in the continuation.
+
+#### Cost: native mixed Discovery feed projection
+
+- Touches: One already bounded Search page, its supplied summaries, and the feed's projected item array; no owner SQL, pool checkout, or extra disclosure call.
+- Bound: O(B) key/route validation and projection with B at most the existing 160 raw-candidate ceiling; no refill, and each output remains inside the closed Feed schema.
+- Growth check: `test/content/feed-discovery.test.ts` pins every current owner variant and mismatched identities at fixed size; independent native 1x/4x/16x pool measurements remain deferred to the continuation.
 
 ## Worker authorization composition
 

@@ -166,9 +166,9 @@ export function FeedCardPreview({ item }: { item: FeedItem }) {
 export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const options = { locale: locale as Locale };
-  if ('kind' in summary && summary.kind === 'review' && 'subject' in summary && summary.subject?.title) {
+  if ('kind' in summary && summary.kind === 'review' && 'subject' in summary && summary.subject) {
     const subject = summary.subject;
-    const title = summary.subject.title;
+    const title = subject.title ?? m.subject_value_unlabelled({}, options);
     return (
       <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
         <span>{m.home_card_review_subject({}, options)}</span>

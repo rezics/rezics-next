@@ -41,15 +41,16 @@ function readableHandle(handle: string | null | undefined): handle is string {
 function FeedCardAuthor({ item, locale }: { item: FeedItem; locale: string }) {
   const summary = item.summary;
   const author = 'author' in summary ? summary.author : undefined;
+  const authorAvatar = author && 'avatar' in author ? author.avatar : null;
   const options = { locale: locale as Locale };
   const name = author?.displayName || (author?.handle ? `@${author.handle}` : m.thread_author_unknown({}, options));
   const identity = (
     <span className="inline-flex min-w-0 max-w-full items-center gap-2 [overflow-wrap:anywhere]">
-      {author?.avatar ? (
+      {authorAvatar ? (
         <span className="block w-8 shrink-0 overflow-hidden rounded-full">
           <Cover
             subject={{ id: item.id, title: name, types: [] }}
-            cover={{ ...author.avatar, variants: [...author.avatar.variants] }}
+            cover={{ ...authorAvatar, variants: [...authorAvatar.variants] }}
             ratio="1:1"
             size="fill"
             src={coverSrc}
@@ -156,7 +157,8 @@ export function FeedCardAttribution({ item, kind, locale }: { item: FeedItem; ki
   const options = { locale: locale as Locale };
   const content = kind === 'discussion' || kind === 'reply' || kind === 'review';
   const cover = 'cover' in summary ? summary.cover : 'avatar' in summary ? summary.avatar : undefined;
-  const authorCover = 'author' in summary ? summary.author?.avatar : undefined;
+  const authorCover =
+    'author' in summary && summary.author && 'avatar' in summary.author ? summary.author.avatar : undefined;
   return (
     <div className="flex min-w-0 w-full flex-col gap-1" data-feed-card-attribution>
       {content ? <FeedCardAuthor item={item} locale={locale} /> : null}
