@@ -60,6 +60,7 @@ export const OWNED_PHASES = [
   'members_preparation_result',
   'members_preparation',
   'members_preparation_owner',
+  'bangumi_upload',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -88,7 +89,8 @@ type Kind =
   | 'native_source_capture'
   | 'sessions'
   | 'collections'
-  | 'collectionLocal';
+  | 'collectionLocal'
+  | 'bangumi_upload';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -158,6 +160,21 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
     },
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
       const args = { route, account_id: accountId, after_id: after };
+      if (kind === 'bangumi_upload') {
+        const rows = await tx.query(`WITH keys AS MATERIALIZED (SELECT upload_id,ordinal
+          FROM library.bangumi_upload_row WHERE route=$1 AND account_id=$2 ORDER BY upload_id,ordinal LIMIT 100)
+          DELETE FROM library.bangumi_upload_row r USING keys k WHERE r.route=$1 AND r.account_id=$2
+            AND r.upload_id=k.upload_id AND r.ordinal=k.ordinal`, [route, accountId]);
+        const roots = await tx.query(`WITH keys AS MATERIALIZED (SELECT upload_id FROM library.bangumi_upload u
+          WHERE route=$1 AND account_id=$2 AND NOT EXISTS (SELECT 1 FROM library.bangumi_upload_row r
+          WHERE r.route=u.route AND r.account_id=u.account_id AND r.upload_id=u.upload_id) ORDER BY upload_id LIMIT $3)
+          DELETE FROM library.bangumi_upload u USING keys k WHERE u.route=$1 AND u.account_id=$2
+          AND u.upload_id=k.upload_id`, [route, accountId, 100 - (rows.rowCount ?? 0)]);
+        const removed = (rows.rowCount ?? 0) + (roots.rowCount ?? 0);
+        return { value: { kind, removed, parent: null, retain: false, blocked: false }, events: [{
+          type: 'com.rezics.library.account-graph.purged.v1', subject: accountId, data: { accountId, kind, removed },
+        }] };
+      }
       if (kind === 'native_source_capture') {
         const capture = await nativeCapture.run(tx, { ...args, after_id: after });
         if (!capture)

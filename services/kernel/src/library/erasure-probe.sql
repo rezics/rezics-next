@@ -8,6 +8,7 @@ WITH input AS NOT MATERIALIZED (
 ),
 probe AS (
   SELECT
+    EXISTS (SELECT 1 FROM library.bangumi_upload WHERE route=input.route AND account_id=input.account_id) AS bangumi_upload,
     EXISTS (SELECT 1 FROM library.collection_publication_operation WHERE route=input.route AND owner_account_id=input.account_id) AS collection_publication_operation,
     EXISTS (SELECT 1 FROM library.collection_source_output WHERE route=input.route AND account_id=input.account_id) AS collection_source_output,
     EXISTS (SELECT 1 FROM library.collection_source_output_publication WHERE route=input.route AND account_id=input.account_id) AS collection_source_output_publication,
@@ -81,6 +82,7 @@ CROSS JOIN LATERAL (VALUES
   (builtin_collection_reference, 'builtin_collection_reference'::text),
   (builtin_state_reference_source, 'builtin_state_reference_source'::text),
   (collection, 'collection'::text),
+  (bangumi_upload, 'bangumi_upload'::text),
   (copy, 'copy'::text),
   (entry, 'entry'::text),
   (entry_deleted, 'entry_deleted'::text),

@@ -433,3 +433,11 @@ and font readiness; a recorded response or source export is not a screenshot or 
 Specification, native driver, implementation exposure, user-case acceptance at a recorded revision, and promotion
 remain separate stages. Existing wrappers and source exports establish inventory only. Native results, screenshot
 artifacts, measurements and promotion are pending integration evidence on its recorded commit.
+
+## Personal Bangumi upload
+
+[Supported envelope and mounted methods](../library-import-bangumi.md) cover private preview, identifier matching,
+explicit target review, confirmed native state application, conflict preservation, original-command retries,
+bounded partial outcomes, cancellation and owner deletion. Other fields remain private loss-aware evidence.
+Focused scenarios: `services/kernel/test/library/list-import-bangumi-http.test.ts`; broader frozen acceptance
+remains an integration responsibility, and source delivery does not assert its result.
