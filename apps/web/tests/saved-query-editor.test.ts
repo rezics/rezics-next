@@ -11,7 +11,7 @@ import {
   savedQuerySeed,
 } from '../src/library/saved-query-editor/selection';
 import { m } from '../src/paraglide/messages.js';
-import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+import { locales } from '../src/paraglide/runtime.js';
 
 const presence = { owner: { presence: true } } as const;
 const book = { type: { in: ['schema:Book'] } };
@@ -51,21 +51,27 @@ test('catalogue and library type or label selections seed a private presence que
   expect(localPath('/en/collections/a?f.schema:keywords=1')).toBe('/en/collections/a?f.schema:keywords=1');
 });
 
-test('the private create address and correction copy exist in every launch locale', () => {
-  const previous = getLocale();
-  try {
-    for (const locale of locales) {
-      setLocale(locale, { reload: false });
-      const href = savedQueryCreateHref(locale, { document: keyword, from: '/en/collections/a' });
-      expect(href.startsWith(`/${locale}/library/rules/new?`)).toBe(true);
-      expect(href).toContain('filter=');
-      const html = renderToStaticMarkup(createElement(SaveQueryLink, { document: keyword }));
-      expect(html).toContain(m.library_saved_query_create());
-      expect(html).toContain(`/${locale}/library/rules/new`);
-    }
-  } finally {
-    setLocale(previous, { reload: false });
+test('the private create address and correction copy exist in every launch locale', async () => {
+  expect(locales).toHaveLength(8);
+  for (const locale of locales) {
+    const messages = (await Bun.file(new URL(`../messages/${locale}.json`, import.meta.url)).json()) as Record<
+      string,
+      string
+    >;
+    expect(messages.library_saved_query_create.length).toBeGreaterThan(0);
+    expect(messages.library_saved_query_invalid.length).toBeGreaterThan(0);
+    expect(messages.library_saved_query_state.length).toBeGreaterThan(0);
+    expect(messages.library_saved_query_correct.length).toBeGreaterThan(0);
+    expect(messages.library_saved_query_blank.length).toBeGreaterThan(0);
+    const href = savedQueryCreateHref(locale, { document: keyword, from: '/en/collections/a' });
+    expect(href.startsWith(`/${locale}/library/rules/new?`)).toBe(true);
+    expect(href).toContain('filter=');
+    expect(href).toContain('from=%2Fen%2Fcollections%2Fa');
   }
+  const html = renderToStaticMarkup(createElement(SaveQueryLink, { document: keyword }));
+  expect(html).toContain(m.library_saved_query_create());
+  expect(html).toContain('/library/rules/new');
+  expect(html).toContain('min-h-11');
 });
 
 test('an unrepresentable selection stays off the save form', () => {
