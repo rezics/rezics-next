@@ -22,7 +22,7 @@ Submitted reports, pending appeals and resolved cases are exclusive queues. Repo
 `status=pending|resolved` with `targetKind` and `order`. Appeals use the board appeal list (pending by nature).
 Catalogue has no appeal list; that control stays visible and explains the missing native seam. Continuation uses
 the sealed native cursor, not report target IDs. Each row carries a stable report or appeal ID into the existing
-detail surface (`/boards/{id}/moderation` or `/moderation/catalogue`).
+detail surface (`/moderation/cases/{reportId}`, the selected workbench appeal, or `/moderation/catalogue`).
 
 The queue reads native list DTOs only. It does not hydrate target documents or reported revisions. Private evidence
 and appeal statements appear only when that list returned them. Unavailable, denied and retired reads render no
@@ -33,4 +33,7 @@ cases. Viewer or session replacement retires the mounted private owner.
 Connected: `me.realms`, Realm boards, `boards/{id}.reports`, `boards/{id}.appeals`, and catalogue reports (status
 and order forwarded through the existing catalogue client seam). Absent: a producer that lists only currently
 permitted moderation queues; a moderator case-detail GET; catalogue appeals. Native uncertain commands stay on the
-existing review pages and retain original sender, credentials, key and operands.
+existing review pages and retain original sender, credentials, key and operands. Workbench rows open
+`/moderation/cases/{reportId}` or the selected workbench appeal (`case`) and return to `/moderation/workbench` with
+the captured snapshot. Loaded pending board reports can be dismissed through the existing per-report command, at most
+twenty on the current page.

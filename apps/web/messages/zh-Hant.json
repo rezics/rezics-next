@@ -5235,5 +5235,7 @@
   "saved_filter_review_value_labels_restart": "讀取期間目前版本已變更。請重新讀取目前中繼資料後再重試。",
   "saved_filter_review_value_labels_retry": "重試讀取目前值標籤",
   "saved_filter_review_value_labels_unavailable": "確切 Collection 的值標籤目前無法使用。未以全域值取代；重試時已儲存運算元仍保持不變。",
-  "saved_filter_review_value_unlabelled": "此確切運算元目前沒有已揭露的值標籤。"
+  "saved_filter_review_value_unlabelled": "此確切運算元目前沒有已揭露的值標籤。",
+  "moderation_workbench_selection_identity": "版塊 {board}。本頁檢舉：{reports}。",
+  "moderation_workbench_appeal_unavailable": "目前佇列頁沒有這項申訴。"
 }

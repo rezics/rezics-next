@@ -16,7 +16,7 @@ import { ReportReviewCard } from '../reports-view-card';
 import { createPrivateReaderLifetime } from '../private-reader-lifetime';
 import type { ReportNavigation } from '../reports-page';
 import { reportReviewNavigationContext } from '../reports-bulk-controls';
-import { workbenchCaseFromPage, workbenchCaseQueueHref } from './read-model';
+import { workbenchCaseFromPage, workbenchCaseQueueHref, type WorkbenchCaseSearch } from './read-model';
 
 const nativeReportAction: ReportQueueAction = (data) => actionOnReport({ data, headers: csrfHeaders() });
 
@@ -24,6 +24,7 @@ export type WorkbenchCasePageProps = {
   page: PrivateReportPage;
   reportId: string;
   input: ReportReadInput;
+  search?: WorkbenchCaseSearch;
   navigation?: ReportNavigation;
   active?: boolean;
   onAction?: ReportQueueAction;
@@ -122,7 +123,7 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
   );
 
   const retired = current.observe();
-  const queueHref = localizeHref(workbenchCaseQueueHref(props.input));
+  const queueHref = localizeHref(workbenchCaseQueueHref(props.search ?? props.input));
   if (retired || (typeof window !== 'undefined' && !browserClient) || (current.owner && !current.owner.available()))
     return <WorkbenchCaseStatus state="unavailable" queueHref={queueHref} />;
 
@@ -190,7 +191,7 @@ export function WorkbenchCaseDetail({
     <AuthoringDepartureBoundary sessionBound={false} navigationContext={reportReviewNavigationContext}>
       <main className="mx-auto w-full max-w-5xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
         <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>
-          {m.moderation_reports_heading()}
+          {m.moderation_workbench_history_return()}
         </a>
         <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
         <ReportReviewCard
@@ -235,7 +236,7 @@ export function WorkbenchCaseStatus({
   return (
     <main className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6 sm:px-8 sm:py-10">
       <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={queueHref}>
-        {m.moderation_reports_heading()}
+        {m.moderation_workbench_history_return()}
       </a>
       <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
       <ContentItemFrame

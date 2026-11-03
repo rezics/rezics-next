@@ -108,9 +108,15 @@ test('workbench is a signed-in route and keeps catalogue off a board scope', () 
   expect(board.board).toBeUndefined();
   expect(workbenchSearch({ board: boardId, queue: 'resolved' }).status).toBe('resolved');
   expect(workbenchSearch({ board: boardId, queue: 'reports' }).status).toBe('pending');
-  expect(workbenchCaseHref({ kind: 'board', boardId }, 'report')).toBe(`/boards/${boardId}/moderation`);
-  expect(workbenchCaseHref({ kind: 'board', boardId }, 'appeal')).toBe(`/boards/${boardId}/moderation?tab=appeals`);
-  expect(workbenchCaseHref({ kind: 'catalogue' }, 'report')).toBe('/moderation/catalogue');
+  expect(workbenchCaseHref({ kind: 'report', id: reportId }, workbenchSearch({ board: boardId, queue: 'reports' }))).toContain(
+    `/moderation/cases/${reportId}`,
+  );
+  expect(workbenchCaseHref({ kind: 'appeal', id: appealId }, workbenchSearch({ board: boardId, queue: 'appeals' }))).toContain(
+    `case=${appealId}`,
+  );
+  expect(workbenchCaseHref({ kind: 'report', id: reportId }, workbenchSearch({ scope: 'catalogue' }))).toBe(
+    '/moderation/catalogue',
+  );
 });
 
 test('board queues stay distinct, continue with the native cursor, and never call catalogue', async () => {
@@ -206,7 +212,7 @@ test('the workbench view covers preparation, empty, denied, unavailable recovery
       onSearch={(value) => searches.push(value)}
     />,
   );
-  const link = loaded.querySelector(`a[href*="/boards/${boardId}/moderation"]`);
+  const link = loaded.querySelector(`a[href*="/moderation/cases/${reportId}"]`);
   expect(link?.textContent).toContain(reportId);
   expect(loaded.textContent).toContain(report.evidence);
   await act(async () => {

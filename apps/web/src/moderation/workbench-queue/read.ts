@@ -9,8 +9,8 @@ import { prepareSession, viewerCredential } from '../../session/request';
 import { catalogueReportsClient } from '../catalogue-reports-client';
 import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from '../private-reader-origin';
 import { preparePrivateReaderRead, type PrivateReaderRead } from '../private-reader-lifetime';
-import { readModerationAppeals, type Appeal } from '../appeals-read';
-import { readModerationReports, type Report } from '../reports-read';
+import { appealTarget, readModerationAppeals, type Appeal } from '../appeals-read';
+import { readModerationReports, type Report, type ResolvedReportTarget } from '../reports-read';
 import {
   WORKBENCH_PAGE_SIZE,
   workbenchReadKey,
@@ -46,6 +46,12 @@ export type WorkbenchRead = PrivateReaderRead & {
   boardsNext: string | null;
   cases: WorkbenchCase[];
   next: string | null;
+  /** Original board reports from this read generation. Catalogue and appeals leave this empty. */
+  reports: Report[];
+  /** Original board appeals from this read generation. */
+  appeals: Appeal[];
+  /** Independent current target for the selected appeal on this exact page. */
+  selectedTarget: ResolvedReportTarget | null;
 };
 export type WorkbenchNativeSource = {
   realms: (cursor?: string) => Promise<{ items: WorkbenchDirectoryItem[]; next: string | null }>;
@@ -67,6 +73,10 @@ export type WorkbenchNativeSource = {
     reports: Array<Omit<Report, 'target'> & { target: { kind: 'subject'; id: string } }>;
     next: string | null;
   }>;
+  readTarget?: (
+    kind: 'post' | 'thread',
+    id: string,
+  ) => Promise<ResolvedReportTarget['value']>;
 };
 
 class WorkbenchReadFailure extends Error {
@@ -99,6 +109,9 @@ function emptyRead(
     boardsNext: null,
     cases: [],
     next: null,
+    reports: [],
+    appeals: [],
+    selectedTarget: null,
   };
 }
 
@@ -152,6 +165,9 @@ export async function readWorkbench(
     boardsNext: null as string | null,
     cases: [] as WorkbenchCase[],
     next: null as string | null,
+    reports: [] as Report[],
+    appeals: [] as Appeal[],
+    selectedTarget: null as ResolvedReportTarget | null,
   };
   if (scope.kind === 'none') {
     const page = await source.realms(search.realmsCursor);
@@ -178,14 +194,27 @@ export async function readWorkbench(
   }
   if (search.queue === 'appeals') {
     const page = await source.boardAppeals(scope.boardId, search.cursor);
+    const listed = bounded(page.appeals).flatMap((appeal) => {
+      const item = appealCase(appeal);
+      return item ? [{ item, appeal }] : [];
+    });
+    const selected = search.case ? listed.find((entry) => entry.appeal.id === search.case) : undefined;
+    const target = selected ? appealTarget(selected.appeal) : undefined;
+    const selectedTarget =
+      target && source.readTarget
+        ? {
+            key: `${target.kind}:${target.id}`,
+            kind: target.kind,
+            value: await source.readTarget(target.kind, target.id),
+          }
+        : null;
     return {
       ...identity,
       state: 'ready',
       ...idle,
-      cases: bounded(page.appeals).flatMap((appeal) => {
-        const item = appealCase(appeal);
-        return item ? [item] : [];
-      }),
+      cases: listed.map((entry) => entry.item),
+      appeals: listed.map((entry) => entry.appeal),
+      selectedTarget,
       next: page.next,
     };
   }
@@ -194,7 +223,15 @@ export async function readWorkbench(
     targetKind: search.targetKind,
     order: search.order,
   });
-  return { ...identity, state: 'ready', ...idle, cases: bounded(page.reports).map(reportCase), next: page.next };
+  const reports = bounded(page.reports);
+  return {
+    ...identity,
+    state: 'ready',
+    ...idle,
+    cases: reports.map(reportCase),
+    reports,
+    next: page.next,
+  };
 }
 
 const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
@@ -251,6 +288,11 @@ function nativeSource(client: KernelClient, authorization: string): WorkbenchNat
         },
         { boardId },
       );
+    },
+    async readTarget(kind, id) {
+      const result =
+        kind === 'post' ? await client.posts({ id }).get(headers) : await client.threads({ id }).get(headers);
+      return result.error ? null : ((result.data as ResolvedReportTarget['value'] | undefined) ?? null);
     },
     async catalogueReports(cursor, selection) {
       const result = await catalogueReportsClient(client).catalogue.reports.get({

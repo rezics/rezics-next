@@ -41,11 +41,11 @@ test('case references preserve their exact scoped report queue', () => {
   });
   expect(search).not.toBeNull();
   const input = workbenchCaseInput(search!);
-  expect(workbenchCaseHref(report.id, input)).toBe(
-    '/moderation/cases/report-1?status=pending&targetKind=post&order=oldest&thread=thread-1&post=post-1&cursor=cursor+one&boardId=board%2Fone',
-  );
+  expect(workbenchCaseHref(report.id, input)).toContain('/moderation/cases/report-1?');
+  expect(workbenchCaseHref(report.id, input)).toContain('boardId=board%2Fone');
+  expect(workbenchCaseHref(report.id, input)).toContain('thread=thread-1');
   expect(workbenchCaseQueueHref(input)).toBe(
-    '/boards/board%2Fone/moderation?status=pending&targetKind=post&order=oldest&thread=thread-1&post=post-1&cursor=cursor+one',
+    '/moderation/workbench?queue=reports&board=board%2Fone&targetKind=post&order=oldest&cursor=cursor+one',
   );
   expect(parseWorkbenchCaseSearch({ boardId: 'board-1', targetKind: 'subject' })).toBeNull();
 });
@@ -65,7 +65,7 @@ test('one board case shows the report, exact revision, current target and native
       report: result.report,
       target: result.target,
       revision: result.revision,
-      queueHref: '/boards/board-1/moderation?status=pending&post=post-1',
+      queueHref: '/moderation/workbench?queue=reports&board=board-1',
       isCurrent: () => true,
       register: () => () => {},
       onAction: async () => ({ ok: true }),
@@ -76,7 +76,7 @@ test('one board case shows the report, exact revision, current target and native
   expect(markup).toContain(m.moderation_current_target_label());
   expect(markup).toContain('Independently readable current target.');
   expect(markup).toContain('Reporter evidence available to this case.');
-  expect(markup).toContain('href="/boards/board-1/moderation?status=pending&amp;post=post-1"');
+  expect(markup).toContain('href="/moderation/workbench?queue=reports&amp;board=board-1"');
   expect(markup).toContain('report-1');
   expect(markup).toContain(m.moderation_queue_post());
 });

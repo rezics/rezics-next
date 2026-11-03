@@ -1,3 +1,4 @@
+import { workbenchCaseHref as reportCaseHref } from '../workbench-case/read-model';
 import { reportSelection, type ReportSelection } from '../reports-read';
 
 export const WORKBENCH_PAGE_SIZE = 20;
@@ -13,6 +14,8 @@ export type WorkbenchSearch = ReportSelection & {
   cursor?: string;
   realmsCursor?: string;
   boardsCursor?: string;
+  /** Selected appeal on this exact bounded appeals page. Never a later-page scan. */
+  case?: string;
 };
 export type WorkbenchScope =
   | { kind: 'none' }
@@ -47,6 +50,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const history = search.history === true && board ? true : undefined;
   const historyCursor = history ? token(search.historyCursor, 4096) : undefined;
   const historyReturn = !history && board && search.historyReturn === true ? true : undefined;
+  const selected = queue === 'appeals' && board && !history ? token(search.case, 128) : undefined;
   return {
     queue,
     status: queue === 'resolved' ? 'resolved' : queue === 'reports' ? 'pending' : selection.status,
@@ -57,6 +61,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
     ...(history ? { history } : {}),
     ...(historyCursor ? { historyCursor } : {}),
     ...(historyReturn ? { historyReturn } : {}),
+    ...(selected ? { case: selected } : {}),
     ...(cursor ? { cursor } : {}),
     ...(realmsCursor ? { realmsCursor } : {}),
     ...(boardsCursor ? { boardsCursor } : {}),
@@ -73,6 +78,26 @@ export function workbenchWithoutContinuation(search: WorkbenchSearch): Workbench
     ...(search.realm ? { realm: search.realm } : {}),
     ...(search.board ? { board: search.board } : {}),
   });
+}
+
+/** Reconstruct the captured workbench queue, including filter, order and cursor. */
+export function workbenchQueueHref(search: WorkbenchSearch): string {
+  const params = new URLSearchParams({
+    queue: search.queue,
+    targetKind: search.targetKind,
+    order: search.order,
+  });
+  if (search.scope === 'catalogue') params.set('scope', 'catalogue');
+  if (search.realm) params.set('realm', search.realm);
+  if (search.board) params.set('board', search.board);
+  if (search.cursor) params.set('cursor', search.cursor);
+  if (search.case) params.set('case', search.case);
+  if (search.history) params.set('history', 'true');
+  if (search.historyCursor) params.set('historyCursor', search.historyCursor);
+  if (search.historyReturn) params.set('historyReturn', 'true');
+  if (search.realmsCursor) params.set('realmsCursor', search.realmsCursor);
+  if (search.boardsCursor) params.set('boardsCursor', search.boardsCursor);
+  return `/moderation/workbench?${params}`;
 }
 
 export function workbenchScope(search: WorkbenchSearch): WorkbenchScope {
@@ -102,12 +127,22 @@ export function workbenchReadKey(search: WorkbenchSearch): string {
   ]);
 }
 
+/** Stable native case reference with the exact scoped page snapshot that listed it. */
 export function workbenchCaseHref(
-  scope: Extract<WorkbenchScope, { kind: 'board' | 'catalogue' }>,
-  kind: 'report' | 'appeal',
+  item: { kind: 'report' | 'appeal'; id: string },
+  search: WorkbenchSearch,
 ): string {
+  const scope = workbenchScope(search);
   if (scope.kind === 'catalogue') return '/moderation/catalogue';
-  return kind === 'appeal'
-    ? `/boards/${encodeURIComponent(scope.boardId)}/moderation?tab=appeals`
-    : `/boards/${encodeURIComponent(scope.boardId)}/moderation`;
+  if (scope.kind !== 'board') return '/moderation/workbench';
+  if (item.kind === 'appeal') return workbenchQueueHref({ ...search, case: item.id });
+  return reportCaseHref(item.id, {
+    boardId: scope.boardId,
+    status: search.queue === 'resolved' ? 'resolved' : 'pending',
+    targetKind: search.targetKind,
+    order: search.order,
+    ...(search.cursor ? { cursor: search.cursor } : {}),
+    ...(search.realm ? { realm: search.realm } : {}),
+    queue: search.queue === 'resolved' ? 'resolved' : 'reports',
+  });
 }

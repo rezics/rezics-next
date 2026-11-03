@@ -4,10 +4,15 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
+import type { ReportsBulkAction } from '../reports-bulk-action';
+import type { ReportQueueAction } from '../reports-view-action';
+import { WorkbenchAppeal } from '../workbench-appeal';
 import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistoryUnavailable } from '../workbench-history';
+import { WorkbenchReportSelect, WorkbenchSelection } from '../workbench-selection';
 import { WorkbenchTriageCase, workbenchTriageIdentity } from '../workbench-triage';
 import {
   workbenchCaseHref,
+  workbenchQueueHref,
   workbenchScope,
   workbenchSearch,
   workbenchWithoutContinuation,
@@ -20,21 +25,41 @@ const control =
 
 export type WorkbenchViewProps = {
   page: Pick<WorkbenchRead, 'state' | 'realms' | 'realmsNext' | 'boards' | 'boardsNext' | 'cases' | 'next' | 'search'> &
-    Partial<Pick<WorkbenchRead, 'readKey' | 'generation'>>;
+    Partial<Pick<WorkbenchRead, 'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget'>>;
   onSearch: (search: WorkbenchSearch) => void;
   onRetry?: () => void;
+  onRestart?: () => void;
+  selection?: ReportsBulkAction;
+  onAction?: ReportQueueAction;
+  onRefresh?: () => Promise<void>;
+  isCurrent?: () => boolean;
 };
 
 function labelOf(item: WorkbenchDirectoryItem): string {
   return item.title?.trim() || m.moderation_target_unavailable();
 }
 
-function CaseRow({ item, search, identity }: { item: WorkbenchCase; search: WorkbenchSearch; identity: string }) {
+function CaseRow({
+  item,
+  search,
+  identity,
+  selection,
+  number,
+}: {
+  item: WorkbenchCase;
+  search: WorkbenchSearch;
+  identity: string;
+  selection?: ReportsBulkAction;
+  number: number;
+}) {
   const scope = workbenchQueueScope(search);
   if (!scope) return null;
-  const href = localizeHref(workbenchCaseHref(scope, item.kind));
+  const href = localizeHref(workbenchCaseHref(item, search));
   return (
     <li className="min-w-0 border-b py-3">
+      {selection && item.kind === 'report' ? (
+        <WorkbenchReportSelect controller={selection} reportId={item.id} number={number} />
+      ) : null}
       <a className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`} href={href}>
         {m.moderation_workbench_open_case({ id: item.id })}
       </a>
@@ -87,11 +112,21 @@ function Directory({
   );
 }
 
-export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
+export function WorkbenchView({
+  page,
+  onSearch,
+  onRetry,
+  onRestart,
+  selection,
+  onAction,
+  onRefresh,
+  isCurrent,
+}: WorkbenchViewProps) {
   const search = page.search;
   const identity = workbenchTriageIdentity(page);
   const scope = workbenchScope(search);
   const queueScope = workbenchQueueScope(search);
+  const boardId = scope.kind === 'board' ? scope.boardId : undefined;
   const next = page.next;
   const realmsNext = page.realmsNext;
   const boardsNext = page.boardsNext;
@@ -294,18 +329,49 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
               onReturn={() => onSearch(returnFromWorkbenchHistory(search))}
               {...(onRetry ? { onRetry } : {})}
             />
+          ) : search.queue === 'appeals' && search.case && queueScope?.kind === 'board' ? (
+            <WorkbenchAppeal
+              appealId={search.case}
+              page={{
+                state: page.state,
+                appeals: page.appeals ?? [],
+                selectedTarget: page.selectedTarget ?? null,
+              }}
+              queueHref={localizeHref(workbenchQueueHref({ ...search, case: undefined }))}
+              {...(isCurrent ? { isCurrent } : {})}
+              {...(onRetry ? { onRetry } : {})}
+              {...(onRestart ? { onRestart } : {})}
+            />
           ) : search.queue === 'appeals' && scope.kind === 'catalogue' ? null : page.cases.length === 0 ? (
             <p role="status" className="text-muted-foreground">
               {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
             </p>
           ) : (
-            <ul key={identity} className="min-w-0">
-              {page.cases.map((item) => (
-                <CaseRow key={`${item.kind}:${item.id}`} item={item} search={search} identity={identity} />
-              ))}
-            </ul>
+            <>
+              {selection && boardId && onAction ? (
+                <WorkbenchSelection
+                  controller={selection}
+                  boardId={boardId}
+                  reports={page.reports ?? []}
+                  onAction={onAction}
+                  {...(onRefresh ? { onRefresh } : {})}
+                />
+              ) : null}
+              <ul key={identity} className="min-w-0">
+                {page.cases.map((item, index) => (
+                  <CaseRow
+                    key={`${item.kind}:${item.id}`}
+                    item={item}
+                    search={search}
+                    identity={identity}
+                    number={index + 1}
+                    {...(selection ? { selection } : {})}
+                  />
+                ))}
+              </ul>
+            </>
           )}
-          {!search.history && next ? (
+          {!search.history && !search.case && next ? (
             <Button
               type="button"
               className={control}

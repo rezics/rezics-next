@@ -5235,5 +5235,7 @@
   "saved_filter_review_value_labels_restart": "La versión activa cambió durante esta lectura. Actualiza los metadatos actuales antes de reintentar.",
   "saved_filter_review_value_labels_retry": "Reintentar etiquetas de valor actuales",
   "saved_filter_review_value_labels_unavailable": "Las etiquetas de valor de esta Collection exacta no están disponibles. No se sustituyeron por valores globales; puedes reintentar sin cambiar los operandos guardados.",
-  "saved_filter_review_value_unlabelled": "No se divulgó una etiqueta actual para este operando exacto."
+  "saved_filter_review_value_unlabelled": "No se divulgó una etiqueta actual para este operando exacto.",
+  "moderation_workbench_selection_identity": "Tablero {board}. Denuncias en esta página: {reports}.",
+  "moderation_workbench_appeal_unavailable": "Esta apelación no está en la página actual de la cola."
 }

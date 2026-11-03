@@ -5296,5 +5296,7 @@
   "saved_filter_review_value_labels_restart": "The active release changed during this read. Refresh current metadata before retrying.",
   "saved_filter_review_value_labels_retry": "Retry current value labels",
   "saved_filter_review_value_labels_unavailable": "Exact-Collection value labels are unavailable. No Global values were substituted; retry while the saved operands remain unchanged.",
-  "saved_filter_review_value_unlabelled": "No current value label was disclosed for this exact operand."
+  "saved_filter_review_value_unlabelled": "No current value label was disclosed for this exact operand.",
+  "moderation_workbench_selection_identity": "Board {board}. Reports on this page: {reports}.",
+  "moderation_workbench_appeal_unavailable": "This appeal is not on the current queue page."
 }

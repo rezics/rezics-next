@@ -1,4 +1,11 @@
-export { workbenchSearch, workbenchReadKey, workbenchScope, workbenchCaseHref, type WorkbenchSearch } from './scope';
+export {
+  workbenchSearch,
+  workbenchReadKey,
+  workbenchScope,
+  workbenchCaseHref,
+  workbenchQueueHref,
+  type WorkbenchSearch,
+} from './scope';
 export {
   loadWorkbench,
   prepareWorkbenchRead,

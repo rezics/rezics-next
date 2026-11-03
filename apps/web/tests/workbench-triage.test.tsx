@@ -107,7 +107,7 @@ test('pending, resolved and appeal summaries keep native type, reason, outcome a
   expect(host.textContent).toContain(evidence);
   expect(host.textContent).not.toContain(m.report_illegal());
   const hrefs = [...host.querySelectorAll('a')].map((link) => link.getAttribute('href') ?? '');
-  expect(hrefs.some((href) => href.includes('/boards/board-club/moderation'))).toBe(true);
+  expect(hrefs.some((href) => href.includes('/moderation/cases/'))).toBe(true);
   expect(hrefs.join(' ')).not.toContain(evidence);
   expect(hrefs.join(' ')).not.toContain(statement);
   expect(hrefs.join(' ')).not.toContain('decision-1');

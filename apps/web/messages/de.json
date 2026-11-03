@@ -5235,5 +5235,7 @@
   "saved_filter_review_value_labels_restart": "Die aktive Version änderte sich während des Lesens. Aktualisiere die aktuellen Metadaten vor dem erneuten Versuch.",
   "saved_filter_review_value_labels_retry": "Aktuelle Wertlabels erneut lesen",
   "saved_filter_review_value_labels_unavailable": "Wertlabels dieser exakten Collection sind nicht verfügbar. Es wurden keine globalen Werte eingesetzt; erneutes Lesen ändert die gespeicherten Operanden nicht.",
-  "saved_filter_review_value_unlabelled": "Für diesen exakten Operanden wurde kein aktuelles Wertlabel offengelegt."
+  "saved_filter_review_value_unlabelled": "Für diesen exakten Operanden wurde kein aktuelles Wertlabel offengelegt.",
+  "moderation_workbench_selection_identity": "Board {board}. Meldungen auf dieser Seite: {reports}.",
+  "moderation_workbench_appeal_unavailable": "Dieser Einspruch steht nicht auf der aktuellen Warteschlangenseite."
 }

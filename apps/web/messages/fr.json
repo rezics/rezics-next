@@ -5235,5 +5235,7 @@
   "saved_filter_review_value_labels_restart": "La version active a changé pendant cette lecture. Actualisez les métadonnées actuelles avant de réessayer.",
   "saved_filter_review_value_labels_retry": "Réessayer les libellés de valeur actuels",
   "saved_filter_review_value_labels_unavailable": "Les libellés de valeur de cette Collection exacte sont indisponibles. Aucune valeur globale ne les remplace ; réessayez sans modifier les opérandes enregistrés.",
-  "saved_filter_review_value_unlabelled": "Aucun libellé actuel n’a été divulgué pour cet opérande exact."
+  "saved_filter_review_value_unlabelled": "Aucun libellé actuel n’a été divulgué pour cet opérande exact.",
+  "moderation_workbench_selection_identity": "Forum {board}. Signalements sur cette page : {reports}.",
+  "moderation_workbench_appeal_unavailable": "Cet appel n’est pas sur la page actuelle de la file."
 }

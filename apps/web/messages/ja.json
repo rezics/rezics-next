@@ -5235,5 +5235,7 @@
   "saved_filter_review_value_labels_restart": "読み取り中に現在のリリースが変わりました。現在のメタデータを更新してから再試行してください。",
   "saved_filter_review_value_labels_retry": "現在の値ラベルを再試行",
   "saved_filter_review_value_labels_unavailable": "このCollectionの値ラベルは利用できません。Global値で置き換えていません。保存オペランドを変更せず再試行できます。",
-  "saved_filter_review_value_unlabelled": "この正確なオペランドについて現在公開された値ラベルはありません。"
+  "saved_filter_review_value_unlabelled": "この正確なオペランドについて現在公開された値ラベルはありません。",
+  "moderation_workbench_selection_identity": "ボード {board}。このページの通報: {reports}。",
+  "moderation_workbench_appeal_unavailable": "この不服申立ては現在のキューのページにありません。"
 }

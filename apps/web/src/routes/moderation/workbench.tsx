@@ -70,6 +70,7 @@ function WorkbenchRoute() {
       navigation={navigation}
       onSearch={onSearch}
       onRetry={() => void router.invalidate({ sync: true })}
+      onRefresh={() => router.invalidate({ sync: true })}
     />
   );
 }

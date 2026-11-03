@@ -5235,5 +5235,7 @@
   "saved_filter_review_value_labels_restart": "读取期间当前版本已更改。请重新读取当前元数据后再重试。",
   "saved_filter_review_value_labels_retry": "重试读取当前值标签",
   "saved_filter_review_value_labels_unavailable": "确切 Collection 的值标签当前不可用。未使用全局值替代；重试时已保存操作数仍保持不变。",
-  "saved_filter_review_value_unlabelled": "此确切操作数当前没有已披露的值标签。"
+  "saved_filter_review_value_unlabelled": "此确切操作数当前没有已披露的值标签。",
+  "moderation_workbench_selection_identity": "版块 {board}。本页举报：{reports}。",
+  "moderation_workbench_appeal_unavailable": "当前队列页没有这项申诉。"
 }
