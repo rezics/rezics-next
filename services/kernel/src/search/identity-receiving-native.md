@@ -116,6 +116,8 @@ handoff retains the predecessor's document. Each plan must preserve independent 
 and scope, current owner, consumer, physical UUID, allocation alias, physical generation, enrollment/fence
 generations, original close and the bounded complete-support/definition/release/preparation/copy references.
 A support page, prepared array, ordinary drain or returned native receipt does not establish these obligations.
+`resolvePlanned` uses Semantic's retained-definition validator and caps capture plus dependency-key reads at 20,480
+bytes, matching the existing native plan SQL's bounded read scale.
 
 The six methods retain the selected ordering:
 
