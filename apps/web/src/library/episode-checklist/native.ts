@@ -105,14 +105,13 @@ function asView(value: unknown): EpisodeProgressView | undefined {
     if (!record(row)) return [];
     const membership = row.membership;
     if (membership !== 'member' && membership !== 'detached' && membership !== 'unavailable') return [];
-    return [
-      {
-        episodeSubjectId: typeof row.episodeSubjectId === 'string' ? row.episodeSubjectId : null,
-        completed: typeof row.completed === 'boolean' ? row.completed : null,
-        membership,
-        ordinal: typeof row.ordinal === 'string' ? row.ordinal : null,
-      },
-    ];
+    const shown: EpisodeProgressView['episodes'][number] = {
+      episodeSubjectId: typeof row.episodeSubjectId === 'string' ? row.episodeSubjectId : null,
+      completed: typeof row.completed === 'boolean' ? row.completed : null,
+      membership,
+      ordinal: typeof row.ordinal === 'string' ? row.ordinal : null,
+    };
+    return [shown];
   });
   return {
     revision: value.revision,

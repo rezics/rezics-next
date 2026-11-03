@@ -65,7 +65,7 @@ export function bindFromDetail(input: {
     locale: input.locale,
     subjectId: input.subjectId,
     sessionId: input.sessionId,
-    revision,
+    revision: input.revision,
   };
 }
 

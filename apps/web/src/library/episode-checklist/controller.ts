@@ -188,13 +188,14 @@ export function applyChecklistOutcome(visit: ChecklistVisit, outcome: ChecklistO
     return { ...visit, kind: 'denied', outcome, retry: null, pending: false };
   }
   if (outcome.state === 'unsupported' || outcome.state === 'unavailable' || outcome.state === 'invalid') {
+    const seam = outcome.state === 'unavailable' ? outcome.seam : visit.seam;
     return {
       ...visit,
       kind: 'unavailable',
       outcome,
       retry: outcome.state === 'unavailable' ? (outcome.command ?? null) : null,
-      seam: outcome.state === 'unavailable' ? outcome.seam : visit.seam,
       pending: false,
+      ...(seam === undefined ? {} : { seam }),
     };
   }
   return visit;

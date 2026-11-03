@@ -166,7 +166,7 @@ export function EpisodeChecklistVisit({
 
   return (
     <div ref={root} className="space-y-6">
-      <EpisodeChecklistReadout visit={visit} work={work} />
+      <EpisodeChecklistReadout visit={visit} {...(work ? { work } : {})} />
       {recovery ? (
         <EpisodeChecklistRecovery
           kind={visit.kind}
@@ -192,7 +192,7 @@ export function EpisodeChecklistVisit({
       ) : visit.kind === 'ready' || visit.kind === 'empty' || visit.kind === 'accepted' ? (
         <EpisodeChecklistEditor
           visit={visit}
-          busy={visit.kind === 'submitting'}
+          busy={false}
           onToggle={(id, completed) => current() && setVisit(toggleRow(visit, id, completed))}
           onReview={() => {
             if (current()) {

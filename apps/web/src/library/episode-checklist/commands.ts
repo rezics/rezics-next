@@ -14,6 +14,12 @@ export type EpisodeSender = (input: {
   intent: ChecklistIntent;
 }) => Promise<EpisodeRecordResult>;
 
+export function headersRecord(headers: HeadersInit): Record<string, string> {
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  return { ...headers };
+}
+
 export function captureEpisodeCommand(
   credential: HeadersInit,
   sessionId: string,
@@ -23,7 +29,7 @@ export function captureEpisodeCommand(
 ): ChecklistCommand {
   return {
     sender: 'recordCanonicalEpisodes',
-    credential,
+    credential: headersRecord(credential),
     key,
     operands: { sessionId, revision, body: recordBody(revision, intent) },
   };

@@ -22,7 +22,6 @@ function selected(visit: ChecklistVisit, id: string, completed: boolean): boolea
 export function EpisodeChecklistReadout({
   visit,
   work,
-  library,
 }: {
   visit: ChecklistVisit;
   work?: { id: string; label?: string | null };

@@ -45,15 +45,17 @@ function labelOf(row: PartRow): string | null {
 
 function episodeIdFromRow(row: PartRow, stream: PartStream, release: Definitions): MembershipCandidate | undefined {
   if (stream.direction === 'inverse' && stream.property === 'schema:isPartOf') {
-    if (!CANONICAL_ID.test(row.holder) || !isCanonicalEpisodeType(release, row.summary?.type)) return undefined;
-    return { id: row.holder, label: labelOf(row), ordinal: positionOf(row), type: row.summary.type };
+    const type = row.summary?.type;
+    if (!type || !CANONICAL_ID.test(row.holder) || !isCanonicalEpisodeType(release, type)) return undefined;
+    return { id: row.holder, label: labelOf(row), ordinal: positionOf(row), type };
   }
   if (stream.direction === 'forward') {
-    if (row.summary?.id && CANONICAL_ID.test(row.summary.id) && isCanonicalEpisodeType(release, row.summary.type)) {
-      return { id: row.summary.id, label: labelOf(row), ordinal: positionOf(row), type: row.summary.type };
+    const summaryType = row.summary?.type;
+    if (row.summary?.id && summaryType && CANONICAL_ID.test(row.summary.id) && isCanonicalEpisodeType(release, summaryType)) {
+      return { id: row.summary.id, label: labelOf(row), ordinal: positionOf(row), type: summaryType };
     }
     for (const [id, related] of Object.entries(row.related ?? {})) {
-      if (CANONICAL_ID.test(id) && isCanonicalEpisodeType(release, related.type)) {
+      if (related.type && CANONICAL_ID.test(id) && isCanonicalEpisodeType(release, related.type)) {
         return { id, label: labelOf(row), ordinal: positionOf(row), type: related.type };
       }
     }

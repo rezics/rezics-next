@@ -38,7 +38,7 @@ export type ChecklistIntent =
 
 export type ChecklistCommand = {
   sender: 'recordCanonicalEpisodes';
-  credential: HeadersInit;
+  credential: Record<string, string>;
   key: string;
   operands: {
     sessionId: string;
