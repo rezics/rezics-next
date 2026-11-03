@@ -431,6 +431,7 @@ const nativeAdmissions = new WeakMap<
     actor: Actor;
     pool: Pool;
     deadline: number;
+    retainedMeaning: boolean;
   }>
 >();
 
@@ -564,7 +565,7 @@ export async function admitSavedCollectionMemberQuery(
       invalidFilter(error);
     }
   }
-  return finishCollectionMemberAdmission(deps, viewer, filter, release, rule.releaseDigest, deadline);
+  return finishCollectionMemberAdmission(deps, viewer, filter, release, rule.releaseDigest, deadline, true);
 }
 
 async function finishCollectionMemberAdmission(
@@ -574,6 +575,7 @@ async function finishCollectionMemberAdmission(
   release: Release | null,
   releaseDigest: string | null,
   deadline: number,
+  retainedMeaning = false,
 ): Promise<CollectionMemberAdmission> {
   const reads = filter === undefined ? [] : privateReads(filter);
   if (reads.length) {
@@ -621,7 +623,7 @@ async function finishCollectionMemberAdmission(
         : null,
   };
   freeze(admission);
-  nativeAdmissions.set(admission, { actor: viewer, pool: deps.pool, deadline });
+  nativeAdmissions.set(admission, { actor: viewer, pool: deps.pool, deadline, retainedMeaning });
   return admission;
 }
 

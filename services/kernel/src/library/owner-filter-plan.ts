@@ -1,4 +1,6 @@
 import type { Release } from '@rezics/definitions';
+import canonicalize from 'canonicalize';
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
@@ -6,6 +8,7 @@ import { systemClock, type KernelClock } from '../clock.ts';
 import type { CommandAttempt } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
+import { parseStrictJson } from '../http/strict-json.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { currentOwnerClauseKey } from '../search/current-filter-plan.ts';
@@ -18,6 +21,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import {
   bindNativeOwnerFilterRead,
+  nativeOwnerFilterBinding,
   releaseNativeOwnerFilterRead,
   revalidateNativeOwnerFilter,
   withNativeOwnerFilterSource,
@@ -40,6 +44,7 @@ import {
   matchOwnerFilterState,
   matchOwnerFilterSupport,
   ownerFilterStateWinner,
+  readNativeCollectionMemberAdmission,
   type CollectionMemberAdmission,
   type CollectionMemberQuery,
   type OwnerFilterEntryFact,
@@ -285,12 +290,22 @@ async function readWorkingOwnerFilterPage(
   )
     throw new ProblemError('unsupported_query');
   await revalidateScope(deps, binding, work);
+  // The saved rule is versioned Source state, while caller filters are request identity. Keeping those
+  // separate lets an authenticated old cursor report stale when the owner edits the stored rule.
+  const savedRule =
+    readNativeCollectionMemberAdmission(admission)?.retainedMeaning &&
+    nativeOwnerFilterBinding(binding)?.metadata.ruleReady;
+  const query = savedRule
+    ? createHash('sha256')
+        .update(canonicalize(options.filter === undefined ? null : parseStrictJson(options.filter))!)
+        .digest('hex')
+    : admission.queryDigest;
   const cursorBinding: ListCursorBinding = {
     route: 'GET /v1/collections/{collectionId}/members',
     viewer: input.actor.kind === 'account' ? input.actor.accountId : null,
     query: {
       collectionId: input.collectionId,
-      query: admission.queryDigest,
+      query,
       limit,
       sort: 'id',
     },

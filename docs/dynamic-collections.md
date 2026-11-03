@@ -231,6 +231,14 @@ Saved dynamic Collections use `POST /v1/collections` with the closed body
 revision and Source generation once; a title/cover edit does not edit its rule. Curated creation and metadata
 operations retain their existing bodies and grants. Both operations use the same
 closed catalogue grammar and semantic admission; this document does not create a second catalogue predicate AST.
+The retained expanded AST and immutable release reference keep accepted meaning after another release activates.
+Reopening or renaming preserves the rule revision, release and Source generation. An explicit rule edit admits
+the current release, even when the submitted AST is unchanged, and advances both rule revision and Source generation
+exactly once through the Collection CAS. Previous rule cursors become stale. Missing retained releases fail closed.
+Exact edit retries return their original effect only after current Collection and full private-family authority,
+without another meaning admission or revision increment; conflicting keys and stale CAS cannot replace newer rules.
+Decision: expanded editor retries may replay after current semantic admission rejects the old AST; unresolved saved
+operands still fail closed because their complete private-family dependencies cannot be established.
 Owner predicates remain owner-only and require reviewed shared admission/native owner plans. Definitions and
 accepted pins own meaning, not localized labels or fixed vertical vocabulary. The shared pure matcher is the
 conformance reference, not mandatory request-time raw-fact replay. Incomplete coverage remains unknown under NOT.
