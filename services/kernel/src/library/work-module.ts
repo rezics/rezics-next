@@ -3,6 +3,7 @@ import type { WorkContext, WorkModule } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { purgeLabelRetentionPage } from './label-retention.ts';
 import { purgeExpiredLabelConsolidations } from './label-consolidation.ts';
+import { purgeExpiredEntryAnnotationReviews } from './entry-annotation-correction.ts';
 import { cutoverEntryIncarnationsPage } from './entry-incarnation-cutover.ts';
 
 export const libraryWorkModule: WorkModule = {
@@ -20,6 +21,7 @@ export const libraryWorkModule: WorkModule = {
     await registerLibraryMemberRetentionWork(context);
     await registerLabelRetention(context);
     await registerLabelConsolidationRetention(context);
+    await registerEntryAnnotationCorrectionRetention(context);
     const { registerLibraryPublishedLogRetentionWork } = await import('./published-log-retention.ts');
     await registerLibraryPublishedLogRetentionWork(context);
     const { registerCopyRetention } = await import('./copy-retention.ts');
@@ -182,6 +184,57 @@ async function registerLabelConsolidationRetention({ pool, client, clock }: Work
     {
       scheduleName: LABEL_CONSOLIDATION_RETENTION_SCHEDULE,
       workflowName: LABEL_CONSOLIDATION_RETENTION_SWEEP_WORKFLOW,
+      schedule: '*/10 * * * *',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+      queueName: 'maintenance',
+    },
+  ]);
+}
+
+export const ENTRY_ANNOTATION_CORRECTION_RETENTION_SWEEP_WORKFLOW = 'library.entryAnnotationCorrectionRetentionSweep';
+export const ENTRY_ANNOTATION_CORRECTION_RETENTION_SCHEDULE = 'library.entryAnnotationCorrectionRetention.every-10-minutes';
+type EntryAnnotationCorrectionSweep = { root: string; sequence: number; partition: number; after: string | null };
+
+async function registerEntryAnnotationCorrectionRetention({ pool, client, clock }: WorkContext) {
+  const page = DBOS.registerStep(
+    async (partition: number, after: string | null) =>
+      purgeExpiredEntryAnnotationReviews({ pool, clock }, { partition, limit: 100, after }),
+    { name: 'library.entryAnnotationCorrectionRetentionPage', ...COMMAND_STEP_RETRIES },
+  );
+  const continuation = DBOS.registerStep(
+    async (input: EntryAnnotationCorrectionSweep) => {
+      await client.enqueue(
+        {
+          workflowName: 'library.entryAnnotationCorrectionRetentionSegment',
+          queueName: 'maintenance',
+          workflowID: `library.entryAnnotationCorrectionRetention:${input.root}:${input.sequence}`,
+          workflowIDReusePolicy: 'return-existing',
+        },
+        input,
+      );
+    },
+    { name: 'library.entryAnnotationCorrectionRetentionContinue', ...COMMAND_STEP_RETRIES },
+  );
+  const segment = async (input: EntryAnnotationCorrectionSweep) => {
+    let { partition, after } = input;
+    for (let n = 0; n < 100 && partition < 4096; n++) {
+      after = (await page(partition, after)).next;
+      if (after === null) partition++;
+    }
+    if (partition < 4096)
+      await continuation({ ...input, sequence: input.sequence + 1, partition, after });
+    return { partition, after };
+  };
+  DBOS.registerWorkflow(segment, { name: 'library.entryAnnotationCorrectionRetentionSegment' });
+  DBOS.registerWorkflow(
+    async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }),
+    { name: ENTRY_ANNOTATION_CORRECTION_RETENTION_SWEEP_WORKFLOW },
+  );
+  await client.applySchedules([
+    {
+      scheduleName: ENTRY_ANNOTATION_CORRECTION_RETENTION_SCHEDULE,
+      workflowName: ENTRY_ANNOTATION_CORRECTION_RETENTION_SWEEP_WORKFLOW,
       schedule: '*/10 * * * *',
       cronTimezone: 'UTC',
       automaticBackfill: false,

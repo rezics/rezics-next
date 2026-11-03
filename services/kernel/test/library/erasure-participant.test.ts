@@ -28,6 +28,7 @@ let unlistedId: string;
 let sessionId: string;
 let oldActor: Awaited<ReturnType<TestKernel['testAccess']['authenticate']>>;
 let entries: ReturnType<typeof createEntryCommands>;
+let correctionReviewId: string;
 const key = () => crypto.randomUUID();
 
 async function request(as: Persona | null, method: string, path: string, body?: unknown) {
@@ -127,6 +128,24 @@ beforeAll(async () => {
   ).progressSession.id;
   oldActor = await kernel.testAccess.authenticate(people.bob.bearer, { pool: db.pool, deadline: Date.now() + 5000 });
   entries = createEntryCommands({ pool: db.pool, access: kernel.testAccess, tokens: testTokens() });
+  const ownedEntry = await entries.readEntry(oldActor, subjectId);
+  if (!ownedEntry.incarnationId) throw new Error('Expected an incarnated entry for correction erasure coverage');
+  correctionReviewId = (
+    await json(
+      await request(people.bob, 'POST', '/v1/libraryEntryAnnotationCorrections', {
+        items: [
+          {
+            subjectId,
+            incarnationId: ownedEntry.incarnationId,
+            currentRevision: ownedEntry.revision,
+            note: { op: 'set', value: 'private review state erased with owner' },
+            priority: { op: 'preserve' },
+          },
+        ],
+      }),
+      201,
+    )
+  ).review.reviewId;
   client = await createWorkClient(db.url);
   // Auth owns its separate executor; the default kernel worker runs in its own process.
   worker = await startErasureWorker(db.url, client);
@@ -239,6 +258,22 @@ test('complete local native cleanup stays pending for shared custody and T immed
   expect(observed.remainingStores).toEqual([]);
   await pending(people.bob);
   const owner = [routeOf(people.bob.accountId), people.bob.accountId];
+  expect(
+    (
+      await db.admin.query(
+        'SELECT review_id FROM library.entry_annotation_review WHERE route=$1 AND account_id=$2 AND review_id=$3',
+        [...owner, correctionReviewId],
+      )
+    ).rows,
+  ).toEqual([]);
+  expect(
+    (
+      await db.admin.query(
+        'SELECT review_id FROM library.entry_annotation_review_item WHERE route=$1 AND account_id=$2 AND review_id=$3',
+        [...owner, correctionReviewId],
+      )
+    ).rows,
+  ).toEqual([]);
   for (const table of ['entry', 'copy', 'follow'])
     expect(
       (await db.admin.query(`SELECT 1 FROM library.${table} WHERE route=$1 AND account_id=$2 LIMIT 1`, owner)).rows,

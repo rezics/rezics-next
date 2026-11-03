@@ -140,6 +140,11 @@ Annotation revision `0` creates the first version; each successful compare-and-s
 each require `{op:"set",value:...}`, `{op:"clear"}` or `{op:"unchanged"}`. Notes are limited to 4,096 UTF-8 bytes.
 Priority is personal list position, not a catalogue rank or rating. Null means unranked.
 
+Owners can also review priority and private note corrections for a fixed selection of exact existing entry
+incarnations and revisions. Preserve, set and clear are independent per item; confirmation reuses the addressed rich
+entry annotation command, while reopening returns current native values and per-item outcomes. See the [selected
+correction contract](library-entry-selected-correction.md) for its bounds, expiry, cancellation and client operands.
+
 Decision: Personal priority is an owner-local list position from 1 through 100, where 1 is highest; null is unranked.
 
 Each source observation is separately addressed by owner, canonical Subject, provider key and provider record ID.

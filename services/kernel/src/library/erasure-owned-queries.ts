@@ -14,6 +14,7 @@ import purgeOwnerIndexPin from './erasure-owned-owner-index-pin.sql';
 import purgeOwnerIndexControl from './erasure-owned-owner-index-control.sql';
 import purgeEntryDeleted from './erasure-owned-entry-deleted.sql';
 import purgeLabelConsolidation from './erasure-owned-label-consolidation.sql';
+import purgeEntryAnnotationReview from './erasure-owned-entry-annotation-review.sql';
 import purgeLabelAssignment from './erasure-owned-label-assignment.sql';
 import purgePersonalLabel from './erasure-owned-personal-label.sql';
 import purgeProgressHead from './erasure-owned-progress-head.sql';
@@ -55,6 +56,7 @@ export const ownedQueries: {
   readonly owner_index_control: typeof purgeOwnerIndexControl;
   readonly entry_deleted: typeof purgeEntryDeleted;
   readonly label_consolidation: typeof purgeLabelConsolidation;
+  readonly entry_annotation_review: typeof purgeEntryAnnotationReview;
   readonly label_assignment: typeof purgeLabelAssignment;
   readonly personal_label: typeof purgePersonalLabel;
   readonly progress_head: typeof purgeProgressHead;
@@ -94,6 +96,7 @@ export const ownedQueries: {
 
   entry_deleted: purgeEntryDeleted,
   label_consolidation: purgeLabelConsolidation,
+  entry_annotation_review: purgeEntryAnnotationReview,
   label_assignment: purgeLabelAssignment,
   personal_label: purgePersonalLabel,
   progress_head: purgeProgressHead,

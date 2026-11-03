@@ -323,6 +323,11 @@ stale/duplicate refusal, and annotation-only/provenance-only Everything support.
 retained source rows in `test/library/account-fact-purge.test.ts`. These focused tests do not establish the deferred
 full Everything/Web acceptance journey.
 
+Selected priority and private-note correction is installed in `test/library/entry-annotation-correction.test.ts` and
+the [selected correction contract](../library-entry-selected-correction.md). It binds fixed Subject IDs to entry
+incarnation, entry revision, annotation revision and review epoch; cancellation leaves accepted items intact, and
+native receipt replay does not repeat their annotation effects. Native64/512/4096 growth acceptance remains deferred.
+
 **Personas and denial cases:** owner and another owner partition, anonymous public reader, suspended bearer,
 public/private/unlisted Collection, public-source revocation, hidden candidate, private filter, unsupported filter,
 unavailable source, expired or tampered cursor, and terminal account fencing remain separate.

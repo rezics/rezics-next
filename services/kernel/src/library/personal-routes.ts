@@ -18,6 +18,12 @@ import { languageRanges } from '../semantic/language.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { LibraryNotFoundError } from './command-support.ts';
+import {
+  createEntryAnnotationCorrectionCommands,
+  ENTRY_ANNOTATION_CORRECTION_LIMITS,
+  EntryAnnotationCorrectionConflictError,
+  EntryAnnotationCorrectionLimitError,
+} from './entry-annotation-correction.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
 import {
   createEntryCommands,
@@ -44,6 +50,7 @@ export type {
   PersonalEntry,
   PersonalEntryAnnotationWrite,
   PersonalEntryFieldChange,
+  PersonalEntryGuard,
   PersonalEntryObservation,
   PersonalEntryPrivacy,
   PersonalEntryPrivacyValue,
@@ -309,6 +316,72 @@ const personalEntrySchema = t.Object(
 );
 const personalEntryResponse = t.Object({ personalEntry: personalEntrySchema }, closed);
 const personalObservationResponse = t.Object({ sourceObservation: personalObservationSchema }, closed);
+const correctionNoteOperation = t.Union([
+  t.Object({ op: t.Literal('preserve') }, closed),
+  t.Object({ op: t.Literal('clear') }, closed),
+  t.Object({ op: t.Literal('set'), value: t.String({ minLength: 1, maxLength: MAX_PERSONAL_NOTE_BYTES }) }, closed),
+]);
+const correctionPriorityOperation = t.Union([
+  t.Object({ op: t.Literal('preserve') }, closed),
+  t.Object({ op: t.Literal('clear') }, closed),
+  t.Object({ op: t.Literal('set'), value: t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }) }, closed),
+]);
+const correctionSelectionSchema = t.Object(
+  {
+    subjectId: id,
+    incarnationId,
+    currentRevision: revision,
+    note: correctionNoteOperation,
+    priority: correctionPriorityOperation,
+  },
+  closed,
+);
+const correctionCurrentSchema = t.Union([
+  t.Object(
+    {
+      annotationRevision: personalRevision,
+      note: t.Union([t.String({ maxLength: MAX_PERSONAL_NOTE_BYTES }), t.Null()]),
+      priority: t.Union([t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY }), t.Null()]),
+    },
+    closed,
+  ),
+  t.Null(),
+]);
+const correctionItemSchema = t.Object(
+  {
+    selected: t.Object({ subjectId: id, incarnationId, currentRevision: revision }, closed),
+    eligibility: t.Union([t.Literal('ready'), t.Literal('stale'), t.Literal('unavailable')]),
+    current: correctionCurrentSchema,
+    operation: t.Union([
+      t.Object({ note: correctionNoteOperation, priority: correctionPriorityOperation }, closed),
+      t.Null(),
+    ]),
+    outcome: t.Union([
+      t.Literal('accepted'),
+      t.Literal('unchanged'),
+      t.Literal('stale'),
+      t.Literal('unavailable'),
+      t.Literal('not-started'),
+    ]),
+  },
+  closed,
+);
+const correctionPageSchema = t.Object(
+  {
+    reviewId: id,
+    epoch: id,
+    state: t.Union([t.Literal('open'), t.Literal('confirmed'), t.Literal('cancelled'), t.Literal('expired')]),
+    createdAt: id,
+    expiresAt: id,
+    total: t.Integer({ minimum: 1, maximum: ENTRY_ANNOTATION_CORRECTION_LIMITS.selection }),
+    page: t.Integer({ minimum: 0, maximum: 3 }),
+    pageCount: t.Integer({ minimum: 1, maximum: 4 }),
+    nextPage: t.Union([t.Integer({ minimum: 1, maximum: 3 }), t.Null()]),
+    items: t.Array(correctionItemSchema, { maxItems: ENTRY_ANNOTATION_CORRECTION_LIMITS.page }),
+  },
+  closed,
+);
+const correctionPageResponse = t.Object({ review: correctionPageSchema }, closed);
 const copyResponse = t.Object({ copy: copySchema }, closed);
 const followResponse = t.Object({ follow: followSchema }, closed);
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
@@ -356,6 +429,21 @@ async function personalCommand<T>(run: () => Promise<T>): Promise<T> {
     return await command(run);
   } catch (error) {
     if (error instanceof TypeError) throw new ProblemError('invalid_request');
+    throw error;
+  }
+}
+async function correctionCommand<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await personalCommand(run);
+  } catch (error) {
+    if (error instanceof EntryAnnotationCorrectionLimitError)
+      throw new ProblemError('library_entry_annotation_correction_limit');
+    if (error instanceof EntryAnnotationCorrectionConflictError)
+      throw new ProblemError(
+        error.reason === 'epoch'
+          ? 'library_entry_annotation_correction_epoch'
+          : 'library_entry_annotation_correction_expired',
+      );
     throw error;
   }
 }
@@ -445,6 +533,12 @@ function followView({ targetId, targetType, state, reason, updatedAt }: Follow) 
 export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   const config = () => ({ ...dependencies, access: dependencies.access() });
   const entries = () => createEntryCommands(config());
+  const corrections = () =>
+    createEntryAnnotationCorrectionCommands({
+      pool: dependencies.pool,
+      ...(dependencies.clock === undefined ? {} : { clock: dependencies.clock }),
+      entries: () => entries(),
+    });
   const copies = () => createCopyCommands(config());
   const follows = () => createFollowCommands(config());
   const shelves = (operation: keyof ShelfReads) => {
@@ -456,6 +550,97 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     if (!owner.scopes.includes('library_entry:list')) throw new ProblemError('forbidden');
   };
   return app
+    .post(
+      '/v1/libraryEntryAnnotationCorrections',
+      {
+        body: t.Object({ items: t.Array(correctionSelectionSchema, { minItems: 1, maxItems: 16 }) }, closed),
+        response: { 201: correctionPageResponse, ...failures, 409: problemSchema('library_entry_annotation_correction_limit') },
+        detail: personalDetail('library_entry_annotation_correction.create', 'library_entry:update'),
+      },
+      async ({ actor, body, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        account(actor);
+        for (const selected of body.items) point(actor, selected.subjectId, 'library_entry:update');
+        const review = await admission.run('normal', job, () => correctionCommand(() => corrections().create(actor, body)));
+        set.status = 201;
+        return { review } satisfies Static<typeof correctionPageResponse>;
+      },
+    )
+    .get(
+      '/v1/libraryEntryAnnotationCorrections/:reviewId',
+      {
+        params: t.Object({ reviewId: id }, closed),
+        query: t.Object({ page: t.Optional(t.Integer({ minimum: 0, maximum: 3, default: 0 })) }, closed),
+        response: { 200: correctionPageResponse, ...failures },
+        detail: detail('library_entry_annotation_correction.read', 'library_entry:read'),
+      },
+      async ({ actor, params, query, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        account(actor);
+        point(actor, params.reviewId, 'library_entry:read');
+        const review = await admission.run('normal', job, () =>
+          correctionCommand(() => corrections().readPage(actor, params.reviewId, query.page)),
+        );
+        return { review } satisfies Static<typeof correctionPageResponse>;
+      },
+    )
+    .post(
+      '/v1/libraryEntryAnnotationCorrections/:reviewId/confirm',
+      {
+        params: t.Object({ reviewId: id }, closed),
+        body: t.Object({ epoch: incarnationId, position: t.Integer({ minimum: 0, maximum: 15 }) }, closed),
+        response: {
+          200: correctionPageResponse,
+          ...failures,
+          409: problemSchema(
+            'conflict',
+            'library_entry_annotation_correction_epoch',
+            'library_entry_annotation_correction_expired',
+          ),
+        },
+        detail: personalDetail('library_entry_annotation_correction.confirm_item', 'library_entry:update'),
+      },
+      async ({ actor, params, body, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        account(actor);
+        point(actor, params.reviewId, 'library_entry:update');
+        const result = await admission.run('normal', job, () =>
+          correctionCommand(() => corrections().confirmItem(actor, params.reviewId, body.epoch, body.position)),
+        );
+        if (result.commandOutcome) session.record(result.commandOutcome);
+        return { review: result.page } satisfies Static<typeof correctionPageResponse>;
+      },
+    )
+    .post(
+      '/v1/libraryEntryAnnotationCorrections/:reviewId/cancel',
+      {
+        params: t.Object({ reviewId: id }, closed),
+        body: t.Object({ epoch: incarnationId }, closed),
+        response: {
+          200: t.Object(
+            {
+              reviewId: id,
+              epoch: id,
+              state: t.Union([t.Literal('open'), t.Literal('confirmed'), t.Literal('cancelled'), t.Literal('expired')]),
+              expiresAt: id,
+            },
+            closed,
+          ),
+          ...failures,
+          409: problemSchema('library_entry_annotation_correction_epoch', 'library_entry_annotation_correction_expired'),
+        },
+        detail: personalDetail('library_entry_annotation_correction.cancel', 'library_entry:update'),
+      },
+      async ({ actor, params, body, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        account(actor);
+        point(actor, params.reviewId, 'library_entry:update');
+        const review = await admission.run('normal', job, () =>
+          correctionCommand(() => corrections().cancel(actor, params.reviewId, body.epoch)),
+        );
+        return review;
+      },
+    )
     .get(
       '/v1/libraryEntries',
       {
@@ -654,6 +839,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             revision: personalRevision,
             note: personalChange(t.String({ minLength: 1, maxLength: MAX_PERSONAL_NOTE_BYTES })),
             priority: personalChange(t.Integer({ minimum: 1, maximum: MAX_PERSONAL_PRIORITY })),
+            entryGuard: t.Optional(t.Object({ incarnationId, currentRevision: revision }, closed)),
           },
           closed,
         ),

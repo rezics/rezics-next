@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, type AuthoritativeTime } from '../command/command.ts';
+import { authoritativeTimeValue, noEffect, type AuthoritativeTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
@@ -14,7 +14,7 @@ import {
   WORK_STEP_DEADLINE_MS,
 } from './command-support.ts';
 import { resolveSubject } from './subject-anchor.ts';
-import { LibraryConflictError } from './entry-errors.ts';
+import { EntryAnnotationReviewStoppedError, LibraryConflictError } from './entry-errors.ts';
 import {
   MAX_SOURCE_OBSERVATIONS,
   applyFieldChange,
@@ -73,11 +73,65 @@ function closed(value: unknown, keys: readonly string[], label: string): Record<
 }
 
 function parseAnnotationInput(value: unknown) {
-  const input = closed(value, ['revision', 'note', 'priority'], 'personal annotation input');
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new TypeError('Invalid personal annotation input');
+  const fields = Object.keys(value);
+  if (
+    !['revision', 'note', 'priority'].every((field) => fields.includes(field)) ||
+    fields.some((field) => !['revision', 'note', 'priority', 'entryGuard'].includes(field))
+  )
+    throw new TypeError('Invalid personal annotation input');
+  const input = value as Record<string, unknown>;
   const note = parseFieldChange(input.note, parsePersonalNote);
   const priority = parseFieldChange(input.priority, parsePersonalPriority);
-  if (note.op === 'unchanged' && priority.op === 'unchanged') throw new TypeError('Personal annotation has no changes');
-  return { revision: parsePersonalRevision(input.revision), note, priority };
+  let entryGuard:
+    | {
+        incarnationId: string;
+        currentRevision: number;
+        reviewGuard?: { reviewId: string; epoch: string; position: number };
+      }
+    | undefined;
+  if (input.entryGuard !== undefined) {
+    if (typeof input.entryGuard !== 'object' || input.entryGuard === null || Array.isArray(input.entryGuard))
+      throw new TypeError('Invalid entry guard');
+    const guardFields = Object.keys(input.entryGuard);
+    if (
+      !['incarnationId', 'currentRevision'].every((field) => guardFields.includes(field)) ||
+      guardFields.some((field) => !['incarnationId', 'currentRevision', 'reviewGuard'].includes(field))
+    )
+      throw new TypeError('Invalid entry guard');
+    const guard = input.entryGuard as Record<string, unknown>;
+    if (
+      typeof guard.incarnationId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(guard.incarnationId)
+    )
+      throw new TypeError('Invalid entry guard');
+    entryGuard = {
+      incarnationId: guard.incarnationId,
+      currentRevision: parsePersonalRevision(guard.currentRevision, false),
+    };
+    if (guard.reviewGuard !== undefined) {
+      const review = closed(guard.reviewGuard, ['reviewId', 'epoch', 'position'], 'review guard');
+      if (
+        typeof review.reviewId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(review.reviewId) ||
+        typeof review.epoch !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(review.epoch) ||
+        !Number.isInteger(review.position) ||
+        Number(review.position) < 0 ||
+        Number(review.position) >= 16
+      )
+        throw new TypeError('Invalid review guard');
+      entryGuard.reviewGuard = {
+        reviewId: review.reviewId,
+        epoch: review.epoch,
+        position: Number(review.position),
+      };
+    }
+  }
+  if (note.op === 'unchanged' && priority.op === 'unchanged' && !entryGuard)
+    throw new TypeError('Personal annotation has no changes');
+  return { revision: parsePersonalRevision(input.revision), note, priority, ...(entryGuard ? { entryGuard } : {}) };
 }
 
 function parseObservationInput(value: unknown) {
@@ -308,30 +362,133 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         if ('error' in prepared) throw prepared.error;
         const route = requireRoute(account.accountId);
         const time = authoritativeTimeValue(command.time);
-        await tx.query(
-          `INSERT INTO library.entry_personal_fact
-            (route,account_id,subject_id,fact_id,annotation_revision,note,priority,annotation_updated_at,
-             annotation_transaction_id,created_at,updated_at,transaction_id)
-           VALUES($1,$2,$3,$4,0,NULL,NULL,NULL,NULL,$5,$5,$6) ON CONFLICT DO NOTHING`,
-          [
-            route,
-            account.accountId,
-            prepared.subjectId,
-            newFactId(route, prepared.subjectId),
-            time,
-            command.transactionId,
-          ],
-        );
-        const current = await tx.query<{ revision: number; note: string | null; priority: number | null }>(
+        if (parsed.entryGuard?.reviewGuard) {
+          const reviewGuard = parsed.entryGuard.reviewGuard;
+          const bound = await tx.query<{
+            epoch: string;
+            state: string;
+            expired: boolean;
+            subjectId: string;
+            incarnationId: string;
+            entryRevision: number;
+            annotationRevision: number | null;
+            noteOp: string;
+            noteValue: string | null;
+            priorityOp: string;
+            priorityValue: number | null;
+            outcome: string | null;
+            requestId: string;
+          }>(
+            `SELECT h.epoch,h.state,h.expires_at <= $6::timestamptz AS expired,
+               i.subject_id AS "subjectId",i.entry_incarnation_id AS "incarnationId",
+               i.entry_revision AS "entryRevision",i.annotation_revision AS "annotationRevision",
+               i.note_op AS "noteOp",i.note_value AS "noteValue",i.priority_op AS "priorityOp",
+               i.priority_value AS "priorityValue",i.outcome,i.request_id AS "requestId"
+             FROM library.entry_annotation_review AS h
+             JOIN library.entry_annotation_review_item AS i
+               ON i.route=h.route AND i.account_id=h.account_id AND i.review_id=h.review_id
+             WHERE h.route=$1 AND h.account_id=$2 AND h.review_id=$3 AND h.epoch=$4
+               AND i.position=$5
+             FOR SHARE OF h,i`,
+            [
+              route,
+              account.accountId,
+              reviewGuard.reviewId,
+              reviewGuard.epoch,
+              reviewGuard.position,
+              time,
+            ],
+          );
+          const row = bound.rows[0];
+          if (row && (row.state !== 'open' || row.expired))
+            throw new EntryAnnotationReviewStoppedError(row.expired ? 'expired' : 'cancelled');
+          const noteOp = parsed.note.op === 'unchanged' ? 'preserve' : parsed.note.op;
+          const priorityOp = parsed.priority.op === 'unchanged' ? 'preserve' : parsed.priority.op;
+          if (
+            !row ||
+            row.subjectId !== prepared.subjectId ||
+            row.incarnationId !== parsed.entryGuard.incarnationId ||
+            row.entryRevision !== parsed.entryGuard.currentRevision ||
+            row.annotationRevision !== parsed.revision ||
+            row.noteOp !== noteOp ||
+            row.noteValue !== (parsed.note.op === 'set' ? parsed.note.value : null) ||
+            row.priorityOp !== priorityOp ||
+            row.priorityValue !== (parsed.priority.op === 'set' ? parsed.priority.value : null) ||
+            row.requestId !== requestKey ||
+            row.outcome !== null
+          )
+            throw new LibraryConflictError();
+        }
+        if (parsed.entryGuard) {
+          const entry = await tx.query<{ incarnationId: string | null; revision: number }>(
+            `SELECT incarnation_id AS "incarnationId",revision FROM library.entry
+             WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE`,
+            [route, account.accountId, prepared.subjectId],
+          );
+          const currentEntry = entry.rows[0];
+          if (
+            !currentEntry ||
+            currentEntry.incarnationId !== parsed.entryGuard.incarnationId ||
+            currentEntry.revision !== parsed.entryGuard.currentRevision
+          )
+            throw new LibraryConflictError();
+        } else {
+          // Existing entries serialize annotation no-op checks with other addressed writes.
+          await tx.query(
+            `SELECT subject_id FROM library.entry
+             WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE`,
+            [route, account.accountId, prepared.subjectId],
+          );
+          await tx.query(
+            `INSERT INTO library.entry_personal_fact
+              (route,account_id,subject_id,fact_id,annotation_revision,note,priority,annotation_updated_at,
+               annotation_transaction_id,created_at,updated_at,transaction_id)
+             VALUES($1,$2,$3,$4,0,NULL,NULL,NULL,NULL,$5,$5,$6) ON CONFLICT DO NOTHING`,
+            [
+              route,
+              account.accountId,
+              prepared.subjectId,
+              newFactId(route, prepared.subjectId),
+              time,
+              command.transactionId,
+            ],
+          );
+        }
+        let current = await tx.query<{ revision: number; note: string | null; priority: number | null }>(
           `SELECT annotation_revision AS revision,note,priority FROM library.entry_personal_fact
            WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE`,
           [route, account.accountId, prepared.subjectId],
         );
-        const before = current.rows[0];
-        if (!before || before.revision !== parsed.revision) throw new LibraryConflictError();
+        let before = current.rows[0] ?? { revision: 0, note: null, priority: null };
+        if (before.revision !== parsed.revision) throw new LibraryConflictError();
         if (before.revision >= 2_147_483_646) throw new LibraryConflictError();
         const note = applyFieldChange(before.note, parsed.note);
         const priority = applyFieldChange(before.priority, parsed.priority);
+        if (parsed.entryGuard && note === before.note && priority === before.priority)
+          return noEffect(await readPersonal(tx, route, account.accountId, prepared.subjectId));
+        if (parsed.entryGuard && current.rows.length === 0) {
+          await tx.query(
+            `INSERT INTO library.entry_personal_fact
+              (route,account_id,subject_id,fact_id,annotation_revision,note,priority,annotation_updated_at,
+               annotation_transaction_id,created_at,updated_at,transaction_id)
+             VALUES($1,$2,$3,$4,0,NULL,NULL,NULL,NULL,$5,$5,$6) ON CONFLICT DO NOTHING`,
+            [
+              route,
+              account.accountId,
+              prepared.subjectId,
+              newFactId(route, prepared.subjectId),
+              time,
+              command.transactionId,
+            ],
+          );
+          current = await tx.query<{ revision: number; note: string | null; priority: number | null }>(
+            `SELECT annotation_revision AS revision,note,priority FROM library.entry_personal_fact
+             WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE`,
+            [route, account.accountId, prepared.subjectId],
+          );
+          before = current.rows[0] ?? before;
+          if (before.revision !== parsed.revision) throw new LibraryConflictError();
+        }
         const updated = await tx.query(
           `UPDATE library.entry_personal_fact SET annotation_revision=annotation_revision+1,note=$4,priority=$5,
              annotation_updated_at=$6,annotation_transaction_id=$7,updated_at=$6,transaction_id=$7
@@ -340,6 +497,15 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
           [route, account.accountId, prepared.subjectId, note, priority, time, command.transactionId, parsed.revision],
         );
         if (updated.rowCount !== 1) throw new LibraryConflictError();
+        if (parsed.entryGuard?.reviewGuard) {
+          const review = parsed.entryGuard.reviewGuard;
+          const item = await tx.query(
+            `UPDATE library.entry_annotation_review_item SET outcome='accepted'
+             WHERE route=$1 AND account_id=$2 AND review_id=$3 AND position=$4 AND outcome IS NULL`,
+            [route, account.accountId, review.reviewId, review.position],
+          );
+          if (item.rowCount !== 1) throw new LibraryConflictError();
+        }
         return {
           value: await readPersonal(tx, route, account.accountId, prepared.subjectId),
           events: [event('com.rezics.library.entry.annotations.updated.v1', account.accountId, prepared.subjectId)],

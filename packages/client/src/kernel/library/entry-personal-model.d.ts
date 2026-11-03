@@ -41,10 +41,13 @@ export type PersonalEntry = Readonly<{
   sourceObservations: readonly PersonalEntryObservation[];
 }>;
 
+export type PersonalEntryGuard = Readonly<{ incarnationId: string; currentRevision: number }>;
 export type PersonalEntryAnnotationWrite = Readonly<{
   revision: number;
   note: PersonalEntryFieldChange<string>;
   priority: PersonalEntryFieldChange<number>;
+  /** Binds a correction to one existing entry incarnation and current revision. */
+  entryGuard?: PersonalEntryGuard;
 }>;
 export type PersonalEntrySourceAdmission = Readonly<{
   provider: string;

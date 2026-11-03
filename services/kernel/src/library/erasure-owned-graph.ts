@@ -70,6 +70,7 @@ export const OWNED_PHASES = [
   'label_consolidation',
   'vndb_import',
   'collection_archive_recovery',
+  'entry_annotation_review',
 ] as const;
 const childQueries: {
   units: typeof units;
