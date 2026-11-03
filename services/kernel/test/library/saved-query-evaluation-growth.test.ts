@@ -127,9 +127,12 @@ test('saved member pages compose across source depth and retained-label growth',
     const sourceDepth = await check('saved member wrapper with selected owner-fact depth', async (scale, previous) => {
       for (let count = previous; count < scale; count++) await f.completeSession(f.targetSubjectId);
     });
-    const retainedHistory = await check('saved member wrapper with same-original retained label history', async (scale) => {
-      await f.retainDeletedHistory(f.targetSubjectId, scale);
-    });
+    const retainedHistory = await check(
+      'saved member wrapper with same-original retained label history',
+      async (scale) => {
+        await f.retainDeletedHistory(f.targetSubjectId, scale);
+      },
+    );
 
     for (const { report, settlements, cases } of [sourceDepth, retainedHistory]) {
       expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);

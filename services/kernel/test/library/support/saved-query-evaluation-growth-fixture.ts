@@ -103,7 +103,12 @@ export async function createSavedQueryEvaluationGrowthFixture() {
       return result.rows[0]?.count ?? 0;
     }
 
-    async function retainDeletedHistory(subjectId: string, total: number, bearer = base.owner, accountId = ownerAccountId) {
+    async function retainDeletedHistory(
+      subjectId: string,
+      total: number,
+      bearer = base.owner,
+      accountId = ownerAccountId,
+    ) {
       const existing = await retainedCount(accountId, subjectId);
       for (let index = existing; index < total; index++) {
         const labelResponse = await base.send(
@@ -144,11 +149,9 @@ export async function createSavedQueryEvaluationGrowthFixture() {
       });
       expect(started.status).toBe(201);
       const session = (await started.json()) as { progressSession: { id: string; revision: number } };
-      const completed = await base.send(
-        'POST',
-        `/v1/progressSessions/${session.progressSession.id}:complete`,
-        { revision: session.progressSession.revision },
-      );
+      const completed = await base.send('POST', `/v1/progressSessions/${session.progressSession.id}:complete`, {
+        revision: session.progressSession.revision,
+      });
       expect(completed.status).toBe(200);
     }
 
