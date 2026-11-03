@@ -78,27 +78,54 @@ export async function realmSubjectBegin(client: AccessClient, dispatched: () => 
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
   };
   if (!work) return dispatch();
-  await work.run('content.realmSubject.snapshot.begin', {
-    keys: 0, points: 3, witnesses: 0, rows: 0, bytes: 128, emptySeeks: 0,
-  }, dispatch);
+  await work.run(
+    'content.realmSubject.snapshot.begin',
+    {
+      keys: 0,
+      points: 3,
+      witnesses: 0,
+      rows: 0,
+      bytes: 128,
+      emptySeeks: 0,
+    },
+    dispatch,
+  );
 }
 
 export async function realmSubjectCommit(client: AccessClient): Promise<void> {
   const work = roots.get(client);
-  const dispatch = async () => { await client.query('COMMIT'); };
+  const dispatch = async () => {
+    await client.query('COMMIT');
+  };
   if (!work) return dispatch();
-  await work.run('content.realmSubject.snapshot.commit', {
-    keys: 0, points: 1, witnesses: 0, rows: 0, bytes: 16, emptySeeks: 0,
-  }, dispatch);
+  await work.run(
+    'content.realmSubject.snapshot.commit',
+    {
+      keys: 0,
+      points: 1,
+      witnesses: 0,
+      rows: 0,
+      bytes: 16,
+      emptySeeks: 0,
+    },
+    dispatch,
+  );
 }
 
 /** Avoid generated run() catalogue preparation inside an admitted point plan. */
 export async function realmSubjectPartition(client: AccessClient, partitionNo: number): Promise<Partition | null> {
   const result = await realmSubjectPoint<{
-    partitionNo: number; node: string; writeState: Partition['writeState'];
-    movedTo: string | null; epoch: number; position: string;
-  }>(client, 'content.realmSubject.partition', [partitionNo], () =>
-    client.query(partitionRead.sql, [partitionNo]), { keys: 1, rows: 1, bytes: 65536 });
+    partitionNo: number;
+    node: string;
+    writeState: Partition['writeState'];
+    movedTo: string | null;
+    epoch: number;
+    position: string;
+  }>(client, 'content.realmSubject.partition', [partitionNo], () => client.query(partitionRead.sql, [partitionNo]), {
+    keys: 1,
+    rows: 1,
+    bytes: 65536,
+  });
   const row = result.rows[0];
   return row ? { ...row, position: BigInt(row.position) } : null;
 }

@@ -65,10 +65,14 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
  * A new epoch needs a new census attempt, never reuse of this prepared evidence.
  */
 function currentHome(before: Observation, after: Observation): boolean {
-  return before.anchors.every((previous) => after.anchors.some((current) =>
-    current.partition.partitionNo === previous.partition.partitionNo &&
-    current.epoch === previous.epoch && current.position >= previous.position,
-  ));
+  return before.anchors.every((previous) =>
+    after.anchors.some(
+      (current) =>
+        current.partition.partitionNo === previous.partition.partitionNo &&
+        current.epoch === previous.epoch &&
+        current.position >= previous.position,
+    ),
+  );
 }
 
 /** Authentication binds the original actor object inside Access. Keep that
@@ -76,9 +80,9 @@ function currentHome(before: Observation, after: Observation): boolean {
  * principal fingerprint additionally detects mutation across released homes.
  */
 function principalSignature(actor: Actor): string {
-  return actor.kind === 'anonymous' ? hash(['anonymous']) : hash([
-    actor.kind, actor.accountId, actor.clientId, actor.requestedBy, actor.authnEpoch, actor.scopes,
-  ]);
+  return actor.kind === 'anonymous'
+    ? hash(['anonymous'])
+    : hash([actor.kind, actor.accountId, actor.clientId, actor.requestedBy, actor.authnEpoch, actor.scopes]);
 }
 
 function route(id: string): number {
@@ -101,12 +105,24 @@ async function prepareAccess(
   action: 'realm:read' | 'space:read' | 'subject:read',
 ): Promise<AccessCheck> {
   const identity = { id, route: route(id) };
-  const eligibility = action === 'realm:read' ? realmReadEligibility(identity)
-    : action === 'space:read' ? spaceReadEligibility(identity) : subjectReadEligibility(identity);
+  const eligibility =
+    action === 'realm:read'
+      ? realmReadEligibility(identity)
+      : action === 'space:read'
+        ? spaceReadEligibility(identity)
+        : subjectReadEligibility(identity);
   if (!dependencies.access.prepare) context.work.unavailable('Content Realm Subject native Access preparation');
-  const check = await accessCheck(dependencies.access, context.actor, action, { ...identity, eligibility }, {
-    pool: dependencies.pool, deadline: context.deadline, work: context.work,
-  });
+  const check = await accessCheck(
+    dependencies.access,
+    context.actor,
+    action,
+    { ...identity, eligibility },
+    {
+      pool: dependencies.pool,
+      deadline: context.deadline,
+      work: context.work,
+    },
+  );
   if (!check.work) context.work.unavailable(`Content Realm Subject ${action} native work producer`);
   return check;
 }
@@ -122,8 +138,13 @@ async function nativePoint<I extends Record<string, unknown>, R extends Record<s
   keys = 1,
 ): Promise<R | null> {
   const values = statement.params.map((name) => input[name]);
-  const result = await realmSubjectPoint(client, `content.realmSubject.${operation}`, values,
-    () => client.query<R>(statement.sql, values), { keys, rows: 4 * keys + 2, bytes: 65536 });
+  const result = await realmSubjectPoint(
+    client,
+    `content.realmSubject.${operation}`,
+    values,
+    () => client.query<R>(statement.sql, values),
+    { keys, rows: 4 * keys + 2, bytes: 65536 },
+  );
   if (result.rows.length > 1) throw new Error('Native exact point returned multiple rows');
   return result.rows[0] ?? null;
 }
@@ -139,8 +160,9 @@ async function observeParent(
 ): Promise<Observation | null> {
   const realm = await prepareAccess(dependencies, context, realmId, 'realm:read');
   const parameters = { route: route(realmId), id: realmId, at: 'infinity', subject: null };
-  const initial = await snapshot(dependencies, realmId, context,
-    (client) => nativePoint(client, 'parent.binding', bindingRead, parameters, 3));
+  const initial = await snapshot(dependencies, realmId, context, (client) =>
+    nativePoint(client, 'parent.binding', bindingRead, parameters, 3),
+  );
   if (!initial.value) return null;
   const parent: Binding = initial.value;
   const space = await prepareAccess(dependencies, context, parent.space_id, 'space:read');
@@ -151,11 +173,28 @@ async function observeParent(
     if (accounts.length) {
       // The clock observation belongs to this native snapshot; no caller time can
       // move a ban interval. Access independently mints its ordinary live T.
-      const at = await realmSubjectPoint<{ at: string }>(client, 'content.realmSubject.time', [],
-        () => client.query('SELECT clock_timestamp()::text AS at'), { keys: 0, rows: 1, bytes: 128 });
-      if (await nativePoint(client, 'parent.ban', bansRead, {
-        route: route(realmId), realm_id: realmId, account_ids: accounts, at: at.rows[0]!.at,
-      }, accounts.length)) return false;
+      const at = await realmSubjectPoint<{ at: string }>(
+        client,
+        'content.realmSubject.time',
+        [],
+        () => client.query('SELECT clock_timestamp()::text AS at'),
+        { keys: 0, rows: 1, bytes: 128 },
+      );
+      if (
+        await nativePoint(
+          client,
+          'parent.ban',
+          bansRead,
+          {
+            route: route(realmId),
+            realm_id: realmId,
+            account_ids: accounts,
+            at: at.rows[0]!.at,
+          },
+          accounts.length,
+        )
+      )
+        return false;
     }
     return true;
   });
@@ -190,8 +229,11 @@ async function observeSubject(
 
 function validate(input: RealmSubjectDisclosureInput): RealmSubjectDisclosureInput {
   route(input.realmId);
-  if (!Array.isArray(input.candidates) || input.candidates.length < 1 ||
-      input.candidates.length > REALM_SUBJECT_DISCLOSURE_BATCH)
+  if (
+    !Array.isArray(input.candidates) ||
+    input.candidates.length < 1 ||
+    input.candidates.length > REALM_SUBJECT_DISCLOSURE_BATCH
+  )
     throw new RangeError('Realm Subject disclosure accepts 1 to 8 candidates');
   const candidates = input.candidates.map(({ threadId, openingPostId, subjectId }) => {
     if (route(threadId) !== route(openingPostId)) throw new TypeError('Opening must share the original thread route');
@@ -231,15 +273,21 @@ export async function prepareRealmSubjectDisclosure(
     parent = await observeParent(dependencies, request.realmId, context);
     for (const candidate of request.candidates) {
       requirePrincipal();
-      if (!parent) { prepared.push({ state: 'withheld' }); continue; }
+      if (!parent) {
+        prepared.push({ state: 'withheld' });
+        continue;
+      }
       const subject = await observeSubject(dependencies, candidate.subjectId, context);
-      if (!subject) { prepared.push({ state: 'withheld' }); continue; }
+      if (!subject) {
+        prepared.push({ state: 'withheld' });
+        continue;
+      }
       const source = await prepareRealmSubjectThreadDisclosure(dependencies, candidate, request.realmId, context);
       prepared.push(source.state === 'withheld' ? { state: 'withheld' } : { source, parent, subject });
     }
   } catch (error) {
     const state = denied(error) ? 'withheld' : 'unknown';
-    prepared.splice(0, prepared.length, ...request.candidates.map(() => ({ state } as RealmSubjectEvidence)));
+    prepared.splice(0, prepared.length, ...request.candidates.map(() => ({ state }) as RealmSubjectEvidence));
   }
   // A consumed handle cannot be used to renew evidence after its fixed deadline
   // or under a mutated principal. This branch performs no additional native IO.
@@ -252,7 +300,7 @@ export async function prepareRealmSubjectDisclosure(
       // Memoization limits final work; it does not turn evidence into a cache.
       if (Date.now() >= context.deadline || principalSignature(context.actor) !== principal)
         return Promise.resolve(expiredEvidence);
-      return finished ??= finish();
+      return (finished ??= finish());
     },
   });
 
@@ -264,33 +312,52 @@ export async function prepareRealmSubjectDisclosure(
       for (let index = 0; index < prepared.length; index++) {
         requirePrincipal();
         const item = prepared[index]!;
-        if ('state' in item) { results.push(item); continue; }
+        if ('state' in item) {
+          results.push(item);
+          continue;
+        }
         if (!finalParent || finalParent.signature !== item.parent.signature || !currentHome(item.parent, finalParent)) {
-          results.push({ state: 'withheld' }); continue;
+          results.push({ state: 'withheld' });
+          continue;
         }
         const candidate = request.candidates[index]!;
         const subject = await observeSubject(dependencies, candidate.subjectId, context);
-        const source = subject && subject.signature === item.subject.signature && currentHome(item.subject, subject)
-          ? await item.source.final() : null;
+        const source =
+          subject && subject.signature === item.subject.signature && currentHome(item.subject, subject)
+            ? await item.source.final()
+            : null;
         if (!subject || !source) {
-          results.push({ state: 'withheld' }); continue;
+          results.push({ state: 'withheld' });
+          continue;
         }
-        if (item.source.state === 'absent') { results.push({ state: 'absent' }); continue; }
+        if (item.source.state === 'absent') {
+          results.push({ state: 'absent' });
+          continue;
+        }
         const before = hash([item.source.signature, item.parent.signature, item.subject.signature]);
         const final = hash([source.signature, finalParent.signature, subject.signature]);
-        results.push({ state: 'positive', freshness: {
-          before, final, expiresAt: context.deadline,
-          anchors: [...source.anchors, ...finalParent.anchors, ...subject.anchors],
-        } });
+        results.push({
+          state: 'positive',
+          freshness: {
+            before,
+            final,
+            expiresAt: context.deadline,
+            anchors: [...source.anchors, ...finalParent.anchors, ...subject.anchors],
+          },
+        });
       }
       requirePrincipal();
       return Object.freeze(results.map((result) => Object.freeze(result)));
     } catch (error) {
       // No partial success after a dependency failure. In particular an absent
       // producer cannot masquerade as a complete empty population.
-      return Object.freeze(request.candidates.map(() => Object.freeze({
-        state: denied(error) ? 'withheld' as const : 'unknown' as const,
-      })));
+      return Object.freeze(
+        request.candidates.map(() =>
+          Object.freeze({
+            state: denied(error) ? ('withheld' as const) : ('unknown' as const),
+          }),
+        ),
+      );
     }
   }
 }

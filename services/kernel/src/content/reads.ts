@@ -3,8 +3,12 @@ import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { createHash } from 'node:crypto';
 import {
-  bindRealmSubjectReadWork, realmSubjectBegin, realmSubjectCommit,
-  realmSubjectPartition, realmSubjectContentPoint, realmSubjectReadRoot,
+  bindRealmSubjectReadWork,
+  realmSubjectBegin,
+  realmSubjectCommit,
+  realmSubjectPartition,
+  realmSubjectContentPoint,
+  realmSubjectReadRoot,
   type RealmSubjectReadContext,
 } from './realm-subject-disclosure-work.ts';
 import { parseStoredDocument, serializeDocument } from '@rezics/document';
@@ -212,7 +216,9 @@ export async function snapshot<T>(
       bindRealmSubjectReadWork(client, context.work);
       let began = false;
       try {
-        await realmSubjectBegin(client, () => { began = true; });
+        await realmSubjectBegin(client, () => {
+          began = true;
+        });
         const partitionNo = partitionOf(route(id));
         const partition = context.work
           ? await realmSubjectPartition(client, partitionNo)
@@ -440,15 +446,21 @@ export async function prepareBoardPageDecisions(
 }
 
 async function point(
-  client: AccessClient, kind: Kind, id: string, threadId = id, bytes = false, nativeEligibility = false,
+  client: AccessClient,
+  kind: Kind,
+  id: string,
+  threadId = id,
+  bytes = false,
+  nativeEligibility = false,
 ): Promise<Row | null> {
   const parameters = { route: route(id), id, kind, thread_id: threadId, include_body: bytes };
   const values = read.params.map((name) => parameters[name as keyof typeof parameters]);
   const dispatch = () => client.query<Row>(read.sql, values);
   // Access's native eligibility producer already accounts its own verification.
-  const { rows } = nativeEligibility || !realmSubjectReadRoot(client)
-    ? await dispatch()
-    : await realmSubjectContentPoint(client, kind, values, dispatch);
+  const { rows } =
+    nativeEligibility || !realmSubjectReadRoot(client)
+      ? await dispatch()
+      : await realmSubjectContentPoint(client, kind, values, dispatch);
   return rows.length === 1 ? rows[0]! : null;
 }
 
@@ -539,7 +551,9 @@ export function readResource(
       },
       async verify(context) {
         const { client, actor, at } = context;
-        const current = await native.point(context, () => point(client, row.kind, row.id, row.thread_id ?? row.id, false, true));
+        const current = await native.point(context, () =>
+          point(client, row.kind, row.id, row.thread_id ?? row.id, false, true),
+        );
         if (!current || signature(current) !== signature(row) || !admissible(current, actor, tombstone))
           throw new ContentNotFoundError();
         if (
@@ -591,7 +605,8 @@ async function prepare(
   const action = `${row.kind}:read`;
   const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder, withheldReference);
   const accessContext = sharedContext ?? {
-    pool: dependencies.pool, deadline: context.deadline,
+    pool: dependencies.pool,
+    deadline: context.deadline,
     ...(context.work ? { work: context.work } : {}),
   };
   if (erasedProof) {
@@ -1580,19 +1595,24 @@ export async function prepareRealmSubjectThreadDisclosure(
   candidate: Readonly<{ threadId: string; openingPostId: string; subjectId: string }>,
   realmId: string,
   context: RealmSubjectReadContext,
-): Promise<Readonly<{
-  state: 'positive' | 'absent' | 'withheld';
-  signature: string | null;
-  anchors: readonly AnchoredPosition[];
-  final(): Promise<Readonly<{ signature: string; anchors: readonly AnchoredPosition[] }> | null>;
-}>> {
+): Promise<
+  Readonly<{
+    state: 'positive' | 'absent' | 'withheld';
+    signature: string | null;
+    anchors: readonly AnchoredPosition[];
+    final(): Promise<Readonly<{ signature: string; anchors: readonly AnchoredPosition[] }> | null>;
+  }>
+> {
   const observed = await snapshot(dependencies, candidate.threadId, context, async (client) => {
     const thread = await point(client, 'thread', candidate.threadId);
     return thread?.first_post_id ? chain(client, candidate.threadId, thread.first_post_id) : null;
   });
   const initial = observed.value;
   const unavailable = {
-    state: 'withheld' as const, signature: null, anchors: [], final: async () => null,
+    state: 'withheld' as const,
+    signature: null,
+    anchors: [],
+    final: async () => null,
   };
   if (!initial?.thread.board_id || !initial.revision || !initial.posts[0]) return unavailable;
   const boardObservation = await observeBoard(dependencies, initial.thread.board_id, context);
@@ -1602,15 +1622,18 @@ export async function prepareRealmSubjectThreadDisclosure(
   const checks: AccessCheck[] = [];
   for (const row of rows) {
     // Exact positive evidence never comes from erased or withheld placeholders.
-    if (!['published', 'protected'].includes(row.visibility) || row.availability !== 'available')
-      return unavailable;
+    if (!['published', 'protected'].includes(row.visibility) || row.availability !== 'available') return unavailable;
     checks.push(await prepare(dependencies, row, context, { observed, board }));
   }
   if (initial.revision.availability !== 'available') return unavailable;
-  const sourceSignature = (value: Chain) => JSON.stringify([
-    fingerprint(value), value.revision?.subject_ids, value.revision?.sha256?.toString('hex'),
-    value.revision?.licence, board.value,
-  ]);
+  const sourceSignature = (value: Chain) =>
+    JSON.stringify([
+      fingerprint(value),
+      value.revision?.subject_ids,
+      value.revision?.sha256?.toString('hex'),
+      value.revision?.licence,
+      board.value,
+    ]);
   const baseline = sourceSignature(initial);
   const allowed = async (client: AccessClient) => {
     const current = await chain(client, candidate.threadId, initial.posts[0]!.id);
@@ -1620,8 +1643,10 @@ export async function prepareRealmSubjectThreadDisclosure(
   };
   if (!(await snapshot(dependencies, candidate.threadId, context, allowed)).value) return unavailable;
   if (!(await boardObservation.recheck())) return unavailable;
-  const exact = initial.thread.first_post_id === candidate.openingPostId &&
-    initial.posts[0].id === candidate.openingPostId && initial.posts[0].parent_id === null &&
+  const exact =
+    initial.thread.first_post_id === candidate.openingPostId &&
+    initial.posts[0].id === candidate.openingPostId &&
+    initial.posts[0].parent_id === null &&
     initial.revision.parent_id === candidate.openingPostId &&
     initial.revision.board_id === initial.thread.board_id &&
     initial.revision.subject_ids.includes(candidate.subjectId) &&
@@ -1635,8 +1660,13 @@ export async function prepareRealmSubjectThreadDisclosure(
     async final() {
       // Reuse the original baseline. Re-reading cannot bless a changed source.
       const current = await snapshot(dependencies, candidate.threadId, context, allowed);
-      if (!current.value || current.anchor.epoch !== observed.anchor.epoch ||
-          current.anchor.position < observed.anchor.position || !(await boardObservation.recheck())) return null;
+      if (
+        !current.value ||
+        current.anchor.epoch !== observed.anchor.epoch ||
+        current.anchor.position < observed.anchor.position ||
+        !(await boardObservation.recheck())
+      )
+        return null;
       return {
         signature: createHash('sha256').update(baseline).digest('hex'),
         anchors: [current.anchor],
