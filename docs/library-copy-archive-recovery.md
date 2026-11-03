@@ -44,7 +44,8 @@ holding operands are malformed; null means unstored. Native v1 uses full SQL cal
 rejected rather than widened or guessed. Old vocabulary remains raw evidence beside its original pins.
 No current identity, profile meaning or copy admission is inferred by inspection.
 
-Section coverage counts records and encoded record bytes actually present. A declared section with zero records is empty. `omissions` retains
+Section coverage counts records and encoded record bytes actually present. Byte counts absent on older retained
+uploads are unavailable, never zero. A declared section with zero records is empty. `omissions` retains
 the producer's explicit exclusions; it is not interpreted as an empty section. v1 cannot represent an unavailable
 installed source as a completed capture: absent expected sections are rejected. Sessions and exact unit rows are
 retained for review; History, journal/reflection, entries/labels, occurrences, Collections, annotations, provider

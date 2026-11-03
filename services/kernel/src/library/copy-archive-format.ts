@@ -68,7 +68,8 @@ export type CopyArchiveManifest = CopyArchiveManifestBase &
 export type ArchiveSectionCoverage = {
   section: string;
   records: number;
-  recordBytes: number;
+  /** Absent on uploads retained before per-section byte accounting was installed. */
+  recordBytes?: number;
   support: 'evidence-only' | 'unsupported';
 };
 export type ArchivedProgressMeasure = { unit: string; amount: string | null; total: string | null };
@@ -102,7 +103,7 @@ export type ArchivedProgressUnit = {
 };
 export type ParsedCopyArchive = {
   manifest: CopyArchiveManifest;
-  coverage: ArchiveSectionCoverage[];
+  coverage: (ArchiveSectionCoverage & { recordBytes: number })[];
   holdings: { ordinal: number; evidence: ArchivedHolding }[];
   progress: {
     ordinal: number;
