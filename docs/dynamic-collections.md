@@ -296,7 +296,7 @@ Constructed response examples below illustrate the exported union; they are not 
 { state: 'ready', summaries: [{
   kind: 'collection', id, destination: `/collections/${id}`, membershipKind: 'dynamic',
   title: 'Reading list', description: null, visibility: 'public', revision: 2,
-  presentationKind: null, presentationKindSource: 'default', cover: null, coverSource: 'pending',
+  presentationKind: null, presentationKindSource: 'mixed', cover: null, coverSource: 'pending',
   outputGeneration: completedGenerationA
 }] }
 { state: 'unavailable', reason: 'native_authority' }

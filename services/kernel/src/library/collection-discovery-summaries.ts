@@ -110,8 +110,9 @@ async function round(
   requireAccessDeadline(context.deadline);
   // Foreign authority is prepared while no Library connection is held. Repeat on final disclosure.
   const decisions = await prepareReadDecisions(dependencies.access, {
-    actor: context.actor, actions: new Set(['collection:read']), time: context.time,
-    context: { pool: dependencies.pool, deadline: context.deadline, time: context.time },
+    actor: context.actor, actions: new Set(['collection:read']),
+    ...(context.time ? { time: context.time } : {}),
+    context: { pool: dependencies.pool, deadline: context.deadline, ...(context.time ? { time: context.time } : {}) },
   });
   return withConnection(dependencies.pool, async (connection) => {
     const client = deadlineClient(connection, context.deadline);

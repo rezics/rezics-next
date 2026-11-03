@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { authoritativeTimeValue, mintReadTime, releaseOperationalTime, type AuthoritativeTime } from '../../src/command/command.ts';
+import { withConnection } from '../../src/database/pool.ts';
 import { readPublicCollectionDiscoverySummaries as hydrate } from '../../src/library/collection-discovery-summaries.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
@@ -124,3 +126,27 @@ test('validation precedes native I/O, including full-key partition bounds and th
     await expect(hydrate(dependencies, ids, context(id))).rejects.toBeInstanceOf(RangeError);
   expect(await hydrate(dependencies, [], context(id))).toEqual({ state: 'ready', summaries: [] });
 });
+
+test('read times are released by their owner and unrelated native infrastructure failures propagate', async () => {
+  const row = await f.collection({ visibility: 'public' });
+  const base = f.runtime.identity.access;
+  const captured: AuthoritativeTime[] = [];
+  const access: Access = { ...base, async prepareReadDecisions(input) {
+    const native = await base.prepareReadDecisions!(input);
+    return { ...native, async decide(client, batch, time) {
+      captured.push(time!);
+      return native.decide(client, batch, time);
+    } };
+  } };
+  expect((await hydrate(deps(access), [row.id], context(row.id))).state).toBe('ready');
+  expect(captured).toHaveLength(2);
+  for (const time of captured) expect(() => authoritativeTimeValue(time)).toThrow();
+  const time = await withConnection(f.database.pool, (client) => mintReadTime(client));
+  try {
+    expect((await hydrate(deps(access), [row.id], { ...context(row.id), time })).state).toBe('ready');
+    expect(authoritativeTimeValue(time)).toBeString();
+  } finally { releaseOperationalTime(time); }
+  const failure = new Error('Native owner checkout failed');
+  const broken = { connect: async () => { throw failure; } } as unknown as typeof f.database.pool;
+  await expect(hydrate({ ...deps(), pool: broken }, [row.id], context(row.id))).rejects.toBe(failure);
+}, 120000);
