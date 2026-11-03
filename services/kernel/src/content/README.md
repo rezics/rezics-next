@@ -970,8 +970,10 @@ is implemented here. Rendered acceptance and connected physical cost evidence re
   check and evaluates it in the final source snapshot. Other viewers add the existing moderator formula. The
   response includes no media; therefore no media or target-text reader runs. All preparation releases source checkout.
 - Bound: let I be the distinct actor/principal IDs (1–2). Identity equality uses `2I` independently anchored
-  snapshots, `8I` statements including `4I` transaction controls, `2I` partition PKs and `2I` Account PKs. Two
-  optional context calls each contain two native header rounds: for a post at most 33 ancestor levels plus one
+  snapshots, `8I` statements including `4I` transaction controls, `2I` partition PKs and `2I` Account PKs.
+  A delegated actor additionally makes two native assignment probes, including their principal/assignment
+  retained joins; an undelegated actor adds no assignment SQL. Two optional context calls each contain two
+  native header rounds: for a post at most 33 ancestor levels plus one
   thread, board and Realm per round; a board uses only its board/Realm header rounds. These bounds do not replace
   the primitives' nested Account, assignment, inverse-membership, authority and retained-history costs. Auth adds
   its actual verifier/key-fetch and Account/client/assignment work; no callback is charged as zero. There is no

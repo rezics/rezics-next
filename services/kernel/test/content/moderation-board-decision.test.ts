@@ -86,7 +86,9 @@ test('native board action, authorized replay, durable projection and private ins
   const page = await read(history(board, 'board'));
   expect(page.response.status).toBe(200);
   expect(page.response.headers.get('cache-control')).toBe('private, no-store');
-  expect(page.body).toEqual({ entries: [detail.body], nextCursor: null });
+  const { viewer, targetContext: _targetContext, ...retainedDecision } = detail.body;
+  expect(viewer).toMatchObject({ affectedAuthor: false, appeal: { state: 'unsupported', reason: 'board' } });
+  expect(page.body).toEqual({ entries: [retainedDecision], nextCursor: null });
   expect((await f.call('GET', exact)).response.status).toBe(404);
   expect((await read(exact, f.people.reporter.bearer)).response.status).toBe(404);
   expect((await read(`/v1/boards/${board}`, f.people.reporter.bearer)).response.status).toBe(404);

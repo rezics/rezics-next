@@ -220,8 +220,23 @@ describe('moderation decisions through HTTP and committed effects', () => {
         decidedAt: new Date(notice.decided_at).toISOString(),
         appealDeadline: new Date(new Date(notice.decided_at).getTime() + 183 * 86400000).toISOString(),
         appeal: null,
+        viewer: {
+          affectedAuthor: true,
+          observedAt: expect.any(String),
+          appeal: { state: 'permitted' },
+        },
+        targetContext: expect.objectContaining({ state: expect.stringMatching(/^(concealed|unavailable)$/) }),
       });
-      expect((await call('GET', path, undefined, undefined, fixture.principal)).body).toEqual(author.body);
+      const moderator = await call('GET', path, undefined, undefined, fixture.principal);
+      expect(moderator.response.status).toBe(200);
+      const { viewer, targetContext: _moderatorContext, ...moderatorDecision } = moderator.body;
+      const { viewer: _authorViewer, targetContext: _authorContext, ...authorDecision } = author.body;
+      expect(moderatorDecision).toEqual(authorDecision);
+      expect(viewer).toEqual({
+        affectedAuthor: false,
+        observedAt: expect.any(String),
+        appeal: { state: 'unavailable', reason: 'not_affected_author' },
+      });
       const stranger = await call('GET', path, undefined, undefined, fixture.recipient);
       const unknown = await call(
         'GET',

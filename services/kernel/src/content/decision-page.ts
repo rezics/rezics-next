@@ -139,7 +139,8 @@ export async function readDecisionPage(
         const value = contexts.get(`${ref.threadId}/${ref.postId ?? ''}`);
         return value ? { state: 'available', kind: 'thread', ...value } : { state: 'concealed' };
       } catch (error) {
-        if (!dependencyFailure(error)) throw error;
+        if (!dependencyFailure(error) && !(error instanceof RangeError && error.message === 'Invalid read decision actions'))
+          throw error;
         return { state: 'unavailable' };
       }
     };
