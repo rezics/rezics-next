@@ -41,6 +41,7 @@ export type {
   RealmClaimReviewPresentation,
   RealmClaimReviewQuery,
 } from './kernel/community/claim-review-page';
+export type { PublicationCommand, RealmPublicationPreparation } from './kernel/community/publication-preparation.ts';
 
 type Routes = KernelType['~Routes']['v1'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];

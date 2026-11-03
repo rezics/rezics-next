@@ -32,8 +32,10 @@ mirroring the documented reference slice; `readRealmPublicationPreparation` retu
 Native source, installed client, supplied-port tests and public runtime delivery are separate boundaries.
 
 Decision: keep confirmation unavailable in the mounted shelf until the generated preparation binding arrives;
-never fall back to shelf heads or the adopted-only point read. Existing live publisher and capture handles stay
-with their owners; full Realm/Space composition, membership and Board consumers remain independent.
+expose the current Web DTO as a standalone package type while the generated route declaration is absent, without
+adding transport or enabling confirmation. Never fall back to shelf heads or the adopted-only point read. Existing
+live publisher and capture handles stay with their owners; full Realm/Space composition, membership and Board
+consumers remain independent.
 
 ## Cost
 
