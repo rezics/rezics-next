@@ -7,6 +7,7 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { RequestContext } from './model.ts';
 import { ContentNotFoundError, readBoard } from './reads.ts';
 import {
+  declareWatchHistory,
   requireWatchOwner,
   watchAuthorization,
   watchOwner,
@@ -84,6 +85,7 @@ export async function setBoardWatch(
       );
       const current = result.rows[0] ?? { watching: false, revision: 0 };
       if (current.revision !== input.expectedRevision) throw new ProblemError('conflict');
+      await declareWatchHistory(tx, 'content.board.watch', owner, current.watching !== input.watching);
       if (current.watching === input.watching) return { value: current, events: [] };
       const revision = current.revision + 1;
       await tx.query(

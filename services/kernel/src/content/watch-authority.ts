@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { resourceAuthorization } from '../access/index.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { principalCommandIdentity, type CommandAuthorization } from '../command/command.ts';
+import { principalCommandIdentity, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
+import { declareCommandHistory } from '../history/record.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
@@ -62,4 +64,18 @@ export function watchReceipt(actor: Actor, kind: string, key: string, input: unk
       .update(JSON.stringify([principalCommandIdentity(actor), input]))
       .digest(),
   };
+}
+
+/** Enroll private receipt/event copies in the existing account erasure protocol. */
+export async function declareWatchHistory(
+  tx: CommandTransaction,
+  kind: 'content.board.watch' | 'content.watch.remove',
+  owner: ReturnType<typeof watchOwner>,
+  changed: boolean,
+) {
+  const accounts = [{ accountId: owner.id, accountRoute: owner.route, roles: ACCOUNT_ROLE_BITS.owner }];
+  await declareCommandHistory(tx, kind, {
+    response: { artifactType: 'command-receipt/v1', accounts },
+    events: changed ? [{ artifactType: 'outbox-event/v1', accounts }] : [],
+  });
 }

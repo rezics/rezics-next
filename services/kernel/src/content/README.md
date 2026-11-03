@@ -2078,6 +2078,8 @@ ready population. The factory and disclosure owners remain the sole owners of th
 Decision: board watch PUT sets an explicit `watching` boolean with `expectedRevision`; management requires
 `kind=thread|board`, and an unavailable row retains only its personal removal identity and subscription metadata.
 Private watch methods refuse an operator acting as a different account, even with a cursor from that account.
+Native watch receipts and private change events enroll their account owner in shared history erasure; the permanent
+command-kind assignments are `content.board.watch=8` and `content.watch.remove=9`.
 `board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
 
 | Consumer             | Native method and mounted operation                                                            | Result                                                                                        |
@@ -2119,7 +2121,7 @@ retention includes board source progress.
   at most one row mutation, and the native `runCommand` envelope for writes. False set and removal omit board reads.
 - Bound: read is `Q_self + Q_board + Q_point`; set is `Q_self + Q_board + C + 2*Q_point`; removal is
   `Q_self + C + 2*Q_point`. Each domain point is one statement and at most one original row. `C` includes the actual
-  shared authorization, time, transaction controls, partition, receipt, outbox and write basis. Retry reauthorizes,
+  shared authorization, time, transaction controls, partition, receipt, outbox, history account guards/locators and write basis. Retry reauthorizes,
   reads its receipt and skips the body. No-op/retry has nonzero cost. Each mutation maintains a fixed set of indexes.
 - Growth check: `board-watch-growth.test.ts` runs the real mounted read and same-key set retry at 256/1024/4096
   subscriptions alongside both management selections and durable delivery.

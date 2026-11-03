@@ -9,6 +9,7 @@ import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { RequestContext } from './model.ts';
 import { ContentNotFoundError, readBoard, readThread } from './reads.ts';
 import {
+  declareWatchHistory,
   requireWatchOwner,
   watchAuthorization,
   watchOwner,
@@ -185,6 +186,7 @@ export async function removeWatch(
       );
       const current = result.rows[0];
       if (current && current.revision !== input.expectedRevision) throw new ProblemError('conflict');
+      await declareWatchHistory(tx, 'content.watch.remove', owner, !!current);
       if (current) {
         await tx.query(
           input.kind === 'thread'
