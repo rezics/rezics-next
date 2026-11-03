@@ -54,6 +54,7 @@ import { noticeRoutes } from '../content/notice-routes.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
+import { libraryExportRoutes } from '../library/library-export-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
 import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
 import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
@@ -603,6 +604,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       });
     },
   });
+  libraryExportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool, tokens, clock, workClient,
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+  });
   const labels = personalLabelRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     routeKey: dependencies.routeKey,
     pool: dependencies.pool,
@@ -757,6 +762,7 @@ type KernelComposition = ZoneComposition &
   ReturnType<typeof pinRoutes> &
   ReturnType<typeof personalLabelRoutes> &
   ReturnType<typeof personalLibraryRoutes> &
+  ReturnType<typeof libraryExportRoutes> &
   ReturnType<typeof communityRoutes> &
   ReturnType<typeof exposureRoutes> &
   ReturnType<typeof subjectPageRoutes> &
