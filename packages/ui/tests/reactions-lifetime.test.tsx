@@ -223,7 +223,7 @@ test('shared Reactions serialize original choices and retire every obsolete visi
     browser = await chromium.launch();
     page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     await page.setContent('<!doctype html><html lang="en"><body><div id="app"></div></body></html>');
-    await page.addScriptTag({ content: built.outputs[0]!.text() });
+    await page.addScriptTag({ content: await built.outputs[0]!.text() });
 
     const primary = page.getByRole('region', { name: 'Primary' });
     const secondary = page.getByRole('region', { name: 'Secondary' });
