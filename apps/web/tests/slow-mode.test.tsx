@@ -158,7 +158,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     const retry = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_retry());
     await act(async () => { await user.click(retry!); });
     expect(submits).toHaveLength(2);
-    expect(submits[1]!.key).not.toBe(submits[0]!.key);
+    expect(submits[1]!.key).toBe(submits[0]!.key);
     expect(host.textContent).toContain(m.slow_mode_saved());
     client.setQueryData(sessionQuery.queryKey, { ...owner, csrfToken: 'replacement-session' });
     for (let attempt = 0; attempt < 25 && host.textContent?.includes(m.slow_mode_saved()); attempt++)
