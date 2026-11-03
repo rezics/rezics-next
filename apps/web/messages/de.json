@@ -5389,6 +5389,7 @@
   "home_kinds_retry": "Typen erneut laden",
   "home_kinds_next": "Weitere Typen",
   "home_feed_kind_review": "Rezension",
+  "home_feed_review_cited_units": "Zitierter Wert: {units} Einheiten",
   "library_type_action": "Typ: {type}",
   "library_types_heading": "Typ auswählen",
   "library_types_description": "Wähle aus den Typen in deiner Bibliothek, jeweils eine Seite. Der Filter gilt für erfasste Einträge; „Weiterlesen“ bleibt unverändert.",
