@@ -35,6 +35,10 @@ export declare function createRealmRatingQuestion(deps: {
     realmId: string;
     meaning: string;
     revision: number;
+    lifecycle: {
+        state: string;
+        revision: number;
+    };
     label: string;
     canonicalLabel: string;
     labelRevision: number;

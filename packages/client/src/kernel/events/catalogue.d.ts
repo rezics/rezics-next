@@ -1523,11 +1523,20 @@ declare const productEventTypes: {
         ownerId: Type.TString;
         revision: Type.TLiteral<1>;
     }>;
+    readonly 'com.rezics.rating.question.lifecycle-changed.v1': Type.TObject<{
+        questionId: Type.TString;
+        realmId: Type.TString;
+        state: Type.TUnion<[Type.TLiteral<"active">, Type.TLiteral<"retired">]>;
+        revision: Type.TInteger;
+        generation: Type.TString;
+    }>;
     readonly 'com.rezics.rating.realm_rank.changed.v1': Type.TObject<{
         questionId: Type.TString;
         populationId: Type.TString;
         subjectId: Type.TString;
         revision: Type.TString;
+        lifecycleState: Type.TUnion<[Type.TLiteral<"active">, Type.TLiteral<"retired">]>;
+        lifecycleRevision: Type.TInteger;
     }>;
     readonly "com.rezics.rating.identity-repair.page.v1": Type.TObject<{
         voterId: Type.TString;

@@ -21,6 +21,10 @@ export type RatingQuestionView = {
     meaning?: string;
     canonicalLabel?: string;
     labelRevision?: number;
+    lifecycle?: {
+        state: 'active' | 'retired';
+        revision: number;
+    };
 };
 /** Keep the legacy wire shape exact. Realm definitions add explicit provenance and
  * meaning; ownerId is the authoring account and is never used as a Realm selector. */
@@ -36,6 +40,8 @@ export declare function ratingQuestionView(row: {
     meaning?: string | null;
     presentationLabel?: string | null;
     labelRevision?: number | null;
+    lifecycleState?: string | null;
+    lifecycleRevision?: number | null;
 }): RatingQuestionView;
 /** Existing Global definitions authority, with no held connection during preparation. */
 export declare function requireGlobalQuestionRead(deps: Dependencies, actor: Actor, deadline: number): Promise<void>;
@@ -65,10 +71,12 @@ export declare function readSelectedQuestionDirectory(deps: Dependencies, actor:
     after: string | null;
     limit: number;
     realmId?: string;
+    lifecycleGeneration?: string;
 }, deadline: number): Promise<{
     ratingQuestions: RatingQuestionView[];
     after: string | null;
     hasMore: boolean;
+    lifecycleGeneration: string;
 }>;
 /** Exact released measurement identity; labels do not change the measurement. */
 export declare function ratingQuestionIdentity(question: {

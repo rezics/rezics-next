@@ -5859,6 +5859,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 realmId: string;
                                 meaning: string;
                                 revision: number;
+                                lifecycle: {
+                                    state: string;
+                                    revision: number;
+                                };
                                 label: string;
                                 canonicalLabel: string;
                                 labelRevision: number;
@@ -5878,6 +5882,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 meaning?: string;
                                 label: string;
                                 grain: "character" | "episode" | "release" | "work";
+                                lifecycle?: {
+                                    state: "active" | "retired";
+                                    revision: number;
+                                };
                                 scale: {
                                     min: number;
                                     max: number;
@@ -5990,6 +5998,222 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                                 questionId: string;
                                 labelRevision: number;
                                 label: string;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        "rating-questions": {
+            ":questionId": {
+                $retire: {
+                    post: {
+                        body: {
+                            expectedLifecycleRevision: number;
+                        };
+                        params: {
+                            questionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                questionId: string;
+                                lifecycle: {
+                                    state: "active" | "retired";
+                                    revision: number;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        "rating-questions": {
+            ":questionId": {
+                $restore: {
+                    post: {
+                        body: {
+                            expectedLifecycleRevision: number;
+                        };
+                        params: {
+                            questionId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                questionId: string;
+                                lifecycle: {
+                                    state: "active" | "retired";
+                                    revision: number;
+                                };
                             };
                             400: Response | {
                                 type: unknown;
@@ -6325,6 +6549,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                             meaning?: string;
                             label: string;
                             grain: "character" | "episode" | "release" | "work";
+                            lifecycle?: {
+                                state: "active" | "retired";
+                                revision: number;
+                            };
                             scale: {
                                 min: number;
                                 max: number;
@@ -6541,6 +6769,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             meaning: import("typebox").TOptional<import("typebox").TString>;
             label: import("typebox").TString;
             grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
+            lifecycle: import("typebox").TOptional<import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"retired">]>;
+                revision: import("typebox").TInteger;
+            }>>;
             scale: import("typebox").TObject<{
                 min: import("typebox").TInteger;
                 max: import("typebox").TInteger;
@@ -6669,6 +6901,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             meaning?: string;
             label: string;
             grain: "character" | "episode" | "release" | "work";
+            lifecycle?: {
+                state: "active" | "retired";
+                revision: number;
+            };
             scale: {
                 min: number;
                 max: number;
@@ -6763,6 +6999,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             meaning?: string;
             label: string;
             grain: "character" | "episode" | "release" | "work";
+            lifecycle?: {
+                state: "active" | "retired";
+                revision: number;
+            };
             scale: {
                 min: number;
                 max: number;
@@ -6882,6 +7122,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
                 meaning: import("typebox").TOptional<import("typebox").TString>;
                 label: import("typebox").TString;
                 grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
+                lifecycle: import("typebox").TOptional<import("typebox").TObject<{
+                    state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"retired">]>;
+                    revision: import("typebox").TInteger;
+                }>>;
                 scale: import("typebox").TObject<{
                     min: import("typebox").TInteger;
                     max: import("typebox").TInteger;
@@ -7070,6 +7314,10 @@ export declare function ratingRoutes(app: ReturnType<typeof definitionRoutes>, d
             meaning: import("typebox").TOptional<import("typebox").TString>;
             label: import("typebox").TString;
             grain: import("typebox").TUnion<[import("typebox").TLiteral<"work">, import("typebox").TLiteral<"release">, import("typebox").TLiteral<"episode">, import("typebox").TLiteral<"character">]>;
+            lifecycle: import("typebox").TOptional<import("typebox").TObject<{
+                state: import("typebox").TUnion<[import("typebox").TLiteral<"active">, import("typebox").TLiteral<"retired">]>;
+                revision: import("typebox").TInteger;
+            }>>;
             scale: import("typebox").TObject<{
                 min: import("typebox").TInteger;
                 max: import("typebox").TInteger;
