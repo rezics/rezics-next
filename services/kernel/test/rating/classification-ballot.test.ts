@@ -19,13 +19,13 @@ import { CLASSIFICATION_AGGREGATE_CHANGED, CLASSIFICATION_BALLOT_CHANGED } from 
 import { classificationAggregateView } from '../../src/rating/classification-ballot.ts';
 
 const accounts = {
-  voter0: newId(0x2201),
-  voter1: newId(0x2201),
-  voter2: newId(0x2201),
-  voter3: newId(0x2201),
-  voter4: newId(0x2201),
-  voter5: newId(0x2201),
-  moderator: newId(0x2201),
+  voter0: '019a1b2c-3d4e-7f00-8a00-5ab1ec700101',
+  voter1: '019a1b2c-3d4e-7f00-8a00-5ab1ec700102',
+  voter2: '019a1b2c-3d4e-7f00-8a00-5ab1ec700103',
+  voter3: '019a1b2c-3d4e-7f00-8a00-5ab1ec700104',
+  voter4: '019a1b2c-3d4e-7f00-8a00-5ab1ec700105',
+  voter5: '019a1b2c-3d4e-7f00-8a00-5ab1ec700106',
+  moderator: '019a1b2c-3d4e-7f00-8a00-5ab1ec700107',
 } as const;
 type Persona = keyof typeof accounts;
 type TestSubject = { id: string; statements: Record<string, Array<{ id: string }>> };
