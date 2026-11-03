@@ -56715,6 +56715,243 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "viewerFacts": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "question": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "grain": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "meaning": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "scale": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "displayStep": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "max": {
+                                  "type": "integer"
+                                },
+                                "min": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "displayStep"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision",
+                            "grain",
+                            "scale",
+                            "meaning"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "rows": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "entry": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "entryState": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "incarnationId": {
+                                        "format": "uuid",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "revision": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "present",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "incarnationId",
+                                      "entryState",
+                                      "revision"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "reason": {
+                                        "const": "scope",
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "rowKey": {
+                                "type": "string"
+                              },
+                              "subjectId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "vote": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "questionRevision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "revision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "present",
+                                        "type": "string"
+                                      },
+                                      "units": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "questionId",
+                                      "questionRevision",
+                                      "units",
+                                      "revision"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "questionRevision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "questionId",
+                                      "questionRevision"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "reason": {
+                                        "enum": [
+                                          "scope",
+                                          "question"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "rowKey",
+                              "subjectId",
+                              "entry",
+                              "vote"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 100,
+                          "type": "array"
+                        },
+                        "state": {
+                          "const": "current",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "question",
+                        "rows"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [
@@ -103785,6 +104022,126 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "actions": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "resourceId": {
+                                    "type": "string"
+                                  },
+                                  "resourceType": {
+                                    "enum": [
+                                      "community.space",
+                                      "community.realm"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "const": "available",
+                                    "type": "string"
+                                  },
+                                  "viewerActions": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "action": {
+                                          "type": "string"
+                                        },
+                                        "operations": {
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "type": "array"
+                                        }
+                                      },
+                                      "required": [
+                                        "action",
+                                        "operations"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "resourceType",
+                                  "resourceId",
+                                  "viewerActions"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unavailable",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "destination": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "address": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "space",
+                                    "type": "string"
+                                  },
+                                  "spaceId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "spaceId",
+                                  "address"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "realm",
+                                    "type": "string"
+                                  },
+                                  "realmId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "realmId"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "unavailable",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
                           "reason": {
                             "enum": [
                               "explicit",
@@ -105517,6 +105874,126 @@
                     "follow": {
                       "additionalProperties": false,
                       "properties": {
+                        "actions": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "resourceId": {
+                                  "type": "string"
+                                },
+                                "resourceType": {
+                                  "enum": [
+                                    "community.space",
+                                    "community.realm"
+                                  ],
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "const": "available",
+                                  "type": "string"
+                                },
+                                "viewerActions": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "action": {
+                                        "type": "string"
+                                      },
+                                      "operations": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      }
+                                    },
+                                    "required": [
+                                      "action",
+                                      "operations"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "resourceType",
+                                "resourceId",
+                                "viewerActions"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "unavailable",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "destination": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "address": {
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "const": "space",
+                                  "type": "string"
+                                },
+                                "spaceId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "spaceId",
+                                "address"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "realm",
+                                  "type": "string"
+                                },
+                                "realmId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "realmId"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "unavailable",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
                         "reason": {
                           "enum": [
                             "explicit",
@@ -122389,11 +122866,26 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
-                  "ordinals": {
+                  "items": {
                     "items": {
-                      "maximum": 99999,
-                      "minimum": 0,
-                      "type": "integer"
+                      "additionalProperties": false,
+                      "properties": {
+                        "ordinal": {
+                          "maximum": 99999,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "reviewRevision": {
+                          "maximum": 9007199254740991,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "ordinal",
+                        "reviewRevision"
+                      ],
+                      "type": "object"
                     },
                     "maxItems": 20,
                     "minItems": 1,
@@ -122401,7 +122893,7 @@
                   }
                 },
                 "required": [
-                  "ordinals"
+                  "items"
                 ],
                 "type": "object"
               }
@@ -123329,6 +123821,11 @@
                               "null"
                             ]
                           },
+                          "reviewRevision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          },
                           "section": {
                             "type": "string"
                           },
@@ -123341,7 +123838,8 @@
                           "section",
                           "evidence",
                           "status",
-                          "review"
+                          "review",
+                          "reviewRevision"
                         ],
                         "type": "object"
                       },
@@ -126110,13 +126608,19 @@
                             "minimum": 0,
                             "type": "integer"
                           },
+                          "reviewRevision": {
+                            "maximum": 9007199254740991,
+                            "minimum": 1,
+                            "type": "integer"
+                          },
                           "status": {
                             "type": "string"
                           }
                         },
                         "required": [
                           "ordinal",
-                          "status"
+                          "status",
+                          "reviewRevision"
                         ],
                         "type": "object"
                       },
@@ -135806,6 +136310,52 @@
               "minLength": 1,
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "year",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 9999,
+                  "minimum": 1,
+                  "multipleOf": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "~elyTyp": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "unallocated",
+                  "type": "string"
+                },
+                {
+                  "anyOf": [
+                    {
+                      "maximum": 12,
+                      "minimum": 1,
+                      "multipleOf": 1,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "~elyTyp": 1
+                }
+              ]
+            }
           }
         ],
         "responses": {
@@ -135820,6 +136370,23 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "currentness": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "revision": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "snapshot",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "revision"
+                      ],
+                      "type": "object"
                     },
                     "expiresAt": {
                       "type": [
@@ -137864,6 +138431,243 @@
                         "stepUnits",
                         "lifecycleState",
                         "lifecycleRevision"
+                      ],
+                      "type": "object"
+                    },
+                    "viewerFacts": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "question": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "grain": {
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "meaning": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "scale": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "displayStep": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "max": {
+                                  "type": "integer"
+                                },
+                                "min": {
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "displayStep"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision",
+                            "grain",
+                            "scale",
+                            "meaning"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "rows": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "entry": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "entryState": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "incarnationId": {
+                                        "format": "uuid",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "revision": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "present",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "incarnationId",
+                                      "entryState",
+                                      "revision"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "reason": {
+                                        "const": "scope",
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "rowKey": {
+                                "type": "string"
+                              },
+                              "subjectId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "vote": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "questionRevision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "revision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "present",
+                                        "type": "string"
+                                      },
+                                      "units": {
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "questionId",
+                                      "questionRevision",
+                                      "units",
+                                      "revision"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "questionId": {
+                                        "format": "uuid",
+                                        "type": "string"
+                                      },
+                                      "questionRevision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "questionId",
+                                      "questionRevision"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "reason": {
+                                        "enum": [
+                                          "scope",
+                                          "question"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "reason"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "rowKey",
+                              "subjectId",
+                              "entry",
+                              "vote"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 100,
+                          "type": "array"
+                        },
+                        "state": {
+                          "const": "current",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "question",
+                        "rows"
                       ],
                       "type": "object"
                     }
@@ -168486,6 +169290,65 @@
                           "format": "uuid",
                           "type": "string"
                         },
+                        "score": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "preserve",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "action"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "set",
+                                  "type": "string"
+                                },
+                                "consent": {
+                                  "const": true,
+                                  "type": "boolean"
+                                },
+                                "units": {
+                                  "maximum": 20,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "action",
+                                "units",
+                                "consent"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "action": {
+                                  "const": "clear",
+                                  "type": "string"
+                                },
+                                "consent": {
+                                  "const": true,
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "action",
+                                "consent"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
                         "skip": {
                           "type": "boolean"
                         },
@@ -169192,6 +170055,7 @@
           "wd:Q689445",
           "schema:MusicAlbum"
         ],
+        "x-body-limit": 4096,
         "x-exposure": "gate:personal_library",
         "x-rate-limit": {
           "family": "write",
@@ -171425,6 +172289,55 @@
                     "maximum": 99,
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "score": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "preserve",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "action"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "set",
+                            "type": "string"
+                          },
+                          "units": {
+                            "maximum": 20,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "units"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "clear",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "action"
+                        ],
+                        "type": "object"
+                      }
+                    ]
                   },
                   "target": {
                     "format": "uuid",
@@ -185163,6 +186076,17 @@
                           "decision": {
                             "additionalProperties": false,
                             "properties": {
+                              "action": {
+                                "enum": [
+                                  "state",
+                                  "skip",
+                                  "retain"
+                                ],
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
                               "baseline": {
                                 "additionalProperties": false,
                                 "properties": {
@@ -185228,7 +186152,8 @@
                               "targetId",
                               "state",
                               "baseline",
-                              "replace"
+                              "replace",
+                              "action"
                             ],
                             "type": [
                               "object",
@@ -185310,12 +186235,16 @@
                               "other": {
                                 "type": "string"
                               },
+                              "score": {
+                                "type": "string"
+                              },
                               "state": {
                                 "type": "string"
                               }
                             },
                             "required": [
                               "state",
+                              "score",
                               "other"
                             ],
                             "type": "object"
@@ -185386,12 +186315,423 @@
                             ],
                             "type": "object"
                           },
+                          "nativeScore": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "admission": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "reason": {
+                                    "enum": [
+                                      "conditional-admission-unavailable",
+                                      "native-question-unavailable",
+                                      "native-current-vote-unavailable",
+                                      "source-not-vn-score"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "status": {
+                                    "const": "unavailable",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "reason"
+                                ],
+                                "type": "object"
+                              },
+                              "currentVote": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "at": {
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "cleared",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "revision",
+                                      "at"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "at": {
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "set",
+                                        "type": "string"
+                                      },
+                                      "units": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "units",
+                                      "revision",
+                                      "at"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "exactUnits": {
+                                "maximum": 20,
+                                "minimum": 0,
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              },
+                              "question": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "aggregateEffect": {
+                                    "const": "public-standard-aggregate",
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "enum": [
+                                      "work",
+                                      "release",
+                                      "episode",
+                                      "character"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "meaning": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "revision": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "scale": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "max": {
+                                        "type": "integer"
+                                      },
+                                      "min": {
+                                        "type": "integer"
+                                      },
+                                      "step": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "min",
+                                      "max",
+                                      "step"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "revision",
+                                  "meaning",
+                                  "label",
+                                  "grain",
+                                  "scale",
+                                  "aggregateEffect"
+                                ],
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              },
+                              "sourceReason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "question",
+                              "currentVote",
+                              "sourceReason",
+                              "exactUnits",
+                              "admission"
+                            ],
+                            "type": "object"
+                          },
                           "ordinal": {
                             "minimum": 0,
                             "type": "integer"
                           },
                           "retainedReason": {
                             "type": "string"
+                          },
+                          "scoreDecision": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "action": {
+                                "enum": [
+                                  "vote",
+                                  "clear"
+                                ],
+                                "type": "string"
+                              },
+                              "consent": {
+                                "enum": [
+                                  "adopt-native-vote",
+                                  "clear-native-vote"
+                                ],
+                                "type": "string"
+                              },
+                              "currentVote": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "absent",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "at": {
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "cleared",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "revision",
+                                      "at"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "at": {
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      },
+                                      "state": {
+                                        "const": "set",
+                                        "type": "string"
+                                      },
+                                      "units": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "units",
+                                      "revision",
+                                      "at"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "nativeAdmission": {
+                                "const": "unavailable",
+                                "type": "string"
+                              },
+                              "question": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "aggregateEffect": {
+                                    "const": "public-standard-aggregate",
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "enum": [
+                                      "work",
+                                      "release",
+                                      "episode",
+                                      "character"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  },
+                                  "meaning": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "revision": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "scale": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "max": {
+                                        "type": "integer"
+                                      },
+                                      "min": {
+                                        "type": "integer"
+                                      },
+                                      "step": {
+                                        "minimum": 1,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "min",
+                                      "max",
+                                      "step"
+                                    ],
+                                    "type": "object"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "revision",
+                                  "meaning",
+                                  "label",
+                                  "grain",
+                                  "scale",
+                                  "aggregateEffect"
+                                ],
+                                "type": "object"
+                              },
+                              "reviewId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "sourceReason": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "enum": [
+                                  "reviewed",
+                                  "applying",
+                                  "applied",
+                                  "skipped",
+                                  "stale",
+                                  "unsupported",
+                                  "failed",
+                                  "unavailable"
+                                ],
+                                "type": "string"
+                              },
+                              "targetId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "units": {
+                                "maximum": 20,
+                                "minimum": 0,
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "reviewId",
+                              "status",
+                              "targetId",
+                              "action",
+                              "units",
+                              "question",
+                              "currentVote",
+                              "consent",
+                              "sourceReason",
+                              "nativeAdmission"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "suggestedRole": {
                             "type": [
@@ -185488,6 +186828,8 @@
                           "match",
                           "target",
                           "decision",
+                          "scoreDecision",
+                          "nativeScore",
                           "fieldsTreatment"
                         ],
                         "type": "object"
@@ -191198,11 +192540,14 @@
                         "reviewId": {
                           "format": "uuid",
                           "type": "string"
+                        },
+                        "scoreReviewId": {
+                          "format": "uuid",
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "ordinal",
-                        "reviewId"
+                        "ordinal"
                       ],
                       "type": "object"
                     },
@@ -191229,33 +192574,67 @@
                   "properties": {
                     "outcomes": {
                       "items": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "ordinal": {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          "reviewId": {
-                            "format": "uuid",
-                            "type": "string"
-                          },
-                          "status": {
-                            "enum": [
-                              "applied",
-                              "skipped",
-                              "stale",
-                              "unsupported",
-                              "failed"
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "ordinal": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "reviewId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "status": {
+                                "enum": [
+                                  "applied",
+                                  "skipped",
+                                  "stale",
+                                  "unsupported",
+                                  "failed"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "reviewId",
+                              "status"
                             ],
-                            "type": "string"
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "ordinal": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "scoreReviewId": {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              "status": {
+                                "enum": [
+                                  "applied",
+                                  "skipped",
+                                  "stale",
+                                  "unsupported",
+                                  "failed",
+                                  "unavailable"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ordinal",
+                              "scoreReviewId",
+                              "status"
+                            ],
+                            "type": "object"
                           }
-                        },
-                        "required": [
-                          "ordinal",
-                          "reviewId",
-                          "status"
-                        ],
-                        "type": "object"
+                        ]
                       },
                       "maxItems": 8,
                       "type": "array"
@@ -193729,38 +195108,143 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "action": {
-                    "enum": [
-                      "skip",
-                      "retain",
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "enum": [
+                          "skip",
+                          "retain"
+                        ],
+                        "type": "string"
+                      },
+                      "ordinal": {
+                        "maximum": 4999,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "targetId": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ordinal",
+                      "action"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "state",
+                        "type": "string"
+                      },
+                      "ordinal": {
+                        "maximum": 4999,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "replace": {
+                        "type": "boolean"
+                      },
+                      "state": {
+                        "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+                        "type": "string"
+                      },
+                      "targetId": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ordinal",
+                      "action",
                       "state"
                     ],
-                    "type": "string"
+                    "type": "object"
                   },
-                  "ordinal": {
-                    "maximum": 4999,
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "replace": {
-                    "type": "boolean"
-                  },
-                  "state": {
-                    "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
-                    "type": "string"
-                  },
-                  "targetId": {
-                    "format": "uuid",
-                    "type": "string"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "action": {
+                        "const": "score",
+                        "type": "string"
+                      },
+                      "consent": {
+                        "enum": [
+                          "adopt-native-vote",
+                          "clear-native-vote"
+                        ],
+                        "type": "string"
+                      },
+                      "ordinal": {
+                        "maximum": 4999,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "questionId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "questionRevision": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "selection": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "vote",
+                                "type": "string"
+                              },
+                              "units": {
+                                "maximum": 20,
+                                "minimum": 0,
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "units"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "clear",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "targetId": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ordinal",
+                      "action",
+                      "questionId",
+                      "questionRevision",
+                      "selection",
+                      "consent"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "ordinal",
-                  "action"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -193771,76 +195255,326 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "baseline": {
+                  "anyOf": [
+                    {
                       "additionalProperties": false,
                       "properties": {
-                        "incarnationId": {
+                        "action": {
+                          "enum": [
+                            "state",
+                            "skip",
+                            "retain"
+                          ],
                           "type": [
                             "string",
                             "null"
                           ]
                         },
-                        "revision": {
-                          "minimum": 1,
-                          "type": "integer"
+                        "baseline": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "incarnationId": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revision": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "state": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "revision",
+                            "incarnationId"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "replace": {
+                          "type": "boolean"
+                        },
+                        "reviewId": {
+                          "format": "uuid",
+                          "type": "string"
                         },
                         "state": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "status": {
+                          "enum": [
+                            "reviewed",
+                            "applying",
+                            "applied",
+                            "skipped",
+                            "stale",
+                            "unsupported",
+                            "failed"
+                          ],
+                          "type": "string"
+                        },
+                        "targetId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "reviewId",
+                        "status",
+                        "targetId",
+                        "state",
+                        "baseline",
+                        "replace",
+                        "action"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "action": {
+                          "enum": [
+                            "vote",
+                            "clear"
+                          ],
+                          "type": "string"
+                        },
+                        "consent": {
+                          "enum": [
+                            "adopt-native-vote",
+                            "clear-native-vote"
+                          ],
+                          "type": "string"
+                        },
+                        "currentVote": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "state": {
+                                  "const": "unavailable",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "state"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "state": {
+                                  "const": "absent",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "state"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "at": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "state": {
+                                  "const": "cleared",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "revision",
+                                "at"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "at": {
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "state": {
+                                  "const": "set",
+                                  "type": "string"
+                                },
+                                "units": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "state",
+                                "units",
+                                "revision",
+                                "at"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "nativeAdmission": {
+                          "const": "unavailable",
+                          "type": "string"
+                        },
+                        "question": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "aggregateEffect": {
+                              "const": "public-standard-aggregate",
+                              "type": "string"
+                            },
+                            "grain": {
+                              "enum": [
+                                "work",
+                                "release",
+                                "episode",
+                                "character"
+                              ],
+                              "type": "string"
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "meaning": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "revision": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "scale": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "max": {
+                                  "type": "integer"
+                                },
+                                "min": {
+                                  "type": "integer"
+                                },
+                                "step": {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "min",
+                                "max",
+                                "step"
+                              ],
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision",
+                            "meaning",
+                            "label",
+                            "grain",
+                            "scale",
+                            "aggregateEffect"
+                          ],
+                          "type": "object"
+                        },
+                        "reviewId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "sourceReason": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "enum": [
+                            "reviewed",
+                            "applying",
+                            "applied",
+                            "skipped",
+                            "stale",
+                            "unsupported",
+                            "failed",
+                            "unavailable"
+                          ],
+                          "type": "string"
+                        },
+                        "targetId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "units": {
+                          "maximum": 20,
+                          "minimum": 0,
+                          "type": [
+                            "integer",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "reviewId",
+                        "status",
+                        "targetId",
+                        "action",
+                        "units",
+                        "question",
+                        "currentVote",
+                        "consent",
+                        "sourceReason",
+                        "nativeAdmission"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "reason": {
+                          "enum": [
+                            "native-question-unavailable",
+                            "native-current-vote-unavailable"
+                          ],
+                          "type": "string"
+                        },
+                        "status": {
+                          "const": "unavailable",
                           "type": "string"
                         }
                       },
                       "required": [
-                        "state",
-                        "revision",
-                        "incarnationId"
+                        "status",
+                        "reason"
                       ],
-                      "type": [
-                        "object",
-                        "null"
-                      ]
-                    },
-                    "replace": {
-                      "type": "boolean"
-                    },
-                    "reviewId": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "state": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "status": {
-                      "enum": [
-                        "reviewed",
-                        "applying",
-                        "applied",
-                        "skipped",
-                        "stale",
-                        "unsupported",
-                        "failed"
-                      ],
-                      "type": "string"
-                    },
-                    "targetId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "reviewId",
-                    "status",
-                    "targetId",
-                    "state",
-                    "baseline",
-                    "replace"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -209379,27 +211113,25 @@
                             "additionalProperties": false,
                             "properties": {
                               "filter": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "primaryType": {
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [],
-                                "type": "object"
+                                "maxLength": 65536,
+                                "type": "string"
                               },
                               "kind": {
                                 "const": "query",
+                                "type": "string"
+                              },
+                              "sort": {
+                                "const": "id",
+                                "type": "string"
+                              },
+                              "sourceId": {
+                                "format": "uuid",
                                 "type": "string"
                               }
                             },
                             "required": [
                               "kind",
-                              "filter"
+                              "sourceId"
                             ],
                             "type": "object"
                           }
@@ -209466,27 +211198,25 @@
                             "additionalProperties": false,
                             "properties": {
                               "filter": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "primaryType": {
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [],
-                                "type": "object"
+                                "maxLength": 65536,
+                                "type": "string"
                               },
                               "kind": {
                                 "const": "query",
+                                "type": "string"
+                              },
+                              "sort": {
+                                "const": "id",
+                                "type": "string"
+                              },
+                              "sourceId": {
+                                "format": "uuid",
                                 "type": "string"
                               }
                             },
                             "required": [
                               "kind",
-                              "filter"
+                              "sourceId"
                             ],
                             "type": "object"
                           }
@@ -209545,27 +211275,25 @@
                             "additionalProperties": false,
                             "properties": {
                               "filter": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "primaryType": {
-                                    "type": "string"
-                                  },
-                                  "state": {
-                                    "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [],
-                                "type": "object"
+                                "maxLength": 65536,
+                                "type": "string"
                               },
                               "kind": {
                                 "const": "query",
+                                "type": "string"
+                              },
+                              "sort": {
+                                "const": "id",
+                                "type": "string"
+                              },
+                              "sourceId": {
+                                "format": "uuid",
                                 "type": "string"
                               }
                             },
                             "required": [
                               "kind",
-                              "filter"
+                              "sourceId"
                             ],
                             "type": "object"
                           }
@@ -209590,27 +211318,93 @@
                         "type": "string"
                       },
                       "selection": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "const": "occurrences",
-                            "type": "string"
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "explicit",
+                                    "type": "string"
+                                  },
+                                  "targets": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "subjectId": {
+                                          "format": "uuid",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "subjectId"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 1000,
+                                    "minItems": 1,
+                                    "type": "array"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "targets"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "filter": {
+                                    "maxLength": 65536,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "const": "query",
+                                    "type": "string"
+                                  },
+                                  "sort": {
+                                    "const": "id",
+                                    "type": "string"
+                                  },
+                                  "sourceId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "sourceId"
+                                ],
+                                "type": "object"
+                              }
+                            ]
                           },
-                          "memberIds": {
-                            "items": {
-                              "format": "uuid",
-                              "type": "string"
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "occurrences",
+                                "type": "string"
+                              },
+                              "memberIds": {
+                                "items": {
+                                  "format": "uuid",
+                                  "type": "string"
+                                },
+                                "maxItems": 1000,
+                                "minItems": 1,
+                                "type": "array"
+                              }
                             },
-                            "maxItems": 1000,
-                            "minItems": 1,
-                            "type": "array"
+                            "required": [
+                              "kind",
+                              "memberIds"
+                            ],
+                            "type": "object"
                           }
-                        },
-                        "required": [
-                          "kind",
-                          "memberIds"
-                        ],
-                        "type": "object"
+                        ]
                       }
                     },
                     "required": [
@@ -209802,6 +211596,74 @@
                           ],
                           "type": "string"
                         },
+                        "selectionSource": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exposure": {
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
+                              "type": "string"
+                            },
+                            "filter": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "membershipKind": {
+                              "enum": [
+                                "curated",
+                                "dynamic"
+                              ],
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "scannedCandidates": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "selectedSubjects": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "sort": {
+                              "const": "id",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sourceDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision",
+                            "membershipKind",
+                            "exposure",
+                            "sourceDigest",
+                            "filter",
+                            "sort",
+                            "scannedCandidates",
+                            "selectedSubjects"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "state": {
                           "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
                           "type": [
@@ -209849,6 +211711,7 @@
                         "selectionKind",
                         "state",
                         "collectionId",
+                        "selectionSource",
                         "phase",
                         "selectionComplete",
                         "occurrencesComplete",
@@ -209873,6 +211736,26 @@
               }
             },
             "description": "Response for status 201"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "preparing": {
+                      "const": true,
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "preparing"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 202"
           },
           "400": {
             "content": {
@@ -210726,6 +212609,74 @@
                           ],
                           "type": "string"
                         },
+                        "selectionSource": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exposure": {
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
+                              "type": "string"
+                            },
+                            "filter": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "membershipKind": {
+                              "enum": [
+                                "curated",
+                                "dynamic"
+                              ],
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "scannedCandidates": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "selectedSubjects": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "sort": {
+                              "const": "id",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sourceDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision",
+                            "membershipKind",
+                            "exposure",
+                            "sourceDigest",
+                            "filter",
+                            "sort",
+                            "scannedCandidates",
+                            "selectedSubjects"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "state": {
                           "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
                           "type": [
@@ -210773,6 +212724,7 @@
                         "selectionKind",
                         "state",
                         "collectionId",
+                        "selectionSource",
                         "phase",
                         "selectionComplete",
                         "occurrencesComplete",
@@ -212528,6 +214480,74 @@
                           ],
                           "type": "string"
                         },
+                        "selectionSource": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exposure": {
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
+                              "type": "string"
+                            },
+                            "filter": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "membershipKind": {
+                              "enum": [
+                                "curated",
+                                "dynamic"
+                              ],
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "scannedCandidates": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "selectedSubjects": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "sort": {
+                              "const": "id",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sourceDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision",
+                            "membershipKind",
+                            "exposure",
+                            "sourceDigest",
+                            "filter",
+                            "sort",
+                            "scannedCandidates",
+                            "selectedSubjects"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "state": {
                           "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
                           "type": [
@@ -212575,6 +214595,7 @@
                         "selectionKind",
                         "state",
                         "collectionId",
+                        "selectionSource",
                         "phase",
                         "selectionComplete",
                         "occurrencesComplete",
@@ -213475,6 +215496,74 @@
                           ],
                           "type": "string"
                         },
+                        "selectionSource": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "exposure": {
+                              "enum": [
+                                "private",
+                                "unlisted",
+                                "public"
+                              ],
+                              "type": "string"
+                            },
+                            "filter": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "membershipKind": {
+                              "enum": [
+                                "curated",
+                                "dynamic"
+                              ],
+                              "type": "string"
+                            },
+                            "revision": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "scannedCandidates": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "selectedSubjects": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "sort": {
+                              "const": "id",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "sourceDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "revision",
+                            "membershipKind",
+                            "exposure",
+                            "sourceDigest",
+                            "filter",
+                            "sort",
+                            "scannedCandidates",
+                            "selectedSubjects"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
                         "state": {
                           "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
                           "type": [
@@ -213522,6 +215611,7 @@
                         "selectionKind",
                         "state",
                         "collectionId",
+                        "selectionSource",
                         "phase",
                         "selectionComplete",
                         "occurrencesComplete",
@@ -221141,6 +223231,91 @@
               }
             },
             "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "const": "stale_cursor",
+                      "type": "string"
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "effect_status": {
+                      "enum": [
+                        "not_applicable",
+                        "not_applied"
+                      ],
+                      "type": "string"
+                    },
+                    "errors": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "code": {
+                            "enum": [
+                              "required",
+                              "unknown_field",
+                              "invalid_type",
+                              "invalid_format",
+                              "out_of_range",
+                              "unsupported"
+                            ],
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(?:\\/(?:[^~/]|~[01])*)*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pointer",
+                          "code"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "const": false,
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "const": "Stale Cursor",
+                      "type": "string"
+                    },
+                    "type": {
+                      "const": "https://rezics.com/problems/stale_cursor",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code",
+                    "retryable",
+                    "effect_status",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Stale cursor"
           },
           "503": {
             "content": {
@@ -388433,6 +390608,1074 @@
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
                             "type": "string"
                           },
+                          "card": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "actions": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "references": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "operations": {
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "action": {
+                                                "type": "string"
+                                              },
+                                              "operationId": {
+                                                "type": "string"
+                                              },
+                                              "state": {
+                                                "enum": [
+                                                  "available",
+                                                  "sign_in_required",
+                                                  "denied",
+                                                  "withheld",
+                                                  "unavailable",
+                                                  "not_applicable"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "action",
+                                              "operationId",
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "maxItems": 256,
+                                          "type": "array"
+                                        },
+                                        "sourceRevisionId": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "state": {
+                                          "enum": [
+                                            "current",
+                                            "withheld"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "type": {
+                                          "enum": [
+                                            "content.thread",
+                                            "content.post"
+                                          ],
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "id",
+                                        "state",
+                                        "operations"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 2,
+                                    "type": "array"
+                                  },
+                                  "retryable": {
+                                    "type": "boolean"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "current",
+                                      "unavailable",
+                                      "not_applicable"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "state",
+                                  "retryable",
+                                  "references"
+                                ],
+                                "type": "object"
+                              },
+                              "authors": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "openingPost": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "identity": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "avatar": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "credit": {
+                                                    "type": "null"
+                                                  },
+                                                  "focalPoint": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "x": {
+                                                        "type": "number"
+                                                      },
+                                                      "y": {
+                                                        "type": "number"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "x",
+                                                      "y"
+                                                    ],
+                                                    "type": [
+                                                      "object",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "height": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "media": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "placeholder": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "color": {
+                                                        "type": "string"
+                                                      },
+                                                      "thumbhash": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "thumbhash",
+                                                      "color"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "variants": {
+                                                    "items": {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "format": {
+                                                          "enum": [
+                                                            "avif",
+                                                            "webp"
+                                                          ],
+                                                          "type": "string"
+                                                        },
+                                                        "width": {
+                                                          "type": "integer"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "format",
+                                                        "width"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                  },
+                                                  "width": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "media",
+                                                  "width",
+                                                  "height",
+                                                  "placeholder",
+                                                  "variants",
+                                                  "focalPoint",
+                                                  "credit"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "displayName": {
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "handle": {
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "displayName",
+                                              "handle",
+                                              "avatar"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "identity"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "withheld",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "thread": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "identity": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "avatar": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "credit": {
+                                                    "type": "null"
+                                                  },
+                                                  "focalPoint": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "x": {
+                                                        "type": "number"
+                                                      },
+                                                      "y": {
+                                                        "type": "number"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "x",
+                                                      "y"
+                                                    ],
+                                                    "type": [
+                                                      "object",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "height": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  "media": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  },
+                                                  "placeholder": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "color": {
+                                                        "type": "string"
+                                                      },
+                                                      "thumbhash": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "thumbhash",
+                                                      "color"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "variants": {
+                                                    "items": {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "format": {
+                                                          "enum": [
+                                                            "avif",
+                                                            "webp"
+                                                          ],
+                                                          "type": "string"
+                                                        },
+                                                        "width": {
+                                                          "type": "integer"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "format",
+                                                        "width"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                  },
+                                                  "width": {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "media",
+                                                  "width",
+                                                  "height",
+                                                  "placeholder",
+                                                  "variants",
+                                                  "focalPoint",
+                                                  "credit"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "displayName": {
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "handle": {
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "displayName",
+                                              "handle",
+                                              "avatar"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "current",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "identity"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "unavailable",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "const": "withheld",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "thread",
+                                  "openingPost"
+                                ],
+                                "type": "object"
+                              },
+                              "comments": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "cohort": {
+                                        "const": "public",
+                                        "type": "string"
+                                      },
+                                      "count": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "kind": {
+                                            "enum": [
+                                              "exact",
+                                              "lower-bound"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "minimum": 0,
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "value"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "lastActivityAt": {
+                                        "format": "date-time",
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "source": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "epoch": {
+                                            "minimum": 1,
+                                            "type": "integer"
+                                          },
+                                          "position": {
+                                            "pattern": "^[0-9]+$",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "epoch",
+                                          "position"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "state": {
+                                        "const": "current",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "cohort",
+                                      "count",
+                                      "lastActivityAt",
+                                      "source"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "enum": [
+                                          "unavailable",
+                                          "withheld"
+                                        ],
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "currentness": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "actions": {
+                                    "enum": [
+                                      "current",
+                                      "unavailable",
+                                      "not_applicable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "authors": {
+                                    "enum": [
+                                      "current",
+                                      "unavailable",
+                                      "not_applicable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "comments": {
+                                    "enum": [
+                                      "current",
+                                      "unavailable",
+                                      "not_applicable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "media": {
+                                    "enum": [
+                                      "current",
+                                      "unavailable",
+                                      "not_applicable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "place": {
+                                    "const": "current",
+                                    "type": "string"
+                                  },
+                                  "reactions": {
+                                    "enum": [
+                                      "current",
+                                      "unavailable",
+                                      "not_applicable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "const": "current",
+                                    "type": "string"
+                                  },
+                                  "watch": {
+                                    "enum": [
+                                      "current",
+                                      "sign_in_required",
+                                      "unavailable",
+                                      "not_applicable"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "place",
+                                  "authors",
+                                  "reactions",
+                                  "actions",
+                                  "watch",
+                                  "media",
+                                  "comments"
+                                ],
+                                "type": "object"
+                              },
+                              "media": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "images": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "containerId": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "credit": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "license": {
+                                              "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]{0,79}$",
+                                              "type": "string"
+                                            },
+                                            "obligations": {
+                                              "items": {
+                                                "enum": [
+                                                  "cc:Attribution",
+                                                  "cc:ShareAlike",
+                                                  "cc:Notice",
+                                                  "cc:SourceCode"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "maxItems": 4,
+                                              "type": "array",
+                                              "uniqueItems": true
+                                            },
+                                            "rightsHolder": {
+                                              "maxLength": 1024,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "via": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "name": {
+                                                  "maxLength": 1024,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                },
+                                                "url": {
+                                                  "maxLength": 1024,
+                                                  "minLength": 1,
+                                                  "pattern": "^https://[^\\s]+(?![\\s\\S])",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "name",
+                                                "url"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          },
+                                          "required": [
+                                            "rightsHolder",
+                                            "via",
+                                            "license",
+                                            "obligations"
+                                          ],
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ]
+                                        },
+                                        "digest": {
+                                          "pattern": "^[0-9a-f]{64}$",
+                                          "type": "string"
+                                        },
+                                        "focalPoint": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "x": {
+                                              "maximum": 1,
+                                              "minimum": 0,
+                                              "type": "number"
+                                            },
+                                            "y": {
+                                              "maximum": 1,
+                                              "minimum": 0,
+                                              "type": "number"
+                                            }
+                                          },
+                                          "required": [
+                                            "x",
+                                            "y"
+                                          ],
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ]
+                                        },
+                                        "height": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        },
+                                        "id": {
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                          "type": "string"
+                                        },
+                                        "placeholder": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "color": {
+                                              "pattern": "^#[0-9a-f]{6}$",
+                                              "type": "string"
+                                            },
+                                            "thumbhash": {
+                                              "maxLength": 44,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "thumbhash",
+                                            "color"
+                                          ],
+                                          "type": [
+                                            "object",
+                                            "null"
+                                          ]
+                                        },
+                                        "variants": {
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "format": {
+                                                "enum": [
+                                                  "avif",
+                                                  "webp"
+                                                ],
+                                                "type": "string"
+                                              },
+                                              "height": {
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "width": {
+                                                "maximum": 2560,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "format",
+                                              "width",
+                                              "height"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "maxItems": 12,
+                                          "minItems": 1,
+                                          "type": "array"
+                                        },
+                                        "width": {
+                                          "minimum": 1,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "containerId",
+                                        "digest",
+                                        "width",
+                                        "height",
+                                        "variants",
+                                        "placeholder",
+                                        "focalPoint",
+                                        "credit"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 32,
+                                    "type": "array"
+                                  },
+                                  "state": {
+                                    "enum": [
+                                      "none",
+                                      "available",
+                                      "unavailable",
+                                      "withheld"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "state",
+                                  "images"
+                                ],
+                                "type": "object"
+                              },
+                              "parentContext": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "opening",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "reply",
+                                        "type": "string"
+                                      },
+                                      "parent": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "author": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "displayName": {
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "handle": {
+                                                    "type": [
+                                                      "string",
+                                                      "null"
+                                                    ]
+                                                  },
+                                                  "id": {
+                                                    "format": "uuid",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "displayName",
+                                                  "handle"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "createdAt": {
+                                                "format": "date-time",
+                                                "type": "string"
+                                              },
+                                              "excerpt": {
+                                                "maxLength": 160,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "language": {
+                                                "maxLength": 256,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "revisionId": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "spoiler": {
+                                                "type": "boolean"
+                                              },
+                                              "state": {
+                                                "const": "available",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "id",
+                                              "revisionId",
+                                              "createdAt",
+                                              "author",
+                                              "excerpt",
+                                              "language",
+                                              "spoiler"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "id": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "state": {
+                                                "const": "removed",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "id"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "state": {
+                                                "const": "withheld",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "parent"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "presentation": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "language": {
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "spoiler": {
+                                        "type": "boolean"
+                                      },
+                                      "state": {
+                                        "const": "current",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "language",
+                                      "spoiler"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "withheld",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "reply": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "state": {
+                                    "enum": [
+                                      "available",
+                                      "sign_in_required",
+                                      "denied",
+                                      "withheld",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "state"
+                                ],
+                                "type": "object"
+                              },
+                              "state": {
+                                "enum": [
+                                  "current",
+                                  "erased"
+                                ],
+                                "type": "string"
+                              },
+                              "watch": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "current",
+                                        "type": "string"
+                                      },
+                                      "watching": {
+                                        "type": "boolean"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "watching"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "sign_in_required",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "retryable": {
+                                        "const": true,
+                                        "type": "boolean"
+                                      },
+                                      "state": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "retryable"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "state": {
+                                        "const": "withheld",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "state",
+                              "authors",
+                              "presentation",
+                              "media",
+                              "comments",
+                              "actions",
+                              "reply",
+                              "watch",
+                              "currentness"
+                            ],
+                            "type": "object"
+                          },
                           "createdAt": {
                             "format": "date-time",
                             "type": "string"
@@ -389401,7 +392644,8 @@
                           "kind",
                           "title",
                           "availability",
-                          "firstPost"
+                          "firstPost",
+                          "card"
                         ],
                         "type": "object"
                       },
