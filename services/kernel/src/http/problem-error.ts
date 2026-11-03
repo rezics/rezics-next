@@ -97,6 +97,21 @@ export const PROBLEMS = {
   collection_restore_stale: { status: 409, title: 'Stale Collection Restore', retryable: false },
   collection_restore_expired: { status: 409, title: 'Collection Restore Expired', retryable: false },
   library_label_capacity: { status: 409, title: 'Library Label Capacity Reached', retryable: false },
+  library_entry_annotation_correction_limit: {
+    status: 409,
+    title: 'Library Entry Annotation Correction Limit Reached',
+    retryable: false,
+  },
+  library_entry_annotation_correction_epoch: {
+    status: 409,
+    title: 'Library Entry Annotation Correction Epoch Changed',
+    retryable: false,
+  },
+  library_entry_annotation_correction_expired: {
+    status: 409,
+    title: 'Library Entry Annotation Correction Expired',
+    retryable: false,
+  },
   semantic_not_ready: { status: 503, title: 'Semantic Layer Not Ready', retryable: true },
   presentation_not_ready: { status: 503, title: 'Presentation Not Ready', retryable: true },
   not_found: { status: 404, title: 'Not Found', retryable: false },
