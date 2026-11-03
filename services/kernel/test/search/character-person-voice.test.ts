@@ -250,6 +250,18 @@ test('a changed retained cut before or during dispatch retires the complete page
   }
 });
 
+test('an actual pool outside the retained bound retires the complete page', async () => {
+  const f = retainedFixture();
+  const page = await prepareCharacterPersonPage([probe()], async (partition, probes) => {
+    const cut = await f.prepare(partition, probes);
+    return cut && { ...cut, partition: partition + 1 };
+  });
+
+  expect(await page.match()).toEqual(['not_proven']);
+  expect(await page.revalidate()).toBe(false);
+  expect(f.dispatched).toEqual([]);
+});
+
 test('rated first next and final retained pages stay ordered through dense current voice rejections', async () => {
   const accepted = new Set([3, 7, 10, 14, 18].map((n) => id(n + 100)));
   const subjects: IndexedSubject[] = Array.from({ length: 20 }, (_, n) => ({

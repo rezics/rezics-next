@@ -193,6 +193,9 @@ export function authorizeCharacterPersonPage(plan: CharacterPersonWitnessPlan) {
   let retired = false;
   return {
     bounds,
+    get retired() {
+      return retired;
+    },
     dispatch(partition: number, kind: 'primary' | 'appearance') {
       const bound = bounds.find((pool) => pool.partition === partition);
       const count = used.get(partition) ?? { primary: 0, appearance: 0 };
@@ -262,7 +265,7 @@ export async function prepareCharacterPersonPage(
   let matched = false;
   let retired = false;
   const revalidate = async () => {
-    if (retired) return false;
+    if (retired || authorization.retired) return false;
     for (const cut of retained)
       if (!(await cut.revalidate())) {
         retired = true;
@@ -276,29 +279,35 @@ export async function prepareCharacterPersonPage(
     async match() {
       if (matched) throw new Error('Relation page was already dispatched');
       matched = true;
-      if (!(await revalidate())) return probes.map(() => 'not_proven');
-      let appearance = 0;
-      const witnesses = await matchCharacterPersonWitnessPlan(plan, async (_, partition) => {
-        authorization.dispatch(partition, 'appearance');
-        const cut = appearances[appearance++]!;
-        const local = planCharacterPersonWitnesses(cut.probes, cut.statements);
-        return cut.finish(
-          await matchCharacterPersonWitnessPlan(local, async () => {
-            throw new Error('Unexpected nested appearance dispatch');
-          }),
-        );
-      });
-      const keyOf = (probe: RelationFacetProbe) => JSON.stringify(probe);
-      const evidence = new Map(probes.map((probe, index) => [keyOf(probe), witnesses[index]!]));
-      const results = new Map<string, RelationFacetMatch>();
-      for (const cut of cuts) {
-        authorization.dispatch(cut.partition, 'primary');
-        const values = await cut.finish(cut.probes.map((probe) => evidence.get(keyOf(probe)) ?? 'not_proven'));
-        // finish preserves the original positional input, including unsupported and missing keys.
-        for (const [index, probe] of cut.input.entries()) results.set(keyOf(probe), values[index]!);
+      try {
+        if (!(await revalidate())) return probes.map(() => 'not_proven');
+        let appearance = 0;
+        const witnesses = await matchCharacterPersonWitnessPlan(plan, async (_, partition) => {
+          authorization.dispatch(partition, 'appearance');
+          const cut = appearances[appearance++]!;
+          const local = planCharacterPersonWitnesses(cut.probes, cut.statements);
+          return cut.finish(
+            await matchCharacterPersonWitnessPlan(local, async () => {
+              throw new Error('Unexpected nested appearance dispatch');
+            }),
+          );
+        });
+        const keyOf = (probe: RelationFacetProbe) => JSON.stringify(probe);
+        const evidence = new Map(probes.map((probe, index) => [keyOf(probe), witnesses[index]!]));
+        const results = new Map<string, RelationFacetMatch>();
+        for (const cut of cuts) {
+          authorization.dispatch(cut.partition, 'primary');
+          const values = await cut.finish(cut.probes.map((probe) => evidence.get(keyOf(probe)) ?? 'not_proven'));
+          // finish preserves the original positional input, including unsupported and missing keys.
+          for (const [index, probe] of cut.input.entries()) results.set(keyOf(probe), values[index]!);
+        }
+        if (!(await revalidate())) return probes.map(() => 'not_proven');
+        return probes.map((probe) => results.get(keyOf(probe)) ?? 'not_proven');
+      } catch (error) {
+        if (!authorization.retired) throw error;
+        retired = true;
+        return probes.map(() => 'not_proven');
       }
-      if (!(await revalidate())) return probes.map(() => 'not_proven');
-      return probes.map((probe) => results.get(keyOf(probe)) ?? 'not_proven');
     },
   };
 }
