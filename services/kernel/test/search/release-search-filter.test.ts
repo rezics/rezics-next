@@ -3,10 +3,12 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { buildReleaseSearchFilter } from '../../src/search/release-search.ts';
 
 const releaseType = 'wd:Q20631656';
+const platformId = '018f0000-0000-7000-8000-000000000001';
+const subjectId = '018f0000-0000-7000-8000-000000000002';
 
 test('release filters keep platform languages attached and preserve calendar precision', () => {
   const filter = buildReleaseSearchFilter(bundledRelease, releaseType, {
-    platform: 'wd:Q1406',
+    platform: platformId,
     languages: ['en', 'ja', 'en'],
     date: { type: 'time', gte: '2024-02-29', lte: '2024-03' },
   });
@@ -17,7 +19,7 @@ test('release filters keep platform languages attached and preserve calendar pre
       {
         statement: {
           property: 'schema:gamePlatform',
-          in: ['wd:Q1406'],
+          in: [platformId],
           qualifiers: [{ property: 'schema:inLanguage', in: ['en', 'ja'] }],
         },
       },
@@ -30,7 +32,7 @@ test('age rating uses its released unit and producer roles stay release-specific
   expect(
     buildReleaseSearchFilter(bundledRelease, releaseType, {
       ageRating: { gte: 13, unit: 'http://www.wikidata.org/entity/Q577' },
-      producer: { role: 'developer', subject: 'wd:Q123' },
+      producer: { role: 'developer', subject: subjectId },
     }),
   ).toEqual({
     and: [
@@ -41,13 +43,13 @@ test('age rating uses its released unit and producer roles stay release-specific
           range: { gte: 13, unit: 'http://www.wikidata.org/entity/Q577' },
         },
       },
-      { statement: { property: 'wdt:P178', in: ['wd:Q123'] } },
+      { statement: { property: 'wdt:P178', in: [subjectId] } },
     ],
   });
 
   expect(() =>
     buildReleaseSearchFilter(bundledRelease, releaseType, {
-      producer: { role: 'publisher', subject: 'wd:Q123' },
+      producer: { role: 'publisher', subject: subjectId },
     }),
   ).not.toThrow();
 });
