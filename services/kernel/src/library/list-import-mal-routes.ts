@@ -12,6 +12,7 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createMalImport } from './list-import-mal.ts';
 import { MAL_LIMITS } from './list-import-mal-parser.ts';
+import { MAL_LABEL_LIMITS } from './list-import-mal-tags.ts';
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' }),
@@ -71,6 +72,7 @@ export function malImportRoutes(
       },
       async ({ actor, body, headers, job, admission, session, set }) =>
         safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
           const command = await admission.run('normal', job, () =>
             service().preview(actor, body.xml, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), job.deadline),
           );
@@ -111,12 +113,36 @@ export function malImportRoutes(
       {
         params,
         headers,
-        body: t.Object({ row, target: t.Union([id, t.Null()]), skip: t.Boolean(), replace: t.Boolean() }, closed),
+        body: t.Object(
+          {
+            row,
+            target: t.Union([id, t.Null()]),
+            skip: t.Boolean(),
+            replace: t.Boolean(),
+            labels: t.Optional(
+              t.Array(
+                t.Object(
+                  {
+                    value: t.Integer({ minimum: 0, maximum: MAL_LABEL_LIMITS.values - 1 }),
+                    target: t.Union([
+                      t.Object({ labelId: id, revision: t.Integer({ minimum: 1, maximum: 2147483647 }) }, closed),
+                      t.Object({ name: t.String({ maxLength: 1024 }) }, closed),
+                    ]),
+                  },
+                  closed,
+                ),
+                { maxItems: MAL_LABEL_LIMITS.values },
+              ),
+            ),
+          },
+          closed,
+        ),
         response: { 200: result, ...failures },
         detail: detail('review'),
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
         safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
           const command = await admission.run('normal', job, () =>
             service().review(actor, params.id, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), job.deadline),
           );
@@ -167,8 +193,9 @@ export function malImportRoutes(
         response: { 200: result, ...failures },
         detail: detail('cancel'),
       },
-      async ({ actor, params, headers, job, admission, session }) =>
+      async ({ actor, params, headers, job, admission, session, set }) =>
         safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
           const command = await admission.run('normal', job, () =>
             service().cancel(actor, params.id, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
           );
@@ -184,8 +211,9 @@ export function malImportRoutes(
         response: { 200: result, ...failures },
         detail: detail('delete'),
       },
-      async ({ actor, params, headers, job, admission, session }) =>
+      async ({ actor, params, headers, job, admission, session, set }) =>
         safe(async () => {
+          set.headers['Cache-Control'] = 'private, no-store';
           const command = await admission.run('normal', job, () =>
             service().delete(actor, params.id, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
           );

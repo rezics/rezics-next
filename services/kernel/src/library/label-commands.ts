@@ -21,6 +21,8 @@ import page from './label-catalogue-page.sql';
 import prefixPage from './label-catalogue-prefix.sql';
 import * as store from './label-store.ts';
 import { assertAniListLabel, prepareAniListLabel, type AniListLabelGuard } from './list-import-anilist-label-guard.ts';
+import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
+import { deadlineFor } from '../request/deadline.ts';
 
 type Label = { id: string; name: string; revision: number };
 type LabelValue = { label: { id: string; revision: number } };
@@ -146,25 +148,52 @@ export function createPersonalLabelCommands(config: {
     });
   }
 
-  async function createLabel(actor: Actor, input: unknown, key: string, guard?: AniListLabelGuard) {
+  async function createLabel(
+    actor: Actor,
+    input: unknown,
+    key: string,
+    importGuard?: AniListLabelGuard | MalLabelFence,
+  ) {
+    const malLabelFence =
+      importGuard && 'sourceDigest' in importGuard && 'subject' in importGuard ? importGuard : undefined;
+    const guard = importGuard && 'subjectId' in importGuard ? importGuard : undefined;
     const owner = account(actor, 'library_entry:update');
     const parsed = nameInput(input);
-    return run(
+    const body: LibraryCommandBody<LabelValue> = async (tx, command) => {
+      if (malLabelFence) await assertMalLabelFence(tx, owner, malLabelFence);
+      const route = routeOf(owner.accountId)!;
+      const label = await store.insertPersonalLabel(
+        tx,
+        route,
+        { accountId: owner.accountId, id: newId(route), name: parsed.normalized },
+        { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
+      );
+      return { value: minimal(label), events: events(owner, label.id) };
+    };
+    if (!malLabelFence) return run(actor, 'library_label.create', { name: parsed.name }, key, body, guard);
+    if (!config.access) throw new TypeError('MAL label adoption requires Subject access');
+    const access = config.access,
+      deadline = deadlineFor(5000);
+    return createLibraryCommandRunner(config).ownAccountPrepared(
       actor,
-      'library_label.create',
-      { name: parsed.name },
-      key,
-      async (tx, command) => {
-        const route = routeOf(owner.accountId)!;
-        const label = await store.insertPersonalLabel(
-          tx,
-          route,
-          { accountId: owner.accountId, id: newId(route), name: parsed.normalized },
-          { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
-        );
-        return { value: minimal(label), events: events(owner, label.id) };
+      {
+        action: 'library_entry:update',
+        kind: 'library_label.create',
+        requestKey: key,
+        input: { name: parsed.name, malLabelFence },
+        async prepare(attempt) {
+          try {
+            await prepareMalLabelFence({ pool, access }, owner, malLabelFence, attempt.time, deadline);
+            return { error: undefined };
+          } catch (error) {
+            return { error };
+          }
+        },
       },
-      guard,
+      async (tx, command, prepared) => {
+        if (prepared.error !== undefined) throw prepared.error;
+        return body(tx, command);
+      },
     );
   }
 

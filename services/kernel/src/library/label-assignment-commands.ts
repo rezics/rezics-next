@@ -35,6 +35,7 @@ import { readPersonalLabel } from './label-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import labelPage from './label-assignment-label-page.sql';
 import subjectPage from './label-assignment-subject-page.sql';
+import { assertMalLabelFence, prepareMalLabelFence, type MalLabelFence } from './list-import-mal-label-fence.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type Assignment = { id: string; labelId: string; subjectId: string; revision: number };
@@ -125,8 +126,10 @@ export function createLabelAssignmentCommands(deps: {
     value: unknown,
     key: string,
     operation: 'assign' | 'unassign' | 'restore',
-    guard?: AniListLabelGuard,
+    importGuard?: AniListLabelGuard | MalLabelFence,
   ) {
+    const guard = importGuard && 'subjectId' in importGuard ? importGuard : undefined;
+    const malLabelFence = importGuard && 'subject' in importGuard ? importGuard : undefined;
     const account = owner(actor, 'library_entry:update');
     id(labelId);
     const parsed = input(value, operation !== 'assign');
@@ -134,7 +137,12 @@ export function createLabelAssignmentCommands(deps: {
     const request = {
       action: 'library_entry:update',
       kind: `library_label.${operation === 'restore' ? 'assignment_restore' : operation}`,
-      input: { labelId, ...parsed, ...(guard ? { importReview: guard } : {}) },
+      input: {
+        labelId,
+        ...parsed,
+        ...(guard ? { importReview: guard } : {}),
+        ...(malLabelFence ? { malLabelFence } : {}),
+      },
       requestKey: key,
     };
     const execute = async (
@@ -143,6 +151,7 @@ export function createLabelAssignmentCommands(deps: {
       prepared: { subjectId?: string; error?: unknown },
     ): Promise<CommandResult<ReturnType<typeof minimal> | { deleted: true; revision: number }>> => {
       if (prepared.error !== undefined) throw prepared.error;
+      if (malLabelFence) await assertMalLabelFence(tx, account, malLabelFence);
       const route = sameAccountRoute(account.accountId, labelId);
       const tuple = {
         route,
@@ -171,10 +180,10 @@ export function createLabelAssignmentCommands(deps: {
           case 'migration_required':
             throw new ProblemError('index_not_ready');
           case 'existing':
-            return noEffect({ ...minimal(result.assignment), ...(guard ? { unchanged: true } : {}) });
+            return noEffect({ ...minimal(result.assignment), ...(guard || malLabelFence ? { unchanged: true } : {}) });
           case 'applied':
             return {
-              value: { ...minimal(result.assignment), ...(guard ? { unchanged: false } : {}) },
+              value: { ...minimal(result.assignment), ...(guard || malLabelFence ? { unchanged: false } : {}) },
               events: events(account, labelId),
             };
         }
@@ -211,7 +220,7 @@ export function createLabelAssignmentCommands(deps: {
       }
     };
     if (operation === 'unassign') return runner.ownAccount(actor, request, (tx, command) => execute(tx, command, {}));
-    return (guard ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
+    return (guard || malLabelFence ? createLibraryCommandRunner(deps) : runner).ownAccountPrepared(
       actor,
       {
         ...request,
@@ -222,10 +231,12 @@ export function createLabelAssignmentCommands(deps: {
               if (prepared.error !== undefined) throw prepared.error;
               return { subjectId: guard.subjectId };
             }
+            if (malLabelFence) await prepareMalLabelFence(deps, account, malLabelFence, attempt.time, deadline);
             const resolved = await withRequestDeadline(deadline, () =>
               resolveSubject(deps, account, parsed.subjectId, attempt.time),
             );
             if (!resolved) throw new LibraryNotFoundError();
+            if (malLabelFence && resolved.subjectId !== malLabelFence.subject) throw new LibraryConflictError();
             return { subjectId: resolved.subjectId };
           } catch (error) {
             return { error };
@@ -241,7 +252,7 @@ export function createLabelAssignmentCommands(deps: {
     labelId: string,
     value: { subjectId: string },
     key: string,
-    guard?: AniListLabelGuard,
+    importGuard?: AniListLabelGuard | MalLabelFence,
   ) {
     return (await mutate(
       actor,
@@ -249,7 +260,7 @@ export function createLabelAssignmentCommands(deps: {
       value,
       key,
       'assign',
-      guard,
+      importGuard,
     )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged?: boolean }>;
   }
   async function unassignLabel(actor: Actor, labelId: string, value: Expected, key: string) {
