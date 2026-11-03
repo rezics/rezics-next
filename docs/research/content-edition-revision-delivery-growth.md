@@ -16,19 +16,16 @@ The publisher is the natively bootstrapped governance account as well as the act
 its resource-local actions and platform grant-management action admit ordinary grant commands.
 The mounted native write limiter has a fixture secret and unchanged production budgets.
 
-Premise correction: the focused `edition.test.ts` creates a protected thread using HTTP, but on the bound base
-`ThreadInputSchema` admits only `published | draft`. `PostInputSchema`, `RevisionInputSchema`, `createPost` and
-`revisePost` also have no protected-state producer. Content's owner document explicitly refuses protected-state
-revision changes. Existing tests' `seedGovernanceAuthority` and `seedResourceDenial` write Access rows directly;
-the new fixture does neither. There is no public resource-denial command. The protected-source exemption cannot
-be reached through the promised selected native producers on this source. Its exact owning prerequisite is the
-Content creation/visibility seam in `src/content/{schemas,commands,routes}.ts`, requiring a subsequent owning brief.
+Premise correction: the bound base did not admit protected Content creation. The native creation contract now admits
+`protected` visibility for threads and posts while revision inputs and commands remain `published | draft`. The
+fixture creates selected protected resources through native HTTP composition and does not seed selected visibility
+or grants with SQL. There is no public resource-denial command. Protected-source delivery uses the existing exact
+edition source exemption; ordinary source reads are checked independently from edition byte delivery.
 
-Decision: retain published-source growth, add native seller and reachable parent lifecycle races, and continue protected-source/ancestor grant cases after the owning creation/visibility seam is admitted.
-This introduces no new audience. The recipient receives direct edition, Realm and board grants through supported
-commands; the non-member receives only the edition grant. Source-post read grants are never written for either.
-Ordinary reads of a published source can already succeed through its public eligibility and authorized parents;
-absence of a newly written post grant does not prove the unavailable protected-source HTTP outcome.
+Decision: retain the four published-source growth axes and add a native protected-source case with independent
+recipient grants on the protected thread and ancestor posts. The recipient receives direct edition, Realm and board
+grants through supported commands; the non-member receives only the edition grant. The selected source receives no
+post read grant. Existing published-source behavior and the fixed Access deadlines remain unchanged.
 
 ## Independent populations and capture
 
@@ -60,7 +57,8 @@ and a small fixed body; it makes no maximum-body/maximum-ancestry performance cl
 The suite asserts exact `{editionId,revisionId,sha256,licence,body}`, canonical digest/native pinned bytes, private
 no-store, and full 200 responses despite matching conditional headers. The positive trace must contain native
 publisher sale/source authority and both preparation/final subject, board, Realm, Space, thread and ancestor checks.
-Only the selected post is omitted from buyer source-post checks. Actual body selection must name the exact pin.
+Only the selected protected post is omitted from buyer source-post checks. Ordinary HTTP read of that source must
+refuse while edition bytes remain available. Actual body selection must name the exact pin.
 
 Native outcomes cover edition-granted non-member refusal with an authorized owner/recipient control, missing caller
 edition grant, terminal unpublication, source takedown, deletion and physical source-byte erasure, and publisher
@@ -76,8 +74,8 @@ publisher restoration, source connection failure or deadline expiry.
 
 These are authored assertions and source reasoning, not measurements or an executed growth result. The controller
 owns acceptance admission after integration. No growth row, proof registration, main-promotion claim or shared
-fixture/owner specification is changed. The remaining protected-source/ancestor scenarios are explicitly retained
-in the private continuation; the existing frozen consumer tests remain untouched.
+fixture/owner specification is changed. Protected-source and ancestor revocation cases are now included in the
+native acceptance suite; the existing frozen consumer tests remain untouched.
 
 Prior composition sources: focused `edition.test.ts` and `edition-mechanical.test.ts`; Content's Edition owner/Cost section;
 Content Goal Done-when/Acceptance; `edition-{reads,store,sale,sale-native,initiator,sale-consent,commands,routes}.ts`;
@@ -85,8 +83,7 @@ Edition source guards in `reads.ts`; Content command/input and cleanup contracts
 production grant command and role catalogues; shared growth capture/classifier/seed/access-path code and the
 existing Realm asset publication growth composition. No external reference source is named by this slice.
 
-This continuation rechecked native Content input schemas and command visibility guards, Content's post-publication
-and Edition owner sections, Edition source and seller final guards, and native Content moderation/post deletion and
-Community lifecycle routes. The protected-state producer remains absent on this bound source; no selected visibility
-or grant was seeded. Protected-source read exemption and independent protected ancestor/thread grant revocations
-remain unmeasured and are assigned to `.temp/continuation/protected-edition-delivery.md`.
+The protected creation seam is now implemented in native Content schemas and commands, and the fixture creates its
+protected thread, ancestor and selected source through those commands. Ordinary protected-source read refusal,
+independent ancestor/thread grants and restoration/revocation boundaries are authored in the focused suite. Its
+acceptance and growth measurements remain deferred to the controller's post-integration run.
