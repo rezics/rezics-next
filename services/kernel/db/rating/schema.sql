@@ -640,6 +640,41 @@ CREATE SEQUENCE rating.realm_rank_publication_generation
 
 
 --
+-- Name: source_classification_observation; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.source_classification_observation (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    association_key text NOT NULL,
+    digest text NOT NULL,
+    association jsonb NOT NULL,
+    payload jsonb NOT NULL,
+    as_of timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT source_classification_observation_association_check CHECK ((jsonb_typeof(association) = 'object'::text)),
+    CONSTRAINT source_classification_observation_association_key_check CHECK ((association_key ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_classification_observation_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT source_classification_observation_check1 CHECK (((association ->> 'subjectId'::text) = (subject_id)::text)),
+    CONSTRAINT source_classification_observation_digest_check CHECK ((digest ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT source_classification_observation_payload_check CHECK (((jsonb_typeof(payload) = 'object'::text) AND (octet_length((payload)::text) <= 8192))),
+    CONSTRAINT source_classification_observation_route_check CHECK (((route >= 0) AND (route <= 65535)))
+);
+
+
+--
+-- Name: source_classification_slot; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.source_classification_slot (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    association_key text NOT NULL,
+    digest text
+);
+
+
+--
 -- Name: source_statistic; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -1013,6 +1048,22 @@ ALTER TABLE ONLY rating.realm_rank
 
 
 --
+-- Name: source_classification_observation source_classification_observation_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_classification_observation
+    ADD CONSTRAINT source_classification_observation_pkey PRIMARY KEY (route, subject_id, association_key, digest);
+
+
+--
+-- Name: source_classification_slot source_classification_slot_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_classification_slot
+    ADD CONSTRAINT source_classification_slot_pkey PRIMARY KEY (route, subject_id, association_key);
+
+
+--
 -- Name: source_statistic_head source_statistic_head_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -1308,6 +1359,30 @@ ALTER TABLE ONLY rating.question_label_revision
 
 ALTER TABLE ONLY rating.question_lifecycle
     ADD CONSTRAINT question_lifecycle_question_id_fkey FOREIGN KEY (question_id) REFERENCES rating.question(id) ON DELETE CASCADE;
+
+
+--
+-- Name: source_classification_observation source_classification_observation_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_classification_observation
+    ADD CONSTRAINT source_classification_observation_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
+
+
+--
+-- Name: source_classification_slot source_classification_slot_route_subject_id_association_ke_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_classification_slot
+    ADD CONSTRAINT source_classification_slot_route_subject_id_association_ke_fkey FOREIGN KEY (route, subject_id, association_key, digest) REFERENCES rating.source_classification_observation(route, subject_id, association_key, digest);
+
+
+--
+-- Name: source_classification_slot source_classification_slot_route_subject_id_fkey; Type: FK CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.source_classification_slot
+    ADD CONSTRAINT source_classification_slot_route_subject_id_fkey FOREIGN KEY (route, subject_id) REFERENCES semantic.subject(route, subject_id);
 
 
 --
