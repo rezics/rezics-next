@@ -95,13 +95,26 @@ snapshots as personal authority.
 
 ## Web checklist integration and focused scenarios
 
-The existing reserved canonical checklist owner is the interface consumer. Keep its existing surface. Obtain
-catalogue membership/order from Semantic's existing work-parts reader, pass a page's exact Episode IDs to the
-`episodes` GET, and use `:recordEpisodes` to toggle one ID or a batch. Preserve unmarked holes and separate special
-IDs. Use current ordinal labels only; show missing authority explicitly. Retained-fact paging provides corrections
-for detached visible episodes. Clear also works when source identity is unavailable. Reread after a stale revision,
-retain the exact key/body for transport retries, and never infer a checked prefix from a scalar value. The generated
-Kernel client exposes both mounted methods through `progressSessions`.
+The signed-in progress-session page mounts a private canonical checklist beside scalar measures and the diary, without
+taking those owners. Viewer association uses the same `{viewer,requested,locale,page}` envelope as
+`readCurrentViewerProgressIndex`; the session host supplies that viewer from the page read that prepared it. Account
+replacement, sign-out, unknown viewer or failed association immediately retires rows, cursors, selections, review
+authority and late callbacks. A matching viewer cannot authorize a stale subject, cursor, locale or session revision.
+
+Decision: use the work-parts inverse `schema:isPartOf` stream when present, otherwise the default stream. If that page
+does not admit canonical Episode Subjects, membership is unavailable rather than scanning other streams. Association
+byte cap remains unavailable in [subject pages](subject-pages.md); membership is therefore bounded by the installed
+20-row work-parts page (`MEMBERSHIP_PAGE_CAP`) and encoded current-page bytes, not an invented producer byte cap.
+
+Obtain catalogue membership/order from that one Semantic page, pass at most 20 exact Episode IDs to
+`progressSessions({sessionId}).episodes.get({query:{ids}})`, and record with
+`.$recordEpisodes.post` using `Idempotency-Key: JSON.stringify(key)`. Preserve unmarked holes and separate special
+IDs. Use current ordinal labels only; show missing authority explicitly. Completeness is shown only when the native
+body defines it; omission is unavailable, never zero. Retained-fact paging (`limit`/`cursor`, no `ids`) provides
+corrections for detached visible episodes. Clear is exclusive and remains useful without source identity. Reread after
+a stale revision, retain the exact key/body for transport retries, and never infer a checked prefix from a scalar
+value. Reopening keeps canonical facts; a retired occurrence conceals current rows and refuses fresh mutations,
+including clear, while an authorized exact receipt may replay its original revision.
 
 [`episode-progress.test.ts`](../services/kernel/test/library/episode-progress.test.ts) exercises mounted production
 Access and persisted Subjects: episodes 1 and 3 with 2 unmarked, equal-numbered special, separate reread, scalar
@@ -109,3 +122,18 @@ independence, wrong parent/type, owner isolation, CAS, exact retry, clear, curso
 concealment, correction after profile removal, reopening and retirement. Its intent checks reject old tokens and
 ambiguous batches.
 Controller-owned integration acceptance remains separate from these focused scenarios.
+
+## Cost
+
+- Operation: one private checklist visit (membership page + ≤20-ID inspect), explicit retained continuation, and one
+  bounded add/remove or exclusive clear plus inspect readback.
+- Touched neighbourhood: installed `episodes` GET and `$recordEpisodes` POST, the work-parts membership page, the
+  mounted visit. No per-episode request loop, catalogue enumeration or whole-session cache of N ≤ 20,000.
+- Formula: one visit is `1` membership page of cap `L=20` plus `1` inspect of `I≤20`. Continuation adds one retained
+  page `R≤20`. A mutation is one command plus fixed revision/readback. Web work and retained bytes are
+  `O(L + 20 + encoded current-page bytes)`, independent of retained completion count N.
+- Installed caps: inspect ≤20 IDs, retained pages ≤20, combined add/remove ≤20 distinct IDs, session retained cap
+  20,000 (`MAX_EPISODE_IDS` / producer session cap). Work-parts membership `limit: 20`. Association byte cap is
+  unavailable; Web does not invent one.
+- Test reference: `apps/web/tests/canonical-episode-checklist.test.tsx` growth cases at 20/200/2,000 retained
+  completions with a fixed membership/inspection set.

@@ -51,6 +51,13 @@ import {
   projectIndependentMeasures,
   sessionHasIndependentMeasures,
 } from './independent-measures';
+import { EpisodeChecklistVisit, bindFromDetail } from './episode-checklist';
+import {
+  continueCanonicalEpisodes,
+  inspectCanonicalEpisodes,
+  loadCanonicalEpisodeChecklist,
+  recordCanonicalEpisodes,
+} from './episode-checklist/server';
 
 const buttonClass =
   'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
@@ -1038,6 +1045,56 @@ function SessionEditor({
             {...(logsCursor === undefined ? {} : { logsCursor })}
           />
         ) : null}
+        <EpisodeChecklistVisit
+          binding={bindFromDetail({
+            viewer: originating?.viewer ?? null,
+            locale: getLocale(),
+            subjectId: session.subjectId,
+            sessionId: session.id,
+            revision: session.revision,
+          })}
+          credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
+          isCurrent={() => canHandle() && (commandGuards.record?.isCurrent() ?? true)}
+          onRevision={(revision) => {
+            if (!canHandle()) return;
+            setSession((current) => (revision > current.revision ? { ...current, revision } : current));
+          }}
+          sender={async ({ sessionId, credential, key, revision, intent }) =>
+            recordCanonicalEpisodes({
+              data: { sessionId, revision, key, intent },
+              headers: credential,
+            })
+          }
+          load={async () => {
+            const loaded = await loadCanonicalEpisodeChecklist({
+              data: {
+                sessionId: session.id,
+                subjectId: session.subjectId,
+                revision: session.revision,
+                locale: getLocale(),
+                viewer: originating?.viewer ?? null,
+              },
+              headers: commandGuards.record?.headers() ?? csrfHeaders(),
+            });
+            return loaded.visit;
+          }}
+          inspect={async (ids) =>
+            inspectCanonicalEpisodes({
+              data: { sessionId: session.id, ids },
+              headers: commandGuards.record?.headers() ?? csrfHeaders(),
+            })
+          }
+          continueRetained={async (cursor) =>
+            continueCanonicalEpisodes({
+              data: { sessionId: session.id, ...(cursor ? { cursor } : {}) },
+              headers: commandGuards.record?.headers() ?? csrfHeaders(),
+            })
+          }
+          work={{
+            id: session.subjectId,
+            label: session.subject ? displayLibraryTitle(session.subject.label, getLocale()).text : null,
+          }}
+        />
         {offered &&
         session.state === 'active' &&
         session.mode !== 'completed_units' &&

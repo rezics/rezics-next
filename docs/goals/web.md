@@ -146,6 +146,15 @@ where its scope or interface wording changes. Page stories cover only the brief'
 recordings when available; illustrative responses stay labelled as such. All launch locales and the current
 phone/desktop, keyboard, private no-store and session-retirement requirements continue to apply.
 
+### Canonical episode checklist
+
+Web owns the signed-in progress-session canonical checklist. It consumes Commerce's private episode inspect/command
+and Semantic's existing work-parts membership page, without a second progress-index writer or a scalar-counter
+identity. Viewer binding reuses the `{viewer,requested,locale,page}` envelope from
+`readCurrentViewerProgressIndex`. Missing generated methods stay unavailable at
+`KernelClient.progressSessions({ sessionId }).episodes.get` and
+`.$recordEpisodes.post`. Details and Cost live in [canonical episode completion](../library-episode-progress.md).
+
 ### Personal Library export
 
 Web owns the signed-in `/library/export` visit that consumes Commerce's private `libraryExports` capture. It is
