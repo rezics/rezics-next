@@ -147,6 +147,28 @@ test('Uncertain retry keeps the original immutable intent; cancellation retains 
   }
 });
 
+test('Native recoverable effects keep original operands; terminal failure requires fresh confirmation', () => {
+  const { visit } = fixture();
+  try {
+    visit.choose(1, 'entries', { action: 'preserve' });
+    visit.admitReview(visit.startReview(), { identity: 'original', operands: [{ ordinal: 1, revision: 2 }] });
+    const first = visit.startApply();
+    visit.settleApply(first.request, 'recoverable', page([{ ordinal: 1, status: 'recoverable' }]));
+    expect(visit.state?.phase).toBe('recoverable');
+    expect(() => visit.startReview()).toThrow('selection_locked');
+    const replay = visit.startApply();
+    expect(replay.operand).toBe(first.operand);
+    visit.settleApply(replay.request, 'failed', page([{ ordinal: 1, status: 'failed' }]));
+    expect(visit.state?.phase).toBe('failed');
+    expect(visit.state?.results?.rows[0]?.status).toBe('failed');
+    expect(() => visit.startApply()).toThrow('fresh_review_required');
+    visit.admitReview(visit.startReview(), { identity: 'fresh', operands: [{ ordinal: 1, revision: 3 }] });
+    expect(visit.startApply().operand.identity).toBe('fresh');
+  } finally {
+    visit.retire();
+  }
+});
+
 test('Account, credential, CSRF, source, route, deadline and upload replacement retire private callbacks', () => {
   for (const changed of [null, ...Object.keys(binding).map((key) => ({ ...binding, [key]: 'replacement' }))]) {
     const { visit, replace } = fixture();

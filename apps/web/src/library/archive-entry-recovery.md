@@ -73,6 +73,8 @@ callbacks. The mounted adapter must provide the current binding reader and retir
 events; no private state is connected to the unavailable page yet.
 
 These modules define local custody rather than a handwritten HTTP client or a native review-version schema.
+Decision: retain the original confirmed operand for native `recoverable` outcomes as for uncertain transport;
+native `failed` outcomes retain their result page and require fresh explicit review before another apply.
 The generated adapter must project bounded native pages without duplicating their rows in page context, carry the
 native exact review identity and original request credentials/keys, and enforce native admission and receipts.
 Local state tests do not establish artifact admission, native effects, response-byte bounds or mounted completion.

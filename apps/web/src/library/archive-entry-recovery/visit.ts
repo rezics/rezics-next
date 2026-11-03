@@ -17,7 +17,20 @@ export type RecoveryBinding = Readonly<{
 type Channel = 'upload' | 'page' | 'review' | 'apply' | 'results' | 'cancel';
 export type RecoveryRequest = Readonly<{ signal: AbortSignal }>;
 type Pending = { request: RecoveryRequest; abort: AbortController; selectionRevision: number };
-type Phase = 'idle' | 'reviewed' | 'applying' | 'uncertain' | 'stale' | 'complete' | 'cancelling' | 'cancelled';
+type Phase =
+  | 'idle'
+  | 'reviewed'
+  | 'applying'
+  | 'uncertain'
+  | 'recoverable'
+  | 'stale'
+  | 'failed'
+  | 'complete'
+  | 'cancelling'
+  | 'cancelled';
+export type RecoveryApplyOutcome = 'complete' | 'uncertain' | 'recoverable' | 'stale' | 'failed';
+
+const retainsOriginal = (phase: Phase) => phase === 'uncertain' || phase === 'recoverable';
 
 const sameBinding = (left: RecoveryBinding, right: RecoveryBinding | null) =>
   right !== null &&
@@ -166,7 +179,8 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
 
   #edit() {
     this.#requireUpload();
-    if (['applying', 'uncertain', 'cancelling', 'cancelled'].includes(this.#phase)) throw new Error('selection_locked');
+    if (retainsOriginal(this.#phase) || ['applying', 'cancelling', 'cancelled'].includes(this.#phase))
+      throw new Error('selection_locked');
   }
 
   #invalidateReview() {
@@ -202,12 +216,12 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     return true;
   }
 
-  /** Call only on explicit confirmation, or explicit retry of an uncertain original request. */
+  /** Explicit confirmation or original replay; recoverable/failed outcomes come from the native owner. */
   startApply(): Readonly<{ request: RecoveryRequest; operand: Confirm }> {
     this.#requireUpload();
     if (this.#phase === 'reviewed' && this.#review?.revision === this.#selection.revision) {
       this.#original = this.#review.operand;
-    } else if (this.#phase !== 'uncertain') {
+    } else if (!retainsOriginal(this.#phase)) {
       throw new Error('fresh_review_required');
     }
     if (this.#original === null) throw new Error('fresh_review_required');
@@ -218,7 +232,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
 
   settleApply(
     request: RecoveryRequest,
-    outcome: 'complete' | 'uncertain' | 'stale',
+    outcome: RecoveryApplyOutcome,
     results?: RecoveryPage<Result, ResultContext>,
   ): boolean {
     if (!this.#accept('apply', request)) return false;
@@ -233,7 +247,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     }
     this.#phase = outcome;
     if (admitted !== undefined) this.#results = admitted;
-    if (outcome !== 'uncertain') {
+    if (!retainsOriginal(outcome)) {
       this.#original = null;
       this.#review = null;
     }
