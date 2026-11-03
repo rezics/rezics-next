@@ -2828,7 +2828,10 @@ export class MergeTrain {
         result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles);
         const scopeCheckedFiles = result.changedFiles.filter((path) => !derivedForPath(path, derivedFiles).length);
         if (workspace) {
-          const ownership = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
+          const ownership = readRiskOwnership(
+            o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
+            o.policy?.brief,
+          );
           for (const task of sharedTasks) {
             const protectedPaths = Object.entries(ownership.areas)
               .filter(([area]) => !task.brief.riskAreas.includes(area))
@@ -4122,7 +4125,11 @@ export class MergeTrain {
     }
     const brief = parseBrief(
       markdown,
-      readRiskOwnership(this.options.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json')),
+      readRiskOwnership(
+        this.options.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
+        this.options.policy?.brief,
+      ),
+      this.options.policy?.brief,
     );
     const requested = store.events(member.taskId, member.attempt).find((event) => event.kind === 'landing-requested');
     const authorized = store
@@ -5398,7 +5405,10 @@ export class MergeTrain {
               const sourcePaths = changedPathsBetween(tree, fork === tip ? task.base : fork, tip);
               const frozen = frozenFilesForTask(o.stateDirectory, task.id);
               const before = git(tree, 'rev-parse', 'HEAD');
-              const risk = readRiskOwnership(o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'));
+              const risk = readRiskOwnership(
+                o.riskAreasFile ?? join(import.meta.dir, '../risk-areas.json'),
+                o.policy?.brief,
+              );
               const guardedRequest = {
                 ...entry.request,
                 declaredPaths: [

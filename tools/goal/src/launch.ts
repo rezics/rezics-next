@@ -298,7 +298,7 @@ export function workerPrompt(
   const devProduct = devProductBrief(task.brief);
   const research = task.brief.kind === 'research';
   const manager = task.brief.manager ?? task.brief.goal ?? '<your manager>';
-  const tests = task.workspace ? [] : workerTestCommands(branchChangedPaths(task), task.worktree);
+  const tests = task.workspace ? [] : workerTestCommands(branchChangedPaths(task, policy), task.worktree);
   return [
     `AGENTS.md is already loaded. The main checkout ${mainCheckout} is read-only; write only inside ${task.worktree}${research ? ` and the reference clones under ${mainCheckout}/.reference/` : ''}.`,
     'The contract is self-sufficient: open the workflow skill, docs/development, architecture or scope only for a section it links. Batch reads, read line ranges of large files, read each file once. Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.',
@@ -358,10 +358,14 @@ export function workerPrompt(
     .join('\n\n');
 }
 /** Paths this task's branch changes against its base, committed or not; empty when Git cannot tell. */
-function branchChangedPaths(task: Pick<Task, 'worktree' | 'base'>): string[] {
+function branchChangedPaths(task: Pick<Task, 'worktree' | 'base'>, policy: ControlPolicy): string[] {
   if (!task.worktree || !task.base || !existsSync(task.worktree)) return [];
   const run = (args: string[]) => {
-    const result = spawnSync('git', args, { cwd: task.worktree, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    const result = spawnSync('git', args, {
+      cwd: task.worktree,
+      encoding: 'utf8',
+      maxBuffer: policy.workerPrompt.gitBufferBytes,
+    });
     return result.status === 0 ? result.stdout : '';
   };
   const committed = run(['diff', '--name-only', '--no-renames', '-z', task.base, 'HEAD', '--']).split('\0');
@@ -759,7 +763,7 @@ export async function launch(
   const resuming = Boolean(resumeSession);
   // The branch head at this prompt; the first prompt's head tells whether the attempt made a new commit.
   const startHead = branchHead(task);
-  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt);
+  const ownerDecisionPrompt = prepareOwnerDecisionPrompt(store, task, attempt, prompt, policy);
   const logStartOffset = resuming ? (statSync(attempt.logPath, { throwIfNoEntry: false })?.size ?? 0) : 0;
   const out = openSync(attempt.logPath, resumeSession ? 'a' : 'w'),
     err = openSync(`${attempt.logPath}.err`, 'w');

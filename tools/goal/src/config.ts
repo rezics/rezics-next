@@ -55,13 +55,13 @@ import type { BriefContinuation } from './types.ts';
 
 export type SettingsOptions = { cwd?: string; env?: NodeJS.ProcessEnv; localFile?: string };
 export type ConfiguredSettings = Settings & { integrationChecks: IntegrationCheck[] };
-export function readDerivedFiles(value: unknown = defaults.derivedFiles): DerivedFile[] {
+export function readDerivedFiles(value: unknown = defaults.derivedFiles, policy = defaultPolicy.brief): DerivedFile[] {
   if (!Array.isArray(value)) throw new Error('derivedFiles must be an array');
   return value.map((item, index) => {
     const file = object(item, `derivedFiles[${index}]`);
     keys(file, ['path', 'stage', 'command', 'inputs'], `derivedFiles[${index}]`);
     const path = text(file.path, `derivedFiles[${index}].path`);
-    validatePath(path);
+    validatePath(path, policy);
     if (file.stage !== 'integration' && file.stage !== 'promotion')
       throw new Error(`invalid derivedFiles[${index}].stage`);
     if (
@@ -76,7 +76,7 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
     )
       throw new Error(`derivedFiles[${index}].inputs must be a path array`);
     const inputs = (file.inputs as string[] | undefined)?.map((input) => {
-      validatePath(input);
+      validatePath(input, policy);
       return input;
     });
     return { path, stage: file.stage, command: [...file.command], ...(inputs ? { inputs } : {}) };
@@ -85,6 +85,7 @@ export function readDerivedFiles(value: unknown = defaults.derivedFiles): Derive
 export function readIntegrationChecks(
   value: unknown = defaults.integrationChecks,
   label = 'integrationChecks',
+  policy = defaultPolicy.brief,
 ): IntegrationCheck[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value.map((item, index) => {
@@ -96,7 +97,7 @@ export function readIntegrationChecks(
       check.paths.some((part) => typeof part !== 'string' || !part)
     )
       throw new Error(`${label}[${index}].paths must be a path list`);
-    for (const path of check.paths) validatePath(path);
+    for (const path of check.paths) validatePath(path, policy);
     if (
       !Array.isArray(check.command) ||
       !check.command.length ||
@@ -325,22 +326,27 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     throw new Error('formatCommand must be a command array');
   const integrationChecks = readIntegrationChecks(
     local.integrationChecks === undefined ? defaults.integrationChecks : local.integrationChecks,
+    'integrationChecks',
+    policy.brief,
   );
   const affectedTests = readIntegrationChecks(
     local.affectedTests === undefined ? defaults.affectedTests : local.affectedTests,
     'affectedTests',
+    policy.brief,
   );
-  const defaultVerifierChecks = readIntegrationChecks(defaults.verifierChecks ?? [], 'verifierChecks');
+  const defaultVerifierChecks = readIntegrationChecks(defaults.verifierChecks ?? [], 'verifierChecks', policy.brief);
   const verifierChecks =
     local.verifierChecks === undefined
       ? verifierChecksFromLegacy(
           defaultVerifierChecks,
-          readIntegrationChecks(defaults.affectedTests),
+          readIntegrationChecks(defaults.affectedTests, 'affectedTests', policy.brief),
           local.affectedTests === undefined ? [] : affectedTests,
-          local.integrationChecks === undefined ? undefined : readIntegrationChecks(local.integrationChecks),
+          local.integrationChecks === undefined
+            ? undefined
+            : readIntegrationChecks(local.integrationChecks, 'integrationChecks', policy.brief),
           local.affectedTests !== undefined,
         )
-      : readIntegrationChecks(local.verifierChecks, 'verifierChecks');
+      : readIntegrationChecks(local.verifierChecks, 'verifierChecks', policy.brief);
   const siblingTests = readSiblingTests(local.siblingTests === undefined ? defaults.siblingTests : local.siblingTests);
   const codex: Record<string, unknown> = { ...defaults.codex, ...object(local.codex ?? {}, 'codex') };
   keys(codex, Object.keys(defaults.codex), 'codex');
@@ -371,7 +377,9 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     mainCheckout: main,
     stateDirectory,
     worktreeRoot: path(local.worktreeRoot, '.temp/worktrees', env.GOAL_WORKTREE_ROOT),
-    ...(local.sharedWebModules === undefined ? {} : { sharedWebModules: readWebModules(local.sharedWebModules) }),
+    ...(local.sharedWebModules === undefined
+      ? {}
+      : { sharedWebModules: readWebModules(local.sharedWebModules, policy.brief) }),
     localFile,
     mainBranch: text(local.mainBranch ?? defaults.mainBranch, 'mainBranch'),
     branchPrefix: text(local.branchPrefix ?? defaults.branchPrefix, 'branchPrefix'),
@@ -386,7 +394,10 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
     verifierChecks,
     siblingTests,
     affectedTests,
-    derivedFiles: readDerivedFiles(local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles),
+    derivedFiles: readDerivedFiles(
+      local.derivedFiles === undefined ? defaults.derivedFiles : local.derivedFiles,
+      policy.brief,
+    ),
     riskAreasFile: path(local.riskAreasFile, join(import.meta.dir, '../risk-areas.json')),
     pools,
     notes: parseNotes(local.notes),

@@ -423,7 +423,11 @@ export class WorkerTasks {
     actor?: AuthenticatedManager | null,
   ): { brief: ReturnType<typeof parseBrief>; taskClass: Task['taskClass'] } {
     const markdown = readFileSync(briefFile, 'utf8');
-    const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
+    const brief = parseBrief(
+      markdown,
+      readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
+      this.settings.policy?.brief,
+    );
     if (brief.goal === 'control-plane') {
       const outside = brief.paths.filter((path) => !path.startsWith('tools/goal/'));
       if (outside.length)
@@ -557,7 +561,7 @@ export class WorkerTasks {
   }
   /** Patterns of the risk areas a brief did not declare, which a worker may not change outside its declared paths. */
   protectedPaths(brief: { riskAreas: readonly string[] }): string[] {
-    const ownership = readRiskOwnership(this.settings.riskAreasFile);
+    const ownership = readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief);
     return Object.entries(ownership.areas)
       .filter(([area]) => !brief.riskAreas.includes(area))
       .flatMap(([, patterns]) => patterns);
@@ -921,7 +925,11 @@ export class WorkerTasks {
     const next =
       briefFile === undefined
         ? current
-        : parseBrief(readFileSync(briefFile, 'utf8'), readRiskOwnership(this.settings.riskAreasFile));
+        : parseBrief(
+            readFileSync(briefFile, 'utf8'),
+            readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
+            this.settings.policy?.brief,
+          );
     return devProductBrief(current) && devProductBrief(next);
   }
   /** Persist an explicit retry for the host to start on its next recovery sweep. */
@@ -2081,7 +2089,11 @@ export class WorkerTasks {
       throw new Error('recorded base commit is not an ancestor of the stabilize head');
     }
     const markdown = withStabilizeTarget(task.brief.markdown);
-    const brief = parseBrief(markdown, readRiskOwnership(this.settings.riskAreasFile));
+    const brief = parseBrief(
+      markdown,
+      readRiskOwnership(this.settings.riskAreasFile, this.settings.policy?.brief),
+      this.settings.policy?.brief,
+    );
     const ref = { taskId, attempt: task.currentAttempt };
     const apply = (current: Task) => {
       writeFileSync(current.briefPath, markdown);

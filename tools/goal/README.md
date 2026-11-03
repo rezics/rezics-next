@@ -442,6 +442,10 @@ Explicit runners and lease deadlines retain precedence within the configured con
 windows remain validated independently of protocol identities. The default inbox page size must not exceed its maximum;
 operators lowering the maximum below the default must also lower the default page size. A single
 existing-failure probe samples the earliest prefix and leaves any unsampled range unproven.
+Launch smoke forwards its startup policy snapshot to its inner process. Its UUID shapes, two provider invocations,
+fixture command delays, evidence traversal accounting, JSON syntax costs and UTF-8 shrink factor are fixed protocol
+or fixture constants. Owner-decision IDs retain their fixed 128-character persisted identity format; input and
+manager-message limits use the caller policy. Brief estimate defaults remain guidance, without estimate caps.
 
 | Setting                                               | Default                     | Purpose                                                                                         |
 | ----------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -469,6 +473,38 @@ existing-failure probe samples the earliest prefix and leaves any unsampled rang
 | `flow.oldestQueueMs`                                  | `3600000`                   | Alarm when the oldest queue entry exceeds this age (ms).                                        |
 | `flow.landingP90Ms`                                   | `1800000`                   | Alarm when the landing p90 exceeds this duration (ms).                                          |
 | `flow.attemptsPerIntegrated`                          | `1.5`                       | Alarm above this attempts-per-integrated-task ratio.                                            |
+| `policy.launchSmoke.pollMs`                           | `100`                       | Worker-check result polling interval (ms).                                                      |
+| `policy.launchSmoke.budgetMs`                         | `270000`                    | Internal lifecycle smoke execution budget (ms).                                                 |
+| `policy.launchSmoke.outputBytes`                      | `2097152`                   | Captured and forwarded smoke command output bound (bytes).                                      |
+| `policy.launchSmoke.evidenceBudgetBytes`              | `40000`                     | Shared recursive smoke evidence content budget (bytes).                                         |
+| `policy.launchSmoke.evidenceDepth`                    | `8`                         | Smoke evidence nesting depth.                                                                   |
+| `policy.launchSmoke.evidenceStringBytes`              | `4096`                      | Maximum JSON-encoded smoke evidence string size (bytes).                                        |
+| `policy.launchSmoke.evidenceArrayItems`               | `64`                        | Smoke evidence array items.                                                                     |
+| `policy.launchSmoke.evidenceObjectEntries`            | `40`                        | Smoke evidence object entries.                                                                  |
+| `policy.launchSmoke.evidenceKeyCharacters`            | `100`                       | Smoke evidence key characters.                                                                  |
+| `policy.launchSmoke.evidenceBytes`                    | `65536`                     | Maximum serialized smoke evidence size (bytes).                                                 |
+| `policy.launchSmoke.logTailBytes`                     | `32768`                     | Smoke run log suffix bytes.                                                                     |
+| `policy.launchSmoke.logEvents`                        | `32`                        | Smoke run log suffix events.                                                                    |
+| `policy.launchSmoke.stderrBytes`                      | `2048`                      | Smoke stderr suffix bytes.                                                                      |
+| `policy.launchSmoke.diagnosticCharacters`             | `1200`                      | Smoke error diagnostic characters.                                                              |
+| `policy.launchSmoke.commandTimeoutMs`                 | `30000`                     | Default smoke helper command deadline (ms).                                                     |
+| `policy.launchSmoke.stopGraceMs`                      | `500`                       | Owned worker-check termination grace (ms).                                                      |
+| `policy.launchSmoke.fakeCommandTimeoutMs`             | `10000`                     | Fake-agent protocol command deadline (ms).                                                      |
+| `policy.launchSmoke.checkWaitMs`                      | `10000`                     | Fake-agent worker-check completion wait (ms).                                                   |
+| `policy.launchSmoke.worktreeCleanupTimeoutMs`         | `2000`                      | Disposable smoke worktree/branch cleanup deadline (ms).                                         |
+| `policy.launchSmoke.innerTerminationGraceMs`          | `3000`                      | Owned inner smoke termination grace (ms).                                                       |
+| `policy.launchSmoke.cloneTimeoutMs`                   | `45000`                     | Real smoke repository clone deadline (ms).                                                      |
+| `policy.launchSmoke.innerOverheadMs`                  | `5000`                      | Inner smoke process shutdown overhead (ms).                                                     |
+| `policy.launchSmoke.scopeCleanupTimeoutMs`            | `5000`                      | Owned smoke systemd scope cleanup deadline (ms).                                                |
+| `policy.launchSmoke.snapshotEvents`                   | `16`                        | Events retained in a smoke evidence snapshot.                                                   |
+| `policy.launchSmoke.launchErrors`                     | `8`                         | Launch errors retained in a smoke evidence snapshot.                                            |
+| `policy.launchSmoke.resultCharacters`                 | `400`                       | Failed resumed-worker result excerpt characters.                                                |
+| `policy.launchSmoke.drainWaitMs`                      | `5000`                      | Wait for an owned worker start to settle during smoke cleanup (ms).                             |
+| `policy.brief.bytes`                                  | `65536`                     | Maximum brief and owner-decision input size (UTF-8 bytes).                                      |
+| `policy.brief.pathCharacters`                         | `65536`                     | Maximum declared path pattern characters.                                                       |
+| `policy.brief.pathMatchStates`                        | `1000000`                   | Maximum visited cells per path-pattern intersection.                                            |
+| `policy.workerPrompt.characters`                      | `20000`                     | Total worker prompt characters when delivering an owner decision.                               |
+| `policy.workerPrompt.gitBufferBytes`                  | `16777216`                  | Worker prompt changed-path Git output buffer (bytes).                                           |
 | `policy.history.attemptPageSize`                      | `100`                       | Maximum attempt or attempt-record page size.                                                    |
 | `policy.history.diagnosticCharacters`                 | `2000`                      | Maximum retained historical proof reader error characters.                                      |
 | `policy.proof.concurrency`                            | `3`                         | Concurrent ordinary and active historical proof admissions per Goal.                            |

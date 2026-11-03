@@ -498,6 +498,44 @@
       "blockerAgeMs": 3600000,
       "threadDepth": 10000,
       "pollMs": 2000
+    },
+    "launchSmoke": {
+      "pollMs": 100,
+      "budgetMs": 270000,
+      "outputBytes": 2097152,
+      "evidenceBudgetBytes": 40000,
+      "evidenceDepth": 8,
+      "evidenceStringBytes": 4096,
+      "evidenceArrayItems": 64,
+      "evidenceObjectEntries": 40,
+      "evidenceKeyCharacters": 100,
+      "evidenceBytes": 65536,
+      "logTailBytes": 32768,
+      "logEvents": 32,
+      "stderrBytes": 2048,
+      "diagnosticCharacters": 1200,
+      "commandTimeoutMs": 30000,
+      "stopGraceMs": 500,
+      "fakeCommandTimeoutMs": 10000,
+      "checkWaitMs": 10000,
+      "worktreeCleanupTimeoutMs": 2000,
+      "innerTerminationGraceMs": 3000,
+      "cloneTimeoutMs": 45000,
+      "innerOverheadMs": 5000,
+      "scopeCleanupTimeoutMs": 5000,
+      "snapshotEvents": 16,
+      "launchErrors": 8,
+      "resultCharacters": 400,
+      "drainWaitMs": 5000
+    },
+    "brief": {
+      "bytes": 65536,
+      "pathCharacters": 65536,
+      "pathMatchStates": 1000000
+    },
+    "workerPrompt": {
+      "characters": 20000,
+      "gitBufferBytes": 16777216
     }
   }
 }

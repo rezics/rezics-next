@@ -1,3 +1,4 @@
+import { defaultPolicy, readControlPolicy, type ControlPolicy } from '../src/policy.ts';
 #!/usr/bin/env bun
 import { randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
@@ -38,9 +39,7 @@ import {
 import type { ExecutedRegression, ScenarioEvidence } from '../src/lifecycle-scenarios.ts';
 
 const CHECK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const WAIT_MS = 100;
-const INNER_BUDGET_MS = 270_000;
-const OUTPUT_LIMIT = 2 * 1024 * 1024;
+type SmokePolicy = ControlPolicy['launchSmoke'];
 
 export type SmokeOptions = {
   root?: string;
@@ -50,6 +49,7 @@ export type SmokeOptions = {
   expectedDevScriptTree?: string;
   parity?: 'deferred' | 'execute';
   scriptsRoot?: string;
+  policy?: ControlPolicy;
 };
 
 type SmokeReport = {
@@ -101,10 +101,10 @@ export function requireSmokeWaitingCheckId(checks: unknown): string {
 type Reporter = (line: string) => void;
 
 /** Store bounded diagnostics, never prompts, account configuration, or unrestricted tool arguments. */
-export function saveSmokeEvidence(path: string, evidence: unknown): void {
-  let remaining = 40_000;
+export function saveSmokeEvidence(path: string, evidence: unknown, policy: SmokePolicy = defaultPolicy.launchSmoke): void {
+  let remaining = policy.evidenceBudgetBytes;
   const clean = (value: unknown, depth = 0): unknown => {
-    if (remaining <= 0 || depth > 8) return '<truncated>';
+    if (remaining <= 0 || depth > policy.evidenceDepth) return '<truncated>';
     remaining -= 16;
     if (typeof value === 'string') {
       const redacted = value
@@ -114,21 +114,21 @@ export function saveSmokeEvidence(path: string, evidence: unknown): void {
           '$1<redacted>',
         );
       let text = Buffer.from(redacted)
-        .subarray(0, Math.max(0, Math.min(4096, remaining)))
+        .subarray(0, Math.max(0, Math.min(policy.evidenceStringBytes, remaining)))
         .toString('utf8');
-      while (Buffer.byteLength(JSON.stringify(text)) > Math.max(2, Math.min(4096, remaining)))
+      while (Buffer.byteLength(JSON.stringify(text)) > Math.max(2, Math.min(policy.evidenceStringBytes, remaining)))
         text = text.slice(0, Math.floor(text.length * 0.75));
       remaining -= Buffer.byteLength(JSON.stringify(text));
       return text;
     }
-    if (Array.isArray(value)) return value.slice(0, 64).map((item) => clean(item, depth + 1));
+    if (Array.isArray(value)) return value.slice(0, policy.evidenceArrayItems).map((item) => clean(item, depth + 1));
     if (value && typeof value === 'object') {
       const entries: [string, unknown][] = [];
-      for (const [key, item] of Object.entries(value).slice(0, 40)) {
+      for (const [key, item] of Object.entries(value).slice(0, policy.evidenceObjectEntries)) {
         if (remaining <= 0) break;
         remaining -= key.length + 8;
         entries.push([
-          key.slice(0, 100),
+          key.slice(0, policy.evidenceKeyCharacters),
           /(?:password|secret|api[_-]?key|(?:access|refresh|id)[_-]?token)/i.test(key)
             ? '<redacted>'
             : clean(item, depth + 1),
@@ -139,7 +139,7 @@ export function saveSmokeEvidence(path: string, evidence: unknown): void {
     return value;
   };
   const json = JSON.stringify(clean(evidence), null, 2);
-  if (Buffer.byteLength(json) > 64 * 1024) throw new Error('Smoke evidence exceeded its size bound');
+  if (Buffer.byteLength(json) > policy.evidenceBytes) throw new Error('Smoke evidence exceeded its size bound');
   writeFileSync(`${path}.tmp`, json + '\n', { mode: 0o600 });
   renameSync(`${path}.tmp`, path);
 }
@@ -210,12 +210,12 @@ export function observeSmokeAdapter(adapter: AgentAdapter, record: (value: Smoke
 }
 
 /** Only the current run's bounded suffix; omit raw tool arguments, environment and tool output. */
-export function smokeRunSuffix(path: string, offset: number): unknown[] {
+export function smokeRunSuffix(path: string, offset: number, policy: SmokePolicy = defaultPolicy.launchSmoke): unknown[] {
   if (!existsSync(path)) return [];
   const fd = openSync(path, 'r');
   try {
     const size = statSync(path).size;
-    const start = Math.max(offset, size - 32 * 1024);
+    const start = Math.max(offset, size - policy.logTailBytes);
     const buffer = Buffer.alloc(Math.max(0, size - start));
     const count = readSync(fd, buffer, 0, buffer.length, start);
     let lines = buffer.subarray(0, count).toString('utf8').split(/\r?\n/);
@@ -241,18 +241,18 @@ export function smokeRunSuffix(path: string, offset: number): unknown[] {
           return [];
         }
       })
-      .slice(-32);
+      .slice(-policy.logEvents);
   } finally {
     closeSync(fd);
   }
 }
 
-function smokeStderrSuffix(path: string): string {
+function smokeStderrSuffix(path: string, policy: SmokePolicy): string {
   if (!existsSync(path)) return '';
   const fd = openSync(path, 'r');
   try {
     const size = fstatSync(fd).size;
-    const buffer = Buffer.alloc(Math.min(size, 2048));
+    const buffer = Buffer.alloc(Math.min(size, policy.stderrBytes));
     return buffer
       .subarray(0, readSync(fd, buffer, 0, buffer.length, Math.max(0, size - buffer.length)))
       .toString('utf8');
@@ -265,27 +265,31 @@ function reportLine(line: string): void {
   process.stdout.write(`${line}\n`);
 }
 
-function message(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).replace(/[\r\n]+/g, ' ').slice(0, 1200);
+function message(error: unknown, policy: SmokePolicy = defaultPolicy.launchSmoke): string {
+  return (error instanceof Error ? error.message : String(error)).replace(/[\r\n]+/g, ' ').slice(0, policy.diagnosticCharacters);
 }
 
-function stepFailure(step: string, error: unknown, report: Reporter): Error {
-  const detail = message(error);
+function stepFailure(step: string, error: unknown, report: Reporter, policy: SmokePolicy = defaultPolicy.launchSmoke): Error {
+  const detail = message(error, policy);
   report(`${step}: failed: ${detail}`);
   return new Error(`${step}: ${detail}`);
 }
 
-function checked(command: string, args: string[], cwd: string, timeout = 30_000, env = process.env): string {
-  const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout, maxBuffer: OUTPUT_LIMIT });
-  if (result.status !== 0) {
-    const detail = result.stderr?.trim() || result.stdout?.trim() || result.error?.message || `exit ${result.status}`;
-    throw new Error(`${command} ${args[0] ?? ''}: ${detail}`);
-  }
-  return result.stdout.trim();
-}
-
-function git(cwd: string, ...args: string[]): string {
-  return checked('git', args, cwd);
+function smokeTools(policy: SmokePolicy) {
+  const checked = (command: string, args: string[], cwd: string, timeout = policy.commandTimeoutMs, env = process.env): string => {
+    const result = spawnSync(command, args, { cwd, env, encoding: 'utf8', timeout, maxBuffer: policy.outputBytes });
+    if (result.status !== 0) {
+      const detail = result.stderr?.trim() || result.stdout?.trim() || result.error?.message || `exit ${result.status}`;
+      throw new Error(`${command} ${args[0] ?? ''}: ${detail}`);
+    }
+    return result.stdout.trim();
+  };
+  return {
+    checked,
+    git: (cwd: string, ...args: string[]) => checked('git', args, cwd),
+    message: (error: unknown) => message(error, policy),
+    stepFailure: (step: string, error: unknown, report: Reporter) => stepFailure(step, error, report, policy),
+  };
 }
 
 /** Owns only a newly created smoke directory, including its disposable immutable dependency store. */
@@ -466,7 +470,7 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, milliseconds));
 }
 
-async function stopWorkerCheck(resultPath: string): Promise<void> {
+async function stopWorkerCheck(resultPath: string, policy: SmokePolicy): Promise<void> {
   if (!existsSync(resultPath)) return;
   try {
     const record = JSON.parse(readFileSync(resultPath, 'utf8')) as Record<string, unknown>;
@@ -478,7 +482,7 @@ async function stopWorkerCheck(resultPath: string): Promise<void> {
     } catch {
       process.kill(pid, 'SIGTERM');
     }
-    await delay(500);
+    await delay(policy.stopGraceMs);
     if (processIsAlive(pid)) {
       try {
         process.kill(-pid, 'SIGKILL');
@@ -495,6 +499,7 @@ async function exerciseWorkerCheck(
   tree: string,
   workerCheckScript: string,
   deadline: number,
+  policy: SmokePolicy,
 ): Promise<Record<string, unknown>> {
   const runner = requireWorkerCheck(workerCheckScript);
   const start = await runBoundedProcess(
@@ -510,12 +515,13 @@ async function exerciseWorkerCheck(
     {
       cwd: tree,
       env: { ...process.env, REZICS_CHECK_MEMORY: 'off' },
-      timeoutMs: Math.min(30_000, Math.max(1, deadline - Date.now())),
+      timeoutMs: Math.min(policy.commandTimeoutMs, Math.max(1, deadline - Date.now())),
+      outputLimit: policy.outputBytes,
     },
   );
   const id = /check: id ([0-9a-f-]{36})/i.exec(start.stdout)?.[1];
   if (start.timedOut) {
-    if (id && CHECK_ID.test(id)) await stopWorkerCheck(join(tree, '.temp/goal/checks/results', `${id}.json`));
+    if (id && CHECK_ID.test(id)) await stopWorkerCheck(join(tree, '.temp/goal/checks/results', `${id}.json`), policy);
     throw new Error('capacity timeout: dev worker-check start is infrastructure/unverified');
   }
   if (start.error || start.status !== 0)
@@ -545,12 +551,13 @@ async function exerciseWorkerCheck(
     const wait = await runBoundedProcess(process.execPath, [runner, '--wait', id], {
       cwd: tree,
       env: { ...process.env, REZICS_CHECK_MEMORY: 'off' },
-      timeoutMs: Math.min(30_000, Math.max(1, deadline - Date.now())),
+      timeoutMs: Math.min(policy.commandTimeoutMs, Math.max(1, deadline - Date.now())),
+      outputLimit: policy.outputBytes,
     });
     if (wait.timedOut) throw new Error('capacity timeout: dev worker-check wait is infrastructure/unverified');
     if (wait.error || wait.status !== 0)
       throw new Error(`dev worker-check wait failed: ${wait.stderr.trim() || wait.error || wait.status}`);
-    const terminal = await waitForCheck(resultPath, deadline);
+    const terminal = await waitForCheck(resultPath, deadline, policy);
     if (terminal.infrastructureFailureFinal === true || terminal.infrastructureFailure)
       throw new Error(
         `capacity timeout: dev worker-check infrastructure failure: ${String(terminal.infrastructureFailure ?? 'final infrastructure failure')}`,
@@ -573,7 +580,7 @@ async function exerciseWorkerCheck(
       foregroundWait: wait.stdout.trim(),
     };
   } finally {
-    await stopWorkerCheck(resultPath);
+    await stopWorkerCheck(resultPath, policy);
   }
 }
 
@@ -630,8 +637,9 @@ function fakeStep(
   agent: string,
   step: string,
   env: NodeJS.ProcessEnv,
+  policy: SmokePolicy,
 ): { status: number | null; stdout: string; stderr: string; error?: Error } {
-  const result = spawnSync(agent, [step], { encoding: 'utf8', env, timeout: 10_000, maxBuffer: OUTPUT_LIMIT });
+  const result = spawnSync(agent, [step], { encoding: 'utf8', env, timeout: policy.fakeCommandTimeoutMs, maxBuffer: policy.outputBytes });
   return {
     status: result.status,
     stdout: result.stdout ?? '',
@@ -644,7 +652,7 @@ function fakeStep(
 export async function runLaunchSmoke(agent?: string, options: SmokeOptions = {}): Promise<void> {
   const root = resolve(options.root ?? resolve(import.meta.dir, '../../..'));
   const report = options.report ?? reportLine;
-  if (agent) return runFakeSmoke(agent, root, report, options.env ?? {});
+  if (agent) return runFakeSmoke(agent, root, report, options.env ?? {}, options.policy ?? defaultPolicy);
   if (options.parity === 'execute' && !options.scriptsRoot)
     throw new Error('Explicit parity execution requires --scripts-root <delivered-dev-checkout>');
   return runRealSmoke(root, report, options.reportPath, options.expectedDevScriptTree, options);
@@ -655,7 +663,10 @@ async function runFakeSmoke(
   root: string,
   report: Reporter,
   suppliedEnv: NodeJS.ProcessEnv,
+  startupPolicy: ControlPolicy,
 ): Promise<void> {
+  const policy = startupPolicy.launchSmoke;
+  const { git, checked, message, stepFailure } = smokeTools(policy);
   const { path: directory, remove } = createSmokeDirectory(root, 'launch-smoke-test-');
   let checkId = '';
   const session = 'launch-smoke-fake-session';
@@ -684,8 +695,8 @@ async function runFakeSmoke(
       const cloned = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
         cwd: root,
         encoding: 'utf8',
-        timeout: 30_000,
-        maxBuffer: OUTPUT_LIMIT,
+        timeout: policy.commandTimeoutMs,
+        maxBuffer: policy.outputBytes,
       });
       if (cloned.status !== 0)
         throw new Error(cloned.stderr?.trim() || cloned.error?.message || `git clone exited ${cloned.status}`);
@@ -713,7 +724,7 @@ async function runFakeSmoke(
           'process.exit(Number(process.env.REZICS_SMOKE_CHECK_EXIT ?? 0))',
         ],
         directory,
-        30_000,
+        policy.commandTimeoutMs,
         {
           ...process.env,
           ...suppliedEnv,
@@ -726,7 +737,7 @@ async function runFakeSmoke(
       resultPath = join(directory, '.temp/goal/checks/results', `${checkId}.json`);
       baseEnv.REZICS_SMOKE_CHECK_ID = checkId;
       baseEnv.REZICS_SMOKE_RESULT = resultPath;
-      const start = fakeStep(agent, 'start', baseEnv);
+      const start = fakeStep(agent, 'start', baseEnv, policy);
       if (start.error || start.status !== 0)
         throw new Error(start.stderr || start.error?.message || `exit ${start.status}`);
       let waiting: Record<string, unknown> | undefined;
@@ -753,9 +764,9 @@ async function runFakeSmoke(
     }
 
     try {
-      const result = await waitForCheck(resultPath, Date.now() + 10_000);
+      const result = await waitForCheck(resultPath, Date.now() + policy.checkWaitMs, policy);
       if (result.status !== 'finished' || result.exitCode !== 0) throw new Error('worker-check result did not pass');
-      const wake = fakeStep(agent, 'wake', baseEnv);
+      const wake = fakeStep(agent, 'wake', baseEnv, policy);
       if (wake.error || wake.status !== 0) throw new Error(wake.stderr || wake.error?.message || `exit ${wake.status}`);
       if (!wake.stdout.includes('result passed')) throw new Error('wake did not receive the passing check result');
       passed.push('wake: passed');
@@ -764,7 +775,7 @@ async function runFakeSmoke(
     }
 
     try {
-      const success = fakeStep(agent, 'success', baseEnv);
+      const success = fakeStep(agent, 'success', baseEnv, policy);
       if (success.error || success.status !== 0)
         throw new Error(success.stderr || success.error?.message || `exit ${success.status}`);
       let status = '';
@@ -780,10 +791,10 @@ async function runFakeSmoke(
       throw stepFailure('success', error, report);
     }
   } finally {
-    if (resultPath) await waitForCheck(resultPath, Date.now() + 10_000).catch(() => {});
+    if (resultPath) await waitForCheck(resultPath, Date.now() + policy.checkWaitMs, policy).catch(() => {});
     if (clone && devTree && devWorktreeAdded) {
       try {
-        checked('git', ['worktree', 'remove', '--force', devTree], clone, 2000);
+        checked('git', ['worktree', 'remove', '--force', devTree], clone, policy.worktreeCleanupTimeoutMs);
       } catch {
         /* The disposable clone is removed below. */
       }
@@ -792,7 +803,7 @@ async function runFakeSmoke(
   }
 }
 
-function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number, report: Reporter): Promise<number> {
+function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number, report: Reporter, policy: SmokePolicy): Promise<number> {
   return new Promise((resolvePromise, reject) => {
     const script = join(tree, 'tools/goal/scripts/launch-smoke.ts');
     const child = spawn(process.execPath, [script, '--inner'], {
@@ -809,17 +820,17 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
     let outputTruncated = false;
     const appendTail = (current: string, text: string): string => {
       const next = Buffer.concat([Buffer.from(current), Buffer.from(text)]);
-      return next.byteLength <= OUTPUT_LIMIT ? next.toString('utf8') : next.subarray(-OUTPUT_LIMIT).toString('utf8');
+      return next.byteLength <= policy.outputBytes ? next.toString('utf8') : next.subarray(-policy.outputBytes).toString('utf8');
     };
     const reportBounded = (line: string) => {
-      if (reportedBytes >= OUTPUT_LIMIT) {
-        if (!outputTruncated) report('[inner output truncated after 2 MiB]');
+      if (reportedBytes >= policy.outputBytes) {
+        if (!outputTruncated) report(`[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`);
         outputTruncated = true;
         return;
       }
-      const remaining = OUTPUT_LIMIT - reportedBytes - 1;
+      const remaining = policy.outputBytes - reportedBytes - 1;
       if (remaining <= 0) {
-        if (!outputTruncated) report('[inner output truncated after 2 MiB]');
+        if (!outputTruncated) report(`[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`);
         outputTruncated = true;
         return;
       }
@@ -829,7 +840,7 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
       report(bounded);
       reportedBytes += Buffer.byteLength(bounded) + 1;
       if (Buffer.byteLength(bounded) < bytes.byteLength) {
-        if (!outputTruncated) report('[inner output truncated after 2 MiB]');
+        if (!outputTruncated) report(`[inner output truncated after ${policy.outputBytes === defaultPolicy.launchSmoke.outputBytes ? '2 MiB' : `${policy.outputBytes} bytes`}]`);
         outputTruncated = true;
       }
     };
@@ -852,7 +863,7 @@ function runInnerProcess(tree: string, env: NodeJS.ProcessEnv, timeoutMs: number
       () => {
         timedOut = true;
         signalChildGroup(child, 'SIGTERM');
-        forceKill = setTimeout(() => signalChildGroup(child, 'SIGKILL'), 3000);
+        forceKill = setTimeout(() => signalChildGroup(child, 'SIGKILL'), policy.innerTerminationGraceMs);
       },
       Math.max(1, timeoutMs),
     );
@@ -904,9 +915,13 @@ async function runRealSmoke(
   expectedDevScriptTree?: string,
   options: SmokeOptions = {},
 ): Promise<void> {
+  const sourceSettings = loadSettings({ cwd: root });
+  const startupPolicy = options.policy ?? sourceSettings.policy ?? defaultPolicy;
+  const policy = startupPolicy.launchSmoke;
+  const { git, checked, message, stepFailure } = smokeTools(policy);
   let currentStep = 'candidate';
   const startedAt = Date.now();
-  const deadline = startedAt + INNER_BUDGET_MS;
+  const deadline = startedAt + policy.budgetMs;
   const reportPath = resolveSmokeReportPath(root, requestedReportPath);
   const runId = randomUUID();
   const runEvidenceDirectory = join(root, '.temp/launch-smoke-evidence');
@@ -949,7 +964,7 @@ async function runRealSmoke(
       startedAt: new Date(startedAt).toISOString(),
       stage: currentStep,
       ...extra,
-    });
+    }, policy);
   };
   persistReport(root, reportPath, evidence);
   saveRunEvidence();
@@ -962,7 +977,6 @@ async function runRealSmoke(
     saveRunEvidence();
     git(root, 'diff', '--quiet', 'HEAD', '--');
     const sourceRoot = mainCheckout(root);
-    const sourceSettings = loadSettings({ cwd: root });
     if (sourceSettings.codex.serviceTier.trim().toLowerCase() === 'fast')
       throw new Error('Codex service tier is Fast; launch smoke only permits the configured non-Fast tier');
     const disposable = createSmokeDirectory(root, 'launch-smoke-');
@@ -976,8 +990,8 @@ async function runRealSmoke(
     const cloneResult = spawnSync('git', ['clone', '--shared', '--no-checkout', sourceRoot, clone], {
       cwd: root,
       encoding: 'utf8',
-      timeout: 45_000,
-      maxBuffer: OUTPUT_LIMIT,
+      timeout: policy.cloneTimeoutMs,
+      maxBuffer: policy.outputBytes,
     });
     if (cloneResult.status !== 0)
       throw new Error(
@@ -1023,13 +1037,15 @@ async function runRealSmoke(
         REZICS_LAUNCH_SMOKE_STATE: join(temporary, 'state'),
         REZICS_LAUNCH_SMOKE_WORKTREES: workerRoot,
         REZICS_LAUNCH_SMOKE_DEADLINE: String(deadline),
+        REZICS_LAUNCH_SMOKE_POLICY: JSON.stringify(startupPolicy),
         REZICS_LAUNCH_SMOKE_REPORT_PATH: reportPath,
         REZICS_LAUNCH_SMOKE_EVIDENCE: runEvidencePath,
         REZICS_LAUNCH_SMOKE_RUN_ID: runId,
         REZICS_LAUNCH_SMOKE_CANDIDATE: candidate,
       },
-      Math.max(1, remaining + 5_000),
+      Math.max(1, remaining + policy.innerOverheadMs),
       report,
+      policy,
     );
     const completed = readReport(reportPath);
     if (completed.status !== 'passed')
@@ -1086,24 +1102,24 @@ async function runRealSmoke(
     if (reportedStep) throw new Error(detail);
     throw stepFailure(currentStep, error, report);
   } finally {
-    if (temporary) cleanupSmokeScopes(join(temporary, 'state/systemd-bin/systemd-run-argv.jsonl'));
+    if (temporary) cleanupSmokeScopes(join(temporary, 'state/systemd-bin/systemd-run-argv.jsonl'), policy);
     if (clone && tree && worktreeAdded) {
       try {
-        checked('git', ['worktree', 'remove', '--force', tree], clone, 2000);
+        checked('git', ['worktree', 'remove', '--force', tree], clone, policy.worktreeCleanupTimeoutMs);
       } catch {
         /* The disposable repository is removed below. */
       }
     }
     if (clone && branch) {
       try {
-        checked('git', ['branch', '-D', branch], clone, 2000);
+        checked('git', ['branch', '-D', branch], clone, policy.worktreeCleanupTimeoutMs);
       } catch {
         /* The disposable repository is removed below. */
       }
     }
     if (clone && devTree && devWorktreeAdded) {
       try {
-        checked('git', ['worktree', 'remove', '--force', devTree], clone, 2000);
+        checked('git', ['worktree', 'remove', '--force', devTree], clone, policy.worktreeCleanupTimeoutMs);
       } catch {
         /* The disposable repository is removed below. */
       }
@@ -1146,7 +1162,7 @@ async function runRealSmoke(
   }
 }
 
-function cleanupSmokeScopes(path: string): void {
+function cleanupSmokeScopes(path: string, policy: SmokePolicy): void {
   if (!existsSync(path)) return;
   let calls: string[][];
   try {
@@ -1161,7 +1177,7 @@ function cleanupSmokeScopes(path: string): void {
     }),
   );
   for (const unit of units)
-    spawnSync('systemctl', ['--user', 'stop', unit], { encoding: 'utf8', timeout: 5000, maxBuffer: OUTPUT_LIMIT });
+    spawnSync('systemctl', ['--user', 'stop', unit], { encoding: 'utf8', timeout: policy.scopeCleanupTimeoutMs, maxBuffer: policy.outputBytes });
 }
 
 function withDeadline<T>(promise: Promise<T>, deadline: number, step: string): Promise<T> {
@@ -1176,7 +1192,7 @@ function withDeadline<T>(promise: Promise<T>, deadline: number, step: string): P
   ]);
 }
 
-async function waitForCheck(resultPath: string, deadline: number): Promise<Record<string, unknown>> {
+async function waitForCheck(resultPath: string, deadline: number, policy: SmokePolicy): Promise<Record<string, unknown>> {
   while (Date.now() < deadline) {
     if (existsSync(resultPath)) {
       try {
@@ -1186,18 +1202,21 @@ async function waitForCheck(resultPath: string, deadline: number): Promise<Recor
         if (record.status === 'finished') return record;
       } catch (error) {
         if (error instanceof SyntaxError) {
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, WAIT_MS));
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, policy.pollMs));
           continue;
         }
         throw error;
       }
     }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, WAIT_MS));
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, policy.pollMs));
   }
   throw new Error('worker-check result did not arrive before the smoke deadline');
 }
 
 async function runInnerSmoke(report: Reporter): Promise<void> {
+  const startupPolicy = process.env.REZICS_LAUNCH_SMOKE_POLICY
+    ? readControlPolicy(JSON.parse(process.env.REZICS_LAUNCH_SMOKE_POLICY))
+    : undefined;
   const tree = resolve(process.env.REZICS_LAUNCH_SMOKE_TREE ?? resolve(import.meta.dir, '../../..'));
   const clone = resolve(process.env.REZICS_LAUNCH_SMOKE_CLONE ?? tree);
   const sourceRoot = resolve(process.env.REZICS_LAUNCH_SMOKE_SOURCE_ROOT ?? tree);
@@ -1210,7 +1229,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   const workerCheckScript = resolve(
     process.env.REZICS_LAUNCH_SMOKE_WORKER_CHECK ?? join(tree, 'scripts/worker-check.ts'),
   );
-  const deadline = Number(process.env.REZICS_LAUNCH_SMOKE_DEADLINE ?? Date.now() + INNER_BUDGET_MS);
+  const deadline = Number(process.env.REZICS_LAUNCH_SMOKE_DEADLINE ?? Date.now() + (startupPolicy ?? defaultPolicy).launchSmoke.budgetMs);
   const reportPath = resolve(
     process.env.REZICS_LAUNCH_SMOKE_REPORT_PATH ?? join(tree, '.temp/goal/lifecycle-smoke/report.json'),
   );
@@ -1255,6 +1274,9 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
     GOAL_WORKTREE_ROOT: worktreeRoot,
   };
   const settings = loadSettings({ cwd: tree, env, localFile });
+  if (startupPolicy) settings.policy = startupPolicy;
+  const policy = (settings.policy ?? defaultPolicy).launchSmoke;
+  const { git, checked, message, stepFailure } = smokeTools(policy);
   // Tracked configuration comes from the candidate; local, untracked files (routing.local.json) exist only in the
   // source checkout, and remapping them failed every smoke at setup with ENOENT.
   const remap = (path: string): string => {
@@ -1307,12 +1329,12 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   }
 
   const systemdErrors: string[] = [];
-  const systemdProbe = new WorkerSlice().launch(
+  const systemdProbe = new WorkerSlice(undefined, undefined, undefined, settings.policy?.workerResources).launch(
     'lifecycle-smoke-preflight',
     0,
     process.execPath,
     ['-e', 'process.stdout.write("lifecycle systemd scope passed\\n")'],
-    { cwd: tree, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 },
+    { cwd: tree, env: process.env, stdio: ['ignore', 'pipe', 'pipe'], timeout: policy.commandTimeoutMs },
     () => false,
     (line: string) => systemdErrors.push(line),
   );
@@ -1340,7 +1362,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   persistEvidence();
   report('systemd-preflight: passed');
 
-  const workerCheckEvidence = await exerciseWorkerCheck(tree, workerCheckScript, deadline);
+  const workerCheckEvidence = await exerciseWorkerCheck(tree, workerCheckScript, deadline, policy);
   upsertScenario(evidence, {
     id: 'dev-worker-check-start-and-result-records',
     status: 'passed',
@@ -1411,9 +1433,9 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
       launches,
       selection: { configuredProfile: selected, currentAttemptProfile: attempt?.profile, pool: attempt?.pool },
       currentRun: run ? { sequence: run.sequence, at: run.at, ...runBody } : null,
-      events: events.slice(-16).map((event) => ({ sequence: event.sequence, kind: event.kind, at: event.at })),
-      logSuffix: attempt && runBody ? smokeRunSuffix(attempt.logPath, runBody.logStartOffset) : [],
-      stderrSuffix: attempt && runBody ? smokeStderrSuffix(`${attempt.logPath}.err`) : '',
+      events: events.slice(-policy.snapshotEvents).map((event) => ({ sequence: event.sequence, kind: event.kind, at: event.at })),
+      logSuffix: attempt && runBody ? smokeRunSuffix(attempt.logPath, runBody.logStartOffset, policy) : [],
+      stderrSuffix: attempt && runBody ? smokeStderrSuffix(`${attempt.logPath}.err`, policy) : '',
       checks: (attempt?.checks ?? []).map((id) => {
         const path = join(task!.worktree, '.temp/goal/checks/results', `${id}.json`);
         let record: unknown = null;
@@ -1424,8 +1446,8 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
         }
         return { id, record };
       }),
-      launchErrors: launchErrors.slice(-8),
-    });
+      launchErrors: launchErrors.slice(-policy.launchErrors),
+    }, policy);
   };
   const observed = observeSmokeAdapter(agentAdapter('codex'), (launch) => {
     launches.push(launch);
@@ -1448,7 +1470,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
   };
   try {
     const frontMatter = launchSmokeBrief(workerCheckScript);
-    parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile));
+    parseBrief(frontMatter, readRiskOwnership(settings.riskAreasFile, settings.policy?.brief), settings.policy?.brief);
     const briefPath = join(stateDirectory, 'briefs', `${randomUUID()}.md`);
     mkdirSync(dirname(briefPath), { recursive: true });
     writeFileSync(briefPath, frontMatter, { flag: 'wx' });
@@ -1492,7 +1514,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
 
       currentStep = 'wake';
       const resultPath = join(waitingTask.worktree, '.temp/goal/checks/results', `${checkId}.json`);
-      const checkResult = await withDeadline(waitForCheck(resultPath, deadline), deadline, 'wake');
+      const checkResult = await withDeadline(waitForCheck(resultPath, deadline, policy), deadline, 'wake');
       if (checkResult.infrastructureFailureFinal === true || checkResult.infrastructureFailure)
         throw new Error(
           `capacity timeout: worker-check ${checkId} infrastructure failure: ${String(checkResult.infrastructureFailure ?? 'final infrastructure failure')}`,
@@ -1521,7 +1543,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
       if (resumed.exitCode !== 0) throw new Error(`resumed worker exited with code ${String(resumed.exitCode)}`);
       if (resumed.state !== 'exited' || resumed.failureKind || !reportsSuccess(resumed.result))
         throw new Error(
-          `resumed worker did not exit successfully: ${resumed.failureKind ?? resumed.result.slice(-400)}`,
+          `resumed worker did not exit successfully: ${resumed.failureKind ?? resumed.result.slice(-policy.resultCharacters)}`,
         );
       const successResult = parseWorkerResult(
         parseProviderObject(readLogTail(resumed.logPath), 'resumed success'),
@@ -1658,7 +1680,7 @@ async function runInnerSmoke(report: Reporter): Promise<void> {
       if (startPromise)
         await Promise.race([
           startPromise.catch(() => {}),
-          new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000)),
+          new Promise((resolvePromise) => setTimeout(resolvePromise, policy.drainWaitMs)),
         ]);
     }
     try {
