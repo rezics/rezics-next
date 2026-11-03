@@ -59,6 +59,10 @@ test('MAL retains independent measures, zero, private comments, dates and unknow
   expect(() => parseMal(' '.repeat(MAL_LIMITS.bytes + 1))).toThrow('2 MiB');
 });
 test('MAL adopts only an explicitly selected scalar occurrence and retries the same native receipts', async () => {
+  expect(native.original.types['ex:Parent']?.library?.profileId).toBe('fixture.game');
+  expect(native.original.libraryProfiles?.['fixture.game']?.progress?.allowed[0]?.units.map((unit) => unit.id)).toContain(
+    'episode',
+  );
   const target = await native.createSubject('game');
   const id = await upload(
     anime('210', '<my_watched_episodes>0</my_watched_episodes>') +
