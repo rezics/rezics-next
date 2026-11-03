@@ -311,6 +311,7 @@ export function startDiscoveryIndexing(options: {
   reviewSource?: ReviewDiscoverySource;
 }) {
   const receivers = new Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>();
+  const incarnations = new Map<number, string>();
   const relays = new Map<number, ReturnType<typeof startRelays>>();
   let stopped = false,
     paused = false,
@@ -341,7 +342,14 @@ export function startDiscoveryIndexing(options: {
         : (options.intervalMs ?? 100);
     for (const target of generations) {
       if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
+      const binding = `${target.uuid}:${target.incarnation}`;
+      if (incarnations.has(target.generation) && incarnations.get(target.generation) !== binding) {
+        await relays.get(target.generation)?.stop();
+        relays.delete(target.generation);
+        receivers.delete(target.generation);
+      }
       if (!relays.has(target.generation)) {
+        incarnations.set(target.generation, binding);
         const projection = createDiscoveryProjection({ ...options, target, registry });
         if (options.reviewSource) receivers.set(target.generation, createReviewDiscoveryReceiving({
           ...options, projection, source: options.reviewSource,
@@ -369,6 +377,7 @@ export function startDiscoveryIndexing(options: {
       await relays.get(target.generation)?.stop();
       relays.delete(target.generation);
       receivers.delete(target.generation);
+      incarnations.delete(target.generation);
       await retireDiscovery(
         options.pool,
         options.search,
@@ -381,6 +390,7 @@ export function startDiscoveryIndexing(options: {
         await relay.stop();
         relays.delete(generation);
         receivers.delete(generation);
+        incarnations.delete(generation);
       }
     if (readiness) throw readiness;
   };
@@ -445,6 +455,7 @@ export function startDiscoveryIndexing(options: {
         await Promise.all([...relays.values()].map((relay) => relay.stop()));
         relays.clear();
         receivers.clear();
+        incarnations.clear();
       }));
     },
   };
