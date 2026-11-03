@@ -2081,6 +2081,7 @@ Private watch methods refuse an operator acting as a different account, even wit
 Native watch receipts and private change events enroll their account owner in shared history erasure; the permanent
 command-kind assignments are `content.board.watch=8` and `content.watch.remove=9`.
 `board_activity` is independent of `thread_watch`, optional, default-on, in-app only, without historical backfill.
+Decision: opening fanout uses 20 recipients per durable page, matching the native Inbox's default presentation page.
 
 | Consumer             | Native method and mounted operation                                                            | Result                                                                                        |
 | -------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -2171,7 +2172,7 @@ existing mandatory path.
 
 - Touches: `readOpening` runs one partition point and one exact envelope/thread/post/revision query. Its native
   envelope has at most `MAX_COMMAND_EVENTS=1000` events. `loadPage` runs BEGIN, partition fence, work INSERT, work lock,
-  B≤100 recipient range and COMMIT. Advancing runs BEGIN, partition fence, progress UPDATE and COMMIT.
+  B≤20 recipient range and COMMIT. Advancing runs BEGIN, partition fence, progress UPDATE and COMMIT.
 - Bound: fixed work is eight data statements and four transaction controls, one bounded original-envelope range,
   three original source points, three load progress/fence points, two advance/fence points and B recipient rows.
   Per recipient add the exact source query/partition point, `postReadableByAccount`, and the delivered finalizer.

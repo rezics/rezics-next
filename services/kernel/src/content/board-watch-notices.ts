@@ -14,7 +14,8 @@ import { finalizeOptionalNotice, NOTICE_RETENTION_MS, withWritableNoticeRoute } 
 import { postReadableByAccount } from './reads.ts';
 
 const published = 'com.rezics.content.post.published.v1';
-export const BOARD_WATCH_RECIPIENT_BUDGET = 100;
+// Match the native Inbox's default presentation page; larger fanouts continue durably.
+export const BOARD_WATCH_RECIPIENT_BUDGET = 20;
 export const BOARD_WATCH_STEP_DEADLINE_MS = 30_000;
 type Source = ContentEventData<typeof published>;
 type Input = { source: Source; route: number; epoch: number; position: string; eventId: string; time: Date };
