@@ -181,6 +181,8 @@ export type BoardPinPageController = {
   state: BoardPinFeedState;
   rowStatuses: Readonly<Record<string, BoardPinRowStatus | undefined>>;
   sender: BoardPinSender | null;
+  needsRestart: boolean;
+  malformed: boolean;
   refresh(): void;
   start(threadId: string, action: BoardPinAction): void;
   retry(threadId: string): void;
@@ -211,10 +213,13 @@ export function useBoardPinPage(input: {
   };
   const [state, setState] = useState<BoardPinFeedState>(snapshot);
   const [rowStatuses, setRowStatuses] = useState<Record<string, BoardPinRowStatus | undefined>>({});
+  const [needsRestart, setNeedsRestart] = useState(false);
+  const [malformed, setMalformed] = useState(false);
   const live = useRef(false);
   const readController = useRef<AbortController | null>(null);
   const busyRows = useRef(new Set<string>());
   const caller = useRef<BoardPinCommandCaller | null>(null);
+  const restartAfterCommand = useRef(false);
   const refreshRef = useRef(async () => {});
 
   const isCurrent = () => live.current && input.visit.observation.snapshot() === input.visit.revision;
@@ -228,7 +233,13 @@ export function useBoardPinPage(input: {
         byThreadId.set(threadId, result.thread);
         return { ...current, byThreadId };
       });
-      if (producer.readBoard) queueMicrotask(() => void refreshRef.current());
+      if (!producer.readBoard) return;
+      if (input.cursor) {
+        restartAfterCommand.current = true;
+        setNeedsRestart(true);
+        return;
+      }
+      queueMicrotask(() => void refreshRef.current());
     });
   }
 
@@ -246,17 +257,31 @@ export function useBoardPinPage(input: {
     setState({ state: 'preparing' });
     try {
       if (producer.readBoard) {
+        const omitCursor = restartAfterCommand.current || !input.cursor;
         const result = await producer.readBoard({
           boardId: input.boardId,
           ...(input.sort ? { sort: input.sort } : {}),
-          ...(input.cursor ? { cursor: input.cursor } : {}),
+          ...(!omitCursor && input.cursor ? { cursor: input.cursor } : {}),
           signal: controller.signal,
         });
         if (controller.signal.aborted || !isCurrent()) return;
+        if (result.state === 'restart') {
+          setNeedsRestart(true);
+          setMalformed(false);
+          return;
+        }
+        if (result.state === 'malformed') {
+          setMalformed(true);
+          setState({ state: 'unavailable' });
+          return;
+        }
         if (result.state !== 'ready') {
           setState(result);
           return;
         }
+        restartAfterCommand.current = false;
+        setNeedsRestart(false);
+        setMalformed(false);
         input.onBoardRead?.(result);
         const ids = [
           ...[...pinnedIdentitySet(result.pinnedThreads)],
@@ -329,7 +354,16 @@ export function useBoardPinPage(input: {
     caller.current?.retry(threadId);
   };
 
-  return { state, rowStatuses, sender: input.visit.sender, refresh: () => void refresh(), start, retry };
+  return {
+    state,
+    rowStatuses,
+    sender: input.visit.sender,
+    needsRestart,
+    malformed,
+    refresh: () => void refresh(),
+    start,
+    retry,
+  };
 }
 
 export function BoardPinPageStatus({ state, onRetry }: { state: BoardPinFeedState; onRetry(): void }): ReactNode {

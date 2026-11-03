@@ -28,7 +28,14 @@ write into a replacement caller. Setting commands keep the original idempotency 
 
 A cooldown refusal keeps the draft and shows the native retry time. The person explicitly resubmits when they choose
 to; native policy may still refuse. Unavailable eligibility is an honest status with a manual retry, never a
-speculative allowed or empty wait. Denied setting admission hides the editor.
+speculative allowed or empty wait. Denied setting admission hides the editor. An unknown setting command retries the
+exact original sender, credentials, key and interval. A definitive conflict requires an explicit current-state review
+before a new intent. Browser clocks never grant sending authority.
+
+## Board reading after a setting
+
+An applied interval change reconciles the current board reading without repeating the setting command. Slow mode does
+not increment Content's pin revision; the current cursor remains usable unless a separate pin change invalidates it.
 
 ## Remaining producer binding
 

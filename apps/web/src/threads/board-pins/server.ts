@@ -1,8 +1,10 @@
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { readPageAuthors } from '../../identity/read';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client.ts';
+import { chunkAuthorIds, disclosedBoardAuthorIds } from '../board-reading';
 import { validBoardPinId, type BoardPinAction, type BoardPinBoardRead, type BoardPinCommandResult } from './contract';
 import { changeBoardPinRequest, readBoardPinBoardRequest } from './native';
 
@@ -44,16 +46,31 @@ function validateChange(input: unknown): {
   return { boardId: input.boardId, threadId: input.threadId, action: input.action, key: input.key };
 }
 
+async function withAuthors(result: BoardPinBoardRead): Promise<BoardPinBoardRead> {
+  if (result.state !== 'ready') return result;
+  const authorIds = disclosedBoardAuthorIds(result.pinnedThreads, result.threads);
+  if (authorIds.length === 0) return { ...result, authors: {} };
+  const authors: { [id: string]: NonNullable<Extract<BoardPinBoardRead, { state: 'ready' }>['authors']>[string] } = {};
+  for (const batch of chunkAuthorIds(authorIds)) {
+    const page = await readPageAuthors(kernelClient(), batch);
+    if (page === null) return { ...result, authors: null };
+    Object.assign(authors, page);
+  }
+  return { ...result, authors };
+}
+
 export const readBoardPinBoard = createServerFn({ method: 'GET' })
   .validator(validateBoardRead)
   .handler(async ({ data }): Promise<BoardPinBoardRead> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return readBoardPinBoardRequest(
-      data,
-      getRequest(),
-      env as Partial<SessionEnv>,
-      kernelClient(),
-      kernelOriginConfigured(),
+    return withAuthors(
+      await readBoardPinBoardRequest(
+        data,
+        getRequest(),
+        env as Partial<SessionEnv>,
+        kernelClient(),
+        kernelOriginConfigured(),
+      ),
     );
   });
 

@@ -8,7 +8,7 @@ import {
   ImageCredit,
 } from '../community/community-presentation-parts';
 import { Badge } from '@rezics/ui/shadcn/badge';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { Menu } from '@rezics/ui/menu';
 import { EllipsisIcon } from 'lucide-react';
 import { m } from '../paraglide/messages.js';
@@ -18,6 +18,7 @@ import { BoardContext } from './thread-context';
 import { BoardFeed } from './board-feed';
 import type { CommunityBoardPage } from './board-feed-data';
 import type { BoardSort } from './board-sort';
+import { boardReadingRestartHref } from './board-reading';
 
 /** One owned community region, reused by the actual route and Patterns. The shell owns surrounding navigation. */
 export function BoardCommunity({
@@ -159,9 +160,11 @@ export function BoardCommunityMenu({ boardId, signedIn = false }: { boardId: str
 export function BoardCommunityStatus({
   state,
   onRetry,
+  restart,
 }: {
-  state: 'loading' | 'error' | 'closed';
+  state: 'loading' | 'error' | 'closed' | 'restart';
   onRetry?: () => void;
+  restart?: { boardId: string; sort: BoardSort };
 }) {
   return (
     <section className="w-full max-w-6xl rounded-3xl bg-card p-6 sm:p-10" aria-busy={state === 'loading'}>
@@ -170,15 +173,30 @@ export function BoardCommunityStatus({
           ? m.platform_closed_heading()
           : state === 'loading'
             ? m.board_threads_heading()
-            : m.error_heading()}
+            : state === 'restart'
+              ? m.board_threads_heading()
+              : m.error_heading()}
       </PageHeading>
       <p role="status" className="mt-4 text-muted-foreground">
         {state === 'closed'
           ? m.platform_closed_message()
           : state === 'loading'
             ? m.board_community_loading()
-            : m.error_message()}
+            : state === 'restart'
+              ? m.board_reading_invalid_cursor()
+              : m.error_message()}
       </p>
+      {state === 'restart' && restart ? (
+        <a
+          href={boardReadingRestartHref({ boardId: restart.boardId, sort: restart.sort, locale: getLocale() })}
+          className={buttonVariants({
+            variant: 'outline',
+            className: 'mt-4 h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal',
+          })}
+        >
+          {m.board_reading_restart()}
+        </a>
+      ) : null}
       {state === 'error' && onRetry ? (
         <Button variant="outline" className="mt-4 min-h-11 min-w-11" onClick={onRetry}>
           {m.board_community_retry()}

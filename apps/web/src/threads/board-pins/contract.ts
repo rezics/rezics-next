@@ -67,9 +67,12 @@ export type BoardPinBoardRead =
       threads: readonly BoardPinJsonRecord[];
       next: string | null;
       rankRefreshedAt: string | null;
+      authors: { readonly [id: string]: BoardPinJsonRecord } | null;
     }>
   | Readonly<{ state: 'denied' }>
-  | Readonly<{ state: 'unavailable' }>;
+  | Readonly<{ state: 'unavailable' }>
+  | Readonly<{ state: 'restart' }>
+  | Readonly<{ state: 'malformed' }>;
 
 export type BoardPinProducer = Readonly<{
   /** Read statuses for the exact ordinary feed page; no directory or second feed is requested. */
@@ -204,6 +207,17 @@ export function parseBoardPinCommandResult(
   };
 }
 
+function authorMap(value: unknown): { readonly [id: string]: BoardPinJsonRecord } | null | undefined {
+  if (value === null) return null;
+  if (!record(value)) return undefined;
+  const authors: { [id: string]: BoardPinJsonRecord } = {};
+  for (const [id, item] of Object.entries(value)) {
+    if (!record(item)) return undefined;
+    authors[id] = item as BoardPinJsonRecord;
+  }
+  return authors;
+}
+
 export function parseBoardPinBoard(boardId: string, body: unknown): BoardPinBoardRead {
   if (!record(body)) return { state: 'unavailable' };
   const threads = jsonRecords(body.threads);
@@ -214,7 +228,9 @@ export function parseBoardPinBoard(boardId: string, body: unknown): BoardPinBoar
     body.rankRefreshedAt === null || typeof body.rankRefreshedAt === 'string' ? body.rankRefreshedAt : undefined;
   if (next === undefined || rankRefreshedAt === undefined) return { state: 'unavailable' };
   const management = body.management === 'allowed' ? 'allowed' : 'denied';
-  return { state: 'ready', boardId, management, pinnedThreads, threads, next, rankRefreshedAt };
+  const authors = body.authors === undefined ? null : authorMap(body.authors);
+  if (authors === undefined) return { state: 'unavailable' };
+  return { state: 'ready', boardId, management, pinnedThreads, threads, next, rankRefreshedAt, authors };
 }
 
 /** Owns exact-command recovery for one mounted board/session visit. Retiring it never cancels a sent command. */

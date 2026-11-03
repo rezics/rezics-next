@@ -2,6 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed.ts';
 import type { SessionEnv } from '../../session/client.ts';
 import { prepareSession, viewerCredential } from '../../session/request.ts';
+import { isInvalidBoardCursor, isMalformedBoardQuery } from '../board-reading';
 import {
   parseBoardPinBoard,
   parseBoardPinCommandResult,
@@ -59,6 +60,8 @@ function queryOf(sort: 'active' | 'hot' | 'new' | undefined, cursor: string | un
 
 function readOutcome(boardId: string, status: number, body: unknown): BoardPinBoardRead {
   if (status === 401 || status === 403) return { state: 'denied' };
+  if (isInvalidBoardCursor(status, body)) return { state: 'restart' };
+  if (isMalformedBoardQuery(status, body)) return { state: 'malformed' };
   if (status === 200) return parseBoardPinBoard(boardId, body);
   return { state: 'unavailable' };
 }

@@ -1,8 +1,9 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useLocation } from '@tanstack/react-router';
-import { MessageSquareIcon, HeartIcon } from 'lucide-react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { Link, useLocation, useRouter } from '@tanstack/react-router';
+import type { ReactionKind } from '@rezics/ui/reactions';
 import { ContentItem } from '@rezics/ui/content-item';
-import { buttonVariants } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { FeedActionBar } from '../features/feed/action-bar';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { BoardSortNav, type BoardSort } from './board-sort';
@@ -22,18 +23,30 @@ import { pinnedIdentitySet } from './board-pins/contract';
 import { productionBoardPinProducer } from './board-pins/producer';
 import type { BoardPinProducer, BoardPinReadResult, BoardPinSender, BoardPinThread } from './board-pins/contract';
 import {
+  authorsForCurrentReading,
   boardPinThreadIds,
   boardThreadPreview,
-  boardThreadReactionCount,
   nativePinnedSection,
   ordinaryBoardThreads,
   type BoardFeedThread,
   type BoardThreadPage,
   type CommunityBoardPage,
 } from './board-feed-data';
+import { captureBoardReadingReturn, disclosedBoardAuthorIds } from './board-reading';
+import type { PageAuthors } from '../identity/read';
 
 const consumedContinuationStates = new WeakSet<object>();
 let lastObservedHistoryIndex: number | null = null;
+
+function nativeReactionCounts(thread: BoardFeedThread): Partial<Record<ReactionKind, number>> | undefined {
+  if (thread.availability !== 'available' || thread.reactions === undefined) return undefined;
+  const counts: Partial<Record<ReactionKind, number>> = {};
+  for (const [kind, value] of Object.entries(thread.reactions)) {
+    if (!Number.isSafeInteger(value) || value < 0) return undefined;
+    counts[kind as ReactionKind] = value;
+  }
+  return counts;
+}
 
 function ThreadCard({
   thread,
@@ -41,12 +54,16 @@ function ThreadCard({
   now,
   pin,
   pinControl,
+  signedIn,
+  origin,
 }: {
   thread: BoardFeedThread;
   authors: CommunityBoardPage['authors'];
   now: string;
   pin?: BoardPinThread;
   pinControl?: ReactNode;
+  signedIn: boolean;
+  origin: { key: string; isCurrent(): boolean };
 }) {
   const locale = getLocale();
   const available = thread.availability === 'available';
@@ -65,8 +82,8 @@ function ThreadCard({
         ) : null}
       </>
     ) : null;
-  const { replyCount, lastActivityAt } = threadActivity(thread);
-  const reactions = boardThreadReactionCount(thread);
+  const { lastActivityAt } = threadActivity(thread);
+  const counts = nativeReactionCounts(thread);
 
   return (
     <ContentItem
@@ -75,6 +92,8 @@ function ThreadCard({
       href={href}
       headingLevel={3}
       titleDataSlot="board-feed-card"
+      data-thread-id={thread.id}
+      tabIndex={-1}
       metadata={
         available ? (
           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -91,39 +110,45 @@ function ThreadCard({
       }
       preview={previewContent}
       actions={
-        <>
-          <CopyDiscussionLink href={href} />
-          {pinControl}
-          {available && reactions !== null ? (
-            <a
-              href={href}
-              className="inline-flex min-h-11 min-w-11 max-w-full items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-start whitespace-normal text-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              <HeartIcon aria-hidden="true" className="size-4 shrink-0" />
-              <span className="min-w-0">{m.board_feed_reactions({ count: reactions })}</span>
-            </a>
-          ) : null}
-          <a
+        available ? (
+          <FeedActionBar
+            locale={locale}
+            title={title}
             href={href}
-            className="inline-flex min-h-11 min-w-11 max-w-full items-center gap-1.5 rounded-xl bg-muted px-3 py-2 text-start whitespace-normal text-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            signedIn={signedIn}
+            origin={origin}
+            {...(counts === undefined
+              ? {}
+              : {
+                  reaction: {
+                    target: { kind: 'thread' as const, id: thread.id },
+                    counts,
+                    value: null,
+                    personalReady: false,
+                    settleWithRead: false,
+                    reactionOrigin: { key: origin.key, reader: null, isCurrent: origin.isCurrent },
+                  },
+                })}
+            reply={{ href: `${href}${href.includes('#') ? '' : '#reply'}` }}
+            overflow={<CopyDiscussionLink href={href} />}
           >
-            <MessageSquareIcon aria-hidden="true" className="size-4 shrink-0" />
-            <span className="min-w-0">
-              {available && replyCount !== null
-                ? m.board_feed_replies({ count: replyCount })
-                : m.board_feed_open_thread()}
-            </span>
-          </a>
-          {available && lastActivityAt ? (
-            <time
-              dateTime={lastActivityAt}
-              title={fullDateTime(lastActivityAt, locale)}
-              className="min-w-0 max-w-full text-xs"
-            >
-              {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
-            </time>
-          ) : null}
-        </>
+            {pinControl}
+            {lastActivityAt ? (
+              <time
+                dateTime={lastActivityAt}
+                title={fullDateTime(lastActivityAt, locale)}
+                className="min-w-0 max-w-full text-xs"
+              >
+                {m.board_thread_last_activity({ time: timeText(lastActivityAt, now, locale) })}
+              </time>
+            ) : null}
+          </FeedActionBar>
+        ) : (
+          <>
+            <CopyDiscussionLink href={href} />
+            {pinControl}
+          </>
+        )
       }
     />
   );
@@ -180,7 +205,7 @@ function BoardFeedVisit({
   boardId,
   sort,
   page,
-  authors,
+  authors: initialAuthors,
   now,
   actions,
   cursor,
@@ -194,11 +219,22 @@ function BoardFeedVisit({
   const headingId = useId();
   const pinHeadingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const locale = getLocale();
   const location = useLocation();
+  const router = useRouter();
   const [reading, setReading] = useState(page);
+  const [authors, setAuthors] = useState(initialAuthors);
   const section = nativePinnedSection(reading.pinnedThreads);
-  const ordinary = ordinaryBoardThreads(reading);
+  const ordinarySource = ordinaryBoardThreads(reading);
+  const pinVisitKey = boardPinVisitKey({
+    boardId,
+    sort,
+    ...(cursor === undefined ? {} : { cursor }),
+    ...(initialPinRead === undefined ? {} : { initial: initialPinRead }),
+    producer: pinProducer,
+    visit,
+  });
   const threadIds = useMemo(() => boardPinThreadIds(reading), [reading]);
   const pinnedIds = useMemo(() => pinnedIdentitySet(reading.pinnedThreads), [reading]);
   const pins = useBoardPinPage({
@@ -210,7 +246,22 @@ function BoardFeedVisit({
     ...(initialPinRead === undefined ? {} : { initial: initialPinRead }),
     producer: pinProducer,
     visit,
-    onBoardRead: (result) => setReading(applyBoardPinReading(page, result)),
+    onBoardRead: (result) => {
+      const next = applyBoardPinReading(page, result);
+      setReading(next);
+      const ordinary = ordinaryBoardThreads(next);
+      const ids = disclosedBoardAuthorIds(next.pinnedThreads, ordinary.threads);
+      setAuthors((previous) => authorsForCurrentReading(previous, result.authors as PageAuthors | null, ids));
+    },
+  });
+  const ordinary = pins.needsRestart ? { ...ordinarySource, next: null } : ordinarySource;
+  const origin = { key: pinVisitKey, isCurrent: () => visit.observation.snapshot() === visit.revision };
+  const signedIn = !!pins.sender;
+  const returnAddress = captureBoardReadingReturn({
+    boardId,
+    sort,
+    locale,
+    ...(cursor === undefined || pins.needsRestart ? {} : { cursor }),
   });
   useLayoutEffect(() => {
     const state = location.state;
@@ -229,10 +280,31 @@ function BoardFeedVisit({
       if (current.__boardNextPage === true) window.history.replaceState({ ...current, __boardNextPage: false }, '');
     }
   }, [location.state]);
+  useLayoutEffect(() => {
+    const focused = typeof document === 'undefined' ? null : document.activeElement;
+    if (!(focused instanceof HTMLElement) || !list.current?.contains(focused)) return;
+    const row = focused.closest('[data-thread-id]');
+    const id = row?.getAttribute('data-thread-id');
+    if (!id || threadIds.includes(id)) return;
+    const next = list.current.querySelector<HTMLElement>('[data-thread-id]');
+    (next ?? heading.current)?.focus();
+  }, [threadIds]);
   const refreshedAt =
     sort !== 'new' && reading.rankRefreshedAt && !Number.isNaN(Date.parse(reading.rankRefreshedAt))
       ? reading.rankRefreshedAt
       : null;
+  const openReturnedThread = (event: MouseEvent) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+      return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const link = target.closest('a');
+    if (!link || !returnAddress) return;
+    const href = link.getAttribute('href');
+    if (!href || !href.includes('/threads/')) return;
+    event.preventDefault();
+    void router.navigate({ href, state: { boardReadingReturn: returnAddress } as never });
+  };
   const card = (thread: BoardFeedThread, pinnedRow?: BoardPinThread) => {
     const row =
       pinnedRow ??
@@ -261,11 +333,18 @@ function BoardFeedVisit({
         now={now}
         {...(row === undefined ? {} : { pin: row })}
         pinControl={pinControl}
+        signedIn={signedIn}
+        origin={origin}
       />
     );
   };
-  return (
-    <section className="min-w-0 space-y-3 [overflow-wrap:anywhere]" aria-labelledby={headingId}>
+    return (
+    <section
+      ref={list}
+      className="min-w-0 space-y-3 [overflow-wrap:anywhere]"
+      aria-labelledby={headingId}
+      onClick={openReturnedThread}
+    >
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
         <h2 ref={heading} id={headingId} tabIndex={-1} className="min-w-0 max-w-full text-lg font-semibold">
           {m.board_threads_heading()}
@@ -287,7 +366,32 @@ function BoardFeedVisit({
           </details>
         ) : null}
       </div>
-      <BoardPinPageStatus state={pins.state} onRetry={pins.refresh} />
+      {pins.malformed ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="board-reading-malformed" role="status">
+          <p className="min-w-0 text-sm text-muted-foreground">{m.board_reading_malformed()}</p>
+          <Button type="button" variant="outline" className="min-h-11 min-w-11" onClick={pins.refresh}>
+            {m.board_community_retry()}
+          </Button>
+        </div>
+      ) : (
+        <BoardPinPageStatus state={pins.state} onRetry={pins.refresh} />
+      )}
+      {pins.needsRestart ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="board-reading-restart" role="status">
+          <p className="min-w-0 text-sm text-muted-foreground">{m.board_reading_restart_help()}</p>
+          <Link
+            to="/boards/$id"
+            params={{ id: boardId }}
+            search={sort === 'active' ? {} : { sort }}
+            className={buttonVariants({
+              variant: 'outline',
+              className: 'h-auto min-h-11 min-w-11 max-w-full py-2 whitespace-normal',
+            })}
+          >
+            {m.board_reading_restart()}
+          </Link>
+        </div>
+      ) : null}
       {section.state === 'ready' ? (
         <div role="region" aria-labelledby={pinHeadingId} data-slot="board-pin-section" className="min-w-0 space-y-2">
           <p id={pinHeadingId} className="min-w-0 max-w-full text-base font-semibold">
@@ -307,7 +411,6 @@ function BoardFeedVisit({
         <ul className="space-y-2">{ordinary.threads.map((thread) => card(thread))}</ul>
       ) : section.state === 'ready' ? null : (
         <div className="rounded-2xl bg-muted/50 px-5 py-10 text-center">
-          <MessageSquareIcon aria-hidden="true" className="mx-auto mb-4 size-8 text-muted-foreground" />
           <p className="mx-auto max-w-sm text-muted-foreground">
             {ordinary.next === null ? m.board_threads_empty() : m.board_threads_page_empty()}
           </p>

@@ -1,5 +1,6 @@
 import type { loadBoardPageWithAuthors } from '../identity/page-loaders';
 import { BOARD_PINNED_SECTION_LIMIT, pinnedIdentitySet } from './board-pins/contract';
+import type { PageAuthors } from '../identity/read';
 
 export type CommunityBoardPage = Awaited<ReturnType<typeof loadBoardPageWithAuthors>>;
 export type BoardFeedThread = CommunityBoardPage['threads']['threads'][number];
@@ -71,11 +72,30 @@ export function nativePinnedSection(pinned: unknown): BoardPinnedSection {
   return threads.length === 0 ? { state: 'empty' } : { state: 'ready', threads };
 }
 
-/** Same-page continuation only: drop identities already present in the native pinned section. */
+/**
+ * Drop the native initial cohort from ordinary rows, including concealed identities.
+ * Continuation pages supply an empty pinned array and are not scanned for pins.
+ */
 export function ordinaryBoardThreads(page: BoardThreadPage): BoardThreadPage {
   const pinned = pinnedIdentitySet(page.pinnedThreads);
   if (pinned.size === 0) return page;
   return { ...page, threads: page.threads.filter((thread) => !pinned.has(thread.id)) };
+}
+
+/** Current disclosed authors only. A replacement page never keeps leftover private metadata. */
+export function authorsForCurrentReading(
+  previous: PageAuthors,
+  next: PageAuthors | undefined,
+  authorIds: readonly string[],
+): PageAuthors {
+  if (next === null) return null;
+  const source = next ?? previous ?? {};
+  const current: NonNullable<PageAuthors> = {};
+  for (const id of authorIds) {
+    const author = source[id];
+    if (author) current[id] = author;
+  }
+  return current;
 }
 
 export function boardPinThreadIds(page: BoardThreadPage): string[] {

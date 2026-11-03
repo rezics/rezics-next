@@ -7,6 +7,7 @@ import { boardRealmId, readBoardRealm, type BoardRealm } from '../threads/board-
 import { boardCommunitySource, type BoardCommunitySource } from '../threads/board-community-source';
 import { readThreadSubjects, type ThreadSubject } from '../threads/subjects';
 import { loadThreadPage, type LoadedThreadPage, type ThreadSlugRedirect } from '../threads/thread-page';
+import { BoardPageCursorError, disclosedBoardAuthorIds, isInvalidBoardCursor } from '../threads/board-reading';
 import { readPageAuthors, type PageAuthors } from './read';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
@@ -14,9 +15,15 @@ type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>;
 type ThreadPage = NonNullable<Awaited<ReturnType<BoardResource['threads']['get']>>['data']>;
 export type PageInput = { id: string; cursor?: string; sort?: 'hot' | 'new' };
 
-function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
+function checkRead<T>(
+  result: { error?: unknown; status?: number; data?: T | null },
+  resource: string,
+  cursor?: { boardId: string; sort?: 'hot' | 'new' },
+): NonNullable<T> {
   if (result.error) {
     if (result.status === 404) throw notFound();
+    if (cursor && isInvalidBoardCursor(result.status ?? 0, result.error))
+      throw new BoardPageCursorError(cursor.boardId, cursor.sort);
     throw new Error(`Kernel ${resource} read failed`);
   }
   return result.data as NonNullable<T>;
@@ -59,12 +66,12 @@ export async function loadBoardPageWithAuthors(
     }),
   ]);
   const board = checkRead<Board>(boardResult, 'board');
-  const threads = checkRead<ThreadPage>(threadsResult, 'board threads');
+  const threads = checkRead<ThreadPage>(threadsResult, 'board threads', {
+    boardId: data.id,
+    ...(data.sort === undefined ? {} : { sort: data.sort }),
+  });
   if (board.board.id !== data.id) throw notFound();
-  const authors = await readPageAuthors(client, [
-    ...threads.threads.map((thread) => thread.authorId),
-    ...(threads.pinnedThreads ?? []).map((thread) => thread.authorId),
-  ]);
+  const authors = await readPageAuthors(client, disclosedBoardAuthorIds(threads.pinnedThreads, threads.threads));
   return {
     board: board.board,
     community: boardCommunitySource(board.board),

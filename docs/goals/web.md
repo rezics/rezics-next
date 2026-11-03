@@ -81,11 +81,13 @@ independent rather than making shared files or unfinished producer delivery into
   population at a time. Native order and privacy states remain authoritative. Realm population selection is private
   to the mounted visit and never enters public metadata or a public Search index.
 - **Board pins.** The initial board page renders Content's disclosed `pinnedThreads` (at most five, native
-  newest-first order) above the existing active/hot/new continuation, excluding those identities from ordinary rows.
-  Concealed pins are omitted with no placeholder. Pin/unpin confirmation and exact-command retry bind
+  newest-first order) above the existing active/hot/new continuation, excluding the complete native initial cohort
+  from ordinary rows, including concealed identities. Later pages do not imply the board has no pins. Concealed pins
+  are omitted with no placeholder. Pin/unpin confirmation and exact-command retry bind
   `boards({ id }).threads({ threadId }).pin` POST and the same board-threads GET; listing capability fields are still
-  absent, so controls appear only from explicit producer actions. Content owns cap (currently three), storage, order
-  and authorization. Details: [board pins](../../apps/web/src/threads/board-pins.md).
+  absent, so controls appear only from explicit producer actions. Effective pin/unpin, including ABA, invalidates the
+  cursor: Web offers an explicit restart of this board/sort with no cursor. Content owns cap (five), `pin_revision`,
+  storage, order and authorization. Details: [board pins](../../apps/web/src/threads/board-pins.md).
 - **Slow mode.** Show the native board posting interval (`off`, 30, 60 or 300 seconds) and the caller's next
   permitted attempt beside new-thread and reply writing. An admitted moderator inspects and changes that interval on
   the board. Waiting preserves the draft; countdown text is display guidance; Send and Retry stay explicit, so a

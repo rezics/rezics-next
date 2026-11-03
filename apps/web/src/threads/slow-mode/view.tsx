@@ -111,7 +111,7 @@ function applyChange(
   if (result.kind === 'applied') remember({ kind: 'available', policy: result.policy });
 }
 
-export function SlowModeSetting({ boardId }: { boardId: string }) {
+export function SlowModeSetting({ boardId, onApplied }: { boardId: string; onApplied?: () => void }) {
   const { visit, read, preparing, reload } = useSlowModeRead(boardId);
   if (!visit) return null;
   if (read?.kind === 'denied') return null;
@@ -123,6 +123,7 @@ export function SlowModeSetting({ boardId }: { boardId: string }) {
       read={read}
       preparing={preparing}
       reload={reload}
+      onApplied={onApplied}
     />
   );
 }
@@ -132,11 +133,13 @@ function SlowModeSettingForm({
   read,
   preparing,
   reload,
+  onApplied,
 }: {
   visit: SlowModeVisit;
   read: import('./contract').SlowModeRead | undefined;
   preparing: boolean;
   reload: () => void;
+  onApplied?: () => void;
 }) {
   const ids = useId();
   const client = useQueryClient();
@@ -144,30 +147,47 @@ function SlowModeSettingForm({
   const [draft, setDraft] = useState<SlowModeInterval | null>(null);
   const [outcome, setOutcome] = useState<SlowModeChange | null>(null);
   const [pending, setPending] = useState(false);
+  const [needsReview, setNeedsReview] = useState(false);
   const commandKey = useRef(crypto.randomUUID());
+  const exact = useRef<{ interval: SlowModeInterval; key: string } | null>(null);
   const policy = read?.kind === 'available' ? read.policy : undefined;
   const selected = draft ?? policy?.intervalSeconds ?? 0;
-  const busy = pending || preparing;
+  const busy = pending || preparing || needsReview;
 
-  async function save() {
-    if (!visit.current() || pending) return;
+  async function save(retry = false) {
+    if (!visit.current() || pending || (needsReview && !retry)) return;
+    const command = retry
+      ? exact.current
+      : { interval: selected, key: commandKey.current };
+    if (!command) return;
+    if (!retry) exact.current = command;
     setPending(true);
     setOutcome(null);
     const owner = visit.controller.signal;
     try {
       const result = await port.change({
         boardId: visit.boardId,
-        intervalSeconds: selected,
-        idempotencyKey: commandKey.current,
+        intervalSeconds: command.interval,
+        idempotencyKey: command.key,
         signal: owner,
       });
       if (!visit.current(owner)) return;
       setOutcome(result);
       if (result.kind === 'applied') {
         commandKey.current = crypto.randomUUID();
+        exact.current = null;
         setDraft(null);
+        setNeedsReview(false);
         applyChange(visit, result, (next) => rememberSlowModeRead(client, visit, next));
-      } else if (result.kind !== 'unknown') commandKey.current = crypto.randomUUID();
+        onApplied?.();
+      } else if (result.kind === 'conflict') {
+        commandKey.current = crypto.randomUUID();
+        exact.current = null;
+        setNeedsReview(true);
+      } else if (result.kind !== 'unknown') {
+        commandKey.current = crypto.randomUUID();
+        exact.current = null;
+      }
     } catch {
       if (!visit.current(owner)) return;
       setOutcome({ kind: 'unknown' });
@@ -222,14 +242,32 @@ function SlowModeSettingForm({
             </RadioGroup>
           </FieldSet>
           {outcome?.kind === 'denied' ? <p role="alert">{m.slow_mode_denied()}</p> : null}
-          {outcome?.kind === 'unavailable' || outcome?.kind === 'conflict' ? (
-            <p role="alert">{m.slow_mode_unavailable()}</p>
-          ) : null}
+          {outcome?.kind === 'unavailable' ? <p role="alert">{m.slow_mode_unavailable()}</p> : null}
+          {outcome?.kind === 'conflict' ? <p role="alert">{m.slow_mode_conflict()}</p> : null}
           {outcome?.kind === 'unknown' ? <p role="alert">{m.slow_mode_unknown()}</p> : null}
           {outcome?.kind === 'applied' ? <p role="status">{m.slow_mode_saved()}</p> : null}
-          <Button type="submit" className={actionClass} disabled={busy}>
-            {m.slow_mode_apply()}
-          </Button>
+          {outcome?.kind === 'conflict' ? (
+            <Button
+              type="button"
+              variant="outline"
+              className={actionClass}
+              onClick={() => {
+                setNeedsReview(false);
+                setOutcome(null);
+                reload();
+              }}
+            >
+              {m.slow_mode_review()}
+            </Button>
+          ) : outcome?.kind === 'unknown' ? (
+            <Button type="button" className={actionClass} disabled={pending} onClick={() => void save(true)}>
+              {m.slow_mode_retry()}
+            </Button>
+          ) : (
+            <Button type="submit" className={actionClass} disabled={busy}>
+              {m.slow_mode_apply()}
+            </Button>
+          )}
         </form>
       )}
     </section>

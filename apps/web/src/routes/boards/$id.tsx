@@ -11,6 +11,7 @@ import { BoardCommunity, BoardCommunityMenu, BoardCommunityStatus } from '../../
 import { BoardParticipation, BoardStartThread } from '../../threads/board-community-actions';
 import { SlowModeSetting } from '../../threads/slow-mode';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isBoardPageCursorError } from '../../threads/board-reading';
 import {
   BoardPageCallerHost,
   createBoardPageCaller,
@@ -79,7 +80,7 @@ function BoardPage() {
   const id = Route.useParams().id;
   const search = Route.useSearch();
   const sort = boardSortFromSearch(search.sort);
-  const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
+  const returnTo = location.publicHref.split('#')[0]!;
   return (
     <BoardPageCallerHost
       result={page}
@@ -101,7 +102,11 @@ function BoardPage() {
           }
           start={<BoardStartThread board={currentPage.board} realm={currentPage.realm} returnTo={returnTo} />}
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
-          postingInterval={session === 'signed-in' ? <SlowModeSetting boardId={id} /> : null}
+          postingInterval={
+            session === 'signed-in' ? (
+              <SlowModeSetting boardId={id} onApplied={() => void router.invalidate()} />
+            ) : null
+          }
         />
       )}
     </BoardPageCallerHost>
@@ -121,10 +126,20 @@ function BoardPageError({ error }: { error: unknown }) {
     credentialMode: router.options.context.credentialMode,
   });
   const canRetry = lifecycle.caller && lifecycle.current;
+  const restart = isBoardPageCursorError(error);
   return (
     <BoardCommunityStatus
-      state={lifecycle.caller && !lifecycle.current ? 'loading' : isPlatformClosedError(error) ? 'closed' : 'error'}
-      {...(canRetry ? { onRetry: () => void lifecycle.retry(() => void router.invalidate()) } : {})}
+      state={
+        lifecycle.caller && !lifecycle.current
+          ? 'loading'
+          : restart
+            ? 'restart'
+            : isPlatformClosedError(error)
+              ? 'closed'
+              : 'error'
+      }
+      {...(restart ? { restart: { boardId: id, sort: sort ?? 'active' } } : {})}
+      {...(canRetry && !restart ? { onRetry: () => void lifecycle.retry(() => void router.invalidate()) } : {})}
     />
   );
 }

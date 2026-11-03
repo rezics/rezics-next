@@ -52,6 +52,7 @@ import { BoardContext } from '../../threads/thread-context';
 import { ThreadSubjects } from '../../threads/thread-subjects';
 import { ThreadReading, type ThreadReadingPage } from '../../threads/thread-reading';
 import { ThreadWatch } from '../../threads/thread-watch';
+import { boardReadingHref, parseBoardReadingReturn } from '../../threads/board-reading';
 import { PageHeading } from '../../shell/page-heading';
 import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
 import {
@@ -124,14 +125,24 @@ export function ThreadReadingHeader({
   page,
   title,
   watch,
+  boardReturn,
 }: {
   page: ThreadReadingPage;
   title: string | null;
   watch?: ReactNode;
+  boardReturn?: string;
 }) {
   return (
     <header className="min-w-0 min-h-8 scroll-mt-24 space-y-3 px-1 [overflow-wrap:anywhere]">
       <BoardContext realm={page.realm} board={page.board} prominent />
+      {boardReturn ? (
+        <a
+          href={boardReturn}
+          className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm px-2 py-2.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          {m.board_reading_return()}
+        </a>
+      ) : null}
       {title || watch ? (
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           {title ? <PageHeading>{title}</PageHeading> : null}
@@ -181,6 +192,9 @@ export function ThreadPage() {
   const { cursor, post } = Route.useSearch();
   const locale = getLocale();
   const returnTo = location.publicHref.split(/[?#]/, 1)[0]!;
+  const boardReturn = parseBoardReadingReturn(
+    (location.state as { boardReadingReturn?: unknown } | undefined)?.boardReadingReturn,
+  );
   const routeSearch = JSON.stringify(location.search);
   const readScope = useMemo(
     () => ({}),
@@ -478,6 +492,9 @@ export function ThreadPage() {
           <ThreadReadingHeader
             page={visiblePage}
             title={title}
+            {...(boardReturn && boardReturn.boardId === visiblePage.board.id
+              ? { boardReturn: boardReadingHref(boardReturn) }
+              : {})}
             watch={
               <ThreadWatch
                 key={JSON.stringify([visiblePage.thread.id, subject ?? null, callbackRevision])}
