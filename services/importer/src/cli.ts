@@ -26,6 +26,7 @@ import {
   VNDB_IMPORTER_SCOPES,
   type CredentialsObserver,
 } from './credentials.ts';
+import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
 
 const VALID_SOURCE = /^(?:bangumi|vndb|openlibrary|wikidata)$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -101,6 +102,8 @@ function usage(): string {
     'Usage: rezics-import --source <bangumi|vndb|openlibrary|wikidata> --dump <path|-> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
     '       [--source-alias <name>] [--disappearance-threshold <0..1>]',
+    '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
+    '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
     'Options: --source --dump --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --help',
   ].join('\n');
 }
@@ -527,6 +530,14 @@ function diagnostic(
 
 /** Parse and run one real importer acquisition without import-time work. */
 export async function runImportCli(argv: readonly string[], options: ImportCliOptions = {}): Promise<ImportCliResult> {
+  if (Array.isArray(argv) && argv[0] === 'diagnostics')
+    return runDiagnosticsCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+      ...(options.observer?.onDatabaseOpen ? { observer: { onDatabaseOpen: options.observer.onDatabaseOpen } } : {}),
+    });
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'diagnostics')
+    return { code: 0, stdout: `${diagnosticsUsage()}\n`, stderr: '', openHandles: 0 };
   let config: Config;
   try {
     const parsed = parse(argv);
