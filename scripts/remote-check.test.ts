@@ -7411,6 +7411,8 @@ test('physical deletion funds aggregate detachment, while competing owners and r
     mkdirSync(entry);
     writeFileSync(join(entry, 'payload'), 'x'.repeat(40000));
   }
+  const competitor = join(fixture.directory, 'competitor.py');
+  writeFileSync(competitor, dependencyPreparationProgram);
   const probe = `
 def evict_artifacts(cache):
     initial = RECLAIM_CREDIT
@@ -7426,7 +7428,7 @@ def evict_artifacts(cache):
     assert 0 < admitted <= initial
     assert sum(entry.exists() for entry in entries) == 1
     assert RECLAIM_CREDIT == initial - admitted
-    competitor = subprocess.run(['python3', '-c', ${JSON.stringify(dependencyPreparationProgram)}, 'sweep', str(cache)])
+    competitor = subprocess.run(['python3', ${JSON.stringify(competitor)}, 'sweep', str(cache)])
     assert competitor.returncode == 0
     assert RECLAIM_CREDIT == initial - admitted
 `;
