@@ -145,11 +145,7 @@ export function createBangumiLabelReview(
       return items;
     });
     const current = r.review.target ? await subjectObservation(actor, r.review.target) : null;
-    if (
-      r.review.target &&
-      (!current || current.source.subjectId !== r.review.target || current.source.kind !== 'supported')
-    )
-      throw conflict();
+    if (r.review.target && (!current || current.source.subjectId !== r.review.target)) throw conflict();
     const subject = current
       ? {
           subjectId: current.source.subjectId,
