@@ -26,7 +26,10 @@ test('unread summary bounds growing same-recipient acknowledged and seen prefixe
     );
     expect(reply.rows).toHaveLength(1);
 
-    for (const [size, previous] of [[256, 0], [4096, 256]] as const) {
+    for (const [size, previous] of [
+      [256, 0],
+      [4096, 256],
+    ] as const) {
       const added = (size - previous) / 2;
       const seen = Array.from({ length: added }, () => newId(route));
       const acknowledged = Array.from({ length: added }, () => newId(route));

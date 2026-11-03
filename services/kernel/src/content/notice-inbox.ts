@@ -240,9 +240,7 @@ export async function countUnreadNotices(
          FROM content.notice_seen WHERE route=$1 AND account_id=$2`,
         [accountRoute, accountId],
       );
-      const frontier = frontierResult.rows[0] as
-        | { seen_created_at: Date; seen_notice_id: string }
-        | undefined;
+      const frontier = frontierResult.rows[0] as { seen_created_at: Date; seen_notice_id: string } | undefined;
       const values: unknown[] = [accountRoute, accountId];
       let seek = '';
       if (frontier) {
