@@ -217,10 +217,7 @@ export function MineCollectionsPageView({
   const navigate = useNavigate();
   const canCreate = useOperation('collection.create');
   const canReadLibrary = useOperation('library_entry.list');
-  const canEditRules =
-    useOperation('collection.create') &&
-    useOperation('collection_rule.get') &&
-    useOperation('collection_rule.update');
+  const canEditRules = useOperation('collection.update');
   const loaded = page.signedIn && (!page.state || page.state === 'loaded');
   const requestedAddress = admitMineCollectionsAddress({ cursor, layout, addressError: page.invalidAddress });
   const requestedCursor = requestedAddress.cursor;
