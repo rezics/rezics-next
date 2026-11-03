@@ -32,7 +32,7 @@ function CurrentHistory({
   );
   useLayoutEffect(() => {
     const previous = globalThis.fetch;
-    const transport: typeof fetch = async (input, init) => {
+    const transport = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       const path = new URL(request.url).pathname;
       if (path === `/v1/posts/${selected.id}/revisions`) return Response.json(currentHistoryEnvelope(2, kind));
@@ -41,7 +41,7 @@ function CurrentHistory({
       if (path === '/v1/accounts') return Response.json({ accounts: [] });
       if (path.startsWith('/v1/subjects/')) return new Response(null, { status: 404 });
       return previous(input, init);
-    };
+    }) as typeof fetch;
     globalThis.fetch = transport;
     return () => {
       if (globalThis.fetch === transport) globalThis.fetch = previous;
