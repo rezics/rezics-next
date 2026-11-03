@@ -2872,9 +2872,15 @@ CREATE TABLE library.copy_archive_progress_apply (
     session_id uuid,
     error_code text,
     updated_at timestamp with time zone NOT NULL,
+    session_revision integer,
+    active_started boolean DEFAULT false NOT NULL,
+    active_command jsonb,
+    CONSTRAINT copy_archive_progress_active_command_check CHECK ((((active_step IS NULL) = (active_command IS NULL)) AND ((active_step IS NOT NULL) OR (active_started = false)))),
+    CONSTRAINT copy_archive_progress_apply_active_command_check CHECK (((active_command IS NULL) OR ((jsonb_typeof(active_command) = 'object'::text) AND (octet_length((active_command)::text) <= 8192)))),
     CONSTRAINT copy_archive_progress_apply_active_step_check CHECK (((active_step >= 0) AND (active_step <= 9))),
     CONSTRAINT copy_archive_progress_apply_next_step_check CHECK (((next_step >= 0) AND (next_step <= 10))),
     CONSTRAINT copy_archive_progress_apply_request_key_hash_check CHECK ((octet_length(request_key_hash) = 32)),
+    CONSTRAINT copy_archive_progress_apply_session_revision_check CHECK (((session_revision >= 1) AND (session_revision <= 2147483646))),
     CONSTRAINT copy_archive_progress_apply_state_check CHECK ((state = ANY (ARRAY['applying'::text, 'partial'::text, 'applied'::text, 'stale'::text, 'failed'::text])))
 );
 
