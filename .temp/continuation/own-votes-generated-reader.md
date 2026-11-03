@@ -1,56 +1,52 @@
 ---
 {
-  "goal": "web",
-  "manager": "web",
-  "kind": "interface",
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "account",
-    "deletion"
-  ],
-  "criticalPath": false,
-  "after": [
-    "eda59d58-d2b6-4674-a92c-3b5cc345c2cb",
-    "fde5a113-246b-4aff-a56c-f209ac6c5a5e",
-    "59999de4-4f17-4643-af4f-cfeb177771b2"
-  ],
-  "waiting": [],
-  "paths": [
-    "apps/web/src/ratings/own-votes/**",
-    "apps/web/src/routes/library/ratings.tsx",
-    "apps/web/src/stories/own-votes.stories.tsx",
-    "apps/web/tests/own-votes-*.test.ts*",
-    "apps/web/messages/*.json",
-    "docs/goals/web.md"
-  ],
-  "acceptance": {
-    "command": [
-      "bun",
-      "apps/web/scripts/focused.ts",
-      "--private-network",
-      "--",
-      "bun",
-      "test",
-      "tests/own-votes-inventory.test.ts",
-      "tests/own-votes-commands.test.ts",
-      "tests/own-votes-current-reader.test.tsx",
-      "tests/own-votes-journey.test.tsx"
+  'goal': 'web',
+  'manager': 'web',
+  'kind': 'interface',
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'account', 'deletion'],
+  'criticalPath': false,
+  'after':
+    [
+      'eda59d58-d2b6-4674-a92c-3b5cc345c2cb',
+      'fde5a113-246b-4aff-a56c-f209ac6c5a5e',
+      '59999de4-4f17-4643-af4f-cfeb177771b2',
     ],
-    "placement": "default",
-    "failing": true,
-    "tests": [
-      "An admitted readable zero or nonzero vote with unavailable/read_only advice explains the current limitation without edit, clear or fabricated action links; a fresh admitted editable row can be selected explicitly.",
-      "Populated, empty, concealed sparse continuation, dependency failure, revoked access and identical-cursor retry preserve their distinct native outcomes in the existing mounted account visit.",
-      "Replacing an editable row with read-only advice retires its form and delayed write/readback effects; an uncertain original command is never rewritten or treated as confirmed from newer current data.",
-      "The native twenty-row bound, original pair identity, same-intent replay, account/session/exposure retirement and zero per-row hydration remain intact."
-    ]
-  },
-  "estimate": {
-    "lines": 450,
-    "files": 9
-  }
+  'waiting': [],
+  'paths':
+    [
+      'apps/web/src/ratings/own-votes/**',
+      'apps/web/src/routes/library/ratings.tsx',
+      'apps/web/src/stories/own-votes.stories.tsx',
+      'apps/web/tests/own-votes-*.test.ts*',
+      'apps/web/messages/*.json',
+      'docs/goals/web.md',
+    ],
+  'acceptance':
+    {
+      'command':
+        [
+          'bun',
+          'apps/web/scripts/focused.ts',
+          '--private-network',
+          '--',
+          'bun',
+          'test',
+          'tests/own-votes-inventory.test.ts',
+          'tests/own-votes-commands.test.ts',
+          'tests/own-votes-current-reader.test.tsx',
+          'tests/own-votes-journey.test.tsx',
+        ],
+      'placement': 'default',
+      'failing': true,
+      'tests':
+        [
+          'An admitted readable zero or nonzero vote with unavailable/read_only advice explains the current limitation without edit, clear or fabricated action links; a fresh admitted editable row can be selected explicitly.',
+          'Populated, empty, concealed sparse continuation, dependency failure, revoked access and identical-cursor retry preserve their distinct native outcomes in the existing mounted account visit.',
+          'Replacing an editable row with read-only advice retires its form and delayed write/readback effects; an uncertain original command is never rewritten or treated as confirmed from newer current data.',
+          'The native twenty-row bound, original pair identity, same-intent replay, account/session/exposure retirement and zero per-row hydration remain intact.',
+        ],
+    },
+  'estimate': { 'lines': 450, 'files': 9 },
 }
 ---
 
