@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { ownedTemporaryDirectory } from './tmp-janitor.ts';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   encodeLifecycleSpec,
@@ -1816,7 +1817,10 @@ export async function runWorkerCheck(
   let scoped = false;
   const peakFile = join(directory, `peak.${process.pid}.${randomUUID()}.tmp`);
   const ownedCommand = ownedLocalCommand(command);
+  let temporary: ReturnType<typeof ownedTemporaryDirectory> | undefined;
   try {
+    temporary = ownedTemporaryDirectory(join(root, '.temp'), 'check-tmp-');
+    Object.assign(env, temporary.env);
     let callerSlice = '';
     if (env.REZICS_CHECK_SCOPE !== 'off') {
       try {
@@ -1886,6 +1890,7 @@ export async function runWorkerCheck(
   } catch (error) {
     wait.stop();
     const executionIntent = cancelled();
+    temporary?.close();
     const logicalCancelled =
       error instanceof CheckCancelled ||
       (logicalCheckId !== undefined &&
@@ -1947,6 +1952,7 @@ export async function runWorkerCheck(
     throw error;
   } finally {
     clearInterval(progressTimer);
+    temporary?.close();
     stopForwarders();
     wait.stop();
     closeSync(descriptor);

@@ -1,4 +1,10 @@
 import { resolve } from 'node:path';
+import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
+
+// A failed test or runtime marker belongs to this invocation, never the host's shared /tmp.
+const temporary = ownedTemporaryDirectory(resolve(import.meta.dir, '../../../.temp/goal-tests'), 'run-');
+Object.assign(process.env, temporary.env);
+process.once('exit', () => temporary.close());
 
 // Root test preloads also route checks, whose wait recorder must see the attempt's file after this preload strips the
 // control-plane environment from test processes.

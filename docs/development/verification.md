@@ -87,6 +87,35 @@ setup or cleanup failures and does not authorize a discretionary whole-suite run
 
 ## Check placement
 
+### Temporary files
+
+Workers use `.temp/worker-tmp` in their task worktree; deleting the worktree deletes their scratch files. Each gate,
+local check and test invocation gets a separate directory in its checkout's `.temp`. Remote checks use
+`.temp/tmp` inside their disposable run. Child processes inherit `TMPDIR`, `TMP` and `TEMP`. Node's compile cache is
+disabled in these environments, including tools such as Vite that enable it programmatically.
+`tools/goal` fixture helpers register teardown after every test, including failed tests, and make read-only
+directories writable before removing them. Fixture process teardown precedes directory deletion.
+
+Decision: retain the pinned Bun runtime and confine runtime markers; expire inactive `.hm` markers after one hour,
+and recognized fixture, browser, randomized `.tmp` and Node cache entries after 24 hours.
+
+The control plane's maintenance timer should invoke `bun scripts/tmp-janitor.ts` hourly once available; use
+`--dry-run` to preview. It examines only entries belonging to its UID with the patterns in
+`scripts/tmp-janitor.ts`. It checks both modification and metadata age, including descendants. It preserves
+unrecognized entries, top-level symlinks, foreign-owned descendants, and entries referenced by a live cwd, descriptor,
+memory mapping or inherited temp/cache environment. Failure to inspect a live process of the same UID refuses the
+pass. Shared stack and memory lease directories are never janitor candidates. A stale globally shared compile cache
+with active users remains protected; new check and worker processes do not refill it.
+
+#### Cost: temporary cleanup
+
+- Touches: one `/tmp` directory listing, one process reference snapshot, and each eligible stale tree once.
+- Bound: linear in process references plus recognized entries and their descendants; active processes reserve
+  ancestor paths in a set, so each marker needs a constant-time lookup. Normal teardown removes run scratch and
+  an hourly pass bounds inactive recognized host leftovers to their retention period plus one hour.
+- Growth check: `scripts/tmp-janitor.test.ts` covers retention, ownership boundaries, live references, failed tests
+  and read-only teardown. A full day of workstation load and timer integration remain integration checks.
+
 `scripts/check-placement.ts` is the shared conservative classifier used by worker checks. Root and Web typecheck
 scripts, pure compiler and formatter commands, and explicit small unit selections are local. A small unit selection
 has at most 12 explicit test files; each file and its statically imported relative source is at most 256 KiB, within

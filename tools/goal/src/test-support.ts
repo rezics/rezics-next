@@ -1,6 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { afterEach } from 'bun:test';
+import { ownedTemporaryDirectory, removeTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
 import { git as repositoryGit } from './merge.ts';
 
 import { loadSettings } from './config.ts';
@@ -34,6 +37,17 @@ import {
 const FIXTURE_TERM_GRACE_MS = 300;
 const FIXTURE_KILL_WAIT_MS = 1500;
 const FIXTURE_FAKE_WORKER_LIFETIME_MS = 60_000;
+const fixtureDisposals = new Map<string, () => void | Promise<void>>();
+afterEach(async () => {
+  const failures: unknown[] = [];
+  for (const [path, dispose] of [...fixtureDisposals].reverse()) {
+    try {
+      await dispose();
+      fixtureDisposals.delete(path);
+    } catch (error) { failures.push(error); }
+  }
+  if (failures.length) throw new AggregateError(failures, 'temporary fixture cleanup failed');
+});
 
 function boundedFixtureWorkerScript(script: string): string {
   const guard =
@@ -136,17 +150,23 @@ export function checkScriptFixture(ref = 'refs/heads/dev') {
       ]) {
         const target = join(root, path);
         mkdirSync(dirname(target), { recursive: true });
-        writeFileSync(target, transform(path, read(path)));
+        const source = read(path);
+        writeFileSync(target, transform(path, source));
+        if (path === 'scripts/worker-check.ts' && source.includes("'./tmp-janitor.ts'"))
+          writeFileSync(join(root, 'scripts/tmp-janitor.ts'), read('scripts/tmp-janitor.ts'));
       }
     },
   };
 }
 
 export function temporaryDirectory(): { path: string; close(): void } {
-  const root = resolve(import.meta.dir, '../../../.temp/goal-tests');
-  mkdirSync(root, { recursive: true });
-  const path = mkdtempSync(join(root, 'case-'));
-  return { path, close: () => rmSync(path, { recursive: true, force: true }) };
+  const temporary = ownedTemporaryDirectory(tmpdir(), 'case-');
+  const close = () => {
+    temporary.close();
+    fixtureDisposals.delete(temporary.path);
+  };
+  fixtureDisposals.set(temporary.path, close);
+  return { path: temporary.path, close };
 }
 export function repository() {
   const temporary = temporaryDirectory();
@@ -201,7 +221,7 @@ export function mergeTrainHarness() {
   };
   const queue = new SqliteLandingQueue(db, fence);
   const outcomes: GateOutcome[] = [];
-  return {
+  const fixture = {
     ...repo,
     db,
     store,
@@ -225,6 +245,8 @@ export function mergeTrainHarness() {
       repo.close();
     },
   };
+  fixtureDisposals.set(repo.path, () => fixture.close());
+  return fixture;
 }
 
 export function tempDirectory(): string {
@@ -341,7 +363,7 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
   let disposed = false;
   let disposing: Promise<void> | undefined;
   let databaseClosed = false;
-  return {
+  const fixture = {
     root,
     settings,
     store,
@@ -356,10 +378,11 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
         throw new Error('fixture has live owned processes; await h.disposeAsync() before removing its directory');
       store.db.close();
       databaseClosed = true;
-      rmSync(root, { recursive: true, force: true });
+      removeTemporaryDirectory(root);
+      fixtureDisposals.delete(root);
       disposed = true;
     },
-    disposeAsync(options = {}) {
+    disposeAsync(options: { beforeRemove?: () => void | Promise<void> } = {}) {
       if (disposed) return Promise.resolve();
       if (disposing) return disposing;
       const cleanup = async () => {
@@ -402,7 +425,8 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
           store.db.close();
           databaseClosed = true;
         }
-        rmSync(root, { recursive: true, force: true });
+        removeTemporaryDirectory(root);
+        fixtureDisposals.delete(root);
         disposed = true;
       };
       disposing = cleanup().catch((error) => {
@@ -412,6 +436,8 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:120,cached
       return disposing;
     },
   };
+  fixtureDisposals.set(root, () => fixture.disposeAsync());
+  return fixture;
 }
 
 /** Real workers and Git, with explicit integrated fixtures for the promotion specifications. */

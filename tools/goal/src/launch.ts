@@ -23,6 +23,7 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
+import { temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
 import { acquireDirectoryLease, LeaseHeldError } from './lease.ts';
 import {
   processIdentity,
@@ -89,6 +90,7 @@ export function workerEnvironment(
     ...cleanAgentEnvironment(env),
     ...NO_COMPILE_CACHE,
     ...extra,
+    ...(worktree ? temporaryEnvironment(join(worktree, '.temp/worker-tmp')) : {}),
   });
   const wrapperDirectory = worktree && join(worktree, 'scripts', 'check-host');
   if (wrapperDirectory && existsSync(join(wrapperDirectory, 'docker')))

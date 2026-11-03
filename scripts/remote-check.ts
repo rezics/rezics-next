@@ -3177,7 +3177,11 @@ export function runScript(
       fi
     fi`
     : '';
-  const systemdScript = `preparation_phase() {
+  const systemdScript = `mkdir -p ${quote(`${directory}/.temp/tmp`)}
+export TMPDIR=${quote(`${directory}/.temp/tmp`)} TMP=${quote(`${directory}/.temp/tmp`)} TEMP=${quote(`${directory}/.temp/tmp`)}
+export NODE_DISABLE_COMPILE_CACHE=1
+unset NODE_COMPILE_CACHE
+preparation_phase() {
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} "$1"
 }
 preparation_phase base-refresh
@@ -3235,8 +3239,6 @@ host=$REMOTE_CHECK_HOST
     ${gitRestore}
     preparation_phase source-verification
     ${sourceVerification}
-    mkdir -p ${quote(`${directory}/.temp/node-compile-cache`)}
-    export NODE_COMPILE_CACHE=${quote(`${directory}/.temp/node-compile-cache`)}
     real_bun=$bun
     if [ -n "\${REMOTE_CHECK_PREPARER_BIN:-}" ]; then
       export REMOTE_CHECK_REAL_BUN="$bun" REMOTE_CHECK_PREPARATION_REVISION="$expected_revision" REMOTE_CHECK_PREPARATION_BUILD="$build" REMOTE_CHECK_PREPARATION_VERSION="$expected_bun"

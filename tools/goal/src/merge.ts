@@ -3,6 +3,7 @@ import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { ownedTemporaryDirectory } from '../../../scripts/tmp-janitor.ts';
 import type { FirstFailure } from './contracts.ts';
 import {
   checkResultKey,
@@ -166,14 +167,15 @@ export function processGroupRunner(
 ): GateRunner {
   const run: GateRunner = async (argv, cwd, logPath, options) => {
     if (!argv.length) throw new Error('A gate command is required');
+    const temporary = ownedTemporaryDirectory(join(cwd, '.temp'), 'gate-tmp-');
     return await new Promise<GateResult>((resolve, reject) => {
       let finishCleanup!: () => void;
       const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
-        env: sanitizeEnvironment
+        env: { ...(sanitizeEnvironment
           ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
-          : parent,
+          : parent), ...temporary.env },
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -239,6 +241,7 @@ export function processGroupRunner(
         try {
           if (timer !== undefined) clearTimeout(timer);
           const groupStopped = await stopGroup();
+          if (groupStopped) temporary.close();
           if (!groupStopped) output += `Command process group cleanup could not be proven for PID ${pid}\n`;
           if (
             groupStopped &&
