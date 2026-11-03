@@ -9,7 +9,11 @@ import { FeedCardAttribution } from './card-attribution';
 import { FeedCardContext, FeedCardPreview, FeedCardVisual, feedCardKind } from './card-presentation';
 
 /** A current-page projection: no hydration, retained identity, source inference or reordering. */
-export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedItemPresentation {
+export function homeFeedItemPresentation(
+  item: FeedItem,
+  locale: string,
+  context: { current?: boolean; key?: string } = {},
+): FeedItemPresentation {
   const options = { locale: locale as Locale };
   const title = homeFeedTitle(item, locale);
   const href = homeFeedDestination(item, locale);
@@ -27,7 +31,15 @@ export function homeFeedItemPresentation(item: FeedItem, locale: string): FeedIt
     className: '[overflow-wrap:anywhere] [&_[data-content-item-slot=title]]:break-words',
     visual: FeedCardVisual({ item, title, href, locale }),
     context: <FeedCardContext item={item} kind={kind} locale={locale} />,
-    metadata: <FeedCardAttribution item={item} kind={kind} locale={locale} />,
+    metadata: (
+      <FeedCardAttribution
+        item={item}
+        kind={kind}
+        locale={locale}
+        contextCurrent={context.current ?? true}
+        contextKey={context.key}
+      />
+    ),
     preview: <FeedCardPreview item={item} />,
     state: progress?.text,
     actions:

@@ -4,7 +4,13 @@ import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import type { FeedItem } from '../pages/home-feed-read';
-import { FeedCardSubjectContext, feedCardLinkClassName, type FeedCardKind } from './card-presentation';
+import {
+  FeedCardParentContext,
+  FeedCardReviewCitation,
+  FeedCardSubjectContext,
+  feedCardLinkClassName,
+  type FeedCardKind,
+} from './card-presentation';
 
 /** An explicit UTC zone keeps server and client rendering stable across midnight. */
 export function feedCardTime(value: string | null | undefined, locale: string): { value: string; text: string } | null {
@@ -152,7 +158,19 @@ function FeedCardImageCredit({
   );
 }
 
-export function FeedCardAttribution({ item, kind, locale }: { item: FeedItem; kind: FeedCardKind; locale: string }) {
+export function FeedCardAttribution({
+  item,
+  kind,
+  locale,
+  contextCurrent = true,
+  contextKey = '',
+}: {
+  item: FeedItem;
+  kind: FeedCardKind;
+  locale: string;
+  contextCurrent?: boolean;
+  contextKey?: string;
+}) {
   const summary = item.summary;
   const options = { locale: locale as Locale };
   const content = kind === 'discussion' || kind === 'reply' || kind === 'review';
@@ -163,7 +181,18 @@ export function FeedCardAttribution({ item, kind, locale }: { item: FeedItem; ki
     <div className="flex min-w-0 w-full flex-col gap-1" data-feed-card-attribution>
       {content ? <FeedCardAuthor item={item} locale={locale} /> : null}
       {kind === 'account' ? <FeedCardAccount item={item} locale={locale} /> : null}
-      <FeedCardSubjectContext item={item} locale={locale} />
+      <FeedCardSubjectContext item={item} locale={locale} contextCurrent={contextCurrent} />
+      {kind === 'review' ? (
+        <FeedCardReviewCitation item={item} locale={locale} contextCurrent={contextCurrent} />
+      ) : null}
+      {kind === 'reply' ? (
+        <FeedCardParentContext
+          item={item}
+          locale={locale}
+          contextCurrent={contextCurrent}
+          contextKey={contextKey}
+        />
+      ) : null}
       <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <FeedCardTime value={item.occurredAt} locale={locale} label={m.home_card_occurrence({}, options)} />
         {'createdAt' in summary ? (

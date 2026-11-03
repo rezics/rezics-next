@@ -18,7 +18,7 @@ import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
 import { observeReactionSession } from '../../threads/thread-reactions';
 import { VoteControl, type FeedReaction } from './vote-control';
-import type { FeedItem } from '../pages/home-feed-read';
+import type { FeedItem, FeedPage } from '../pages/home-feed-read';
 import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destination';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
@@ -46,7 +46,7 @@ export type FeedActionBarProps = {
   /** Detail hosts can keep the reaction/menu cluster at top right and actions beside the body. */
   layout?: 'row' | 'detail';
   /** Source owners retire retained actions synchronously when a page visit is replaced. */
-  origin?: { key: string; isCurrent(): boolean } | undefined;
+  origin?: { key: string; reader?: string | null; isCurrent(): boolean } | undefined;
 };
 
 const actionClass = 'min-h-11 max-w-full whitespace-normal break-words sm:min-h-8 pointer-coarse:min-h-11';
@@ -70,6 +70,7 @@ export function HomeFeedActions({
   children,
   verification,
   origin,
+  reactionsAsOf,
 }: {
   item: FeedItem;
   locale: string;
@@ -77,12 +78,41 @@ export function HomeFeedActions({
   children?: ReactNode;
   verification?: VerificationConfig | undefined;
   origin?: FeedActionBarProps['origin'];
+  reactionsAsOf?: FeedPage['reactionsAsOf'];
 }) {
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
   if (kind !== 'thread' && kind !== 'post' && kind !== 'subject') return children;
   const isWork = kind === 'subject' && 'creativeWork' in item.summary && item.summary.creativeWork;
   const destination = item.destination;
+  const summary = item.summary;
+  const reactionTarget = 'reactionTarget' in summary ? summary.reactionTarget : undefined;
+  const reactionCounts = 'reactions' in summary ? summary.reactions : undefined;
+  const hasViewerSelection = Object.hasOwn(summary, 'viewerReaction');
+  const reaction = reactionTarget && reactionCounts
+    ? {
+        target: { kind: reactionTarget.targetKind, id: reactionTarget.targetId },
+        counts: reactionCounts,
+        value: 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
+        personalReady:
+          !signedIn ||
+          (hasViewerSelection &&
+            reactionsAsOf !== undefined &&
+            reactionsAsOf !== null &&
+            origin?.reader !== undefined &&
+            (origin?.isCurrent() ?? true)),
+        ...(origin?.reader === undefined
+          ? {}
+          : {
+              reactionOrigin: {
+                key: origin.key,
+                reader: origin.reader,
+                isCurrent: origin.isCurrent,
+              },
+            }),
+        ...(reactionsAsOf === undefined ? {} : { sourceWatermark: reactionsAsOf }),
+      }
+    : undefined;
   const target =
     destination.kind === 'thread' || destination.kind === 'subject'
       ? { kind: destination.kind, id: destination.id }
@@ -96,6 +126,7 @@ export function HomeFeedActions({
       title={homeFeedTitle(item, locale)}
       signedIn={signedIn}
       plain={kind === 'post'}
+      reaction={reaction}
       origin={origin}
       overflow={
         target && verification && href ? (

@@ -73,6 +73,11 @@ and review ratings, stay absent until their bounded public owner summaries suppl
 reads, does not rank or apply public/private predicates, and omits missing descriptive fields. Following
 Collections and Content thread/post summaries keep their existing native identities and actions.
 
+Decision: Review cards render the current native reviewed Subject and disclosed question/vote revisions; reply cards
+render only their exact immediate parent with its disclosed author, language and spoiler state. Absent, withheld or
+unavailable context never falls back to a body or another identity. A spoiler reveal belongs to the current page,
+target and account visit and retires with them.
+
 An embedded owner list can use the same body without claiming a native mixed-feed branch:
 
 ```tsx
@@ -107,6 +112,8 @@ the same adapter; unavailable Realm/Space and board carriers retain their owner 
 
 Pass the admitted localized `href`, `title`, `signedIn` and, when actually supplied, `reaction` containing the native
 `target`, complete count map and current viewer slot. A count map omits zero kinds; it is not an unknown projection.
+Home binds that reaction to the page's native `reactionsAsOf` watermark and current reader visit; missing target,
+counts, viewer selection or freshness cannot authorize a write.
 The score is upvote minus downvote from that map. Without a supplied map the pill shows an unavailable dash and
 cannot write; it never reports zero or reads each row to manufacture a baseline. Subjects retain their installed
 non-vote reaction kinds. A `plain` reply pill omits its filled background without reducing its phone targets.
