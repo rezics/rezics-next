@@ -93,7 +93,8 @@ const BATCH_LIMIT = 256;
 export const CREATE_SUBJECT = 'subject.create';
 // Permanent Semantic owner-assigned receipt codec ID.
 registerCommandHistoryKind(CREATE_SUBJECT, 3020);
-const CONTEXT = GLOBAL_CONTEXT;
+// Literal identity so this module can finish while definitions.ts is still evaluating.
+const CONTEXT = '00000000-0000-8000-8000-000000000000';
 
 /** Retries reach the partition holding their receipt while each attempt gets a new subject id. */
 export function subjectTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
