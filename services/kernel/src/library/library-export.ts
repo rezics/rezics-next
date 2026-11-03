@@ -22,6 +22,7 @@ import {
   type LibraryExportFinalManifest,
   type LibraryExportFinalManifestV2,
   type LibraryExportFinalManifestV3,
+  type LibraryExportFinalManifestV4,
   type LibraryExportVersion,
 } from './library-export-format.ts';
 
@@ -172,7 +173,9 @@ function finalManifest(capture: Capture, seek: ExportSeek): LibraryExportFinalMa
   );
   return metadata.version === 2
     ? { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV2['sectionTotals'] }
-    : { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV3['sectionTotals'] };
+    : metadata.version === 3
+      ? { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV3['sectionTotals'] }
+      : { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV4['sectionTotals'] };
 }
 
 /** No private artifact is retained: signed keysets replay only against the original unchanged source. */
@@ -277,7 +280,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           `SELECT 1 WHERE EXISTS (SELECT 1 FROM library.list_import_mal WHERE route=$1 AND account_id=$2
         AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)
         ${
-          capture.format_version === 3
+          capture.format_version === 4
             ? `OR EXISTS (SELECT 1 FROM library.vndb_import WHERE route=$1 AND account_id=$2
           AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)`
             : ''
@@ -331,7 +334,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           const at = new Date(authoritativeTimeValue(command.time)).toISOString();
           await tx.query(
             `INSERT INTO library.library_export(route,account_id,export_id,format_version,generation,created_at,expires_at,state)
-          VALUES($1,$2,$3,3,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
+          VALUES($1,$2,$3,4,$4,$5,$5::timestamptz+interval '15 minutes','collecting')
           ON CONFLICT(route,account_id) DO UPDATE SET export_id=EXCLUDED.export_id,generation=EXCLUDED.generation,
             format_version=EXCLUDED.format_version,created_at=EXCLUDED.created_at,expires_at=EXCLUDED.expires_at,state='collecting'`,
             [route, account.accountId, id, source, at],

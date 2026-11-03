@@ -5,7 +5,7 @@ import { idempotencyKeyOf, IDEMPOTENCY_HEADER } from '../http/request.ts';
 import type { Access } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import { createLibraryExport, exportAuthorityTypes, type LibraryExportDependencies } from './library-export.ts';
-import { exportSections, exportSectionsV2, exportSectionsV3 } from './library-export-format.ts';
+import { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
 
 const closed = { additionalProperties: false } as const;
 const params = t.Object({ id: t.String({ format: 'uuid' }) }, closed);
@@ -36,6 +36,7 @@ const sectionV2 = t.Union([
 const sectionsV1 = t.Tuple(exportSections.map((section) => t.Literal(section)) as never);
 const sectionsV2 = t.Tuple(exportSectionsV2.map((section) => t.Literal(section)) as never);
 const sectionsV3 = t.Tuple(exportSectionsV3.map((section) => t.Literal(section)) as never);
+const sectionsV4 = t.Tuple(exportSectionsV4.map((section) => t.Literal(section)) as never);
 const manifestV1Fields = {
   format: t.Literal('https://rezics.com/formats/library-export'),
   version: t.Literal(1),
@@ -74,6 +75,19 @@ const manifestV3Fields = {
   omissions: t.Record(text, text),
   fullExport: t.Literal(false),
 };
+const manifestV4Fields = {
+  format: t.Literal('https://rezics.com/formats/library-export'),
+  version: t.Literal(4),
+  coverage: t.Literal('private-library-owner-facts-v4'),
+  exportId: text,
+  capturedAt: text,
+  expiresAt: text,
+  privacy: t.Literal('private'),
+  completeness: t.Literal('supported-native-facts'),
+  sections: sectionsV4,
+  omissions: t.Record(text, text),
+  fullExport: t.Literal(false),
+};
 const state = t.Union([
   t.Literal('collecting'),
   t.Literal('ready'),
@@ -86,6 +100,7 @@ const statusSchema = t.Union([
   t.Object({ ...manifestV1Fields, state, first: nullable }, closed),
   t.Object({ ...manifestV2Fields, state, first: nullable }, closed),
   t.Object({ ...manifestV3Fields, state, first: nullable }, closed),
+  t.Object({ ...manifestV4Fields, state, first: nullable }, closed),
 ]);
 const sectionTotal = t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed);
 const sectionTotalsV2 = t.Object(
@@ -94,6 +109,10 @@ const sectionTotalsV2 = t.Object(
 );
 const sectionTotalsV3 = t.Object(
   Object.fromEntries(exportSectionsV3.map((section) => [section, sectionTotal])),
+  closed,
+);
+const sectionTotalsV4 = t.Object(
+  Object.fromEntries(exportSectionsV4.map((section) => [section, sectionTotal])),
   closed,
 );
 const year = t.Integer({ minimum: 1, maximum: 9999 });
@@ -265,6 +284,15 @@ const finalManifest = t.Union([
       rows: t.Integer({ minimum: 0 }),
       recordBytes: t.Integer({ minimum: 0 }),
       sectionTotals: sectionTotalsV3,
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ...manifestV4Fields,
+      rows: t.Integer({ minimum: 0 }),
+      recordBytes: t.Integer({ minimum: 0 }),
+      sectionTotals: sectionTotalsV4,
     },
     closed,
   ),

@@ -1,6 +1,7 @@
 -- migrate:up
+ALTER TABLE library.library_export ALTER COLUMN format_version SET DEFAULT 4;
 ALTER TABLE library.library_export DROP CONSTRAINT library_export_format_version_check;
-ALTER TABLE library.library_export ADD CONSTRAINT library_export_format_version_check CHECK(format_version IN (1,2,3));
+ALTER TABLE library.library_export ADD CONSTRAINT library_export_format_version_check CHECK(format_version IN (1,2,3,4));
 
 -- Source-owned parsed row index: no XML, decisions or export artifact. Parent removal owns cleanup.
 -- Building this once avoids detoasting/parsing the entire retained VNDB array on every export page.
@@ -43,6 +44,35 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR UPDATE OR DELETE ON library.vn
 CREATE TRIGGER export_owner_fence AFTER INSERT OR UPDATE OR DELETE ON library.vndb_import_row
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 CREATE TRIGGER export_owner_fence AFTER INSERT OR UPDATE OR DELETE ON library.list_import_anilist
+  FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+-- MAL uses the same source-owned keyset seam; older formats keep their exact wire meaning.
+ALTER TABLE library.list_import_mal ADD COLUMN export_cancelled boolean
+  GENERATED ALWAYS AS ((document->>'canceled')::boolean) STORED;
+CREATE TABLE library.list_import_mal_row (
+  route integer NOT NULL,
+  account_id uuid NOT NULL,
+  upload_id uuid NOT NULL,
+  ordinal integer NOT NULL CHECK(ordinal BETWEEN 0 AND 499),
+  evidence jsonb NOT NULL,
+  PRIMARY KEY(route,account_id,upload_id,ordinal),
+  FOREIGN KEY(route,account_id,upload_id) REFERENCES library.list_import_mal(route,account_id,id) ON DELETE CASCADE
+);
+INSERT INTO library.list_import_mal_row
+  SELECT route,account_id,id,(ordinality-1)::integer,evidence
+  FROM library.list_import_mal CROSS JOIN LATERAL jsonb_array_elements(document->'rows') WITH ORDINALITY AS r(evidence,ordinality);
+CREATE FUNCTION library.index_mal_import_rows() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND NEW.document->'rows' IS NOT DISTINCT FROM OLD.document->'rows' THEN RETURN NULL; END IF;
+  DELETE FROM library.list_import_mal_row WHERE route=NEW.route AND account_id=NEW.account_id AND upload_id=NEW.id;
+  INSERT INTO library.list_import_mal_row
+    SELECT NEW.route,NEW.account_id,NEW.id,(ordinality-1)::integer,evidence
+    FROM jsonb_array_elements(NEW.document->'rows') WITH ORDINALITY AS r(evidence,ordinality);
+  RETURN NULL;
+END; $$;
+CREATE TRIGGER index_parsed_rows AFTER INSERT OR UPDATE OF document ON library.list_import_mal
+  FOR EACH ROW EXECUTE FUNCTION library.index_mal_import_rows();
+CREATE TRIGGER export_owner_fence AFTER INSERT OR UPDATE OR DELETE ON library.list_import_mal_row
   FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 -- migrate:down
