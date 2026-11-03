@@ -136,10 +136,14 @@ test('cancellation at delivery and terminal authority cannot deliver a successfu
   const read = createReportedYearSummaryReads(native);
   await expect(read.summary(owner.actor, 2020, Date.now() + 5000, AbortSignal.abort())).rejects.toMatchObject({ code: 'deadline_exceeded' });
   const controller = new AbortController();
+  let correction: (() => Promise<void>) | undefined;
   const pool = { connect: async () => {
     const client = await native.pool.connect();
     return { query: async (...args: Parameters<typeof client.query>) => {
       const value = await (client.query as Function)(...args);
+      if (typeof args[0] === 'string' && args[0].includes('WITH head AS') && correction) {
+        const apply = correction; correction = undefined; await apply();
+      }
       if (args[0] === 'COMMIT') controller.abort();
       return value;
     }, release: () => client.release() };
@@ -147,6 +151,13 @@ test('cancellation at delivery and terminal authority cannot deliver a successfu
   let delivered = false;
   await expect(createReportedYearSummaryReads({ pool }).summary(owner.actor, 2020, Date.now() + 5000,
     controller.signal, () => { delivered = true; })).rejects.toMatchObject({ code: 'deadline_exceeded' });
+  expect(delivered).toBe(false);
+  const source = (await native.pool.query('SELECT session_id,journal_revision FROM library.progress_session WHERE route=$1 AND account_id=$2 ORDER BY session_id LIMIT 1',
+    [routeOf(owner.actor.accountId), owner.actor.accountId])).rows[0];
+  correction = async () => { await send('PATCH', `/v1/progressSessions/${source.session_id}/journal`,
+    { revision: source.journal_revision, finishDate: { year: 1492 } }); };
+  await expect(createReportedYearSummaryReads({ pool }).summary(owner.actor, 2020, Date.now() + 5000,
+    undefined, () => { delivered = true; })).rejects.toMatchObject({ code: 'dependency_unavailable' });
   expect(delivered).toBe(false);
   const route = routeOf(owner.actor.accountId)!;
   const retained = await native.pool.query<{session_id:string}>('SELECT session_id FROM library.progress_session WHERE route=$1 AND account_id=$2', [route, owner.actor.accountId]);

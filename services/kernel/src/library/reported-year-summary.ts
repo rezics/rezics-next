@@ -47,8 +47,8 @@ type Bucket = { bucket: number; completed: string; subjects: string; unknown: st
 // All keys are addressed. Completeness is equality against the installed all-time
 // source counter, never an inferred empty owner or a migration's synthetic marker.
 const headSql = `SELECT i.complete,
-  CASE WHEN a.retained_sessions IS NULL THEN true
-    ELSE COALESCE(g.initialized AND g.ready AND g.mode='open',false) END AS ready,
+  CASE WHEN g.account_id IS NULL THEN a.retained_sessions IS NULL
+    ELSE g.initialized AND g.ready AND g.mode='open' END AS ready,
   COALESCE(y.initialized_sessions,0)::text AS initialized,
   COALESCE(a.retained_sessions,0)::text AS retained,
   COALESCE(y.missing_finish,0)::text AS missing,
