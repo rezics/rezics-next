@@ -747,11 +747,14 @@ function nativeLibrarySourceCustody(
           (input.identity.scope === 'curated'
             ? source.kind !== 'curated'
             : input.identity.scope === 'private_builtin'
-              ? source.kind !== 'dynamic' || source.builtin === null || source.visibility !== 'private'
+              ? source.kind !== 'dynamic' || (episode.kind !== 'terminal' && source.visibility !== 'private')
               : source.kind !== 'dynamic' || source.builtin !== null)
         )
           return blocked('source');
-        if (source.publicCustody || input.identity.scope === 'active_explicit_output') return blocked('public_custody');
+        if (
+          (source.publicCustody && !(episode.kind === 'terminal' && input.identity.scope === 'private_builtin')) ||
+          input.identity.scope === 'active_explicit_output'
+        ) return blocked('public_custody');
         if (
           episode.kind === 'deleted' &&
           (source.state !== 'deleted' ||

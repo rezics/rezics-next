@@ -1,3 +1,4 @@
+import outputHeadForRetention from './collection-source-output-head.sql';
 import { createBuiltinRuntime, type BuiltinCollectionView } from './builtin-runtime.ts';
 import type { Pool, PoolClient } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -411,14 +412,19 @@ export function createCollectionReads(
       const allowed = await check(client, observation?.time);
       if (sink.failure) throw sink.failure.error;
       if (!sink.seen) sink.row = await collectionRead.run(queryOf(client), { route, id });
-      // T hides nonpublic contributions even from a known-ID anonymous/unlisted
-      // read. Authentication of the viewer alone cannot fence the curator's data.
-      if (sink.row && sink.row.visibility !== 'public') {
-        if (sink.row.curatorAccountId === null) return null;
-        const curatorRoute = routeOf(sink.row.curatorAccountId);
-        const curator =
-          curatorRoute === null ? null : await readAccount(client, curatorRoute, sink.row.curatorAccountId);
-        if (!curator || curator.state === 'deleted') return null;
+      // Terminal owners cannot disclose private/unlisted payload or authorship, even before bounded work.
+      if (sink.row?.curatorAccountId) {
+        const curatorId = sink.row.curatorAccountId;
+        const curatorRoute = routeOf(curatorId);
+        const curator = curatorRoute === null ? null : await readAccount(client, curatorRoute, curatorId);
+        if (!curator || curator.state === 'deleted') {
+          if (sink.row.visibility !== 'public') return null;
+          if (sink.row.membershipKind === 'dynamic') {
+            const output = await client.query(outputHeadForRetention.sql, [route, id, sink.row.sourceGeneration]);
+            if (!output.rows.length) return null;
+          }
+          sink.row = { ...sink.row, curatorAccountId: null };
+        }
       }
       return disclose(sink.row, allowed, account, viewer);
     });

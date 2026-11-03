@@ -1205,6 +1205,27 @@ custody. Full label HTTP/generated-client adoption belongs to the catalogue/assi
 
 #### Retention inventory
 
+Saved Collections use the existing in-place `collection` deletion episode, CAS and exact 720-hour window;
+Undo leaves `rule_filter`, `rule_sort`, `rule_release_digest` and `rule_revision` unchanged. Terminal cleanup in
+`collection-retention.ts` and `saved-collection-retention.ts` clears those private columns, drains
+`canonical_source_reference/head/generation/scope` and `canonical_source_fact/state`, and erases
+`collection_publication_staging_evidence/seal/staging` before unselected
+`collection_source_output_member/head/publication/output` generations, at most 100 child rows per page.
+Publication operation/source/episode references use the participant's existing publication phase; members
+preparation results/headers/owner associations use its existing appended owned-graph phases.
+
+Only actual committed active-PUBLIC output A enters `collection_retained_output` at `(route, collection_id)`:
+its generation, source generation, cardinality, member fence and native disposition transaction contain no account,
+rule or private fact. It preserves A's original ID and subjects; pending B never supplies membership. Frozen
+headers/members/head reject writes. After native custody settles, A's output account attribution and original
+private publication reference are removed, then its Collection curator is cleared. Private/unlisted/deleted and
+unpublished saved views have no retained set and drain through the existing physical parent disposer. Native
+capture retirement includes saved working sources under terminal fences. Real capture/identity/receiving holds
+remain pending and keep their authority intact; local exhaustion never acknowledges shared Core/DBOS history,
+receipts, work payloads or foreign Source disposition. Terminal reads hide nonpublic views and public authorship
+immediately. Decision: live native custody keeps physical deidentification pending while rules and unrelated
+private references drain, using only a proven selected output for the account-free retained locator.
+
 The owner directory adds private structural records, erased after native family hooks stop and before
 `fact_source_head`: `owner_index_label_repair` at `(route, account_id, label_id)` (raw100 indexed children),
 `owner_index_state` at `(route, account_id, pin, collection_id)`,

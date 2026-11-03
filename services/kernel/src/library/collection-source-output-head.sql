@@ -19,5 +19,20 @@ WHERE h.route=$1 AND h.collection_id=$2 AND h.source_generation=$3 AND r.source_
   AND g.member_count=r.expected_members AND g.member_fence=r.member_fence
   AND r.xmin=b.xmin AND r.xmin=g.xmin AND r.xmin=h.xmin
   AND b.principal_kind='account' AND b.position>0 AND p.write_state='active' AND p.moved_to IS NULL
+  AND NOT EXISTS(SELECT 1 FROM library.collection_retained_output retained WHERE retained.route=s.route AND retained.collection_id=s.collection_id)
   AND r.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
+
+UNION ALL
+-- Terminal disposition preserves only the proven selected set, independently of private writer controls.
+SELECT r.generation::text,r.transaction_id::text,b.position::text,r.native_xid::text,
+       r.members::text,r.member_fence::text,r.source_generation::text
+FROM library.collection_retained_output r
+JOIN library.collection s ON (s.route,s.collection_id)=(r.route,r.collection_id)
+JOIN library.collection_source_output g ON (g.route,g.collection_id,g.generation)=(r.route,r.collection_id,r.generation)
+JOIN editorial.write_basis b ON b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id
+WHERE r.route=$1 AND r.collection_id=$2 AND r.source_generation=$3
+  AND s.state='active' AND s.visibility='public' AND s.source_generation=r.source_generation
+  AND g.state='complete' AND g.member_count=r.members AND g.member_fence=r.member_fence
+  AND g.expected_members=r.members AND g.written_members=r.members
+  AND r.xmin=b.xmin AND r.native_xid IS DISTINCT FROM pg_current_xact_id_if_assigned()
 ;

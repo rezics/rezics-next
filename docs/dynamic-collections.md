@@ -321,6 +321,13 @@ private predicates and facts are not public output. Pending or unpublished gener
 Never evaluate a fresh query at `T` over undisclosed private facts; if no generation completed, no subject set is
 manufactured. Private, UNLISTED and already-deleted Collections, including formerly-public ones, are erased by bounded work.
 
+Native terminal cleanup records only a proven selected A in `collection_retained_output`, using the actual
+Collection ID and a committed account-free disposition locator; no query runs at T. Live native custody keeps
+physical deidentification pending while rules and unrelated private references drain. Pending B, canonical
+working/result references and staging evidence drain in bounded child-before-parent pages. The existing Library
+participant owns this work; shared Core/DBOS history and foreign Source holds still require their actual owners.
+Ordinary saved-view Undo preserves the in-place rule, immutable release and identity without new rule admission.
+
 Every new directory/support/change/registration/frontier/prepared/intent store, identity effect and first-apply
 custody joins the exact Library [A5 inventory](../services/kernel/src/library/README.md#retention-inventory), bound
 to native transactionId/component/job and terminal T. Shared history/work artifacts join their actual owner custody;

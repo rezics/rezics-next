@@ -254,7 +254,8 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
           removed: 0,
           parent: row?.id ?? null,
           retain: row !== null && 'retain' in row && row.retain === true,
-          blocked: row !== null && 'everPublic' in row && row.everPublic === true && row.retain !== true,
+          // The locked local disposer distinguishes real custody from historical visibility.
+          blocked: false,
         });
       }
       let removed: number;

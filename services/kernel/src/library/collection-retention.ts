@@ -1,3 +1,4 @@
+import { purgeSavedCollectionPage } from './saved-collection-retention.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { shareAccount } from '../access/account-share.ts';
@@ -229,9 +230,13 @@ export async function purgeTerminalCollectionPage(
   if (requireRoute(input.collectionId) !== route) throw new TypeError('Foreign terminal Collection');
   if (!(await terminalScope.run(tx, { route, account_id: input.accountId })))
     throw new Error('Collection cleanup requires the current native terminal obligation');
-  const parent = await lock.run(tx, { route, collection_id: input.collectionId, purge_after: null, time });
+  let parent = await lock.run(tx, { route, collection_id: input.collectionId, purge_after: null, time });
   if (!parent) return { status: 'stale', removed: 0 };
   if (parent.accountId !== input.accountId) throw new Error('Foreign terminal Collection owner');
+  const saved = await purgeSavedCollectionPage(tx, input);
+  if (saved) return saved;
+  parent = await lock.run(tx, { route, collection_id: input.collectionId, purge_after: null, time });
+  if (!parent) return { status: 'stale', removed: 0 };
   return removeLocalPage(tx, route, input.collectionId, input.accountId, parent, { kind: 'terminal' });
 }
 
