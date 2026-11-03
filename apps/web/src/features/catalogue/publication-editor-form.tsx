@@ -2,7 +2,7 @@ import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useQuery } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
-import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
+import type { EntityPickerSearch, EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -16,182 +16,45 @@ import {
 } from '@rezics/ui/shadcn/alert-dialog';
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { cn } from '@rezics/ui/utils';
 import { useId, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
-import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { subjectHref } from '../../subject/subject-href';
-import type { CreateFailure, CreateResult } from './create-subject';
+import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
 import {
   publicationDraft,
-  publicationTarget,
+  publicationWorkStatement,
   type PublicationCommand,
+  type PublicationItem,
   type PublicationProfile,
   type PublicationRead,
   type PublicationTransport,
 } from './publication-editor';
-import { ScalarControl } from './statement-editor-view';
-import type { SnakInput, StatementInput } from './statement-editor';
-import { controlId, presentStatementViolations } from './statement-validation-presentation';
+import { PublicationFacts } from './publication-editor-facts';
+import {
+  publicationCorrections,
+  publicationCurrentHolders,
+  type PublicationCorrection,
+  type PublicationFactRow,
+  type PublicationTerm,
+} from './publication-editor-guidance';
 import { usePublicationEditorNavigation } from './publication-editor-navigation';
+import { PublicationReview } from './publication-editor-review';
+import { PublicationTerms } from './publication-editor-terms';
+import type { StatementInput } from './statement-editor';
+import type { StatementFieldsRead } from './statement-editor-view';
 
-// Caller sizing preserves dense fine-pointer desktops and lets translated actions wrap.
 const actionClassName =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
 const recoveryFocusClassName = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
-const inputClassName = 'min-w-0 min-h-11 md:pointer-fine:min-h-8';
-// NativeSelect applies className to its wrapper, so size the native target inside it.
 const selectClassName = 'w-full min-w-0 max-w-full [&_select]:min-h-11 md:pointer-fine:[&_select]:min-h-8';
 const labelClassName = 'min-w-0 max-w-full flex-wrap [overflow-wrap:anywhere]';
 const linkClassName =
   'inline-flex min-h-11 min-w-11 max-w-full items-center underline [overflow-wrap:anywhere] md:pointer-fine:min-h-8';
 const actionLinkClassName = cn(buttonVariants(), actionClassName);
 const outlineLinkClassName = cn(buttonVariants({ variant: 'outline' }), actionClassName);
-
-function pointerSegments(pointer: string): string[] | undefined {
-  if (!pointer.startsWith('/')) return;
-  const segments = pointer.slice(1).split('/');
-  if (segments.some((segment) => /~(?![01])/.test(segment))) return;
-  return segments.map((segment) => segment.replace(/~1/g, '/').replace(/~0/g, '~'));
-}
-
-function pointerFrom(segments: string[]): string {
-  return `/${segments.map((segment) => segment.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`;
-}
-
-function statementAddress(pointer: string) {
-  const segments = pointerSegments(pointer);
-  if (segments?.[0] !== 'statements' || !segments[1]) return;
-  return { property: segments[1], index: segments[2], path: segments.slice(3) };
-}
-
-function hasFactContent(value: unknown): boolean {
-  if (typeof value === 'string') return !!value.trim();
-  if (value == null) return false;
-  if (typeof value === 'object') return Object.values(value).some(hasFactContent);
-  return true;
-}
-
-/** Keep confirmation with the property-keyed row, outside the submitted fact value. */
-function PublicationFactRemoval({
-  property,
-  populated,
-  disabled,
-  editable,
-  onRemove,
-  locale,
-}: {
-  property: string;
-  populated: boolean;
-  disabled: boolean;
-  editable: () => boolean;
-  onRemove: () => void;
-  locale: string;
-}) {
-  const o = { locale: locale as never };
-  const [confirmingProperty, setConfirmingProperty] = useState<string>();
-  const confirming = confirmingProperty === property;
-  const holder = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const cancel = useRef<HTMLButtonElement>(null);
-  const restoreFocus = useRef(false);
-  const current = useRef({ property, disabled, editable, onRemove });
-  current.current = { property, disabled, editable, onRemove };
-  const canRemove = () =>
-    current.current.property === property && !current.current.disabled && current.current.editable();
-
-  useLayoutEffect(() => {
-    if (disabled) return;
-    if (confirming) cancel.current?.focus();
-    else if (restoreFocus.current) {
-      trigger.current?.focus();
-      restoreFocus.current = false;
-    }
-  }, [confirming, disabled]);
-
-  function cancelRemoval() {
-    restoreFocus.current = true;
-    setConfirmingProperty(undefined);
-  }
-
-  function remove() {
-    const section = holder.current?.closest('fieldset');
-    if (!canRemove() || !section?.isConnected) return;
-    const controls = [
-      ...(section.closest('form')?.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex="0"]') ??
-        []),
-    ];
-    const first = controls.findIndex((control) => section.contains(control));
-    const last = controls.findLastIndex((control) => section.contains(control));
-    [...controls.slice(last + 1), ...controls.slice(0, first).reverse()]
-      .find(
-        (control) =>
-          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
-          !control.closest('[hidden], [inert]'),
-      )
-      ?.focus();
-    current.current.onRemove();
-  }
-
-  return (
-    <div ref={holder}>
-      {confirming ? (
-        <div
-          role="group"
-          aria-label={m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}
-          className="space-y-2"
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              cancelRemoval();
-            }
-          }}
-        >
-          <p>{m.candidate_confirm_title({ action: m.relation_remove({}, o) }, o)}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              ref={cancel}
-              className={actionClassName}
-              type="button"
-              variant="outline"
-              disabled={disabled}
-              onClick={cancelRemoval}
-            >
-              {m.candidate_cancel({}, o)}
-            </Button>
-            <Button
-              className={actionClassName}
-              type="button"
-              variant="destructive"
-              disabled={disabled}
-              onClick={remove}
-            >
-              {m.relation_remove({}, o)}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <Button
-          ref={trigger}
-          className={actionClassName}
-          type="button"
-          variant="ghost"
-          disabled={disabled}
-          onClick={() => {
-            if (!canRemove()) return;
-            if (populated) setConfirmingProperty(property);
-            else remove();
-          }}
-        >
-          {m.relation_remove({}, o)}
-        </Button>
-      )}
-    </div>
-  );
-}
 
 /** Ordinary initial facts for one independently identified publication, anchored to an existing work. */
 export const PublicationEditor = catalogueEditor(PublicationEditorLive);
@@ -217,7 +80,6 @@ function PublicationEditorLive({
   const navigation = usePublicationEditorNavigation(() => localDraft.current);
   const stay = useRef<HTMLButtonElement>(null);
   const o = { locale: locale as never };
-  // Session and the independent public work/definition reads start together.
   const query = useQuery({
     queryKey: [...['publication-editor', work, locale], lifetime.generation],
     queryFn: () => transport.load(),
@@ -251,30 +113,21 @@ function PublicationEditorLive({
   const currentProfile = read?.profiles.find((entry) => !draftProfile || entry.id === draftProfile.id);
   const profile = currentProfile ?? draftProfile;
   const displayRelease = read?.release ?? privateDefinitions.current?.release;
-  const controlRead =
-    read ??
-    (privateDefinitions.current && {
-      release: privateDefinitions.current.release,
-      public: { related: {} },
-    });
   const [relationChoice, setRelation] = useState('');
   const relation = relationChoice || profile?.relations[0] || '';
-  const [language, setLanguage] = useState(locale);
-  const [label, setLabel] = useState('');
-  const [facts, setFacts] = useState<Record<string, SnakInput['value']>>({});
-  // One identity per added row; removing and readding a property retires its old controls.
-  const factHolders = useRef(new Map<string, object>());
-  const pendingFactFocus = useRef<{
-    property: string;
-    holder: object;
-    trigger: HTMLButtonElement;
-    readingGeneration: number;
-  } | null>(null);
-  const [publisher, setPublisher] = useState<EntityPickerSubject[]>([]);
+  const nextTermId = useRef(1);
+  const [terms, setTerms] = useState<PublicationTerm[]>([
+    { id: 0, language: locale, label: '', description: '', aliases: '' },
+  ]);
+  const [workLink, setWorkLink] = useState<StatementInput>();
+  const [facts, setFacts] = useState<PublicationFactRow[]>([]);
+  const [picked, setPicked] = useState<Record<string, EntityPickerSubject>>({});
   const [field, setField] = useState('');
-  const [citation, setCitation] = useState('');
   const [independent, setIndependent] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewed, setReviewed] = useState<PublicationItem>();
   const [failure, setFailure] = useState<CreateFailure>();
+  const [corrections, setCorrections] = useState<PublicationCorrection[]>([]);
   const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
@@ -291,75 +144,59 @@ function PublicationEditorLive({
     !running.current &&
     !admission.current.disabled &&
     !admission.current.created;
-  useLayoutEffect(() => {
-    const intent = pendingFactFocus.current;
-    if (!intent) return;
-    pendingFactFocus.current = null;
-    if (
-      !intent.trigger.isConnected ||
-      document.activeElement !== intent.trigger ||
-      !lifetime.active() ||
-      intent.readingGeneration !== readingGeneration.current ||
-      !editable() ||
-      factHolders.current.get(intent.property) !== intent.holder ||
-      !currentProfile?.fields.includes(intent.property)
-    )
-      return;
-    const section = document.getElementById(`${id}-fact-${encodeURIComponent(intent.property)}`);
-    if (!section) return;
-    const datatype = read?.release.properties[intent.property]?.datatype;
-    const targetField =
-      datatype === 'quantity'
-        ? 'amount'
-        : datatype === 'time'
-          ? 'precision'
-          : datatype === 'monolingualtext'
-            ? 'text'
-            : 'value';
-    const target =
-      intent.property === 'schema:publisher'
-        ? section.querySelector<HTMLElement>('input:not([type="hidden"]), [role="combobox"], select, textarea')
-        : document.getElementById(
-            controlId(`${id}-scalar-${encodeURIComponent(intent.property)}`, 'fact', targetField),
-          );
-    (target && section.contains(target) ? target : section).focus();
-  });
-  const name = (id: string) =>
-    pickText(displayRelease?.properties[id]?.labels ?? {}, locale).text || draftNames[id] || '';
+  if (read && relation && !workLink)
+    setWorkLink(publicationWorkStatement(relation, work, read.release));
+  const name = (property: string) =>
+    pickText(displayRelease?.properties[property]?.labels ?? {}, locale).text || draftNames[property] || '';
   const title = read ? pickText(read.public.subject.labels, locale).text : '';
   const back = read ? subjectHref({ id: work, label: title }, locale).href : `/${locale}/search`;
-  // Reuse the producer's current profile and schema validation; never narrow the staged draft to fit it.
+  const searchLabel = terms.map((term) => term.label.trim()).find(Boolean) || title;
+  const currentWorkLink =
+    workLink &&
+    ({
+      ...workLink,
+      property: { id: relation },
+      value: { type: 'value' as const, content: work },
+      rank: 'normal' as const,
+    } satisfies StatementInput);
   const reviewErrors =
-    reviewDefinitions && read && profile
-      ? publicationDraft(
-          read,
-          profile.id,
-          relation,
-          [{ language, label, description: '', aliases: '' }],
-          facts,
-          citation,
-          independent,
-        ).errors
+    reviewDefinitions && read && profile && currentWorkLink
+      ? publicationDraft(read, profile.id, relation, terms, currentWorkLink, facts.map((row) => row.statement), independent)
+          .errors
       : [];
   const unsupportedRelation = reviewDefinitions && !currentProfile?.relations.includes(relation);
   const unsupportedFact = (property: string) => reviewDefinitions && !currentProfile?.fields.includes(property);
-  const unsupportedPublisher =
-    reviewDefinitions &&
-    !!read &&
-    Object.hasOwn(facts, 'schema:publisher') &&
-    publisher.some((item) => !item.types.some((type) => publicationTarget(read.release, type, 'schema:publisher')));
-  const factNeedsReview = (property: string) =>
-    unsupportedFact(property) ||
-    (property === 'schema:publisher' && unsupportedPublisher) ||
-    reviewErrors.some((error) => statementAddress(error.pointer)?.property === property);
   const correctionsRequired =
     !currentProfile ||
     unsupportedRelation ||
-    unsupportedPublisher ||
-    Object.keys(facts).some(unsupportedFact) ||
+    facts.some((row) => unsupportedFact(row.statement.property.id)) ||
     reviewErrors.length > 0;
+  const holders = publicationCurrentHolders(terms, facts);
+  const errorRows = corrections.map((error) =>
+    error.target && holders.has(error.holder) ? error : { ...error, target: undefined },
+  );
+  const hasControlError = (target: string) => errorRows.some((error) => error.target === target);
+  const pendingHolderFocus = useRef<string>();
+  const controlErrorId = (target: string) => errorRows.find((error) => error.target === target)?.id;
+  const reviewContext: StatementFieldsRead | undefined = displayRelease
+    ? {
+        release: displayRelease,
+        source: null,
+        public: {
+          related: {
+            ...(read ? { [work]: { labels: read.public.subject.labels, type: read.public.subject.type } } : {}),
+            ...Object.fromEntries(
+              Object.values(picked).map((item) => [
+                item.id,
+                { labels: { [locale]: item.title }, type: item.types[0] ?? '' },
+              ]),
+            ),
+          },
+          subject: { type: profile?.id ?? '' },
+        },
+      }
+    : undefined;
 
-  // Orient only to the committed result of the same explicit keyboard recovery.
   useLayoutEffect(() => {
     const intent = recoveryFocus.current;
     if (!intent) return;
@@ -387,8 +224,16 @@ function PublicationEditorLive({
         ? `${id}-unsupported-profile`
         : reviewDefinitions
           ? `${id}-review-heading`
-          : `${id}-profile-heading`
+          : reviewing
+            ? `${id}-whole-review`
+            : `${id}-profile-heading`
       : `${id}-load-error`;
+    document.getElementById(target)?.focus();
+  });
+  useLayoutEffect(() => {
+    const target = pendingHolderFocus.current;
+    if (!target || reviewing) return;
+    pendingHolderFocus.current = undefined;
     document.getElementById(target)?.focus();
   });
 
@@ -396,7 +241,7 @@ function PublicationEditorLive({
     if (!read) return;
     privateDefinitions.current = { release: read.release, profiles: read.profiles };
     if (profile) setDraftProfile(profile);
-    const properties = [relation, ...Object.keys(facts), field, 'schema:url'].filter(Boolean);
+    const properties = [relation, ...facts.map((row) => row.statement.property.id), field, 'schema:url'].filter(Boolean);
     setDraftNames((names) => ({
       ...names,
       ...Object.fromEntries(
@@ -449,227 +294,31 @@ function PublicationEditorLive({
     }
   }
 
+  function reject(errors: NonNullable<CreateFailure['errors']>, extra?: CreateFailure) {
+    setCorrections(
+      publicationCorrections(
+        errors,
+        terms,
+        currentWorkLink,
+        facts,
+        relation,
+        (read ?? privateDefinitions.current)?.release ?? displayRelease!,
+        locale,
+        id,
+      ),
+    );
+    setFailure(extra ?? { ok: false, reason: 'invalid', errors });
+  }
+
   function edit(change: () => void, current: () => boolean = () => true) {
     if (!editable() || !current()) return;
     change();
     localDraft.current = true;
-    // Only an explicit edit after a definite refusal starts a different request. Uncertain drafts stay frozen.
     command.current = null;
+    setReviewing(false);
+    setReviewed(undefined);
     setFailure(undefined);
-  }
-  function scalarEntries(property: string) {
-    return (failure?.errors ?? []).flatMap((error) => {
-      const address = statementAddress(error.pointer);
-      if (
-        address?.property !== property ||
-        address.index !== '0' ||
-        address.path.length === 0 ||
-        address.path[0] === 'references'
-      )
-        return [];
-      return [{ error, path: address.path, pointer: pointerFrom(['statement', ...address.path]) }];
-    });
-  }
-  function scalarFeedback(property: string) {
-    const feedbackId = `${id}-scalar-${encodeURIComponent(property)}`;
-    const part: StatementInput = {
-      property: { id: property },
-      value: facts[property] ?? { type: 'novalue' },
-      qualifiers: [],
-      references: [],
-      rank: 'normal',
-    };
-    const entries = scalarEntries(property);
-    const errors = controlRead
-      ? presentStatementViolations(
-          entries.map(({ error, pointer }) => ({ pointer, code: error.code })),
-          part,
-          controlRead.release,
-          locale,
-          feedbackId,
-        )
-      : [];
-    return { feedback: { id: feedbackId, address: 'fact', errors }, entries };
-  }
-  function linkedError(target: string, label: string, instruction: string = m.catalogue_create_invalid_field({}, o)) {
-    return { target, summaryId: `${target}-error`, label, instruction, unique: false };
-  }
-  function generalError(error: NonNullable<CreateFailure['errors']>[number], index: number) {
-    const summaryId = `${id}-general-error-${index}`;
-    const diagnostic = controlRead
-      ? presentStatementViolations(
-          [{ pointer: '/unsupported', code: error.code }],
-          {
-            property: { id: '' },
-            value: { type: 'novalue' },
-            qualifiers: [],
-            references: [],
-            rank: 'normal',
-          },
-          controlRead.release,
-          locale,
-          summaryId,
-        )[0]
-      : undefined;
-    return {
-      target: undefined,
-      summaryId,
-      label: diagnostic?.label ?? m.catalogue_create_invalid_field({}, o),
-      instruction: diagnostic?.instruction ?? '',
-      unique: false,
-    };
-  }
-  function errorControl(error: NonNullable<CreateFailure['errors']>[number], index: number) {
-    const languageValue = language.trim();
-    const languageValid = /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(languageValue);
-    const segments = pointerSegments(error.pointer);
-    if (error.pointer === '/independent') return linkedError(`${id}-independent`, m.publication_independent({}, o));
-    if (error.pointer === '/type' || error.pointer === '/relation')
-      return linkedError(`${id}-relation`, m.relation_property({}, o));
-    if (error.pointer === '/language') return linkedError(`${id}-language`, m.catalogue_create_language({}, o));
-    if (segments?.[0] === 'labels') {
-      const target =
-        segments.length === 1
-          ? `${id}-label`
-          : segments.length === 2 && segments[1] === languageValue
-            ? languageValid
-              ? `${id}-label`
-              : `${id}-language`
-            : undefined;
-      if (target)
-        return linkedError(
-          target,
-          target === `${id}-language` ? m.catalogue_create_language({}, o) : m.catalogue_create_label({}, o),
-        );
-    }
-    const address = statementAddress(error.pointer);
-    if (address) {
-      const { property, index: statementIndex, path } = address;
-      const currentStatement = property === relation || Object.hasOwn(facts, property);
-      const citationVisible = !!controlRead?.release.properties['schema:url'] || !!citation;
-      const citationPath =
-        (path.length === 1 && path[0] === 'references') ||
-        (path.join('/') === 'references/0/parts/0/value/content' && !!citation.trim());
-      if (currentStatement && citationVisible && statementIndex === '0' && citationPath) {
-        const value =
-          property === relation
-            ? { type: 'value' as const, content: read?.public.subject.id ?? '' }
-            : (facts[property] ?? { type: 'novalue' as const });
-        const part: StatementInput = {
-          property: { id: property },
-          value,
-          qualifiers: [],
-          references: citation.trim()
-            ? [
-                {
-                  parts: [
-                    {
-                      property: { id: 'schema:url' },
-                      value: { type: 'value', content: citation.trim() },
-                    },
-                  ],
-                },
-              ]
-            : [],
-          rank: 'normal',
-        };
-        const [presented] = controlRead
-          ? presentStatementViolations(
-              [{ pointer: pointerFrom(['statement', ...path]), code: error.code }],
-              part,
-              controlRead.release,
-              locale,
-              `${id}-citation-feedback`,
-            )
-          : [];
-        return linkedError(
-          `${id}-citation`,
-          m.relation_citation({}, o),
-          presented?.instruction ?? m.catalogue_create_invalid_field({}, o),
-        );
-      }
-      const propertyRoot = statementIndex === undefined || (statementIndex === '0' && path.length === 0);
-      if (currentStatement && property === relation && propertyRoot)
-        return linkedError(`${id}-relation`, m.relation_property({}, o));
-      if (currentStatement && property !== relation && propertyRoot) {
-        const fieldset = `${id}-fact-${encodeURIComponent(property)}`;
-        const label = name(property);
-        if (label) return linkedError(fieldset, label);
-      }
-      if (
-        Object.hasOwn(facts, property) &&
-        property !== 'schema:publisher' &&
-        statementIndex === '0' &&
-        path.length > 0 &&
-        !unsupportedFact(property)
-      ) {
-        const { feedback, entries } = scalarFeedback(property);
-        const scalarIndex = entries.findIndex((entry) => entry.error === error);
-        const presented = feedback.errors[scalarIndex];
-        const scalarFields = [
-          'state',
-          'value',
-          'date',
-          'amount',
-          'unit',
-          'lowerBound',
-          'upperBound',
-          'text',
-          'language',
-        ];
-        if (presented && scalarFields.some((field) => presented.target === controlId(feedback.id, 'fact', field))) {
-          const precision = path.join('/') === 'value/content/precision';
-          return {
-            target:
-              precision && controlRead?.release.properties[property]?.datatype === 'time'
-                ? controlId(feedback.id, 'fact', 'precision')
-                : presented.target,
-            summaryId: presented.id,
-            label: precision ? `${presented.label} · ${m.correction_precision({}, o)}` : presented.label,
-            instruction: presented.instruction,
-            unique: true,
-          };
-        }
-      }
-    }
-    return generalError(error, index);
-  }
-  const errorRows = (() => {
-    const rows = (failure?.errors ?? []).map(errorControl);
-    const grouped: typeof rows = [];
-    const byTarget = new Map<string, (typeof rows)[number]>();
-    for (const row of rows) {
-      if (!row.target || row.unique) {
-        grouped.push(row);
-        continue;
-      }
-      const existing = byTarget.get(row.target);
-      if (existing) {
-        existing.instruction = [existing.instruction, row.instruction].filter(Boolean).join(' ');
-      } else {
-        byTarget.set(row.target, row);
-        grouped.push(row);
-      }
-    }
-    return grouped;
-  })();
-  const hasControlError = (target: string) => errorRows.some((error) => error.target === target);
-  const controlErrorId = (target: string) => errorRows.find((error) => error.target === target)?.summaryId;
-  function reviewErrorLabel(pointer: string) {
-    if (pointer.includes('/references/')) return m.relation_citation({}, o);
-    const address = statementAddress(pointer);
-    if (address)
-      return address.property === relation
-        ? m.relation_property({}, o)
-        : name(address.property) || m.publication_field({}, o);
-    if (pointer === '/independent') return m.publication_independent({}, o);
-    if (pointer === '/type' || pointer === '/relation') return m.relation_property({}, o);
-    const segments = pointerSegments(pointer);
-    if (segments?.[0] === 'labels')
-      return /^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(language.trim())
-        ? m.catalogue_create_label({}, o)
-        : m.catalogue_create_language({}, o);
-    return m.catalogue_create_invalid_field({}, o);
+    setCorrections([]);
   }
 
   async function submit(event: FormEvent) {
@@ -681,6 +330,7 @@ function PublicationEditorLive({
       created ||
       !read ||
       !profile ||
+      !currentWorkLink ||
       session !== 'signed-in' ||
       failure?.reason === 'conflict' ||
       reviewDefinitions ||
@@ -688,24 +338,33 @@ function PublicationEditorLive({
     )
       return;
     if (!command.current) {
-      const draft = publicationDraft(
-        read,
-        profile.id,
-        relation,
-        [{ language, label, description: '', aliases: '' }],
-        facts,
-        citation,
-        independent,
-      );
-      if (draft.errors.length) {
-        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+      if (!reviewing) {
+        const draft = publicationDraft(
+          read,
+          profile.id,
+          relation,
+          terms,
+          currentWorkLink,
+          facts.map((row) => row.statement),
+          independent,
+        );
+        if (draft.errors.length) {
+          reject(draft.errors);
+          return;
+        }
+        setReviewed(draft.item);
+        setReviewing(true);
         return;
       }
-      command.current = { work, relation, item: draft.item, key: crypto.randomUUID() };
+      if (!reviewed) return;
+      command.current = { work, relation, item: structuredClone(reviewed), key: crypto.randomUUID() };
       setDraftProfile(profile);
       setDraftNames(
         Object.fromEntries(
-          [relation, ...Object.keys(facts), 'schema:url'].map((property) => [property, name(property)]),
+          [relation, ...facts.map((row) => row.statement.property.id), 'schema:url'].map((property) => [
+            property,
+            name(property),
+          ]),
         ),
       );
       setRelation(relation);
@@ -723,8 +382,9 @@ function PublicationEditorLive({
         if (result.reader.state === 'ready') onNavigate(result.reader.href);
       } else {
         if (result.reason === 'unavailable' || result.reason === 'conflict') admission.current.disabled = true;
-        setFailure(result);
-        // Uncertain commands retain their exact original body/key, even if a response asks for new metadata.
+        setReviewing(false);
+        if (result.errors) reject(result.errors, result);
+        else setFailure(result);
         if (result.refreshDefinitions && result.reason !== 'unavailable') {
           setReviewDefinitions(true);
           await refreshDefinitions();
@@ -741,6 +401,7 @@ function PublicationEditorLive({
       setBusy(false);
     }
   }
+
   async function openCreated() {
     if (!lifetime.active()) return;
     if (!created || running.current) return;
@@ -759,6 +420,11 @@ function PublicationEditorLive({
       running.current = false;
       setBusy(false);
     }
+  }
+
+  function focusHolder(target: string) {
+    pendingHolderFocus.current = target;
+    edit(() => {});
   }
 
   return (
@@ -789,12 +455,7 @@ function PublicationEditorLive({
         <p className="text-muted-foreground">{m.publication_intro({}, o)}</p>
       </header>
       {created ? (
-        <ContentItemFrame
-          as="div"
-          role="status"
-          aria-labelledby={`${id}-result`}
-          className="min-w-0 space-y-4 p-4 sm:p-6"
-        >
+        <ContentItemFrame as="div" role="status" aria-labelledby={`${id}-result`} className="min-w-0 space-y-4 p-4 sm:p-6">
           <ContentItemHeading id={`${id}-result`} className="text-xl font-semibold">
             {m.catalogue_create_created({}, o)}
           </ContentItemHeading>
@@ -814,6 +475,9 @@ function PublicationEditorLive({
               </Button>
             </>
           )}
+          <a href={back} className={outlineLinkClassName}>
+            {m.publication_back({}, o)}
+          </a>
         </ContentItemFrame>
       ) : (
         <>
@@ -826,17 +490,8 @@ function PublicationEditorLive({
             query.data?.ok === false ||
             (query.data?.ok && !matchingRead) ||
             (refreshRequired && !query.isFetching)) && (
-            <ContentItemFrame
-              as="div"
-              role="alert"
-              aria-labelledby={`${id}-load-error`}
-              className="min-w-0 space-y-3 p-4"
-            >
-              <ContentItemHeading
-                tabIndex={-1}
-                id={`${id}-load-error`}
-                className={cn('text-lg font-semibold', recoveryFocusClassName)}
-              >
+            <ContentItemFrame as="div" role="alert" aria-labelledby={`${id}-load-error`} className="min-w-0 space-y-3 p-4">
+              <ContentItemHeading tabIndex={-1} id={`${id}-load-error`} className={cn('text-lg font-semibold', recoveryFocusClassName)}>
                 {query.data?.ok === false && query.data.reason === 'concealed'
                   ? m.catalogue_create_concealed({}, o)
                   : query.data?.ok === false && query.data.reason === 'invalid'
@@ -874,7 +529,7 @@ function PublicationEditorLive({
                   preview={<p>{m.publication_duplicate({}, o)}</p>}
                   actions={
                     <a
-                      href={`/${locale}/search?q=${encodeURIComponent(label.trim() || title)}`}
+                      href={`/${locale}/search?q=${encodeURIComponent(searchLabel)}`}
                       target="_blank"
                       rel="noreferrer"
                       className={outlineLinkClassName}
@@ -912,9 +567,9 @@ function PublicationEditorLive({
                   )}
                   {reviewErrors.length > 0 && (
                     <ul className="list-inside list-disc">
-                      {[...new Set(reviewErrors.map((error) => reviewErrorLabel(error.pointer)))].map((label) => (
-                        <li key={label}>
-                          {label}: {m.catalogue_create_invalid_field({}, o)}
+                      {[...new Set(reviewErrors.map((error) => error.pointer))].map((pointer) => (
+                        <li key={pointer}>
+                          {pointer}: {m.catalogue_create_invalid_field({}, o)}
                         </li>
                       ))}
                     </ul>
@@ -959,314 +614,176 @@ function PublicationEditorLive({
                   </a>
                 </p>
               )}
-              <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
-                <FieldSet
-                  disabled={disabled}
-                  aria-describedby={profile.description ? `${id}-profile-description` : undefined}
-                  className="min-w-0 gap-4"
-                >
-                  <FieldLegend lang={profile.labelLang ?? undefined} className="max-w-full">
-                    <ContentItemHeading
-                      id={`${id}-profile-heading`}
-                      tabIndex={-1}
-                      className={cn('text-xl font-semibold [overflow-wrap:anywhere]', recoveryFocusClassName)}
-                    >
-                      {profile.label}
-                    </ContentItemHeading>
-                  </FieldLegend>
-                  {profile.description && (
-                    <FieldDescription
-                      id={`${id}-profile-description`}
-                      lang={profile.descriptionLang ?? undefined}
-                      className="min-w-0 text-start [overflow-wrap:anywhere]"
-                    >
-                      {profile.description}
-                      {profile.descriptionLang && profile.descriptionLang !== locale && (
-                        <span lang={locale} className="ms-2">
-                          {m.guide_fallback({ language: profile.descriptionLang }, o)}
-                        </span>
-                      )}
-                    </FieldDescription>
-                  )}
-                  <Field data-invalid={hasControlError(`${id}-label`) || undefined}>
-                    <FieldLabel className={labelClassName} htmlFor={`${id}-label`}>
-                      {m.catalogue_create_label({}, o)}
-                    </FieldLabel>
-                    <Input
-                      className={inputClassName}
-                      id={`${id}-label`}
-                      aria-describedby={controlErrorId(`${id}-label`)}
-                      value={label}
-                      required
-                      maxLength={250}
-                      aria-invalid={hasControlError(`${id}-label`) || undefined}
-                      onChange={(e) => edit(() => setLabel(e.target.value))}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel className={labelClassName} htmlFor={`${id}-language`}>
-                      {m.catalogue_create_language({}, o)}
-                    </FieldLabel>
-                    <Input
-                      className={inputClassName}
-                      id={`${id}-language`}
-                      value={language}
-                      maxLength={64}
-                      aria-describedby={`${id}-language-help${controlErrorId(`${id}-language`) ? ` ${controlErrorId(`${id}-language`)}` : ''}`}
-                      aria-invalid={hasControlError(`${id}-language`) || undefined}
-                      onChange={(e) => edit(() => setLanguage(e.target.value))}
-                    />
-                    <FieldDescription id={`${id}-language-help`} className="text-start">
-                      {m.catalogue_create_language_help({}, o)}
-                    </FieldDescription>
-                  </Field>
-                  <Field>
-                    <FieldLabel className={labelClassName} htmlFor={`${id}-relation`}>
-                      {m.relation_property({}, o)}
-                    </FieldLabel>
-                    <NativeSelect
-                      className={selectClassName}
-                      id={`${id}-relation`}
-                      aria-describedby={controlErrorId(`${id}-relation`)}
-                      aria-invalid={hasControlError(`${id}-relation`) || undefined}
-                      value={relation}
-                      onChange={(e) => edit(() => setRelation(e.target.value))}
-                    >
-                      {unsupportedRelation && (
-                        <NativeSelectOption value={relation} disabled>
-                          {name(relation) || relation}
-                        </NativeSelectOption>
-                      )}
-                      {(read ? (currentProfile?.relations ?? []) : profile.relations).map((id) => (
-                        <NativeSelectOption key={id} value={id}>
-                          {name(id)}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
-                    {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
-                  </Field>
-                  <Field orientation="horizontal" data-invalid={hasControlError(`${id}-independent`) || undefined}>
-                    <Checkbox
-                      nativeButton
-                      render={<button type="button" />}
-                      id={`${id}-independent`}
-                      aria-describedby={controlErrorId(`${id}-independent`)}
-                      checked={independent}
-                      aria-invalid={hasControlError(`${id}-independent`) || undefined}
-                      onCheckedChange={(value) => edit(() => setIndependent(value))}
-                    />
-                    <FieldLabel
-                      className={`${labelClassName} min-h-11 min-w-11 items-center md:pointer-fine:min-h-8`}
-                      htmlFor={`${id}-independent`}
-                    >
-                      {m.publication_independent({}, o)}
-                    </FieldLabel>
-                  </Field>
-                </FieldSet>
-              </ContentItemFrame>
-              {Object.entries(facts).map(([property, value]) => {
-                const holder = factHolders.current.get(property);
-                const current = () => holder !== undefined && factHolders.current.get(property) === holder;
-                return (
-                  <ContentItemFrame as="div" key={property} className="min-w-0 p-4 sm:p-6">
+              {reviewing && reviewed && profile && reviewContext ? (
+                <PublicationReview
+                  id={id}
+                  item={reviewed}
+                  profile={profile}
+                  relation={relation}
+                  terms={terms}
+                  facts={facts}
+                  read={reviewContext}
+                  locale={locale}
+                  onEdit={focusHolder}
+                />
+              ) : (
+                <>
+                  <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
                     <FieldSet
-                      id={`${id}-fact-${encodeURIComponent(property)}`}
                       disabled={disabled}
-                      tabIndex={-1}
-                      aria-describedby={controlErrorId(`${id}-fact-${encodeURIComponent(property)}`)}
-                      aria-invalid={hasControlError(`${id}-fact-${encodeURIComponent(property)}`) || undefined}
-                      className="min-w-0 gap-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      aria-describedby={profile.description ? `${id}-profile-description` : undefined}
+                      className="min-w-0 gap-4"
                     >
-                      <FieldLegend className="max-w-full">
-                        <ContentItemHeading level={3} className="text-base font-semibold [overflow-wrap:anywhere]">
-                          {name(property) || m.correction_preserved({}, o)}
+                      <FieldLegend lang={profile.labelLang ?? undefined} className="max-w-full">
+                        <ContentItemHeading
+                          id={`${id}-profile-heading`}
+                          tabIndex={-1}
+                          className={cn('text-xl font-semibold [overflow-wrap:anywhere]', recoveryFocusClassName)}
+                        >
+                          {profile.label}
                         </ContentItemHeading>
                       </FieldLegend>
-                      {factNeedsReview(property) && (
-                        <>
-                          <FieldError>{m.publication_choice_review({}, o)}</FieldError>
-                          {property === 'schema:publisher' && <p>{publisher.map((item) => item.title).join(', ')}</p>}
-                          <details>
-                            <summary className={linkClassName}>{m.publication_staged_value({}, o)}</summary>
-                            <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-                              {JSON.stringify({ property, value }, null, 2)}
-                            </pre>
-                          </details>
-                        </>
+                      {profile.description && (
+                        <FieldDescription
+                          id={`${id}-profile-description`}
+                          lang={profile.descriptionLang ?? undefined}
+                          className="min-w-0 text-start [overflow-wrap:anywhere]"
+                        >
+                          {profile.description}
+                          {profile.descriptionLang && profile.descriptionLang !== locale && (
+                            <span lang={locale} className="ms-2">
+                              {m.guide_fallback({ language: profile.descriptionLang }, o)}
+                            </span>
+                          )}
+                        </FieldDescription>
                       )}
-                      {unsupportedFact(property) ? null : property === 'schema:publisher' ? (
-                        <EntityPicker
-                          label={name(property)}
-                          value={publisher}
-                          search={async (text, signal) => {
-                            const results = await search(text, signal);
-                            if (
-                              !read ||
-                              renderedReadingGeneration !== readingGeneration.current ||
-                              refreshRequiredRef.current
-                            )
-                              return [];
-                            return results.filter((item) =>
-                              item.types.some((type) => publicationTarget(read.release, type, property)),
-                            );
-                          }}
-                          src={coverSrc}
-                          disabled={disabled}
-                          onValueChange={(items) =>
-                            edit(() => {
-                              setPublisher(items);
-                              setFacts((facts) => ({
-                                ...facts,
-                                [property]: { type: 'value', content: items[0]?.id ?? '' },
-                              }));
-                            }, current)
-                          }
-                        />
-                      ) : (
-                        <ScalarControl
-                          part={{ property: { id: property }, value }}
-                          definition={controlRead?.release.properties[property]}
-                          read={controlRead!}
-                          locale={locale}
-                          feedback={scalarFeedback(property).feedback}
-                          onChange={(next) =>
-                            edit(() => setFacts((facts) => ({ ...facts, [property]: next })), current)
-                          }
-                        />
-                      )}
-                      <PublicationFactRemoval
-                        property={property}
+                      <PublicationTerms
+                        id={id}
+                        terms={terms}
                         locale={locale}
-                        populated={
-                          value.type !== 'value' ||
-                          hasFactContent(value.content) ||
-                          (property === 'schema:publisher' && publisher.length > 0)
-                        }
                         disabled={disabled}
-                        editable={() => editable() && current()}
-                        onRemove={() =>
-                          edit(() => {
-                            factHolders.current.delete(property);
-                            setFacts((facts) =>
-                              Object.fromEntries(Object.entries(facts).filter(([id]) => id !== property)),
-                            );
-                            if (property === 'schema:publisher') setPublisher([]);
-                          }, current)
+                        errors={errorRows}
+                        onChange={(termId, fieldName, value) =>
+                          edit(() =>
+                            setTerms((rows) =>
+                              rows.map((row) => (row.id === termId ? { ...row, [fieldName]: value } : row)),
+                            ),
+                          )
                         }
+                        onAdd={() =>
+                          edit(() =>
+                            setTerms((rows) => [
+                              ...rows,
+                              { id: nextTermId.current++, language: '', label: '', description: '', aliases: '' },
+                            ]),
+                          )
+                        }
+                        onRemove={(termId) => {
+                          if (!editable()) return false;
+                          edit(() => setTerms((rows) => rows.filter((row) => row.id !== termId)));
+                          return true;
+                        }}
                       />
+                      <Field>
+                        <FieldLabel className={labelClassName} htmlFor={`${id}-relation`}>
+                          {m.relation_property({}, o)}
+                        </FieldLabel>
+                        <NativeSelect
+                          className={selectClassName}
+                          id={`${id}-relation`}
+                          aria-describedby={controlErrorId(`${id}-relation`)}
+                          aria-invalid={hasControlError(`${id}-relation`) || undefined}
+                          value={relation}
+                          onChange={(event) =>
+                            edit(() => {
+                              const next = event.target.value;
+                              setRelation(next);
+                              setWorkLink((current) =>
+                                current ? { ...current, property: { id: next } } : current,
+                              );
+                            })
+                          }
+                        >
+                          {unsupportedRelation && (
+                            <NativeSelectOption value={relation} disabled>
+                              {name(relation) || relation}
+                            </NativeSelectOption>
+                          )}
+                          {(read ? (currentProfile?.relations ?? []) : profile.relations).map((property) => (
+                            <NativeSelectOption key={property} value={property}>
+                              {name(property)}
+                            </NativeSelectOption>
+                          ))}
+                        </NativeSelect>
+                        {unsupportedRelation && <FieldError>{m.publication_choice_review({}, o)}</FieldError>}
+                      </Field>
+                      <Field orientation="horizontal" data-invalid={hasControlError(`${id}-independent`) || undefined}>
+                        <Checkbox
+                          nativeButton
+                          render={<button type="button" />}
+                          id={`${id}-independent`}
+                          aria-describedby={controlErrorId(`${id}-independent`)}
+                          checked={independent}
+                          aria-invalid={hasControlError(`${id}-independent`) || undefined}
+                          onCheckedChange={(value) => edit(() => setIndependent(value))}
+                        />
+                        <FieldLabel
+                          className={`${labelClassName} min-h-11 min-w-11 items-center md:pointer-fine:min-h-8`}
+                          htmlFor={`${id}-independent`}
+                        >
+                          {m.publication_independent({}, o)}
+                        </FieldLabel>
+                      </Field>
                     </FieldSet>
                   </ContentItemFrame>
-                );
-              })}
-              <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
-                <FieldSet disabled={disabled} className="min-w-0 flex-row flex-wrap items-end gap-3">
-                  <FieldLegend className="sr-only">{m.publication_field({}, o)}</FieldLegend>
-                  <Field className="min-w-0 basis-full sm:flex-1 sm:basis-64">
-                    <FieldLabel className={labelClassName} htmlFor={`${id}-field`}>
-                      {m.publication_field({}, o)}
-                    </FieldLabel>
-                    <NativeSelect
-                      className={selectClassName}
-                      id={`${id}-field`}
-                      value={field}
-                      onChange={(e) => edit(() => setField(e.target.value))}
-                    >
-                      <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
-                      {(read ? (currentProfile?.fields ?? []) : profile.fields)
-                        .filter((id) => !Object.hasOwn(facts, id))
-                        .map((id) => (
-                          <NativeSelectOption key={id} value={id}>
-                            {name(id)}
-                          </NativeSelectOption>
-                        ))}
-                      {field && read && !currentProfile?.fields.includes(field) && (
-                        <NativeSelectOption value={field} disabled>
-                          {name(field) || field}
-                        </NativeSelectOption>
-                      )}
-                    </NativeSelect>
-                    {field && read && !currentProfile?.fields.includes(field) && (
-                      <FieldError>{m.publication_choice_review({}, o)}</FieldError>
-                    )}
-                  </Field>
-                  <Button
-                    className={actionClassName}
-                    type="button"
-                    variant="outline"
-                    disabled={
-                      disabled || !field || !currentProfile?.fields.includes(field) || Object.hasOwn(facts, field)
-                    }
-                    onBlur={(event) => {
-                      if (pendingFactFocus.current?.trigger === event.currentTarget) pendingFactFocus.current = null;
-                    }}
-                    onClick={(event) => {
-                      const keyboardActivation = event.detail === 0;
-                      const trigger = event.currentTarget;
-                      pendingFactFocus.current = null;
-                      edit(
-                        () => {
-                          const datatype = read?.release.properties[field]?.datatype;
-                          if (!datatype) return;
-                          const holder = {};
-                          factHolders.current.set(field, holder);
-                          if (keyboardActivation)
-                            pendingFactFocus.current = {
-                              property: field,
-                              holder,
-                              trigger,
-                              readingGeneration: renderedReadingGeneration,
-                            };
-                          setFacts((facts) => ({
-                            ...facts,
-                            [field]: {
-                              type: 'value',
-                              content: datatype === 'time' || datatype === 'quantity' ? {} : '',
-                            },
-                          }));
-                          setField('');
-                        },
-                        () =>
-                          admission.current.field === field &&
-                          !factHolders.current.has(field) &&
-                          !!currentProfile?.fields.includes(field),
-                      );
-                    }}
-                  >
-                    {m.correction_add({}, o)}
-                  </Button>
-                </FieldSet>
-              </ContentItemFrame>
-              {(displayRelease?.properties['schema:url'] || citation) && (
-                <ContentItemFrame as="div" className="min-w-0 p-4 sm:p-6">
-                  <FieldSet disabled={disabled} className="min-w-0 gap-3">
-                    <FieldLegend className="max-w-full">
-                      <ContentItemHeading className="text-xl font-semibold [overflow-wrap:anywhere]">
-                        {name('schema:url') || m.relation_citation({}, o)}
-                      </ContentItemHeading>
-                    </FieldLegend>
-                    <Field>
-                      <FieldLabel className={labelClassName} htmlFor={`${id}-citation`}>
-                        {m.relation_citation({}, o)}
-                      </FieldLabel>
-                      <Input
-                        className={inputClassName}
-                        id={`${id}-citation`}
-                        aria-describedby={`${id}-citation-help${controlErrorId(`${id}-citation`) ? ` ${controlErrorId(`${id}-citation`)}` : ''}`}
-                        aria-invalid={hasControlError(`${id}-citation`) || undefined}
-                        type="url"
-                        value={citation}
-                        maxLength={1500}
-                        onChange={(e) => edit(() => setCitation(e.target.value))}
-                      />
-                      <FieldDescription id={`${id}-citation-help`} className="text-start">
-                        {m.publication_citation({}, o)}
-                      </FieldDescription>
-                      {reviewErrors.some((error) => error.pointer.includes('/references/')) && (
-                        <FieldError>{m.publication_choice_review({}, o)}</FieldError>
-                      )}
-                    </Field>
-                  </FieldSet>
-                </ContentItemFrame>
+                  {currentWorkLink && displayRelease && (
+                    <PublicationFacts
+                      id={id}
+                      work={work}
+                      workTitle={title}
+                      relation={relation}
+                      workLink={currentWorkLink}
+                      facts={facts}
+                      profile={profile}
+                      currentProfile={currentProfile}
+                      release={displayRelease}
+                      locale={locale}
+                      search={search}
+                      picked={picked}
+                      disabled={disabled}
+                      reviewDefinitions={reviewDefinitions}
+                      guideReturn={`/${locale}/catalogue/publication?work=${work}`}
+                      field={field}
+                      errors={errorRows}
+                      onWorkChange={(statement) => edit(() => setWorkLink(statement))}
+                      onFactsChange={(next) => {
+                        if (!editable()) return;
+                        const removed = next.length < facts.length;
+                        setFacts(next);
+                        localDraft.current = true;
+                        command.current = null;
+                        setReviewing(false);
+                        setReviewed(undefined);
+                        if (!removed) {
+                          setFailure(undefined);
+                          setCorrections([]);
+                        }
+                      }}
+                      onPicked={(subject, item) =>
+                        edit(() =>
+                          setPicked((current) => {
+                            if (!item) {
+                              const { [subject]: _removed, ...rest } = current;
+                              return rest;
+                            }
+                            return { ...current, [subject]: item };
+                          }),
+                        )
+                      }
+                      onFieldChoice={(property) => edit(() => setField(property))}
+                    />
+                  )}
+                </>
               )}
               {failure && (
                 <ContentItemFrame
@@ -1289,7 +806,7 @@ function PublicationEditorLive({
                   {errorRows.length ? (
                     <ul className="list-inside list-disc">
                       {errorRows.map((error) => (
-                        <li key={error.summaryId} id={error.summaryId}>
+                        <li key={error.id} id={error.id}>
                           {error.target ? (
                             <a className={linkClassName} href={`#${encodeURIComponent(error.target)}`}>
                               {error.label}
@@ -1311,6 +828,11 @@ function PublicationEditorLive({
                 </ContentItemFrame>
               )}
               <ContentItemFrame as="div" className="flex min-w-0 flex-wrap gap-3 p-4">
+                {reviewing && !uncertain && (
+                  <Button className={actionClassName} type="button" variant="outline" onClick={() => edit(() => {})}>
+                    {m.publication_continue({}, o)}
+                  </Button>
+                )}
                 <Button
                   className={actionClassName}
                   type="submit"
@@ -1326,7 +848,9 @@ function PublicationEditorLive({
                     ? m.catalogue_create_saving({}, o)
                     : uncertain
                       ? m.catalogue_create_retry({}, o)
-                      : m.publication_submit({}, o)}
+                      : reviewing
+                        ? m.publication_submit({}, o)
+                        : m.publication_review({}, o)}
                 </Button>
                 {read && (
                   <a href={back} className={outlineLinkClassName}>

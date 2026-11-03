@@ -124,26 +124,38 @@ test('the production route creates Book and Anime releases, then retries only th
       serverFunctionHeaders.push(request.allHeaders());
   });
 
-  const bookCitation = 'https://example.org/native-book-edition';
+  const bookWorkCitation = 'https://example.org/native-book-work';
+  const bookIsbnCitation = 'https://example.org/native-book-isbn';
   await page.goto(`${stack.web}/en/catalogue/publication?work=${book.id}`, { waitUntil: 'domcontentloaded' });
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
   const name = page.getByRole('textbox', { name: 'Name', exact: true });
   await name.waitFor({ state: 'visible' });
   await name.fill('Native paperback edition');
-  await page.getByRole('combobox', { name: 'Add a publication fact', exact: true }).selectOption('schema:isbn');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await page.locator('[id$="-fact-schema%3Aisbn"]').getByRole('textbox').fill('9780306406157');
-  await page.getByRole('textbox', { name: 'Citation URL', exact: true }).fill(bookCitation);
+  await page.getByRole('button', { name: 'Add a language', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Data language', exact: true }).nth(1).fill('ja');
+  await page.getByRole('textbox', { name: 'Name', exact: true }).nth(1).fill('ネイティブ文庫');
+  const factChoice = page.getByRole('combobox', { name: 'Add a publication fact', exact: true });
+  await factChoice.selectOption('schema:isbn');
+  await factChoice.locator('xpath=ancestor::fieldset[1]').getByRole('button', { name: 'Add', exact: true }).click();
+  const isbn = page.locator('[data-publication-property="schema:isbn"]');
+  await isbn.getByRole('textbox', { name: 'Value', exact: true }).fill('9780306406157');
+  await isbn.getByRole('textbox', { name: 'URL', exact: true }).fill(bookIsbnCitation);
+  await page.locator('[id$="-work-link"]').getByRole('textbox', { name: 'URL', exact: true }).fill(bookWorkCitation);
   const independent = page.getByRole('checkbox', { name: /independently identified publication/ });
-  const bookCreateButton = page.getByRole('button', { name: 'Create publication', exact: true });
-  await bookCreateButton.click();
+  const reviewButton = page.getByRole('button', { name: 'Review publication', exact: true });
+  await reviewButton.click();
   expect(await independent.getAttribute('aria-invalid')).toBe('true');
   let requests = (await currentRequests()).slice(start).filter(({ fixtureRequest }) => !fixtureRequest);
   expect(requests.some(({ method, url }) => method === 'POST' && url === '/v1/subjects')).toBe(false);
 
   await stack.injectCreatedSubjectReadFailureOnce({ status: 503, body: '{"title":"Temporarily unavailable"}' });
   await independent.click();
-  await bookCreateButton.click();
+  await reviewButton.click();
+  await page.getByRole('heading', { name: 'Review publication', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Edit this part' }).first().click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).first().waitFor({ state: 'visible' });
+  await reviewButton.click();
+  await page.getByRole('button', { name: 'Create publication', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'Subject created.' }).waitFor({ state: 'visible' });
   expect(
     await page
@@ -158,10 +170,14 @@ test('the production route creates Book and Anime releases, then retries only th
   const bookInput = JSON.parse(bookPost!.body!) as CreatedInput;
   expect(bookInput.type).toBe('bf:Instance');
   expect(bookInput.labels.en).toBe('Native paperback edition');
+  expect(bookInput.labels.ja).toBe('ネイティブ文庫');
   expect(bookInput.statements['schema:exampleOfWork']?.[0]?.value.content).toBe(book.id);
   expect(bookInput.statements['schema:isbn']?.[0]?.value.content).toBe('9780306406157');
-  citationPart(bookInput.statements['schema:exampleOfWork']![0]!, bookCitation);
-  citationPart(bookInput.statements['schema:isbn']![0]!, bookCitation);
+  citationPart(bookInput.statements['schema:exampleOfWork']![0]!, bookWorkCitation);
+  citationPart(bookInput.statements['schema:isbn']![0]!, bookIsbnCitation);
+  expect(bookInput.statements['schema:isbn']![0]!.references[0]!.parts).not.toContainEqual(
+    expect.objectContaining({ value: expect.objectContaining({ content: bookWorkCitation }) }),
+  );
   expect(bookInput.statements).not.toHaveProperty('schema:author');
   expect(bookInput.statements).not.toHaveProperty('schema:wordCount');
   const failedRead = requests.find(
@@ -178,8 +194,8 @@ test('the production route creates Book and Anime releases, then retries only th
   expect(bookEdition.subject.type).toBe('bf:Instance');
   expect(bookEdition.subject.statements['schema:exampleOfWork']?.[0]?.value.content).toBe(book.id);
   expect(bookEdition.subject.statements['schema:isbn']?.[0]?.value.content).toBe('9780306406157');
-  citationPart(bookEdition.subject.statements['schema:exampleOfWork']![0]!, bookCitation);
-  citationPart(bookEdition.subject.statements['schema:isbn']![0]!, bookCitation);
+  citationPart(bookEdition.subject.statements['schema:exampleOfWork']![0]!, bookWorkCitation);
+  citationPart(bookEdition.subject.statements['schema:isbn']![0]!, bookIsbnCitation);
   expect(bookEdition.subject.statements).not.toHaveProperty('schema:author');
   expect(bookEdition.subject.statements).not.toHaveProperty('schema:wordCount');
   requests = (await currentRequests()).slice(start).filter(({ fixtureRequest }) => !fixtureRequest);
@@ -190,8 +206,9 @@ test('the production route creates Book and Anime releases, then retries only th
   await page.goto(`${stack.web}/en/catalogue/publication?work=${movie.id}`, { waitUntil: 'domcontentloaded' });
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill('Native animated release');
-  await page.getByRole('textbox', { name: 'Citation URL', exact: true }).fill(movieCitation);
+  await page.locator('[id$="-work-link"]').getByRole('textbox', { name: 'URL', exact: true }).fill(movieCitation);
   await page.getByRole('checkbox', { name: /independently identified publication/ }).click();
+  await page.getByRole('button', { name: 'Review publication', exact: true }).click();
   await page.getByRole('button', { name: 'Create publication', exact: true }).click();
   await page.waitForURL((url) => url.pathname.includes('/subjects/'));
   const movieReleaseId = /\/subjects\/([0-9a-f-]{36})\//i.exec(new URL(page.url()).pathname)?.[1];

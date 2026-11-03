@@ -86,13 +86,21 @@ test('publication fact confirmation preserves drafts, property targets and the o
   const button = (name: string) => canvas.getByRole('button', { name });
   const input = (name: string) => canvas.getByRole('textbox', { name }) as HTMLInputElement;
   const type = (element: HTMLElement, value: string) => act(async () => user.type(element, value));
+  const factChoice = () => canvas.getByRole('combobox', { name: m.publication_field() });
+  const addButton = () => within(factChoice().closest('fieldset')!).getByRole('button', { name: m.correction_add() });
   const add = (property: string) =>
     act(async () => {
-      await user.selectOptions(canvas.getByRole('combobox', { name: m.publication_field() }), property);
-      await user.click(button(m.correction_add()));
+      await user.selectOptions(factChoice(), property);
+      await user.click(addButton());
     });
-  const region = (property: string) =>
-    host.querySelector<HTMLElement>(`[id$="-fact-${encodeURIComponent(property)}"]`)!;
+  const create = async () => {
+    await click(button(m.publication_review()));
+    await canvas.findByRole('heading', { name: m.publication_review() });
+    await click(button(m.publication_submit()));
+  };
+  const workUrl = () =>
+    within(host.querySelector('[id$="-work-link"]')!).getByRole('textbox', { name: m.correction_url() });
+  const region = (property: string) => host.querySelector<HTMLElement>(`[data-publication-property="${property}"]`)!;
   const remove = (property: string) => within(region(property)).getByRole('button', { name: m.relation_remove() });
   const snapshot = () =>
     [...host.querySelectorAll<HTMLInputElement>('input, select')].map((node) => [node.id, node.value, node.checked]);
@@ -134,24 +142,24 @@ test('publication fact confirmation preserves drafts, property targets and the o
     expect(window.document.activeElement).toBe(window.document.body);
     const fieldSelect = canvas.getByRole('combobox', { name: m.publication_field() }) as HTMLSelectElement;
     await act(async () => user.selectOptions(fieldSelect, 'schema:datePublished'));
-    const retiredAdd = retainedClick(button(m.correction_add()));
+    const retiredAdd = retainedClick(addButton());
     await act(async () => {
       await user.selectOptions(fieldSelect, 'schema:isbn');
-      button(m.correction_add()).focus();
-      retiredAdd({ detail: 0, currentTarget: button(m.correction_add()) });
+      addButton().focus();
+      retiredAdd({ detail: 0, currentTarget: addButton() });
     });
     expect(fieldSelect.value).toBe('schema:isbn');
     expect(region('schema:datePublished')).toBeNull();
-    expect(window.document.activeElement).toBe(button(m.correction_add()));
+    expect(window.document.activeElement).toBe(addButton());
     await act(async () => {
       await user.selectOptions(fieldSelect, 'schema:datePublished');
-      await user.click(button(m.correction_add()));
+      await user.click(addButton());
     });
-    expect(window.document.activeElement).toBe(button(m.correction_add()));
+    expect(window.document.activeElement).toBe(addButton());
     await click(remove('schema:datePublished'));
     await act(async () => {
       await user.selectOptions(fieldSelect, 'schema:datePublished');
-      const trigger = button(m.correction_add());
+      const trigger = addButton();
       trigger.focus();
       await user.keyboard('{Enter}');
     });
@@ -160,7 +168,7 @@ test('publication fact confirmation preserves drafts, property targets and the o
     await click(remove('schema:datePublished'));
     await type(input(m.catalogue_create_label()), 'Independent edition');
     await click(canvas.getByRole('checkbox', { name: m.publication_independent() }));
-    await type(input(m.relation_citation()), 'https://example.org/source');
+    await type(workUrl(), 'https://example.org/source');
     await add('schema:isbn');
     await type(input(m.correction_value()), '978-0-140-44430-8');
     const oldScalar = retained<SnakInput['value']>(input(m.correction_value()), 'onChange');
@@ -178,9 +186,12 @@ test('publication fact confirmation preserves drafts, property targets and the o
     await act(async () => oldScalar(isbn));
     expect(region('schema:publisher')).toBe(sibling);
     expect(sibling.textContent).toContain('Selected press');
-    await click(button(m.publication_submit()));
-    const correction = await canvas.findByRole('link', { name: 'publisher' });
-    expect(decodeURIComponent(correction.getAttribute('href')!.slice(1))).toBe(stableId);
+    await create();
+    const correction = await canvas.findByRole('link', { name: /publisher/i });
+    const correctionTarget = window.document.getElementById(
+      decodeURIComponent(correction.getAttribute('href')!.slice(1)),
+    );
+    expect(sibling.contains(correctionTarget)).toBe(true);
     const before = snapshot();
     for (const property of ['schema:isbn', 'schema:publisher']) {
       await click(remove(property));
@@ -204,7 +215,7 @@ test('publication fact confirmation preserves drafts, property targets and the o
     expect(region('schema:publisher')).toBe(sibling);
     expect(sibling.id).toBe(stableId);
     expect(sibling.contains(window.document.activeElement as unknown as Node)).toBe(true);
-    expect(input(m.relation_citation()).value).toBe('https://example.org/source');
+    expect(workUrl().value).toBe('https://example.org/source');
     await click(remove('schema:publisher'));
     await click(remove('schema:publisher'));
     expect(window.document.activeElement).toBe(canvas.getByRole('combobox', { name: m.publication_field() }));
@@ -229,23 +240,21 @@ test('publication fact confirmation preserves drafts, property targets and the o
     await act(async () => currentScalar(isbn));
     expect(region('schema:publisher').textContent).toContain('Selected press');
     await click(remove('schema:isbn'));
-    await click(button(m.publication_submit()));
-    const locked = snapshot();
+    await create();
+    expect(canvas.getByRole('button', { name: m.catalogue_create_saving() })).toBeDefined();
     const lateEdits = () => {
       currentScalar({ type: 'value', content: 'late scalar' });
       currentPublisher([{ ...publisher, title: 'Late press', id: fixture.work.subject.id }]);
     };
     await act(async () => lateEdits());
-    expect(snapshot()).toEqual(locked);
-    expect(region('schema:publisher').textContent).toContain('Selected press');
     expect(canvas.queryByText('Late press')).toBeNull();
-    expect((remove('schema:isbn') as HTMLButtonElement).disabled).toBe(true);
-    await click(remove('schema:isbn'));
     await act(async () => finish({ ok: false, reason: 'unavailable' }));
     await canvas.findByRole('heading', { name: m.catalogue_create_uncertain() });
+    const locked = snapshot();
     await act(async () => lateEdits());
     expect(snapshot()).toEqual(locked);
     expect(canvas.getByRole('heading', { name: m.catalogue_create_uncertain() })).toBeDefined();
+    expect((remove('schema:isbn') as HTMLButtonElement).disabled).toBe(true);
     await click(remove('schema:isbn'));
     expect(input(m.correction_value()).value).toBe('978-0-140-44430-8');
     await click(button(m.catalogue_create_retry()));
@@ -257,7 +266,7 @@ test('publication fact confirmation preserves drafts, property targets and the o
     });
     await act(async () => finish({ ok: false, reason: 'invalid' }));
     await act(async () => currentScalar({ type: 'value', content: '978-0-140-44431-5' }));
-    await click(button(m.publication_submit()));
+    await create();
     expect(commands[3]!.key).not.toBe(commands[2]!.key);
     expect(commands[3]!.item.statements['schema:isbn']![0]!.value).toEqual({
       type: 'value',

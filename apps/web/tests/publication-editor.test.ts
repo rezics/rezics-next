@@ -39,26 +39,43 @@ const sessionRequest = (csrf = 'AAAAAAAAAAAAAAAAAAAAAA') =>
       'x-csrf-token': csrf,
     },
   });
+const workCitation = 'https://publisher.example/work';
+const isbnCitation = 'https://publisher.example/isbn';
+function statement(
+  property: string,
+  content: unknown,
+  url = '',
+): Parameters<typeof publicationDraft>[5][number] {
+  return {
+    property: { id: property },
+    value: { type: 'value', content },
+    qualifiers: [],
+    references: url
+      ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: url } }] }]
+      : [],
+    rank: 'normal',
+  };
+}
 function draft(read: Extract<PublicationRead, { ok: true }>) {
   return publicationDraft(
     read,
     'bf:Instance',
     'schema:exampleOfWork',
-    [{ language: 'en', label: 'A distinct edition', description: '', aliases: '' }],
-    {
-      'schema:isbn': { type: 'value', content: '978-0-140-44430-8' },
-      'schema:datePublished': {
-        type: 'value',
-        content: {
-          time: '+2026-10-00T00:00:00Z',
-          precision: 10,
-          calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
-        },
-      },
-      'schema:numberOfPages': { type: 'value', content: { amount: '+240', unit: '1' } },
-      'schema:publisher': { type: 'value', content: '00000000-0000-4000-8000-00000000e003' },
-    },
-    'https://publisher.example/edition',
+    [
+      { language: 'en', label: 'A distinct edition', description: 'Paperback notes', aliases: 'Trade\nReprint' },
+      { language: 'ja', label: '別版', description: '', aliases: '' },
+    ],
+    statement('schema:exampleOfWork', read.public.subject.id, workCitation),
+    [
+      statement('schema:isbn', '978-0-140-44430-8', isbnCitation),
+      statement('schema:datePublished', {
+        time: '+2026-10-00T00:00:00Z',
+        precision: 10,
+        calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+      }),
+      statement('schema:numberOfPages', { amount: '+240', unit: '1' }),
+      statement('schema:publisher', '00000000-0000-4000-8000-00000000e003'),
+    ],
     true,
   );
 }
@@ -84,7 +101,17 @@ test('Create an independently identified edition or publication linked to its re
   expect(publicationCreatedId).not.toBe(command.work);
   const write = fixture.calls.find((call) => call.method === 'POST')!;
   expect(write).toMatchObject({ path: '/v1/subjects', authorization: 'Bearer server-only', key, body: initial.item });
+  expect(initial.item.labels).toEqual({ en: 'A distinct edition', ja: '別版' });
+  expect(initial.item.descriptions).toEqual({ en: 'Paperback notes' });
+  expect(initial.item.aliases).toEqual({ en: ['Trade', 'Reprint'] });
   expect(initial.item.statements['schema:isbn']![0]!.value).toEqual({ type: 'value', content: '978-0-140-44430-8' });
+  expect(initial.item.statements['schema:exampleOfWork']![0]!.references).toEqual([
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: workCitation } }] },
+  ]);
+  expect(initial.item.statements['schema:isbn']![0]!.references).toEqual([
+    { parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: isbnCitation } }] },
+  ]);
+  expect(initial.item.statements['schema:datePublished']![0]!.references).toEqual([]);
   const current = await fixture.client.subjects({ id: publicationCreatedId }).get();
   expect(current.data?.subject.statements['schema:exampleOfWork']?.[0]?.value).toEqual({
     type: 'value',
@@ -137,8 +164,8 @@ test('only emitted profiles at work grain, exact work links, native ISBN and con
     'rezics:AnimeRelease',
     'bf:hasPart',
     [{ language: 'en', label: 'Film anthology', description: '', aliases: '' }],
-    {},
-    '',
+    statement('bf:hasPart', anime.work.subject.id),
+    [],
     true,
   );
   expect(anthology.errors).toEqual([]);
@@ -151,8 +178,8 @@ test('only emitted profiles at work grain, exact work links, native ISBN and con
     'bf:Instance',
     'schema:exampleOfWork',
     [{ language: 'en', label: 'PDF in French', description: '', aliases: '' }],
-    {},
-    '',
+    statement('schema:exampleOfWork', read.public.subject.id),
+    [],
     false,
   );
   expect(independent.errors).toContainEqual({ pointer: '/independent', code: 'required' });

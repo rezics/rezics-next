@@ -771,6 +771,35 @@ Classification facts may be entered at creation when emitted. Correction reuses 
 classification control for those emitted fields, with independent drafts and explicit candidate
 decision/selection. No substitute writer or Concept seed is supplied.
 
+## Browser flow: independently identified publications
+
+`/{locale}/catalogue/publication?work={id}` starts from an exact readable work. Book works use the released
+`bf:Instance` grain, screen works `rezics:AnimeRelease`, and software or game works `wd:Q20631656`, only when
+those Types and the allowed work-linking relations are emitted. These are publication grains, never new work
+identities, recordings, personal copies or Library entries. ISBN or title equality never infers an edition, and
+the work's credits, labels, evidence and provider identity are not copied. The independent-identification
+confirmation stays explicit.
+
+The contributor enters multiple language rows with labels, descriptions and aliases using native initial-term
+semantics. Duplicate languages and invalid language or term input are explained before sealing. Rows keep a
+stable identity through removal and error correction; removing an entered row uses the same draft-loss treatment
+as other catalogue creation. The existing work is shown as an immutable target; its evidence and admitted
+qualifiers remain editable. Optional publication facts use complete statement holders with the shared value,
+qualifier, grouped-reference and rank presentation, limited to the profile's emitted fields and native
+multiplicity. Each assertion owns its references: a URL entered for one fact never cites another. Empty controls
+produce no assertions. Decision: initial publication facts use the same `normal` rank as other native subject
+creation; preferred and deprecated ranks remain later correction.
+
+Whole-publication review shows every language, the selected grain, the exact work link, facts, qualifiers, ranks
+and grouped evidence with definition names and actual language attribution. Edit returns to the corresponding
+stable holder. Confirm seals that reviewed item and the existing command key. Server-side creation rereads the
+exact work, checks the allowed profile and relation, and uses the existing subject-creation authority. Metadata
+refresh reconciles only an unsent or definitively rejected draft. Native diagnostics map statement, qualifier and
+reference pointers to the current holder; a removed holder leaves the diagnostic on the whole review rather than
+a neighbour. The exact returned UUID is reread before offering the readable publication and an explicit return to
+the original work. Unknown delivery retries the sealed body and key; a confirmed unread result retries only the
+read. Returning or changing language after a confirmed result cannot create another publication.
+
 ## Browser flow: definition guide
 
 Decision: the active guide opens on the first bounded page and provides separate localized label-prefix and

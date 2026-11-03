@@ -11,7 +11,7 @@ import {
   type InitialSubject,
   type TermDraft,
 } from './create-subject';
-import { editableScalar, type SnakInput, type StatementInput } from './statement-editor';
+import { creationStatement, editableScalar, emptyCreationStatement, type StatementInput } from './statement-editor';
 import { definitionText } from './definition-guide';
 
 export type PublicationItem = InitialSubject & { statements: Record<string, StatementInput[]> };
@@ -125,29 +125,64 @@ export async function readPublicationEditor(
   }
 }
 
+function meaningful(content: unknown): boolean {
+  if (typeof content === 'string') return content.trim().length > 0;
+  if (typeof content === 'number' || typeof content === 'boolean') return true;
+  if (Array.isArray(content)) return content.some(meaningful);
+  if (content && typeof content === 'object')
+    return Object.entries(content).some(
+      ([key, value]) => !['unit', 'precision', 'calendarmodel', 'language'].includes(key) && meaningful(value),
+    );
+  return false;
+}
+
+/** Empty scaffolds are omitted; typed zero, false, no-value and some-value remain assertions. */
+export function publicationAssertion(statement: StatementInput): boolean {
+  if (statement.value.type !== 'value') return true;
+  return (
+    meaningful(statement.value.content) ||
+    (statement.qualifiers?.length ?? 0) > 0 ||
+    statement.references.length > 0
+  );
+}
+
+export function publicationWorkStatement(relation: string, work: string, release: Release): StatementInput {
+  return {
+    ...emptyCreationStatement(relation, release),
+    value: { type: 'value', content: work },
+    rank: 'normal',
+  };
+}
+
 export function publicationDraft(
   read: Extract<PublicationRead, { ok: true }>,
   type: string,
   relation: string,
   terms: TermDraft[],
-  facts: Record<string, SnakInput['value']>,
-  citation: string,
+  workLink: StatementInput,
+  facts: StatementInput[],
   independent: boolean,
 ): { item: PublicationItem; errors: Violation[] } {
   const initial = initialTerms(type, terms);
-  const statements: PublicationItem['statements'] = {};
-  const references = citation.trim()
-    ? [{ parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: citation.trim() } }] }]
-    : [];
-  const statement = (property: string, value: SnakInput['value']): StatementInput => ({
-    property: { id: property },
-    value,
-    qualifiers: [],
-    references: structuredClone(references),
-    rank: 'normal',
-  });
-  statements[relation] = [statement(relation, { type: 'value', content: read.public.subject.id })];
-  for (const [property, value] of Object.entries(facts)) statements[property] = [statement(property, value)];
+  const link = creationStatement(
+    {
+      ...workLink,
+      property: { id: relation },
+      value: { type: 'value', content: read.public.subject.id },
+      rank: 'normal',
+    },
+    read.release,
+  );
+  const statements: PublicationItem['statements'] = { [relation]: [link] };
+  for (const fact of facts) {
+    if (fact.property.id === relation) continue;
+    const prepared = creationStatement(
+      { ...fact, rank: 'normal' },
+      read.release,
+    );
+    if (!publicationAssertion(prepared)) continue;
+    (statements[prepared.property.id] ??= []).push(prepared);
+  }
   const item: PublicationItem = { ...initial.item, statements };
   const errors = [...initial.errors, ...validatePublication(read, item, relation)];
   if (!independent) errors.push({ pointer: '/independent', code: 'required' });

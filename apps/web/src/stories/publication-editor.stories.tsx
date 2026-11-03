@@ -78,17 +78,22 @@ async function fill(canvasElement: HTMLElement) {
   await userEvent.clear(language);
   await userEvent.type(language, 'en');
   await userEvent.click(canvas.getByRole('checkbox', { name: m.publication_independent() }));
-  await userEvent.selectOptions(canvas.getByRole('combobox', { name: m.publication_field() }), 'schema:isbn');
-  await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
-  await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), '978-0-140-44430-8');
   await userEvent.type(
-    canvas.getByRole('textbox', { name: m.relation_citation() }),
+    within(canvasElement.querySelector('[id$="-work-link"]') as HTMLElement).getByRole('textbox', {
+      name: m.correction_url(),
+    }),
     'https://publisher.example/edition',
   );
+  const field = canvas.getByRole('combobox', { name: m.publication_field() });
+  await userEvent.selectOptions(field, 'schema:isbn');
+  await userEvent.click(within(field.closest('fieldset')!).getByRole('button', { name: m.correction_add() }));
+  await userEvent.type(canvas.getByRole('textbox', { name: m.correction_value() }), '978-0-140-44430-8');
   return canvas;
 }
 async function submit(canvasElement: HTMLElement) {
   const canvas = await fill(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: m.publication_review() }));
+  await canvas.findByRole('heading', { name: m.publication_review() });
   await userEvent.click(canvas.getByRole('button', { name: m.publication_submit() }));
   return canvas;
 }
@@ -111,7 +116,7 @@ export const GrainRequired: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.type(await canvas.findByRole('textbox', { name: m.catalogue_create_label() }), 'A file in French');
-    await userEvent.click(canvas.getByRole('button', { name: m.publication_submit() }));
+    await userEvent.click(canvas.getByRole('button', { name: m.publication_review() }));
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_invalid());
     expect(canvas.getByRole('checkbox', { name: m.publication_independent() })).toHaveAttribute('aria-invalid', 'true');
   },
@@ -145,7 +150,7 @@ export const Conflict: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await submit(canvasElement);
     expect(await canvas.findByRole('alert')).toHaveTextContent(m.catalogue_create_conflict());
-    expect(canvas.getByRole('button', { name: m.publication_submit() })).toBeDisabled();
+    expect(canvas.getByRole('button', { name: m.publication_review() })).toBeDisabled();
   },
 };
 export const UnavailableRetry: Story = {
@@ -202,17 +207,20 @@ export const UncertainRetry: Story = {
           await expect(element.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
         };
         const field = canvas.getByRole('combobox', { name: m.publication_field() });
-        const add = canvas.getByRole('button', { name: m.correction_add() });
-        const create = canvas.getByRole('button', { name: m.publication_submit() });
+        const add = within(field.closest('fieldset')!).getByRole('button', { name: m.correction_add() });
+        const create = canvas.getByRole('button', { name: m.publication_review() });
         const back = canvas.getByRole('link', { name: m.publication_back() });
         const discovery = canvas.getByRole('link', { name: m.publication_search() });
+        const workUrl = within(canvasElement.querySelector('[id$="-work-link"]') as HTMLElement).getByRole('textbox', {
+          name: m.correction_url(),
+        });
         for (const control of [
           canvas.getByRole('textbox', { name: m.catalogue_create_label() }),
           canvas.getByRole('textbox', { name: m.catalogue_create_language() }),
           canvas.getByRole('combobox', { name: m.relation_property() }),
           field,
           add,
-          canvas.getByRole('textbox', { name: m.relation_citation() }),
+          workUrl,
           create,
           back,
           discovery,
@@ -257,15 +265,21 @@ export const UncertainRetry: Story = {
           [m.catalogue_create_label(), 'A distinct edition'],
           [m.catalogue_create_language(), 'en'],
           [m.correction_value(), '978-0-140-44430-8'],
-          [m.relation_citation(), 'https://publisher.example/edition'],
         ] as const) {
           const control = canvas.getByRole('textbox', { name });
           await expect(control).toBeDisabled();
           await expect(control).toHaveValue(value);
         }
-        await expect(independent).toBeChecked();
-        await expect(independent).toBeDisabled();
-        await expect(field).toBeDisabled();
+        const sealedIndependent = canvas.getByRole('checkbox', { name: m.publication_independent() });
+        await expect(sealedIndependent).toBeChecked();
+        await expect(sealedIndependent).toBeDisabled();
+        await expect(canvas.getByRole('combobox', { name: m.publication_field() })).toBeDisabled();
+        const sealedUrl = within(canvasElement.querySelector('[id$="-work-link"]') as HTMLElement).getByRole(
+          'textbox',
+          { name: m.correction_url() },
+        );
+        await expect(sealedUrl).toBeDisabled();
+        await expect(sealedUrl).toHaveValue('https://publisher.example/edition');
         const retry = canvas.getByRole('button', { name: m.catalogue_create_retry() });
         await target(retry);
         await readable(retry);
@@ -368,12 +382,14 @@ async function independentFamily(canvasElement: HTMLElement, longNames = false) 
     }
   }
   await userEvent.type(names[1]!, 'Another independent draft');
-  await userEvent.click(local.getByRole('button', { name: m.publication_submit() }));
+  await userEvent.click(local.getByRole('button', { name: m.publication_review() }));
   expect(await local.findByRole('alert')).toHaveTextContent(m.catalogue_create_invalid());
   expect(other.queryByRole('alert')).toBeNull();
   expect(names[1]).toHaveValue('Another independent draft');
   // Use the original native-shaped creation flow; only this first editor is invalid at the transport boundary.
   await fill(first);
+  await userEvent.click(local.getByRole('button', { name: m.publication_review() }));
+  await local.findByRole('heading', { name: m.publication_review() });
   await userEvent.click(local.getByRole('button', { name: m.publication_submit() }));
   const corrections = await local.findAllByRole('alert');
   expect(corrections.some((alert) => alert.textContent?.includes(m.catalogue_create_invalid()))).toBe(true);

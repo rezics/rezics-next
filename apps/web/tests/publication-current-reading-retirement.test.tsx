@@ -140,12 +140,18 @@ test('publication refresh retires the old work reading, keeps private values and
     expect(within(scope()).getByRole('link', { name: title })).toBeDefined();
     await replace(input(m.catalogue_create_label()), 'A local edition');
     await replace(input(m.catalogue_create_language()), 'en-GB');
-    await replace(input(m.relation_citation()), 'https://publisher.example/edition');
+    await replace(
+      within(host.querySelector('[id$="-work-link"]')!).getByRole('textbox', { name: m.correction_url() }),
+      'https://publisher.example/edition',
+    );
     await act(async () => user.click(within(scope()).getByRole('checkbox', { name: m.publication_independent() })));
     await act(async () =>
       user.selectOptions(within(scope()).getByRole('combobox', { name: m.publication_field() }), 'schema:publisher'),
     );
-    await click(m.correction_add());
+    await act(async () => {
+      const choice = within(scope()).getByRole('combobox', { name: m.publication_field() });
+      await user.click(within(choice.closest('fieldset')!).getByRole('button', { name: m.correction_add() }));
+    });
     await replace(within(scope()).getByRole('combobox', { name: 'publisher' }) as HTMLElement, 'Supplied');
     const publisherOption = await within(window.document.body as unknown as HTMLElement).findByRole('option', {
       name: /Supplied publisher/,
@@ -157,8 +163,13 @@ test('publication refresh retires the old work reading, keeps private values and
     const relation = (within(scope()).getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement)
       .value;
 
+    const create = async () => {
+      await click(m.publication_review());
+      await canvas.findByRole('heading', { name: m.publication_review() });
+      await click(m.publication_submit());
+    };
     mode = 'pending';
-    await click(m.publication_submit());
+    await create();
     await canvas.findByText(m.catalogue_create_loading());
     expect(canvas.queryByRole('link', { name: title })).toBeNull();
     expect(canvas.queryByRole('link', { name: m.publication_back() })).toBeNull();
@@ -167,7 +178,13 @@ test('publication refresh retires the old work reading, keeps private values and
     expect((within(scope()).getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement).value).toBe(
       relation,
     );
-    expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
+    expect(
+      (
+        within(host.querySelector('[id$="-work-link"]')!).getByRole('textbox', {
+          name: m.correction_url(),
+        }) as HTMLInputElement
+      ).value,
+    ).toBe('https://publisher.example/edition');
     expect(
       within(scope()).getByRole('checkbox', { name: m.publication_independent() }).getAttribute('aria-checked'),
     ).toBe('true');
@@ -213,12 +230,18 @@ test('publication refresh retires the old work reading, keeps private values and
     }
     expect(input(m.catalogue_create_label()).value).toBe('A local edition');
     expect(input(m.catalogue_create_language()).value).toBe('en-GB');
-    expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
+    expect(
+      (
+        within(host.querySelector('[id$="-work-link"]')!).getByRole('textbox', {
+          name: m.correction_url(),
+        }) as HTMLInputElement
+      ).value,
+    ).toBe('https://publisher.example/edition');
     expect(scope().textContent).toContain('Supplied publisher');
     expect((within(scope()).getByRole('combobox', { name: m.publication_field() }) as HTMLSelectElement).value).toBe(
       'schema:isbn',
     );
-    expect((within(scope()).getByRole('button', { name: m.publication_submit() }) as HTMLButtonElement).disabled).toBe(
+    expect((within(scope()).getByRole('button', { name: m.publication_review() }) as HTMLButtonElement).disabled).toBe(
       true,
     );
     expect(commands).toHaveLength(1);
@@ -226,7 +249,7 @@ test('publication refresh retires the old work reading, keeps private values and
 
     await click(m.catalogue_create_review_new());
     submitMode = 'uncertain';
-    await click(m.publication_submit());
+    await create();
     const sealed = structuredClone(commands[1]!);
     await click(m.catalogue_create_retry());
     expect(commands[2]).toEqual(sealed);

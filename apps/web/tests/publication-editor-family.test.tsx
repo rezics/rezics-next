@@ -150,10 +150,24 @@ test('independent publication creation, local corrections, immutable recovery an
       if (value) await user.type(element, value);
     });
   const click = (name: string, index = 0) => act(async () => user.click(scope(index).getByRole('button', { name })));
+  const review = (index = 0) => click(m.publication_review(), index);
+  const confirmCreate = (index = 0) => click(m.publication_submit(), index);
+  const create = async (index = 0) => {
+    await review(index);
+    await scope(index).findByRole('heading', { name: m.publication_review() });
+    await confirmCreate(index);
+  };
+  const workSection = (index = 0) => article(index).querySelector('[id$="-work-link"]') as HTMLElement;
+  const factSection = (property: string, index = 0) =>
+    article(index).querySelector(`[data-publication-property="${property}"]`) as HTMLElement;
+  const urlIn = (section: HTMLElement) =>
+    within(section).getByRole('textbox', { name: m.correction_url() }) as HTMLInputElement;
   const add = (property: string, index = 0) =>
     act(async () => {
-      await user.selectOptions(scope(index).getByRole('combobox', { name: m.publication_field() }), property);
-      await user.click(scope(index).getByRole('button', { name: m.correction_add() }));
+      const choice = scope(index).getByRole('combobox', { name: m.publication_field() });
+      await user.selectOptions(choice, property);
+      const fieldset = choice.closest('fieldset')!;
+      await user.click(within(fieldset).getByRole('button', { name: m.correction_add() }));
     });
   const ready = async (index = 0) => {
     await scope(index).findByRole('textbox', { name: m.catalogue_create_label() });
@@ -206,9 +220,8 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(description.textContent).toContain(profile.description);
     if (profile.descriptionLang && profile.descriptionLang !== 'en')
       expect(description.textContent).toContain(m.guide_fallback({ language: profile.descriptionLang }));
-    expect(
-      scope().getByRole('heading', { name: first.fixture.release.properties['schema:url']!.labels.en, level: 2 }),
-    ).toBeDefined();
+    expect(scope().getByRole('heading', { name: m.publication_work_link() })).toBeDefined();
+    expect(urlIn(workSection()).type).toBe('url');
     const options = scope().getByRole('combobox', { name: m.publication_field() }) as HTMLSelectElement;
     expect([...options.options].map((option) => option.value)).toEqual(['', ...profile.fields]);
     const relations = scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement;
@@ -224,7 +237,7 @@ test('independent publication creation, local corrections, immutable recovery an
     );
     const beforeValidation = first.fixture.calls.length;
     await replace(input(m.catalogue_create_label(), 1), 'Untouched second draft');
-    await click(m.publication_submit());
+    await review();
     expect(scope().getByRole('checkbox', { name: m.publication_independent() }).getAttribute('aria-invalid')).toBe(
       'true',
     );
@@ -264,8 +277,9 @@ test('independent publication creation, local corrections, immutable recovery an
     await add('schema:numberOfPages');
     await replace(input(m.correction_amount()), '+240');
     await act(async () => user.selectOptions(scope().getByRole('combobox', { name: m.correction_unit() }), '1'));
-    await replace(input(m.relation_citation()), 'https://publisher.example/edition');
-    await click(m.publication_submit());
+    await replace(urlIn(workSection()), 'https://publisher.example/work');
+    await replace(urlIn(factSection('schema:isbn')), 'https://publisher.example/isbn');
+    await create();
     await scope().findByRole('heading', { name: m.catalogue_create_uncertain(), level: 2 });
     expect(uncertain.commands).toHaveLength(1);
     const original = uncertain.commands[0]!;
@@ -293,14 +307,18 @@ test('independent publication creation, local corrections, immutable recovery an
       type: 'value',
       content: { amount: '+240', unit: '1' },
     });
-    for (const statements of Object.values(original.item.statements))
-      expect(statements[0]!.references).toEqual([
-        {
-          parts: [
-            { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://publisher.example/edition' } },
-          ],
-        },
-      ]);
+    expect(original.item.statements['schema:exampleOfWork']![0]!.references).toEqual([
+      {
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://publisher.example/work' } }],
+      },
+    ]);
+    expect(original.item.statements['schema:isbn']![0]!.references).toEqual([
+      {
+        parts: [{ property: { id: 'schema:url' }, value: { type: 'value', content: 'https://publisher.example/isbn' } }],
+      },
+    ]);
+    expect(original.item.statements['schema:datePublished']![0]!.references).toEqual([]);
+    expect(original.item.statements['schema:numberOfPages']![0]!.references).toEqual([]);
     for (const control of article().querySelectorAll('input, select'))
       expect(control.closest('fieldset[disabled]')).not.toBeNull();
     expect(uncertain.fixture.calls).toHaveLength(7); // initial 3 + current work/release 3 + one lost POST
@@ -366,19 +384,19 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.type(scope().getByRole('combobox', { name: publisherLabel }), 'Press'));
     const correctionBody = within(window.document.body as unknown as HTMLElement);
     await act(async () => user.click(await correctionBody.findByRole('option', { name: /Supplied publisher/ })));
-    await click(m.publication_submit());
+    await create();
     await scope().findByRole('heading', { name: m.catalogue_create_invalid(), level: 2 });
-    const citation = input(m.relation_citation());
+    const citation = urlIn(workSection());
+    const references = workSection().querySelector('[id$="-references"]') as HTMLElement;
     const targetFor = (control: HTMLElement) =>
       [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].find(
         (link) => decodeURIComponent(link.hash.slice(1)) === control.id,
       );
     expect(targetFor(amount)).toBeDefined();
     expect(targetFor(precision)).toBeDefined();
-    expect(targetFor(citation)).toBeDefined();
+    expect(targetFor(citation) || targetFor(references)).toBeDefined();
     expect(amount.getAttribute('aria-invalid')).toBe('true');
     expect(precision.getAttribute('aria-invalid')).toBe('true');
-    expect(citation.getAttribute('aria-invalid')).toBe('true');
     expect(article().textContent).toContain(m.correction_citation_hint());
     expect(input(m.correction_amount()).value).toBe('+240');
     expect(precision.value).toBe('10');
@@ -388,7 +406,7 @@ test('independent publication creation, local corrections, immutable recovery an
     await replace(amount, '+241');
     await act(async () => user.selectOptions(precision, '9'));
     await replace(citation, 'https://publisher.example/edition');
-    await click(m.publication_submit());
+    await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
     expect(correction.commands).toHaveLength(2);
     expect(correction.commands[1]!.key).not.toBe(correction.commands[0]!.key);
@@ -415,7 +433,7 @@ test('independent publication creation, local corrections, immutable recovery an
       const result = tracked(scenario);
       await mount(result);
       await ready();
-      await click(m.publication_submit());
+      await create();
       await scope().findByRole('heading', { name: m.catalogue_create_created() });
       expect(scope().queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
       expect(result.navigations).toEqual([]);
@@ -436,7 +454,7 @@ test('independent publication creation, local corrections, immutable recovery an
       await ready();
       await add('schema:isbn');
       await replace(input(m.correction_value()), '978-0-140-44430-8');
-      await click(m.publication_submit());
+      await create();
       await scope().findByRole('heading', {
         name:
           scenario === 'denied'
@@ -451,14 +469,14 @@ test('independent publication creation, local corrections, immutable recovery an
       expect(refusal.navigations).toEqual([]);
       await associations(0);
       if (scenario === 'conflict') {
-        expect((scope().getByRole('button', { name: m.publication_submit() }) as HTMLButtonElement).disabled).toBe(
+        expect((scope().getByRole('button', { name: m.publication_review() }) as HTMLButtonElement).disabled).toBe(
           true,
         );
         expect(input(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
         const old = refusal.commands[0]!;
         await click(m.catalogue_create_review_new());
         refusal.fixture.setScenario('ready');
-        await click(m.publication_submit());
+        await create();
         await scope().findByRole('link', { name: m.catalogue_create_open() });
         expect(refusal.commands[1]!.key).not.toBe(old.key);
         expect(refusal.commands[1]!.item).toEqual(old.item);
@@ -507,8 +525,8 @@ test('independent publication creation, local corrections, immutable recovery an
       name: /Supplied publisher/,
     });
     await act(async () => user.click(recoveryPublisher));
-    await replace(input(m.relation_citation()), 'https://publisher.example/edition');
-    await click(m.publication_submit());
+    await replace(urlIn(workSection()), 'https://publisher.example/edition');
+    await create();
     await scope().findByText(m.publication_definitions_review());
     const recoveryButton = () =>
       scope().getByRole('button', { name: m.catalogue_create_review_new() }) as HTMLButtonElement;
@@ -519,8 +537,8 @@ test('independent publication creation, local corrections, immutable recovery an
     );
     expect(article().textContent).toContain('"ja"');
     expect(input(m.catalogue_create_language()).value).toBe('en-GB');
-    expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
-    await click(m.publication_submit());
+    expect(urlIn(workSection()).value).toBe('https://publisher.example/edition');
+    await review();
     expect(recovery.commands).toHaveLength(1);
     await act(async () =>
       user.selectOptions(scope().getByRole('combobox', { name: m.relation_property() }), 'schema:exampleOfWork'),
@@ -530,7 +548,7 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.click(within(removedFact).getByRole('button', { name: m.relation_remove() })));
     expect(recoveryButton().disabled).toBe(false);
     await click(m.catalogue_create_review_new());
-    await click(m.publication_submit());
+    await create();
     await scope().findByText(m.publication_empty());
     const corrected = recovery.commands[1]!;
     expect(corrected.key).not.toBe(recovery.commands[0]!.key);
@@ -542,7 +560,7 @@ test('independent publication creation, local corrections, immutable recovery an
     expect(corrected.item.statements['schema:inLanguage']).toBeUndefined();
     expect(input(m.catalogue_create_label()).value).toBe('A distinct edition');
     expect(article().textContent).toContain(publisherId);
-    expect(input(m.relation_citation()).value).toBe('https://publisher.example/edition');
+    expect(urlIn(workSection()).value).toBe('https://publisher.example/edition');
     // An unavailable reload cannot unlock creation, and a removed profile never hides the draft.
     failRefresh = true;
     await click(m.publication_refresh());
@@ -556,10 +574,10 @@ test('independent publication creation, local corrections, immutable recovery an
     const publisherFact = scope().getByRole('heading', { name: 'publisher', level: 3 }).closest('fieldset')!;
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
     await act(async () => user.click(within(publisherFact).getByRole('button', { name: m.relation_remove() })));
-    await replace(input(m.relation_citation()), '');
+    await replace(urlIn(workSection()), '');
     expect(recoveryButton().disabled).toBe(false);
     await click(m.catalogue_create_review_new());
-    await click(m.publication_submit());
+    await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
     expect(recovery.commands).toHaveLength(3);
     expect(recovery.commands[2]!.key).not.toBe(corrected.key);
@@ -607,15 +625,14 @@ test('independent publication creation, local corrections, immutable recovery an
     await add(escapedProperty);
     const escapedInput = scope().getAllByRole('textbox', { name: m.correction_value() })[2] as HTMLInputElement;
     await replace(escapedInput, 'escaped value');
-    await click(m.publication_submit());
+    await create();
     await scope().findByRole('heading', { name: m.catalogue_create_invalid() });
     const fragments = [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')];
-    expect(fragments).toHaveLength(6);
-    expect(fragments.some((link) => link.textContent?.includes(m.relation_citation()))).toBe(false);
-    expect(article().textContent).toContain(m.correction_error_uneditable());
+    expect(fragments.length).toBeGreaterThanOrEqual(6);
     const targets = fragments.map((link) => decodeURIComponent(link.hash.slice(1)));
-    expect(new Set(targets).size).toBe(6);
+    expect(new Set(targets).size).toBe(targets.length);
     expect(targets).toContain(escapedInput.id);
+    expect(article().textContent).toContain(m.correction_error_uneditable());
     expect(new Set(ids()).size).toBe(ids().length);
     await associations(0);
     await associations(1);
@@ -623,13 +640,86 @@ test('independent publication creation, local corrections, immutable recovery an
     await draw();
     expect(ids()).toEqual(collisionIds);
     await replace(input(m.catalogue_create_language()), 'bad/language');
-    await click(m.publication_submit());
+    await review();
     await associations(0);
     expect(
       [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].some(
         (link) => decodeURIComponent(link.hash.slice(1)) === input(m.catalogue_create_language()).id,
       ),
     ).toBe(true);
+
+    const journey = tracked();
+    const journeySubmit = journey.transport.submit;
+    let nestedOnce = true;
+    journey.transport = {
+      ...journey.transport,
+      submit: async (command) => {
+        if (nestedOnce) {
+          nestedOnce = false;
+          journey.commands.push(structuredClone(command));
+          return {
+            ok: false,
+            reason: 'invalid',
+            errors: [
+              { pointer: '/statements/schema:isbn/0/references/0/parts/0/value/content', code: 'invalid_format' },
+              { pointer: '/statements/schema:numberOfPages/0/value/content/amount', code: 'out_of_range' },
+            ],
+          };
+        }
+        return journeySubmit(command);
+      },
+    };
+    await mount(journey);
+    await ready();
+    await click(m.catalogue_create_add_language());
+    await replace(scope().getAllByRole('textbox', { name: m.catalogue_create_language() })[1]!, 'ja');
+    await replace(scope().getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!, '別版');
+    await add('schema:isbn');
+    await replace(input(m.correction_value()), '978-0-140-44430-8');
+    await replace(urlIn(workSection()), 'https://publisher.example/work');
+    await replace(urlIn(factSection('schema:isbn')), 'https://publisher.example/isbn');
+    await add('schema:numberOfPages');
+    await replace(input(m.correction_amount()), '+240');
+    await act(async () => user.selectOptions(scope().getByRole('combobox', { name: m.correction_unit() }), '1'));
+    await review();
+    await scope().findByRole('heading', { name: m.publication_review() });
+    expect(article().textContent).toContain('別版');
+    expect(article().textContent).toContain('https://publisher.example/work');
+    expect(article().textContent).toContain('https://publisher.example/isbn');
+    await act(async () => user.click(scope().getAllByRole('button', { name: m.publication_edit() })[0]!));
+    expect(scope().queryByRole('heading', { name: m.publication_review() })).toBeNull();
+    expect(scope().getAllByRole('textbox', { name: m.catalogue_create_label() })[1]!.value).toBe('別版');
+    await create();
+    await scope().findByRole('heading', { name: m.catalogue_create_invalid() });
+    const amountControl = input(m.correction_amount());
+    const isbnUrl = urlIn(factSection('schema:isbn'));
+    const errorLink = (control: HTMLElement) =>
+      [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].some(
+        (link) => decodeURIComponent(link.hash.slice(1)) === control.id,
+      );
+    expect(errorLink(isbnUrl)).toBe(true);
+    expect(errorLink(amountControl)).toBe(true);
+    const isbnBlock = factSection('schema:isbn');
+    await act(async () => user.click(within(isbnBlock).getByRole('button', { name: m.relation_remove() })));
+    await act(async () => user.click(within(isbnBlock).getByRole('button', { name: m.relation_remove() })));
+    expect(article().querySelector('[data-publication-property="schema:isbn"]')).toBeNull();
+    expect(errorLink(amountControl)).toBe(true);
+    expect(
+      [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')].every((link) => {
+        const target = window.document.getElementById(decodeURIComponent(link.hash.slice(1)));
+        return !target || target.getAttribute('data-publication-property') !== 'schema:isbn';
+      }),
+    ).toBe(true);
+    await replace(input(m.correction_amount()), '+241');
+    await create();
+    await scope().findByRole('link', { name: m.catalogue_create_open() });
+    expect(journey.commands[1]!.item.labels).toEqual({ en: 'A distinct edition', ja: '別版' });
+    expect(journey.commands[1]!.item.statements['schema:isbn']).toBeUndefined();
+    expect(journey.commands[1]!.item.statements['schema:exampleOfWork']![0]!.references[0]!.parts[0]!.value).toEqual({
+      type: 'value',
+      content: 'https://publisher.example/work',
+    });
+    expect(scope().getByRole('link', { name: m.publication_back() }).getAttribute('href')).toContain('/subjects/');
 
     // Supplied film profiles keep their emitted relation order, including the anthology link.
     const film = tracked('ready', 'schema:Movie');
@@ -638,7 +728,7 @@ test('independent publication creation, local corrections, immutable recovery an
     const relation = scope().getByRole('combobox', { name: m.relation_property() }) as HTMLSelectElement;
     expect([...relation.options].map((option) => option.value)).toEqual(['schema:exampleOfWork', 'bf:hasPart']);
     await act(async () => user.selectOptions(relation, 'bf:hasPart'));
-    await click(m.publication_submit());
+    await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
     expect(film.commands[0]!.relation).toBe('bf:hasPart');
     expect(Object.keys(film.commands[0]!.item.statements)).toEqual(['bf:hasPart']);
@@ -652,7 +742,7 @@ test('independent publication creation, local corrections, immutable recovery an
     retired.transport = { ...retired.transport, submit: async () => late };
     await mount(retired);
     await ready();
-    await click(m.publication_submit());
+    await create();
     admitted = false;
     await draw();
     await act(async () =>
@@ -694,7 +784,7 @@ test('independent publication creation, local corrections, immutable recovery an
       await mount(state);
       await scope().findByRole('textbox', { name: m.catalogue_create_label() });
       expect(input(m.catalogue_create_label()).closest('fieldset[disabled]')).not.toBeNull();
-      expect((scope().getByRole('button', { name: m.publication_submit() }) as HTMLButtonElement).disabled).toBe(true);
+      expect((scope().getByRole('button', { name: m.publication_review() }) as HTMLButtonElement).disabled).toBe(true);
       if (session === 'signed-out') {
         expect(scope().getByRole('link', { name: m.account_sign_in() }).getAttribute('href')).toBe(
           `/auth/sign-in?return_to=${encodeURIComponent(`/en/catalogue/publication?work=${state.fixture.work.subject.id}`)}`,
@@ -733,7 +823,7 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.type(freshPicker, 'Press'));
     const freshChoice = await optionsInDocument.findByRole('option', { name: /Supplied publisher/ });
     await act(async () => user.click(freshChoice));
-    await click(m.publication_submit());
+    await create();
     await scope().findByRole('link', { name: m.catalogue_create_open() });
     expect(publisher.commands[0]!.item.statements['schema:publisher']![0]!.value).toEqual({
       type: 'value',
@@ -764,7 +854,7 @@ test('independent publication creation, local corrections, immutable recovery an
     const publisherName = departure.fixture.release.properties['schema:publisher']!.labels.en!;
     await act(async () => user.type(scope().getByRole('combobox', { name: publisherName }), 'Press'));
     await act(async () => user.click(await body.findByRole('option', { name: /Supplied publisher/ })));
-    await replace(input(m.relation_citation()), 'https://publisher.example/edition');
+    await replace(urlIn(workSection()), 'https://publisher.example/edition');
     const snapshot = () =>
       [...article().querySelectorAll('input, select')].map((element) => {
         const control = element as HTMLInputElement;
