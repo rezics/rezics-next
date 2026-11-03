@@ -1,13 +1,19 @@
 import { afterEach, expect, test } from 'bun:test';
 import { readErasureStatus } from '../../src/access/erasure.ts';
 import { OWNER_INDEX_WORKFLOW } from '../../src/library/owner-index-work.ts';
-import { createDynamicCollectionsDriver, type NativeDynamicCollectionsDriver } from './support/native-dynamic-driver.ts';
+import {
+  createDynamicCollectionsDriver,
+  type NativeDynamicCollectionsDriver,
+} from './support/native-dynamic-driver.ts';
 
 let driver: NativeDynamicCollectionsDriver | undefined;
-afterEach(async () => { await driver?.close(); driver = undefined; });
+afterEach(async () => {
+  await driver?.close();
+  driver = undefined;
+});
 
 async function pending() {
-  const current = driver = await createDynamicCollectionsDriver();
+  const current = (driver = await createDynamicCollectionsDriver());
   await current.world.native.hold();
   const subject = await current.provisionSubject('game');
   const response = await current.setEntryState(subject.id, current.profiles.game.states[0]!.id);
@@ -16,22 +22,26 @@ async function pending() {
   return current;
 }
 async function metadata(current: NativeDynamicCollectionsDriver) {
-  return (await current.world.native.reader.query(
-    'SELECT collection_id AS id,labels FROM library.owner_index_state WHERE account_id=$1 ORDER BY collection_id',
-    [current.accounts.owner.id],
-  )).rows;
+  return (
+    await current.world.native.reader.query(
+      'SELECT collection_id AS id,labels FROM library.owner_index_state WHERE account_id=$1 ORDER BY collection_id',
+      [current.accounts.owner.id],
+    )
+  ).rows;
 }
 async function refused(current: NativeDynamicCollectionsDriver, ids: string[]) {
-  for (const id of ids) for (const method of ['GET', 'PUT'] as const) {
-    const input = {
-      method, path: method === 'GET' ? `/v1/collections/${id}` : `/v1/follows/${id}`,
-      headers: { 'Idempotency-Key': `"${Bun.randomUUIDv7()}"` },
-    };
-    expect((await current.request('owner', input)).ok).toBe(false);
-    const response = await current.request('other', input);
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ code: 'not_found' });
-  }
+  for (const id of ids)
+    for (const method of ['GET', 'PUT'] as const) {
+      const input = {
+        method,
+        path: method === 'GET' ? `/v1/collections/${id}` : `/v1/follows/${id}`,
+        headers: { 'Idempotency-Key': `"${Bun.randomUUIDv7()}"` },
+      };
+      expect((await current.request('owner', input)).ok).toBe(false);
+      const response = await current.request('other', input);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ code: 'not_found' });
+    }
 }
 
 test('installed maintenance page captures the accepted pin and real handle, applies current meaning and refuses a fabricated ready-pin capture', async () => {
@@ -50,12 +60,17 @@ test('installed maintenance page captures the accepted pin and real handle, appl
       accountId: current.accounts.owner.id,
       meaning: { pin: { releaseDigest: accepted.releaseDigest, profileId: accepted.profileId } },
     });
-    expect(captured.meaning.states.map((state) => ({ id: state.stateId, labels: state.labels }))).toEqual([...accepted.states]);
+    expect(captured.meaning.states.map((state) => ({ id: state.stateId, labels: state.labels }))).toEqual([
+      ...accepted.states,
+    ]);
     expect(await current.world.native.workClient.getWorkflow(run.workflowId)).toMatchObject({
-      workflowName: OWNER_INDEX_WORKFLOW, queueName: 'maintenance',
+      workflowName: OWNER_INDEX_WORKFLOW,
+      queueName: 'maintenance',
     });
     expect(await metadata(current)).toEqual([]);
-  } finally { latch.resume(); }
+  } finally {
+    latch.resume();
+  }
   await run.result;
   await run.handle.getResult();
   expect(await current.world.native.workClient.getWorkflow(run.workflowId)).toMatchObject({ status: 'SUCCESS' });
@@ -74,10 +89,13 @@ test('committed account deletion passes a held native capture and the same opera
   const repair = current.repairStateReferences();
   let ids: string[] = [];
   let references: { id: string }[] = [];
-  const readReferences = async () => (await current.world.native.reader.query<{ id: string }>(
-    'SELECT collection_id AS id FROM library.builtin_collection_reference WHERE collection_id=ANY($1::uuid[]) ORDER BY collection_id',
-    [ids],
-  )).rows;
+  const readReferences = async () =>
+    (
+      await current.world.native.reader.query<{ id: string }>(
+        'SELECT collection_id AS id FROM library.builtin_collection_reference WHERE collection_id=ANY($1::uuid[]) ORDER BY collection_id',
+        [ids],
+      )
+    ).rows;
   try {
     await latch.reached;
     const captured = await latch.captured;
@@ -91,7 +109,9 @@ test('committed account deletion passes a held native capture and the same opera
     expect(receipt).toEqual({ accountId: current.accounts.owner.id, at: status!.at });
     expect(status).toMatchObject({ state: 'pending', completedAt: null });
     await refused(current, ids);
-  } finally { latch.resume(); }
+  } finally {
+    latch.resume();
+  }
   await repair;
   expect(await metadata(current)).toEqual([]);
   expect((await readReferences()).every((row) => references.some((before) => row.id === before.id))).toBe(true);

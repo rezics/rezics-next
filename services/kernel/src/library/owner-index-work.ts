@@ -7,7 +7,12 @@ import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
 import { workStepDeadline } from './command-support.ts';
 import { readOwnerIndexFrontier, stepOwnerIndex, type OwnerIndexFrontier } from './owner-index.ts';
-import { applyOwnerPinMeaning, loadOwnerPinMeaning, nextOwnerPin, type OwnerPinMeaning } from './owner-index-metadata.ts';
+import {
+  applyOwnerPinMeaning,
+  loadOwnerPinMeaning,
+  nextOwnerPin,
+  type OwnerPinMeaning,
+} from './owner-index-metadata.ts';
 
 export const OWNER_INDEX_WORKFLOW = 'library.ownerIndex';
 export const OWNER_INDEX_SWEEP = 'library.ownerIndexSweep';
@@ -15,10 +20,7 @@ export const OWNER_INDEX_SCHEDULE = 'library.ownerIndex.every-10-minutes';
 export type OwnerPinCapture = Readonly<{ workflowId: string; accountId: string; meaning: OwnerPinMeaning }>;
 const pinCaptures = new WeakMap<WorkContext['pool'], (capture: OwnerPinCapture) => Promise<void>>();
 /** Private executor observation: the owner checkout and immutable release checkout have both ended. */
-export function observeOwnerPinCapture(
-  pool: WorkContext['pool'],
-  capture: (value: OwnerPinCapture) => Promise<void>,
-) {
+export function observeOwnerPinCapture(pool: WorkContext['pool'], capture: (value: OwnerPinCapture) => Promise<void>) {
   if (pinCaptures.has(pool)) throw new Error('Owner pin capture observer already installed');
   pinCaptures.set(pool, capture);
   return () => pinCaptures.delete(pool);

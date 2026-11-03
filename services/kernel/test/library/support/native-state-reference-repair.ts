@@ -20,7 +20,10 @@ function message(value: unknown): value is Message {
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
   // close/error may precede the scenario awaiting its observation.
   void promise.catch(() => undefined);
   return { promise, resolve, reject };
@@ -36,7 +39,11 @@ export function installStateReferenceRepairLatch(pool: Pool, send: (value: Messa
   let held: { message: Message; release: ReturnType<typeof deferred<void>> } | undefined;
   const remove = observeOwnerPinCapture(pool, async (capture) => {
     const current = held;
-    if (!current || current.message.workflowId !== capture.workflowId || current.message.accountId !== capture.accountId)
+    if (
+      !current ||
+      current.message.workflowId !== capture.workflowId ||
+      current.message.accountId !== capture.accountId
+    )
       return;
     send({ ...current.message, kind: 'captured', capture });
     await current.release.promise;
@@ -70,13 +77,15 @@ export function createStateReferenceRepair(input: {
 }) {
   let closed = false;
   let active = false;
-  let latch: {
-    workflowId: string;
-    armed: ReturnType<typeof deferred<void>>;
-    captured: ReturnType<typeof deferred<OwnerPinCapture>>;
-    observed: boolean;
-    released: boolean;
-  } | undefined;
+  let latch:
+    | {
+        workflowId: string;
+        armed: ReturnType<typeof deferred<void>>;
+        captured: ReturnType<typeof deferred<OwnerPinCapture>>;
+        observed: boolean;
+        released: boolean;
+      }
+    | undefined;
   function release(current: NonNullable<typeof latch>) {
     current.released = true;
     try {
@@ -97,7 +106,9 @@ export function createStateReferenceRepair(input: {
         if (value.capture.workflowId !== latch.workflowId || value.capture.accountId !== input.accountId)
           throw new Error('State reference capture identity differs from the native run');
         if (!value.capture.meaning.states.length) {
-          latch.captured.reject(new Error('Native Library dependency_unavailable: pending pin has no accepted state references'));
+          latch.captured.reject(
+            new Error('Native Library dependency_unavailable: pending pin has no accepted state references'),
+          );
           release(latch);
           return;
         }
@@ -109,7 +120,10 @@ export function createStateReferenceRepair(input: {
       if (closed || active || latch) throw new Error('State reference repair world is closed or busy');
       const current = {
         workflowId: `${OWNER_INDEX_WORKFLOW}:native:${Bun.randomUUIDv7()}`,
-        armed: deferred<void>(), captured: deferred<OwnerPinCapture>(), observed: false, released: false,
+        armed: deferred<void>(),
+        captured: deferred<OwnerPinCapture>(),
+        observed: false,
+        released: false,
       };
       latch = current;
       const reached = current.captured.promise.then(() => undefined);
@@ -142,7 +156,7 @@ export function createStateReferenceRepair(input: {
             if (current && !current.observed)
               throw new Error(
                 'Native Library dependency_unavailable: library.ownerIndex({accounts:[accountId],frontier:null,metadata:true}) ' +
-                'captured no pending pin; bounded accepted ready-pin state-reference recapture producer is absent',
+                  'captured no pending pin; bounded accepted ready-pin state-reference recapture producer is absent',
               );
           } catch (error) {
             current?.captured.reject(error);
@@ -156,7 +170,10 @@ export function createStateReferenceRepair(input: {
         void result.catch(() => undefined);
         return { workflowId, handle, result };
       } catch (error) {
-        if (current) { release(current); current.captured.reject(error); }
+        if (current) {
+          release(current);
+          current.captured.reject(error);
+        }
         if (latch === current) latch = undefined;
         active = false;
         throw error;

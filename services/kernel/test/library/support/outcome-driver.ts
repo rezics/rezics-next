@@ -1443,13 +1443,17 @@ if (import.meta.main) {
   let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
   process.on('message', (message) => repairLatch?.receive(message));
   process.on('disconnect', () => repairLatch?.close());
-  const modules = KERNEL_WORK_MODULES.map((module) => module.name !== 'library' ? module : {
-    ...module,
-    async register(context: Parameters<typeof module.register>[0]) {
-      repairLatch = installStateReferenceRepairLatch(context.pool, (message) => process.send?.(message));
-      await module.register(context);
-    },
-  });
+  const modules = KERNEL_WORK_MODULES.map((module) =>
+    module.name !== 'library'
+      ? module
+      : {
+          ...module,
+          async register(context: Parameters<typeof module.register>[0]) {
+            repairLatch = installStateReferenceRepairLatch(context.pool, (message) => process.send?.(message));
+            await module.register(context);
+          },
+        },
+  );
   await startWorker(readWorkerConfig(workerEnv), modules, workerEnv);
   for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
   process.send?.('ready');
