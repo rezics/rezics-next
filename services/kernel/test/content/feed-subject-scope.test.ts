@@ -35,7 +35,11 @@ test('native Space Subject scope retains complete publication membership and rej
     expect(prefix.subjects.map((row) => row.subjectId)).toEqual(expected.slice(0, 1));
     expect(prefix.exhausted).toBe(false);
     expect(prefix.examined).toBe(2);
-    expect(await scope.contains([world.conceptId, world.mainTarget.threadId, world.schemeId])).toEqual([true, false, true]);
+    expect(await scope.contains([world.conceptId, world.mainTarget.threadId, world.schemeId])).toEqual([
+      true,
+      false,
+      true,
+    ]);
     // Actual committed unrelated heads must not consume this scope's prefix or invalidate its observation.
     for (let index = 0; index < 12; index++) {
       const subject = await world.command('POST', '/v1/subjects', {

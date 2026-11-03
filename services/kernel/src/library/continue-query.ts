@@ -233,7 +233,9 @@ export async function readContinueOwnerPage(
         after = raw.at(-1)!;
       }
       completed = await selectPopulation(
-        [...rows.values()].filter((value) => exhausted || (after !== null && value.lastActivityAt > after.lastActivityAt)),
+        [...rows.values()].filter(
+          (value) => exhausted || (after !== null && value.lastActivityAt > after.lastActivityAt),
+        ),
       );
       completed.sort(compare);
       if (exhausted || completed.length > input.limit) break;

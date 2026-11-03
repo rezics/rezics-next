@@ -47,7 +47,10 @@ export function createContinueReads(
         throw new ProblemError('invalid_request');
       if (query.spaceId !== undefined && (typeof query.spaceId !== 'string' || routeOf(query.spaceId) === null))
         throw new ProblemError('invalid_request', { errors: [{ pointer: '/spaceId', code: 'invalid_format' }] });
-      if (query.kind !== undefined && (typeof query.kind !== 'string' || query.kind.length === 0 || query.kind.length > 128))
+      if (
+        query.kind !== undefined &&
+        (typeof query.kind !== 'string' || query.kind.length === 0 || query.kind.length > 128)
+      )
         throw new ProblemError('invalid_request', { errors: [{ pointer: '/kind', code: 'invalid_format' }] });
       const accountActor = actor;
       const route = routeOf(accountActor.accountId);

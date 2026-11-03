@@ -390,7 +390,13 @@ function executeDiscoverySearch(
                 inSpace.has(`${candidate.key.owner}:${candidate.key.kind}:${candidate.key.id}`),
               )
             : result.hits;
-          const current = await currentDiscoveryCandidates(registry, selectedCandidates, admitted.filter, release, context);
+          const current = await currentDiscoveryCandidates(
+            registry,
+            selectedCandidates,
+            admitted.filter,
+            release,
+            context,
+          );
           consumed = window.examined;
           for (let index = 0; index < result.hits.length; index++) {
             const candidate = result.hits[index]!;

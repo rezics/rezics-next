@@ -65,8 +65,7 @@ export function continueRoutes(
         for (const name of new URL(request.url).searchParams.keys())
           if (name !== 'limit' && name !== 'cursor' && name !== 'view' && name !== 'spaceId')
             throw new ProblemError('invalid_request');
-        if (new URL(request.url).searchParams.getAll('spaceId').length > 1)
-          throw new ProblemError('invalid_request');
+        if (new URL(request.url).searchParams.getAll('spaceId').length > 1) throw new ProblemError('invalid_request');
       },
       response: {
         200: continuePageSchema,

@@ -506,21 +506,16 @@ test('Default feed route applies the selected native kind across the mixed strea
       );
       expect(result.status, JSON.stringify(result.body)).toBe(201);
       const id = (result.body.subject as { id: string }).id;
-      expect((await driver.fixtures.send(viewer, 'PUT', `/v1/libraryEntries/${id}`, { state: activeBook }, key())).status)
-        .toBe(201);
+      expect(
+        (await driver.fixtures.send(viewer, 'PUT', `/v1/libraryEntries/${id}`, { state: activeBook }, key())).status,
+      ).toBe(201);
       return id;
     };
     const secondBook = await addBook('000 Native selected continuation book');
     const outOfSpace: string[] = [];
     for (let index = 0; index < 7; index++) outOfSpace.push(await addBook(`000 A out-of-space ${index}`));
     const publish = async (subjectId: string) => {
-      const result = await driver.request(
-        'editor',
-        'POST',
-        `/v1/realms/${realmId}/publications`,
-        { subjectId },
-        key(),
-      );
+      const result = await driver.request('editor', 'POST', `/v1/realms/${realmId}/publications`, { subjectId }, key());
       expect(result.status, JSON.stringify(result.body)).toBe(201);
       return (result.body.publication as { publicationId: string }).publicationId;
     };
@@ -548,9 +543,8 @@ test('Default feed route applies the selected native kind across the mixed strea
     expect(selectedContinue.subjects.map((row) => row.subjectId).sort()).toEqual([book, movie, secondBook].sort());
     expect((await fetch(new URL('/v1/libraryContinue?spaceId=invalid', server.url), { headers })).status).toBe(400);
     expect(
-      (
-        await fetch(new URL(`/v1/libraryContinue?spaceId=${spaceId}&spaceId=${spaceId}`, server.url), { headers })
-      ).status,
+      (await fetch(new URL(`/v1/libraryContinue?spaceId=${spaceId}&spaceId=${spaceId}`, server.url), { headers }))
+        .status,
     ).toBe(400);
 
     const anonymousSpacePage = (cursor?: string) => page('schema:Book', 'home', 1, cursor, false, spaceId);
@@ -570,14 +564,7 @@ test('Default feed route applies the selected native kind across the mixed strea
     const firstMixedSpacePage = await page('schema:Book', 'home', 1, undefined, true, spaceId);
     expect(firstMixedSpacePage.feedItems[0]).toMatchObject({ source: 'continue', key: { kind: 'schema:Book' } });
     expect(firstMixedSpacePage.next).toBeString();
-    const secondMixedSpacePage = await page(
-      'schema:Book',
-      'home',
-      1,
-      firstMixedSpacePage.next!,
-      true,
-      spaceId,
-    );
+    const secondMixedSpacePage = await page('schema:Book', 'home', 1, firstMixedSpacePage.next!, true, spaceId);
     expect(secondMixedSpacePage.feedItems[0]).toMatchObject({ source: 'continue', key: { kind: 'schema:Book' } });
     expect(secondMixedSpacePage.feedItems[0]!.key.id).not.toBe(firstMixedSpacePage.feedItems[0]!.key.id);
 
