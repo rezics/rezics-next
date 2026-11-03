@@ -161,7 +161,7 @@ export function MusicContextCreateReview({
             {item.descriptions?.[language] && <p lang={language}>{item.descriptions[language]}</p>}
             {!!item.aliases?.[language]?.length && (
               <ul lang={language} className="list-disc ps-5">
-                {item.aliases[language]!.map((alias, aliasIndex) => <li key={aliasIndex}>{alias}</li>)}
+                {item.aliases[language]!.map((alias: string, aliasIndex: number) => <li key={aliasIndex}>{alias}</li>)}
               </ul>
             )}
             <div className="flex flex-wrap gap-2">

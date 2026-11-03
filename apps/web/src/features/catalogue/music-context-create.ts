@@ -204,9 +204,12 @@ export async function createMusicContext(
   if (nativeErrors.length)
     return { ok: false, reason: 'invalid', errors: nativeErrors, refreshDefinitions: true };
   const statements = item.statements ?? {};
-  const errors = musicContextCreateDraft(read.release, item, Object.values(statements).flat()).errors;
   if (Object.entries(statements).some(([property, rows]) => rows.some((statement) => statement.property.id !== property)))
-    errors.push({ pointer: '/statements', code: 'invalid_format' });
+    return { ok: false, reason: 'invalid', errors: [{ pointer: '/statements', code: 'invalid_format' }] };
+  const facts = Object.entries(statements).flatMap(([property, rows]) =>
+    rows.map((statement, index) => ({ key: `${property}:${index}`, statement })),
+  );
+  const errors = musicContextCreateDraft(read.release, item, facts).errors;
   if (errors.length) return { ok: false, reason: 'invalid', errors, refreshDefinitions: true };
   const created = await createSubjectRecord(client, request, sessionEnv, command, locale, preparedAuthorization);
   return created.ok

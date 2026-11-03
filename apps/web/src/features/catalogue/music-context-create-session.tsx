@@ -52,7 +52,7 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
     release: Release;
     digest: string;
     holders: ReturnType<typeof musicContextCreateHolders>;
-  }>();
+  } | undefined>(undefined);
 
   const retainedTypes = new Set([
     ...Object.entries(termDrafts).filter(([, retained]) => retained).map(([type]) => type),
@@ -183,8 +183,9 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
             canEditType: (type: string) =>
               reading.ok && activeTypeIds.has(type) && musicContextKind(reading.release, type) !== 'unsupported',
             canCreateType: (type: string) => reading.ok && activeTypeIds.has(type),
-            labelLanguage: (type: string) => pickText(release.types[type]?.labels ?? {}, locale).lang,
-            descriptionLanguage: (type: string) => pickText(release.types[type]?.descriptions ?? {}, locale).lang,
+            labelLanguage: (type: string) => pickText(release.types[type]?.labels ?? {}, locale).lang ?? undefined,
+            descriptionLanguage: (type: string) =>
+              pickText(release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
             fields,
             prepare: (initial: InitialSubject) => {
               const facts = musicContextCreatePreparedFacts(factsByType[initial.type] ?? [], release);
