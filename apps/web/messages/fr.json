@@ -2752,6 +2752,8 @@
   "realm_bans_details_account": "Compte",
   "realm_bans_details_reason": "Motif",
   "realm_bans_details_at": "Date du bannissement",
+  "realm_bans_details_moderator": "Compte du modérateur",
+  "realm_bans_moderator_erased": "Le compte du modérateur a été effacé.",
   "realm_bans_empty": "Aucun bannissement actuel sur cette page.",
   "realm_bans_no_reason": "Aucun motif indiqué",
   "realm_bans_unban": "Débannir",

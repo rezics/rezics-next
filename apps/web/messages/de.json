@@ -2752,6 +2752,8 @@
   "realm_bans_details_account": "Konto",
   "realm_bans_details_reason": "Grund",
   "realm_bans_details_at": "Gesperrt am",
+  "realm_bans_details_moderator": "Moderationskonto",
+  "realm_bans_moderator_erased": "Das Moderationskonto wurde gelöscht.",
   "realm_bans_empty": "Keine aktuellen Sperren auf dieser Seite.",
   "realm_bans_no_reason": "Kein Grund angegeben",
   "realm_bans_unban": "Sperre aufheben",

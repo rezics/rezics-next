@@ -71,6 +71,7 @@ export function RealmBanOutcome({
         </div>
         {result.action === 'ban' ? (
           <>
+            <BanModeratorIdentity actor={result.ban.actor} />
             <div>
               <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
               <dd className="whitespace-pre-wrap wrap-anywhere">{result.ban.reason || m.realm_bans_no_reason()}</dd>
@@ -89,6 +90,17 @@ export function RealmBanOutcome({
       <p>{result.action === 'ban' ? m.realm_bans_active() : m.realm_bans_lifted()}</p>
       {result.action === 'ban' && result.ban.workflowId !== null ? <p>{m.realm_bans_removal_pending()}</p> : null}
     </ContentItemFrame>
+  );
+}
+
+function BanModeratorIdentity({ actor }: { actor: string | null }) {
+  return (
+    <div>
+      <dt className="font-medium">{m.realm_bans_details_moderator()}</dt>
+      <dd className="wrap-anywhere">
+        {actor ? <bdi>{actor}</bdi> : m.realm_bans_moderator_erased()}
+      </dd>
+    </div>
   );
 }
 
@@ -964,6 +976,7 @@ function RealmBansVisit({
                           <bdi>{ban.accountId}</bdi>
                         </dd>
                       </div>
+                      <BanModeratorIdentity actor={ban.actor} />
                       <div>
                         <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
                         <dd className="whitespace-pre-wrap wrap-anywhere">{ban.reason || m.realm_bans_no_reason()}</dd>

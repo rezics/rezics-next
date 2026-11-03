@@ -2752,6 +2752,8 @@
   "realm_bans_details_account": "アカウント",
   "realm_bans_details_reason": "理由",
   "realm_bans_details_at": "禁止日時",
+  "realm_bans_details_moderator": "モデレーターのアカウント",
+  "realm_bans_moderator_erased": "モデレーターのアカウントは消去されました。",
   "realm_bans_empty": "このページに現在の利用禁止はありません。",
   "realm_bans_no_reason": "理由なし",
   "realm_bans_unban": "利用禁止を解除",

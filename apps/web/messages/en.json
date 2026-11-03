@@ -2746,6 +2746,8 @@
   "realm_bans_details_account": "Account",
   "realm_bans_details_reason": "Reason",
   "realm_bans_details_at": "Banned at",
+  "realm_bans_details_moderator": "Moderator account",
+  "realm_bans_moderator_erased": "Moderator account was erased.",
   "realm_bans_empty": "No current bans on this page.",
   "realm_bans_no_reason": "No reason provided",
   "realm_bans_unban": "Unban",

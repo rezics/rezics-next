@@ -70,6 +70,32 @@ lookup remains one exact handle read, and a fresh ban uses its existing final ex
 point command. There is no polling, history/directory scan, additional role read, per-row identity read or new
 background work.
 
+## Current ban identity fallback and inspection boundary
+
+The installed `KernelClient.realms({ realmId }).bans.get` response contains current rows with
+`accountId`, `reason`, `actor` and `at`, plus the native `next` cursor. It does not publish target
+or moderator profile disclosure, current action advice, an episode-bound selected-account read, or
+unban readback. The Web list keeps native account-key order and the 20-row limit; it renders the
+native account IDs as fallbacks, the actual reason and effective time, and the actor account ID when
+present. Native `actor: null` means the moderator account was erased, so the operational row stays
+visible and is never labelled as an anonymous moderator. The existing command writer remains the
+authority and reauthorizes every mutation.
+
+Decision: until Content installs the composed identity fields, use the native target and actor account IDs as fallbacks; render native `actor: null` as an erased moderator identity, never as anonymous.
+
+The new composed current-ban reader remains unbound until Content publishes its generated methods,
+response types and native examples. The selected inspection will retain the list frontier, bind the
+Realm/account/current episode, and keep absent, denied and unavailable outcomes distinct only where
+the native response admits them. An unavailable inspection retains selection for explicit retry; it
+does not certify absence. A definitive unban receipt stays independent from readback, and neither
+current absence nor accepted removal claims restored membership or completed Accounts work.
+
+## Current-ban consumer cost
+
+- Touches: one native composed ban page per explicit list/retry, at most one installed selected-current inspection, existing target resolution only for a deliberate new ban, and separately charged original command/readback. Identity and authority arrive from the native composition, with no per-row network fanout.
+- Bound: consumer page20, one exact selection, one immutable pending command and one opaque frontier. Derive native reason/identity/context/cursor and media byte caps from installed contracts. Validation/rendering is O(N+admitted bytes) with no retained pages/history, hidden refill or global lookup.
+- Growth check: at 1/10/20 rows exercise actual consumer adapters and record requests, selected reads, projected bytes and retained state across retry, unban/reban and retirement. Content/Accounts retain native 256/1024/4096 current-interval/history/identity/authority and registered completion evidence; Web counts cannot certify it.
+
 `tests/realm-ban-lifetime.test.tsx` authors the actual default Panel/Control/session-cache composition with the
 original server handlers and generated native HTTP client. Deferred native responses and an independently
 deferred original server-function response cover replacement, queued sends, current recovery, bounded20,

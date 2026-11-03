@@ -2752,6 +2752,8 @@
   "realm_bans_details_account": "Cuenta",
   "realm_bans_details_reason": "Motivo",
   "realm_bans_details_at": "Fecha del bloqueo",
+  "realm_bans_details_moderator": "Cuenta del moderador",
+  "realm_bans_moderator_erased": "La cuenta del moderador se eliminó.",
   "realm_bans_empty": "No hay bloqueos actuales en esta página.",
   "realm_bans_no_reason": "Sin motivo indicado",
   "realm_bans_unban": "Desbloquear",

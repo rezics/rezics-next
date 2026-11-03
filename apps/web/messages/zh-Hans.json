@@ -2752,6 +2752,8 @@
   "realm_bans_details_account": "账户",
   "realm_bans_details_reason": "原因",
   "realm_bans_details_at": "封禁时间",
+  "realm_bans_details_moderator": "版主账号",
+  "realm_bans_moderator_erased": "版主账号已删除。",
   "realm_bans_empty": "此页没有当前封禁。",
   "realm_bans_no_reason": "未提供原因",
   "realm_bans_unban": "解除封禁",

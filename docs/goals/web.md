@@ -189,6 +189,23 @@ generated DTOs, authorized responses and action variants; illustrative compositi
 The positive production visit, current selected ban/add integration, rejected/unknown commands and full locale/viewport
 review remain continuation work. No fixture or unavailable route establishes native completion or producer growth.
 
+### Current Realm ban identity and inspection boundary
+
+The installed `KernelClient.realms({ realmId }).bans.get` returns the native current page as
+`{ items: [{ accountId, reason, actor, at }], next }`. It includes no disclosed profile identity, current action advice,
+episode-bound selected-account inspection or unban readback. Web keeps the current 20-row native order and cursor,
+renders the native IDs as fallbacks, and retains rows whose actor is null. Native `actor: null` is the erased moderator
+meaning; it is not an anonymous actor. No per-row Accounts or permission read is added, and the existing writer
+continues to reauthorize mutations.
+
+Decision: until Content installs composed identity fields, display the native target and actor account IDs as fallbacks; a native null actor is shown as erased and never as anonymous.
+
+The expanded current identity/action/inspection composition remains owed from Content. Web must bind its selection to
+Realm, account and current episode without moving the list cursor, distinguish true absence from denied/unavailable
+readback, and preserve the immutable command receipt independently. Current absence does not restore membership;
+an accepted removal workflow remains pending until Accounts reports completion. See the
+[ban lifetime and consumer boundary](../../apps/web/src/community/realm-ban-lifetime.md).
+
 ### My Realms current-entry boundary
 
 The existing `/realms` page keeps the current `MyRealmsCaller`, one-page cursor flow and signed-in route. The
