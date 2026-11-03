@@ -6,6 +6,7 @@ import type {
   LibraryLabelsInspection,
 } from '../../../../../specs/library-labels-driver.ts';
 import { createLibraryDriver } from './outcome-driver.ts';
+import { inspectNativeLabelCollections } from './native-labels-inspection.ts';
 import { costOf } from '../../support/growth.ts';
 import { compileProfileRelease, profileTypes } from './native-conformance-profiles.ts';
 import { json, write, setEntry, publish, requestKey, unavailable, deleteAccount } from './native-conformance.ts';
@@ -137,14 +138,7 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
           [...args, input.subjectIds ?? null],
         )
       ).rows;
-      const collections = (
-        await database.query<LibraryLabelsInspection['collections'][number]>(
-          `
-        SELECT collection_id AS "collectionId",curator_account_id AS "curatorAccountId",visibility,revision,state FROM library.collection
-        WHERE collection_id=ANY($1::uuid[]) ORDER BY route,collection_id`,
-          [input.collectionIds ?? []],
-        )
-      ).rows;
+      const collectionObservations = await inspectNativeLabelCollections(world, account, input.collectionIds ?? []);
       // Unknown inspection tables must fail at SQL instead of supplying a successful empty privacy proof.
       const publicSubjectRows = (
         await database.query<LibraryLabelsInspection['publicSubjectRows'][number]>(
@@ -206,11 +200,10 @@ export async function createLibraryLabelsDriver(): Promise<LibraryLabelsDriver> 
             [account.partition, account.id],
           )
         ).rows,
-        cleanup: unavailable('legacy per-label cleanup job observations are not exported by native retention'),
-        collections,
-        collectionGrants: unavailable('exact native Collection grant observations'),
-        collectionOutbox: unavailable('exact native Collection outbox observations'),
-        collectionWork: unavailable('exact native Collection workflow observations'),
+        cleanup: unavailable(
+          'services/kernel/src/library/label-retention.ts purgeLabelRetentionPage exposes page counts and a cursor, but no per-label cleanup run identity or committed-page snapshot',
+        ),
+        ...collectionObservations,
         publicSubjectRows,
       };
     }
