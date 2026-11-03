@@ -210,3 +210,67 @@ receipt, media reservation or automatic restoration is ported. Prepared recovery
 show that status explicitly. The focused recovery tests pin storage boundaries, privacy/uncertainty, retirement and
 the mounted reload/restore journey. Existing authoring-departure, composer lifetime and composer stories retain
 ownership of navigation, upload and rich-editor interactions.
+
+## Local writing files
+
+Admitted signed-in new-thread and reply composers expose **Writing files** in the existing editor action row.
+This journey owns local file reads, previews and explicit replacement, never browser autosave, native submissions,
+inline stale-edit recovery or publication. The original rich editor, upload controls, mention lookup, Send and exact
+uncertain-command retry remain their owners. Inline edits keep their existing recovery surface.
+
+Decision: Local writing uses Blocks codecs, replaces media and opaque components with visible text, rejects nesting
+beyond 64 JSON containers, and adds a narrow editor snapshot-state callback because the installed editor lacked one.
+
+Supported imports are `.json` (a strict `rezics-document-v1` Text or Blocks snapshot), `.txt` (literal plain text),
+and `.md`/`.markdown` (the installed CommonMark codec, including its spoiler support). Text snapshots become Blocks
+for the existing discussion editor. HTML in Markdown stays literal text. No other suffix, network URL, archive,
+legacy command envelope or guessed schema is accepted. Invalid versions, attributes, unsupported nodes, malformed or
+duplicate block IDs refuse the entire import with a localized error; original writing stays intact. File MIME is
+only a chooser hint. A suffix chooses a codec, never provenance, licence, attribution or attachment authority.
+
+The chooser rejects more than 1,048,576 bytes before reading. This is the smaller of the journey's 1 MiB ceiling and
+the installed editor's 2 MiB snapshot ceiling; the document codecs declare no smaller byte limit. Exactly one
+`File.text()` and one admission journey run per selected file. Cancellation reads nothing. Actual UTF-8 bytes are
+also checked after reading. Plain-text paragraph expansion has a conservative early lower-bound refusal; converted,
+normalized snapshots are checked against 2,097,152 bytes before preview. Oversize conversion never truncates text.
+The iterative JSON depth guard runs before recursive validation. Work is O(B + N) over bounded file bytes and admitted
+nodes, without polling or network access. The focused tests project 1 KiB, 64 KiB and 1 MiB inputs without timing
+thresholds and cover a one-byte overflow, invalid IDs, nesting, paragraph expansion and late file completion.
+
+Preview renders only the admitted projection through `DocumentBody`, with an explicitly unavailable image renderer
+and no metadata resolver or extra reader context. Image/media references become paragraphs containing their alt or
+caption; opaque components become their fallback text. Their source URLs, arbitrary payloads and capability fields
+are absent from the projection. Unsafe links and links containing URL credentials or named authentication parameters
+lose their link mark while retaining visible text. Separate localized counts explain every category of repair.
+Supported text, marks, IDs and language attributes otherwise keep their document meaning. Reattach files through the
+existing native upload control if needed. Importing does not queue an image read or reservation.
+
+Inspecting a file never changes writing. **Replace unsent body** explicitly replaces only the body, leaves title and
+posting choices intact, resets a settled current-visit command key and returns keyboard focus to the editor.
+**Keep current writing**, Cancel and Escape retain the draft. A synchronous editor transaction, title/body change,
+normal recovery restore or upload-source replacement invalidates the pending preview/read. Confirmation compares the
+exact current draft revision again. A newer file selection or cancellation retires older callbacks. In-flight and
+uncertain commands and pending uploads suspend replacement; a file can never reset their immutable command or key.
+
+Exports contain only the currently identified editable body, using installed canonical `serializeDocument` or
+`documentText`, with the same media/component/link repairs and notices. They never include command metadata, receipts,
+credentials, session state, upload capabilities, titles, private fetched context or publication choices. Plain text
+is a projection and loses formatting. An editable confirmed snapshot remains exportable during an uncertain command;
+this does not establish the command outcome. Pending snapshots cannot be exported as current writing. A failed editor
+snapshot blocks normal export and Send; **Download raw recovery** is visibly separate, carries only editor text and
+node structure without attributes or capabilities, and is explicitly neither portable nor submit-ready. Raw recovery
+is never offered as a valid document import.
+
+Each visit retains one current preview and at most one object URL. Repeated export, changed writing, close and
+retirement revoke the prior URL. A download request reports only that the browser was asked, never that a file was
+saved. Every export also provides a focused, selected read-only content field and explicit Copy; clipboard refusal
+retains manual selection and never reports success. Account/readiness/CSRF replacement, sign-out, route departure and
+unmount retire the existing composer signal synchronously, clear private preview/export DOM, revoke the URL and fence
+late file/clipboard results. There is no second draft store or autosave timer.
+
+The file chooser bound, deliberate local import and distinct recovery export retain the meaning of
+`legacy-final:apps/web/features/document-editor/body-editor.tsx`; no legacy command, schema or editor is copied.
+Prepared portable-writing stories use the real composer and visibly supplied submission outcomes; raw-recovery states
+are separately labelled prepared editor fixtures. Existing composer and browser-draft stories continue to own rich
+formatting, upload, departure and reload interactions. Portable-writing interaction stories cover phone 390 and
+desktop 1280, light/dark, long writing, file inspection, cancellation, export fallback, replacement and keyboard return.

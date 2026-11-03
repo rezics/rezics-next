@@ -73,6 +73,10 @@ export interface RichTextEditorProps {
   upload?: ImageUploader;
   lookupMention?: MentionSource;
   onUploadState?: (state: UploadState, count: number) => void;
+  /** Synchronous invalidation before the debounced, validated onChange snapshot. */
+  onSnapshotPending?: () => void;
+  /** Unnormalized editor nodes for explicit local recovery; never a submit-ready snapshot. */
+  onSnapshotError?: (document: DocumentNode) => void;
   /** Rendered at the end of the row that starts with the image control. */
   actions?: ReactNode;
   onBlur?: () => void;
@@ -229,6 +233,8 @@ export function RichTextEditor({
   maxLength,
   upload,
   onUploadState,
+  onSnapshotPending,
+  onSnapshotError,
   lookupMention,
   actions,
   onBlur,
@@ -243,8 +249,8 @@ export function RichTextEditor({
   }, [value]);
   const controlledKey = snapshotKey(normalizedValue);
   const editable = !disabled && !readOnly;
-  const latest = useRef({ onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload });
-  latest.current = { onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload };
+  const latest = useRef({ onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload, onSnapshotPending, onSnapshotError });
+  latest.current = { onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload, onSnapshotPending, onSnapshotError };
 
   const controlled = useRef({ key: controlledKey, profile: value.profile });
   const emittedKey = useRef<string | null>(null);
@@ -321,6 +327,7 @@ export function RichTextEditor({
         snapshot = editorSnapshot(editor.state.doc, value.profile);
       } catch {
         setSnapshotError(true);
+        latest.current.onSnapshotError?.(editor.state.doc.toJSON() as DocumentNode);
         return;
       }
 
@@ -336,7 +343,9 @@ export function RichTextEditor({
   publishRef.current = publish;
 
   const schedulePublish = useCallback((editor: TiptapEditor) => {
-    if (editor.isDestroyed || editor.view.composing) return;
+    if (editor.isDestroyed || !mounted.current) return;
+    latest.current.onSnapshotPending?.();
+    if (editor.view.composing) return;
     if (timer.current !== null) clearTimeout(timer.current);
     const epoch = documentEpoch.current;
     timer.current = setTimeout(() => {

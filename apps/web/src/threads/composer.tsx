@@ -38,6 +38,7 @@ import { EditConflictRecovery } from './edit-conflict-recovery';
 import { SlowModeEligibility } from './slow-mode';
 import { writingScope } from './local-writing-draft';
 import { LocalWritingDraftControls, useLocalWritingDraft } from './local-writing-draft-controls';
+import { PortableWritingControls, PortableWritingToolbar, usePortableWriting } from './portable-writing-controls';
 export { ExistingReviewNotice, SignInPrompt } from './write-prompts';
 
 type WriteResult<T> = { ok: true; value: T } | WriteFailure;
@@ -578,6 +579,10 @@ function PostComposerContent<T, Context = undefined>({
   const initialSubmissionContext = useRef(JSON.stringify(submissionContext));
   const initialReplyTarget = useRef(replyTargetId ?? null);
   const bodyRef = useRef(body);
+  const [snapshotPhase, setSnapshotPhase] = useState<'ready' | 'pending' | 'failed'>('ready');
+  const snapshotPhaseRef = useRef(snapshotPhase);
+  const rawEditorWork = useRef<DocumentNode | null>(null);
+  const writingRevision = useRef(0);
   const [bodyCanSend, setBodyCanSend] = useState(() => hasDocumentContent(body));
   const editorHost = useRef<HTMLDivElement>(null);
   const [editorReady, setEditorReady] = useState(false);
@@ -621,6 +626,7 @@ function PostComposerContent<T, Context = undefined>({
   );
   const ready =
     canSubmit &&
+    snapshotPhase === 'ready' &&
     bodyCanSend &&
     (!titleRequired || Boolean(title.trim())) &&
     !draftHasMediaIssues(failure, body) &&
@@ -661,6 +667,49 @@ function PostComposerContent<T, Context = undefined>({
     lifetime,
   );
 
+  const writing = usePortableWriting({
+    current: () => lifetime.current(),
+    signal: lifetime.controller.signal,
+    revision: () => writingRevision.current,
+    replaceable: () => lifetime.current() && canSubmit && !submittingRef.current &&
+      !replyIntent.current.unresolved && pendingRef.current === 0 && snapshotPhaseRef.current !== 'pending',
+    snapshot: () => ({ body: bodyRef.current, phase: snapshotPhaseRef.current, raw: rawEditorWork.current }),
+    replace: (next) => {
+      if (!lifetime.current() || submittingRef.current || replyIntent.current.unresolved || pendingRef.current > 0) return;
+      const nextKey = crypto.randomUUID();
+      replyIntent.current.reset(nextKey);
+      setIdempotencyKey(nextKey);
+      updateBody(next);
+      setFailure(null);
+      setUploadNotice(null);
+    },
+    focus: () => {
+      if (!lifetime.current()) return;
+      editorHost.current?.querySelector<HTMLElement>(
+        '.ProseMirror[contenteditable="true"], [role="textbox"][contenteditable="true"]',
+      )?.focus();
+    },
+  }, session?.state === 'signed-in' && canSubmit);
+
+  function invalidateWriting() {
+    writingRevision.current++;
+    writing?.changed();
+  }
+  function snapshotPending() {
+    if (!lifetime.current()) return;
+    snapshotPhaseRef.current = 'pending';
+    rawEditorWork.current = null;
+    setSnapshotPhase('pending');
+    invalidateWriting();
+  }
+  function snapshotFailed(raw: DocumentNode) {
+    if (!lifetime.current()) return;
+    snapshotPhaseRef.current = 'failed';
+    rawEditorWork.current = raw;
+    setSnapshotPhase('failed');
+    invalidateWriting();
+  }
+
   const localWriting = useLocalWritingDraft({
     actor: session?.state === 'signed-in' ? (session.subject ?? null) : null,
     scope: writingScope({ containerId, boardId, replyTargetId, submissionContext }),
@@ -669,7 +718,7 @@ function PostComposerContent<T, Context = undefined>({
     admitted: canSubmit,
     title,
     body,
-    suspended: submitting || replyIntent.current.unresolved,
+    suspended: submitting || replyIntent.current.unresolved || snapshotPhase !== 'ready',
   });
 
   useEffect(() => {
@@ -799,6 +848,10 @@ function PostComposerContent<T, Context = undefined>({
 
   function updateBody(next: DocumentSnapshot) {
     if (!lifetime.current()) return;
+    snapshotPhaseRef.current = 'ready';
+    setSnapshotPhase('ready');
+    rawEditorWork.current = null;
+    invalidateWriting();
     bodyRef.current = next;
     setBody(next);
     setBodyCanSend(hasDocumentContent(next));
@@ -838,6 +891,7 @@ function PostComposerContent<T, Context = undefined>({
         const uploaded = await mediaUpload.copy(source, id);
         if (!current()) return;
         const next = replaceImageSource(bodyRef.current, source, uploaded.src);
+        invalidateWriting();
         bodyRef.current = next;
         setBody(next);
         setBodyCanSend(hasDocumentContent(next));
@@ -898,6 +952,7 @@ function PostComposerContent<T, Context = undefined>({
   function removeIssueImage(id: string) {
     if (!lifetime.current()) return;
     const next = withoutImage(bodyRef.current, id);
+    invalidateWriting();
     pruneCopiedImages(next);
     bodyRef.current = next;
     setBody(next);
@@ -916,6 +971,7 @@ function PostComposerContent<T, Context = undefined>({
     setBodyCanSend(hasDocumentContent(next) || hasMedia);
     // Tiptap publishes the structured snapshot; only the pre-hydration fallback is plain text.
     if (target.classList.contains('ProseMirror')) return;
+    invalidateWriting();
     bodyRef.current = next;
     if (plainEditorVisible) setBody(next);
   }
@@ -934,6 +990,7 @@ function PostComposerContent<T, Context = undefined>({
     if (
       !lifetime.current() ||
       pendingRef.current > 0 ||
+      snapshotPhaseRef.current !== 'ready' ||
       !hasDocumentContent(bodyRef.current) ||
       !ready ||
       submittingRef.current
@@ -956,6 +1013,7 @@ function PostComposerContent<T, Context = undefined>({
     const command = replyIntent.current.prepare(draft, replyTargetId ?? null, commandContext);
     // Pending and lost responses both retain the entire command until its outcome is known.
     replyIntent.current.settle(false);
+    writing?.cancel();
     setIdempotencyKey(command.idempotencyKey);
     submittingRef.current = true;
     setSubmitting(true);
@@ -982,6 +1040,7 @@ function PostComposerContent<T, Context = undefined>({
       replyIntent.current.settle(true);
       localWriting.draft?.settle('success');
       setTitle('');
+      invalidateWriting();
       const empty = fromPlainText('', 'blocks');
       initialBodyRef.current = empty;
       bodyRef.current = empty;
@@ -1034,7 +1093,7 @@ function PostComposerContent<T, Context = undefined>({
               id="thread-title"
               className="h-11 min-w-0 max-w-full border-border bg-background px-3"
               value={title}
-              onChange={(event) => setTitle(event.currentTarget.value)}
+              onChange={(event) => { invalidateWriting(); setTitle(event.currentTarget.value); }}
               autoComplete="off"
             />
           </div>
@@ -1062,6 +1121,8 @@ function PostComposerContent<T, Context = undefined>({
             value={body}
             disabled={submitting}
             onChange={updateBody}
+            onSnapshotPending={snapshotPending}
+            onSnapshotError={snapshotFailed}
             label={bodyLabel}
             {...(titleRequired ? {} : { placeholder: m.thread_reply_placeholder() })}
             {...(titleRequired ? { toolbar: 'always' as const } : {})}
@@ -1069,6 +1130,8 @@ function PostComposerContent<T, Context = undefined>({
             lookupMention={lookupPostMention}
             className={`thread-post-editor ${editorSize}${plainEditorVisible ? ' thread-editor-pending' : ''}`}
             actions={
+              <>
+              {writing ? <PortableWritingToolbar transfer={writing} /> : null}
               <Button
                 type="submit"
                 form={formId}
@@ -1077,11 +1140,15 @@ function PostComposerContent<T, Context = undefined>({
               >
                 {m.thread_write_send()}
               </Button>
+              </>
             }
             {...(upload ? { upload, onUploadState: handleUploadState } : {})}
           />
         </div>
       </div>
+      {writing ? <PortableWritingControls transfer={writing} signal={lifetime.controller.signal}
+        disabled={submitting || replyIntent.current.unresolved || pendingUploads > 0 || snapshotPhase === 'pending'}
+        phase={snapshotPhase} /> : null}
       {foreignPendingRef.current > 0 ? (
         <p
           className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
@@ -1125,7 +1192,7 @@ function PostComposerContent<T, Context = undefined>({
           draft={localWriting.draft}
           read={localWriting.read}
           live={() => ({ title, body: bodyRef.current })}
-          suspended={submitting || replyIntent.current.unresolved}
+          suspended={submitting || replyIntent.current.unresolved || snapshotPhase !== 'ready'}
           restoreDisabled={pendingUploads > 0}
           hasLiveWriting={Boolean(title) || hasDocumentContent(body)}
           onRestore={(payload) => {
