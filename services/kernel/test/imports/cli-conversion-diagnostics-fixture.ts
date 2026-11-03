@@ -109,51 +109,58 @@ export async function runCliConversionDiagnosticsJourney() {
     ];
     const exchanges: Exchange[] = [];
     const commands = new Map<string, { bytes: string; keys: string[] }>();
-    async function invoke(signal?: AbortSignal) {
+    const replay: typeof fetch = (async (input: Request | string | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(request.url);
+      if (url.origin === auth) return support.host.service.handler(request);
+      expect(url.origin).toBe(api);
+      const bytes = await request.clone().text();
+      if (url.pathname === '/v1/subjects:batchWrite') {
+        for (const command of (JSON.parse(bytes) as BatchWriteRequest).commands)
+          runtime.commands.set(command.key, { command, actor: identity.bulk.accountId });
+      }
+      const response = await runtime.replay(request);
+      const body = await response.clone().text();
+      const key = request.headers.get('idempotency-key');
+      exchanges.push({ path: url.pathname, key, bytes, status: response.status, body });
+      if (key && request.method !== 'GET') {
+        const prior = commands.get(key);
+        const keys =
+          url.pathname === '/v1/subjects:batchWrite'
+            ? (JSON.parse(bytes) as BatchWriteRequest).commands.map((c) => c.key)
+            : [key];
+        if (prior) expect({ bytes, keys }).toEqual(prior);
+        else commands.set(key, { bytes, keys });
+      }
+      return response;
+    }) as unknown as typeof fetch;
+    async function invoke(controller?: AbortController) {
       const start = exchanges.length;
-      const result = await runImportCli(argv, {
-        signal,
-        observer: signal
-          ? {
-              onCoordinator({ importer }) {
-                const seal = importer.session.store.seal.bind(importer.session.store);
-                importer.session.store.seal = (...args) => {
-                  const outcome = seal(...args);
-                  signal.abort();
-                  return outcome;
-                };
-              },
-            }
-          : undefined,
-        fetch: (async (input: Request | string | URL, init?: RequestInit) => {
-          const request = input instanceof Request ? input : new Request(input, init);
-          const url = new URL(request.url);
-          if (url.origin === auth) return support.host.service.handler(request);
-          expect(url.origin).toBe(api);
-          const bytes = await request.clone().text();
-          if (url.pathname === '/v1/subjects:batchWrite') {
-            for (const command of (JSON.parse(bytes) as BatchWriteRequest).commands)
-              runtime.commands.set(command.key, { command, actor: identity.bulk.accountId });
-          }
-          const response = await runtime.replay(request);
-          const body = await response.clone().text();
-          const key = request.headers.get('idempotency-key');
-          exchanges.push({ path: url.pathname, key, bytes, status: response.status, body });
-          if (key && request.method !== 'GET') {
-            const prior = commands.get(key);
-            const keys =
-              url.pathname === '/v1/subjects:batchWrite'
-                ? (JSON.parse(bytes) as BatchWriteRequest).commands.map((c) => c.key)
-                : [key];
-            if (prior) expect({ bytes, keys }).toEqual(prior);
-            else commands.set(key, { bytes, keys });
-          }
-          return response;
-        }) as typeof fetch,
-      });
+      const result = await runImportCli(
+        argv,
+        controller
+          ? (() => {
+              const abort = controller;
+              return {
+                signal: abort.signal,
+                observer: {
+                  onCoordinator({ importer }) {
+                    const seal = importer.session.store.seal.bind(importer.session.store);
+                    importer.session.store.seal = (...args) => {
+                      const outcome = seal(...args);
+                      abort.abort();
+                      return outcome;
+                    };
+                  },
+                },
+                fetch: replay,
+              };
+            })()
+          : { fetch: replay },
+      );
       return { result, captured: exchanges.slice(start) };
     }
-    const interrupted = await invoke(new AbortController().signal);
+    const interrupted = await invoke(new AbortController());
     expect(interrupted.result.code).toBe(130);
     expect(interrupted.result.openHandles).toBe(0);
     expect(interrupted.captured.filter((e) => e.path.startsWith('/v1/'))).toEqual([]);
@@ -164,7 +171,7 @@ export async function runCliConversionDiagnosticsJourney() {
         fetch: (async () => {
           network++;
           throw new Error('diagnostics must not use the network');
-        }) as typeof fetch,
+        }) as unknown as typeof fetch,
       },
     );
     expect(network).toBe(0);
