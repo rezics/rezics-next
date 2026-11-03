@@ -91,8 +91,11 @@ async function waitForAgent(
   for (let attempt = 0; attempt < 120; attempt++) {
     const listed = await stack.kernel(`/v1/accounts?ids=${encodeURIComponent(accountId)}`, {}, 'editor');
     const accounts = listed.ok
-      ? ((await listed.json()) as { accounts?: { id: string; subject?: { id: string; label: string; type: string } }[] })
-          .accounts
+      ? (
+          (await listed.json()) as {
+            accounts?: { id: string; subject?: { id: string; label: string; type: string } }[];
+          }
+        ).accounts
       : undefined;
     const fromAccount = accounts?.find((account) => account.id === accountId)?.subject;
     if (fromAccount?.id) return fromAccount;

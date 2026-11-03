@@ -62,9 +62,7 @@ async function publicStatement(id: string, property: string, candidate: string):
 
 async function confirm(page: Page, operation: 'Share consent' | 'Retract assertion'): Promise<void> {
   await page.getByRole('button', { name: operation, exact: true }).click();
-  await page
-    .getByRole('checkbox', { name: 'This assertion targets the agent linked to my current account.' })
-    .click();
+  await page.getByRole('checkbox', { name: 'This assertion targets the agent linked to my current account.' }).click();
   await serverAction(page, () => page.getByRole('button', { name: 'Confirm', exact: true }).click());
 }
 
@@ -81,7 +79,9 @@ test('website consent discloses and terminally retracts an unsourced assertion t
     'alice',
   );
   expect(accepted.status).toBe(200);
-  const listing = (await accepted.json()) as { candidates: { id: string; decision: string; retracted: number | null }[] };
+  const listing = (await accepted.json()) as {
+    candidates: { id: string; decision: string; retracted: number | null }[];
+  };
   expect(listing.candidates).toContainEqual(
     expect.objectContaining({ id: current.own.candidate, decision: 'accepted', retracted: null }),
   );
@@ -114,13 +114,11 @@ test('website consent discloses and terminally retracts an unsourced assertion t
   expect(await publicStatement(current.own.id, current.own.property, current.own.candidate)).not.toBeNull();
 
   const beforePublic = (await kernelNow()).length;
-  await serverAction(page, () =>
-    page.getByRole('button', { name: 'Read current public result', exact: true }).click(),
-  );
+  await serverAction(page, () => page.getByRole('button', { name: 'Read current public result', exact: true }).click());
   expect(posts((await kernelNow()).slice(beforePublic), disclosePath)).toHaveLength(0);
-  expect(posts((await kernelNow()).slice(beforePublic), `/v1/statements/${current.own.candidate}/retract`)).toHaveLength(
-    0,
-  );
+  expect(
+    posts((await kernelNow()).slice(beforePublic), `/v1/statements/${current.own.candidate}/retract`),
+  ).toHaveLength(0);
 
   const bob = await current.auth.signIn('bob');
   const other = bob.context.pages()[0] ?? (await bob.context.newPage());
@@ -148,9 +146,7 @@ test('website consent discloses and terminally retracts an unsourced assertion t
   expect(await publicStatement(current.own.id, current.own.property, current.own.candidate)).toBeNull();
 
   const beforeRefresh = (await kernelNow()).length;
-  await serverAction(page, () =>
-    page.getByRole('button', { name: 'Read current public result', exact: true }).click(),
-  );
+  await serverAction(page, () => page.getByRole('button', { name: 'Read current public result', exact: true }).click());
   expect(posts((await kernelNow()).slice(beforeRefresh), retractPath)).toHaveLength(0);
   expect(posts((await kernelNow()).slice(beforeRefresh), disclosePath)).toHaveLength(0);
 
