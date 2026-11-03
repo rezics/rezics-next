@@ -51,7 +51,7 @@ export declare function bindOwnerFilterRead(dependencies: Omit<Dependencies, 'to
 /** Complete native original/fact closure, independently of positive candidate enumeration.
  * Missing coverage never supplies private absence, even underneath a negative filter branch.
  */
-export declare function readOwnerFilterCandidateClosure(binding: OwnerFilterReadBinding, source: PreparedCollectionSource, subjectId: string, work: NativeCollectionWork): Promise<Unavailable | Readonly<{
+export declare function readOwnerFilterCandidateClosure(binding: OwnerFilterReadBinding, source: PreparedCollectionSource, subjectId: string, work: NativeCollectionWork, deferDisclosure?: boolean): Promise<Unavailable | Readonly<{
     status: 'complete';
     closure: OwnerFilterCandidateClosure;
 }>>;
