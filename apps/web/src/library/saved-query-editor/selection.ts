@@ -106,6 +106,14 @@ export function admitSavedQueryInput(input: SavedQueryInput): SavedQuerySelectio
   return filter && !issues.length ? { state: 'admitted', filter: withPresence(filter) } : { state: 'invalid', issues };
 }
 
+/** Only an admitted create selection seeds the private rule form. */
+export function savedQuerySeed(
+  collectionId: string | null,
+  selection: SavedQuerySelection,
+): FilterDocument | undefined {
+  return collectionId === null && selection.state === 'admitted' ? selection.filter : undefined;
+}
+
 export function savedQueryCreateHref(
   locale: string,
   input: { document?: FilterDocument; type?: string; state?: string; label?: string; from?: string },

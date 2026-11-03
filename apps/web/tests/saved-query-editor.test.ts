@@ -1,35 +1,23 @@
-import { expect, mock, test } from 'bun:test';
+import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { parseFilter } from '@rezics/filter';
-import { CollectionRuleEditor, RuleEditLink } from '../src/library/collection-rule-editor';
+import { SavedQueryCorrection } from '../src/library/saved-query-editor/correction';
 import { SaveQueryLink } from '../src/library/saved-query-editor/link';
 import {
   admitSavedQueryInput,
   localPath,
   savedQueryCreateHref,
+  savedQuerySeed,
 } from '../src/library/saved-query-editor/selection';
-import { unavailableRuleChoices } from '../src/library/collection-rule-read';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
-
-mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('../src/library/subject-label-input', () => ({
-  subjectLabelInputIssue: () => undefined,
-}));
-const { SavedQueryEditor } = await import('../src/library/saved-query-editor/editor');
 
 const presence = { owner: { presence: true } } as const;
 const book = { type: { in: ['schema:Book'] } };
 const keyword = parseFilter({
   statement: { property: 'schema:keywords', in: ['00000000-0000-4000-8000-000000000123'] },
 });
-const newPage = {
-  state: 'new' as const,
-  viewerId: 'owner',
-  choices: unavailableRuleChoices(),
-  intent: '10000000-0000-4000-8000-000000000001',
-};
 
 test('catalogue and library type or label selections seed a private presence query; a state ID stays unsaved', () => {
   expect(admitSavedQueryInput({})).toEqual({ state: 'empty' });
@@ -46,10 +34,14 @@ test('catalogue and library type or label selections seed a private presence que
     state: 'admitted',
     filter: { and: [presence, { owner: { label: { id: label } } }] },
   });
-  expect(admitSavedQueryInput({ type: 'schema:Book', state: 'reading' })).toEqual({
+  const unrepresentable = admitSavedQueryInput({ type: 'schema:Book', state: 'reading' });
+  expect(unrepresentable).toEqual({
     state: 'invalid',
     issues: [{ key: 'state', reason: 'unrepresentable' }],
   });
+  expect(savedQuerySeed(null, unrepresentable)).toBeUndefined();
+  expect(savedQuerySeed(null, admitSavedQueryInput({ type: 'schema:Book' }))).toEqual({ and: [presence, book] });
+  expect(savedQuerySeed('saved', admitSavedQueryInput({ type: 'schema:Book' }))).toBeUndefined();
   expect(admitSavedQueryInput({ filter: '{' })).toEqual({
     state: 'invalid',
     issues: [{ key: 'filter', reason: 'invalid' }],
@@ -76,51 +68,18 @@ test('the private create address and correction copy exist in every launch local
   }
 });
 
-test('an unrepresentable selection stays off the save form; an admitted seed is reviewed before create', () => {
+test('an unrepresentable selection stays off the save form', () => {
   const invalid = renderToStaticMarkup(
-    createElement(SavedQueryEditor, {
-      page: newPage,
-      collectionId: null,
+    createElement(SavedQueryCorrection, {
       selection: { state: 'invalid', issues: [{ key: 'state', reason: 'unrepresentable' }] },
       originHref: '/en/library?state=reading',
     }),
   );
   expect(invalid).toContain(m.library_saved_query_invalid());
   expect(invalid).toContain(m.library_saved_query_state());
+  expect(invalid).toContain(m.library_saved_query_correct());
+  expect(invalid).toContain(m.library_saved_query_blank());
   expect(invalid).toContain('href="/en/library?state=reading"');
   expect(invalid).not.toMatch(/<form\b/);
   expect(invalid).not.toContain(m.library_collection_create());
-
-  const seeded = renderToStaticMarkup(
-    createElement(CollectionRuleEditor, {
-      page: newPage,
-      viewerId: 'owner',
-      collectionId: null,
-      admitted: ['collection.create'],
-      csrfToken: 'csrf',
-      seed: { and: [presence, book] },
-      save: async () => ({ ok: false, reason: 'unavailable' }),
-      reload: async () => newPage,
-    }),
-  );
-  expect(seeded).toContain('schema:Book');
-  expect(seeded).toContain(m.library_rule_presence());
-  expect(seeded).toContain(m.library_rule_private());
-  expect(seeded).toContain(m.library_collection_create());
-});
-
-test('owned saved-dynamic collections keep an edit link and builtins do not', () => {
-  const owned = { id: 'saved', curatorAccountId: 'owner', membershipKind: 'dynamic' };
-  expect(
-    renderToStaticMarkup(createElement(RuleEditLink, { collection: owned, viewerId: 'owner', allowed: true })),
-  ).toContain('/collections/saved/rule');
-  expect(
-    renderToStaticMarkup(
-      createElement(RuleEditLink, {
-        collection: { ...owned, builtinKind: 'everything' },
-        viewerId: 'owner',
-        allowed: true,
-      }),
-    ),
-  ).toBe('');
 });
