@@ -5,7 +5,11 @@ import { partitionOf, routeOf } from '../route/route.ts';
 export type RatingSourcePosition = Readonly<{ epoch: number; position: string; revision: number }>;
 
 /** Native log positions order membership epochs and pages, independently of vote revision or wall time. */
-export function ratingSourcePosition(event: CloudEvent, ownerId: string, revision = 0): RatingSourcePosition | undefined {
+export function ratingSourcePosition(
+  event: CloudEvent,
+  ownerId: string,
+  revision = 0,
+): RatingSourcePosition | undefined {
   const source = /^urn:rezics:log:([0-9]+)\.([1-9][0-9]*)$/.exec(event.source);
   // Direct, pre-log callers retain their existing contract; production relay always supplies the native envelope.
   if (!source || Number(source[1]) !== partitionOf(routeOf(ownerId)!)) return undefined;

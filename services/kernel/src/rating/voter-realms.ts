@@ -100,7 +100,15 @@ export function createVoterRealmsEffect(pool: Pool): Effect {
           },
         },
         async (tx, { transactionId }) => {
-          if (!(await advanceRatingSource(tx, route, 'membership', [voterId, realmId], ratingSourcePosition(event, realmId))))
+          if (
+            !(await advanceRatingSource(
+              tx,
+              route,
+              'membership',
+              [voterId, realmId],
+              ratingSourcePosition(event, realmId),
+            ))
+          )
             return { value: null, events: [] };
           const row = await readRealm.run(tx, parameters(address));
           const changedRealms = new Set<string>([realmId]);

@@ -83,7 +83,9 @@ export function createVoterEligibilityEffect(pool: Pool): Effect {
           },
         },
         async (tx, command) => {
-          if (!(await advanceRatingSource(tx, route, 'eligibility', [accountId], ratingSourcePosition(event, accountId))))
+          if (
+            !(await advanceRatingSource(tx, route, 'eligibility', [accountId], ratingSourcePosition(event, accountId)))
+          )
             return { value: null, events: [] };
           await ensureVoterState.run(tx, { route, voter_id: accountId });
           const current = await readVoterState.run(tx, { route, voter_id: accountId });

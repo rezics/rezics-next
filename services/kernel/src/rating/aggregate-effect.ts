@@ -231,8 +231,16 @@ async function applyPartition(
         };
 
         if (change.source) {
-          if (!(await advanceRatingSource(tx, route, 'aggregate',
-            [change.voterId, change.questionId, change.populationId, change.targetId], change.source))) continue;
+          if (
+            !(await advanceRatingSource(
+              tx,
+              route,
+              'aggregate',
+              [change.voterId, change.questionId, change.populationId, change.targetId],
+              change.source,
+            ))
+          )
+            continue;
           received += 1;
         }
 
@@ -320,7 +328,10 @@ async function applyPartition(
       if (applied === 0 && received === 0) throw new NoAggregateChange();
       return {
         value: undefined,
-        events: [{ type: AGGREGATE_APPLIED, data: { applied: Math.max(applied, received) } }, ...(await totals.commit(tx))],
+        events: [
+          { type: AGGREGATE_APPLIED, data: { applied: Math.max(applied, received) } },
+          ...(await totals.commit(tx)),
+        ],
       };
     });
   } catch (error) {

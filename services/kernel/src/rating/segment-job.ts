@@ -3,7 +3,13 @@ import canonicalize from 'canonicalize';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { authoritativeTimeValue, runCommand, type AuthoritativeTime, type CommandEvent, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  runCommand,
+  type AuthoritativeTime,
+  type CommandEvent,
+  type CommandTransaction,
+} from '../command/command.ts';
 import type { RatingCounter } from '../access/rating-counter.ts';
 import { applyRatingSegmentPageEvent } from './aggregate-effect.ts';
 import { withConnection } from '../database/pool.ts';
@@ -289,12 +295,16 @@ export async function processRatingSegmentPage(
       : { voterId: input.voterId, direction: input.direction, votes };
   const options = {
     partition: partitionOf(voterRoute),
-    ...(ratingCounter ? { receipt: {
-      actorAccountId: input.voterId,
-      kind: 'rating.segment.page',
-      key: `${input.transitionId}:${input.after?.questionId ?? ''}:${input.after?.targetId ?? ''}`,
-      digest: createHash('sha256').update(canonicalize(input)!).digest(),
-    } } : {}),
+    ...(ratingCounter
+      ? {
+          receipt: {
+            actorAccountId: input.voterId,
+            kind: 'rating.segment.page',
+            key: `${input.transitionId}:${input.after?.questionId ?? ''}:${input.after?.targetId ?? ''}`,
+            digest: createHash('sha256').update(canonicalize(input)!).digest(),
+          },
+        }
+      : {}),
   };
   const producePage = async (
     tx: CommandTransaction,
