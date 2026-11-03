@@ -1,8 +1,11 @@
-WITH decision AS (
-  SELECT decision_id, target_kind, target_id, decided_at
-  FROM content.moderation_decision
-  WHERE route = :route::integer AND target_kind = :target_kind::text
-    AND target_id = :target_id::uuid AND security_revision = :security_revision::bigint
+WITH input AS (
+  SELECT :route::integer AS route, :target_kind::text AS target_kind,
+         :target_id::uuid AS target_id, :security_revision::bigint AS security_revision
+), decision AS (
+  SELECT d.decision_id, d.target_kind, d.target_id, d.decided_at, i.route
+  FROM content.moderation_decision d CROSS JOIN input i
+  WHERE d.route = i.route AND d.target_kind = i.target_kind
+    AND d.target_id = i.target_id AND d.security_revision = i.security_revision
 )
 SELECT d.decision_id::text, d.target_kind, d.target_id::text,
        to_char(d.decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS decided_at,
@@ -11,7 +14,7 @@ SELECT d.decision_id::text, d.target_kind, d.target_id::text,
        COALESCE(t.board_id, pt.board_id) AS board_id
 FROM decision d
 LEFT JOIN content.thread t
-  ON d.target_kind = 'thread' AND t.route = :route::integer AND t.thread_id = d.target_id
+  ON d.target_kind = 'thread' AND t.route = d.route AND t.thread_id = d.target_id
 LEFT JOIN content.post p
-  ON d.target_kind = 'post' AND p.route = :route::integer AND p.post_id = d.target_id
+  ON d.target_kind = 'post' AND p.route = d.route AND p.post_id = d.target_id
 LEFT JOIN content.thread pt ON pt.route = p.route AND pt.thread_id = p.thread_id;
