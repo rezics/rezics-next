@@ -22,8 +22,8 @@ const actions = [
   'subject:create',
   'subject:read',
   'classification_ballot:set',
-  'classification_ballot:read-own',
-  'classification_ballot:read-aggregate',
+  'classification_ballot:read_own',
+  'classification_ballot:read_aggregate',
 ];
 const routeKey = new Uint8Array(32).fill(31);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
@@ -380,7 +380,7 @@ test('the page continues from raw keys and promotes an exact selected slot once'
     { ...actor, clientId: 'desktop' },
     { ...actor, requestedBy: `urn:rezics:request:${accounts.other}:${randomUUID()}` },
     { ...actor, authnEpoch: 2 },
-    { ...actor, scopes: [...actor.scopes, 'classification_ballot:read-aggregate'] },
+    { ...actor, scopes: [...actor.scopes, 'classification_ballot:read_aggregate'] },
   ])
     await expect(reader.page(changed, { cursor: first.next as string }, Date.now() + 30_000)).rejects.toThrow();
   const delegated = await delegatedBearer(`urn:rezics:request:${accounts.other}:${randomUUID()}`);

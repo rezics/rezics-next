@@ -36,7 +36,7 @@
     "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"],
     "semantic.context.owner": ["context:accept", "context:adopt", "access:grant", "context:delete", "context:restore"],
     "semantic.revision.author": ["statement:delete", "statement:restore"],
-    "semantic.subject.classification_ballot_standing": ["classification_ballot:set", "classification_ballot:read-own"],
+    "semantic.subject.classification_ballot_standing": ["classification_ballot:set", "classification_ballot:read_own"],
     "semantic.context.moderator": ["context:accept"],
     "library.collection.owner": ["collection:read", "collection:update", "collection:delete"],
     "semantic.zone.owner": [

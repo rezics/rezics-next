@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import { readAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { noEffect, type CommandEvent, type CommandTransaction } from '../command/command.ts';
@@ -9,11 +10,13 @@ import {
   type CurrentClassificationAssociation,
 } from '../semantic/classification-association.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
+import { partitionReadClientObservation } from '../database/read-snapshot.ts';
 import { createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { commandAttemptDeadline } from '../command/command.ts';
 import { CLASSIFICATION_BALLOT_CHANGED, CLASSIFICATION_BALLOT_CLEANUP } from './events.ts';
 import actorStateRead from './classification-ballot-actor-state-lock.sql';
+import actorStateObserve from './classification-ballot-actor-state-read.sql';
 import actorStateInsert from './classification-ballot-actor-state-insert.sql';
 import actorStateActivate from './classification-ballot-actor-state-activate.sql';
 import slotLock from './classification-ballot-slot-lock.sql';
@@ -21,10 +24,12 @@ import slotUpsert from './classification-ballot-slot-upsert.sql';
 import ownSlotRead from './classification-ballot-own-read.sql';
 import aggregateRead from './classification-ballot-aggregate-read.sql';
 import contributionOwnRead from './classification-ballot-contribution-own-read.sql';
+import aggregateSources from './classification-ballot-aggregate-sources.sql';
+import aggregateCheckpoint from './classification-ballot-aggregate-checkpoint.sql';
 
 export const CLASSIFICATION_BALLOT_SET = 'classification_ballot:set';
-export const CLASSIFICATION_BALLOT_READ_OWN = 'classification_ballot:read-own';
-export const CLASSIFICATION_BALLOT_READ_AGGREGATE = 'classification_ballot:read-aggregate';
+export const CLASSIFICATION_BALLOT_READ_OWN = 'classification_ballot:read_own';
+export const CLASSIFICATION_BALLOT_READ_AGGREGATE = 'classification_ballot:read_aggregate';
 export const CLASSIFICATION_BALLOT_MINIMUM = 5;
 
 export type Assessment = 'support' | 'oppose';
@@ -100,6 +105,71 @@ export function classificationAggregateView(associationId: string, row: Aggregat
     generation: String(row.generation),
     pending: 'unknown' as const,
   };
+}
+
+/** Read only the represented source partitions, never voter identities or contribution history.
+ * A source checkpoint at its native head proves that lifecycle pages and their target writes
+ * have run. Behind, moved or changed sources cannot certify eligible current totals. */
+export async function readClassificationAggregateObservation(
+  pool: Pool,
+  association: Pick<CurrentClassificationAssociation, 'subjectRoute' | 'subjectId' | 'associationId' | 'bindingHash'>,
+  deadline: number,
+) {
+  const address = {
+    route: association.subjectRoute,
+    subject_id: association.subjectId,
+    association_id: association.associationId,
+    binding_hash: Buffer.from(association.bindingHash, 'hex'),
+  };
+  const collect = async () => {
+    const target = await withReadTransaction(
+      pool,
+      async (client) => {
+        const { partition } = await partitionReadClientObservation(client, partitionOf(address.route));
+        const rows = (await aggregateRead.run(client, address)) as Aggregate[];
+        const sources = await aggregateSources.run(client, address);
+        const row = rows[0] ?? null;
+        if (row && sources.length === 0) throw new AccessUnavailableError('contention');
+        return { row, sources, epoch: partition.epoch, node: partition.node };
+      },
+      deadline,
+    );
+    // At most 4096 represented native partitions, bounded by the partition address space.
+    const witnesses = [];
+    for (const source of target.sources) {
+      witnesses.push(
+        await withReadTransaction(
+          pool,
+          async (client) => {
+            const { partition } = await partitionReadClientObservation(client, source.partition);
+            const checkpoint = await aggregateCheckpoint.run(client, { partition: source.partition });
+            if (
+              partition.epoch !== source.epoch ||
+              !checkpoint ||
+              checkpoint.epoch !== partition.epoch ||
+              BigInt(checkpoint.position) !== partition.position ||
+              partition.position < BigInt(source.position)
+            )
+              throw new AccessUnavailableError('contention');
+            return { partition, checkpoint };
+          },
+          deadline,
+        ),
+      );
+    }
+    return { target, witnesses };
+  };
+  const observed = await collect();
+  return {
+    value: classificationAggregateView(association.associationId, observed.target.row),
+    async current(): Promise<boolean> {
+      return JSON.stringify(observed, bigintJson) === JSON.stringify(await collect(), bigintJson);
+    },
+  };
+}
+
+function bigintJson(_key: string, value: unknown): unknown {
+  return typeof value === 'bigint' ? value.toString() : value;
 }
 
 function account(actor: Actor, scope: string): AccountActor {
@@ -412,32 +482,40 @@ export function createClassificationBallotCommands(config: Dependencies) {
     });
     if (!association) throw new ClassificationBallotNotFoundError();
     const actorRoute = requireRoute(owner.accountId);
-    const slot = await withReadTransaction(
-      pool,
-      async (client) => {
-        const current = await readAccount(client, actorRoute, owner.accountId);
-        assertCurrentAccount(owner, current);
-        return (await ownSlotRead.run(client, {
-          route: actorRoute,
-          actor_id: owner.accountId,
-          subject_id: subjectId,
-          association_id: associationId,
-        })) as BallotSlot | null;
-      },
-      deadline,
-    );
+    const ownSnapshot = () =>
+      withReadTransaction(
+        pool,
+        async (client) => {
+          const { partition } = await partitionReadClientObservation(client, partitionOf(actorRoute));
+          const current = await readAccount(client, actorRoute, owner.accountId);
+          assertCurrentAccount(owner, current);
+          const state = await actorStateObserve.run(client, { route: actorRoute, actor_id: owner.accountId });
+          const slot = (await ownSlotRead.run(client, {
+            route: actorRoute,
+            actor_id: owner.accountId,
+            subject_id: subjectId,
+            association_id: associationId,
+          })) as BallotSlot | null;
+          return { slot, state, partition };
+        },
+        deadline,
+      );
+    const observed = await ownSnapshot();
+    const slot = observed.slot;
     const currentSlot = slot && hashBytes(slot.binding_hash) === association.bindingHash ? slot : null;
     const contribution = currentSlot
       ? await withReadTransaction(
           pool,
-          (client) =>
-            contributionOwnRead.run(client, {
+          async (client) => {
+            await partitionReadClientObservation(client, partitionOf(association.subjectRoute));
+            return contributionOwnRead.run(client, {
               route: association.subjectRoute,
               subject_id: subjectId,
               association_id: associationId,
               actor_route: actorRoute,
               actor_id: owner.accountId,
-            }),
+            });
+          },
           deadline,
         )
       : null;
@@ -447,6 +525,9 @@ export function createClassificationBallotCommands(config: Dependencies) {
       hashBytes(contribution.bindingHash) === association.bindingHash
         ? contribution
         : null;
+    await assertAssociationCurrent(actor, association, CLASSIFICATION_BALLOT_READ_OWN, deadline);
+    if (JSON.stringify(observed, bigintJson) !== JSON.stringify(await ownSnapshot(), bigintJson))
+      throw new AccessUnavailableError('contention');
     return {
       associationId,
       hasBallot: currentSlot?.assessment !== null && currentSlot?.assessment !== undefined,
@@ -469,19 +550,29 @@ export function createClassificationBallotCommands(config: Dependencies) {
       deadline,
     });
     if (!association) throw new ClassificationBallotNotFoundError();
-    const rows = (await withReadTransaction(
+    const observation = await readClassificationAggregateObservation(pool, association, deadline);
+    await assertAssociationCurrent(actor, association, CLASSIFICATION_BALLOT_READ_AGGREGATE, deadline);
+    if (!(await observation.current())) throw new AccessUnavailableError('contention');
+    return observation.value;
+  }
+
+  async function assertAssociationCurrent(
+    actor: Actor,
+    original: CurrentClassificationAssociation,
+    action: string,
+    deadline: number,
+  ): Promise<void> {
+    const current = await readCurrentClassificationAssociation({
       pool,
-      (client) =>
-        aggregateRead.run(client, {
-          route: association.subjectRoute,
-          subject_id: subjectId,
-          association_id: associationId,
-          binding_hash: Buffer.from(association.bindingHash, 'hex'),
-        }),
+      access,
+      actor,
+      subjectId: original.subjectId,
+      associationId: original.associationId,
+      action,
       deadline,
-    )) as Aggregate[];
-    const row = rows[0] ?? null;
-    return classificationAggregateView(associationId, row);
+    });
+    if (!current) throw new ClassificationBallotNotFoundError();
+    if (current.bindingHash !== original.bindingHash) throw new AccessUnavailableError('contention');
   }
 
   return { set, clear, readOwn, readAggregate };

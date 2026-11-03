@@ -17,6 +17,7 @@ import { Value } from 'typebox/value';
 import { EVENT_TYPES } from '../../src/events/catalogue.ts';
 import { CLASSIFICATION_AGGREGATE_CHANGED, CLASSIFICATION_BALLOT_CHANGED } from '../../src/rating/events.ts';
 import { classificationAggregateView } from '../../src/rating/classification-ballot.ts';
+import { interleaveClassificationRead } from './support/classification-ballot-interleave.ts';
 
 const accounts = {
   voter0: '019a1b2c-3d4e-7f00-8a00-5ab1ec700101',
@@ -32,8 +33,8 @@ const actions = [
   'subject:create',
   'subject:read',
   'classification_ballot:set',
-  'classification_ballot:read-own',
-  'classification_ballot:read-aggregate',
+  'classification_ballot:read_own',
+  'classification_ballot:read_aggregate',
 ];
 const routeKey = new Uint8Array(32).fill(31);
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(23)]]) };
@@ -292,7 +293,24 @@ test('mounted classification ballots stay private and converge through the durab
     state: 'suppressed',
     pending: 'unknown',
   });
-  await hideSubjectAtSemanticSource(moderatedSubject.id);
+  const ordinaryApp = app;
+  app = createKernel({
+    pool: interleaveClassificationRead(database.pool, 'rating.classification_contribution', () =>
+      hideSubjectAtSemanticSource(moderatedSubject.id),
+    ),
+    access: realAccess.access,
+    tokens,
+    receiptKeys,
+    routeKey,
+    writeRate: realAccess.writeRate,
+  });
+  try {
+    expect(
+      (await request('voter5', 'GET', ballotPath(moderatedSubject.id, moderatedAssociationId, 'assessment'))).status,
+    ).toBe(404);
+  } finally {
+    app = ordinaryApp;
+  }
   const moderatedPublic = await request(
     'voter5',
     'GET',
@@ -308,6 +326,11 @@ test('mounted classification ballots stay private and converge through the durab
 
   const firstKey = randomUUID();
   expect((await setBallot('voter0', subject.id, associationId, 'support', false, firstKey)).delivery).toBe('enqueued');
+  expect(await setBallot('voter0', subject.id, associationId, 'support', false, firstKey)).toEqual({
+    associationId,
+    revision: '1',
+    delivery: 'enqueued',
+  });
   expect(await ownBallot('voter0', subject.id, associationId)).toEqual({
     associationId,
     hasBallot: true,
@@ -371,7 +394,7 @@ test('mounted classification ballots stay private and converge through the durab
     revision: '2',
     pending: true,
   });
-  expect(await aggregate('voter0', subject.id, associationId)).toEqual(sixBallots);
+  expect((await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'))).status).toBe(503);
   expect(await setBallot('voter0', subject.id, associationId, 'oppose', true)).toEqual({
     associationId,
     revision: '2',
@@ -405,12 +428,33 @@ test('mounted classification ballots stay private and converge through the durab
   await driveWorker(partitions);
   expect(await aggregate('voter0', subject.id, associationId)).toEqual(changedAggregate);
 
-  await suspendAccount(database.admin, accounts.voter1);
+  const clearKey = randomUUID();
+  expect(
+    (await request('voter0', 'DELETE', ballotPath(subject.id, associationId, 'assessment'), undefined, clearKey))
+      .status,
+  ).toBe(204);
+  expect((await ownBallot('voter0', subject.id, associationId)).hasBallot).toBe(false);
+  expect((await setBallot('voter0', subject.id, associationId, 'support', false)).revision).toBe('4');
+  // Recover the original clear receipt without clearing the newer slot.
+  expect(
+    (await request('voter0', 'DELETE', ballotPath(subject.id, associationId, 'assessment'), undefined, clearKey))
+      .status,
+  ).toBe(204);
   await driveWorker(partitions);
-  expect(await aggregate('voter0', subject.id, associationId)).toEqual({
-    associationId,
-    state: 'suppressed',
-    pending: 'unknown',
+  expect(await ownBallot('voter0', subject.id, associationId)).toMatchObject({
+    assessment: 'support',
+    revision: '4',
+    pending: false,
+  });
+
+  await suspendAccount(database.admin, accounts.voter1);
+  expect((await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'))).status).toBe(503);
+  await driveWorker(partitions);
+  expect(await aggregate('voter0', subject.id, associationId)).toMatchObject({
+    state: 'published',
+    supportCount: 3,
+    opposeCount: 2,
+    falsePositiveCount: 2,
   });
   const suspendedWrite = await request('voter1', 'PUT', ballotPath(subject.id, associationId, 'assessment'), {
     assessment: 'oppose',
@@ -419,8 +463,27 @@ test('mounted classification ballots stay private and converge through the durab
   expect([401, 403]).toContain(suspendedWrite.status);
   await suspendAccount(database.admin, accounts.voter2);
   await driveWorker(partitions);
+  expect(await aggregate('voter0', subject.id, associationId)).toEqual({
+    associationId,
+    state: 'suppressed',
+    pending: 'unknown',
+  });
 
-  await hideSubjectAtSemanticSource(target.id);
+  app = createKernel({
+    pool: interleaveClassificationRead(database.pool, 'rating.classification_aggregate', () =>
+      hideSubjectAtSemanticSource(target.id),
+    ),
+    access: realAccess.access,
+    tokens,
+    receiptKeys,
+    routeKey,
+    writeRate: realAccess.writeRate,
+  });
+  try {
+    expect((await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'))).status).toBe(404);
+  } finally {
+    app = ordinaryApp;
+  }
   const hiddenAggregate = await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'));
   const hiddenOwn = await request('voter0', 'GET', ballotPath(subject.id, associationId, 'assessment'));
   const unknown = await request('voter0', 'GET', ballotPath(subject.id, newId(routeOf(subject.id)!), 'aggregate'));

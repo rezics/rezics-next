@@ -1,4 +1,17 @@
 /** Imports owns extraction and licence admission; Web owns presentation. */
+export {
+  createClassificationBallotCommands,
+  CLASSIFICATION_BALLOT_SET,
+  CLASSIFICATION_BALLOT_READ_OWN,
+  CLASSIFICATION_BALLOT_READ_AGGREGATE,
+} from './classification-ballot.ts';
+export type { SetClassificationBallotInput } from './classification-ballot.ts';
+export {
+  ClassificationBallotInputSchema,
+  ClassificationBallotSetResponseSchema,
+  ClassificationBallotOwnResponseSchema,
+  ClassificationBallotAggregateResponseSchema,
+} from './schemas.ts';
 export { createOwnVotesReader, OWN_VOTES_PAGE_SIZE } from './own-votes-page.ts';
 export type { OwnVoteActions, OwnVoteEntry, OwnVotesPage } from './own-votes-page.ts';
 export {

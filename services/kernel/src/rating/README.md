@@ -1764,7 +1764,7 @@ The mounted APIs are:
 - `GET /v1/subjects/{id}/classification-associations/{associationId}/assessment` reads only the authenticated person's slot.
 - `GET /v1/subjects/{id}/classification-associations/{associationId}/aggregate` reads the privacy-qualified native aggregate.
 
-Their mounted action labels are `classification_ballot:set`, `classification_ballot:read-own` and `classification_ballot:read-aggregate`.
+Their mounted action labels are `classification_ballot:set`, `classification_ballot:read_own` and `classification_ballot:read_aggregate`.
 One current slot belongs to the account and exact association. A set response contains `associationId`, `revision` and `delivery`. The own-state response contains `hasBallot`, `assessment`, `falsePositive`, `revision` and `pending`; `pending` compares only that person's slot revision with their retained target contribution. A changed write returns `delivery: "enqueued"`; an unchanged write returns `delivery: "unchanged"`. Neither response claims that the public aggregate has changed.
 
 Below five eligible current ballots, the aggregate is `{ "associationId": "…", "state": "suppressed", "pending": "unknown" }` and includes no numeric count, fraction, voter identifier or ordering clue. At five or more, `state: "published"` includes support and oppose counts, an independent false-positive count, `supportFraction = supportCount / (supportCount + opposeCount)`, `asOf`, `generation` and `pending: "unknown"`. The fraction is defined only when support plus oppose has a denominator. The public pending state is unknown because an exact association-home read does not scan actor homes. Published values describe the last delivered target-home generation; current Semantic subject, target, association, spoiler and moderation disclosure gates apply on every own-state and aggregate read. Loss of current association disclosure hides the aggregate immediately without erasing private ballot provenance.
@@ -1773,43 +1773,116 @@ The default worker consumes the actor-home outbox with `projectBatch`, preserves
 
 Decision: support fraction is support divided by support plus oppose, false-positive flags count independently, public pending is unknown without an actor-home scan, own pending compares only the caller's slot revision with its retained contribution, changed writes say enqueued and unchanged writes say unchanged.
 
+The source factory is `createClassificationBallotCommands({ pool, access, clock? })`, exported with the input and
+mounted response schemas from `rating/register.ts`. Its `set`, `clear`, `readOwn` and `readAggregate` methods back
+the existing Subject receiver. Client publication must derive methods and aliases from these mounted declarations.
+The native source does not supply a replacement Client DTO or a second presentation.
+
+Decision: retain each represented actor partition as an aggregate source witness and return retryable unavailability
+while its native relay checkpoint trails its current head, including unrelated pending work, rather than publish
+potentially ineligible ballots during lifecycle cleanup.
+
+Every accepted contribution revision advances the aggregate generation, including changes that leave numeric totals
+unchanged. Each target transaction also retains that source partition's greatest native epoch/position. Aggregate
+reads collect the exact aggregate and its source prefix twice. For each represented source, its current native epoch
+must match the delivered epoch and its relay checkpoint must equal its current log head. The initial and final
+collections must agree, including aggregate generation and source membership. Missing, moved, unavailable or changed
+witnesses fail the read without a partial result. Cleanup remains bounded and asynchronous; its unfinished events
+keep the source frontier behind the head. No currentness check enumerates voters or joins foreign partitions.
+Both the point reader and the existing own-page aggregate receiver apply this same witness.
+
+Own-state reads repeat the current account, actor lifecycle generation, exact private slot and actor-home witness
+after reading delivery state. Both point readers repeat Semantic's current exact association and native Access
+after payload selection. A visibility loss returns the same 404 as absence; a changed binding or witness returns a
+retryable failure. A visible mismatched binding cannot be edited or silently rebound. Withdrawing after lost
+visibility still returns only 204 under the existing own-account rule.
+
+The existing receiver can represent these responses without new UI:
+
+```json
+{ "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102", "revision": "2", "delivery": "enqueued" }
+{ "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102", "hasBallot": true, "assessment": "oppose", "falsePositive": true, "revision": "2", "pending": true }
+{ "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102", "state": "suppressed", "pending": "unknown" }
+{ "associationId": "019a1b2c-3d4e-7f00-8a00-5ab1ec702102", "state": "published", "supportCount": 3, "opposeCount": 2, "falsePositiveCount": 4, "supportFraction": 0.6, "asOf": "2026-11-03T23:00:00.000Z", "generation": "8", "pending": "unknown" }
+```
+
+A withheld association returns the ordinary `not_found` problem, with no retained state or aggregate. A dependency,
+source backlog or changing witness returns the existing retryable unavailable problem and no count or new frontier.
+Retry the original read. An uncertain command retains its original method, body, key, credentials and receipt
+component; retry that exact command before separately refreshing current own state. An exact receipt replay returns
+the original response only after current admission, even if a later command has changed the slot.
+
 ### Cost: set or change
 
-**Touches:** One actor-home eligibility row, one exact actor slot, its receipt and outbox; Semantic performs bounded released reads for the subject, current association and target.
-
-**Bound:** One slot write and a fixed number of point reads; no actor or association enumeration.
-
-**Growth check:** Storage grows by one retained slot per actor and exact association. Each changed slot emits one durable projection event.
+- Touches: The existing own-account command runner prepares current Semantic association, Subject/target identity,
+  released classification and native Access before actor checkout and receipt lookup. Its actor-home command reads
+  current account admission, eligibility generation and one locked exact slot, then writes that slot, receipt and
+  outbox. The registered relay reads source envelopes, locks one retained target contribution and aggregate, and
+  writes the replacement contribution, source witness, generation and aggregate event in one target command.
+- Bound: One exact slot and contribution per command; one source-prefix point upsert per accepted revision. Semantic
+  performs two Subject and two target snapshots per preparation, including native authority, identity, release,
+  selected slot and disclosure work. Shared command retries, account admission, receipt, log and transaction controls
+  remain part of the bound; there is no synchronous voter enumeration or foreign write in the actor command.
+- Growth check: Hold exact actors, homes and payloads fixed while independently growing unrelated ballots, selected
+  revision/event history, Semantic identity/authority changes and relevant relay backlog at 256/1024/4096. Include
+  every source/target pool, actual default runner phase, Access preparation/evaluation, control statement, physically
+  examined row and raw/materialized/retained/serialized byte. Require exact primary-key prefixes, excluding invisible
+  MVCC under the existing decision; returned rows and output limits alone do not establish examined-work ceilings.
 
 ### Cost: withdraw
 
-**Touches:** The authenticated actor-home eligibility row and one exact retained slot, followed by one durable projection event when a ballot existed.
-
-**Bound:** One slot point read and at most one slot update. If current association visibility is gone, the existing own-account command boundary permits clearing only the caller's retained slot and returns no prior state.
-
-**Growth check:** Withdrawal keeps the private revisioned slot for delivery ordering; it adds no voter index or global scan.
+- Touches: The same native preparation and own-account runner, current account and actor state, exact retained slot,
+  receipt and changed outbox event. Target delivery subtracts the exact retained contribution and advances both slot
+  witness and aggregate generation. Missing association visibility uses only the existing minimal own-account rule.
+- Bound: One locked slot and at most one update/event, plus an activation cleanup event when needed. Each lifecycle
+  page selects at most 51 indexed obligations and updates at most 50 exact keys, emitting one ordered slot revision
+  per update and a continuation event when another page remains. A visible binding mismatch fails before mutation.
+- Growth check: Retain change-clear-change and exact uncertain-clear replay with a newer slot. Grow selected actor
+  history and eligible cleanup obligations independently of unrelated actors at 256/1024/4096; capture all shared
+  runner controls, preparations, physical prefixes and bytes, including every cleanup and target-delivery phase.
 
 ### Cost: read own state
 
-**Touches:** Current bounded Semantic disclosure, one account-home slot point read and, when that slot exists, one exact association-home contribution point read.
-
-**Bound:** At most three released snapshots and no voter enumeration.
-
-**Growth check:** Read cost remains independent of the number of ballots on the association.
+- Touches: Two complete current Semantic association observations bracket the payload. Two released actor-home
+  snapshots bind the native home, account, lifecycle generation and exact caller slot; one separately bound
+  association-home snapshot reads only that caller's retained contribution. Every checkout is released before the next.
+- Bound: Eleven snapshots on the retained-slot path, including eight inside the two Semantic observations; six native
+  Access preparations and twelve evaluations within those observations, with their nested work charged separately.
+  Three exact private payload points and two actor-state/account points per actor pass; no voter inventory. Operational
+  failure returns no state. Own pending is a conservative comparison with one retained delivery revision.
+- Growth check: Keep selected actor/association, homes and byte caps fixed while independently growing unrelated
+  slots, selected contribution history and source/identity/authority changes at 256/1024/4096. Capture all nested pools,
+  controls, physical rows and raw/materialized/retained/serialized bytes; require full supplied-key prefixes.
 
 ### Cost: read aggregate
 
-**Touches:** Current bounded Semantic disclosure and one association-home aggregate point read keyed by the exact binding hash.
-
-**Bound:** No actor-home query, request-time count or scan. Suppressed responses omit the stored numeric totals.
-
-**Growth check:** One aggregate and one retained contribution per actor/association; actor cleanup visits at most 50 indexed slots per durable step.
+- Touches: Two complete Semantic association/Access observations and two bound target snapshots. Each target pass
+  reads the exact binding's aggregate and ordered source prefix. Each source pass separately binds its native home
+  and reads its exact consumer checkpoint; no cross-partition SQL join or actor lookup participates.
+- Bound: For P represented source partitions, ten plus 2P released snapshots, two aggregate points, two prefix reads
+  of at most P source rows and 2P checkpoint points. P is at most the native partition address space of 4096,
+  independent of voters and retained contribution history. Source tuples contain only partition, epoch and position;
+  internal witnesses retain these and native home/checkpoint metadata, never voter identities. Public serialization
+  has fixed scalar fields and no source vector. Semantic release/authority raw and materialized bytes are additionally
+  charged; no fitted whole-operation byte ceiling is inferred from these structural limits.
+- Growth check: Keep represented homes, selected keys, ballot cardinality and admitted byte caps fixed while growing
+  unrelated rows, selected retained history, authority/identity changes and relevant repair backlog independently at
+  256/1024/4096. Attribute both target collections, every source pool, native runner/control and Access phase and all
+  physical/raw/materialized/retained/serialized work before setting numerical ceilings. Require the exact
+  route+subject+association+binding prefix and checkpoint primary key; no output-count proxy proves physical bounds.
 
 ### Cost: read own classification assessments
 
-- **Touches:** The Kernel pool reads the acting account, actor eligibility and home epoch in three released account-home snapshots. Each of at most 21 exact original `(subject, association)` keys receives own-disclosure preparation and final witness; with the scopes, each also receives current SET clear/set preparation and aggregate preparation with their final witnesses. Subject and target summaries, retained contributions and five-ballot aggregates are read from their owning pools. Access is prepared and evaluated for each source and target observation. This GET invokes no command or receipt transaction, emits no event and has zero registered effect-runner phases.
-- **Bound:** The raw seek returns at most 21 slot rows and exposes at most 20; one selected key adds at most one point row and item. The final slot witness reads at most 21 rows, for at most 43 returned retained-slot rows across the page. At most 21 exact keys reach each association observation and each contribution or aggregate batch; summary selection has at most 42 exact identities. Raw and materialized payloads are bounded by those row counts and existing row schemas; retained bytes are zero. The serialized response is capped at 1 MiB. There is no actor or Subject scan and no request-time count.
-- **Growth check:** Keep 20 raw slots, selected keys, represented homes and the byte cap fixed while independently growing unrelated actor slots, association history and native aggregate history at 256/1024/4096. Capture every actor and Semantic pool, Access preparation/evaluation, repeated association witness, transaction, physical row, raw/materialized/retained/serialized byte and runner phase. Require strict route+actor+raw-key and supplied-identity physical prefixes; output limits alone do not bound examined work.
+- Touches: The existing account-bound raw selection, optional selected key, exact-slot verification, current Semantic
+  association/summary composition and caller contribution batch. Each admitted aggregate also uses the shared
+  two-pass target/source observation described in Cost: read aggregate; final verification occurs before return.
+- Bound: At most 20 raw entries and one selected slot; no voter enumeration or request-time count. For A admitted
+  aggregates, A <= 21, charge each aggregate's two target prefixes and two passes over its represented source homes,
+  in addition to the page's existing account, summary and Semantic observations. Any nested failure returns no page
+  or refreshed cursor, preserving the exact input frontier.
+- Growth check: Keep selected keys, represented homes, raw cardinality and byte caps fixed while independently
+  growing unrelated slots, selected history, authority changes and repair backlogs at 256/1024/4096. Include the
+  shared aggregate witness in all-pool physical-prefix, controls, preparations/evaluations and byte measurements.
 
 ### Return to classification assessments
 
@@ -1947,6 +2020,6 @@ The retryable dependency failure returns no partial page or replacement cursor, 
 
 ### Cost: own classification page
 
-- Touches: Three released account-home snapshots verify the active account and actor lifecycle row. The current partial ballot index selects at most 21 raw keys; the optional selected key uses one primary-key lookup, and final actor-home verification probes at most 21 supplied keys. Current Semantic association reads are grouped by subject home and capped at 21 identities; at most 84 exact resolutions cover initial own disclosure, current set advice, aggregate advice and final own disclosure. Current summaries batch at most 42 supplied Subject ids by represented home. Native contribution and aggregate reads each use supplied-key joins, capped at 21 identities per represented association home.
+- Touches: Three released account-home snapshots verify the active account and actor lifecycle row. The current partial ballot index selects at most 21 raw keys; the optional selected key uses one primary-key lookup, and final actor-home verification probes at most 21 supplied keys. Current Semantic association reads are grouped by subject home and capped at 21 identities; at most 84 exact resolutions cover initial own disclosure, current set advice, aggregate advice and final own disclosure. Current summaries batch at most 42 supplied Subject ids by represented home. Native contribution reads use supplied-key joins capped at 21 identities per represented association home. Each admitted aggregate uses the two-pass source witness described in Cost: read aggregate; at most 21 selected aggregates participate.
 - Bound: Raw slots are fixed at 20 plus one continuation sentinel; one selected slot may be promoted separately. The response has at most 21 entries, at most 42 compact summaries, labels at most 2,000 characters, and a 1 MiB serialized body ceiling. No actor, subject, association-history or voter scan runs on the page request. Any unavailable nested read fails the whole request and preserves the caller's cursor frontier.
 - Growth check: `classification-ballot-own-page.test.ts` creates real Semantic associations and ballots, traverses more than one page and checks selected-item deduplication, stale revision, withdrawal and viewer isolation. Independent 256/1024/4096 unrelated-slot growth and strict physical-prefix plans remain controller native acceptance; they were deferred by this attempt's validation policy.

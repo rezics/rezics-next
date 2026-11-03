@@ -26,6 +26,7 @@ import contributionLock from './classification-ballot-contribution-lock.sql';
 import contributionUpsert from './classification-ballot-contribution-upsert.sql';
 import aggregateLock from './classification-ballot-aggregate-lock.sql';
 import aggregateUpsert from './classification-ballot-aggregate-upsert.sql';
+import aggregateSourceUpsert from './classification-ballot-aggregate-source-upsert.sql';
 
 const SUSPENDED = 'com.rezics.access.account.suspended.v1';
 const REINSTATED = 'com.rezics.access.account.reinstated.v1';
@@ -347,8 +348,14 @@ async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, c
         eligibility_generation: data.eligibilityGeneration,
         eligible: data.eligible,
       });
-      const totalsChanged = delta.support !== 0 || delta.oppose !== 0 || delta.falsePositive !== 0;
-      if (!totalsChanged) return { value: null, events: [] };
+      await aggregateSourceUpsert.run(tx, {
+        ...aggregateAddress,
+        source_partition: envelope.partition,
+        source_epoch: envelope.epoch,
+        source_position: envelope.position.toString(),
+      });
+      // Generation witnesses every accepted slot revision, including a flag-only no-count
+      // change or a clear. It seals both the retained contribution and its source frontier.
       const generation = BigInt(aggregate?.generation ?? '0') + 1n;
       if (generation > MAX_BIGINT) throw new Error('Classification ballot aggregate generation exhausted');
       const asOf = new Date(authoritativeTimeValue(currentCommand(tx).time)).toISOString();

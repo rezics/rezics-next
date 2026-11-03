@@ -564,8 +564,8 @@ test('classification ballot APIs mount the three declared actions on semantic su
   const actions = actionCatalogue(app);
   for (const action of [
     'classification_ballot:set',
-    'classification_ballot:read-own',
-    'classification_ballot:read-aggregate',
+    'classification_ballot:read_own',
+    'classification_ballot:read_aggregate',
   ])
     expect(actions.has(action)).toBe(true);
   const paths = openApiDocument(app).paths;
@@ -581,12 +581,12 @@ test('classification ballot APIs mount the three declared actions on semantic su
     'x-resource-types': ['semantic.subject'],
   });
   expect(assessment?.get).toMatchObject({
-    'x-action': 'classification_ballot:read-own',
+    'x-action': 'classification_ballot:read_own',
     'x-exposure': 'public',
     'x-resource-types': ['semantic.subject'],
   });
   expect(paths['/v1/subjects/{id}/classification-associations/{associationId}/aggregate']?.get).toMatchObject({
-    'x-action': 'classification_ballot:read-aggregate',
+    'x-action': 'classification_ballot:read_aggregate',
     'x-exposure': 'public',
     'x-resource-types': ['semantic.subject'],
   });

@@ -23,6 +23,7 @@ import {
   CLASSIFICATION_BALLOT_SET,
   classificationBallotClearPrecondition,
   classificationAggregateView,
+  readClassificationAggregateObservation,
   type Assessment,
 } from './classification-ballot.ts';
 import { classificationQualifiersDigest } from './source-classification-contract.ts';
@@ -31,7 +32,6 @@ import selectRaw from './classification-ballot-own-page-raw.sql';
 import selectSelected from './classification-ballot-own-page-selected.sql';
 import selectCurrent from './classification-ballot-own-page-current.sql';
 import selectContributions from './classification-ballot-own-page-contributions.sql';
-import selectAggregates from './classification-ballot-own-page-aggregates.sql';
 
 export const CLASSIFICATION_BALLOT_OWN_PAGE_SIZE = 20;
 export const CLASSIFICATION_BALLOT_OWN_PAGE_MAX_SELECTED = CLASSIFICATION_BALLOT_OWN_PAGE_SIZE + 1;
@@ -56,13 +56,6 @@ type Slot = {
   falsePositive: boolean;
   revision: string;
   eligibilityGeneration: string;
-};
-type Aggregate = {
-  supportCount: number | null;
-  opposeCount: number | null;
-  falsePositiveCount: number | null;
-  generation: string | null;
-  asOf: Date | string | null;
 };
 type Contribution = { bindingHash: Buffer | null; revision: string | null };
 type PageItem = {
@@ -474,14 +467,17 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
           associationId: slot.associationId,
           binding_hash: slot.bindingHash.toString('hex'),
         }));
-      const aggregateRows = (await associationRows(
-        deps,
-        aggregateInputs,
-        (row) => row,
-        (client, route, keys) => selectAggregates.run(client, { route, keys }),
-        deadline,
-      )) as Array<Aggregate & Key>;
-      const aggregateByKey = new Map(aggregateRows.map((row) => [keyOf(row), row]));
+      const aggregateObservations = new Map<
+        string,
+        Awaited<ReturnType<typeof readClassificationAggregateObservation>>
+      >();
+      for (const input of aggregateInputs) {
+        const association = aggregateAssociations.get(keyOf(input))!;
+        aggregateObservations.set(
+          keyOf(input),
+          await readClassificationAggregateObservation(deps.pool, association, deadline),
+        );
+      }
 
       const finalAssociations = await associations(deps, owner, seedSlots, CLASSIFICATION_BALLOT_READ_OWN, deadline);
       const finalSetAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_SET)
@@ -625,26 +621,7 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         )
           throw new Error('Invalid current classification association digest');
         const aggregateAllowed = aggregateAssociations.get(key)?.bindingHash === current.bindingHash;
-        const aggregateRow = aggregateByKey.get(key);
-        const aggregate: ReturnType<typeof classificationAggregateView> | null = aggregateAllowed
-          ? classificationAggregateView(
-              slot.associationId,
-              aggregateRow &&
-                aggregateRow.supportCount !== null &&
-                aggregateRow.opposeCount !== null &&
-                aggregateRow.falsePositiveCount !== null &&
-                aggregateRow.generation !== null &&
-                aggregateRow.asOf !== null
-                ? {
-                    supportCount: aggregateRow.supportCount,
-                    opposeCount: aggregateRow.opposeCount,
-                    falsePositiveCount: aggregateRow.falsePositiveCount,
-                    generation: aggregateRow.generation,
-                    asOf: aggregateRow.asOf,
-                  }
-                : null,
-            )
-          : null;
+        const aggregate = aggregateAllowed ? (aggregateObservations.get(key)?.value ?? null) : null;
         items.push({
           state: 'available',
           subjectId: slot.subjectId,
@@ -658,6 +635,9 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
         });
       }
 
+      for (const observation of aggregateObservations.values()) {
+        if (!(await observation.current())) throw new AccessUnavailableError('contention');
+      }
       const last = rawSlots.at(-1);
       const next =
         pageResult.hasMore && last
