@@ -240,7 +240,7 @@ function scenario(slots = 8): { env: Record<string, string>; events: () => Event
         },
         {
           name: 'c',
-          performance: false,
+          performance: true,
           address: 'ops@c.test',
           identity: '/keys/c',
           memoryMaxGiB: 48,

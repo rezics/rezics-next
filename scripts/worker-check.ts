@@ -1330,7 +1330,8 @@ export async function runWorkerCheck(
     writeSync(descriptor, line);
   }
   if (localOnly && needsStack) {
-    const line = 'worker-check: --local cannot place a heavy or unknown check on this host; routing to a or b\n';
+    const line =
+      'worker-check: --local cannot place a heavy or unknown check on this host; routing to a performance-approved check host\n';
     process.stderr.write(line);
     writeSync(descriptor, line);
   }

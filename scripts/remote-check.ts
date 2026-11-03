@@ -4168,8 +4168,12 @@ function liveHosts(initial: Host[], file?: string, requested?: readonly string[]
   const eligible = (hosts: Host[]) => performanceHosts(hosts).filter(({ name }) => !allowed || allowed.has(name));
   let lastValid = eligible(initial);
   let reportedInvalidRewrite = false;
+  const available = () => {
+    if (lastValid.length === 0) throw new Error('remote-check: no performance-approved host is configured');
+    return lastValid;
+  };
   return () => {
-    if (!file) return lastValid;
+    if (!file) return available();
     try {
       lastValid = eligible(readHosts(file));
     } catch (error) {
@@ -4179,7 +4183,7 @@ function liveHosts(initial: Host[], file?: string, requested?: readonly string[]
         reportedInvalidRewrite = true;
       }
     }
-    return lastValid;
+    return available();
   };
 }
 
