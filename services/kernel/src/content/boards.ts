@@ -405,9 +405,7 @@ export async function listBoardThreads(
     if (!pinnedFinalState) throw new Error('Board pin disclosure did not complete');
     anchors.push(...pinnedItems.map((result) => result.anchor), pinnedFinalState.boardAnchor);
     if (!pinnedFinalState.parentAllowed) throw new ContentNotFoundError();
-    pinnedThreads = pinnedItems.flatMap((result) =>
-      result.value?.boardId === boardId ? [result.value] : [],
-    );
+    pinnedThreads = pinnedItems.flatMap((result) => (result.value?.boardId === boardId ? [result.value] : []));
   }
   const hasVisibleMore = current.length > limit;
   const more = hasVisibleMore || scanned < candidates.length || selected.hasMore;

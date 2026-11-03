@@ -58,10 +58,7 @@ function route(id: string): number {
 }
 
 /** The persisted pin section is a fixed indexed read from the board projection. */
-export async function readBoardPins(
-  client: Pick<PoolClient, 'query'>,
-  boardId: BoardId,
-): Promise<readonly ThreadId[]> {
+export async function readBoardPins(client: Pick<PoolClient, 'query'>, boardId: BoardId): Promise<readonly ThreadId[]> {
   const parameters = { route: route(boardId), board_id: boardId, limit: MAX_BOARD_PINS };
   const { rows } = await client.query<(typeof pinPage)['~reylo']['element']>(
     pinPage.sql,

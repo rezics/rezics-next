@@ -112,7 +112,9 @@ export async function setBoardThreadPin(
   const receipt = {
     kind: commandKind,
     key: context.idempotencyKey,
-    digest: createHash('sha256').update(canonicalize([identity, body])!).digest(),
+    digest: createHash('sha256')
+      .update(canonicalize([identity, body])!)
+      .digest(),
   };
   const accessContext: AccessContext = { pool: dependencies.pool, deadline: context.deadline };
 
@@ -138,7 +140,8 @@ export async function setBoardThreadPin(
         'post',
         input.threadId,
       );
-      if (!post || post.thread_id !== input.threadId || routeOf(post.id) !== boardRoute) throw new ContentNotFoundError();
+      if (!post || post.thread_id !== input.threadId || routeOf(post.id) !== boardRoute)
+        throw new ContentNotFoundError();
 
       const boardIdentity = { route: boardRoute, id: input.boardId };
       const boardRead = readResource(board, Object.freeze({}));
@@ -157,7 +160,17 @@ export async function setBoardThreadPin(
         () => new GrantDeniedError(),
       );
       const checks: PreparedCheck[] = [];
-      checks.push(await prepareCheck(dependencies.access, actor, 'board:read', boardRead, accessContext, () => new ContentNotFoundError(), attempt));
+      checks.push(
+        await prepareCheck(
+          dependencies.access,
+          actor,
+          'board:read',
+          boardRead,
+          accessContext,
+          () => new ContentNotFoundError(),
+          attempt,
+        ),
+      );
       if (realmId) {
         const realmIdentity = { route: boardRoute, id: realmId };
         checks.push(
@@ -172,8 +185,28 @@ export async function setBoardThreadPin(
           ),
         );
       }
-      checks.push(await prepareCheck(dependencies.access, actor, 'thread:read', threadRead, accessContext, () => new ContentNotFoundError(), attempt));
-      checks.push(await prepareCheck(dependencies.access, actor, 'post:read', postRead, accessContext, () => new ContentNotFoundError(), attempt));
+      checks.push(
+        await prepareCheck(
+          dependencies.access,
+          actor,
+          'thread:read',
+          threadRead,
+          accessContext,
+          () => new ContentNotFoundError(),
+          attempt,
+        ),
+      );
+      checks.push(
+        await prepareCheck(
+          dependencies.access,
+          actor,
+          'post:read',
+          postRead,
+          accessContext,
+          () => new ContentNotFoundError(),
+          attempt,
+        ),
+      );
       const moderatorProof = await moderator.prepare!(attempt);
       return { moderator, moderatorProof, checks };
     },
@@ -233,18 +266,30 @@ export async function setBoardThreadPin(
         for (let index = pins.length - 1; index >= 0; index--) {
           const pin = pins[index]!;
           const parameters = { ...targetParameters, thread_id: pin.thread_id, pin_slot: pin.pin_slot + 1 };
-          await tx.query(setSlot.sql, setSlot.params.map((name) => parameters[name as keyof typeof parameters]));
+          await tx.query(
+            setSlot.sql,
+            setSlot.params.map((name) => parameters[name as keyof typeof parameters]),
+          );
         }
         const parameters = { ...targetParameters, pin_slot: 1 };
-        await tx.query(setSlot.sql, setSlot.params.map((name) => parameters[name as keyof typeof parameters]));
+        await tx.query(
+          setSlot.sql,
+          setSlot.params.map((name) => parameters[name as keyof typeof parameters]),
+        );
         pinPosition = 1;
       } else if (!input.pinned && current) {
         const clear = { ...targetParameters, pin_slot: null };
-        await tx.query(setSlot.sql, setSlot.params.map((name) => clear[name as keyof typeof clear]));
+        await tx.query(
+          setSlot.sql,
+          setSlot.params.map((name) => clear[name as keyof typeof clear]),
+        );
         for (const pin of pins) {
           if (pin.pin_slot <= current.pin_slot) continue;
           const parameters = { ...targetParameters, thread_id: pin.thread_id, pin_slot: pin.pin_slot - 1 };
-          await tx.query(setSlot.sql, setSlot.params.map((name) => parameters[name as keyof typeof parameters]));
+          await tx.query(
+            setSlot.sql,
+            setSlot.params.map((name) => parameters[name as keyof typeof parameters]),
+          );
         }
         pinPosition = null;
       }
