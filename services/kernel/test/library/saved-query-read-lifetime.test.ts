@@ -23,37 +23,55 @@ const originalMint = command.mintReadTime;
 const originalEpisode = episodes.readCollectionPublicationEpisode;
 
 beforeAll(async () => {
-  f = await createCollectionRulesFixture();
-  // Publication and native Members preparation may overlap independent read checkouts.
-  f.database.pool.options.max = 4;
-  const context = { pool: f.database.pool, deadline: Date.now() + 30_000 };
-  actor = await f.runtime.identity.access.authenticate(f.owner, context);
-  reduced = await f.runtime.identity.access.authenticate(f.reduced, context);
-  subjectId = await f.subject('Saved read lifetime');
-  await f.entry(subjectId);
-  const created = await f.send('POST', '/v1/collections', {
-    title: 'Owned read lifetimes',
-    membershipKind: 'dynamic',
-    visibility: 'private',
-    rule: { filter: { owner: { presence: true } }, sort: 'id' },
-  });
-  expect(created.status).toBe(201);
-  const { collection } = await created.json();
-  collectionId = collection.id;
-  expect((await f.page(collectionId)).members).toContainEqual({ kind: 'dynamic', subjectId });
-  const begun = await service().begin(
-    actor,
-    { collectionId, revision: collection.revision, visibility: 'public' },
-    randomUUID(),
-  );
-  publicationId = begun.value.locator.publicationId;
-  const episode = await originalEpisode(f.database.pool, begun.value.locator);
-  expect(episode?.source.input.identity).toMatchObject({
-    scope: 'private_builtin',
-    accountId: actor.accountId,
-    collectionId,
-  });
-  expect(episode?.initiator.recordedTransactionId).toBe(begun.transactionId);
+  let stage = 'native rules fixture';
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      (async () => {
+        f = await createCollectionRulesFixture();
+        // Publication and native Members preparation may overlap independent read checkouts.
+        f.database.pool.options.max = 4;
+        stage = 'owner authentication';
+        const context = { pool: f.database.pool, deadline: Date.now() + 30_000 };
+        actor = await f.runtime.identity.access.authenticate(f.owner, context);
+        reduced = await f.runtime.identity.access.authenticate(f.reduced, context);
+        stage = 'native subject and entry';
+        subjectId = await f.subject('Saved read lifetime');
+        await f.entry(subjectId);
+        stage = 'saved Collection creation';
+        const created = await f.send('POST', '/v1/collections', {
+          title: 'Owned read lifetimes',
+          membershipKind: 'dynamic',
+          visibility: 'private',
+          rule: { filter: { owner: { presence: true } }, sort: 'id' },
+        });
+        expect(created.status).toBe(201);
+        const { collection } = await created.json();
+        collectionId = collection.id;
+        stage = 'native saved Members page';
+        expect((await f.page(collectionId)).members).toContainEqual({ kind: 'dynamic', subjectId });
+        stage = 'native publication begin';
+        const begun = await service().begin(
+          actor,
+          { collectionId, revision: collection.revision, visibility: 'public' },
+          randomUUID(),
+        );
+        publicationId = begun.value.locator.publicationId;
+        const episode = await originalEpisode(f.database.pool, begun.value.locator);
+        expect(episode?.source.input.identity).toMatchObject({
+          scope: 'private_builtin',
+          accountId: actor.accountId,
+          collectionId,
+        });
+        expect(episode?.initiator.recordedTransactionId).toBe(begun.transactionId);
+      })(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Native lifetime setup stalled at ${stage}`)), 110_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }, 120_000);
 afterEach(() => mock.restore());
 afterAll(async () => {
