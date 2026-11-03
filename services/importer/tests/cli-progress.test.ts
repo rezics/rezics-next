@@ -160,7 +160,7 @@ test('launch dump decoders report committed staging and acknowledgement transiti
         oneChunk(new Uint8Array(await readFile(new URL(path, fixtureRoot)))),
         { progress: progress.progress },
       );
-      expect(result.status).toBe('committed');
+      expect(result.status, `${source}: ${result.diagnostic}`).toBe('committed');
       expect(progress.staged).toBeGreaterThan(0);
       expect(progress.sourceComplete).toBe(true);
       expect(progress.phases).toContain('staging');
