@@ -1495,6 +1495,7 @@ The artifact acceptance command is the prescribed formatter check on this file a
 Current minimal mode runs no acceptance, worker-check, native/database/browser/remote check or probe.
 Documentation-only work requires no workspace compiler.
 Formatting and committing this artifact supply no product outcome/native proof.
+
 ## Installed scoped composition and bounded paging
 
 The production caller is `POST /v1/subjects:facets` → `SearchService.facets` → `readScopedFacetDiscovery` →

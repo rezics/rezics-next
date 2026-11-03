@@ -96,11 +96,9 @@ export async function retainedFacetGrowthFixture(count: number) {
       const deadline = Date.now() + 120_000;
       for (;;) {
         const database = await databases.values().next().value!;
-        const run = await capture(
-          database,
-          () => owner.request('anonymous', 'POST', '/v1/subjects:facets', body),
-          { includeBackends: true },
-        );
+        const run = await capture(database, () => owner.request('anonymous', 'POST', '/v1/subjects:facets', body), {
+          includeBackends: true,
+        });
         preparation.push({
           request: body,
           status: run.value.status,

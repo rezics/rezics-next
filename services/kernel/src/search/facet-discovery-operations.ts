@@ -268,114 +268,114 @@ export function createFacetNativeOperations(
     async pageFacets({ reads }, context) {
       const pageObservations = new Set(reads.map(({ queried }) => queried.snapshot.observation));
       try {
-      const meter = empty();
-      if (reads.length === 0) return { status: 'preparing' as const, cost: meter };
-      const seen = new Set<string>();
-      for (const read of reads) {
-        if (seen.has(read.queried.snapshot.observation)) continue;
-        seen.add(read.queried.snapshot.observation);
-        const retained = executions.get(read.queried.snapshot.observation);
-        if (!retained) return { status: 'preparing' as const, cost: meter };
-        const start = await observe(read.queried, retained, context);
-        add(meter, start.cost);
-        if (start.status === 'unready' || start.status === 'unavailable' || !cleanForExecution(start, retained))
-          return { status: 'preparing' as const, cost: meter };
-      }
-      seen.clear();
-      for (const read of reads) {
-        const admission = read.plan.scope;
-        if (!admission) continue;
-        const key = scopedFacetIdentityKey(admission.identity);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const start = await observeScope(admission, context);
-        add(meter, start.cost);
-        if (start.status !== 'observed') return { status: 'preparing' as const, cost: meter };
-      }
-      const facets: Extract<FacetNativePageResult, { status: 'ready' }>['facets'][number][] = [];
-      let asOf = '';
-      for (const read of reads) {
-        const eligible: { value: string; labels: Record<string, string> }[] = [];
-        const found = await storage.readFacetCandidates(read, context);
-        add(meter, found.cost);
-        if (found.status !== 'candidates' || found.rows.length > read.size + 1)
-          return { status: 'preparing' as const, cost: meter };
-        asOf = found.asOf;
-        for (const row of found.rows as StoredRow[]) {
-          let disclosed: Awaited<ReturnType<typeof current>> | null;
-          try {
-            disclosed = await current(row, read.plan.valueKind);
-          } catch {
-            disclosed = null;
+        const meter = empty();
+        if (reads.length === 0) return { status: 'preparing' as const, cost: meter };
+        const seen = new Set<string>();
+        for (const read of reads) {
+          if (seen.has(read.queried.snapshot.observation)) continue;
+          seen.add(read.queried.snapshot.observation);
+          const retained = executions.get(read.queried.snapshot.observation);
+          if (!retained) return { status: 'preparing' as const, cost: meter };
+          const start = await observe(read.queried, retained, context);
+          add(meter, start.cost);
+          if (start.status === 'unready' || start.status === 'unavailable' || !cleanForExecution(start, retained))
+            return { status: 'preparing' as const, cost: meter };
+        }
+        seen.clear();
+        for (const read of reads) {
+          const admission = read.plan.scope;
+          if (!admission) continue;
+          const key = scopedFacetIdentityKey(admission.identity);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const start = await observeScope(admission, context);
+          add(meter, start.cost);
+          if (start.status !== 'observed') return { status: 'preparing' as const, cost: meter };
+        }
+        const facets: Extract<FacetNativePageResult, { status: 'ready' }>['facets'][number][] = [];
+        let asOf = '';
+        for (const read of reads) {
+          const eligible: { value: string; labels: Record<string, string> }[] = [];
+          const found = await storage.readFacetCandidates(read, context);
+          add(meter, found.cost);
+          if (found.status !== 'candidates' || found.rows.length > read.size + 1)
+            return { status: 'preparing' as const, cost: meter };
+          asOf = found.asOf;
+          for (const row of found.rows as StoredRow[]) {
+            let disclosed: Awaited<ReturnType<typeof current>> | null;
+            try {
+              disclosed = await current(row, read.plan.valueKind);
+            } catch {
+              disclosed = null;
+            }
+            meter.accessPoints++;
+            if (!disclosed) {
+              const invalidated = await storage.retireFacetCandidates(read, context);
+              add(meter, invalidated.cost);
+              return { status: 'preparing' as const, cost: meter };
+            }
+            eligible.push({ value: row.value, labels: disclosed.labels });
           }
-          meter.accessPoints++;
-          if (!disclosed) {
-            const invalidated = await storage.retireFacetCandidates(read, context);
-            add(meter, invalidated.cost);
+          if (read.after !== null && eligible.length === 0) return { status: 'preparing' as const, cost: meter };
+          const values = eligible.slice(0, read.size);
+          facets.push({
+            property: read.plan.property,
+            values,
+            after: values.at(-1)?.value ?? null,
+            hasMore: eligible.length > read.size,
+          });
+          const retained = executions.get(read.queried.snapshot.observation);
+          if (!retained) return { status: 'preparing' as const, cost: meter };
+          const currentSource = await observe(read.queried, retained, context);
+          add(meter, currentSource.cost);
+          const currentScope = read.plan.scope ? await observeScope(read.plan.scope, context) : undefined;
+          if (currentScope) add(meter, currentScope.cost);
+          if (
+            currentSource.status !== 'observed' ||
+            !cleanForExecution(currentSource, retained) ||
+            (currentScope !== undefined && currentScope.status !== 'observed')
+          ) {
+            for (const candidate of reads) {
+              const invalidated = await storage.retireFacetCandidates(candidate, context);
+              add(meter, invalidated.cost);
+            }
             return { status: 'preparing' as const, cost: meter };
           }
-          eligible.push({ value: row.value, labels: disclosed.labels });
         }
-        if (read.after !== null && eligible.length === 0) return { status: 'preparing' as const, cost: meter };
-        const values = eligible.slice(0, read.size);
-        facets.push({
-          property: read.plan.property,
-          values,
-          after: values.at(-1)?.value ?? null,
-          hasMore: eligible.length > read.size,
-        });
-        const retained = executions.get(read.queried.snapshot.observation);
-        if (!retained) return { status: 'preparing' as const, cost: meter };
-        const currentSource = await observe(read.queried, retained, context);
-        add(meter, currentSource.cost);
-        const currentScope = read.plan.scope ? await observeScope(read.plan.scope, context) : undefined;
-        if (currentScope) add(meter, currentScope.cost);
-        if (
-          currentSource.status !== 'observed' ||
-          !cleanForExecution(currentSource, retained) ||
-          (currentScope !== undefined && currentScope.status !== 'observed')
-        ) {
-          for (const candidate of reads) {
-            const invalidated = await storage.retireFacetCandidates(candidate, context);
-            add(meter, invalidated.cost);
+        seen.clear();
+        for (const read of reads) {
+          if (seen.has(read.queried.snapshot.observation)) continue;
+          seen.add(read.queried.snapshot.observation);
+          const retained = executions.get(read.queried.snapshot.observation);
+          if (!retained) return { status: 'preparing' as const, cost: meter };
+          const final = await observe(read.queried, retained, context);
+          add(meter, final.cost);
+          if (final.status === 'unready' || final.status === 'unavailable' || !cleanForExecution(final, retained)) {
+            for (const candidate of reads) {
+              const invalidated = await storage.retireFacetCandidates(candidate, context);
+              add(meter, invalidated.cost);
+            }
+            return { status: 'preparing' as const, cost: meter };
           }
-          return { status: 'preparing' as const, cost: meter };
         }
-      }
-      seen.clear();
-      for (const read of reads) {
-        if (seen.has(read.queried.snapshot.observation)) continue;
-        seen.add(read.queried.snapshot.observation);
-        const retained = executions.get(read.queried.snapshot.observation);
-        if (!retained) return { status: 'preparing' as const, cost: meter };
-        const final = await observe(read.queried, retained, context);
-        add(meter, final.cost);
-        if (final.status === 'unready' || final.status === 'unavailable' || !cleanForExecution(final, retained)) {
-          for (const candidate of reads) {
-            const invalidated = await storage.retireFacetCandidates(candidate, context);
-            add(meter, invalidated.cost);
+        seen.clear();
+        for (const read of reads) {
+          const admission = read.plan.scope;
+          if (!admission) continue;
+          const key = scopedFacetIdentityKey(admission.identity);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const final = await observeScope(admission, context);
+          add(meter, final.cost);
+          if (final.status !== 'observed') {
+            for (const candidate of reads) {
+              const invalidated = await storage.retireFacetCandidates(candidate, context);
+              add(meter, invalidated.cost);
+            }
+            return { status: 'preparing' as const, cost: meter };
           }
-          return { status: 'preparing' as const, cost: meter };
         }
-      }
-      seen.clear();
-      for (const read of reads) {
-        const admission = read.plan.scope;
-        if (!admission) continue;
-        const key = scopedFacetIdentityKey(admission.identity);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const final = await observeScope(admission, context);
-        add(meter, final.cost);
-        if (final.status !== 'observed') {
-          for (const candidate of reads) {
-            const invalidated = await storage.retireFacetCandidates(candidate, context);
-            add(meter, invalidated.cost);
-          }
-          return { status: 'preparing' as const, cost: meter };
-        }
-      }
-      return { status: 'ready' as const, facets, asOf, cost: meter };
+        return { status: 'ready' as const, facets, asOf, cost: meter };
       } finally {
         for (const observation of pageObservations) executions.delete(observation);
       }

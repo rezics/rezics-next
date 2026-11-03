@@ -152,9 +152,10 @@ function sameIdentity(left: ScopedFacetIdentity, right: ScopedFacetIdentity): bo
  */
 export function createScopedFacetSource(ports?: ScopedFacetPorts) {
   function resolve(admission: ScopedFacetAdmission) {
-    const bound = admission.request !== null && typeof admission.request === 'object'
-      ? ownerPorts.get(admission.request)
-      : undefined;
+    const bound =
+      admission.request !== null && typeof admission.request === 'object'
+        ? ownerPorts.get(admission.request)
+        : undefined;
     const selected = bound?.ports ?? ports;
     return selected ? { ports: selected, request: bound?.request ?? admission.request } : undefined;
   }
@@ -242,7 +243,10 @@ export function createScopedFacetSource(ports?: ScopedFacetPorts) {
   };
 }
 
-const hash = (value: unknown) => createHash('sha256').update(canonicalize(value) ?? '').digest('hex');
+const hash = (value: unknown) =>
+  createHash('sha256')
+    .update(canonicalize(value) ?? '')
+    .digest('hex');
 
 function scopeWorkCost(request: ServiceScopeFacetRequest): PublicFilterCost {
   const { used } = request.work.receipt();
@@ -279,14 +283,8 @@ function evaluationReservation(work: ScopeWork, subjects: readonly string[]) {
 }
 
 /** Adapt the installed service-bound Collection Scope to the facet owner's finite candidate and current-evaluation ports. */
-export function createServiceScopeFacetPorts(
-  _resource: SearchResourceScope,
-): ScopedFacetPorts {
-  async function evaluate(
-    request: ServiceScopeFacetRequest,
-    subjects: readonly string[],
-    resume = true,
-  ) {
+export function createServiceScopeFacetPorts(_resource: SearchResourceScope): ScopedFacetPorts {
+  async function evaluate(request: ServiceScopeFacetRequest, subjects: readonly string[], resume = true) {
     let progress = resume ? request.progress : null;
     const progressSeen = new Set<string>();
     if (progress) progressSeen.add(canonicalize(progress) ?? '');
@@ -337,8 +335,7 @@ export function createServiceScopeFacetPorts(
         return { ...request.pendingPage.page, cost: emptyCost() };
       try {
         const remaining = request.work.remaining();
-        if (remaining.remaining.candidateKeys < 1)
-          return { status: 'unready', cost: scopeWorkCost(request) };
+        if (remaining.remaining.candidateKeys < 1) return { status: 'unready', cost: scopeWorkCost(request) };
         const allowance = {
           ...remaining,
           remaining: {
@@ -400,25 +397,25 @@ export function serviceScopeFacetIdentity(
   return {
     source: hash({ resource, profile: prepared.basis.profile }),
     meaning: hash({ release: prepared.basis.release, meaning }),
-    population: hash({ canonical: prepared.basis.canonical, source: prepared.basis.nativeOwner ?? prepared.basis.index }),
+    population: hash({
+      canonical: prepared.basis.canonical,
+      source: prepared.basis.nativeOwner ?? prepared.basis.index,
+    }),
     authorization: hash({ principal, basis: prepared.basis.query }),
   };
 }
 
-export function serviceScopeFacetAdmission(input: Readonly<{
-  resource: SearchResourceScope;
-  scope: ReturnType<typeof createSearchScopeForService>;
-  prepared: PreparedSearchScope;
-  work: ScopeWork;
-  principal: string;
-  meaning: unknown;
-}>): ScopedFacetAdmission {
-  const identity = serviceScopeFacetIdentity(
-    input.resource,
-    input.prepared,
-    input.principal,
-    input.meaning,
-  );
+export function serviceScopeFacetAdmission(
+  input: Readonly<{
+    resource: SearchResourceScope;
+    scope: ReturnType<typeof createSearchScopeForService>;
+    prepared: PreparedSearchScope;
+    work: ScopeWork;
+    principal: string;
+    meaning: unknown;
+  }>,
+): ScopedFacetAdmission {
+  const identity = serviceScopeFacetIdentity(input.resource, input.prepared, input.principal, input.meaning);
   const request: ServiceScopeFacetRequest = {
     scope: input.scope,
     prepared: input.prepared,

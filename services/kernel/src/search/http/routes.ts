@@ -359,9 +359,7 @@ export function searchRoutes<App>(
           )
             await admitGroup({
               pool,
-              access:
-                gateAccess ??
-                (() => routeAccess()!),
+              access: gateAccess ?? (() => routeAccess()!),
               actor,
               group: 'search_advanced',
               clientAction: 'subject:read',
@@ -378,8 +376,7 @@ export function searchRoutes<App>(
           return admission.run('normal', job, async () => {
             if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
             if (!discovery) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-            const ownerAccess: Access | undefined =
-              routeAccess();
+            const ownerAccess: Access | undefined = routeAccess();
             if (!ownerAccess) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             return discoveryHttpPage(
               await discovery(
@@ -399,15 +396,11 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'invalid_format' }],
               });
             if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-            const realmAccess = body.population
-              ? routeAccess()
-              : undefined;
+            const realmAccess = body.population ? routeAccess() : undefined;
             if (body.population && !realmAccess)
               throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
             const active = await activeRelease(pool);
-            const scopeAccess: Access | undefined =
-              realmAccess ??
-              routeAccess();
+            const scopeAccess: Access | undefined = realmAccess ?? routeAccess();
             const scopeOptions = scopeAccess
               ? { access: scopeAccess, actor, deadline: job.deadline, routeKey }
               : undefined;

@@ -142,8 +142,7 @@ function scopedCatalogueCondition(value: unknown, scope: FacetDiscoveryScope): u
     if (!isRecord(node)) return;
     for (const kind of ['realm', 'collection'])
       if (Object.hasOwn(node, kind)) leaves.push({ kind, leaf: node, operand: node[kind] });
-    for (const [key, child] of Object.entries(node))
-      if (key !== 'realm' && key !== 'collection') visit(child);
+    for (const [key, child] of Object.entries(node)) if (key !== 'realm' && key !== 'collection') visit(child);
   };
   visit(document);
   if (!leaves.length) return document;
@@ -1121,12 +1120,16 @@ export function createSearchService({
       request = ownSubjectRequest(request);
       if (request.scope !== undefined) {
         const provider =
-          (await facetProvider?.()) ?? (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
+          (await facetProvider?.()) ??
+          (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
         if (!provider) throw indexNotReady();
         return readScopedFacetDiscovery(cursors, provider, request, async (scopedRequest) => {
           if (!context.scope) throw indexNotReady();
-          if (scopedRequest.conditions !== undefined && scopedRequest.filter !== undefined &&
-              !isDeepStrictEqual(scopedRequest.conditions, scopedRequest.filter))
+          if (
+            scopedRequest.conditions !== undefined &&
+            scopedRequest.filter !== undefined &&
+            !isDeepStrictEqual(scopedRequest.conditions, scopedRequest.filter)
+          )
             invalid('/conditions', 'invalid_format');
           const submitted = scopedRequest.conditions ?? scopedRequest.filter;
           const effectiveFilter = scopedCatalogueCondition(submitted, scopedRequest.scope);
