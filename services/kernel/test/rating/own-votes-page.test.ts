@@ -105,6 +105,7 @@ test('a suppressed raw page keeps continuation; dependency failure retries the s
   expect(resumed.votes).toHaveLength(2);
   expect(resumed.next).toBeNull();
   for (const row of first.votes) await moderate(row.targetId, 'hide');
+  expect((await native.request(first.votes[0].actions.readback, viewer)).status).toBe(404);
   const sparse = await body(await native.request(pagePath, viewer));
   expect(sparse.votes).toEqual([]);
   expect(sparse.next).toBeString();

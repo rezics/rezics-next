@@ -10,6 +10,7 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { identityEpochStore } from '../semantic/identity-epoch-store.ts';
+import { admitIdentityRatingEffect } from '../semantic/identity-rating-admission.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
@@ -88,6 +89,26 @@ async function visibleSources(deps: Dependencies, actor: Actor, sources: readonl
     if (error instanceof SubjectIdentityUnavailableError) throw new AccessUnavailableError('contention');
     throw error;
   }
+}
+
+/** Observe the same native identity admission as a changed vote, without writing or holding an account checkout. */
+async function admittedSources(deps: Dependencies, sources: readonly string[], deadline: number) {
+  const homes = new Map<number, string[]>();
+  for (const id of sources) {
+    const home = partitionOf(routeOf(id)!);
+    homes.set(home, [...(homes.get(home) ?? []), id]);
+  }
+  const admitted = new Set<string>();
+  for (const [home, ids] of homes) {
+    await withReadTransaction(deps.pool, async (client) => {
+      await partitionReadClient(client, home);
+      for (const id of ids) {
+        const result = await admitIdentityRatingEffect(client, { requestedTargetId: id, resolvedTargetId: id });
+        if (result.status === 'admitted') admitted.add(id);
+      }
+    }, deadline);
+  }
+  return admitted;
 }
 
 /** Supplied exact keys only; each question home is released before native Realm Access preparation. */
@@ -169,6 +190,10 @@ export function createOwnVotesReader(deps: Dependencies) {
       const finalMappings = await identityEpochStore.readMappings(deps.pool, sources);
       const final = new Map(sources.map((id, i) => [id, finalMappings[i]!]));
       for (const mapping of finalMappings) mappingKey(mapping);
+      const admitted = await admittedSources(deps, sources.filter((id) => {
+        const mapping = final.get(id)!;
+        return mapping.state === 'mapped' && mapping.terminal === id && finalVisible.has(id);
+      }), deadline);
       await requireRelease();
       const current = await accountRead((client) => selectCurrent.run(client, {
         route: routeOf(owner.accountId)!, voter_id: owner.accountId,
@@ -191,7 +216,8 @@ export function createOwnVotesReader(deps: Dependencies) {
         const path = `/v1/subjects/${row.targetId}/ratings/${row.questionId}/vote`;
         let actions: OwnVoteActions;
         if (row.targetId !== latest.terminal) actions = { state: 'unavailable', reason: 'merged_source' };
-        else if (row.countedTarget !== row.targetId) actions = { state: 'unavailable', reason: 'identity_pending' };
+        else if (row.countedTarget !== row.targetId || !admitted.has(row.targetId))
+          actions = { state: 'unavailable', reason: 'identity_pending' };
         else if (question.lifecycleState === 'retired') actions = { state: 'retired', reason: 'question_retired', clear: path, readback: path };
         else actions = { state: 'editable', put: path, clear: path, readback: path };
         votes.push({

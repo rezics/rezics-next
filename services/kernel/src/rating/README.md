@@ -1046,10 +1046,15 @@ inspection after integration are remaining experience work; this API alone does 
   disclosure and terminal reference disclosure for up to S <=20 sources; an ordinary source still incurs both
   reference reads. Each reference snapshot reads its partition and exact Subject and runs native Access.
   One `readSubjectSummaries` batch hydrates at most S distinct terminals. Two independently anchored Global
-  release reads bracket that summary. All snapshots, pool acquisition, deadlines and runner controls participate.
+  release reads bracket that summary. Finally, each distinct visible unmerged source runs the native
+  `admitIdentityRatingEffect` observation grouped by Subject home, without an account checkout: one exact
+  Subject/direct-redirect probe, then one `readEpoch` for its home (partition owner, cutover authority and
+  partition identity control). Pending admission removes mutation links. All snapshots, pool acquisition,
+  deadlines and runner controls participate.
 - Bound: Rating-owned storage work is at most 21 selected votes plus 20 exact reobservations, four account points,
   and 2Q definition/label/lifecycle points each. The complete cost additionally includes four real identity
-  batches, 4S prepared native checks/reference observations, 2R Realm reads and one shared summary projection.
+  batches, 4S prepared native checks/reference observations, 2R Realm reads, at most S native identity-admission
+  probes with their owner/cutover/control observations, and one shared summary projection.
   Summary work includes current labels, original-language and image slots, up to twelve representative-edition
   keys per supplied terminal, one chosen edition per terminal, up to three planning attempts, native disclosure
   for all addressed subjects, selected Content media/custody and independently anchored source fences. Release

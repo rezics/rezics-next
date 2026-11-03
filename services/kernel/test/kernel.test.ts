@@ -422,6 +422,7 @@ const typed = [
   'PUT /v1/subjects/:id/ratings/:questionId/vote',
   'DELETE /v1/subjects/:id/ratings/:questionId/vote',
   'GET /v1/subjects/:id/ratings/:questionId/vote',
+  'GET /v1/me/rating-votes',
   'GET /v1/subjects/:id/threads',
   'GET /v1/accounts/:accountId/threads',
   'GET /v1/accounts/:accountId/posts',
