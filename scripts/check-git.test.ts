@@ -45,7 +45,7 @@ function repository(root: string) {
   const source = join(root, 'source');
   mkdirSync(source);
   git(source, 'init', '-q');
-  writeFileSync(join(source, '.git/info/exclude'), '.temp/\n');
+  writeFileSync(join(source, '.git/info/exclude'), '.temp/check-git-publications/\n');
   git(source, 'config', 'user.email', 'fixture@example.test');
   git(source, 'config', 'user.name', 'Fixture');
   writeFileSync(join(source, 'tracked.txt'), 'historical\n');
@@ -390,5 +390,16 @@ test('a lost push response falls back and releases the exact remotely accepted c
   expect(readFileSync(requests, 'utf8').trim().split('\n').length).toBeGreaterThanOrEqual(2);
   const journal = join(source, '.temp/check-git-publications/lost-response.json');
   if (existsSync(journal)) await releaseCheckGit(source, journal);
+  expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
+});
+
+test('an unavailable ownership journal falls back without publishing or releasing another ref', async () => {
+  const root = sandbox();
+  const { source } = repository(root);
+  const origin = publicOrigin(root, source);
+  mkdirSync(join(source, '.temp'));
+  writeFileSync(join(source, '.temp/check-git-publications'), 'unavailable');
+  const manifest = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/no-journal' });
+  expect(existsSync(join(dirname(manifest), 'snapshot.pack'))).toBe(true);
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
 });

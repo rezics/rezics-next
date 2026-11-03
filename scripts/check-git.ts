@@ -602,19 +602,23 @@ export async function stageCheckGit(
       );
       const manifest: CheckGitPublication = { format: FORMAT, ...identity, remote: { ref: publication.ref, commit } };
       const recordPath = publicationRecord(source, publication.ref);
-      mkdirSync(dirname(recordPath), { recursive: true, mode: 0o700 });
-      const record: OwnedPublication = {
-        ...manifest,
-        ownership: {
-          origin: originIdentity(source),
-          createdAt: now(),
-          state: publication.retain ? 'retained' : 'active',
-        },
-      };
-      // Persist intent before transport: a lost push response or failed manifest still has exact cleanup identity.
-      writeFileSync(recordPath, `${JSON.stringify(record)}\n`, { mode: 0o600, flag: 'wx' });
       let firstFailure: string | undefined;
+      let intentRecorded = false;
       try {
+        mkdirSync(dirname(recordPath), { recursive: true, mode: 0o700 });
+        if (!isDirectory(join(source, '.temp')) || !isDirectory(dirname(recordPath)))
+          throw new Error('check-git: publication journal directory is unsafe');
+        const record: OwnedPublication = {
+          ...manifest,
+          ownership: {
+            origin: originIdentity(source),
+            createdAt: now(),
+            state: publication.retain ? 'retained' : 'active',
+          },
+        };
+        // Persist intent before transport: a lost response or failed manifest retains exact cleanup identity.
+        writeFileSync(recordPath, `${JSON.stringify(record)}\n`, { mode: 0o600, flag: 'wx' });
+        intentRecorded = true;
         for (let attempt = 0; ; attempt++) {
           try {
             await pushCheckGit(source, [`${commit}:${publication.ref}`], isolatedObjects, deadlineMs, now);
@@ -637,7 +641,7 @@ export async function stageCheckGit(
           `check-git: GitHub publication unavailable; using full snapshot upload for ${commit}:${publication.ref}: ${firstFailure ? `first: ${firstFailure}; ` : ''}final: ${transportDiagnostic(error)}`,
         );
         // Failed or interrupted publication may already exist remotely; cleanup must not gate fallback delivery.
-        void releaseCheckGit(source, recordPath);
+        if (intentRecorded) void releaseCheckGit(source, recordPath);
       }
     }
     const cacheRoot = reusableCacheRoot(source);
