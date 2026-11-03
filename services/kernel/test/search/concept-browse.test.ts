@@ -228,6 +228,22 @@ test('preparation interruption resumes the retained frontier and final currentne
   expect(await advanceConceptBrowse(changing, second.store, next, limits)).toEqual({ status: 'restart' });
 });
 
+test('retirement during final observation prevents negative membership', async () => {
+  const { store } = retention(),
+    graph = sourceFor({});
+  const result = await finish(graph.source, store, (await startConceptBrowse(selection, binding, store))!);
+  if (result.status !== 'complete') throw new Error('Expected completion');
+  let observations = 0;
+  const expiring: ConceptBrowseSource = {
+    ...graph.source,
+    observe: async () => {
+      if (++observations === 2) await store.retire(result.state);
+      return { status: 'current', binding };
+    },
+  };
+  expect(await currentConceptMembership(expiring, store, result.state, 'missing')).toBe('not_proven');
+});
+
 test('large retained closures do not grow step state or truncate at the filter in limit', async () => {
   const children = Array.from({ length: 130 }, (_, i) => `child-${i}`);
   const { source } = sourceFor({ root: children });

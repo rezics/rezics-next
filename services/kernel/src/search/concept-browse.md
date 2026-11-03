@@ -42,7 +42,8 @@ constants, binding observations, current disclosure, authorization, History/sour
 cleanup, and useful result-page costs still require native composition and measurement. There is no population-
 independent whole-page claim or 1x/4x/16x measurement here.
 
-`currentConceptMembership` observes the full binding before and after a sealed membership lookup. A changed,
+`currentConceptMembership` observes the full binding before and after a sealed membership lookup, then confirms
+that the same retained revision remains sealed. A changed,
 retired, unavailable or unsealed closure yields `not_proven`, including for an absent concept. The shared current
 Boolean interpreter must preserve this value under exclusion, and the shared statement matcher must independently
 prove the property, concept value, disclosure and spoiler qualifier on the same statement. Membership must never

@@ -130,9 +130,21 @@ function validLimits(limits: ConceptBrowseLimits): boolean {
 function freezeState(state: ConceptBrowseState): ConceptBrowseState {
   return Object.freeze({
     version: 2 as const,
-    selection: Object.freeze({ ...state.selection }),
-    binding: Object.freeze({ ...state.binding }),
-    retained: Object.freeze({ ...state.retained }),
+    selection: Object.freeze({
+      concept: state.selection.concept,
+      property: state.selection.property,
+      scheme: state.selection.scheme,
+      includeChildren: true as const,
+    }),
+    binding: Object.freeze({
+      release: state.binding.release,
+      graph: state.binding.graph,
+      scheme: state.binding.scheme,
+      membership: state.binding.membership,
+      principal: state.binding.principal,
+      request: state.binding.request,
+    }),
+    retained: Object.freeze({ id: state.retained.id, revision: state.retained.revision }),
   });
 }
 export async function startConceptBrowse(
@@ -142,10 +154,9 @@ export async function startConceptBrowse(
 ): Promise<ConceptBrowseState | null> {
   if (!validBinding(binding) || !validSelection(selection, binding)) return null;
   // Copy before awaiting persistence; caller mutation cannot change the retained definition.
-  const selected = Object.freeze({ ...selection });
-  const observed = Object.freeze({ ...binding });
-  const retained = await store.create(selected, observed);
-  return validLocator(retained) ? freezeState({ version: 2, selection: selected, binding: observed, retained }) : null;
+  const definition = freezeState({ version: 2, selection, binding, retained: { id: '', revision: '' } });
+  const retained = await store.create(definition.selection, definition.binding);
+  return validLocator(retained) ? freezeState({ ...definition, retained }) : null;
 }
 /** One finite worker step. No discovered/frontier population is copied or returned. */
 export async function advanceConceptBrowse(
@@ -255,5 +266,6 @@ export async function currentConceptMembership(
     if (final.status !== 'preparing') await store.retire(snapshot);
     return 'not_proven';
   }
-  return member;
+  const retained = await store.read(snapshot);
+  return retained.status === 'complete' ? member : 'not_proven';
 }
