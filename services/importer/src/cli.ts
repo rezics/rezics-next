@@ -46,6 +46,7 @@ import {
 } from './credentials.ts';
 import { diagnosticsUsage, runDiagnosticsCli } from './diagnostics-cli.ts';
 import { captureComparisonUsage, runCaptureComparisonCli } from './capture-comparison-cli.ts';
+import { disappearanceReviewUsage, runDisappearanceReviewCli } from './disappearance-review-cli.ts';
 import { runBindingInspectionCli } from './binding-inspection-cli.ts';
 import { runInspectCli } from './inspect-cli.ts';
 import { resumeUsage, runResumeCli } from './resume-cli.ts';
@@ -174,6 +175,8 @@ function usage(): string {
     '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>] [--decode-budget <bytes>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
+    '       rezics-import disappearance-review --state <sqlite-path> --source <configured-source-id> --generation <id>',
+    '       [--page missing] [--limit 1..100] [--cursor <token>] [--record <key>] [--json]',
     '       rezics-import retention --state <sqlite-path> --source <configured-source-id> [--after <id>] [--limit 1..100]',
     '       rezics-import retention --state <sqlite-path> --source <configured-source-id> --generation <id> [--generation <id> ...] --output <plan-path>',
     '       rezics-import retention --state <sqlite-path> --plan <plan-path> --confirm <plan-id> --apply',
@@ -472,6 +475,13 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return runCaptureComparisonCli(argv.slice(1), options.signal ? { signal: options.signal } : {});
   if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'capture-comparison')
     return { code: 0, stdout: `${captureComparisonUsage()}\n`, stderr: '', openHandles: 0 };
+  if (Array.isArray(argv) && argv[0] === 'disappearance-review')
+    return runDisappearanceReviewCli(argv.slice(1), {
+      ...(options.signal ? { signal: options.signal } : {}),
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+    });
+  if (Array.isArray(argv) && argv.length === 2 && argv[0] === '--help' && argv[1] === 'disappearance-review')
+    return { code: 0, stdout: `${disappearanceReviewUsage()}\n`, stderr: '', openHandles: 0 };
   if (Array.isArray(argv) && argv[0] === 'observations')
     return runObservationsCli(argv.slice(1), {
       ...(options.signal ? { signal: options.signal } : {}),

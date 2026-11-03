@@ -20,6 +20,9 @@
  * projection is caller-sanitized normalized data; raw source input is NEVER an
  * argument. Native absent revision is literally unversioned, never a timestamp.
  * seal uses maintained prior/seen-survivor counters, not COUNT/history queries.
+ * A mass-disappearance complete seal snapshots missing identities with one
+ * `run_missing` INSERT...SELECT plus a stop header before release; that write
+ * is generation-scoped evidence, not a page, native effect or approval of loss.
  * No pending command is visible before successful seal. classify compares actual
  * staged/current metadata and atomically persists typed command bytes and keys
  * before returning. Identical metadata/projection must not fabricate a revision.
@@ -240,8 +243,13 @@ export function runStoreCounts(evidence: Evidence, pageCap: number = CAPS.page):
         );
       }
       // SQL spelling is additional evidence, never an exemption from a plan.
+      // INSERT destinations are writes; only FROM/JOIN/UPDATE relations must appear in reads.
       const escaped = relation.table.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      if (new RegExp(`\\b(?:FROM|JOIN|UPDATE|INTO)\\s+["\x60\\[]?${escaped}(?:["\x60\\]]|\\s|$)`, 'i').test(sql)) {
+      const insertTarget = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+["`\[]?(\w+)/i.exec(sql)?.[1];
+      if (
+        relation.table !== insertTarget &&
+        new RegExp(`\\b(?:FROM|JOIN|UPDATE|INTO)\\s+["\x60\\[]?${escaped}(?:["\x60\\]]|\\s|$)`, 'i').test(sql)
+      ) {
         requireProof(
           execution.reads.some((r) => r.table === relation.table),
           'growing relation omitted from read proof',
@@ -274,9 +282,17 @@ export function runStoreCounts(evidence: Evidence, pageCap: number = CAPS.page):
       if (!point) {
         // A source-prefix SEARCH alone still permits a whole source scan. A
         // page requires an anchored multi-column prefix, key range and LIMIT.
+        // Mass-disappearance evidence copies the exact missing prefix in one
+        // INSERT...SELECT; the bound is that prefix, not a caller page.
+        const missingSnapshot =
+          /^\s*INSERT\s+INTO\s+run_disappearance_missing\b/i.test(sql) &&
+          /\bINDEXED BY run_missing\b/i.test(sql) &&
+          index!.name === 'run_missing';
         requireProof(index!.columns.length >= 2 && equality(index!.columns[0]!), 'page lacks equality anchor');
-        requireProof(/\bLIMIT\s+(?:\?|[:@$]\w+|\d+)/i.test(sql), 'non-point access lacks bounded indexed keyset');
-        requireProof(execution.rows <= pageCap, 'page exceeds caller cap');
+        if (!missingSnapshot) {
+          requireProof(/\bLIMIT\s+(?:\?|[:@$]\w+|\d+)/i.test(sql), 'non-point access lacks bounded indexed keyset');
+          requireProof(execution.rows <= pageCap, 'page exceeds caller cap');
+        }
         const constrained = index!.columns.filter((c) =>
           new RegExp(`(?:^| AND )${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[=<>]`, 'i').test(constraints),
         );

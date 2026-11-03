@@ -97,6 +97,7 @@ export function createSqliteProbe(database: Database, options: { growingTables: 
     if (hasTriggers && /\b(?:INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql)) return 'unsupported';
     if (/^(?:SELECT|WITH)\b/i.test(sql)) return 'read';
     if (/^(?:UPDATE|DELETE)\b/i.test(sql)) return 'write';
+    if (/^INSERT\s+(?:OR\s+\w+\s+)?INTO\s+\w+\s*(?:\([^)]+\))?\s+SELECT\b/i.test(sql)) return 'write';
     // A single keyed VALUES insert/upsert has no readable input relation.
     const insert = /^INSERT\s+(?:OR\s+\w+\s+)?INTO\s+(\w+)\s*(?:\(([^)]+)\))?\s+VALUES\s*\(([^)]+)\)([\s\S]*)$/i.exec(
       sql,

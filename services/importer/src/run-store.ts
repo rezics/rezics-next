@@ -120,6 +120,9 @@ type Envelope = {
   keys_json: string;
 };
 
+/** Generation-scoped children for API68 retention; pruned evidence is unavailable. */
+export const DISAPPEARANCE_EVIDENCE_TABLES = ['run_disappearance_stops', 'run_disappearance_missing'] as const;
+
 export const RUN_TABLES = [
   'run_sources',
   'run_generations',
@@ -136,6 +139,7 @@ export const RUN_TABLES = [
   'run_staging_checkpoints',
   'run_staging_prefix',
   'run_retention_work',
+  ...DISAPPEARANCE_EVIDENCE_TABLES,
 ] as const;
 
 const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly string[]> = {
@@ -632,6 +636,17 @@ export class RunStore<Projection = BatchStatement[]> {
         result_json TEXT,
         created_at TEXT NOT NULL
       ) WITHOUT ROWID`);
+      // Immutable stop evidence is generation-scoped. API68 deletes these children with the generation.
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_disappearance_stops (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
+        baseline_generation TEXT, supplied INTEGER NOT NULL, survivors INTEGER NOT NULL,
+        prior INTEGER NOT NULL, missing INTEGER NOT NULL, threshold REAL NOT NULL,
+        input_complete INTEGER NOT NULL,
+        PRIMARY KEY(source, run_id)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_disappearance_missing (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
+        record_revision TEXT NOT NULL, digest TEXT NOT NULL, converter_revision TEXT NOT NULL,
+        PRIMARY KEY(source, run_id, record_key)) WITHOUT ROWID`);
     } catch (error) {
       db.close();
       throw error;
@@ -687,6 +702,46 @@ export class RunStore<Projection = BatchStatement[]> {
   private release(run: Run, status: string) {
     this.write('UPDATE run_generations SET status=? WHERE source=? AND id=?', status, run.source, run.id);
     this.write('UPDATE run_sources SET lease_run=NULL WHERE source=? AND lease_run=?', run.source, run.id);
+  }
+  /**
+   * Snapshot the compared missing population before the capability is released.
+   * One indexed INSERT...SELECT plus one header insert; failure rolls the seal back.
+   */
+  private captureDisappearanceEvidence(run: Run, g: Generation, missing: number): void {
+    const sourceRow = this.get<Source>('SELECT * FROM run_sources WHERE source=?', run.source);
+    const inserted = this.write(
+      `INSERT INTO run_disappearance_missing(source,run_id,record_key,record_revision,digest,converter_revision)
+      SELECT m.source,?,m.record_key,
+        json_extract(m.row_json,'$.recordRevision'),
+        json_extract(m.row_json,'$.digest'),
+        json_extract(m.row_json,'$.converter_revision')
+      FROM run_members AS m INDEXED BY run_missing
+      WHERE m.source=? AND m.active=1 AND m.seen<?
+        AND json_extract(m.row_json,'$.source')=m.source
+        AND json_extract(m.row_json,'$.recordKey')=m.record_key
+        AND json_extract(m.row_json,'$.state')='present'
+        AND typeof(json_extract(m.row_json,'$.recordRevision'))='text'
+        AND typeof(json_extract(m.row_json,'$.digest'))='text'
+        AND typeof(json_extract(m.row_json,'$.converter_revision'))='text'`,
+      run.id,
+      run.source,
+      g.seq,
+    );
+    if (inserted.changes !== missing) throw new Error('Disappearance evidence is incomplete');
+    this.write(
+      `INSERT INTO run_disappearance_stops(
+        source,run_id,evidence_id,baseline_generation,supplied,survivors,prior,missing,threshold,input_complete)
+      VALUES(?,?,?,?,?,?,?,?,?,1)`,
+      run.source,
+      run.id,
+      token(),
+      sourceRow?.generation ?? null,
+      g.supplied,
+      g.survivors,
+      g.prior,
+      missing,
+      g.threshold,
+    );
   }
   begin(source: string, options: { disappearanceThreshold?: number } = {}): Run | 'busy' {
     sourceId(source);
@@ -1057,6 +1112,7 @@ export class RunStore<Projection = BatchStatement[]> {
           : g.prior > 0 && (missing === g.prior || missing / g.prior > g.threshold)
             ? 'mass-disappearance'
             : 'ready';
+      if (status === 'mass-disappearance') this.captureDisappearanceEvidence(run, g, missing);
       if (status !== 'ready') this.release(run, status);
       else
         this.write(
