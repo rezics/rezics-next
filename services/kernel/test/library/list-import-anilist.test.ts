@@ -4,6 +4,7 @@ import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from '
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
+import { authenticateAccount } from '../support/admitted-access.ts';
 
 let f: NativeProfileFixture;
 beforeAll(async () => {
@@ -31,14 +32,11 @@ const row = {
   unfamiliar: { keep: true },
 };
 test('the supported GraphQL wrappers preserve distinct zero, missing, fuzzy, invalid and unknown source evidence', () => {
-  const document = {
-    data: {
-      MediaListCollection: {
-        hasNextChunk: true,
-        lists: [{ name: 'Private custom', isCustomList: true, entries: [row] }],
-      },
-    },
+  const collection = {
+    hasNextChunk: true,
+    lists: [{ name: 'Private custom', isCustomList: true, entries: [row] }],
   };
+  const document = { data: { MediaListCollection: collection } };
   const parsed = parseAniList(JSON.stringify(document), 'POINT_10');
   expect(parsed.document).toEqual(document);
   expect(parsed.rows[0]!.evidence).toEqual(row);
@@ -67,12 +65,15 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     'subject:read',
     'library_entry:update',
     'library_entry:read',
-    'library_entry:list',
-    'follow:create',
   ]);
   await f.grantLibraryGate(importer.actor.accountId);
+  const steward = await authenticateAccount(
+    f.access,
+    { pool: f.pool, deadline: deadlineFor(30000) },
+    { ...f.steward.actor, scopes: ['access:grant', 'subject:batch_write'] },
+  );
   await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
-    { pool: f.pool, actor: f.steward.actor, deadline: deadlineFor(30000) },
+    { pool: f.pool, actor: steward, deadline: deadlineFor(30000) },
     {
       resource: { route: 0, id: GLOBAL_CONTEXT },
       subject: { kind: 'account', id: importer.actor.accountId },
