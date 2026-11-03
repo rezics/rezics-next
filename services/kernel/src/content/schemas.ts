@@ -73,6 +73,35 @@ export const SourceFenceResponseSchema = t.Object(
 export const ContentIdSchema = t.String({
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
 });
+export const WatchManagementKindSchema = t.Union([t.Literal('thread'), t.Literal('board')]);
+const watchManagementIdentity = {
+  id: ContentIdSchema,
+  kind: WatchManagementKindSchema,
+  revision: t.Integer({ minimum: 1, maximum: 2147483646 }),
+  createdAt: t.String({ format: 'date-time' }),
+};
+export const WatchManagementItemSchema = t.Union([
+  t.Object(
+    {
+      ...watchManagementIdentity,
+      state: t.Literal('available'),
+      resourceId: ContentIdSchema,
+      title: t.Union([t.String({ maxLength: 1024 }), t.Null()]),
+    },
+    closed,
+  ),
+  t.Object({ ...watchManagementIdentity, state: t.Literal('unavailable') }, closed),
+]);
+export const WatchManagementPageSchema = t.Object(
+  {
+    items: t.Array(WatchManagementItemSchema, { maxItems: 20 }),
+    next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+  },
+  closed,
+);
+export type WatchManagementKind = Static<typeof WatchManagementKindSchema>;
+export type WatchManagementItem = Static<typeof WatchManagementItemSchema>;
+export type WatchManagementPage = Static<typeof WatchManagementPageSchema>;
 const nullableId = t.Union([ContentIdSchema, t.Null()]);
 const reportTarget = t.Object(
   {
