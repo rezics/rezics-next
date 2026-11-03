@@ -57,12 +57,7 @@ export function MalResultPage({
       {result.stopped ? <p role="status">{m.library_mal_stopped()}</p> : <p role="status">{m.library_mal_partial()}</p>}
       <ul className="space-y-3">
         {result.outcomes.map((outcome) => (
-          <Outcome
-            key={outcome.row}
-            outcome={outcome}
-            titles={titles}
-            admission={admissions.get(outcome.row)}
-          />
+          <Outcome key={outcome.row} outcome={outcome} titles={titles} admission={admissions.get(outcome.row)} />
         ))}
         {result.remaining.map((row) => (
           <li

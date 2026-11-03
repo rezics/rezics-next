@@ -425,7 +425,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       if (!body || !row.target) {
         row.sourceAdmission = {
           status: 'unsupported',
-          reason: row.target ? (blocked ?? 'This provider record has no stable identity.') : 'This row has no canonical Subject.',
+          reason: row.target
+            ? (blocked ?? 'This provider record has no stable identity.')
+            : 'This row has no canonical Subject.',
         };
         continue;
       }

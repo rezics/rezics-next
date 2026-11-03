@@ -193,7 +193,16 @@ export const admitPrivateSourceForSubject = createServerFn({ method: 'POST' })
     const sourceCreated = timestampValue(item.sourceCreated);
     const sourceUpdated = timestampValue(item.sourceUpdated);
     const key = typeof item.key === 'string' && annotationKey(item.key) ? item.key : null;
-    if (!id || !provider || !recordId || !privacy || !sourceCreated || !sourceUpdated || !key || item.confirmReviewed !== true)
+    if (
+      !id ||
+      !provider ||
+      !recordId ||
+      !privacy ||
+      !sourceCreated ||
+      !sourceUpdated ||
+      !key ||
+      item.confirmReviewed !== true
+    )
       throw new Error('Invalid source admission');
     const body: PersonalEntrySourceAdmission = {
       provider,

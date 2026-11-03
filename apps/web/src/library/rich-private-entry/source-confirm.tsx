@@ -1,7 +1,12 @@
 import { Checkbox } from '@rezics/ui/shadcn/checkbox';
 import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { m } from '../../paraglide/messages.js';
-import type { SourceAdmissionOutcome, SourceAdmissionPreview, SourcePrivacyField, SourceTimestampField } from './admission';
+import type {
+  SourceAdmissionOutcome,
+  SourceAdmissionPreview,
+  SourcePrivacyField,
+  SourceTimestampField,
+} from './admission';
 
 export function sourcePreviewFieldText(field: SourcePrivacyField | SourceTimestampField): string {
   if (field.kind === 'unsupported') return field.reason;
@@ -20,8 +25,7 @@ export function sourcePreviewFieldText(field: SourcePrivacyField | SourceTimesta
 export function sourceAdmissionText(outcome: SourceAdmissionOutcome): string {
   if (outcome.status === 'admitted') return m.library_import_source_admitted();
   if (outcome.status === 'conflict') return m.library_import_source_conflict();
-  if (outcome.status === 'unsupported')
-    return m.library_import_source_unsupported({ reason: outcome.reason ?? '' });
+  if (outcome.status === 'unsupported') return m.library_import_source_unsupported({ reason: outcome.reason ?? '' });
   return m.library_import_source_failed();
 }
 
@@ -80,7 +84,10 @@ export function ImportSourceChecks({
           disabled={disabled}
           onCheckedChange={(value) => onPrivacy(value === true)}
         />
-        <FieldLabel className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]" htmlFor={privacyId}>
+        <FieldLabel
+          className="min-h-11 min-w-0 items-center whitespace-normal [overflow-wrap:anywhere]"
+          htmlFor={privacyId}
+        >
           {m.library_import_source_privacy_confirm()}
         </FieldLabel>
       </Field>

@@ -52,6 +52,7 @@ per-row metadata for N rows and exact uncertain-command operands.
 
 Decision: Confirm without the two source checkboxes still applies the import; the confirmation page disables Confirm
 until both are checked. Date-like failed parses stay unsupported; non-date tokens stay unknown.
+
 - Retained bound: `O(U + 10 × page-row bytes + N × metadata bytes)` with U the upload during submission only.
 - Installed caps: `BANGUMI_LIMITS` in `list-import-bangumi-model.ts` (256 KiB, 100 rows, 8 KiB row, 32 KiB evidence,
   depth 16, page 10, apply 5).

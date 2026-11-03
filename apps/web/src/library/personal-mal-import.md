@@ -15,15 +15,15 @@ Mounted under `/v1/libraryImports/mal` after Commerce dependency `029513f7`. Web
 DELETE). The generated client snapshot may lag the kernel source; missing methods render unavailable rather than a
 local parser or successful fixture.
 
-| Step    | Native                                                                 | Page                                                                               |
-| ------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Upload  | `POST :preview` `{ xml }` with Idempotency-Key                         | File stays local until submit; bytes are dropped after the call                    |
-| Preview | `GET :id?after=` pages of 20                                           | Current page only; titles assist display/search, never automatic identity          |
-| Review  | `POST :id/review` `{ row, target, skip, replace }`                     | Unmatched rows may set an explicit subject; skip and replace are deliberate        |
-| Confirm | `POST :id/apply` `{ confirm: true, rows: [{ row, version, fields }] }` | Only native-admitted `status` is selectable; other fields remain retained evidence |
-| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply  | Separate typed command; record id is `${kind}/${identifier.value}`; created time is absent |
-| Stop    | `POST :id/cancel`                                                      | Stops future dispatch; acknowledged effects remain                                 |
-| Discard | `DELETE :id`                                                           | Clears this upload's evidence now                                                  |
+| Step    | Native                                                                 | Page                                                                                       |
+| ------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Upload  | `POST :preview` `{ xml }` with Idempotency-Key                         | File stays local until submit; bytes are dropped after the call                            |
+| Preview | `GET :id?after=` pages of 20                                           | Current page only; titles assist display/search, never automatic identity                  |
+| Review  | `POST :id/review` `{ row, target, skip, replace }`                     | Unmatched rows may set an explicit subject; skip and replace are deliberate                |
+| Confirm | `POST :id/apply` `{ confirm: true, rows: [{ row, version, fields }] }` | Only native-admitted `status` is selectable; other fields remain retained evidence         |
+| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply   | Separate typed command; record id is `${kind}/${identifier.value}`; created time is absent |
+| Stop    | `POST :id/cancel`                                                      | Stops future dispatch; acknowledged effects remain                                         |
+| Discard | `DELETE :id`                                                           | Clears this upload's evidence now                                                          |
 
 Anime uses `mal_anime` / `https://myanimelist.net/anime`; manga uses `mal_manga` / `https://myanimelist.net/manga`.
 Match states are matched, already-matched, unmatched, unavailable and ambiguous as delivered. Skipped is a review

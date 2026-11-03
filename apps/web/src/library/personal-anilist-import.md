@@ -23,7 +23,7 @@ local parser or successful fixture.
 | Preview | `GET :importId?after=-1` pages of 20                                              | Current page only; titles assist display/search, never automatic identity         |
 | Review  | `POST :importId:review` `{ ordinal, subjectId?, skip?, fields, replace }`         | Default `replace:false`; only `status` is selectable; REPEATING stays unsupported |
 | Confirm | `POST :importId:apply` `{ confirmations: [{ ordinal, reviewId }] }` batches of 20 | Exact stored review ids; `complete:false` is resumable                            |
-| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply             | Separate typed command; only after privacy and original-timestamp confirmation    |
+| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply              | Separate typed command; only after privacy and original-timestamp confirmation    |
 | Stop    | `POST :importId:cancel` `{ remove:false }`                                        | Stops new admission; acknowledged effects remain                                  |
 | Discard | `POST :importId:cancel` `{ remove:true }`                                         | Clears this upload's evidence now; Library facts stay                             |
 
@@ -57,6 +57,7 @@ rows and exact uncertain-command operands.
 Decision: a missing AniList list-entry `id` uses the AniList media identifier from preview identifiers as the
 provider record identity. Unix `createdAt`/`updatedAt` stay unknown. Confirm without the two source checkboxes
 still applies the import; the confirmation page disables Confirm until both are checked.
+
 - Retained bound: `O(U + 20 × page-row bytes + N × metadata bytes)` with U the upload during submission only.
 - Installed caps: `ANILIST_LIMITS` in `list-import-anilist-parser.ts` (1 MiB, 200 rows, depth 24, page/apply 20).
 - Test reference: `apps/web/tests/personal-anilist-import.test.tsx` growth cases at 20/100/200 rows.

@@ -147,11 +147,7 @@ export type BangumiMutateResult =
   | { kind: 'deleted' }
   | BangumiFailure
   | BangumiUnknown;
-export type BangumiAdmitResult =
-  | { kind: 'admitted' }
-  | { kind: 'conflict' }
-  | BangumiFailure
-  | BangumiUnknown;
+export type BangumiAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | BangumiFailure | BangumiUnknown;
 
 export type BangumiImportPort = {
   preview(command: Extract<BangumiCommand, { kind: 'preview' }>): Promise<BangumiPreviewResult>;

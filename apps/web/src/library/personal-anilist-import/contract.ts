@@ -174,11 +174,7 @@ export type AniListReviewResult =
   | AniListUnknown;
 export type AniListApplyCallResult = { kind: 'applied'; result: AniListApplyResult } | AniListFailure | AniListUnknown;
 export type AniListMutateResult = { kind: 'cancelled'; removed: boolean } | AniListFailure | AniListUnknown;
-export type AniListAdmitResult =
-  | { kind: 'admitted' }
-  | { kind: 'conflict' }
-  | AniListFailure
-  | AniListUnknown;
+export type AniListAdmitResult = { kind: 'admitted' } | { kind: 'conflict' } | AniListFailure | AniListUnknown;
 
 export type AniListImportPort = {
   preview(command: Extract<AniListCommand, { kind: 'preview' }>): Promise<AniListPreviewResult>;

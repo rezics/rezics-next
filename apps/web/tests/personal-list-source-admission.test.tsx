@@ -233,7 +233,10 @@ test('AniList and Bangumi admit after apply, retry the original admission, and s
       };
     },
     async apply() {
-      return { kind: 'applied', result: { outcomes: [{ ordinal: 0, status: 'applied', retained: [] }], complete: true } };
+      return {
+        kind: 'applied',
+        result: { outcomes: [{ ordinal: 0, status: 'applied', retained: [] }], complete: true },
+      };
     },
     async admitSource(command) {
       admits.push(JSON.parse(JSON.stringify(command)));

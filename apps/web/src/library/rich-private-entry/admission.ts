@@ -108,10 +108,8 @@ export function privacyFromToken(raw: string): SourcePrivacyField {
 }
 
 export function timestampFromText(raw: string, mode: 'parse' | 'unknown'): SourceTimestampField {
-  if (raw.length === 0)
-    return { kind: 'unsupported', reason: 'An empty timestamp is not an absent timestamp.' };
-  if (mode === 'parse' && isKnownSourceTimestamp(raw))
-    return { kind: 'ready', value: { status: 'known', value: raw } };
+  if (raw.length === 0) return { kind: 'unsupported', reason: 'An empty timestamp is not an absent timestamp.' };
+  if (mode === 'parse' && isKnownSourceTimestamp(raw)) return { kind: 'ready', value: { status: 'known', value: raw } };
   const token = boundedToken(raw, SOURCE_TIMESTAMP_BYTES);
   if (token && (mode === 'unknown' || !/^\d{4}(?:-\d{2})?(?:-\d{2})?(?:T|$)/.test(raw)))
     return { kind: 'ready', value: { status: 'unknown', sourceValue: token } };
@@ -130,7 +128,11 @@ export function unsupportedField(reason: string): UnsupportedSourceField {
 
 export function sourceAdmissionBody(preview: SourceAdmissionPreview): PersonalEntrySourceAdmission | null {
   if (!validProviderKey(preview.provider) || !validRecordId(preview.recordId)) return null;
-  if (preview.privacy.kind !== 'ready' || preview.sourceCreated.kind !== 'ready' || preview.sourceUpdated.kind !== 'ready')
+  if (
+    preview.privacy.kind !== 'ready' ||
+    preview.sourceCreated.kind !== 'ready' ||
+    preview.sourceUpdated.kind !== 'ready'
+  )
     return null;
   return {
     provider: preview.provider,

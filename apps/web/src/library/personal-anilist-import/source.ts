@@ -25,7 +25,10 @@ function anilistPrivacy(evidence: AniListRecord): SourceAdmissionPreview['privac
   return unsupportedField('AniList private must be a retained boolean.');
 }
 
-function anilistTimestamp(evidence: AniListRecord, field: 'createdAt' | 'updatedAt'): SourceAdmissionPreview['sourceCreated'] {
+function anilistTimestamp(
+  evidence: AniListRecord,
+  field: 'createdAt' | 'updatedAt',
+): SourceAdmissionPreview['sourceCreated'] {
   if (!has(evidence, field)) return absentTimestamp();
   const value = evidence[field];
   if (value === null) return { kind: 'ready', value: { status: 'unknown' } };
@@ -36,7 +39,8 @@ function anilistTimestamp(evidence: AniListRecord, field: 'createdAt' | 'updated
 
 function recordIdOf(row: AniListRow): string {
   const evidence = row.source.evidence;
-  if (typeof evidence.id === 'number' && Number.isSafeInteger(evidence.id) && evidence.id > 0) return String(evidence.id);
+  if (typeof evidence.id === 'number' && Number.isSafeInteger(evidence.id) && evidence.id > 0)
+    return String(evidence.id);
   return row.source.identifiers.find((item) => item.source === 'anilist')?.externalId ?? '';
 }
 

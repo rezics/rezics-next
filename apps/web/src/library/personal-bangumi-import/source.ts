@@ -25,11 +25,13 @@ function bangumiPrivacy(source: BangumiRecord): SourceAdmissionPreview['privacy'
   return unsupportedField('The retained private value cannot fit the native provenance evidence bound.');
 }
 
-function bangumiTimestamp(source: BangumiRecord, field: 'created_at' | 'updated_at'): SourceAdmissionPreview['sourceCreated'] {
+function bangumiTimestamp(
+  source: BangumiRecord,
+  field: 'created_at' | 'updated_at',
+): SourceAdmissionPreview['sourceCreated'] {
   if (!has(source, field)) return absentTimestamp();
   const raw = source[field];
-  if (typeof raw !== 'string')
-    return unsupportedField('The retained timestamp is not text.');
+  if (typeof raw !== 'string') return unsupportedField('The retained timestamp is not text.');
   return timestampFromText(raw, 'parse');
 }
 

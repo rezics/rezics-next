@@ -200,7 +200,9 @@ function MalImportSession({ visit }: { visit: MalVisit }) {
       if (!body || !target) {
         setRowAdmission(row.index, {
           status: 'unsupported',
-          reason: target ? (blocked ?? 'This provider record has no stable identity.') : 'This row has no canonical Subject.',
+          reason: target
+            ? (blocked ?? 'This provider record has no stable identity.')
+            : 'This row has no canonical Subject.',
         });
         continue;
       }
