@@ -173,8 +173,7 @@ function assertRetirementSample(path: Path, sample: ReportSample): void {
     expect(occurrence.blocks).toBeGreaterThan(0);
     const nodes = planNodes(occurrence.planDocuments);
     const consumerIndex = nodes.find(
-      (node) =>
-        node['Index Name'] === 'consumer_checkpoint_consumer_idx' && Number(node['Actual Loops'] ?? 0) > 0,
+      (node) => node['Index Name'] === 'consumer_checkpoint_consumer_idx' && Number(node['Actual Loops'] ?? 0) > 0,
     );
     expect(consumerIndex).toBeDefined();
     expect(
