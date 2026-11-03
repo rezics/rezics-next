@@ -31,8 +31,8 @@ export declare const exportSectionsV2: readonly [
 export type LibraryExportVersion = 1 | 2;
 export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
-/** Archive recovery intentionally accepts version 1 only. */
-export type LibraryExportSection = LibraryExportSectionV1;
+/** Archive recovery shares the installed V1 and V2 section vocabulary. */
+export type LibraryExportSection = LibraryExportSectionV2;
 export declare function sectionsForVersion(version: LibraryExportVersion): typeof exportSections | typeof exportSectionsV2;
 
 export type LibraryExportManifestV1 = {
@@ -86,7 +86,7 @@ export type LibraryExportFinalManifestV2 = LibraryExportManifestV2 & {
   sectionTotals: LibraryExportSectionTotals;
 };
 export type LibraryExportFinalManifest = LibraryExportFinalManifestV1 | LibraryExportFinalManifestV2;
-export type LibraryArchiveManifest = LibraryExportFinalManifestV1;
+export type LibraryArchiveManifest = LibraryExportFinalManifest;
 
 export declare function libraryExportManifest(capture: {
   export_id: string;
@@ -104,5 +104,5 @@ export declare function libraryExportManifest(capture: {
   export_id: string;
   created_at: string;
   expires_at: string;
-  format_version: LibraryExportVersion;
+  format_version?: LibraryExportVersion;
 }): LibraryExportManifest;
