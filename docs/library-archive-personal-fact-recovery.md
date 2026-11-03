@@ -102,9 +102,6 @@ missing targets, per-item replay, cancellation, expiry pruning, foreign-owner de
 checks Session progress and command timestamps remain separate from imported dates. Focused tests and workspace
 typechecks are worker checks; frozen acceptance and composed native growth measurements run after integration.
 
-After landing, Commerce receives the exact installed review/apply methods and field outcomes. Web323 remains the
-single coordinated archive consumer; no second restoration interface is introduced.
-
 The route/schema producer is implemented in this source. Generated client snapshot emission awaits successful
 workspace compilation; the existing snapshot must not be presented as the reflection handoff.
 The remaining generation and focused verification are recorded in the reflection client continuation.
