@@ -929,6 +929,21 @@ cursor. A final required-source takedown still returns 404. Dependency failures 
 supplied cursor for retry. The signed cursor binds the original route, Subject, provider and native/legacy ordering
 boundary; the existing command and Subject authorization is evaluated afresh for every account and request.
 
+The installed internal factory is `createSourceObservationReadCommands(dependencies).inspect(input)` in
+`source-observation-read.ts`. Its exported `SourceObservationReadDependencies` takes `pool`, `routeKey` and optional
+`clock`; `SourceObservationReadInput` takes `subjectId`, `source`, optional `digest`/`cursor`/`history`, and `deadline`.
+It returns `Promise<SourceObservationReadResponse>`; `SourceObservationReadItem` and `SourceObservationPayload` are
+also exported. The mounted route owns Access authorization and both current Subject resolutions; an internal
+factory call does not replace these checks. Existing put/clear commands consume `resolution.*.expectedObservation`
+and reauthorize the immutable intent on every attempt, including exact replay. A stale expected digest remains a
+conflict. Generated declarations and OpenAPI must come from this mounted schema before consumer delivery.
+
+Consumers distinguish populated history (`items: [observation]`), continuing withheld history (`items: [],
+nextCursor: signedBoundary`), exhausted history (`items: [], nextCursor: null`) and failed reads (no inspection DTO;
+retain the original input). The current head is independent of all three history states. Web retains the existing
+Subject provenance and conflict-recovery interface; native transport tests do not establish its phone/desktop
+experience or one-action recovery acceptance.
+
 Inspection reuses current Subject and source-tuple fence reads before and after payload hydration. A guessed digest
 cannot disclose an alias or retained payload outside the existing write authorization, current Subject identity and
 facts-fence rules. The response is capped at 68,000 serialized bytes and each immutable payload is independently

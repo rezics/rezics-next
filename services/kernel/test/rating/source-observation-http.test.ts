@@ -77,7 +77,12 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   await json(await inspect(id, `?digest=${'0'.repeat(64)}`), 404);
   await json(await fixture.request('GET', `${path(id)}/observations`, { actor: null }), 401);
   await json(await inspect(id, '', fixture.actors.author), 403);
-  await fence('103');
+  const finalHead = observer.hold({ statement: payloadQuery.sql }, 'after');
+  const required = inspect(id, `?digest=${old}`);
+  await finalHead.entered;
+  try { await fence('103'); } finally { finalHead.release(); }
+  const concealed = await json(await required, 404);
+  expect(JSON.stringify(concealed)).not.toContain('catalogue-103');
   await json(await inspect(id, `?digest=${old}`), 404);
 });
 
