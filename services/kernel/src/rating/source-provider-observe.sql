@@ -25,5 +25,6 @@ WITH input AS NOT MATERIALIZED (
   ON CONFLICT (route, subject_id, source) DO UPDATE
     SET digest = EXCLUDED.digest,
         last_order = GREATEST(rating.source_statistic_head.last_order, EXCLUDED.last_order)
+  RETURNING 1
 )
 SELECT 1 FROM head;
