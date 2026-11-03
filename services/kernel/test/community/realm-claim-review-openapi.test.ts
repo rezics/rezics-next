@@ -87,9 +87,7 @@ test('Kernel publishes bounded and authority-aware Realm claim review contracts'
   const reviewBody = properties(response(review));
   const request = properties(reviewBody.claimRequests?.items);
   expect(reviewBody.claimRequests?.type).toBe('array');
-  expect(reviewBody.claimRequests?.items?.required).toEqual(
-    expect.arrayContaining(['claimant', 'approvalAdvice']),
-  );
+  expect(reviewBody.claimRequests?.items?.required).toEqual(expect.arrayContaining(['claimant', 'approvalAdvice']));
   const claimantPresentation = properties(request.claimant);
   expect(Object.keys(claimantPresentation).sort()).toEqual(['href', 'label']);
   expect(claimantPresentation.href?.maxLength).toBe(4096);
