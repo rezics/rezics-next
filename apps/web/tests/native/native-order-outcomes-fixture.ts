@@ -1,9 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import {
-  startNativePurchasesFixture,
-  type NativePurchasesFixture,
-} from './native-purchases-fixture.ts';
+import { startNativePurchasesFixture, type NativePurchasesFixture } from './native-purchases-fixture.ts';
 
 export type NativeOrderOutcomeName =
   | 'initialPublicOfferReview'
@@ -164,13 +161,7 @@ type OutcomeMap = Record<NativeOrderOutcomeName, NativeOrderOutcome>;
 type RequestTemplate = Omit<NativeHttpCommand, 'kind'>;
 type FakeStripeEvent = Awaited<ReturnType<NativePurchasesFixture['stripe']['event']>>;
 
-const responseHeaderAllowlist = [
-  'cache-control',
-  'content-type',
-  'retry-after',
-  'vary',
-  'www-authenticate',
-] as const;
+const responseHeaderAllowlist = ['cache-control', 'content-type', 'retry-after', 'vary', 'www-authenticate'] as const;
 
 function structuredKey(): string {
   return JSON.stringify(randomUUID());
@@ -296,7 +287,9 @@ function listOrderIds(outcome: NativeProducedOutcome, label: string): string[] {
 }
 
 function providerSessionId(purchases: NativePurchasesFixture, orderId: string): string {
-  const session = [...purchases.stripe.sessions.values()].find((candidate) => candidate.client_reference_id === orderId);
+  const session = [...purchases.stripe.sessions.values()].find(
+    (candidate) => candidate.client_reference_id === orderId,
+  );
   if (!session) throw new Error(`Fake Stripe has no actual Session associated with native order ${orderId}`);
   return session.id;
 }
@@ -337,7 +330,14 @@ async function boundedOrderRead(
     attempts++;
     const response = await purchases.stack.kernel(command.path, {}, persona);
     latest = await responseFact(response, command);
-    if (latest.status === 200 && fieldString(nestedRecord(latest.body, 'order', 'native order response'), 'settlement', 'native order response.order') === expectedSettlement)
+    if (
+      latest.status === 200 &&
+      fieldString(
+        nestedRecord(latest.body, 'order', 'native order response'),
+        'settlement',
+        'native order response.order',
+      ) === expectedSettlement
+    )
       return { availability: 'produced', command, response: latest, pollAttempts: attempts };
     if (Date.now() < deadline) await Bun.sleep(50);
   } while (Date.now() < deadline);
@@ -383,7 +383,8 @@ async function boundedEntitlementRead(
 async function captureWorldIdentity() {
   const root = resolve(import.meta.dir, '../../../..');
   const result = Bun.spawnSync({ cmd: ['git', 'rev-parse', 'HEAD'], cwd: root });
-  if (result.exitCode !== 0) throw new Error(`Unable to read native fixture source revision: ${result.stderr.toString()}`);
+  if (result.exitCode !== 0)
+    throw new Error(`Unable to read native fixture source revision: ${result.stderr.toString()}`);
   const revision = result.stdout.toString().trim();
   if (!/^[0-9a-f]{40}$/i.test(revision)) throw new Error(`Invalid native fixture source revision: ${revision}`);
   return {
@@ -396,10 +397,7 @@ function listRead(persona: 'alice' | 'bob'): RequestTemplate {
   return { method: 'GET', path: '/v1/orders', persona };
 }
 
-async function ordersRead(
-  purchases: NativePurchasesFixture,
-  persona: 'alice' | 'bob',
-): Promise<NativeProducedOutcome> {
+async function ordersRead(purchases: NativePurchasesFixture, persona: 'alice' | 'bob'): Promise<NativeProducedOutcome> {
   return httpOutcome(purchases, listRead(persona));
 }
 
@@ -595,7 +593,12 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
     sequence.push({ kind: 'provider-command', name: 'pay', sessionId: revisedSessionId });
     await changedTerms.stripe.pay(revisedSessionId);
     const paymentEvent = await changedTerms.stripe.event('checkout.session.completed', revisedSessionId);
-    const paymentWebhook = await eventOutcome(changedTerms, paymentEvent, 'checkout.session.completed', revisedSessionId);
+    const paymentWebhook = await eventOutcome(
+      changedTerms,
+      paymentEvent,
+      'checkout.session.completed',
+      revisedSessionId,
+    );
     setOutcome(outcomes, sequence, 'paymentWebhook', paymentWebhook);
     requireStatus(paymentWebhook, 200, 'Verified payment webhook');
     const paymentWebhookReplay = await eventOutcome(
@@ -833,11 +836,10 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
       let reconciliationReplay: NativeOutcome;
       if (reconciliationRequest.response.status === 202) {
         const reconciliationBody = requiredRecord(reconciliationRequest.response.body, 'Reconciliation response');
-        if (
-          reconciliationBody.orderId !== reconciliationOrderId ||
-          reconciliationBody.reconciliation !== 'queued'
-        )
-          throw new Error(`Native reconciliation returned an unexpected queued response: ${reconciliationRequest.response.bodyText}`);
+        if (reconciliationBody.orderId !== reconciliationOrderId || reconciliationBody.reconciliation !== 'queued')
+          throw new Error(
+            `Native reconciliation returned an unexpected queued response: ${reconciliationRequest.response.bodyText}`,
+          );
         reconciliationReplay = await httpOutcome(reconciliationWorld, {
           method: 'POST',
           path: `/v1/orders/${reconciliationOrderId}:reconcile`,
@@ -846,7 +848,9 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
           idempotencyKey: reconciliationKey,
         });
         if (reconciliationReplay.response.status !== 202)
-          throw new Error(`Native reconciliation replay returned ${reconciliationReplay.response.status}: ${reconciliationReplay.response.bodyText}`);
+          throw new Error(
+            `Native reconciliation replay returned ${reconciliationReplay.response.status}: ${reconciliationReplay.response.bodyText}`,
+          );
         setOutcome(outcomes, sequence, 'reconciliationReplay', reconciliationReplay);
       } else if ([401, 403, 503].includes(reconciliationRequest.response.status)) {
         const binding =
@@ -888,8 +892,7 @@ export async function startNativeOrderOutcomesFixture(): Promise<NativeOrderOutc
           'No installed native producer in this fixture creates an unknown-settlement order from a lost Checkout creation response.',
         accessUnavailable:
           'No installed native Commerce-to-Content current-access producer exposes an unavailable access response.',
-        accessRefresh:
-          'No installed native Commerce-to-Content current-access producer exposes a refresh response.',
+        accessRefresh: 'No installed native Commerce-to-Content current-access producer exposes a refresh response.',
         accessDeniedCurrentUse:
           'No installed native Content current-use response exposes denied use; Commerce disclosure denials are captured separately.',
         repairUncertain:

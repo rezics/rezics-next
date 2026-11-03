@@ -202,7 +202,9 @@ test('failed delivery and current own-versus-other disclosure stay tied to nativ
   expect(failed).toMatchObject({ id: manifest.ids.failedOrderId, settlement: 'failed', entitlementId: null });
   const failedEntitlements = object(produced('failedBuyerEntitlements').response.body).entitlements;
   expect(Array.isArray(failedEntitlements)).toBe(true);
-  expect((failedEntitlements as unknown[]).some((row) => object(row).orderId === manifest.ids.failedOrderId)).toBe(false);
+  expect((failedEntitlements as unknown[]).some((row) => object(row).orderId === manifest.ids.failedOrderId)).toBe(
+    false,
+  );
 
   expect(produced('currentBuyerOrder').response.status).toBe(200);
   expect(nested(produced('currentBuyerOrder').response.body, 'order')).toMatchObject({
@@ -295,9 +297,11 @@ test('repair and unavailable mappings preserve the installed boundary without in
     expect(outcome.response.persona.length).toBeGreaterThan(0);
     expect(typeof outcome.response.status).toBe('number');
     expect(rawJson(outcome)).toEqual(outcome.response.body);
-    expect(Object.keys(outcome.response.headers).every((header) =>
-      ['cache-control', 'content-type', 'retry-after', 'vary', 'www-authenticate'].includes(header),
-    )).toBe(true);
+    expect(
+      Object.keys(outcome.response.headers).every((header) =>
+        ['cache-control', 'content-type', 'retry-after', 'vary', 'www-authenticate'].includes(header),
+      ),
+    ).toBe(true);
   }
   const exported = JSON.stringify(manifest);
   expect(exported).not.toContain('stripe-signature');
