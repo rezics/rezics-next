@@ -53,7 +53,7 @@ export type ProvenanceExportRecord = {
     recordedAt: string;
   };
 };
-export type JournalExportRecord = {
+type JournalExportRecordBase = {
   section: 'journals';
   accountId: string;
   sessionId: string;
@@ -65,15 +65,24 @@ export type JournalExportRecord = {
   startedAt: string;
   completedAt: string | null;
   lastChangedAt: string | null;
-  journal: {
-    sessionId: string;
-    revision: number;
-    startDate: JournalDate | null;
-    finishDate: JournalDate | null;
-    reflection: string | null;
-  };
 };
-export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord;
+type JournalExportFields = {
+  sessionId: string;
+  revision: number;
+  startDate: JournalDate | null;
+  finishDate: JournalDate | null;
+  reflection: string | null;
+};
+export type JournalExportRecordV2 = JournalExportRecordBase & { journal: JournalExportFields };
+export type JournalExportRecordV3 = JournalExportRecordBase & {
+  journal: JournalExportFields & { assessment: { meaningRevision: number; units: number | null } };
+};
+export type ExportRecord =
+  | ExistingExportRecord
+  | AnnotationExportRecord
+  | ProvenanceExportRecord
+  | JournalExportRecordV2
+  | JournalExportRecordV3;
 type SourceRow = Record<string, unknown> & { key: string };
 export type ExportSeek = {
   section: number;
@@ -93,7 +102,7 @@ export const initialExportSeek = (version: LibraryExportVersion = 1): ExportSeek
   after: '',
   rows: 0,
   bytes: 0,
-  ...(version === 2 ? { sectionTotals: exportSectionsV2.map(() => [0, 0] as [number, number]) } : {}),
+  ...(version >= 2 ? { sectionTotals: exportSectionsV2.map(() => [0, 0] as [number, number]) } : {}),
 });
 export type ExportSourcePage = {
   records: ExportRecord[];
@@ -192,6 +201,12 @@ const queries: Partial<Record<LibraryExportSectionV2, string>> = {
     ORDER BY p.session_id LIMIT ${FETCH_ROWS}`,
 };
 
+const journalsV3 = queries.journals!.replace(
+  "'reflection',p.journal_reflection) AS journal",
+  "'reflection',p.journal_reflection,'assessment',jsonb_build_object('meaningRevision',p.journal_assessment_meaning_revision,'units',p.journal_assessment_units)) AS journal",
+);
+if (journalsV3 === queries.journals) throw new Error('V3 journal export projection is missing');
+
 /** The database refuses a single unbounded row before it reaches the driver buffer. */
 async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unknown[], maxRecordBytes: number) {
   return (
@@ -226,7 +241,7 @@ export async function readExportSourcePage(
 
   let rows: { value: SourceRow | null }[];
   if (v1Direct(section, version)) {
-    const sourceSql = queries[section];
+    const sourceSql = section === 'journals' && version === 3 ? journalsV3 : queries[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
     const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
     const after =
@@ -352,7 +367,7 @@ export async function readExportSourcePage(
     }
     const record = { section, ...data } as ExportRecord;
     const bytes = Buffer.byteLength(JSON.stringify(record), 'utf8');
-    if (version === 2 && bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
+    if (version >= 2 && bytes > LIBRARY_EXPORT_LIMITS.maxRecordBytes) {
       oversized = true;
       break;
     }

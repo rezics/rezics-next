@@ -185,7 +185,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   }
   const sections = Object.groupBy(records, (r) => r.section);
   expect(pages).toBeGreaterThan(2);
-  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 2, fullExport: false } });
+  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 3, fullExport: false } });
   expect(final.manifest.rows).toBe(records.length);
   expect(final.manifest.recordBytes).toBe(
     records.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
@@ -648,7 +648,7 @@ test('cancellation, changed revisions, expiry and terminal deletion never yield 
   ).toBe(0);
 });
 
-test('version 2 streams annotations, accepted provenance and addressed live journals as independent facts', async () => {
+test('version 3 streams annotations, provenance, live journals and private assessments as independent facts', async () => {
   const annotationSubject = subjectIds[16]!;
   const provenanceSubject = subjectIds[15]!;
   const annotationWrite = await command('PUT', `/v1/libraryEntries/${annotationSubject}/annotations`, {
@@ -683,12 +683,13 @@ test('version 2 streams annotations, accepted provenance and addressed live jour
     startDate: { year: 2004, month: 2 },
     finishDate: { year: 2023, month: 7, day: 11 },
     reflection: 'Revisited before summer.',
+    assessment: { units: 0 },
   });
   expect((await json(journalWrite)).journal).toMatchObject({ sessionId: session, revision: 1, changed: true });
 
   const requestKey = randomUUID();
   const captureStatus = await capture(requestKey);
-  expect(captureStatus).toMatchObject({ version: 2, fullExport: false });
+  expect(captureStatus).toMatchObject({ version: 3, coverage: 'private-library-owner-facts-v3', fullExport: false });
   expect(captureStatus.sections.slice(-3)).toEqual(['annotations', 'provenance', 'journals']);
   const firstPath = `/v1/libraryExports/${captureStatus.exportId}/pages?cursor=${encodeURIComponent(captureStatus.first)}`;
   const first = await get(firstPath);
@@ -702,7 +703,7 @@ test('version 2 streams annotations, accepted provenance and addressed live jour
     if (final.next) expect(final.manifest).toBeNull();
     cursor = final.next;
   }
-  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 2, fullExport: false } });
+  expect(final).toMatchObject({ state: 'ready', next: null, manifest: { version: 3, fullExport: false } });
   expect(final.manifest.rows).toBe(records.length);
   expect(final.manifest.recordBytes).toBe(
     records.reduce((bytes, record) => bytes + Buffer.byteLength(JSON.stringify(record), 'utf8'), 0),
@@ -761,6 +762,7 @@ test('version 2 streams annotations, accepted provenance and addressed live jour
       startDate: { year: 2004, month: 2 },
       finishDate: { year: 2023, month: 7, day: 11 },
       reflection: 'Revisited before summer.',
+      assessment: { meaningRevision: 1, units: 0 },
     },
   });
   expect(records.some((record) => record.section === 'annotations' && record.subjectId === journal!.subjectId)).toBe(
@@ -781,8 +783,13 @@ test('version 2 streams annotations, accepted provenance and addressed live jour
     startDate: null,
     finishDate: null,
     reflection: null,
+    assessment: null,
   });
   expect((await json(journalClear)).journal).toMatchObject({ revision: 2, changed: true });
+  expect((await get(`/v1/progressSessions/${session}/journal`)).journal.assessment).toEqual({
+    meaningRevision: 1,
+    units: null,
+  });
   expect((await get(`/v1/libraryExports/${captureStatus.exportId}`)).state).toBe('stale');
   expect(await capture(requestKey)).toMatchObject({
     exportId: captureStatus.exportId,

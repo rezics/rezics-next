@@ -60,6 +60,11 @@ const manifestV2Fields = {
   omissions: t.Record(text, text),
   fullExport: t.Literal(false),
 };
+const manifestV3Fields = {
+  ...manifestV2Fields,
+  version: t.Literal(3),
+  coverage: t.Literal('private-library-owner-facts-v3'),
+};
 const state = t.Union([
   t.Literal('collecting'),
   t.Literal('ready'),
@@ -71,6 +76,7 @@ const state = t.Union([
 const statusSchema = t.Union([
   t.Object({ ...manifestV1Fields, state, first: nullable }, closed),
   t.Object({ ...manifestV2Fields, state, first: nullable }, closed),
+  t.Object({ ...manifestV3Fields, state, first: nullable }, closed),
 ]);
 const sectionTotal = t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed);
 const sectionTotalsV2 = t.Object(
@@ -173,6 +179,15 @@ const journalRecord = t.Object(
         startDate: nullableDate,
         finishDate: nullableDate,
         reflection: nullable,
+        assessment: t.Optional(
+          t.Object(
+            {
+              meaningRevision: t.Integer({ minimum: 1, maximum: 32_767 }),
+              units: t.Union([t.Integer({ minimum: 0, maximum: 20 }), t.Null()]),
+            },
+            closed,
+          ),
+        ),
       },
       closed,
     ),
@@ -184,6 +199,15 @@ const finalManifest = t.Union([
   t.Object(
     {
       ...manifestV2Fields,
+      rows: t.Integer({ minimum: 0 }),
+      recordBytes: t.Integer({ minimum: 0 }),
+      sectionTotals: sectionTotalsV2,
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ...manifestV3Fields,
       rows: t.Integer({ minimum: 0 }),
       recordBytes: t.Integer({ minimum: 0 }),
       sectionTotals: sectionTotalsV2,

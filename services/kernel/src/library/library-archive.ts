@@ -152,7 +152,8 @@ function parse(bytes: Uint8Array): unknown {
 function manifestOf(value: unknown): LibraryArchiveManifest {
   if (value === null || value === undefined) fail('incomplete_capture');
   const m = object(value, 'invalid_envelope');
-  if (m.format !== LIBRARY_EXPORT_FORMAT || (m.version !== 1 && m.version !== 2)) fail('unsupported_version');
+  if (m.format !== LIBRARY_EXPORT_FORMAT || (m.version !== 1 && m.version !== 2 && m.version !== 3))
+    fail('unsupported_version');
   const version = m.version as LibraryExportVersion;
   const installedSections: readonly string[] = sectionsForVersion(version);
   if (m.rows === undefined || m.recordBytes === undefined || m.sections === undefined) fail('incomplete_capture');
@@ -169,7 +170,7 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     'fullExport',
     'rows',
     'recordBytes',
-    ...(version === 2 ? ['coverage', 'sectionTotals'] : []),
+    ...(version >= 2 ? ['coverage', 'sectionTotals'] : []),
   ];
   if (
     !exactKeys(m, required) ||
@@ -180,7 +181,8 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     m.privacy !== 'private' ||
     m.completeness !== 'supported-native-facts' ||
     m.fullExport !== false ||
-    (version === 2 && m.coverage !== 'private-library-owner-facts-v2')
+    (version === 2 && m.coverage !== 'private-library-owner-facts-v2') ||
+    (version === 3 && m.coverage !== 'private-library-owner-facts-v3')
   )
     fail('invalid_envelope');
   const sections = m.sections;
@@ -215,7 +217,7 @@ function manifestOf(value: unknown): LibraryArchiveManifest {
     (m.recordBytes as number) > LIBRARY_EXPORT_LIMITS.recordBytes
   )
     fail('bounds');
-  if (version === 2) {
+  if (version >= 2) {
     const totals = object(m.sectionTotals, 'invalid_envelope');
     if (
       !exactKeys(totals, installedSections) ||
@@ -275,7 +277,7 @@ function validJournalDate(value: unknown): boolean {
   return day <= days;
 }
 
-function supportedRecord(row: ObjectValue, section: MergeSection) {
+function supportedRecord(row: ObjectValue, section: MergeSection, version: LibraryExportVersion) {
   if (section === 'annotations') {
     if (
       !exactKeys(
@@ -315,6 +317,7 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
   }
   if (section === 'journals') {
     const journal = object(row.journal, 'invalid_record');
+    const assessment = version === 3 ? object(journal.assessment, 'invalid_record') : null;
     if (
       !exactKeys(row, [
         'section',
@@ -330,7 +333,11 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
         'lastChangedAt',
         'journal',
       ]) ||
-      !exactKeys(journal, ['sessionId', 'revision', 'reflection'], ['startDate', 'finishDate']) ||
+      !exactKeys(
+        journal,
+        ['sessionId', 'revision', 'reflection', ...(version === 3 ? ['assessment'] : [])],
+        ['startDate', 'finishDate'],
+      ) ||
       !uuid(row.accountId) ||
       !uuid(row.sessionId) ||
       !uuid(row.subjectId) ||
@@ -350,6 +357,15 @@ function supportedRecord(row: ObjectValue, section: MergeSection) {
       (Object.hasOwn(journal, 'startDate') && journal.startDate !== null && !validJournalDate(journal.startDate)) ||
       (Object.hasOwn(journal, 'finishDate') && journal.finishDate !== null && !validJournalDate(journal.finishDate)) ||
       (journal.reflection !== null && typeof journal.reflection !== 'string')
+    )
+      fail('invalid_record');
+    if (
+      version === 3 &&
+      (!assessment ||
+        !exactKeys(assessment, ['meaningRevision', 'units']) ||
+        !Number.isSafeInteger(assessment.meaningRevision) ||
+        (assessment.meaningRevision as number) < 1 ||
+        (assessment.units !== null && !Number.isSafeInteger(assessment.units)))
     )
       fail('invalid_record');
     return;
@@ -468,7 +484,8 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (size > LIBRARY_ARCHIVE_LIMITS.pageBytes) fail('bounds');
     recordBytes += size;
     if (recordBytes > LIBRARY_ARCHIVE_LIMITS.recordBytes) fail('bounds');
-    if ((archiveMergeSections as readonly string[]).includes(section)) supportedRecord(row, section as MergeSection);
+    if ((archiveMergeSections as readonly string[]).includes(section))
+      supportedRecord(row, section as MergeSection, manifest.version);
     const key = recordKey(row, section);
     if (seen.has(key)) fail('duplicate_record');
     seen.add(key);
@@ -485,7 +502,7 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (section === 'assignments' && !labelIds.has(row.label_id as string)) fail('incomplete_capture');
   }
   if (recordBytes !== manifest.recordBytes) fail('inconsistent_manifest');
-  if (manifest.version === 2) {
+  if (manifest.version >= 2) {
     for (const section of exportSectionsV2) {
       const expected = manifest.sectionTotals[section];
       const actual = totals.get(section)!;

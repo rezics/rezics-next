@@ -82,7 +82,7 @@ composition with persisted native authority and subjects. The [source contract](
 shape, mapping, retained losses, bounds and Web responses. Independent custom-list label adoption is specified in
 [the label adoption contract](../library-import-anilist-labels.md) and covered by
 `test/library/list-import-anilist-labels.test.ts`; native64/512/4096 complete-caller growth remains deferred.
-The label methods are producer composition; Web325 remains the complete AniList interface; broader frozen acceptance remains an integration check.
+The label methods are producer composition; the existing AniList interface remains the complete user interface; broader frozen acceptance remains an integration check.
 
 Personal VNDB XML upload now has mounted preview/page/source/review/apply/cancel/delete methods documented in
 [its owner contract](../library-import-vndb.md), with focused native HTTP scenarios in
@@ -543,9 +543,11 @@ and font readiness; a recorded response or source export is not a screenshot or 
 
 ## Personal Library portability
 
-The native export now retains version 2 annotation, accepted provenance and live occurrence-journal records under
-the installed private capture and source-fence contract. Version 1 and the archive-entry/label merge remain
-version 1 only; native64/512/4096 executed growth evidence remains deferred to integration.
+The native export now creates exact version 3 captures with version 2 annotation, accepted provenance and live
+occurrence-journal sections plus the private assessment meaning `{meaningRevision:1,units:number|null}`. Historical
+version 1 and 2 captures retain their original section inventories and accounting. Assessment uses the journal-local
+compare-and-swap independently of progress and public Subject votes; native64/512/4096 executed growth evidence
+remains deferred to integration.
 
 MAL consumption-date adoption is available through its existing private upload, review and result journey. The owner
 selects an existing progress occurrence and explicitly adopts valid year, year/month or full calendar dates into the
@@ -566,16 +568,18 @@ outcomes. The typed client exposes upload, status, Collection/occurrence pages, 
 Only one curated Collection is supported; recovery preserves duplicate occurrences, valid archived ordinal order,
 and distinct empty/cleared/missing note outcomes while creating fresh private native IDs. Dynamic and built-in
 Collections, grants, saved rules and public output remain unsupported. Broad native64/512/4096 growth acceptance and
-the adjacent Web recovery interface remain deferred to integration; Web323 still owns export UI.
+the adjacent Web recovery interface remain deferred to integration; Web retains export UI ownership.
 
-[Personal archive review and merge](../library-archive-merge.md) shares the installed V1/V2 producer vocabulary and
-bounds. The bounded decoder checks completed artifacts; private consumer methods page evidence and coverage,
-require explicit current subject/state/label or Entry/Session review, and delegate selected entry, label, assignment,
-annotation and journal-date effects to native commands with a per-item replay journal, cancellation, seven-day
-retention and owned-graph erasure. V2 provenance remains retained unsupported evidence. Focused native scenarios
-cover actual V2 producer compatibility, private fact recovery, stale targets, replay, cancellation and denial paths.
-Web adoption, frozen acceptance and measured native64/512/4096 cost evidence remain deferred; the existing export
-evidence status is unchanged. See [personal fact recovery](../library-archive-personal-fact-recovery.md) for the
+[Personal archive review and merge](../library-archive-merge.md) shares the installed V1/V2/V3 producer vocabulary and
+bounds. The bounded decoder checks exact completed artifacts; private consumer methods page evidence and coverage,
+require explicit current Subject/state/label or Entry/Session review, and delegate selected entry, label, assignment,
+annotation, journal-date/reflection and V3 assessment effects to native commands with one coherent journal PATCH, a
+per-item replay journal, cancellation, seven-day retention and owned-graph erasure. Provider provenance remains
+retained unsupported evidence. Provider-evidence V4 remains refused until its exact receive contract is installed;
+its sections stay inert. Focused native scenarios cover actual V3 producer compatibility, private fact
+recovery, stale targets, replay, cancellation and denial paths. Web adoption, frozen acceptance and measured
+native64/512/4096 cost evidence remain deferred; the existing export evidence status is unchanged. See
+[personal fact recovery](../library-archive-personal-fact-recovery.md) for the
 supported fields, native methods and visibility decision.
 
 ## Evidence stage

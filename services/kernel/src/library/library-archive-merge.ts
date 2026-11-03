@@ -53,6 +53,7 @@ export const LIBRARY_ARCHIVE_MERGE_LIMITS = {
   page: 100,
   reviewItems: 20,
   applyItems: 20,
+  selectedJournalFields: 4,
   cleanupItems: 100,
   lifetimeDays: 7,
 } as const;
@@ -100,7 +101,12 @@ export type ArchiveMergeReviewInput =
       kind: 'journal';
       subjectId: string;
       sessionId: string;
-      fields: { startDate?: ArchiveFieldChoice; finishDate?: ArchiveFieldChoice };
+      fields: {
+        startDate?: ArchiveFieldChoice;
+        finishDate?: ArchiveFieldChoice;
+        reflection?: ArchiveFieldChoice;
+        assessment?: ArchiveFieldChoice;
+      };
     };
 
 export type ArchiveMergeSelection = { ordinal: number; reviewRevision: number };
@@ -218,7 +224,15 @@ function sameJson(left: unknown, right: unknown) {
 
 function selectedFields(value: unknown, allowed: readonly string[]): Record<string, ArchiveFieldChoice> {
   const fields = object(value);
-  if (!fields || Object.keys(fields).length < 1 || Object.keys(fields).some((key) => !allowed.includes(key)))
+  const fieldLimit = allowed.includes('assessment')
+    ? LIBRARY_ARCHIVE_MERGE_LIMITS.selectedJournalFields
+    : allowed.length;
+  if (
+    !fields ||
+    Object.keys(fields).length < 1 ||
+    Object.keys(fields).length > fieldLimit ||
+    Object.keys(fields).some((key) => !allowed.includes(key))
+  )
     throw new ProblemError('invalid_request');
   const result: Record<string, ArchiveFieldChoice> = {};
   for (const [key, choice] of Object.entries(fields)) {
@@ -226,6 +240,19 @@ function selectedFields(value: unknown, allowed: readonly string[]): Record<stri
     result[key] = choice;
   }
   return result;
+}
+
+function supportedArchiveAssessment(value: unknown): value is { meaningRevision: 1; units: number | null } {
+  const assessment = object(value);
+  return Boolean(
+    assessment &&
+      Object.keys(assessment).length === 2 &&
+      assessment.meaningRevision === 1 &&
+      (assessment.units === null ||
+        (Number.isSafeInteger(assessment.units) &&
+          (assessment.units as number) >= 0 &&
+          (assessment.units as number) <= 20)),
+  );
 }
 
 function nativeChange(choice: ArchiveFieldChoice, value: unknown) {
@@ -807,7 +834,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       if (item.section !== 'journals' || !sameIdentity(item.source_subject_id, evidence.subjectId))
         throw new ProblemError('invalid_request');
       if (!isRoutedId(decision.subjectId) || !isRoutedId(decision.sessionId)) throw new ProblemError('invalid_request');
-      const choices = selectedFields(decision.fields, ['startDate', 'finishDate']);
+      const choices = selectedFields(decision.fields, ['startDate', 'finishDate', 'reflection', 'assessment']);
       return identityTime(async (at) => {
         const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
         const observation = await readLibraryProfileSourceObservation(
@@ -848,12 +875,15 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         }
         const currentBinding = {
           sessionId: session.id,
+          sessionStartedAt: session.startedAt,
           subjectId: session.subjectId,
           sessionRevision: session.revision,
           state: session.state,
           journalRevision: current.revision,
           startDate: current.startDate,
           finishDate: current.finishDate,
+          reflection: current.reflection,
+          assessment: current.assessment,
         };
         if (session.subjectId !== source.subjectId)
           return {
@@ -866,7 +896,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         const archiveJournal = object(evidence.journal) ?? {};
         const patch: Record<string, unknown> = { revision: current.revision };
         let unsupportedField: string | null = null;
-        for (const field of ['startDate', 'finishDate'] as const) {
+        for (const field of ['startDate', 'finishDate', 'reflection'] as const) {
           const choice = choices[field];
           if (choice === undefined || choice === 'preserve') continue;
           if (choice === 'clear') patch[field] = null;
@@ -874,6 +904,14 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             unsupportedField = field;
             break;
           } else patch[field] = archiveJournal[field];
+        }
+        const assessmentChoice = choices.assessment;
+        if (!unsupportedField && assessmentChoice !== undefined && assessmentChoice !== 'preserve') {
+          const archivedAssessment = archiveJournal.assessment;
+          if (!supportedArchiveAssessment(archivedAssessment)) unsupportedField = 'assessment';
+          else if (assessmentChoice === 'clear') patch.assessment = null;
+          else if (archivedAssessment.units === null) unsupportedField = 'assessment';
+          else patch.assessment = { units: archivedAssessment.units };
         }
         if (unsupportedField)
           return {
@@ -887,12 +925,17 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             review: { ...base, current: currentBinding, reason: 'invalid-journal-date', field: parsed.field },
           };
 
-        const changes = (['startDate', 'finishDate'] as const).some((field) => {
+        const changes = (['startDate', 'finishDate', 'reflection'] as const).some((field) => {
           const choice = choices[field];
           if (choice === undefined || choice === 'preserve') return false;
           const next = choice === 'clear' ? null : archiveJournal[field];
           return !sameJson(current[field], next);
-        });
+        }) ||
+          (assessmentChoice !== undefined &&
+            assessmentChoice !== 'preserve' &&
+            (current.assessment.meaningRevision !== 1 ||
+              current.assessment.units !==
+                (assessmentChoice === 'clear' ? null : (archiveJournal.assessment as { units: number }).units)));
         return {
           status: changes ? 'mapped' : 'already_equal',
           review: {
@@ -1100,17 +1143,28 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       const choices = object(decision.fields) ?? {};
       const fields: Record<string, unknown> = {};
       const current = object(decision.current)!;
-      for (const field of ['startDate', 'finishDate'] as const) {
+      const patch: Record<string, unknown> = { revision: current.journalRevision };
+      for (const field of ['startDate', 'finishDate', 'reflection', 'assessment'] as const) {
         const choice = choices[field] as ArchiveFieldChoice | undefined;
         if (choice !== undefined) {
           const value = choice === 'set' ? evidence[field] : null;
+          const currentAssessment = object(current.assessment);
+          const currentValue = field === 'assessment' ? currentAssessment?.units : current[field];
+          const selectedValue = field === 'assessment' ? object(value)?.units : value;
+          const alreadyEqual =
+            field === 'assessment'
+              ? currentAssessment?.meaningRevision === 1 &&
+                currentAssessment?.units === (choice === 'clear' ? null : selectedValue)
+              : sameJson(currentValue, choice === 'clear' ? null : selectedValue);
+          if (choice !== 'preserve')
+            patch[field] = choice === 'clear' ? null : field === 'assessment' ? { units: selectedValue } : value;
           fields[field] = {
             choice,
             value,
             outcome:
               choice === 'preserve'
                 ? 'preserved'
-                : sameJson(current[field], choice === 'clear' ? null : value)
+                : alreadyEqual
                   ? 'unchanged'
                   : 'accepted',
           };
@@ -1123,10 +1177,12 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           sessionId: decision.sessionId,
           subjectId: decision.targetSubjectId,
           sessionRevision: object(decision.current)!.sessionRevision,
+          sessionStartedAt: object(decision.current)!.sessionStartedAt,
           state: object(decision.current)!.state,
           journalRevision: object(decision.current)!.journalRevision,
           profile,
           fields,
+          patch,
         },
       };
     }
@@ -1315,21 +1371,35 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         typeof effect.operands.sessionId !== 'string' ||
         typeof effect.operands.subjectId !== 'string' ||
         typeof effect.operands.sessionRevision !== 'number' ||
+        (effect.operands.sessionStartedAt !== undefined && typeof effect.operands.sessionStartedAt !== 'string') ||
         typeof effect.operands.state !== 'string' ||
         typeof effect.operands.journalRevision !== 'number' ||
         !profile ||
         !fields
       )
         throw new Error('Archive journal binding is invalid');
-      const patch: Record<string, unknown> = { revision: effect.operands.journalRevision };
       const fieldOutcomes: Record<string, string> = {};
-      for (const field of ['startDate', 'finishDate'] as const) {
+      for (const field of ['startDate', 'finishDate', 'reflection', 'assessment'] as const) {
         const selected = object(fields[field]);
         if (!selected || (selected.choice !== 'preserve' && selected.choice !== 'set' && selected.choice !== 'clear'))
           continue;
-        if (selected.choice !== 'preserve') patch[field] = selected.choice === 'clear' ? null : selected.value;
         fieldOutcomes[field] = typeof selected.outcome === 'string' ? selected.outcome : 'unchanged';
       }
+      const patch = object(effect.operands.patch) ?? { revision: effect.operands.journalRevision };
+      if (!Object.hasOwn(effect.operands, 'patch')) {
+        for (const field of ['startDate', 'finishDate'] as const) {
+          const selected = object(fields[field]);
+          if (selected && selected.choice !== 'preserve')
+            patch[field] = selected.choice === 'clear' ? null : selected.value;
+        }
+      }
+      if (
+        patch.revision !== effect.operands.journalRevision ||
+        Object.keys(patch).some((field) =>
+          !['revision', 'startDate', 'finishDate', 'reflection', 'assessment'].includes(field),
+        )
+      )
+        throw new Error('Archive journal patch receipt is invalid');
       const parsedPatch = parseProgressSessionJournalPatch(patch);
       if (!parsedPatch.ok) throw new ProgressInvalidError(parsedPatch.field);
       const ownerRoute = routeOf(owner.accountId)!;
@@ -1339,18 +1409,23 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           profile,
           subjectId,
           sessionRevision: effect.operands.sessionRevision,
+          sessionStartedAt: effect.operands.sessionStartedAt,
           state: effect.operands.state,
         },
         assert: async (tx: CommandTransaction) => {
-          const session = await tx.query<{ subjectId: string; revision: number; state: string }>(
-            `SELECT subject_id::text AS "subjectId",revision,state FROM library.progress_session
+          const session = await tx.query<{ subjectId: string; revision: number; state: string; startedAt: string }>(
+            `SELECT subject_id::text AS "subjectId",revision,state,
+                    to_char(started_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startedAt"
+             FROM library.progress_session
              WHERE route=$1 AND account_id=$2 AND session_id=$3`,
             [ownerRoute, owner.accountId, effect.operands.sessionId],
           );
           if (
             session.rows[0]?.subjectId !== subjectId ||
             session.rows[0]?.revision !== effect.operands.sessionRevision ||
-            session.rows[0]?.state !== effect.operands.state
+            session.rows[0]?.state !== effect.operands.state ||
+            (typeof effect.operands.sessionStartedAt === 'string' &&
+              session.rows[0]?.startedAt !== effect.operands.sessionStartedAt)
           )
             throw new ProgressConflictError();
           await identityTime(async (at) => {
