@@ -169,7 +169,10 @@ test('Recipe creation and current correction share complete frames with independ
     fixture.calls.filter((call) => call.method === 'POST' && call.path.endsWith(suffix));
   const queued = (element: HTMLElement) => {
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;
-    return (Reflect.get(element, key) as { onClick: () => void }).onClick;
+    const onClick = (
+      Reflect.get(element, key) as { onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => void }
+    ).onClick;
+    return () => onClick({ preventDefault() {}, stopPropagation() {} });
   };
   const retainedChange = (element: HTMLElement) => {
     const key = Object.keys(element).find((key) => key.startsWith('__reactProps$'))!;

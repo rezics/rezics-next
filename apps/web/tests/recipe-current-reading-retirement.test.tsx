@@ -154,7 +154,10 @@ test('Recipe recovery retires current authority and keeps the private draft and 
   };
   const queued = (element: HTMLElement) => {
     const key = Object.keys(element).find((name) => name.startsWith('__reactProps$'))!;
-    return (Reflect.get(element, key) as { onClick: () => void }).onClick;
+    const onClick = (
+      Reflect.get(element, key) as { onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => void }
+    ).onClick;
+    return () => onClick({ preventDefault() {}, stopPropagation() {} });
   };
   const readRetry = () =>
     [...host.querySelectorAll<HTMLButtonElement>('button')].find(
