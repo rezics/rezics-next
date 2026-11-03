@@ -266,9 +266,7 @@ test('Edition reads a protected exact source while protected thread and ancestor
       await f.grant(id, f.buyer, [action]);
       await delivered(f, selected);
 
-      await raceRefusal(f, selected, f.buyer.accountId, action, id, () =>
-        f.grant(id, f.buyer, [action], true, true),
-      );
+      await raceRefusal(f, selected, f.buyer.accountId, action, id, () => f.grant(id, f.buyer, [action], true, true));
       await refused(f, selected);
       await f.grant(id, f.buyer, [action]);
       await delivered(f, selected);
