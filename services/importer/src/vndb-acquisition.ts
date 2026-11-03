@@ -311,11 +311,7 @@ export function resumeVndbAcquisitionInvocation(acquisition: string): string {
   return `bun services/importer/src/cli.ts --source vndb --dump <original-file> --state <same-state-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin> --resume-acquisition --acquisition ${acquisition}`;
 }
 
-export function vndbAcquisitionProgress(
-  acquisition: string,
-  committed: number,
-  complete: boolean,
-): string {
+export function vndbAcquisitionProgress(acquisition: string, committed: number, complete: boolean): string {
   const archive = complete ? 'archive complete' : 'archive incomplete';
   return `VNDB table acquisition ${acquisition}: committed ${committed} durable rows, ${archive}. ${VNDB_ACQUISITION_COST}`;
 }

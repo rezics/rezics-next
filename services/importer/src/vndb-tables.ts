@@ -1047,13 +1047,7 @@ export class VndbTablesStore {
     }
   }
 
-  private completeMember(
-    source: string,
-    runId: string,
-    ordinal: number,
-    lines: number,
-    cursor: Cursor,
-  ) {
+  private completeMember(source: string, runId: string, ordinal: number, lines: number, cursor: Cursor) {
     this.db.transaction(() => {
       this.options.observer?.onBeforeCheckpoint?.();
       this.db

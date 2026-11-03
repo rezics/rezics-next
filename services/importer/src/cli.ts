@@ -7,11 +7,7 @@ import { createReviewedCatalogueLookup } from './reviewed-catalogue.ts';
 import { createMediaResolver } from './media-resolver.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES, observeDumpRetention } from './dumps-bytes.ts';
-import {
-  DEFAULT_VNDB_ARCHIVE_BYTES,
-  DEFAULT_VNDB_ARCHIVE_ENTRIES,
-  type VndbTablesStore,
-} from './vndb-tables.ts';
+import { DEFAULT_VNDB_ARCHIVE_BYTES, DEFAULT_VNDB_ARCHIVE_ENTRIES, type VndbTablesStore } from './vndb-tables.ts';
 import {
   VNDB_ACQUISITION_COST,
   VNDB_ACQUISITION_MISSING_STATE,
@@ -628,8 +624,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             maxSourceRecords: 500_000,
             maxArchiveBytes: DEFAULT_VNDB_ARCHIVE_BYTES,
             maxArchiveEntries: DEFAULT_VNDB_ARCHIVE_ENTRIES,
-            decodeBudget:
-              config.compression === 'zstd' ? (config.decodeBudget ?? DEFAULT_DECODED_ZSTD_BYTES) : 0,
+            decodeBudget: config.compression === 'zstd' ? (config.decodeBudget ?? DEFAULT_DECODED_ZSTD_BYTES) : 0,
           });
         } else {
           capture = captureIdentity({
@@ -658,27 +653,27 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       }
     }
     if (config.mode !== 'checkpoint-acquisition' && config.mode !== 'resume-acquisition') {
-    tokenProvider = await createAccountTokenProvider({
-      accountKeyPath: config.accountKey,
-      account: config.account,
-      client: config.client,
-      authOrigin: config.auth,
-      scopes:
-        config.source === 'vndb'
-          ? [...VNDB_IMPORTER_SCOPES, 'subject:read']
-          : config.source === 'bangumi'
-            ? [...IMPORTER_SCOPES, 'subject:read']
-            : IMPORTER_SCOPES,
-      fetch: guardedFetch,
-      signal: AbortSignal.any([signal, credentialLifetime.signal]),
-      now: () => clock.now(),
-      observer: {
-        onAccountKey(path, observation) {
-          options.observer?.onTokenRead?.(path, observation.bytes);
-          options.observer?.onAccountKey?.(path, observation);
+      tokenProvider = await createAccountTokenProvider({
+        accountKeyPath: config.accountKey,
+        account: config.account,
+        client: config.client,
+        authOrigin: config.auth,
+        scopes:
+          config.source === 'vndb'
+            ? [...VNDB_IMPORTER_SCOPES, 'subject:read']
+            : config.source === 'bangumi'
+              ? [...IMPORTER_SCOPES, 'subject:read']
+              : IMPORTER_SCOPES,
+        fetch: guardedFetch,
+        signal: AbortSignal.any([signal, credentialLifetime.signal]),
+        now: () => clock.now(),
+        observer: {
+          onAccountKey(path, observation) {
+            options.observer?.onTokenRead?.(path, observation.bytes);
+            options.observer?.onAccountKey?.(path, observation);
+          },
         },
-      },
-    });
+      });
     }
   } catch (error) {
     credentialLifetime.abort();
@@ -802,8 +797,9 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     return track(() => result);
   };
   const signalTransport = {
-    setSourceRecordMetadata: (input: Parameters<ReturnType<typeof createImportTransport>['setSourceRecordMetadata']>[0]) =>
-      track(() => liveTransport().setSourceRecordMetadata(input, signal)),
+    setSourceRecordMetadata: (
+      input: Parameters<ReturnType<typeof createImportTransport>['setSourceRecordMetadata']>[0],
+    ) => track(() => liveTransport().setSourceRecordMetadata(input, signal)),
     batchWrite: (request: Parameters<ReturnType<typeof createImportTransport>['batch']>[0]) =>
       track(() => liveTransport().batch(request, signal)),
     clearSourceStatistic: (input: Parameters<ReturnType<typeof createImportTransport>['clearSourceStatistic']>[0]) =>

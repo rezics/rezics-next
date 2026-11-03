@@ -79,7 +79,13 @@ function archiveBytes(): Uint8Array {
     put(156, '0');
     put(257, 'ustar\0');
     put(263, '00');
-    put(148, `${header.reduce((sum, byte) => sum + byte, 0).toString(8).padStart(6, '0')}\0 `);
+    put(
+      148,
+      `${header
+        .reduce((sum, byte) => sum + byte, 0)
+        .toString(8)
+        .padStart(6, '0')}\0 `,
+    );
     parts.push(header, body);
     if (body.length % 512) parts.push(new Uint8Array(512 - (body.length % 512)));
   }
@@ -210,7 +216,8 @@ test('evaluateResume distinguishes ready publish, old staging and identity misma
   expect(old.ok).toBe(false);
   if (!old.ok) expect(old.message).toBe(VNDB_ACQUISITION_OLD_UNSUPPORTED);
   expect(
-    evaluateVndbResume(checkpoint, identityOf(encode('changed')), { status: 'staging', materializedGeneration: null }).ok,
+    evaluateVndbResume(checkpoint, identityOf(encode('changed')), { status: 'staging', materializedGeneration: null })
+      .ok,
   ).toBe(false);
 });
 
@@ -247,7 +254,10 @@ test('checkpointed table load resumes without duplicate durable rows, including 
   const ready = new VndbTablesStore(db, { childRowsPerVn: 8 });
   expect(ready.inspect('vndb', 'run-a')).toMatchObject({ state: 'ready', sourceRecords: 2, stagedRows: 7 });
   expect(ready.checkpoint('vndb', 'run-a')).toBeNull();
-  expect(ready.page('vndb', 'run-a', { after: null, limit: 2 }).records.map((row) => row.key)).toEqual(['v123', 'v124']);
+  expect(ready.page('vndb', 'run-a', { after: null, limit: 2 }).records.map((row) => row.key)).toEqual([
+    'v123',
+    'v124',
+  ]);
   db.close();
   rmSync(directory, { recursive: true, force: true });
 });
@@ -279,7 +289,10 @@ test('changed input, uncheckpointed failure and old staging do not resume', asyn
   gated.beginCheckpointed('vndb', 'run-b', identity);
   await expect(gated.stage('vndb', 'run-b', stream(fixture()), { identity })).rejects.toBeInstanceOf(DOMException);
   await expect(
-    gated.stage('vndb', 'run-b', stream(fixture()), { identity: identityOf(encode('other'), { childCap: 8 }), resume: true }),
+    gated.stage('vndb', 'run-b', stream(fixture()), {
+      identity: identityOf(encode('other'), { childCap: 8 }),
+      resume: true,
+    }),
   ).rejects.toThrow();
   expect(gated.inspect('vndb', 'run-b').state).toBe('staging');
   db.close();
@@ -390,9 +403,10 @@ test('ready table acquisition publishes once and zstd archives are admitted', as
   const native = f.requests.length;
   expect(native).toBeGreaterThan(0);
   const db = new Database(join(directory, 'state.sqlite'), { readonly: true });
-  const row = db
-    .query(`SELECT run_id, codec FROM vndb_acquisition_checkpoints WHERE source='vndb'`)
-    .get() as { run_id: string; codec: string } | null;
+  const row = db.query(`SELECT run_id, codec FROM vndb_acquisition_checkpoints WHERE source='vndb'`).get() as {
+    run_id: string;
+    codec: string;
+  } | null;
   expect(row).toBeNull();
   const linked = db
     .query(`SELECT run_id FROM vndb_table_runs WHERE source='vndb' AND materialized_generation IS NOT NULL`)
