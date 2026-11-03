@@ -55,7 +55,7 @@ async function profile(
         await operation(observation);
       },
     });
-    expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+    expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
     const first = report.samples[0]!.cost;
     expect(report.samples.map(({ cost }) => cost.rows)).toEqual([first.rows, first.rows, first.rows]);
     expect(report.samples.map(({ cost }) => cost.statements)).toEqual([
@@ -209,7 +209,7 @@ test.serial(
             await assertNoWork(observation);
           },
         });
-        expect(report.samples.map(({ scale }) => scale)).toEqual(scales);
+        expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
         expect(report.samples.map(({ cost }) => [cost.rows, cost.blocks, cost.statements])).toEqual([
           [0, 0, 0],
           [0, 0, 0],
