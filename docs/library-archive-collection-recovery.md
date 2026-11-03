@@ -141,9 +141,11 @@ Every response explicitly retains `fullRestoration:false`; membership completene
 
 ### Added work and verification boundary
 
-Preview adds at most one addressed active-release lookup for the selected Collection, independent of P+1 occurrence
+Preview adds at most one addressed active-release call for the selected Collection, independent of P+1 occurrence
 rows. Review adds at most one lookup for an explicit Type, one direct Type key admission, and constant-size choice,
-release, canonical input and key serialization in the existing root snapshot write. Mixed performs no Type lookup.
+release, canonical input and key serialization in the existing root snapshot write. Mixed performs no Type lookup. Each active-release call reads the current pointer; a cache miss also reads and
+validates the immutable release body (including its definitions-bounded buffer/serialization), while a cache hit
+uses the immutable cached body. These costs belong to the existing definitions producer, not a free key-only probe.
 Native create preparation performs one release lookup and addressed Type admission per attempt, including retries;
 its current account/epoch/authority, receipt, History, grants and event work remains charged to the existing native
 command. Exact replay repeats native authority/preparation/receipt probes without another create, History, grant or
