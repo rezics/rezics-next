@@ -203,7 +203,7 @@ export function malImportRoutes(
           closed,
         ),
         response: { 200: result, ...failures },
-        detail: { ...detail('dates.review'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
+        detail: { ...detail('dates_review'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
       },
       async ({ actor, params, body, headers, job, admission, session, set }) =>
         safe(async () => {
@@ -241,7 +241,7 @@ export function malImportRoutes(
           closed,
         ),
         response: { 200: t.Unsafe<DateApplied>(t.Any()), ...failures },
-        detail: { ...detail('dates.apply'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
+        detail: { ...detail('dates_apply'), 'x-body-limit': MAL_DATE_LIMITS.requestBytes },
       },
       async ({ actor, params, body, request, job, admission, session, set }) =>
         safe(async () => {
