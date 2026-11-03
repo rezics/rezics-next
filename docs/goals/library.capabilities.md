@@ -495,6 +495,12 @@ and font readiness; a recorded response or source export is not a screenshot or 
 
 ## Personal Library portability
 
+MAL consumption-date adoption is available through its existing private upload, review and result journey. The owner
+selects an existing progress occurrence and explicitly adopts valid year, year/month or full calendar dates into the
+private journal; unknown and invalid evidence stays unapplied, and clearing requires a separate choice. AniList date
+adoption and typed VNDB personal-row integration remain open provider-specific capabilities. See the
+[consumption-date contract](../library-import-consumption-dates.md).
+
 Native `POST /v1/libraryExports`, owner status/pages GET and DELETE cancellation are mounted; the
 [portable format and Web handoff](../library-export.md) own schema, meanings, bounds and failure states.
 Focused native HTTP cases cover two owners, independent facts, paging, stale edits, cancellation and terminal

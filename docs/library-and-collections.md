@@ -320,6 +320,8 @@ Decision: Reopened bulk Library removals offer one explicit restore at a time; a
 
 ## Personal portability
 
+Provider-imported date adoption uses the [consumption-date contract](library-import-consumption-dates.md).
+
 [Personal Library export](library-export.md) mounts authenticated capture, status, bounded pages and cancellation
 at `/v1/libraryExports`. It preserves independent native facts and accepted pins with explicit source omissions;
 Web assembles the versioned artifact after the final manifest. Native edits require restart, and terminal deletion

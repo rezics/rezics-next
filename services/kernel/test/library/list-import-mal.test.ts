@@ -48,7 +48,7 @@ test('MAL retains independent measures, zero, private comments, dates and unknow
   expect(row!.repeats.value).toBe(3);
   expect(row!.retained).toContainEqual({ field: 'unknown', reason: 'private-source-evidence' });
   expect(malDate('0000-00-00').kind).toBe('unknown');
-  expect(malDate('2024-00-05').kind).toBe('unknown');
+  expect(malDate('2024-00-05').kind).toBe('invalid');
   expect(malDate('2023-02-29').kind).toBe('invalid');
   expect(malDate(undefined).kind).toBe('missing');
   expect(malDate('').kind).toBe('unknown');
@@ -195,4 +195,113 @@ test('native conflict defaults preserve facts; replacement has revision and rele
     401,
   );
   await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer, 401);
+});
+
+test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns, clears only by consent and retries the original journal PATCH', async () => {
+  const bearer = await accountToken({
+    accountId: native.owner.actor.accountId,
+    clientId: native.owner.actor.clientId,
+    scopes: [
+      ...native.owner.actor.scopes,
+      'subject:read',
+      'progress_session:create',
+      'progress_session:read',
+      'progress_session:list',
+      'progress_session:update',
+    ],
+  });
+  expect((await native.send('steward', 'POST', '/v1/platform/exposure/reading_progress:open')).status).toBe(200);
+  const target = await native.createSubject('game');
+  const occurrences = [];
+  for (let index = 0; index < 4; index++) {
+    const started = await json(
+      'POST',
+      '/v1/progressSessions',
+      { subjectId: target, mode: 'scalar_amount', unit: 'minute' },
+      randomUUID(),
+      bearer,
+      201,
+    );
+    occurrences.push(started.progressSession);
+  }
+  for (const [index, value] of [
+    { startDate: { year: 2021 }, finishDate: { year: 2022 } },
+    { startDate: { year: 1998 } },
+    { startDate: { year: 2001 } },
+  ].entries()) {
+    await json(
+      'PATCH',
+      `/v1/progressSessions/${occurrences[index]!.id}/journal`,
+      { revision: 0, ...value },
+      randomUUID(),
+      bearer,
+    );
+  }
+  const id = await upload(
+    anime('700', '<my_start_date>2024-00-00</my_start_date><my_finish_date>2024-02-29</my_finish_date><my_last_updated>999</my_last_updated>') +
+      anime('701', '<my_start_date>0000-00-00</my_start_date>') +
+      anime('702', '<my_start_date>0000-00-00</my_start_date>') +
+      anime('703', '<my_start_date>2024-01-01</my_start_date>'),
+  );
+  for (let row = 0; row < 4; row++) await review(id, row, target);
+
+  const adoptedVersion = randomUUID();
+  await json(
+    'POST',
+    `${base}/${id}/dates/review`,
+    { row: 0, occurrenceId: occurrences[0]!.id, startAction: 'adopt', finishAction: 'adopt' },
+    adoptedVersion,
+    bearer,
+  );
+  const reviewed = await json('GET', `${base}/${id}`);
+  expect(reviewed.rows[0].dateReview).toMatchObject({
+    journalRevision: 1,
+    startDate: { status: 'conflict', proposed: { year: 2024 } },
+    finishDate: { status: 'conflict', proposed: { year: 2024, month: 2, day: 29 } },
+  });
+  expect(reviewed.rows[0].dates.started).toMatchObject({ value: '2024', precision: 'year' });
+  expect(reviewed.rows[0].timestamps.my_last_updated).toMatchObject({ value: '999' });
+  const dateApply = (row: number, version: string, fields: string[]) =>
+    json('POST', `${base}/${id}/dates/apply`, { confirm: true, rows: [{ row, version, fields }] }, randomUUID(), bearer);
+  const applied = await dateApply(0, adoptedVersion, ['startDate', 'finishDate']);
+  expect(applied.outcomes[0]).toMatchObject({
+    status: 'applied',
+    fields: [{ field: 'startDate', status: 'applied' }, { field: 'finishDate', status: 'applied' }],
+    receipt: { sessionId: occurrences[0]!.id, revision: 2, changed: true },
+  });
+  expect(applied.outcomes[0].receipt).not.toHaveProperty('startDate');
+  const journalA = await json('GET', `/v1/progressSessions/${occurrences[0]!.id}/journal`, undefined, randomUUID(), bearer);
+  expect(journalA.journal).toMatchObject({ startDate: { year: 2024 }, finishDate: { year: 2024, month: 2, day: 29 } });
+  await native.pool.query(
+    `UPDATE library.list_import_mal SET document=document #- '{dateIntents,0,outcome}' WHERE account_id=$1 AND id=$2`,
+    [native.owner.actor.accountId, id],
+  );
+  expect((await dateApply(0, adoptedVersion, ['startDate', 'finishDate'])).outcomes[0]).toEqual(applied.outcomes[0]);
+  expect((await json('GET', `/v1/progressSessions/${occurrences[0]!.id}/journal`, undefined, randomUUID(), bearer)).journal.revision).toBe(2);
+
+  const unknownVersion = randomUUID();
+  await json('POST', `${base}/${id}/dates/review`, { row: 1, occurrenceId: occurrences[1]!.id, startAction: 'adopt' }, unknownVersion, bearer);
+  expect((await dateApply(1, unknownVersion, ['startDate'])).outcomes[0]).toMatchObject({
+    status: 'unsupported',
+    fields: [{ field: 'startDate', status: 'unknown' }],
+    receipt: null,
+  });
+  expect((await json('GET', `/v1/progressSessions/${occurrences[1]!.id}/journal`, undefined, randomUUID(), bearer)).journal.startDate).toEqual({ year: 1998 });
+
+  const clearVersion = randomUUID();
+  await json('POST', `${base}/${id}/dates/review`, { row: 2, occurrenceId: occurrences[2]!.id, startAction: 'clear' }, clearVersion, bearer);
+  expect((await dateApply(2, clearVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'applied', receipt: { changed: true } });
+  expect((await json('GET', `/v1/progressSessions/${occurrences[2]!.id}/journal`, undefined, randomUUID(), bearer)).journal.startDate).toBeNull();
+  expect((await json('GET', `/v1/progressSessions/${occurrences[1]!.id}/journal`, undefined, randomUUID(), bearer)).journal.startDate).toEqual({ year: 1998 });
+
+  const staleVersion = randomUUID();
+  await json('POST', `${base}/${id}/dates/review`, { row: 3, occurrenceId: occurrences[3]!.id, startAction: 'adopt' }, staleVersion, bearer);
+  await json('PATCH', `/v1/progressSessions/${occurrences[3]!.id}/journal`, { revision: 0, startDate: { year: 1990 } }, randomUUID(), bearer);
+  expect((await dateApply(3, staleVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'stale', reason: 'refresh-review' });
+  const refreshedVersion = randomUUID();
+  await json('POST', `${base}/${id}/dates/review`, { row: 3, occurrenceId: occurrences[3]!.id, startAction: 'adopt' }, refreshedVersion, bearer);
+  expect((await dateApply(3, refreshedVersion, ['startDate'])).outcomes[0].status).toBe('applied');
+  const diary = await json('GET', '/v1/libraryDiary?limit=25', undefined, randomUUID(), bearer);
+  expect(diary.occurrences.find((item: { id: string }) => item.id === occurrences[0]!.id).reportedDates.startDate).toEqual({ year: 2024 });
+  await json('DELETE', `${base}/${id}`);
 });
