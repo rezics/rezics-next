@@ -61,7 +61,7 @@ export async function createGrowthAppealBoundariesFixture() {
       key: `appeal-boundary-${suffix}`,
       handle: `appealboundary${suffix.slice(0, 12)}`,
       email: `appealboundary-${suffix}@content.test`,
-      password: `${randomUUID()}${randomUUID()}`,
+      password: 'ordinary native registration password',
     });
     const reviewerCredential = await system.auth.issue({
       accountId: registeredReviewer.accountId,
