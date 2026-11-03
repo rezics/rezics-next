@@ -896,7 +896,7 @@ function CollectionPageLifetime({
       page,
       members,
       editorMembers,
-      transfer,
+      transfer: capturedTransfer,
       batchRemovalIds,
       title,
       description,
@@ -906,7 +906,7 @@ function CollectionPageLifetime({
       coverMediaId,
     } = (saveIntent.current ??= captureSave());
     let committed = 0;
-    let currentRevision: number | undefined = transfer?.sourceRevision ?? page.revision;
+    let currentRevision: number | undefined = capturedTransfer?.sourceRevision ?? page.revision;
     let transferRevisions: { source: number; destination: number } | null = null;
 
     const keyFor = (operation: unknown) => {
@@ -919,7 +919,7 @@ function CollectionPageLifetime({
       return key;
     };
     try {
-      const transferIds = new Set(transfer?.memberIds ?? []);
+      const transferIds = new Set(capturedTransfer?.memberIds ?? []);
       const initial = (editorMembers ?? page.members).filter((member) => !transferIds.has(member.id));
       const remainingMembers = members.filter((member) => !transferIds.has(member.id));
       const plan = buildCollectionMemberEditPlan(initial, remainingMembers, page.firstPage);
@@ -1001,19 +1001,19 @@ function CollectionPageLifetime({
         committed += 1;
       }
 
-      if (transfer) {
+      if (capturedTransfer) {
         if (!isCurrent()) return;
         const data = {
-          collectionId: transfer.sourceId,
-          revision: transfer.sourceRevision,
-          memberIds: transfer.memberIds,
-          destinationCollectionId: transfer.destination.id,
-          destinationRevision: transfer.destination.revision,
-          after: transfer.after,
+          collectionId: capturedTransfer.sourceId,
+          revision: capturedTransfer.sourceRevision,
+          memberIds: capturedTransfer.memberIds,
+          destinationCollectionId: capturedTransfer.destination.id,
+          destinationRevision: capturedTransfer.destination.revision,
+          after: capturedTransfer.after,
         };
         setTransferState('pending');
         const result = await send.transferCollectionMembers({
-          data: { ...data, idempotencyKey: transfer.idempotencyKey },
+          data: { ...data, idempotencyKey: capturedTransfer.idempotencyKey },
           headers: headers('collection_member.transfer', credential),
         });
         if (!isCurrent('collection_member.transfer')) return;
@@ -1090,14 +1090,14 @@ function CollectionPageLifetime({
         }
         return;
       }
-      if (transfer && transferRevisions) {
+      if (capturedTransfer && transferRevisions) {
         const receipt: CollectionTransferReceipt = {
-          sourceId: transfer.sourceId,
-          destinationId: transfer.destination.id,
-          sourceTitle: transfer.sourceTitle,
-          destinationTitle: transfer.destination.title,
-          sourceHref: transfer.sourceHref,
-          destinationHref: transfer.destinationHref,
+          sourceId: capturedTransfer.sourceId,
+          destinationId: capturedTransfer.destination.id,
+          sourceTitle: capturedTransfer.sourceTitle,
+          destinationTitle: capturedTransfer.destination.title,
+          sourceHref: capturedTransfer.sourceHref,
+          destinationHref: capturedTransfer.destinationHref,
           sourceRevision: transferRevisions.source,
           destinationRevision: transferRevisions.destination,
           state: 'reading',
@@ -1108,12 +1108,12 @@ function CollectionPageLifetime({
         const [sourceRead, destinationRead] = await Promise.allSettled([
           reloadCollection(true),
           readCollectionMovePlacements({
-            data: { collectionId: transfer.destination.id, revision: transferRevisions.destination },
+            data: { collectionId: capturedTransfer.destination.id, revision: transferRevisions.destination },
           }),
         ]);
         if (!isCurrent()) return;
         const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
-        const sourceReady = !!sourcePage && sourcePage.id === transfer.sourceId;
+        const sourceReady = !!sourcePage && sourcePage.id === capturedTransfer.sourceId;
         const destinationReady = destinationRead.status === 'fulfilled';
         if (sourceReady) resetEditor(sourcePage);
         setTransferReceipt({ ...receipt, state: sourceReady && destinationReady ? 'ready' : 'unavailable' });
@@ -1124,10 +1124,10 @@ function CollectionPageLifetime({
       if (refreshed) resetEditor(refreshed);
     } catch {
       if (!isCurrent()) return;
-      if (transfer && transferRevisions) {
+      if (capturedTransfer && transferRevisions) {
         // The native receipt is definitive. Reconciliation cannot repeat a confirmed transfer.
         setTransferReceipt((receipt) => (receipt ? { ...receipt, state: 'unavailable' } : receipt));
-      } else if (transfer) {
+      } else if (capturedTransfer) {
         setTransferState('unknown');
         setFailure(m.library_collection_move_unknown());
       } else if (committed > 0) {
