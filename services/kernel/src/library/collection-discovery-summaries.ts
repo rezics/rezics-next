@@ -7,8 +7,10 @@ import { readPartition } from '../partition/partition.ts';
 import { prepareReadDecisions, type Actor } from '../request/access.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import {
-  collectionPresentation, readablePresentationCover,
-  type CollectionPresentation, type PresentationDependencies,
+  collectionPresentation,
+  readablePresentationCover,
+  type CollectionPresentation,
+  type PresentationDependencies,
 } from './collection-presentation.ts';
 import { readDiscoveryOutputs } from './collection-discovery-summaries-output.ts';
 import rowsQuery from './collection-discovery-summaries-rows.sql';
@@ -27,27 +29,33 @@ export type PublicCollectionDiscoveryRequest = Readonly<{
   ids: readonly string[];
   context: PublicCollectionDiscoveryContext;
 }>;
-type Card = Omit<CollectionPresentation, 'coverMediaId'> & Readonly<{
-  kind: 'collection';
-  id: string;
-  destination: `/collections/${string}`;
-  title: string;
-  description: string | null;
-  visibility: 'public';
-  revision: number;
-}>;
-export type PublicCollectionDiscoverySummary = Card & (
-  | Readonly<{
-    membershipKind: 'curated'; memberCount: number; orderEpoch: number; createdAt: string; updatedAt: string;
-  }>
-  | Readonly<{ membershipKind: 'dynamic'; outputGeneration: string }>
-);
+type Card = Omit<CollectionPresentation, 'coverMediaId'> &
+  Readonly<{
+    kind: 'collection';
+    id: string;
+    destination: `/collections/${string}`;
+    title: string;
+    description: string | null;
+    visibility: 'public';
+    revision: number;
+  }>;
+export type PublicCollectionDiscoverySummary = Card &
+  (
+    | Readonly<{
+        membershipKind: 'curated';
+        memberCount: number;
+        orderEpoch: number;
+        createdAt: string;
+        updatedAt: string;
+      }>
+    | Readonly<{ membershipKind: 'dynamic'; outputGeneration: string }>
+  );
 export type PublicCollectionDiscoveryResult =
   | Readonly<{ state: 'ready'; summaries: readonly PublicCollectionDiscoverySummary[] }>
   | Readonly<{
-    state: 'unavailable';
-    reason: 'native_authority' | 'changed' | 'access' | 'partition' | 'deadline';
-  }>;
+      state: 'unavailable';
+      reason: 'native_authority' | 'changed' | 'access' | 'partition' | 'deadline';
+    }>;
 export type PublicCollectionDiscoveryDependencies = PresentationDependencies;
 
 type Row = Awaited<ReturnType<typeof rowsQuery.run>>[number];
@@ -66,19 +74,29 @@ type Round = {
 /** Copy and validate the complete request before Access preparation or any owner checkout. */
 function request(ids: readonly string[], context: PublicCollectionDiscoveryContext) {
   if (
-    !context || !Number.isInteger(context.partition) || context.partition < 0 || context.partition >= PARTITIONS ||
-    !Number.isFinite(context.deadline) || !context.actor ||
+    !context ||
+    !Number.isInteger(context.partition) ||
+    context.partition < 0 ||
+    context.partition >= PARTITIONS ||
+    !Number.isFinite(context.deadline) ||
+    !context.actor ||
     (context.actor.kind !== 'anonymous' && context.actor.kind !== 'account') ||
-    !Array.isArray(ids) || ids.length > MAX_COLLECTION_DISCOVERY_SUMMARIES
-  ) throw new RangeError('Invalid public Collection discovery request');
+    !Array.isArray(ids) ||
+    ids.length > MAX_COLLECTION_DISCOVERY_SUMMARIES
+  )
+    throw new RangeError('Invalid public Collection discovery request');
   for (const id of ids) {
     const route = routeOf(id);
     if (route === null || partitionOf(route) !== context.partition)
       throw new RangeError('Public Collection discovery requires full keys in one partition');
   }
-  const actor: Actor = context.actor.kind === 'anonymous' ? { kind: 'anonymous' } : {
-    ...context.actor, scopes: [...context.actor.scopes],
-  };
+  const actor: Actor =
+    context.actor.kind === 'anonymous'
+      ? { kind: 'anonymous' }
+      : {
+          ...context.actor,
+          scopes: [...context.actor.scopes],
+        };
   return { ids: [...new Set(ids)], context: { ...context, actor } };
 }
 
@@ -92,8 +110,13 @@ function publicRow(row: Row): boolean {
 function nativeAuthority(row: Row, output: CollectionOutputPublication | null): boolean {
   if (row.membershipKind === 'curated')
     return row.deidentified || (row.ownerState !== null && row.ownerState !== 'deleted');
-  return row.membershipKind === 'dynamic' && !row.deidentified &&
-    row.ownerState !== null && row.ownerState !== 'deleted' && output !== null;
+  return (
+    row.membershipKind === 'dynamic' &&
+    !row.deidentified &&
+    row.ownerState !== null &&
+    row.ownerState !== 'deleted' &&
+    output !== null
+  );
 }
 
 function signature(row: Row, output: CollectionOutputPublication | null): string {
@@ -110,7 +133,8 @@ async function round(
   requireAccessDeadline(context.deadline);
   // Foreign authority is prepared while no Library connection is held. Repeat on final disclosure.
   const decisions = await prepareReadDecisions(dependencies.access, {
-    actor: context.actor, actions: new Set(['collection:read']),
+    actor: context.actor,
+    actions: new Set(['collection:read']),
     ...(context.time ? { time: context.time } : {}),
     context: { pool: dependencies.pool, deadline: context.deadline, ...(context.time ? { time: context.time } : {}) },
   });
@@ -127,25 +151,43 @@ async function round(
       const byId = new Map(rows.map((row) => [row.id, row]));
       if (rows.length > ids.length || byId.size !== rows.length || rows.some((row) => !ids.includes(row.id)))
         throw new Error('Native Collection discovery returned unexpected keys');
-      const allowed = await decisions.decide(client, {
-        action: 'collection:read', resourceType: 'library.collection', ids,
-        // All facts are owner-read in this snapshot. No hints, caller flags or ordinary grant
-        // can turn unlisted/private/inactive metadata into a public discovery contribution.
-        eligibility: async () => Object.fromEntries(ids.map((id) => [id, !!byId.get(id) && publicRow(byId.get(id)!)])),
-      }, time);
+      const allowed = await decisions.decide(
+        client,
+        {
+          action: 'collection:read',
+          resourceType: 'library.collection',
+          ids,
+          // All facts are owner-read in this snapshot. No hints, caller flags or ordinary grant
+          // can turn unlisted/private/inactive metadata into a public discovery contribution.
+          eligibility: async () =>
+            Object.fromEntries(ids.map((id) => [id, !!byId.get(id) && publicRow(byId.get(id)!)])),
+        },
+        time,
+      );
       if (ids.some((id) => typeof allowed[id]?.allowed !== 'boolean')) throw new AccessUnavailableError('overloaded');
       const visible = rows.filter((row) => publicRow(row) && allowed[row.id]!.allowed);
-      const outputs = await readDiscoveryOutputs(client, visible.filter((row) => row.membershipKind === 'dynamic'));
+      const outputs = await readDiscoveryOutputs(
+        client,
+        visible.filter((row) => row.membershipKind === 'dynamic'),
+      );
       const observed = new Map<string, Observed>();
       for (const row of visible) {
         const output = outputs.get(row.id) ?? null;
-        observed.set(row.id, { row, output, authority: nativeAuthority(row, output), signature: signature(row, output) });
+        observed.set(row.id, {
+          row,
+          output,
+          authority: nativeAuthority(row, output),
+          signature: signature(row, output),
+        });
       }
       await client.query('COMMIT');
       return { epoch: partition.epoch, node: partition.node, rows: observed };
     } catch (error) {
-      try { await connection.query('ROLLBACK'); }
-      catch (cleanup) { discardConnection(connection, cleanup instanceof Error ? cleanup : new Error('Read rollback failed')); }
+      try {
+        await connection.query('ROLLBACK');
+      } catch (cleanup) {
+        discardConnection(connection, cleanup instanceof Error ? cleanup : new Error('Read rollback failed'));
+      }
       throw error;
     } finally {
       if (ownedTime) releaseOperationalTime(ownedTime);
@@ -153,19 +195,32 @@ async function round(
   });
 }
 
-function card(observed: Observed, presentation: Omit<CollectionPresentation, 'coverMediaId'>): PublicCollectionDiscoverySummary {
+function card(
+  observed: Observed,
+  presentation: Omit<CollectionPresentation, 'coverMediaId'>,
+): PublicCollectionDiscoverySummary {
   const { row, output } = observed;
   const common: Card = {
-    ...presentation, kind: 'collection', id: row.id, destination: `/collections/${row.id}`,
-    title: row.title, description: row.description, visibility: 'public', revision: row.revision,
+    ...presentation,
+    kind: 'collection',
+    id: row.id,
+    destination: `/collections/${row.id}`,
+    title: row.title,
+    description: row.description,
+    visibility: 'public',
+    revision: row.revision,
   };
   if (row.membershipKind === 'dynamic') {
     if (!output) throw new Error('A dynamic discovery card requires actual native output authority');
     return { ...common, membershipKind: 'dynamic', outputGeneration: output.generation };
   }
   return {
-    ...common, membershipKind: 'curated', memberCount: row.memberCount, orderEpoch: row.orderEpoch,
-    createdAt: new Date(row.createdAt).toISOString(), updatedAt: new Date(row.updatedAt).toISOString(),
+    ...common,
+    membershipKind: 'curated',
+    memberCount: row.memberCount,
+    orderEpoch: row.orderEpoch,
+    createdAt: new Date(row.createdAt).toISOString(),
+    updatedAt: new Date(row.updatedAt).toISOString(),
   };
 }
 
@@ -181,7 +236,7 @@ export async function readPublicCollectionDiscoverySummaries(
   const admitted = request(ids, context);
   if (!admitted.ids.length) return { state: 'ready', summaries: [] };
   const unavailable = (reason: Extract<PublicCollectionDiscoveryResult, { state: 'unavailable' }>['reason']) =>
-    ({ state: 'unavailable', reason } as const);
+    ({ state: 'unavailable', reason }) as const;
   try {
     const hydrate = async (): Promise<PublicCollectionDiscoveryResult> => {
       const before = await round(dependencies, admitted.ids, admitted.context);
@@ -190,9 +245,15 @@ export async function readPublicCollectionDiscoverySummaries(
       // released before Library's final snapshot; no ordinary Collection read or query runs here.
       for (const [id, observed] of before.rows) {
         if (!observed.authority) continue;
-        const cover = observed.row.coverMediaId === null ? null : await readablePresentationCover(
-          dependencies, admitted.context.actor, observed.row.coverMediaId, admitted.context.deadline,
-        );
+        const cover =
+          observed.row.coverMediaId === null
+            ? null
+            : await readablePresentationCover(
+                dependencies,
+                admitted.context.actor,
+                observed.row.coverMediaId,
+                admitted.context.deadline,
+              );
         presentations.set(id, collectionPresentation(observed.row, cover));
       }
       const final = await round(dependencies, admitted.ids, admitted.context);
@@ -213,7 +274,8 @@ export async function readPublicCollectionDiscoverySummaries(
     };
     return await hydrate();
   } catch (error) {
-    if (error instanceof AccessUnavailableError) return unavailable(error.reason === 'deadline' ? 'deadline' : 'access');
+    if (error instanceof AccessUnavailableError)
+      return unavailable(error.reason === 'deadline' ? 'deadline' : 'access');
     if (error instanceof CommandUnavailableError) return unavailable('partition');
     // SQL, media, programming and unrelated infrastructure failures remain observable to callers.
     throw error;

@@ -10,8 +10,13 @@ const selectedOutputSQL = `
 SELECT requested.id::text AS id, selected.*
 FROM unnest($1::integer[], $2::uuid[], $3::bigint[]) AS requested(route, id, source_generation)
 CROSS JOIN LATERAL (
-${outputHead.sql.trim().replace(/;$/, '').replace(/\$([123])\b/g, (_, n: string) =>
-  ({ '1': 'requested.route', '2': 'requested.id', '3': 'requested.source_generation' })[n]!)}
+${outputHead.sql
+  .trim()
+  .replace(/;$/, '')
+  .replace(
+    /\$([123])\b/g,
+    (_, n: string) => ({ '1': 'requested.route', '2': 'requested.id', '3': 'requested.source_generation' })[n]!,
+  )}
 ) selected`;
 
 export async function readDiscoveryOutputs(
@@ -20,7 +25,9 @@ export async function readDiscoveryOutputs(
 ): Promise<ReadonlyMap<string, CollectionOutputPublication>> {
   if (!keys.length) return new Map();
   const result = await client.query<CollectionOutputPublication & { id: string }>(selectedOutputSQL, [
-    keys.map((key) => key.route), keys.map((key) => key.id), keys.map((key) => key.sourceGeneration),
+    keys.map((key) => key.route),
+    keys.map((key) => key.id),
+    keys.map((key) => key.sourceGeneration),
   ]);
   if (result.rows.length > keys.length || new Set(result.rows.map((row) => row.id)).size !== result.rows.length)
     throw new Error('Native Collection output authority returned duplicate keys');
