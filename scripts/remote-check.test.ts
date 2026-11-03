@@ -4308,6 +4308,7 @@ const stateFile = directory + '/state';
 const state = JSON.parse(readFileSync(stateFile, 'utf8'));
 const cgroup = (slice: string) => directory + '/cgroup/rezics-check.slice/' + slice;
 if (command === 'systemd-run') {
+  if (args.includes('--unit=rezics-check-cache-maintenance')) process.exit(0);
   if (args.includes('--help')) {
     if (process.env.SYSTEMD_MODE === 'systemd-259') console.log('--expand-environment');
     process.exit(0);
@@ -6594,6 +6595,11 @@ function preparationFixture() {
     join(bin, 'systemd-run'),
     `#!/bin/sh
 if [ "$1" = --help ]; then echo --expand-environment; exit 0; fi
+if [ "$1" = --unit=rezics-check-cache-maintenance ]; then
+  test -f exit-status || exit 97
+  printf '%s\\n' "$@" > maintenance-request
+  exit 0
+fi
 while [ "$#" -gt 0 ] && [ "$1" != python3 ]; do shift; done
 exec "$@"
 `,
@@ -6910,6 +6916,8 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   const cold = fixture.create();
   expect(cold.execute().status).toBe(0);
   expect(cold.artifacts().cache).toBe('miss');
+  const entry = join(fixture.directory, 'dependency-artifacts', cold.artifacts().key);
+  utimesSync(entry, 1, 1);
   const warm = fixture.create();
   const result = warm.execute();
   expect(result.status, result.stderr).toBe(0);
@@ -6918,6 +6926,7 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
     key: cold.artifacts().key,
     packages: [{ name: '@fixture/native-installer', version: '1.2.3' }],
   });
+  expect(statSync(entry).mtimeMs).toBeGreaterThan(1000);
   expect(fixture.events()).toEqual(['install:1.2.3', 'postinstall:1.2.3', 'download:1.2.3']);
   expect(existsSync(join(warm.run, 'command-invoked'))).toBe(true);
   const binary = 'node_modules/native-installer/bin/native';
@@ -6940,16 +6949,27 @@ test('cold then warm native preparation reuses verified exact-platform lifecycle
   );
 });
 
-test('preparation evicts source and native artifacts by last use within the host byte budget, preserving held locks', async () => {
+function sweepArtifacts(directory: string, program = dependencyPreparationProgram) {
+  const result = spawnSync('python3', ['-c', program, 'sweep', join(directory, 'dependency-artifacts')], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  expect(result.status, result.stderr).toBe(0);
+  return result;
+}
+
+const smallCacheDisk = "shutil.disk_usage = lambda _: type('Disk', (), {'total': 3000000, 'free': 3000000})()";
+
+test('legacy cache backlog and its global lock cannot delay source/native publication or change the command result', async () => {
   const fixture = preparationFixture();
   const cache = join(fixture.directory, 'dependency-artifacts');
-  const entries = ['a', 'b', 'c'].map((key, index) => join(cache, ...(index === 1 ? ['native'] : []), key.repeat(64)));
-  for (const [index, entry] of entries.entries()) {
+  for (let index = 0; index < 388; index++) {
+    const entry = join(cache, ...(index % 2 ? ['native'] : []), index.toString(16).padStart(64, '0'));
     mkdirSync(entry, { recursive: true });
-    writeFileSync(join(entry, 'old-artifact'), Buffer.alloc(96 * 1024));
-    utimesSync(entry, index + 1, index + 1);
+    writeFileSync(join(entry, 'legacy'), 'unmeasured');
+    if (index === 0) writeFileSync(join(entry, '.cache-bytes'), 'malformed');
   }
-  const holder = Bun.spawn(['flock', entries[0] + '.lock', 'sh', '-c', 'echo LOCKED; cat'], {
+  const holder = Bun.spawn(['flock', cache, 'sh', '-c', 'echo LOCKED; cat'], {
     stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -6958,75 +6978,196 @@ test('preparation evicts source and native artifacts by last use within the host
     await waitForOutput(holder, 'LOCKED\n');
     const program = dependencyPreparationProgram.replace(
       'def install():',
-      "shutil.disk_usage = lambda _: type('Disk', (), {'total': 3000000, 'free': 3000000})()\ndef install():",
+      `
+def forbidden(*args, **kwargs):
+    raise RuntimeError('publication attempted global eviction')
+evict_artifacts = forbidden
+original_walk = os.walk
+def guarded_walk(path, **kwargs):
+    if str(path).startswith(${JSON.stringify(cache)}):
+        raise RuntimeError('publication traversed a legacy artifact')
+    return original_walk(path, **kwargs)
+os.walk = guarded_walk
+def install():`,
     );
-    const run = fixture.create({ program });
+    const run = fixture.create({ program, bound: 2000, command: ['sh', '-c', 'touch command-invoked; exit 23'] });
     const result = run.execute();
-    expect(result.status, result.stderr).toBe(0);
-    expect(entries.map((entry) => existsSync(entry))).toEqual([true, false, true]);
-    expect(result.stderr).toContain('dependency artifacts evicted ' + entries[1]);
-    const sizes = [...result.stderr.matchAll(/cache bytes=(\d+) bound=(\d+)/g)];
-    expect(sizes.length).toBeGreaterThan(0);
-    for (const [, bytes, bound] of sizes) {
-      expect(Number(bound)).toBe(300_000);
-      expect(Number(bytes)).toBeLessThanOrEqual(Number(bound));
-    }
-    const entry = join(cache, run.artifacts().key);
-    utimesSync(entry, 1, 1);
-    const warm = fixture.create({ program });
-    expect(warm.execute().status).toBe(0);
-    expect(warm.artifacts().cache).toBe('hit');
-    expect(statSync(entry).mtimeMs).toBeGreaterThan(1_000);
-    const native = join(
-      cache,
-      'native',
-      readdirSync(join(cache, 'native')).find((name) => !name.endsWith('.lock'))!,
-    );
-    utimesSync(native, 1, 1);
-    const edited = fixture.create({ program, source: 'changed source' });
-    expect(edited.execute().status).toBe(0);
-    expect(edited.artifacts().nativeCache).toBe('hit');
-    expect(statSync(native).mtimeMs).toBeGreaterThan(1_000);
-    const tiny = fixture.create({
-      program: program.replace("'total': 3000000, 'free': 3000000", "'total': 10, 'free': 10"),
-      source: 'entry larger than the byte bound',
-    });
-    const tinyResult = tiny.execute();
-    expect(tinyResult.status, tinyResult.stderr).toBe(0);
-    expect(existsSync(join(cache, tiny.artifacts().key))).toBe(false);
-    expect(existsSync(entries[0]!)).toBe(true);
+    expect(result.status, result.stderr).toBe(23);
+    expect(readFileSync(join(run.run, 'exit-status'), 'utf8')).toBe('23\n');
+    expect(existsSync(join(run.run, 'command-invoked'))).toBe(true);
+    const request = readFileSync(join(run.run, 'maintenance-request'), 'utf8');
+    for (const option of ['--no-block', '--on-unit-inactive=60s', 'RuntimeMaxSec=3s', 'KillMode=control-group'])
+      expect(request).toContain(option);
+    expect(Number(readFileSync(join(cache, run.artifacts().key, '.cache-bytes'), 'utf8'))).toBeGreaterThan(0);
+    expect(readdirSync(cache).filter((name) => /^[a-f0-9]{64}$/.test(name))).toHaveLength(195);
   } finally {
     await holder.stdin.end();
     expect(await holder.exited).toBe(0);
   }
 });
 
-for (const failures of [1, 2]) {
-  test(`full-disk publication evicts and retries once, then ${failures === 1 ? 'publishes' : 'skips caching without failing the command'}`, () => {
-    const fixture = preparationFixture();
-    const cache = join(fixture.directory, 'dependency-artifacts');
-    const old = join(cache, 'd'.repeat(64));
-    mkdirSync(old, { recursive: true });
-    writeFileSync(join(old, 'old-artifact'), 'old bytes');
-    const program = dependencyPreparationProgram.replace(
-      "            copy_entries(root, stage / 'payload', manifest['entries'])",
-      `            shutil.disk_usage = lambda _: type('Disk', (), {'total': 3000000, 'free': 0 if attempt < ${failures} else 3000000})()
-            if attempt < ${failures}:
-                (stage / 'partial').write_text('partial publication')
-                raise OSError(errno.ENOSPC, 'No space left on device')
-            copy_entries(root, stage / 'payload', manifest['entries'])`,
-    );
-    const run = fixture.create({ program });
-    const result = run.execute();
-    expect(result.status, result.stderr).toBe(0);
-    expect(existsSync(join(run.run, 'command-invoked'))).toBe(true);
-    expect(existsSync(old)).toBe(false);
-    expect(existsSync(join(cache, run.artifacts().key))).toBe(failures === 1);
-    expect(result.stderr.match(/evicting before one retry/g)).toHaveLength(2);
-    expect(result.stderr.match(/publication skipped after ENOSPC retry/g) ?? []).toHaveLength(failures === 2 ? 2 : 0);
-    expect(readdirSync(join(run.run, '.temp/check-host')).filter((name) => name.startsWith('artifacts-'))).toEqual([]);
+test('maintenance resumes bounded legacy batches, preserves entry locks and never deletes under the global lock', async () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const entries = Array.from({ length: 140 }, (_, index) =>
+    join(cache, ...(index % 2 ? ['native'] : []), index.toString(16).padStart(64, '0')),
+  );
+  for (const entry of entries) {
+    mkdirSync(entry, { recursive: true });
+    writeFileSync(join(entry, 'legacy'), 'unknown bytes');
+    utimesSync(entry, 1, 1);
+  }
+  const holder = Bun.spawn(['flock', entries[0] + '.lock', 'sh', '-c', 'echo LOCKED; cat'], {
+    stdin: 'pipe',
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
-}
+  const guarded = dependencyPreparationProgram.replace(
+    'def install():',
+    `
+${smallCacheDisk}
+original_unlink = os.unlink
+def guarded_unlink(path, *args, **kwargs):
+    with contextlib.ExitStack() as owned:
+        fd = os.open(${JSON.stringify(cache)}, os.O_RDONLY)
+        owned.callback(os.close, fd)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    return original_unlink(path, *args, **kwargs)
+os.unlink = guarded_unlink
+def install():`,
+  );
+  try {
+    await waitForOutput(holder, 'LOCKED\n');
+    sweepArtifacts(fixture.directory, guarded);
+    expect(entries.every(existsSync)).toBe(true); // A partial accounting batch cannot claim completion.
+    expect(JSON.parse(readFileSync(join(cache, '.sweep-state.json'), 'utf8')).cookie).not.toBe(0);
+    let last = '';
+    for (let tick = 0; tick < 100 && entries.slice(1).some(existsSync); tick++) {
+      last = sweepArtifacts(fixture.directory, guarded).stderr;
+      expect(existsSync(entries[0]!)).toBe(true);
+    }
+    expect(entries.slice(1).some(existsSync)).toBe(false);
+    expect(last).toContain('unknown=');
+    expect(existsSync(entries[0] + '.lock')).toBe(true);
+    expect(spawnSync('flock', ['-n', entries[0] + '.lock', 'true']).status).not.toBe(0);
+  } finally {
+    await holder.stdin.end();
+    expect(await holder.exited).toBe(0);
+  }
+});
+
+test('maintenance revalidates last use and replacement identity before detaching measured LRU entries', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const entries = ['a', 'b', 'c'].map((name) => join(cache, name.repeat(64)));
+  for (const [index, entry] of entries.entries()) {
+    mkdirSync(entry, { recursive: true });
+    writeFileSync(join(entry, '.cache-bytes'), '200000');
+    utimesSync(entry, index + 1, index + 1);
+  }
+  const program = dependencyPreparationProgram.replace(
+    'def install():',
+    `
+def changed_since_snapshot(_):
+    touch_artifacts(Path(${JSON.stringify(entries[0])}))
+    entry = Path(${JSON.stringify(entries[1])})
+    with (entry.parent / (entry.name + '.lock')).open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        detach_artifacts(entry.parent, entry)
+        entry.mkdir()
+        (entry / '.cache-bytes').write_text('200000')
+        os.utime(entry, ns=(2000000000, 2000000000))
+    return type('Disk', (), {'total': 3000000, 'free': 3000000})()
+shutil.disk_usage = changed_since_snapshot
+def install():`,
+  );
+  sweepArtifacts(fixture.directory, program);
+  expect(entries.map(existsSync)).toEqual([true, true, false]);
+  expect(entries.every((entry) => existsSync(entry + '.lock'))).toBe(true);
+});
+
+test('slow interrupted deletion releases coordination, preserves warm reuse and resumes within time and step budgets', async () => {
+  const fixture = preparationFixture();
+  const run = fixture.create();
+  expect(run.execute().status).toBe(0);
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const garbage = join(cache, '.garbage', 'interrupted');
+  mkdirSync(garbage, { recursive: true });
+  for (let index = 0; index < 150; index++) writeFileSync(join(garbage, String(index)), 'old bytes');
+  const ready = join(fixture.directory, 'deleting');
+  const program = dependencyPreparationProgram.replace(
+    'def install():',
+    `
+original_unlink = os.unlink
+def slow_unlink(path, *args, **kwargs):
+    Path(${JSON.stringify(ready)}).touch()
+    time.sleep(60)
+    return original_unlink(path, *args, **kwargs)
+os.unlink = slow_unlink
+def install():`,
+  );
+  const child = Bun.spawn(['python3', '-c', program, 'sweep', cache], { stdout: 'pipe', stderr: 'pipe' });
+  try {
+    await waitFor(() => existsSync(ready));
+    expect(spawnSync('flock', ['-n', cache, 'true']).status).toBe(0);
+    sweepArtifacts(fixture.directory); // Another sweeper skips the busy deletion owner.
+    const warm = fixture.create();
+    expect(warm.execute().status).toBe(0);
+    expect(warm.artifacts().cache).toBe('hit');
+    child.kill('SIGKILL');
+    await child.exited;
+    const offset = `
+clock = time.monotonic
+shift = [0]
+time.monotonic = lambda: clock() + shift[0]
+original_unlink = os.unlink
+def timed_unlink(path, *args, **kwargs):
+    shift[0] += 3
+    return original_unlink(path, *args, **kwargs)
+os.unlink = timed_unlink
+`;
+    sweepArtifacts(
+      fixture.directory,
+      dependencyPreparationProgram.replace('def install():', offset + '\ndef install():'),
+    );
+    expect(readdirSync(garbage)).toHaveLength(149);
+    sweepArtifacts(fixture.directory);
+    expect(existsSync(garbage)).toBe(true); // 128 steps cannot finish 149 files.
+    sweepArtifacts(fixture.directory);
+    expect(existsSync(garbage)).toBe(false);
+    const deep = join(cache, '.garbage', 'deep');
+    mkdirSync(join(deep, ...Array(160).fill('child')), { recursive: true });
+    for (let tick = 0; tick < 4 && existsSync(deep); tick++) sweepArtifacts(fixture.directory);
+    expect(existsSync(deep)).toBe(false);
+  } finally {
+    if (child.exitCode === null) child.kill('SIGKILL');
+    await child.exited;
+    await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  }
+});
+
+test('full-disk source/native publication skips optional caching without eviction, retry or command failure', () => {
+  const fixture = preparationFixture();
+  const cache = join(fixture.directory, 'dependency-artifacts');
+  const old = join(cache, 'd'.repeat(64));
+  mkdirSync(old, { recursive: true });
+  writeFileSync(join(old, 'old-artifact'), 'old bytes');
+  const program = dependencyPreparationProgram.replace(
+    "        copy_entries(root, stage / 'payload', manifest['entries'])",
+    `        (stage / 'partial').write_text('partial publication')
+        raise OSError(errno.ENOSPC, 'No space left on device')`,
+  );
+  const run = fixture.create({ program });
+  const result = run.execute();
+  expect(result.status, result.stderr).toBe(0);
+  expect(existsSync(join(run.run, 'command-invoked'))).toBe(true);
+  expect(existsSync(old)).toBe(true);
+  expect(existsSync(join(cache, run.artifacts().key))).toBe(false);
+  expect(result.stderr.match(/publication skipped after ENOSPC/g)).toHaveLength(2);
+  const partials = readdirSync(join(run.run, '.temp/check-host')).filter((name) => name.startsWith('artifacts-'));
+  expect(partials).toHaveLength(2); // Private run staging is disposed by normal owned-run cleanup.
+  expect(partials.every((name) => existsSync(join(run.run, '.temp/check-host', name, 'partial')))).toBe(true);
+});
 
 test('native preparation invalidates changed package version, lock, platform, runtime revision and corrupt or partial artifacts', () => {
   const fixture = preparationFixture();

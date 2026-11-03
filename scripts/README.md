@@ -485,7 +485,26 @@ Admission retries races against other callers. The default probe interval is fiv
    a verified atomic directory rename. Failed/aborted publishers leave no consumable partial entry, and a timed-out waiter
    cannot delete another publisher's cache. Changed inputs/platform/revision or a damaged entry rebuilds it.
    A second immutable native-artifact layer is keyed by lockfiles, workspace manifests, patches, platform/libc, runtime build and exact Bun revision. It contains only installed workerd/Bun and their platform packages, verified binaries and links. On an unrelated source edit these artifacts seed a private install while frozen installation still runs all lifecycle scripts to regenerate source-dependent outputs. The complete source cache remains independently invalidated. Native identities compare by package name and version, so a verified older publication with a different traversal order remains reusable. Both layers use bounded per-key locking and verified atomic publication; a tarball cache alone is insufficient.
-   Source and native artifacts share an LRU byte budget capped at 10% of filesystem capacity and reduced to preserve 10% free space; hits/publications refresh directory mtime, post-publication sweeps skip entries locked by other preparations, and publication ENOSPC evicts and retries once before skipping the optional cache write. Preparation logs report eviction bytes and remaining cache bytes/bound.
+   Source and native artifacts share an eventual LRU maintenance target capped at 10% of filesystem capacity and
+   reduced to preserve 10% free space. Publication derives allocated bytes from its verification inventory and never
+   scans legacy entries, takes a cache-wide lock or waits for eviction. ENOSPC skips optional publication without a
+   sweep or retry; install validation and the actual command result still apply. Partial staging stays inside the owned
+   run for normal post-command cleanup.
+   After terminal status is durable and the run tree is reaped, the host registers the independent systemd
+   `rezics-check-cache-maintenance` timer/service with `--no-block`; registration failure leaves the result unchanged.
+   The timer starts after one second and repeats 60 seconds after service exit. Its self-contained program survives
+   run-directory cleanup; systemd owns its control group, 256 MiB memory limit, 20% CPU quota, idle I/O priority,
+   three-second runtime limit and one-second stop timeout. Controller deployment must restart this timer to update it.
+   Each sweep admits two seconds of monotonic work, at most 128 namespace records, eight detachments and 128 deletion
+   steps. Directory cookies persist scan progress; completed passes restart to reconcile concurrent mutations.
+   Accounting reports measured bytes and unknown entry counts separately. Decision: unmeasured or malformed legacy
+   entries are conservatively eligible for incremental eviction, without recursively measuring them.
+   Hits/publications refresh directory mtime. Maintenance takes global and per-key locks nonblockingly, revalidates
+   inode and last-use snapshots, then atomically detaches eligible entries into `.garbage` under the per-key lock.
+   Lock files remain stable. Recursive deletion runs afterward under a separate garbage-directory lock, with neither
+   the global nor per-key lock held; interrupted deletion resumes on later ticks. Active entries and newly reused or
+   replaced snapshots are skipped. Backlogs and unknown sizes may temporarily exceed the target; maintenance never
+   makes that target a preparation or result-delivery condition.
    Preparation failure returns infrastructure status 70, writes `preparation-status.json` and `exit-status`, and streams a
    bounded diagnostic receipt with host, run, phase, elapsed time and actual active package names/versions from owned
    process working directories and package metadata. Unknown package identity stays unknown; previously observed packages
