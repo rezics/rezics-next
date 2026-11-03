@@ -82,6 +82,68 @@ physical-proof claim.
 The adopted design evidence is [Realm discovery research](../../../../docs/research/content-realm-discovery-design.md).
 Its proposed `items` envelope is superseded here by the kernel resource-plural `realms` envelope.
 
+## Public Space discovery source
+
+`spaceDiscoverySource({pool,access,clock?}, {deadline}?)` in `space-discovery.ts` exports Community's internal
+`SpaceDiscoverySource`: `read(partition, ids)`, `page(partition, after, limit)` and `count(partition)`. Search owns
+kind registration, index generations, query admission and frontend integration. This interface adds no HTTP
+endpoint or public count. Its identity is the existing Space UUID and native route, including when carrying a Realm;
+it never manufactures a second Realm identity in mixed discovery. Popular/Trending discussion ranking above remains
+independent and unchanged.
+
+Decision: bootstrap traverses all retained Space identities with a private candidate census and sparse eligible pages;
+the census is never an eligible-result count, and consumers must follow native frontiers even on an empty page.
+`read` accepts at most 100 input IDs, deduplicates them and rejects malformed or cross-partition keys. `page` accepts
+1–100 candidates and a full `{route,id}` frontier in that partition. It examines one indexed range of at most `limit`
+candidates plus one continuation probe, returns eligible `spaces`, and returns the last examined key as `next` only
+when that probe exists. Protected/removed candidates still advance the frontier. There is no scan/refill to fill an
+eligible page. `count` returns the exact number of retained native candidates, including protected/removed identities,
+from one `space_discovery_population` row. Its insert/delete trigger runs inside the native writer transaction;
+metadata, visibility and lifecycle transitions do not change that identity census. The migration initializes the
+census once under a Space write lock; requests never reconstruct it by counting a table.
+
+All three return `{partition,position,...}` with `position` the exact bigint `core.partition.position` from the same
+released REPEATABLE READ snapshot as the candidates/census and projected current text. An unavailable, fenced or
+moved partition fails the operation rather than becoming an empty population. `spaces` contains
+`{id,realmId,name,description,revision}`; `revision` is the current native Realm head UUID for a carried Realm, or Space
+head UUID otherwise. It is an equality witness, never an ordering/version surrogate for `position`.
+
+`readSpaceDiscoverySummaries(deps, ids, {deadline})` hydrates at most 100 fixed full keys across their actual homes and
+returns a map of current `{id,realmId,name,description,avatar}`. Both source reads and hydration always prepare native
+anonymous Space and Realm decisions, independent of caller privileges. Standalone text uses `readSpace`; occupied
+slots use the same exact native Realm/current-revision reader as community presentation. A slot occupied by an
+unreadable, protected, removed or source-unsettled Realm suppresses the whole Space, without standalone fallback.
+Both containers must be active and their current heads available at the native read time. Name is the current native
+title; description uses `discoveryDescription` (collapsed whitespace, 160 Unicode characters). No text copy is stored.
+
+Hydration releases each first owner snapshot before resolving only its selected avatar through the original
+`readRealmPresentationImages` as anonymous, with no banner. Unset, erased, denied or unavailable optional images
+yield null, using the exact native `RealmPresentationImage` schema when available. It then repeats owner reads and
+anonymous/source decisions. A changed placement epoch, head, lifecycle version, slot, Context, source gate or
+presentation omits the candidate without retry/refill, including remove/restore cycles. Missing candidates stay
+absent regardless of index evidence. No member counts, rules, private membership or copied media authority are read.
+
+### Cost and lifecycle handoff
+
+Read/page use one released snapshot in one requested partition: one placement/position seek, at most 101 keyset rows,
+at most 100 exact Space/head and occupied-slot reads, one exact Realm/head batch, two native Access batches and at
+most 100 exact current Realm source gates. Count uses one placement/position and one census seek. Hydration groups
+only the supplied keys, with two such owner rounds per occupied partition and at most one native optional avatar
+protocol per candidate (at most twelve derivatives). Work is linear in the fixed input limit, with logarithmic
+indexed seeks; there is no all-partition scan, ranking read, historical text scan or refill. Focused outcomes live in
+`test/community/space-discovery.test.ts`; physical/growth and broader acceptance remain integration obligations.
+
+Bootstrap and current hydration are delivered here. Ongoing convergence is explicitly incomplete: the dependent
+lifecycle increment must compose the existing native `space.created/updated`, `realm.created/updated`,
+`space.removed/restored`, `realm.removed/restored`, and `realm-discovery.changed` events with Access gate and native
+media eligibility invalidation into bounded durable Space-key work. Realm events resolve only their exact native
+host; wake hints never substitute for a current source read. The relay must retain exact transaction positions,
+deduplicate/reorder safely, omit ineligible rows as deletions, and hand Search the affected Space keys/positions for
+its registered generations. This increment adds no relay or claim that an existing index converges after edits or
+gate changes. Search must use current hydration and must not expose this private census as kind-count evidence.
+
+## Space commands and reads
+
 `createSpace` derives its route from the authenticated account and idempotency key.
 It requires `space:create` on the Global Context through `parentCreationAuthorization`.
 One `runCommand` transaction inserts the Space, its first revision and native Access initialization:
