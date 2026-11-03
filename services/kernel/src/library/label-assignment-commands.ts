@@ -351,8 +351,17 @@ export function createLabelAssignmentCommands(deps: {
     key: string,
     admission: LabelCommandAdmission,
   ) {
-    return (await mutate(actor, labelId, value, key, 'assign', admission, expectedLabelRevision,
-      undefined, expectedTarget)) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged: boolean }>;
+    return (await mutate(
+      actor,
+      labelId,
+      value,
+      key,
+      'assign',
+      admission,
+      expectedLabelRevision,
+      undefined,
+      expectedTarget,
+    )) as import('../command/command.ts').CommandOutcome<ReturnType<typeof minimal> & { unchanged: boolean }>;
   }
   async function assignLabelForConsolidation(
     actor: Actor,

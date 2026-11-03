@@ -4,21 +4,39 @@ import { t } from 'elysia';
 import type { Static } from 'typebox';
 
 export const VNDB_LABEL_LIMITS = {
-  rows: 8, mappings: 8, items: 64, page: 8, selectionBytes: 16384, sourceNameBytes: 1024, applyMs: 5000,
+  rows: 8,
+  mappings: 8,
+  items: 64,
+  page: 8,
+  selectionBytes: 16384,
+  sourceNameBytes: 1024,
+  applyMs: 5000,
 } as const;
 export const vndbLabelDigest = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const closed = { additionalProperties: false } as const;
 const uuid = t.String({ format: 'uuid' });
-export const vndbLabelChoiceSchema = t.Object({
-  rows: t.Array(t.Object({ ordinal: t.Integer({ minimum: 0, maximum: 4999 }), reviewId: uuid }, closed), { minItems: 1, maxItems: 8 }),
-  mappings: t.Array(t.Object({
-    source: t.String({ minLength: 1, maxLength: 1024 }),
-    target: t.Union([
-      t.Object({ labelId: uuid, revision: t.Integer({ minimum: 1, maximum: 2147483647 }) }, closed),
-      t.Object({ name: t.String({ minLength: 1, maxLength: 200 }) }, closed),
-    ]),
-  }, closed), { minItems: 1, maxItems: 8 }),
-}, closed);
+export const vndbLabelChoiceSchema = t.Object(
+  {
+    rows: t.Array(t.Object({ ordinal: t.Integer({ minimum: 0, maximum: 4999 }), reviewId: uuid }, closed), {
+      minItems: 1,
+      maxItems: 8,
+    }),
+    mappings: t.Array(
+      t.Object(
+        {
+          source: t.String({ minLength: 1, maxLength: 1024 }),
+          target: t.Union([
+            t.Object({ labelId: uuid, revision: t.Integer({ minimum: 1, maximum: 2147483647 }) }, closed),
+            t.Object({ name: t.String({ minLength: 1, maxLength: 200 }) }, closed),
+          ]),
+        },
+        closed,
+      ),
+      { minItems: 1, maxItems: 8 },
+    ),
+  },
+  closed,
+);
 export type VndbLabelChoice = Static<typeof vndbLabelChoiceSchema>;
 export type LabelIdentity = { id: string; revision: number };
 export type VndbLabelMapping = VndbLabelChoice['mappings'][number] & {
@@ -43,7 +61,12 @@ export type VndbLabelResult = {
   label: LabelIdentity | null;
   assignment: LabelIdentity | null;
 };
-export type VndbLabelItem = { item_no: number; operand: VndbLabelOperand; status: VndbLabelStatus; result: VndbLabelResult | null };
+export type VndbLabelItem = {
+  item_no: number;
+  operand: VndbLabelOperand;
+  status: VndbLabelStatus;
+  result: VndbLabelResult | null;
+};
 export type VndbLabelPlan = {
   preview_id: string;
   state: 'reviewed' | 'applying' | 'cancelled';

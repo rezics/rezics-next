@@ -159,7 +159,9 @@ test('default native worker removes private sessions/history, labels, archives, 
     xml: '<vndb-export version="1.0"><vns><vn id="v9999999999999999"><label label="erase consent"/></vn></vns></vndb-export>',
   });
   const vndbReview = await f.json(as, 'POST', `/v1/libraryImports/vndb/${vndb.uploadId}:review`, 200, {
-    ordinal: 0, action: 'retain', targetId: subjectId,
+    ordinal: 0,
+    action: 'retain',
+    targetId: subjectId,
   });
   await f.json(as, 'POST', `/v1/libraryImports/vndb/${vndb.uploadId}/labels:review`, 200, {
     rows: [{ ordinal: 0, reviewId: vndbReview.reviewId }],
