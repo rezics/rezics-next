@@ -149,12 +149,12 @@ function run(
   };
 }
 
-function displayResult(result: RunResult): Record<string, unknown> {
+function displayResult(result: RunResult, policy = defaultPolicy.nativeCommands): Record<string, unknown> {
   return {
     cwd: result.cwd,
     exitCode: result.status,
-    stdout: result.stdout.slice(0, OUTPUT_LIMIT),
-    stderr: result.stderr.slice(0, OUTPUT_LIMIT),
+    stdout: result.stdout.slice(0, policy.commandBufferBytes),
+    stderr: result.stderr.slice(0, policy.commandBufferBytes),
     ...(result.error ? { error: result.error } : {}),
   };
 }
@@ -212,7 +212,7 @@ function runtimeCheck(
         : version.status !== 0 || version.error
           ? `Could not execute the pinned Bun version probe at ${executable}.`
           : `Pinned Bun reports ${JSON.stringify(actualVersion)} but ${contract.workerCheck.bun.manifestField} requires ${JSON.stringify(expectedVersion)}.`,
-    { expected: expectedVersion || null, actual: actualVersion || null, ...displayResult(version) },
+    { expected: expectedVersion || null, actual: actualVersion || null, ...displayResult(version, policy) },
   );
 
   const revision = run(revisionCommand, scriptsRoot, process.env, policy);
@@ -230,7 +230,7 @@ function runtimeCheck(
     revisionOk
       ? `Pinned Bun revision probe returned ${actualRevision}.`
       : `Bun.revision must be ${artifact?.runtimeRevision ?? 'nonempty'}; received ${JSON.stringify(actualRevision)} from ${executable}.`,
-    { expected: artifact?.runtimeRevision ?? null, actual: actualRevision || null, ...displayResult(revision) },
+    { expected: artifact?.runtimeRevision ?? null, actual: actualRevision || null, ...displayResult(revision, policy) },
   );
   return checks;
 }

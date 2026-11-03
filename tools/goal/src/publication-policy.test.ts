@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { checkSettings } from './config.ts';
+import { checkPinnedBunRuntime } from './check-compatibility.ts';
 import { openDb } from './db.ts';
 import { parseFrozenFiles } from './frozen.ts';
 import { SqliteManagerInbox } from './inbox.ts';
@@ -202,5 +203,30 @@ test('lifecycle capture and CLI errors preserve larger smoke overrides and expli
     expect(output).toContain(message);
   } finally {
     process.stderr.write = write;
+  }
+});
+
+test('pinned native runtime evidence retains a larger caller command buffer', () => {
+  const temporary = temporaryDirectory();
+  try {
+    const version = 'v'.repeat(defaultPolicy.nativeCommands.commandBufferBytes + 1);
+    const executable = join(temporary.path, 'bun-probe');
+    writeFileSync(executable, `#!${process.execPath}\nprocess.stdout.write(${JSON.stringify(version)});\n`, {
+      mode: 0o700,
+    });
+    const policy = readControlPolicy({ nativeCommands: { commandBufferBytes: version.length } });
+    const checks = checkPinnedBunRuntime(
+      temporary.path,
+      `bun@${version}`,
+      executable,
+      undefined,
+      policy.nativeCommands,
+    );
+    expect(checks.find((check) => check.field === 'workerCheck.bun.version')).toMatchObject({
+      status: 'compatible',
+      evidence: { stdout: version },
+    });
+  } finally {
+    temporary.close();
   }
 });
