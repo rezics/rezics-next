@@ -31,10 +31,7 @@ import {
   readAgentIdentityRecoveryArtifactInTransaction,
   type AgentIdentityRecoveryArtifactInspection,
 } from '../history/agent-identity-inventory.ts';
-import {
-  observeAccountErasureSearch,
-  type AccountErasureSearchObservation,
-} from '../search/account-erasure-source.ts';
+import { observeAccountErasureSearch, type AccountErasureSearchObservation } from '../search/account-erasure-source.ts';
 import {
   consumeSelectedHistoryOriginal,
   currentIdentityOriginalTransfer,
@@ -247,8 +244,7 @@ export async function advanceSharedHistory(
             let recoveryCandidate = false;
             const selectedLocator = decodeLocator(first.artifact_type, first.locator);
             if (selectedLocator.artifactType === 'command-receipt/v1')
-              recoveryCandidate =
-                commandHistoryKind(selectedLocator.commandKindId) === 'access.agent-identity.recover';
+              recoveryCandidate = commandHistoryKind(selectedLocator.commandKindId) === 'access.agent-identity.recover';
             else if (selectedLocator.artifactType === 'outbox-event/v1') {
               const event = (
                 await tx.query<{ type: string }>(
@@ -273,14 +269,16 @@ export async function advanceSharedHistory(
                 receiving: {
                   job: { ...job, scan_type: selectedLocator.artifactType, scan_locator: first.locator },
                   proof,
-                  type: selectedLocator.artifactType as Extract<HistoryArtifactType, 'command-receipt/v1' | 'outbox-event/v1'>,
+                  type: selectedLocator.artifactType as Extract<
+                    HistoryArtifactType,
+                    'command-receipt/v1' | 'outbox-event/v1'
+                  >,
                   locator: first.locator,
                   inspection,
                   deadline,
                 },
               };
-            }
-            else if (first.artifact_type === 'durable-work/v1' && (first.state === 'pending' || identity))
+            } else if (first.artifact_type === 'durable-work/v1' && (first.state === 'pending' || identity))
               answer = { work: first.locator, job, proof, identity };
             else {
               let gap =
@@ -481,11 +479,9 @@ async function continueRecoveryReceiving(
       searchObservation = { state: 'pending', gap: 'agent-identity-recovery-event-cut-unavailable' };
     } else {
       try {
-        await reserveIdentityHistoryWork(
-          deps.pool,
-          IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving,
-          { deadline: selected.deadline },
-        );
+        await reserveIdentityHistoryWork(deps.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving, {
+          deadline: selected.deadline,
+        });
         recoveryReceivingReserved = true;
         searchObservation = await observeAccountErasureSearch(
           deps.pool,

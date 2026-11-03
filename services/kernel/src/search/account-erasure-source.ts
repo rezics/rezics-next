@@ -17,9 +17,7 @@ export type AccountErasureSearchObservation = AccountErasureSearchResult &
     eventPosition: string;
   }>;
 
-export type AccountErasureSearchReadiness =
-  | Readonly<{ state: 'pending'; gap: string }>
-  | Readonly<{ state: 'ready' }>;
+export type AccountErasureSearchReadiness = Readonly<{ state: 'pending'; gap: string }> | Readonly<{ state: 'ready' }>;
 
 type AccountErasureSearchInput = Readonly<{
   accountId: string;
@@ -126,7 +124,13 @@ async function inspect(
     return { state: 'pending', gap: 'agent-identity-recovery-account-current-unavailable' };
 
   const generations = (
-    await tx.query<{ prefix: string; generation: string; index_uuid: string | null; incarnation: string; state: string }>(
+    await tx.query<{
+      prefix: string;
+      generation: string;
+      index_uuid: string | null;
+      incarnation: string;
+      state: string;
+    }>(
       `SELECT prefix,generation::text,index_uuid,incarnation::text,state FROM search.discovery_generation
        WHERE partition_no=0 AND prefix=$1 AND state='active'
        ORDER BY generation LIMIT $2${lock ? ' FOR SHARE' : ''}`,

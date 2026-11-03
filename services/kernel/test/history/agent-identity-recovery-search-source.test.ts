@@ -19,17 +19,17 @@ function query(state: State, statement: string) {
   if (statement.includes('FROM core.partition')) return { rows: state.owners };
   if (statement.includes('FROM access.account')) return { rows: state.account ? [state.account] : [] };
   if (statement.includes('FROM search.discovery_generation')) return { rows: state.generations };
-  if (statement.includes('FROM search.discovery_population')) return { rows: state.population ? [state.population] : [] };
+  if (statement.includes('FROM search.discovery_population'))
+    return { rows: state.population ? [state.population] : [] };
   if (statement.includes('FROM search.discovery_copy')) return { rows: state.copy ? [state.copy] : [] };
-  if (statement.startsWith('BEGIN') || statement.startsWith('SET LOCAL') || statement === 'COMMIT')
-    return { rows: [] };
+  if (statement.startsWith('BEGIN') || statement.startsWith('SET LOCAL') || statement === 'COMMIT') return { rows: [] };
   throw new Error(`Unexpected Search source query: ${statement}`);
 }
 
 function database(state: State) {
   const client = {
     async query(input: string | { text?: string }) {
-      return query(state, typeof input === 'string' ? input : input.text ?? '');
+      return query(state, typeof input === 'string' ? input : (input.text ?? ''));
     },
     release() {},
   };

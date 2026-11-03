@@ -69,11 +69,9 @@ export async function verifyAgentIdentityRecoveryArtifactReadiness(
 
   if (!source?.recoveryReceivingReserved) {
     try {
-      await reserveIdentityHistoryWork(
-        resources.pool,
-        IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving,
-        { deadline: resources.deadline },
-      );
+      await reserveIdentityHistoryWork(resources.pool, IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.recoveryReceiving, {
+        deadline: resources.deadline,
+      });
     } catch (error) {
       if (error instanceof IdentityHistoryWorkUnavailable) return { state: 'pending', gap: error.message };
       throw error;

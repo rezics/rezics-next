@@ -819,9 +819,13 @@ export async function readAgentIdentityRecoveryArtifactInTransaction(
   if (!matches.length) return absent;
   if (matches.length !== 1) return pending('agent-identity-recovery-copy-fanout-unavailable');
   try {
-    await reserveIdentityHistoryWork(resources.pool, AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST, context ?? {
-      deadline: resources.deadline,
-    });
+    await reserveIdentityHistoryWork(
+      resources.pool,
+      AGENT_IDENTITY_RECOVERY_INVENTORY_READ_COST,
+      context ?? {
+        deadline: resources.deadline,
+      },
+    );
   } catch (error) {
     if (error instanceof IdentityHistoryWorkUnavailable) return pending(error.message);
     throw error;

@@ -22,10 +22,7 @@ import {
   createSearchIdentityReceivingNativeStore,
   type SearchNativeReceivingReleaseObservation,
 } from './identity-receiving-native-store.ts';
-import type {
-  SearchNativeReceivingPlan,
-  SearchNativeReceivingStored,
-} from './identity-receiving-native-internal.ts';
+import type { SearchNativeReceivingPlan, SearchNativeReceivingStored } from './identity-receiving-native-internal.ts';
 import { SearchNativeReceivingError, SearchNativeReceivingWork } from './identity-receiving-native-work.ts';
 
 /** Derive the installed Source dependencies rather than maintaining a second configuration contract. */
@@ -65,8 +62,7 @@ function cursor(value: string | null): Cursor | null {
     const base = { version: 1, identity: c?.identity, copy: c?.copy, terminal: c?.terminal };
     const canonical =
       c &&
-      (c.support === undefined ||
-        (typeof c.support === 'string' && Buffer.byteLength(c.support, 'utf8') <= 3500)) &&
+      (c.support === undefined || (typeof c.support === 'string' && Buffer.byteLength(c.support, 'utf8') <= 3500)) &&
       JSON.stringify({
         ...base,
         ...(c.support === undefined ? {} : { support: c.support }),
@@ -331,11 +327,7 @@ export function createSearchIdentityReceivingNative(
         await call((c) => store.observeOriginalFence(state.plan, c));
         if (retained?.terminal) {
           if (state.pending) work.fail('draining', 'Original copies prevent terminal revalidation');
-          const support = await requireCompleteOriginalSource(
-            state.plan,
-            work,
-            retained?.support ?? null,
-          );
+          const support = await requireCompleteOriginalSource(state.plan, work, retained?.support ?? null);
           if (support !== null)
             return {
               after: JSON.stringify({
@@ -400,11 +392,7 @@ export function createSearchIdentityReceivingNative(
         // closure operand must not discard the last durable copy continuation and repeat its work.
         const terminal = page.length === 0 && !current.pending;
         if (terminal) {
-          const support = await requireCompleteOriginalSource(
-            current.plan,
-            work,
-            retained?.support ?? null,
-          );
+          const support = await requireCompleteOriginalSource(current.plan, work, retained?.support ?? null);
           if (support !== null)
             return {
               after: JSON.stringify({
