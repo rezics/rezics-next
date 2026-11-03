@@ -108,12 +108,15 @@ test('both mounted Recent interfaces expose the same scoped replay and prevent a
   const { setLocale } = await import('../src/paraglide/runtime.js');
   setLocale('en', { reload: false });
   let current = true;
+  const remembered: Parameters<RecentHistory['remember']>[] = [];
   const history: RecentHistory = {
     entries: [localRecentEntry(row('realm', ['ja', 'en'])), localRecentEntry(row('collection', []))],
     owner: () => current,
     persistence: 'memory',
     sync: 'synced',
-    remember() {},
+    remember(...args) {
+      remembered.push(args);
+    },
     remove() {},
   };
   const host = window.document.createElement('main');
@@ -136,6 +139,11 @@ test('both mounted Recent interfaces expose the same scoped replay and prevent a
       links.slice(2).map((link) => link.getAttribute('href')),
     );
     for (const link of links) expect(request(link.href).text).toBe(text);
+    host.addEventListener('click', (event) => event.preventDefault(), { capture: true });
+    await act(async () => {
+      links[0]!.click();
+    });
+    expect(remembered).toEqual([[text, history.entries[0]!.scope, ['ja', 'en']]]);
     current = false;
     for (const link of links) {
       const click = new window.MouseEvent('click', { bubbles: true, cancelable: true });
@@ -144,6 +152,7 @@ test('both mounted Recent interfaces expose the same scoped replay and prevent a
       });
       expect(click.defaultPrevented).toBe(true);
     }
+    expect(remembered).toHaveLength(1);
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous)

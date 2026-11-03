@@ -114,7 +114,8 @@ export function RecentPanel({
                           event.preventDefault();
                           return;
                         }
-                        if (!scoped) onSelect?.(entry);
+                        if (scoped && destination) history?.remember(entry.query, entry.scope, entry.languages);
+                        else if (!scoped) onSelect?.(entry);
                       }}
                     >
                       {entry.scope?.image ? (
