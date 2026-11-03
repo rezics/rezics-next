@@ -155,9 +155,18 @@ export type ThreadView = Omit<StoredThreadView, 'firstPost'> & Readonly<{ firstP
 
 export type ContentReadDependencies = Readonly<{ pool: Pool; access: Access; tokens: KeyRing; clock?: () => Date }>;
 export type NativeDraftMetadata = Readonly<{
-  id: string; threadId: string; firstPostId: string; revisionId: string; authorId: string;
-  kind: 'discussion' | 'review'; documentKind: 'opening' | 'reply'; title: string | null;
-  savedAt: string; licence: string; subjectIds: readonly string[]; mediaIds: readonly string[];
+  id: string;
+  threadId: string;
+  firstPostId: string;
+  revisionId: string;
+  authorId: string;
+  kind: 'discussion' | 'review';
+  documentKind: 'opening' | 'reply';
+  title: string | null;
+  savedAt: string;
+  licence: string;
+  subjectIds: readonly string[];
+  mediaIds: readonly string[];
   board: { id: string; title: string | null; realmId: string | null };
 }>;
 export type { Actor };
@@ -1214,7 +1223,9 @@ async function disclose(
       );
     }
   }
-  const discloseCurrent = async (client: AccessClient): Promise<PostEntry | ThreadView | NativeDraftMetadata | null> => {
+  const discloseCurrent = async (
+    client: AccessClient,
+  ): Promise<PostEntry | ThreadView | NativeDraftMetadata | null> => {
     if (!initial || !board?.value || checks.length !== rows.length) return null;
     const current = await chain(client, threadId, initial.posts[0]?.id, revisionId);
     if (!current || fingerprint(initial) !== fingerprint(current)) return null;
@@ -1246,16 +1257,29 @@ async function disclose(
     if (metadataOnly) {
       const post = current.posts[0];
       const revision = current.revision;
-      if (erased || withheld || post.visibility !== 'draft' || context.actor.kind !== 'account' ||
-          post.author_id !== context.actor.accountId || revision.availability !== 'available') return null;
+      if (
+        erased ||
+        withheld ||
+        post.visibility !== 'draft' ||
+        context.actor.kind !== 'account' ||
+        post.author_id !== context.actor.accountId ||
+        revision.availability !== 'available'
+      )
+        return null;
       return {
-        id: post.id, threadId, firstPostId: current.thread.first_post_id!, revisionId: revision.id,
-        authorId: post.author_id, kind: current.thread.thread_kind!,
+        id: post.id,
+        threadId,
+        firstPostId: current.thread.first_post_id!,
+        revisionId: revision.id,
+        authorId: post.author_id,
+        kind: current.thread.thread_kind!,
         documentKind: post.id === current.thread.first_post_id ? 'opening' : 'reply',
-        title: post.id === current.thread.first_post_id ? current.thread.title?.slice(0,512) ?? null : null,
-        savedAt: revision.created_at.toISOString(), licence: revision.licence,
-        subjectIds: revision.subject_ids, mediaIds: revision.media_ids,
-        board: { id: board.value!.id, title: board.value!.title?.slice(0,512) ?? null, realmId: board.value!.realmId },
+        title: post.id === current.thread.first_post_id ? (current.thread.title?.slice(0, 512) ?? null) : null,
+        savedAt: revision.created_at.toISOString(),
+        licence: revision.licence,
+        subjectIds: revision.subject_ids,
+        mediaIds: revision.media_ids,
+        board: { id: board.value!.id, title: board.value!.title?.slice(0, 512) ?? null, realmId: board.value!.realmId },
       };
     }
     // The receipt names one exact revision. That replay is the erased-metadata
@@ -1781,12 +1805,28 @@ export async function readPost(
  * requests revision bytes; account ownership does not replace container Access.
  */
 export async function readOwnDraftMetadata(
-  dependencies: ContentReadDependencies, threadId: string, postId: string, context: ReadContext,
+  dependencies: ContentReadDependencies,
+  threadId: string,
+  postId: string,
+  context: ReadContext,
 ): Promise<Anchored<NativeDraftMetadata | null>> {
   if (routeOf(threadId) === null || routeOf(postId) !== routeOf(threadId)) throw new ContentNotFoundError();
-  return withRealmDisclosureScope(async () =>
-    await disclose(dependencies, threadId, context, postId, undefined, false, undefined, undefined, false,
-      undefined, true) as Anchored<NativeDraftMetadata | null>);
+  return withRealmDisclosureScope(
+    async () =>
+      (await disclose(
+        dependencies,
+        threadId,
+        context,
+        postId,
+        undefined,
+        false,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        true,
+      )) as Anchored<NativeDraftMetadata | null>,
+  );
 }
 
 async function list(

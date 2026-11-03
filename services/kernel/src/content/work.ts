@@ -155,11 +155,16 @@ async function registerWork(
   const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
   if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage, options.routeKey);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
-  const repairDrafts = DBOS.registerStep(() => repairOwnDraftPage(context.pool),
-    { name: 'content.ownDrafts.repair.page', ...retry });
-  DBOS.registerWorkflow(async () => {
-    for (let page = 0; page < 16; page++) if ((await repairDrafts()).complete) return;
-  }, { name: OWN_DRAFT_REPAIR_WORKFLOW });
+  const repairDrafts = DBOS.registerStep(() => repairOwnDraftPage(context.pool), {
+    name: 'content.ownDrafts.repair.page',
+    ...retry,
+  });
+  DBOS.registerWorkflow(
+    async () => {
+      for (let page = 0; page < 16; page++) if ((await repairDrafts()).complete) return;
+    },
+    { name: OWN_DRAFT_REPAIR_WORKFLOW },
+  );
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }
@@ -470,8 +475,14 @@ async function registerWork(
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
-    { scheduleName: 'content.ownDrafts.every-minute', workflowName: OWN_DRAFT_REPAIR_WORKFLOW,
-      schedule: '* * * * *', queueName: 'maintenance', cronTimezone: 'UTC', automaticBackfill: false },
+    {
+      scheduleName: 'content.ownDrafts.every-minute',
+      workflowName: OWN_DRAFT_REPAIR_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
     {
       scheduleName: REALM_SUBJECT_CENSUS_SCHEDULE,
       workflowName: REALM_SUBJECT_CENSUS_WORKFLOW,

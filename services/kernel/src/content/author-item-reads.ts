@@ -82,7 +82,13 @@ export function encodeAuthorItemKey(ring: KeyRing, scope: CursorBinding, key: Ke
   return encodeCursor(ring, scope, { epoch, after: [ring.current, payload] }, now);
 }
 
-export function decodeAuthorItemKey(ring: KeyRing, scope: CursorBinding, token: string, epoch: number, now: number): Key {
+export function decodeAuthorItemKey(
+  ring: KeyRing,
+  scope: CursorBinding,
+  token: string,
+  epoch: number,
+  now: number,
+): Key {
   try {
     const decoded = decodeCursor(ring, scope, token, now);
     if (!decoded.ok || decoded.epoch !== epoch || decoded.after.length !== 2) throw new Error();
@@ -137,7 +143,9 @@ async function candidates(
         if (partition.writeState === 'moved')
           throw new CommandUnavailableError('moved', partitionOf(route), partition.movedTo);
         const after =
-          input.cursor === undefined ? null : decodeAuthorItemKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
+          input.cursor === undefined
+            ? null
+            : decodeAuthorItemKey(dependencies.tokens, scope, input.cursor, partition.epoch, now);
         const views = (await readPublicViews(client, [accountId])).get(accountId);
         const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
         const self = context.actor.kind === 'account' && context.actor.accountId === accountId;

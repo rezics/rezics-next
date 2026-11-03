@@ -10,8 +10,12 @@ import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof postPublicationFixture>>;
-beforeAll(async () => { f = await postPublicationFixture(); });
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await postPublicationFixture();
+});
+afterAll(async () => {
+  await f?.close();
+});
 
 // The same registered effect consumes real committed envelopes after releasing
 // the source log checkout, as in production. No locator is fixture-seeded.
@@ -20,10 +24,11 @@ async function deliver(id: string, pool: Pool = f.pool) {
   const effect = createAuthorItemEffect(pool);
   for (;;) {
     const page = await readBatch(pool, {
-      partition: partitionOf(routeOf(id)!), consumer: `drafts_${id.replaceAll('-', '')}`,
+      partition: partitionOf(routeOf(id)!),
+      consumer: `drafts_${id.replaceAll('-', '')}`,
       apply: async (envelopes) => {
         for (const envelope of envelopes)
-          events.push(...envelope.events.filter(event => effect.types.includes(event.type)));
+          events.push(...envelope.events.filter((event) => effect.types.includes(event.type)));
       },
     });
     if (page.status !== 'read') throw new Error('Native draft source log is unavailable');
@@ -39,25 +44,41 @@ test('acknowledged native draft returns privately, resumes exact bytes, conflict
   const post = thread.firstPost;
   await deliver(post.id);
   const second = await f.system.auth.issue({
-    accountId: f.author.actor.accountId, clientId: f.system.auth.ordinaryClient.id,
+    accountId: f.author.actor.accountId,
+    clientId: f.system.auth.ordinaryClient.id,
     scopes: f.system.auth.ordinaryScopes,
   });
-  const response = await f.system.kernel.handle(new Request(`https://content.test${home()}`, {
-    headers: { authorization: `Bearer ${second.bearer}` },
-  }));
+  const response = await f.system.kernel.handle(
+    new Request(`https://content.test${home()}`, {
+      headers: { authorization: `Bearer ${second.bearer}` },
+    }),
+  );
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
-  const page = await response.json() as any;
+  const page = (await response.json()) as any;
   expect(page.drafts.find((item: any) => item.id === post.id)).toMatchObject({
-    threadId: thread.id, firstPostId: post.id, revisionId: post.revisionId,
-    title: 'Publication', kind: 'discussion', licence: 'MIT',
-    actions: { resume: expect.any(String), edit: expect.any(String), publish: expect.any(String), erase: expect.any(String) },
+    threadId: thread.id,
+    firstPostId: post.id,
+    revisionId: post.revisionId,
+    title: 'Publication',
+    kind: 'discussion',
+    licence: 'MIT',
+    actions: {
+      resume: expect.any(String),
+      edit: expect.any(String),
+      publish: expect.any(String),
+      erase: expect.any(String),
+    },
   });
   expect(page.drafts[0]).not.toHaveProperty('body');
   const resume = `${home()}/${post.id}?threadId=${thread.id}`;
   const selected = await f.call('GET', resume);
   expect(selected.status).toBe(200);
-  expect(selected.value.post).toMatchObject({ revisionId: post.revisionId, body: fromPlainText('Opening'), licence: 'MIT' });
+  expect(selected.value.post).toMatchObject({
+    revisionId: post.revisionId,
+    body: fromPlainText('Opening'),
+    licence: 'MIT',
+  });
   expect((await f.call('GET', resume, undefined, { other: true })).status).toBe(404);
   const key = crypto.randomUUID();
   const input = { body: fromPlainText('Acknowledged second-device edit'), visibility: 'draft' };
@@ -67,8 +88,9 @@ test('acknowledged native draft returns privately, resumes exact bytes, conflict
   expect((await f.revise(post, { body: fromPlainText('Concurrent device') })).status).toBe(412);
   expect((await f.call('GET', resume)).value.post).toEqual(saved.value.post);
   await deliver(post.id);
-  expect((await f.call('GET', home())).value.drafts.find((item: any) => item.id === post.id).revisionId)
-    .toBe(saved.value.post.revisionId);
+  expect((await f.call('GET', home())).value.drafts.find((item: any) => item.id === post.id).revisionId).toBe(
+    saved.value.post.revisionId,
+  );
   const published = await f.revise(saved.value.post, { body: input.body, visibility: 'published' });
   expect(published.status).toBe(200);
   await deliver(post.id);
@@ -88,7 +110,9 @@ test('private inventory denies anonymous and unrelated actors and never widens p
   expect(page.status).toBe(200);
   expect(page.value.next).toBeString();
   expect((await f.call('GET', `${home()}?limit=2&cursor=${page.value.next}`)).status).toBe(400);
-  expect((await f.call('GET', `${home()}?limit=1&cursor=${page.value.next}`, undefined, { other: true })).status).toBe(404);
+  expect((await f.call('GET', `${home()}?limit=1&cursor=${page.value.next}`, undefined, { other: true })).status).toBe(
+    404,
+  );
 });
 
 test('pending locators are preparing, bounded repair returns the draft, and late creation cannot resurrect an erase', async () => {
@@ -107,10 +131,12 @@ test('pending locators are preparing, bounded repair returns the draft, and late
   expect(repaired.value.state).toBe('ready');
   expect(repaired.value.drafts.some((item: any) => item.id === thread.firstPost.id)).toBe(true);
   const events = await deliver(thread.firstPost.id);
-  const erased = await f.system.kernel.handle(new Request(`https://content.test/v1/posts/${thread.firstPost.id}`, {
-    method: 'DELETE', headers: { authorization: `Bearer ${f.author.bearer}`,
-      'idempotency-key': JSON.stringify(crypto.randomUUID()) },
-  }));
+  const erased = await f.system.kernel.handle(
+    new Request(`https://content.test/v1/posts/${thread.firstPost.id}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${f.author.bearer}`, 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+    }),
+  );
   expect(erased.status).toBe(204);
   await deliver(thread.firstPost.id);
   const effect = createAuthorItemEffect(f.pool);
@@ -123,20 +149,40 @@ test('native review draft retains original Subject, root language, licence and c
   try {
     const body = fromPlainText('Review retained through another session');
     body.doc.attrs = { ...body.doc.attrs, lang: 'zh-Hant' };
-    const created = await r.call('POST', '/v1/threads', { bearer: r.author.bearer,
-      body: { kind: 'review', title: 'Private review', body, licence: 'CC-BY-4.0',
-        boardId: r.boardId, subjectIds: [r.subjectId], visibility: 'draft' } });
+    const created = await r.call('POST', '/v1/threads', {
+      bearer: r.author.bearer,
+      body: {
+        kind: 'review',
+        title: 'Private review',
+        body,
+        licence: 'CC-BY-4.0',
+        boardId: r.boardId,
+        subjectIds: [r.subjectId],
+        visibility: 'draft',
+      },
+    });
     expect(created.response.status, created.text).toBe(201);
     const thread = created.value.thread;
     await deliver(thread.firstPost.id, r.system.database.pool);
     const path = `/v1/accounts/${r.author.accountId}/drafts`;
     const page = await r.call('GET', path, { bearer: r.author.bearer });
     expect(page.response.status, page.text).toBe(200);
-    expect(page.value.drafts).toMatchObject([{ kind: 'review', language: 'zh-Hant', licence: 'CC-BY-4.0',
-      subjectIds: [r.subjectId], revisionId: thread.firstPost.revisionId }]);
-    const selected = await r.call('GET', `${path}/${thread.firstPost.id}?threadId=${thread.id}`, { bearer: r.author.bearer });
+    expect(page.value.drafts).toMatchObject([
+      {
+        kind: 'review',
+        language: 'zh-Hant',
+        licence: 'CC-BY-4.0',
+        subjectIds: [r.subjectId],
+        revisionId: thread.firstPost.revisionId,
+      },
+    ]);
+    const selected = await r.call('GET', `${path}/${thread.firstPost.id}?threadId=${thread.id}`, {
+      bearer: r.author.bearer,
+    });
     expect(selected.response.status, selected.text).toBe(200);
     expect(selected.value.post.body).toEqual(thread.firstPost.body);
     expect(selected.value.post.sha256).toBe(thread.firstPost.sha256);
-  } finally { await r.close(); }
+  } finally {
+    await r.close();
+  }
 });

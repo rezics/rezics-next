@@ -1194,20 +1194,31 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
         query: ownDraftQuery,
         response: { 200: withHeaders(ownDraftResponse, sessionHeader), ...readFailures },
-        detail: { operationId: 'own_drafts.list', 'x-exposure': 'public',
-          'x-action': 'account:read', security: writeSecurity },
+        detail: {
+          operationId: 'own_drafts.list',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
       },
       async ({ params: { accountId }, query, actor, admission, job, session, set }) => {
         existingId(accountId);
-        return contentOperation(() => admission.run('normal', job, async () => {
-          const page = await listOwnDrafts(dependencies, accountId, { actor, deadline: job.deadline }, {
-            ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-            ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
-          });
-          for (const anchor of page.anchors) session.record(sessionComponent(anchor));
-          set.headers['cache-control'] = 'private, no-store';
-          return { drafts: [...page.entries], next: page.nextCursor, state: page.state, viewer: page.viewer };
-        }));
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const page = await listOwnDrafts(
+              dependencies,
+              accountId,
+              { actor, deadline: job.deadline },
+              {
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+            );
+            for (const anchor of page.anchors) session.record(sessionComponent(anchor));
+            set.headers['cache-control'] = 'private, no-store';
+            return { drafts: [...page.entries], next: page.nextCursor, state: page.state, viewer: page.viewer };
+          }),
+        );
       },
     )
     .get(
@@ -1216,19 +1227,30 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params: t.Object({ accountId: t.String(), id: t.String() }, { additionalProperties: false }),
         query: t.Object({ threadId: t.String() }, { additionalProperties: false }),
         response: { 200: withHeaders(postResponse, { ...sessionHeader, etag: t.String() }), ...readFailures },
-        detail: { operationId: 'own_drafts.resume', 'x-exposure': 'public',
-          'x-action': 'account:read', security: writeSecurity },
+        detail: {
+          operationId: 'own_drafts.resume',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: writeSecurity,
+        },
       },
       async ({ params: { accountId, id }, query, actor, admission, job, session, set }) => {
-        existingId(accountId); existingId(id); existingId(query.threadId);
-        return contentOperation(() => admission.run('normal', job, async () => {
-          const post = await resumeOwnDraft(dependencies, accountId, query.threadId, id, { actor, deadline: job.deadline });
-          session.record(sessionComponent(post.anchor));
-          if (!post.value || !('revisionId' in post.value)) throw new ProblemError('not_found');
-          set.headers.etag = JSON.stringify(post.value.revisionId);
-          set.headers['cache-control'] = 'private, no-store';
-          return { post: post.value };
-        }));
+        existingId(accountId);
+        existingId(id);
+        existingId(query.threadId);
+        return contentOperation(() =>
+          admission.run('normal', job, async () => {
+            const post = await resumeOwnDraft(dependencies, accountId, query.threadId, id, {
+              actor,
+              deadline: job.deadline,
+            });
+            session.record(sessionComponent(post.anchor));
+            if (!post.value || !('revisionId' in post.value)) throw new ProblemError('not_found');
+            set.headers.etag = JSON.stringify(post.value.revisionId);
+            set.headers['cache-control'] = 'private, no-store';
+            return { post: post.value };
+          }),
+        );
       },
     )
     .get(
