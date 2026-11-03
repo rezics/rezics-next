@@ -53,13 +53,13 @@ Each axis/page pair gets a fresh native composition. `checkGrowth` uses `[256, 1
 and warmups, constant examined rows/statements and logarithmic shared blocks, with the shared classifier and
 its ordinary uncertainties. No baseline registration or new gate is added.
 
-| Axis | Native or admitted setup pressure | Fixed selected work |
-| --- | --- | --- |
-| Creator candidates | Exactly scale native-created, registered-effect-enrolled Editions of this creator | Limit two; source ancestry, body, licence and scope |
-| Unrelated homes | `seed` adds scale creator-home rows for unrelated creators, including the selected exact home and other partitions | Four native selected candidates; no selected row is bulk seeded |
-| Source history | Native revision appends with fixed body and subject association | Four pinned Editions keep their original revision IDs |
-| Subject history | Native terms PATCH appends alternate labels on the original subject | Four Editions, exact subject ID and source ancestry |
-| Access history | Governance HTTP grants add scale nonoverlapping expired platform grants to a separate native account | Viewer, scopes and source permissions; expired grants confer no read |
+| Axis               | Native or admitted setup pressure                                                                                  | Fixed selected work                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Creator candidates | Exactly scale native-created, registered-effect-enrolled Editions of this creator                                  | Limit two; source ancestry, body, licence and scope                  |
+| Unrelated homes    | `seed` adds scale creator-home rows for unrelated creators, including the selected exact home and other partitions | Four native selected candidates; no selected row is bulk seeded      |
+| Source history     | Native revision appends with fixed body and subject association                                                    | Four pinned Editions keep their original revision IDs                |
+| Subject history    | Native terms PATCH appends alternate labels on the original subject                                                | Four Editions, exact subject ID and source ancestry                  |
+| Access history     | Governance HTTP grants add scale nonoverlapping expired platform grants to a separate native account               | Viewer, scopes and source permissions; expired grants confer no read |
 
 The source and subject axes exercise retained history of the selected native source and original subject.
 After source erasure, further source-history pressure uses an independent native control source: the erased
@@ -100,7 +100,7 @@ exclude bodies and counts. Application background SQL must be absent from the me
 Focused native HTTP assertions retain same-account access, concealed other-account requests with an allowed
 self-inventory control, draft/published/withdrawn bindings, viewer/account/limit cursor admission, forgery,
 expiry and creator-home epoch binding. A source DELETE during the first final metadata pass must conceal all
-selected results and IDs while preserving raw-key continuation. A moved home must return the native retryable
+selected results and IDs while preserving raw-key continuation. A moved creator home or selected metadata home must return the native retryable
 problem and Retry-After, rather than a successful empty page. Only partition infrastructure state is injected
 with SQL, then restored; selected Content or authorization state is never fabricated.
 
