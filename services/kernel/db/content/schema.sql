@@ -1360,9 +1360,9 @@ CREATE TABLE content.moderation_decision_board (
     target_kind text NOT NULL,
     target_id uuid NOT NULL,
     decided_at timestamp with time zone NOT NULL,
-    CONSTRAINT moderation_decision_board_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT moderation_decision_board_board_partition_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
-    CONSTRAINT moderation_decision_board_source_partition_check CHECK (((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)) = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT moderation_decision_board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
+    CONSTRAINT moderation_decision_board_check1 CHECK (((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)) = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT moderation_decision_board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_decision_board_target_kind_check CHECK ((target_kind = ANY (ARRAY['thread'::text, 'post'::text])))
 );
 
@@ -3063,14 +3063,18 @@ CREATE INDEX moderation_appeal_board_pending_idx ON content.moderation_appeal_bo
 -- Name: moderation_decision_board_page_idx; Type: INDEX; Schema: content; Owner: -
 --
 
-CREATE INDEX moderation_decision_board_page_idx ON content.moderation_decision_board USING btree (route, board_id, decided_at DESC, decision_id DESC) INCLUDE (target_kind, target_id);
-
-
 --
 -- Name: moderation_appeal_thread_pending_idx; Type: INDEX; Schema: content; Owner: -
 --
 
 CREATE INDEX moderation_appeal_thread_pending_idx ON content.moderation_appeal USING btree (route, thread_id, created_at DESC, appeal_id DESC) WHERE (outcome IS NULL);
+
+
+--
+-- Name: moderation_decision_board_page_idx; Type: INDEX; Schema: content; Owner: -
+--
+
+CREATE INDEX moderation_decision_board_page_idx ON content.moderation_decision_board USING btree (route, board_id, decided_at DESC, decision_id DESC) INCLUDE (target_kind, target_id);
 
 
 --
