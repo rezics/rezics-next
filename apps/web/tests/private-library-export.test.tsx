@@ -580,9 +580,7 @@ test('mixed versions, captures and section totals refuse the final artifact', as
 });
 
 test('unsupported version 4 provider responses stay unavailable', () => {
-  expect(
-    isExportStatus({ ...coverage(), version: 4, coverage: 'private-library-owner-facts-v4' }),
-  ).toBe(false);
+  expect(isExportStatus({ ...coverage(), version: 4, coverage: 'private-library-owner-facts-v4' })).toBe(false);
 });
 
 test('fixed expiry and viewer retirement discard late private pages', async () => {

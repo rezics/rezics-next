@@ -102,9 +102,7 @@ export function kernelExportPort(
   function headers(authorization: string): NativeHeaders;
   function headers(authorization: string, key: string): NativeWriteHeaders;
   function headers(authorization: string, key?: string): NativeHeaders | NativeWriteHeaders {
-    return key
-      ? { authorization, 'idempotency-key': quotedIdempotencyKey(key) }
-      : { authorization };
+    return key ? { authorization, 'idempotency-key': quotedIdempotencyKey(key) } : { authorization };
   }
   async function call<T>(
     command: ExportCommand,
@@ -146,8 +144,7 @@ export function kernelExportPort(
         command,
         (surface, authorization) => {
           const pages = surface({ id: command.exportId }).pages;
-          if (!pages)
-            return Promise.resolve({ data: null, status: 503, error: { value: { code: 'unavailable' } } });
+          if (!pages) return Promise.resolve({ data: null, status: 503, error: { value: { code: 'unavailable' } } });
           return pages.get({ query: { cursor: command.cursor }, headers: headers(authorization) });
         },
         (data) => (isExportPage(data) ? ({ kind: 'page' as const, page: data } as const) : undefined),

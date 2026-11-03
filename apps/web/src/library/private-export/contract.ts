@@ -274,9 +274,7 @@ export function isExportCoverage(value: unknown): value is ExportCoverage {
   if (value.version === 2)
     return value.coverage === EXPORT_V2_COVERAGE && exactSections(value.sections, EXPORT_SECTIONS_V2);
   return (
-    value.version === 3 &&
-    value.coverage === EXPORT_V3_COVERAGE &&
-    exactSections(value.sections, EXPORT_SECTIONS_V3)
+    value.version === 3 && value.coverage === EXPORT_V3_COVERAGE && exactSections(value.sections, EXPORT_SECTIONS_V3)
   );
 }
 

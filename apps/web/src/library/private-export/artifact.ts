@@ -34,8 +34,7 @@ export class ExportAssembly {
     if (this.version !== null && this.version !== version) return { kind: 'invalid' };
     this.version = version;
     if (this.sectionTotals.size === 0) {
-      const sections =
-        version === 1 ? EXPORT_SECTIONS_V1 : version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3;
+      const sections = version === 1 ? EXPORT_SECTIONS_V1 : version === 2 ? EXPORT_SECTIONS_V2 : EXPORT_SECTIONS_V3;
       for (const section of sections) this.sectionTotals.set(section, { rows: 0, recordBytes: 0 });
     }
     return null;
@@ -48,11 +47,7 @@ export class ExportAssembly {
     let pageBytes = 0;
     const pageTotals = new Map<string, SectionCount>();
     for (const record of records) {
-      if (
-        !isExportRecord(record) ||
-        !this.sectionTotals.has(record.section) ||
-        !recordMatchesVersion(record, version)
-      )
+      if (!isExportRecord(record) || !this.sectionTotals.has(record.section) || !recordMatchesVersion(record, version))
         return { kind: 'invalid' };
       const recordBytes = encodedRecordBytes(record);
       if (version !== 1 && recordBytes > EXPORT_ROW_BYTES) return { kind: 'limit' };
