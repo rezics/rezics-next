@@ -118,8 +118,7 @@ export async function startCatalogueFactsFixture(): Promise<CatalogueFactsFixtur
       'POST /v1/subjects',
     );
     const alice = await auth.signIn('alice');
-    if ((await alice.response()).status() !== 200)
-      throw new Error('Alice must sign in through the served Auth forms');
+    if ((await alice.response()).status() !== 200) throw new Error('Alice must sign in through the served Auth forms');
 
     const current = async (): Promise<CatalogueFactsSubject> => {
       const body = await json<{ subject: CatalogueFactsSubject }>(

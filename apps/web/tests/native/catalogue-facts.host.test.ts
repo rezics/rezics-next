@@ -136,7 +136,10 @@ test('a multi-field Edit facts submit uses the production BFF, keeps public valu
   });
   await openEditor(page);
   await stage(page, 'publication date');
-  await page.getByRole('region', { name: 'publication date', exact: true }).getByLabel('Day', { exact: true }).fill('7');
+  await page
+    .getByRole('region', { name: 'publication date', exact: true })
+    .getByLabel('Day', { exact: true })
+    .fill('7');
   await stage(page, 'language');
   await page.getByRole('region', { name: 'language', exact: true }).getByLabel('Value', { exact: true }).fill('ja');
 
