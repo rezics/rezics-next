@@ -2,7 +2,9 @@ import { afterAll, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, type ReactNode } from 'react';
 
-const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://rezics.test/en' });
 const globals = {
   window,
