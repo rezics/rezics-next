@@ -13,10 +13,11 @@ import type { ReleaseSearchType } from './release-search-page';
 export type ReleaseSearchResult = { parsed?: ParsedReleaseSearch; types?: ReleaseSearchType[]; state: DiscoveryState };
 
 const readReleaseSearch = createServerFn({ method: 'GET' })
-  .validator(v.object({ locale: v.string(), raw: v.record(v.string(), v.unknown()) }))
+  .validator(v.object({ locale: v.string(), rawJson: v.pipe(v.string(), v.maxLength(65536)) }))
   .handler(async ({ data }): Promise<ReleaseSearchResult> => {
     const release = await refreshRelease();
-    const parsed = parseReleaseSearch(data.raw, release, data.locale);
+    const raw = v.parse(v.record(v.string(), v.unknown()), JSON.parse(data.rawJson));
+    const parsed = parseReleaseSearch(raw, release, data.locale);
     const types = admittedReleaseSearchTypes(release).map((id) => ({
       id,
       label: localizedLabel(release.types[id]?.labels ?? {}, data.locale).text || id,
@@ -34,7 +35,7 @@ export function releaseSearchQueryOptions(locale: string, raw: Record<string, un
     queryKey: ['release-search', locale, principal, raw],
     queryFn: async ({ signal }): Promise<ReleaseSearchResult> => {
       try {
-        return await readReleaseSearch({ data: { locale, raw }, signal });
+        return await readReleaseSearch({ data: { locale, rawJson: JSON.stringify(raw) }, signal });
       } catch (error) {
         if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
         return { state: { status: 'unavailable' } };
