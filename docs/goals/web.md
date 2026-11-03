@@ -17,6 +17,14 @@ capabilities and disclosure rules on every page and device.
   transfer review, the existing atomic native transfer and bounded source/destination recovery. Its limits and
   consumer authorities are recorded in the [placement journey](../../apps/web/src/library/collection-placement-journey.md).
 - Checkout start/return and entitlements expose the commerce outcomes without treating a redirect as fulfilment.
+  Creator Sales extends that existing visit with one supplied-sale inspection, canonical localized offer and Subject
+  readers, and browser return to the same opaque sales cursor. Exact charged unit price, captured unit/tax meaning,
+  settlement and timestamp remain distinct from payout. Public destinations apply their own admission; the sale
+  reference never links to a buyer-only order. Statements retain their independent period/line authority, without
+  a guessed sale-to-statement relation. The [creator sale reading guide](../../apps/web/src/checkout/creator-sale-reading.md)
+  owns the source lifetime and bounded reading contract, replacing the audit's deferred navigation finding.
+  Decision: every replacement observation retires selection; browser return uses a fresh admitted reading, never a
+  stored private inspection snapshot. Source and story delivery do not claim runtime acceptance.
 - Auth pages support sign-in, sign-up, consent, security settings and step-up through the accounts contract.
 - The session BFF, upload completion and every download preserve caller identity and current API decisions.
 - A Realm icon or banner retry keeps the original file only in that appearance caller and finishes the same

@@ -55,6 +55,7 @@ describe("Creator's real private sales history page and statement navigation", (
       'LongTitle',
       'OtherCreatorSameRoute',
       'OtherCreatorDenied',
+      'Currentness',
       'ActualRoute',
     ]);
     expect(story).toContain('canvasElement.querySelector(\'a[href*="/orders/"]\')');

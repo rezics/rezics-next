@@ -40,6 +40,13 @@ function matches(value: unknown, subject: string, cursor: string | null): value 
 export function CreatorSalesCurrent(props: Props) {
   const { initial, locale, cursor } = props;
   const current = useCreatorCurrentOrigin('commerce_sale.list', JSON.stringify([locale, cursor ?? null]));
+  const [loader, setLoader] = useState({ initial, version: 0, origin: current.origin.id });
+  let admittedLoader = loader;
+  if (loader.initial !== initial) {
+    admittedLoader = { initial, version: loader.version + 1, origin: current.origin.id };
+    setLoader(admittedLoader);
+    current.origin.workspace.read = undefined;
+  }
   const subject = current.hydrated ? current.subject : initial.sessionSubject;
   const admitted = current.hydrated ? current.origin.isCurrent() : initial.selling;
   if (!subject || !admitted) {
@@ -55,12 +62,12 @@ export function CreatorSalesCurrent(props: Props) {
   }
   return (
     <CurrentSalesRead
-      key={current.origin.id}
+      key={`${current.origin.id}:${admittedLoader.version}`}
       {...props}
       subject={subject}
       origin={current.origin}
       hydrated={current.hydrated}
-      seed={current.seed}
+      seed={current.seed || (admittedLoader.version > 0 && admittedLoader.origin === current.origin.id)}
     />
   );
 }
@@ -106,6 +113,7 @@ function CurrentSalesRead({
     },
     ...(initialData ? { initialData } : {}),
     refetchOnMount: !initialData,
+    structuralSharing: false,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
@@ -118,5 +126,5 @@ function CurrentSalesRead({
     );
   if (origin.isCurrent()) origin.workspace.read = value;
   const page: CreatorSalesData = value?.page ?? { kind: 'loading' };
-  return <CreatorSalesPage page={page} locale={locale} {...(cursor === undefined ? {} : { cursor })} />;
+  return <CreatorSalesPage page={page} source={value ?? undefined} isCurrent={origin.isCurrent} locale={locale} {...(cursor === undefined ? {} : { cursor })} />;
 }

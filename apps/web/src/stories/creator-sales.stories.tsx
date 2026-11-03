@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, within, userEvent } from 'storybook/test';
 import { CreatorSalesPage } from '../checkout/creator-sales-page';
 import { creatorSaleFixture, creatorSalesStoryPage, type CreatorSalesStory } from '../kernel/fake/creator-sales';
 import { getLocale } from '../paraglide/runtime.js';
@@ -55,6 +56,13 @@ export const History: Story = {
       expect.stringContaining('cursor=story-signed%2Bnext%2F%3D'),
     );
     await expect(canvasElement.querySelector('a[href*="/orders/"]')).toBeNull();
+    const opener = view.getAllByRole('button', { name: m.creator_sale_inspect() })[0]!;
+    await userEvent.click(opener);
+    await expect(view.getByRole('heading', { name: m.creator_sale_inspection() })).toHaveFocus();
+    await expect(view.getByRole('link', { name: m.creator_sale_open_offer() })).toBeVisible();
+    await expect(view.getByRole('link', { name: m.creator_sale_open_work() })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await expect(opener).toHaveFocus();
   },
 };
 export const SecondPage: Story = {
@@ -134,6 +142,8 @@ export const UnknownUnit: Story = {
     const view = await salesMain(canvasElement);
     await expect(view.getByText(m.statements_amount_unavailable())).toBeVisible();
     await expect(view.getByText(m.commerce_tax_unknown())).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.creator_sale_inspect() }));
+    await expect(view.getByText(m.creator_sale_unit_unknown())).toBeVisible();
     await expect(canvasElement.querySelector('a[href*="/orders/"]')).toBeNull();
   },
 };
@@ -145,11 +155,37 @@ export const LongTitle: Story = {
     const view = await salesMain(canvasElement);
     await expect(view.getByRole('heading', { level: 1, name: m.creator_sales_heading() })).toBeVisible();
     await expect(view.getByRole('heading', { level: 2, name: page.sales[0]!.title })).toBeVisible();
+    await userEvent.click(view.getAllByRole('button', { name: m.creator_sale_inspect() })[0]!);
+    await expect(view.getByText(page.sales[0]!.title, { selector: 'p' })).toBeVisible();
+    await expect(view.getByText(creatorSaleFixture.createdAt)).toBeVisible();
     await expect(canvasElement.querySelector('a[href*="/orders/"]')).toBeNull();
   },
 };
 export const OtherCreatorSameRoute: Story = { render: () => render('other-creator') };
 export const OtherCreatorDenied: Story = { render: () => render('denied') };
+function ReplacementReading() {
+  const [page, replace] = useState(() => creatorSalesStoryPage('history'));
+  return <PatternStory visitor="Signed In" path="/creator/sales">
+    <AppShell>
+      <button className="min-h-11 rounded border px-4" onClick={() => replace(creatorSalesStoryPage('history'))}>
+        {m.statements_refresh()}
+      </button>
+      <CreatorSalesPage page={page} locale={getLocale()} />
+    </AppShell>
+  </PatternStory>;
+}
+
+export const Currentness: Story = {
+  render: () => <ReplacementReading />,
+  play: async ({ canvasElement }) => {
+    const view = await salesMain(canvasElement);
+    await userEvent.click(view.getAllByRole('button', { name: m.creator_sale_inspect() })[0]!);
+    await expect(view.getByRole('link', { name: m.creator_sale_open_offer() })).toBeVisible();
+    await userEvent.click(view.getByRole('button', { name: m.statements_refresh() }));
+    await expect(view.queryByRole('heading', { name: m.creator_sale_inspection() })).toBeNull();
+    await expect(view.queryByRole('link', { name: m.creator_sale_open_offer() })).toBeNull();
+  },
+};
 export const ActualRoute: Story = {
   render: () => <PageStory visitor="Signed In" path="/creator/sales" />,
   play: async (context) => {

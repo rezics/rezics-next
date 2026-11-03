@@ -37,7 +37,7 @@ test('Creator Sales Pages stories compose named constructed states in AppShell a
   expect(page).not.toMatch(/<main\b/);
 
   const exports = [...story.matchAll(/export const (\w+): Story =/g)];
-  expect(exports.map((entry) => entry[1])).toEqual([...Object.keys(composedStates), 'ActualRoute']);
+  expect(exports.map((entry) => entry[1])).toEqual([...Object.keys(composedStates), 'Currentness', 'ActualRoute']);
   const scenarios = Object.fromEntries(
     exports.map((entry, index) => [entry[1]!, story.slice(entry.index, exports[index + 1]?.index ?? story.length)]),
   );
