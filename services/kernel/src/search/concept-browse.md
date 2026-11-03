@@ -2,7 +2,8 @@
 
 Search's hierarchy traversal is derived work beneath the existing retained-plan worker. It does not establish
 Semantic graph coverage, release admission, disclosure or authorization. Indexed storage and worker dispatch
-are installed; the native source adapter, current matcher and public hierarchy journey remain to be connected.
+are installed; native classified-statement windows are available through SubjectSource. The hierarchy source,
+complete-absence proof and public hierarchy journey remain to be connected.
 Absent a native source adapter the worker leaves the plan preparing; it cannot seal an empty closure.
 
 Decision: hierarchy continuation follows sortable full native edge keys independently of returned child IDs, so
@@ -109,3 +110,49 @@ retained currentness. The `complete` input is reserved for Semantic's current co
 partial or withheld native evidence cannot set it. The enclosing caller must revalidate native
 statement evidence before publishing results. These ports do not implement that native producer,
 its completeness proof, source cost derivation or the universal Search and page installation.
+
+## Native classified-statement windows
+
+`subjectSource.readConceptStatements` reads the full selected statement prefix for one subject/property,
+using `search_selected_page (route,subject_id,property,slot_id,candidate_id) WHERE active`. It accepts
+one full `(slot,candidate)` continuation and at most 64 raw rows per dispatch. Hidden, rejected,
+retracted and withheld candidates count towards that bound. The native cursor advances past them;
+matching never replaces a closure with `in:64` and never refills a window implicitly. Exactly full
+windows require a later terminal seek. A cursor carries the source identity/revision/security and
+active release observation; replacement discards it. These internal cursors are not public Search cursors.
+
+Decision: native statement windows remain internal and cannot establish absence; terminal windows
+retain `not_proven` until Semantic supplies a current complete-absence proof.
+
+The reader uses the current release to admit the property, Concept condition and all qualifiers,
+then reads the stored immutable releases to interpret each selected statement. The existing native
+relation reader establishes current candidate eligibility, disclosure, imported tuple fences, source
+identity, and original/terminal target and qualifier identities. Per-attempt observations retain native
+identity and tuple versions, including rejected dependencies. Final revalidation rereads the same raw
+prefix and compares its eligibility, source subject and active release observation; it also repeats
+native dependency/tuple reads and compares both witnesses and their versions. No reusable permission
+or synthetic coverage producer is returned.
+
+`matchNativeConceptStatements` composes these native windows with the sealed-cut membership batch.
+Qualifiers and the independently supplied spoiler threshold constrain each statement separately.
+After membership it revalidates native evidence even if the candidate was rejected. Any changed raw
+candidate or native dependency retires the retained cut and returns restart without a verdict or cursor.
+Unavailable evidence discards provisional positives. Exhaustion alone cannot enable exclusion.
+
+The window has two native prefix reads (initial and revalidation), each examining at most B raw
+selected rows for B <= 64, plus point joins for candidate, hidden candidate, disclosure, acceptance
+and latest retraction on those exact keys. Each prefix read has one source home/identity observation
+and one active-release read; at most B distinct stored-release lookups interpret the rows. Each
+native disclosure pass visits the source, target and item qualifier identities along at most eight
+redirect levels, grouped by home, plus imported tuple-owner reads in batches of at most 100.
+Final release observations also apply to both disclosure passes. Replays and empty terminal windows
+use these same reads. Retained membership adds the D + 1 statements documented above and two graph
+observations; no native window performs graph traversal per candidate.
+
+This expands the operation structure, not an all-pool dispatch reservation: stored-release/body byte
+bounds, qualifier fanout, owner control-query work and physical tuple/identity footprints must still
+be composed before enabling this port in the Search dispatcher. The port is exposed by SubjectSource
+but is not activated by Search or the hierarchy worker. Native growth and useful-page guarantees,
+complete-absence ownership, the hierarchy adapter/APIs and the installed localized page remain in
+the continuation. The focused tests cover statement isolation, terminal uncertainty and restart on
+a rejected candidate's changed evidence; they do not measure native growth or connected browser work.

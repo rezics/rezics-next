@@ -1,3 +1,4 @@
+import type { ConceptStatementReader } from '../search/concept-browse-statements.ts';
 import { indexedStatement, selectedCandidate, selectedRank } from './scope-leaf-selection.ts';
 export { indexedStatement } from './scope-leaf-selection.ts';
 import {
@@ -158,6 +159,7 @@ export function subjectSource(
 ): SubjectSource &
   SubjectSourceKeyPages & {
     canonicalNames: SubjectCanonicalNames;
+    readConceptStatements: ConceptStatementReader;
   } {
   const relations = relationSource(pool, routeKey);
   return {
@@ -337,6 +339,7 @@ export function subjectSource(
     },
 
     matchRelationFacets: relations.match,
+    readConceptStatements: relations.readConceptStatements,
 
     async count(partition) {
       assertPartition(partition);

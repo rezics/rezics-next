@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import { conceptStatementRequest, conceptStatementQualifiers,
+  type ConceptStatementReader, type ConceptStatementRead } from '../search/concept-browse-statements.ts';
+import readConcepts from './search-source-concepts.sql';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
 import {
@@ -74,6 +79,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
   async function publicSubjects(
     ids: readonly string[],
     expected: ReadonlyMap<string, SourceSubject>,
+    observations?: Map<string, string>,
   ): Promise<Set<string>> {
     const roots = [...new Set(ids)];
     const states = new Map<string, { visible: boolean; redirect: string | null }>();
@@ -106,6 +112,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         const found = new Map(values.map((row) => [row.id, row]));
         for (const { id } of group) {
           const value = found.get(id);
+          observations?.set(`identity:${id}`, JSON.stringify(value ?? null));
           const before = expected.get(id);
           const stable =
             !before ||
@@ -144,6 +151,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     releases: ReadonlyMap<string, Release | null>,
     expected: ReadonlyMap<string, SourceSubject>,
     runtime: Prepared['runtime'],
+    observations?: Map<string, string>,
   ): Promise<{ subject: string; statement: IndexedStatement }[]> {
     if (!routeKey || !runtime) return [];
     const facets = new Map<string, Set<string>>();
@@ -267,7 +275,11 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           const home = await readPartition(client, partition);
           return !home || home.writeState === 'moved' ? [] : readFences(client, page);
         });
-        for (const [index, fence] of fences.entries()) if (fence.takenDown === false) unfenced.add(page[index]!);
+        for (const [index, tuple] of page.entries()) {
+          const fence = fences[index];
+          observations?.set(`tuple:${JSON.stringify(tuple)}`, JSON.stringify(fence ?? null));
+          if (fence?.takenDown === false) unfenced.add(tuple);
+        }
       }
     }
     // Source revision/security is reanchored after tuple-owner I/O, together with
@@ -275,6 +287,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     const visible = await publicSubjects(
       prepared.flatMap((item) => item.dependencies),
       expected,
+      observations,
     );
     return prepared
       .filter((item) => item.dependencies.every((id) => visible.has(id)) && (!item.tuple || unfenced.has(item.tuple)))
@@ -287,7 +300,93 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     return current?.digest === runtime.digest && current.head === runtime.head;
   }
 
+  /** Full selected-statement prefix, not the value sample used by the indexing path. The
+   * returned evidence is private to one attempt and always needs a final native re-read.
+   */
+  const readConceptStatements: ConceptStatementReader = async (partition, input, after, limit) => {
+    const request = conceptStatementRequest(partition, input, after, limit);
+    const cursor = after === null ? null : { ...after };
+    if (!routeKey) return { status: 'unavailable' };
+    const route = routeOf(request.subject)!;
+    async function snapshot() {
+      return inSearchSnapshot(pool, async (client) => {
+        const home = await readPartition(client, partition);
+        if (!home || home.writeState === 'moved') return null;
+        const runtime = await activeRelease(client);
+        if (!runtime) return null;
+        const subjects = await readSubjects.run(client, {
+          partition_no: partition, routes: [route], subject_ids: [request.subject],
+        });
+        const subject = subjects[0];
+        if (!subject || subject.visibility !== 'visible' || subject.redirect ||
+            !subject.selection_ready || subject.current_revision === null) return null;
+        try {
+          createFilterConstruction(runtime.release).admitFilter({ and: [
+            { type: { in: [subject.type] } },
+            { statement: { property: request.selection.property, in: [request.selection.concept],
+              concept: { scheme: request.selection.scheme,
+                ...(request.selection.includeChildren === undefined ? {} :
+                  { includeChildren: request.selection.includeChildren }) },
+              qualifiers: conceptStatementQualifiers(request) } },
+          ] });
+        } catch (error) {
+          if (error instanceof FilterError) return null;
+          throw error;
+        }
+        if (!relationFacetProperty(runtime.release, request.selection.property)) return null;
+        // The observation binds resumption to the original native subject and release, not to
+        // the page size or the returned rows. It supplies no absence or disclosure certificate.
+        const observation = createHash('sha256').update(JSON.stringify([
+          runtime.digest, runtime.head, subject,
+        ])).digest('hex');
+        if (cursor && cursor.observation !== observation) return { changed: true } as const;
+        const rows = await readConcepts.run(client, {
+          partition_no: partition,
+          requests: [{ route, subject_id: request.subject, property: request.selection.property,
+            after_slot: cursor?.slot ?? ZERO, after_candidate: cursor?.candidate ?? ZERO }],
+          property_limit: limit, input_limit: limit,
+        }) as SelectedStatement[];
+        const releases = new Map<string, Release | null>();
+        for (const digest of new Set(rows.map((row) => row.release)))
+          releases.set(digest, await readRelease(client, digest));
+        return { changed: false, runtime, subject, rows, releases, observation } as const;
+      });
+    }
+    const first = await snapshot();
+    if (!first) return { status: 'unavailable' };
+    if (first.changed) return { status: 'changed' };
+    const identities = new Map<string, string>();
+    const expected = new Map([[request.subject, first.subject]]);
+    const statements = await disclosed(first.rows, first.releases, expected, first.runtime, identities);
+    if (!(await runtimeIsCurrent(first.runtime))) return { status: 'changed' };
+    const last = first.rows.at(-1);
+    const result: ConceptStatementRead = {
+      status: 'current',
+      page: {
+        statements: statements.map((row) => row.statement),
+        examined: first.rows.length,
+        after: last ? { slot: last.slot_id, candidate: last.candidate_id, observation: first.observation } : cursor,
+        terminal: first.rows.length < limit,
+        complete: false,
+      },
+      async revalidate() {
+        const final = await snapshot();
+        if (!final) return 'changed';
+        if (final.changed || final.observation !== first.observation ||
+            !isDeepStrictEqual(first.rows, final.rows)) return 'changed';
+        const currentIdentities = new Map<string, string>();
+        const current = await disclosed(final.rows, final.releases,
+          new Map([[request.subject, final.subject]]), final.runtime, currentIdentities);
+        if (!isDeepStrictEqual(identities, currentIdentities) || !isDeepStrictEqual(statements, current) ||
+            !(await runtimeIsCurrent(final.runtime))) return 'changed';
+        return 'current';
+      },
+    };
+    return result;
+  };
+
   const source = {
+    readConceptStatements,
     async prepare(
       client: PoolClient,
       subjects: readonly SourceSubject[],
