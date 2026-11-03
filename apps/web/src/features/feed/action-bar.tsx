@@ -22,6 +22,7 @@ import type { FeedItem, FeedPage } from '../pages/home-feed-read';
 import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destination';
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
+import { homeFeedReaction } from './home-feed-reaction';
 
 export type FeedActionBarProps = {
   locale: string;
@@ -60,33 +61,6 @@ export function feedFeedbackEntries(locale: string, signedIn: boolean, href: str
       ? { type: 'item', label: `${label} · ${m.feed_action_unavailable({}, options)}`, disabled: true, onSelect() {} }
       : { type: 'link', label, href: signIn },
   );
-}
-
-/** Bind only the exact target, current viewer slot and page watermark supplied by Kernel. */
-export function homeFeedReaction(
-  item: FeedItem,
-  input: {
-    signedIn: boolean;
-    origin?: FeedActionBarProps['origin'];
-    reactionsAsOf?: FeedPage['reactionsAsOf'];
-    hasReactionFreshness?: boolean;
-  },
-): FeedReaction | undefined {
-  const summary = item.summary;
-  if (!('reactionTarget' in summary) || !summary.reactionTarget || !('reactions' in summary) || !summary.reactions)
-    return;
-  const target = summary.reactionTarget;
-  const destinationMatches =
-    (item.destination.kind === 'thread' && target.targetKind === 'thread' && target.targetId === item.destination.id) ||
-    (item.destination.kind === 'post' && target.targetKind === 'post' && target.targetId === item.destination.postId);
-  if (!destinationMatches || (input.signedIn && !Object.hasOwn(summary, 'viewerReaction'))) return;
-  return {
-    target: { kind: target.targetKind, id: target.targetId },
-    counts: summary.reactions,
-    value: input.signedIn && 'viewerReaction' in summary ? (summary.viewerReaction ?? null) : null,
-    ...(input.origin ? { reactionOrigin: input.origin } : {}),
-    ...(input.hasReactionFreshness ? { sourceWatermark: input.reactionsAsOf ?? null } : {}),
-  };
 }
 
 /** Consume only the generated feed contract. No invented reaction fields and no per-row point reads. */

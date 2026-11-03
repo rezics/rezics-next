@@ -1,8 +1,8 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test } from 'bun:test';
-import { homeFeedReaction } from '../src/features/feed/action-bar';
 import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
+import { homeFeedReaction } from '../src/features/feed/home-feed-reaction';
 import type { FeedItem } from '../src/features/pages/home-feed-read';
 
 const ids = {
