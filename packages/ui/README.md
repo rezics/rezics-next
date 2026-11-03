@@ -103,7 +103,7 @@ shadcn menus and sheets render in a portal on the page, not inside the story can
 
 `DocumentBody` derives visit identity from sorted-key structural JSON, so renderer-supported snapshots remain readable, equivalent property-key orderings keep disclosure, and changed document content resets it before paint. Reader option, locale, class name and callback updates keep the current visit's disclosure; only a changed document snapshot remounts spoilers.
 
-`Prose` is the surface for documents, in the reading page (`DocumentBody`) and in the editor. Body text is interface text. Only a Work title, marked with the `work-title` class, takes the serif face. A line holds about 65 characters (36 em for Chinese, Japanese and Korean, where a character is an em wide), and CJK text gets more leading. The styles live in `src/prose.css`.
+`Prose` is the surface for documents, in the reading page (`DocumentBody`) and in the editor. Body text is interface text. Only a Work title, marked with the `work-title` class, takes the serif face. A line holds about 65 characters (36 em for Chinese, Japanese and Korean, where a character is an em wide), and CJK text gets more leading. The styles live in `src/prose.css`. Mixed-script reading stories set `lang` on the existing wrapper around `DocumentBody` so that measure and leading inherit from the document language rather than the Storybook interface locale; 390 and 1280 remain viewport review inputs, not a narrowed inner canvas.
 
 ## Content feedback
 
