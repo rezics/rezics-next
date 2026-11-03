@@ -4,83 +4,62 @@ This derivation covers both the complete Search traversal and the retained score
 `createRealmRankSource.page` compatibility port in [realm-rank.ts](realm-rank.ts). The latter's `limit` bound is
 not a proxy for complete Search ordering.
 
-## Complete Search page
+## Native order primitives and complete Search readiness
 
-Let U be the requested useful-page size (1–100), B the size of one native Search batch, R the number of collector
-rounds (at most 3), and C the total raw candidates checked in the page. The existing collector gives
-`B <= min(200, 2 * remainingUseful + 1, remainingCandidateAllowance)`, `R <= 3`, and
-`C <= min(600, 6 * U + 3)`. The native producer reads no more than B candidates from any ordered source in one
-round. It does not scan the Semantic key-traversal rebuild path or infer a provider from `SubjectSource`.
+Search remains at `index_not_ready`: the delivered native primitives do not yet supply canonical-name ties,
+canonical population seeks, or complete predicate execution. The Semantic ID-key rebuild inventory cannot supply
+these request-time capabilities. The bounds below cover the delivered primitives, not successful complete Search
+pages or a consumer inferred from an interface.
 
-The scored phase first reads the finite `rating.realm_rank_generation` partition frontier for the selected question
-and Realm, using `(question_id, population_id, partition_no)`. It accepts at most 4,096 distinct subject-home
-partitions; the 4,097th inventory row fails closed. For each active partition, one repeatable-read statement seeks
-at most B candidates. Its exact B-tree equality prefix is
+One `createRealmRankOrderSource.observe` capture performs current Realm authorization (`A_R` statements and
+`R_R` physical rows), selected-question metadata/provenance authority (`A_Q` statements and `R_Q` physical rows
+for the authority alone), prior eligibility/freshness, and rank-publication observation. Its fixed SQL is:
+
+- Question home: BEGIN, SET LOCAL, partition point read, question/label/lifecycle point joins, COMMIT: five
+  statements/control statements; at most four physical metadata rows (one home and three point-joined records).
+- Population home: BEGIN, partition point read, pending EXISTS, prior point read, COMMIT: five statements/control
+  statements and at most three physical rows. Pending EXISTS visits at most one exact population key.
+- Publication sequence point read: one statement and one returned observation, with no rank population scan.
+
+Thus each capture uses `11 + A_R + A_Q` statements/control statements. Its fixed relation reads visit at most
+seven physical table rows, plus the sequence observation and `R_R + R_Q`. The five transaction controls comprise
+three from the question snapshot and two from the prior snapshot. Global/standard questions use current
+`definitions:read`; admitted custom questions use current owning-Realm readability. Their authority terms must
+remain distinct in growth evidence. Publication digest changes do not change measurement identity.
+
+Each primitive now performs two complete captures, before and after its native read, including an empty figure
+proof. The captures bind selected population, question identity/revision/publication/provenance, prior
+identity/generation/eligibility, Realm authority/revision, rank-publication generation, and the population home's
+epoch/position. Pending population work refuses observation even if the scored set is empty. Retired questions
+refuse observation. A changed capture restarts; current authority denial fails closed. Conservatively binding
+population position may restart for unrelated work in that home; it does not scan that work.
+
+The remaining per-primitive work is bounded as follows, independently of unrelated history:
+
+| Primitive                  | Additional SQL including controls | Native input/physical relation rows                                                                                          | Retained candidates      |
+| -------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| Scored partition inventory | 4                                 | One home point and at most 4,097 generation rows; the 4,097th fails closed                                                   | At most 4,096 partitions |
+| Scored partition seek      | 5                                 | One home, one generation, at most B rank rows with exact figure and subject point joins (at most 3B physical candidate rows) | B, with B <= 200         |
+| Exact figure proof         | 4 (3 when empty)                  | One home and at most two physical figure/rank rows per requested ID, at most 256 IDs                                         | At most 256 proofs       |
+
+The scored seek's exact B-tree equality prefix is
 `(partition_no, question_id, population_id, question_identity, prior_generation)`, followed by the strict
-descending `(score, subject_id)` seek and `LIMIT B`. The index is
-`realm_rank_score_idx(partition_no, question_id, population_id, question_identity, prior_generation,
-score DESC, subject_id DESC)`. The score seek joins only the exact current public-figure key and subject key; pending
-figures and pending prior work cannot be released. With P active partitions and N_i rows under one partition's
-prefix, rank heap rows are at most P*B and ordered-index work is
-`O(sum(log N_i + B))`. The list and per-partition statements are bounded by 4,096, regardless of unrelated
-subjects or history.
+`(score DESC, subject_id DESC)` tuple and `LIMIT B`. Its index is `realm_rank_score_idx`; the inventory uses
+`(question_id, population_id, partition_no)`. A point-joined figure supplies publication-pending state. Ordered
+index work is `O(log N + B)` for one partition's selected prefix, with O(B) retained candidates. The compatibility
+order is not the required canonical score/name/ID order. The existing `public_figure_realm_rank` trigger remains
+the sole projection writer.
 
-Search merges the returned partition frontiers by score descending and subject UUID descending. Text predicates use
-the existing Search compiler and are evaluated against the candidate IDs in the active Search generation; other
-filters and current disclosure continue through the existing reader. A text mismatch remains a consumed private
-candidate so a later matching score can be reached without advancing past a hidden key in the public cursor.
+For a future complete Search page, preserve the existing collector's useful size U (1–100), at most three rounds,
+`B <= min(200, 2 * remainingUseful + 1, remainingCandidateAllowance)`, and at most
+`C <= min(600, 6 * U + 3)` consumed candidates. Derive the finite partition frontier P, native canonical-name seek,
+complete predicate/admission work and current Subject disclosure from the actual delivered implementation before
+claiming complete-order costs. A finite useful-page collector alone cannot establish a complete native predicate
+or turn an unavailable/partial figure read into an unscored proof. Missing native evidence never means empty EOF.
 
-When the scored frontier is exhausted, the unscored phase issues one `name_sort ASC, id ASC` Search seek, with
-missing names last and a maximum of B hits. Each hit is grouped by its subject-home partition and receives one exact
-batched native figure/rank eligibility observation. For G nonempty groups (`G <= min(B, 4,096)`), the SQL returns
-exactly the requested ID set or fails closed. A complete figure read is the only evidence that a row is unscored;
-score zero remains scored, below-threshold figures are withheld, and an inactive prior yields all-unscored only
-after the population pending observation is complete. This phase costs at most B Search hits, B figure/rank
-eligibility rows, G bounded partition observations and `O(G log N + B)` native index work. It never estimates an
-unscored total or scans the canonical population.
-
-Each cursor observation captures the live Realm read decision, one exact selected-question and label-head read plus
-its current provenance authority, same-Realm prior generation/eligibility/freshness, rank publication generation,
-active definition meaning, Semantic canonical generation and active Search generation. It reobserves these before
-and after each producer read and before returning the page. A canonical-generation sequence is incremented by
-subject, redirect, selected-fact, selection-state and subject-page-publication writes. Any observed change restarts
-the request. The generation is an invalidation fence; the existing Search index remains the only name catalogue.
-
-Let A_R/R_R be the statements and examined rows in one current Realm authorization, A_Q/R_Q those in the
-selected-question provenance authority, and A_S(C)/R_S(C) the existing bounded SubjectSource disclosure work for
-the C consumed candidates. One producer capture performs one question observation, one prior observation, one
-rank-publication point read, one definition-pointer read and one canonical-generation point read, plus the Search
-generation/format reads. On the current pool path this is `13 + A_R + A_Q` SQL statements/control statements,
-`8 + R_R + R_Q` returned rows, and five transaction-control statements before any cache-miss definition body read;
-each cache-miss body adds its existing bounded release read. The question observation contributes two metadata
-point reads and three transaction controls. The prior observation contributes its exact partition, freshness and
-prior reads and two transaction controls. These selected-question terms are per capture and do not collapse
-standard-question evidence into admitted custom-question evidence.
-
-For R rounds, with S scored reads, P_r active scored partitions in round r, T unscored reads and G_r nonempty
-unscored partitions, the complete Search page uses at most `2 + 2*S + 2*T <= 14` producer captures. Its SQL
-statement/control envelope is source-derived as:
-
-`O * (13 + A_R + A_Q + D) + sum_r(4 + 5*P_r) + sum_r(4*G_r) + A_S(C)`
-
-where O is the number of captures, D is a possible release-body cache miss, 4 is the partition-inventory
-transaction/read, 5 is a per-partition scored read including two transaction controls, and 4 is one grouped
-unscored figure proof including its two controls. The corresponding returned-row envelope is:
-
-`O * (8 + R_R + R_Q + D_R) + sum_r(1 + P_r + P_r*(2 + B_r)) + sum_r(G_r + U_r) + R_S(C)`
-
-where D_R is the optional release-body row count, B_r is that round's batch size, and U_r is the number of unscored
-hits. Access and SubjectSource terms remain their actual native implementations, not constants inferred from the
-consumer interface. Search control calls are also bounded: at most one ordered unscored Search request per
-unscored read, plus at most one text-admission request for each nonempty scored partition.
-
-At peak, the scored adapter retains at most P_r*B_r source candidates and the merged output of that same bounded
-frontier: O(P_r*B_r) hit objects, with eight partition reads in flight. The unscored adapter retains O(B_r) Search
-hits and proofs. Across the full collector, current SubjectSource checks see at most C raw candidates. Thus memory
-is independent of relation size and unrelated history; the concrete ceiling is 4,096*200 candidates per scored
-frontier, before object overhead. An acceptance growth fixture should keep the one-partition 256/1024/4096
-population scales separate from multi-partition frontier growth, and should account for the actual selected-question
-reads and both Search and native provider work.
+Performance must review these source-derived terms and the future complete producer terms before acceptance.
+The existing compatibility growth fixture's selected-question costs and transaction-control assertions still need
+reconciliation; no successful complete-order three-scale evidence is claimed here.
 
 ## Scored-only compatibility page
 

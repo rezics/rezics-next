@@ -513,8 +513,8 @@ messaging.
 ## Protected Realm rank source
 
 The adopted second scope includes Realm rating order. Private Realm numbers stay outside the common Search
-index. Search imports `createRealmRankSource` and `RealmRankSource` from [realm-rank.ts](realm-rank.ts), composes
-the factory with the production `{ pool, access, tokens }`, and calls
+index. The scored-only compatibility factory `createRealmRankSource` and `RealmRankSource` in
+[realm-rank.ts](realm-rank.ts) use the production `{ pool, access, tokens }` dependencies and expose
 `page(actor, { realmId, questionId, partition, sort: 'score_desc', limit, cursor? }, { deadline })`.
 The actor comes from native credential verification. The factory performs current Realm authorization itself,
 then checks every consumed candidate through native subject Access and current identity before release; an
@@ -523,29 +523,27 @@ Unavailable authority, data or moved homes fail closed. Search owns selection co
 cross-partition composition; Web owns the remaining Content interfaces. This port
 installs no additional search route or service.
 
-Search's complete Realm ordering uses the separately composed `createRealmRatingNativeSource` in
-`search/realm-rating-native.ts`; the scored-only `page` remains a compatibility port. The native producer reads
-bounded scored frontiers from private `rating.realm_rank` partitions and seeks the current Search population by
-`name_sort` then subject ID for the unscored phase. It proves each unscored candidate against the exact current
-question, prior, figure and rank rows before release. Search retains request parsing, text/analyzer and Boolean
-semantics, filter admission, cross-partition merge, useful-page accounting, public response and the signed outer
-cursor. Realm scope stays separate from the rating population. Missing native composition, partial Search shards,
-incomplete figure proofs and unavailable authority return `index_not_ready`; they never become empty success.
+Search's `createRealmRatingNativeSource` in `search/realm-rating-native.ts` remains at `index_not_ready`.
+`createRealmRankOrderSource` currently supplies native selected-question observations, scored score/UUID seeks
+and exact figure proofs. These primitives do not supply canonical name ties or the complete unscored population;
+Semantic's ID-key inventory is a rebuild path, not a request-time name seek. Private Realm figures remain outside
+the common Search index. Complete ordering still requires bounded partition-local native canonical population/name
+seeks and a compatible generation, before Search may compose their finite frontier. Search retains parsing,
+text/analyzer/Boolean semantics, admission, useful-page accounting, public response and signed outer cursor.
+The required scored order is score descending, canonical name ascending (missing last), then subject ID ascending;
+the unscored phase uses that same name/ID order. The compatibility `page` retains its score/UUID-descending order.
 
-Decision: scored rows tie by subject UUID descending, matching the compatibility rank contract. The unscored phase
-uses canonical `name_sort` ascending, missing names last, then subject UUID ascending. Search's physical index
-remains the only name catalogue; private Realm figures never enter it. Semantic's canonical-generation sequence
-changes with subject, redirect, selected-fact, selection-state and page-publication writes. The producer captures
-that generation with the active Search generation and reobserves both around each seek, so a canonical change
-restarts a continuation without putting a consumed subject key in its public cursor.
+The native observation binds the selected population, question measurement identity, revision, publication digest
+and explicit provenance (Global or the owning Realm), current Realm authority/revision, prior eligibility and
+publication generation, and the population home's epoch/position. Every native partition inventory, scored read
+and figure proof reobserves this evidence before and after its read, including empty requests. A changed caption,
+lifecycle, prior, publication or source home restarts the read; denied Realm or question provenance fails closed.
+Retired questions cannot supply new observations. Pending population work cannot prove eligibility, including an
+empty scored set or an inactive prior. Exact figure proofs preserve score zero and withhold below-threshold figures.
+These observations do not supply canonical name generation or replace current Subject disclosure.
 
-Each Search page captures and reobserves the selected standard-question identity, revision and provenance, current
-Realm read authority, same-Realm prior generation and eligibility, pending state, rank-publication generation,
-active definition meaning, Semantic canonical generation and active Search generation. Current Realm authority is
-checked even for an empty page; current Subject disclosure and redirect checks remain mandatory for every consumed
-hit. A complete native figure read alone proves unscored. Score zero remains scored, below-threshold figures are
-withheld, and an inactive prior is all-unscored only after its population work is settled. A change to any captured
-observation invalidates or restarts the continuation.
+Decision: native primitive reads conservatively restart on any population-home position change until the complete
+canonical producer supplies narrower currentness evidence; the scored-only compatibility port is unchanged.
 
 Decision: eligible selected questions use the released integer vote range (0–20 inclusive); custom means and
 scores use that question's stored units, while the standard question retains its 0–10 display units.
