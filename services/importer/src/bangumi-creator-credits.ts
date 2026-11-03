@@ -95,7 +95,7 @@ export function bangumiStaffDraft(row: BangumiStaffAssociation, workType: number
     person,
     roleCode: row.position,
     ...(row.creditedAs !== undefined ? { creditedAs: row.creditedAs } : {}),
-    path: `/subject-persons/${work}/${person}/position`,
+    path: `/subject-persons/${work}/${row.person_id}/position`,
     record: { ...row },
   };
 }
@@ -111,7 +111,7 @@ export function bangumiVoiceDraft(row: BangumiVoiceAssociation, workType: number
     person,
     character,
     ...(row.creditedAs !== undefined ? { creditedAs: row.creditedAs } : {}),
-    path: `/person-characters/${work}/${person}/character_id`,
+    path: `/person-characters/${work}/${row.person_id}/${row.character_id}`,
     record: { ...row },
   };
 }

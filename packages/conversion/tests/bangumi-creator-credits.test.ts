@@ -56,7 +56,7 @@ test('authored staff and voice rows keep detailed role and character without fab
       [
         {
           kind: 'staff',
-          path: '/subject-persons/12/person:101/position',
+          path: '/subject-persons/12/101/position',
           subject: native(10, 'schema:TVSeries'),
           holder: native(11, 'schema:Person'),
           holderCode: 'person:101',
@@ -65,7 +65,7 @@ test('authored staff and voice rows keep detailed role and character without fab
         },
         {
           kind: 'voice-credit',
-          path: '/person-characters/12/person:102/character_id',
+          path: '/person-characters/12/102/201',
           subject: native(10, 'schema:TVSeries'),
           performer: native(12, 'schema:Person'),
           performerCode: 'person:102',
@@ -99,7 +99,7 @@ test('music and live-action staff remain the pinned omitted producer binding', (
     input([
       {
         kind: 'staff',
-        path: '/subject-persons/30/person:301/position',
+        path: '/subject-persons/30/301/position',
         subject: native(20, 'schema:MusicAlbum'),
         holder: native(21, 'schema:Person'),
         holderCode: 'person:301',
@@ -108,7 +108,7 @@ test('music and live-action staff remain the pinned omitted producer binding', (
       },
       {
         kind: 'staff',
-        path: '/subject-persons/60/person:601/position',
+        path: '/subject-persons/60/601/position',
         subject: native(22, 'schema:Movie'),
         holder: native(23, 'schema:Person'),
         holderCode: 'person:601',
@@ -121,14 +121,14 @@ test('music and live-action staff remain the pinned omitted producer binding', (
   expect(result.gaps).toEqual([
     {
       provider: 'bangumi',
-      path: '/subject-persons/30/person:301/position',
+      path: '/subject-persons/30/301/position',
       code: '3001',
       reason: 'unsupported_source_case',
       property: 'staff.3',
     },
     {
       provider: 'bangumi',
-      path: '/subject-persons/60/person:601/position',
+      path: '/subject-persons/60/601/position',
       code: '4001',
       reason: 'unsupported_source_case',
       property: 'staff.6',
@@ -144,7 +144,7 @@ test('absent endpoints, unknown roles and a changed role withhold or replace the
   };
   const director = {
     kind: 'staff' as const,
-    path: '/subject-persons/12/person:101/position',
+    path: '/subject-persons/12/101/position',
     subject: native(10, 'schema:TVSeries'),
     holder: native(11, 'schema:Person'),
     holderCode: 'person:101',
@@ -154,16 +154,23 @@ test('absent endpoints, unknown roles and a changed role withhold or replace the
   const missing = mapBangumiVocabulary(
     input(
       [
-        { ...director, holder: undefined },
+        {
+          kind: 'staff' as const,
+          path: director.path,
+          subject: director.subject,
+          holderCode: director.holderCode,
+          subjectType: director.subjectType,
+          roleCode: director.roleCode,
+        },
         {
           kind: 'voice-credit',
-          path: '/person-characters/12/person:102/character_id',
+          path: '/person-characters/12/102/201',
           subject: native(10, 'schema:TVSeries'),
           performer: native(12, 'schema:Person'),
           performerCode: 'person:102',
           characterCode: 'character:201',
         },
-        { ...director, path: '/subject-persons/12/person:101/unknown', roleCode: 9999 },
+        { ...director, path: '/subject-persons/12/101/unknown', roleCode: 9999 },
       ],
       bindings.concepts,
       bindings.schemes,

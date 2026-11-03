@@ -63,7 +63,9 @@ function port() {
     async writeSourceStatistic() {},
     async clearSourceStatistic() {},
     async readReviewedSubject(subjectId: string) {
-      return { subject: { id: subjectId, type: types.get(subjectId) ?? 'schema:TVSeries', labels: { en: 'authored' } } };
+      return {
+        subject: { id: subjectId, type: types.get(subjectId) ?? 'schema:TVSeries', labels: { en: 'authored' } },
+      } as Awaited<ReturnType<BangumiCreatorCreditPort['readReviewedSubject']>>;
     },
     async batch(request: BatchWriteRequest): Promise<BatchWriteResult> {
       requests.push(structuredClone(request));

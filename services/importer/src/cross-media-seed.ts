@@ -301,7 +301,8 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     if (!familyWorks.has(number(row, 'subject_id'))) continue;
     const work = String(number(row, 'subject_id'));
-    const person = `person:${number(row, 'person_id')}`;
+    const personId = number(row, 'person_id');
+    const person = `person:${personId}`;
     const workType = types.get(number(row, 'subject_id'));
     const mapping = mapSourceEnumeration('bangumi', `staff.${workType}`, row.position as number);
     member({
@@ -326,15 +327,17 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       workType: workType ?? 0,
       person,
       roleCode: row.position as number,
-      path: `/subject-persons/${work}/${person}/position`,
+      path: `/subject-persons/${work}/${personId}/position`,
       record: row,
     });
   }
   for await (const row of input.rows('bangumi', 'person-characters')) {
     if (!familyWorks.has(number(row, 'subject_id')) && !characters.has(number(row, 'character_id'))) continue;
     const work = String(number(row, 'subject_id'));
-    const person = `person:${number(row, 'person_id')}`;
-    const character = `character:${number(row, 'character_id')}`;
+    const personId = number(row, 'person_id');
+    const characterId = number(row, 'character_id');
+    const person = `person:${personId}`;
+    const character = `character:${characterId}`;
     member({
       source: 'bangumi',
       key: person,
@@ -364,7 +367,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       workType: types.get(number(row, 'subject_id')) ?? 0,
       person,
       character,
-      path: `/person-characters/${work}/${person}/character_id`,
+      path: `/person-characters/${work}/${personId}/${characterId}`,
       record: row,
     });
   }
