@@ -83,12 +83,12 @@ async function recipePosts(label: string) {
 }
 
 function candidatePosts(id: string) {
-  return stack.kernelRequests().filter(
-    (request) =>
-      request.method === 'POST' &&
-      request.url === `/v1/subjects/${id}/candidates` &&
-      !request.fixtureRequest,
-  );
+  return stack
+    .kernelRequests()
+    .filter(
+      (request) =>
+        request.method === 'POST' && request.url === `/v1/subjects/${id}/candidates` && !request.fixtureRequest,
+    );
 }
 
 function draft(page: Page, name: string) {
@@ -106,9 +106,7 @@ async function addFact(page: Page, property: string) {
 async function waitForSuggestion(label: string, type: string) {
   const until = performance.now() + 30_000;
   while (performance.now() < until) {
-    const response = await stack.kernel(
-      `/v1/subjects:suggest?q=${encodeURIComponent(label)}&languages=en`,
-    );
+    const response = await stack.kernel(`/v1/subjects:suggest?q=${encodeURIComponent(label)}&languages=en`);
     if (response.status === 404 || response.status === 403) return null;
     if (response.status === 200) {
       const body = (await response.json()) as { subjects?: { id: string; type: string; labels?: { en?: string } }[] };
@@ -145,9 +143,10 @@ test('native Recipe website creation selects structured facts; later per-field c
   });
 
   await page.locator('form').waitFor({ state: 'visible' });
-  const offered = await page.getByRole('combobox', { name: 'Add fact' }).locator('option').evaluateAll((options) =>
-    options.map((option) => (option as HTMLOptionElement).value),
-  );
+  const offered = await page
+    .getByRole('combobox', { name: 'Add fact' })
+    .locator('option')
+    .evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
   expect(offered).toEqual(expect.arrayContaining(['schema:recipeIngredient', 'wdt:P186', 'schema:suitableForDiet']));
   expect(new Set(offered).size).toBe(offered.length);
 
@@ -173,7 +172,10 @@ test('native Recipe website creation selects structured facts; later per-field c
   }
 
   await page.locator('form button[type="submit"]').click();
-  await page.getByRole('status').filter({ hasText: /created/i }).waitFor({ state: 'visible' });
+  await page
+    .getByRole('status')
+    .filter({ hasText: /created/i })
+    .waitFor({ state: 'visible' });
   const publicHref = await page.getByRole('link', { name: 'View public subject' }).getAttribute('href');
   const id = publicHref?.match(/\/subjects\/([^/]+)/)?.[1];
   expect(id).toBeTruthy();
@@ -231,7 +233,10 @@ test('native Recipe website creation selects structured facts; later per-field c
   const cookCorrection = draft(page, 'cooking time');
   await cookCorrection.getByRole('textbox', { name: 'Amount' }).fill('+40');
   await cookCorrection.getByRole('button', { name: 'Submit proposal' }).click();
-  await cookCorrection.getByRole('status').filter({ hasText: /awaiting review/i }).waitFor({ state: 'visible' });
+  await cookCorrection
+    .getByRole('status')
+    .filter({ hasText: /awaiting review/i })
+    .waitFor({ state: 'visible' });
 
   await page
     .locator('section')
@@ -255,9 +260,15 @@ test('native Recipe website creation selects structured facts; later per-field c
   await page.route('**/_serverFn/**', dropFirst);
   await ingredientCorrection.getByRole('button', { name: 'Submit proposal' }).click();
   await ingredientCorrection.getByRole('button', { name: 'Retry exact proposal' }).waitFor({ state: 'visible' });
-  await cookCorrection.getByRole('status').filter({ hasText: /awaiting review/i }).waitFor({ state: 'visible' });
+  await cookCorrection
+    .getByRole('status')
+    .filter({ hasText: /awaiting review/i })
+    .waitFor({ state: 'visible' });
   await ingredientCorrection.getByRole('button', { name: 'Retry exact proposal' }).click();
-  await ingredientCorrection.getByRole('status').filter({ hasText: /awaiting review/i }).waitFor({ state: 'visible' });
+  await ingredientCorrection
+    .getByRole('status')
+    .filter({ hasText: /awaiting review/i })
+    .waitFor({ state: 'visible' });
   await page.unroute('**/_serverFn/**', dropFirst);
   expect(dropped?.status).toBe(201);
 
@@ -289,7 +300,8 @@ test('native Recipe website creation selects structured facts; later per-field c
   expect(cookCandidates.candidates.every((row) => row.decision == null)).toBe(true);
   expect(
     ingredientCandidates.candidates.some(
-      (row) => JSON.stringify(row.statement.value.content) === JSON.stringify({ language: 'en', text: names.corrected }),
+      (row) =>
+        JSON.stringify(row.statement.value.content) === JSON.stringify({ language: 'en', text: names.corrected }),
     ),
   ).toBe(true);
   expect(ingredientCandidates.candidates).toHaveLength(1);
