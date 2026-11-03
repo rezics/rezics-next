@@ -11,9 +11,19 @@ test('the production seed coalesces reciprocal subject relation rows into one ca
         yield { id: 4, type: 2, name: 'Fate/stay night' };
       }
       if (table === 'vn_titles') {
-        yield { id: 'v1', title: 'STEINS;GATE', official: 't' };
-        yield { id: 'v2', title: 'CLANNAD', official: 't' };
-        yield { id: 'v3', title: 'Fate/stay night', official: 't' };
+        yield { id: 'v1', title: 'STEINS;GATE', official: 't', lang: 'en', latin: null };
+        yield { id: 'v2', title: 'CLANNAD', official: 't', lang: 'en', latin: null };
+        yield { id: 'v3', title: 'Fate/stay night', official: 't', lang: 'en', latin: null };
+      }
+      if (table === 'vn') {
+        yield { id: 'v1', olang: 'en' };
+        yield { id: 'v2', olang: 'en' };
+        yield { id: 'v3', olang: 'en' };
+      }
+      if (table === 'entry_meta') {
+        yield { id: 'v1', revision: '1' };
+        yield { id: 'v2', revision: '1' };
+        yield { id: 'v3', revision: '1' };
       }
       if (table === 'subject-relations') {
         yield { subject_id: 1, related_subject_id: 2, relation_type: 2 };
