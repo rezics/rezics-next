@@ -44,6 +44,8 @@ checking out the next. Native Access and authentication remain inside each reque
 
 Each series has a fresh isolated native system. Scales are exactly 256, 1024 and 4096, with the harness's unchanged
 warmup/repetition policy. Setup and incremental growth run outside the measured callback.
+Native Auth reissues the same ordinary scopes outside observation during long history setup and before measured
+repetitions; each observed HTTP request still authenticates its real issued credential.
 
 | Axis | Population at scale N | Fixed selection |
 | --- | --- | --- |
@@ -84,7 +86,9 @@ present only on the newer head (404 `not_found`), a nonexistent subject selectio
 creation refusal (404). A one-shot driver fault after the actual owner-role insertion raises native `overloaded`
 (503, retryable), requiring rollback of edition, initialization, grants, receipt, outbox, write basis and home position.
 The same key must then succeed through the real command as its allowed control. Draft byte reads and the other
-account's ordinary protected-source read remain refused. The narrow owner metadata grant is not source permission.
+account's ordinary protected-source read remain refused. Full selected source/ancestry grant rows must remain
+unchanged. The narrow owner metadata grant is not source permission. Native source revision creation uses the
+current route's 200 response; older focused edition tests' 201 expectations are not copied into this fixture.
 
 ## Execution limits
 

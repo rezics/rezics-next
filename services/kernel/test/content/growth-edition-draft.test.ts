@@ -76,6 +76,7 @@ for (const axis of axes) {
     const observer = observeSql(f.db.pool);
     try {
       const pinned = await f.sourceState();
+      const sourceGrants = await f.sourceGrants();
       const runs: { key: string; draft: Draft }[] = [];
       const footprints: Record<string, number>[] = [];
       const report = await checkGrowth(f.db, {
@@ -84,8 +85,10 @@ for (const axis of axes) {
         async grow(db, scale, previous) {
           if (axis === 'selected revisions') await f.growRevisions(scale);
           else await seed(db, f.populations[axis], { from: previous, to: scale });
+          await f.refreshAuthor();
           footprints.push({ scale, ...await f.footprint() });
         },
+        async prepare() { await f.refreshAuthor(); },
         async operation() {
           const key = randomUUID();
           const start = observer.records.length;
@@ -131,6 +134,7 @@ for (const axis of axes) {
       const { head_revision_id: _oldHead, ...oldRevision } = pinned;
       const { head_revision_id: _newHead, ...selectedRevision } = current;
       expect(selectedRevision).toEqual(oldRevision);
+      expect(await f.sourceGrants()).toEqual(sourceGrants);
       console.info(JSON.stringify({ report, footprints, source: f.input, ancestryPosts: 2,
         envelope: 'Native HTTP authentication, source preparation/final guards, command, owner grants, receipt/outbox; no worker' }));
     } finally {
@@ -143,6 +147,7 @@ test('Edition draft native replay, selected-subject refusals and rollback preser
   const f = await editionDraftFixture();
   const observer = observeSql(f.db.pool);
   try {
+    const sourceGrants = await f.sourceGrants();
     const key = randomUUID();
     const created = await capture(f.db, () => f.call('/v1/contentEditions', f.input, { key }), { includeBackends: true });
     expect(created.value.status).toBe(201);
@@ -196,6 +201,7 @@ test('Edition draft native replay, selected-subject refusals and rollback preser
     // Draft owner metadata authority does not make bytes deliverable or grant another account source access.
     expect((await f.call(`/v1/contentEditions/${control.value.value.editionId}/revision`)).status).toBe(404);
     expect((await f.call(`/v1/posts/${f.source.id}`, undefined, { bearer: f.native.actors.other.bearer })).status).toBe(404);
+    expect(await f.sourceGrants()).toEqual(sourceGrants);
     console.info(JSON.stringify({ name: 'Edition draft native command envelope and controls',
       captures: captures.map(({ capture: raw }) => ({ cost: costOf(raw), raw })) }));
   } finally {

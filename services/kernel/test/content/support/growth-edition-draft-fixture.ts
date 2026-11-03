@@ -44,7 +44,11 @@ export async function editionDraftFixture() {
         readConsent: ({ actorAccountId, clientId }) => consent.readCurrentConsent({ actorAccountId, clientId }),
       },
     });
-    const author = native.actors.author;
+    let author = native.actors.author;
+    async function refreshAuthor() {
+      author = await native.auth.issue({ accountId: author.actor.accountId,
+        clientId: native.auth.ordinaryClient.id, scopes: native.auth.ordinaryScopes });
+    }
     async function call(
       path: string, body?: unknown,
       options: { method?: string; bearer?: string; version?: string; key?: string } = {},
@@ -105,7 +109,7 @@ export async function editionDraftFixture() {
     async function revise() {
       const changed = await accepted<{ post: Source }>(`/v1/posts/${source.id}/revisions`, {
         body: fromPlainText('A different current head'), subjectIds: [scheme],
-      }, 201, { version: head });
+      }, 200, { version: head });
       head = changed.post.revisionId;
       revisions++;
     }
@@ -169,7 +173,10 @@ export async function editionDraftFixture() {
     };
     async function growRevisions(scale: number) {
       // Selected-source history is produced only by its native conditional HTTP command.
-      while (revisions < scale) await revise();
+      while (revisions < scale) {
+        if (revisions % 128 === 0) await refreshAuthor();
+        await revise();
+      }
     }
     async function sourceState() {
       return (await db.admin.query(`SELECT p.head_revision_id,p.reply_to_post_id,r.*
@@ -195,6 +202,11 @@ export async function editionDraftFixture() {
         [partition])).rows;
       return { counts, home, source: await sourceState() };
     }
+    async function sourceGrants() {
+      return Promise.all(['access.resource_grant', 'access.resource_role_grant'].map(async (table) =>
+        (await db.admin.query(`SELECT * FROM ${table} r WHERE route=$1 AND resource_id=ANY($2::uuid[])
+          ORDER BY to_jsonb(r)::text`, [route, [thread.id, thread.firstPost.id, source.id]])).rows));
+    }
     async function footprint() {
       return (await db.admin.query(`SELECT
         (SELECT count(*)::int FROM content.edition WHERE route=$1) AS editions,
@@ -208,7 +220,8 @@ export async function editionDraftFixture() {
           templates.grant.subject_id, templates.grant.action])).rows[0]!;
     }
     return { native, db, call, accepted, input, source, thread, target, scheme, board, realm, space,
-      route, partition, body, template, populations, growRevisions, sourceState, evidence, effects, footprint, close };
+      route, partition, body, template, populations, growRevisions, refreshAuthor, sourceState, sourceGrants,
+      evidence, effects, footprint, close };
   } catch (error) {
     await close();
     throw error;
