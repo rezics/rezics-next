@@ -791,12 +791,26 @@ controls, with a URL-first part and explicit Add part/Add reference actions. Qua
 units and multiplicity follow the exact admitted release; populated references preserve group boundaries, order and
 stable holder identity. Untouched citation scaffolds are omitted without losing typed zero or false values. Optional
 qualifiers and citations retain their native shape.
-Initial creation facts are selected in Global. Confirmation retains the exact returned subject ID, and only an
-ordinary read of that ID supplies its reader address. Failed readback offers a read retry without another creation.
-Uncertain delivery freezes the full terms/facts command and key; definite refusals retain the draft, stale metadata
-refreshes without discarding it, and key conflicts require explicit review before a new confirmation.
+Standalone Screen creation reviews the exact prepared item before sealing: selected type and its label language,
+every multilingual term and alias, and every admitted initial assertion with its qualifiers, rank and grouped
+references. Confirmation seals that same item; an edit, type switch, reference copy or successful metadata change
+requires a current review again. Creating a standalone season or episode does not establish series or season
+membership; membership remains the existing separate native operation after this identity exists. Episode-from-series
+creation keeps immediate confirmation. Contributors may copy one complete reference group onto up to sixteen other
+initial statements in this creator; copies are independent, leave each destination's existing groups in place, and
+never copy values, qualifiers, rank or authority. Incompatible, removed, sealed and uncertain holders cannot receive
+a copy. Source or destination edits while copy review is open make it stale; Cancel leaves drafts unchanged.
+Type-keyed drafts survive a type switch; only the current type's prepared item enters review or a sealed command.
+Unsupported or retired fields stay visible as repair needs. A failed current metadata read is not an empty baseline.
+Initial creation facts are selected in Global and use the native `normal` rank. Confirmation retains the exact
+returned subject ID, and only an ordinary read of that ID supplies its reader address. Failed readback offers a read
+retry of that UUID without another creation. Ready, denied or concealed, missing, stale or redirected, and unavailable
+readings stay distinct. Uncertain delivery freezes the full terms/facts command and key; a definite refusal can
+return through explicit repair and re-review, and a timeout cannot. Stale metadata refreshes without discarding the
+draft, and key conflicts require explicit review before a new confirmation.
 The native API validates the submitted command. An uncertain retry reaches that same native idempotency path
-without replacing its payload or key after a metadata change.
+without replacing its payload or key after a metadata change. Complete-item review visits admitted holders and their
+structured parts; one confirmation uses one create command and its exact-ID current read.
 
 Initial Screen metadata retry replaces the failure with a pending status, keeps one read in flight, and preserves the Retry action on another failure; successful keyboard recovery orients to the creation heading only while focus intent survives movement, pointer use and caller retirement.
 

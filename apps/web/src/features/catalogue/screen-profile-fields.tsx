@@ -7,9 +7,18 @@ import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
-import { ScalarControl, StatementFields, statementHolderKey, type StatementFieldsRead } from './statement-editor-view';
+import {
+  EditorFailure,
+  PartValue,
+  ScalarControl,
+  StatementFields,
+  statementHolderKey,
+  type StatementFieldsRead,
+} from './statement-editor-view';
 import { creationStatement, emptyCreationStatement, type SnakInput, type StatementInput } from './statement-editor';
-import { controlId, presentStatementViolations } from './statement-validation-presentation';
+import { controlId, presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
+import { ReferenceReusePanel } from './reference-reuse-view';
+import { screenCreateFactsRead, type ScreenReuseState } from './screen-create-review';
 import { screenFactId, screenGroups, screenName, screenTarget, type ScreenGroup } from './screen-profile';
 
 const screenActionClassName =
@@ -23,11 +32,28 @@ export const screenRowId = (row: ScreenRow) => `${screenFactId(row.statement.pro
 
 /** Decode only addresses for controls this local creation editor supports. */
 export function screenCreationControl(pointer: string, rows: ScreenRow[], release: Release, locale: string) {
+  if (!pointer.startsWith('/') || /~(?![01])/.test(pointer)) return;
+  const whole = /^\/statements\/((?:[^/~]|~[01])+)$/.exec(pointer);
+  if (whole) {
+    const property = whole[1]!.replaceAll('~1', '/').replaceAll('~0', '~');
+    const row = rows.find((entry) => entry.statement.property.id === property);
+    if (!row) return;
+    return { id: screenRowId(row), label: screenName(release, property, locale).text };
+  }
+  const indexed = /^\/statements\/((?:[^/~]|~[01])+)\/(0|[1-9]\d*)$/.exec(pointer);
+  if (indexed) {
+    const property = indexed[1]!.replaceAll('~1', '/').replaceAll('~0', '~');
+    const row = rows.filter((entry) => entry.statement.property.id === property)[Number(indexed[2])];
+    if (!row) return;
+    return { id: screenRowId(row), label: screenName(release, property, locale).text };
+  }
   const match = /^\/statements\/((?:[^/~]|~[01])+)\/(0|[1-9]\d*)(\/.*)$/.exec(pointer);
   if (!match) return;
   const property = match[1]!.replaceAll('~1', '/').replaceAll('~0', '~');
   const row = rows.filter((entry) => entry.statement.property.id === property)[Number(match[2])];
   if (!row) return;
+  if (!release.properties[property] || release.properties[property]?.disclosure === 'sourceOrConsent')
+    return { id: screenRowId(row), label: screenName(release, property, locale).text };
   const statement = creationStatement(row.statement, release);
   let part: SnakInput = statement;
   let id = screenRowId(row);
@@ -297,6 +323,16 @@ export function ScreenInitialFields({
   search,
   disabled,
   omitProperties = [],
+  canEdit,
+  errors = [],
+  reuse = null,
+  focusCopy,
+  onReuse,
+  onReuseSelected,
+  onReuseApply,
+  onReuseCancel,
+  onReuseRefresh,
+  onReuseOpen,
 }: {
   type: string;
   rows: ScreenRow[];
@@ -306,6 +342,16 @@ export function ScreenInitialFields({
   search: EntityPickerSearch;
   disabled: boolean;
   omitProperties?: readonly string[] | undefined;
+  canEdit?: () => boolean;
+  errors?: readonly { pointer: string; code: string }[];
+  reuse?: ScreenReuseState | null;
+  focusCopy?: { holder: string; index: number; nonce: number };
+  onReuse?: (row: ScreenRow, index: number) => void;
+  onReuseSelected?: (holders: string[]) => void;
+  onReuseApply?: () => void;
+  onReuseCancel?: () => void;
+  onReuseRefresh?: () => void;
+  onReuseOpen?: (holder: string, index: number) => void;
 }) {
   const o = { locale: locale as never };
   const propertySelectId = useId();
@@ -399,6 +445,21 @@ export function ScreenInitialFields({
     setProperty('');
   };
   const name = (id: string) => screenName(release, id, locale);
+  const context: StatementFieldsRead = {
+    release,
+    source: null,
+    public: { related: {}, subject: { type } },
+  };
+  const admittedRows = rows.filter((row) => fields.includes(row.statement.property.id));
+  const reuseDrafts = admittedRows.map((row) => ({
+    holder: screenRowId(row),
+    property: row.statement.property.id,
+    source: null,
+    baseline: null,
+    statement: row.statement,
+    included: true,
+  }));
+  const editable = () => (canEdit ? canEdit() : !disabled);
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-5">
       <legend className="min-w-0 max-w-full text-lg font-semibold [overflow-wrap:anywhere]">
@@ -461,72 +522,123 @@ export function ScreenInitialFields({
         {m.correction_add({}, o)}
       </Button>
       {/* Keep each error anchor's heading a direct child of its native section. */}
-      {rows.map((row) => (
-        <ContentItemFrame as="div" key={row.key} className="min-w-0 py-4 sm:py-5">
-          <section id={screenRowId(row)} className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
-            <ContentItemHeading
-              level={3}
-              lang={name(row.statement.property.id).lang ?? undefined}
-              className="min-w-0 max-w-full font-sans font-semibold [overflow-wrap:anywhere]"
-            >
-              {name(row.statement.property.id).text}
-            </ContentItemHeading>
-            <StatementFields
-              creation
-              localDraft
-              stablePartAddresses
-              draft={row.statement}
-              current={
-                { release, source: null, public: { related: {}, subject: { type } } } satisfies StatementFieldsRead
-              }
-              locale={locale}
-              feedback={{ id: screenRowId(row), errors: [] }}
-              guideReturn={`/${locale}/catalogue/screen`}
-              heading="h4"
-              valueControl={
-                release.properties[row.statement.property.id]?.datatype === 'wikibase-item' ? (
-                  <InitialValue
-                    id={screenRowId(row)}
-                    part={row.statement}
-                    release={release}
-                    locale={locale}
-                    search={search}
-                    disabled={disabled}
-                    change={(value) => {
-                      writeStatement(row, { ...row.statement, value });
-                      return true;
-                    }}
-                  />
-                ) : undefined
-              }
-              partControl={(part, change) =>
-                release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
-                  <InitialValue
-                    id={screenRowId(row)}
-                    address={`part-${statementHolderKey(part) ?? ''}`}
-                    part={part}
-                    release={release}
-                    locale={locale}
-                    search={search}
-                    disabled={disabled}
-                    change={(value) => {
-                      change(value);
-                      return true;
-                    }}
-                  />
-                ) : undefined
-              }
-              change={(statement) => writeStatement(row, statement)}
-            />
-            <ScreenInitialRemove
-              row={row}
-              disabled={disabled}
-              locale={locale}
-              onRemove={() => removeRow(row.key, row.statement.property.id)}
-            />
-          </section>
-        </ContentItemFrame>
-      ))}
+      {rows.map((row) => {
+        const property = row.statement.property.id;
+        const admitted = fields.includes(property);
+        const id = screenRowId(row);
+        const indexAmong = rows
+          .filter((entry) => entry.statement.property.id === property)
+          .findIndex((entry) => entry.key === row.key);
+        const encoded = property.replaceAll('~', '~0').replaceAll('/', '~1');
+        const prefix = `/statements/${encoded}/${indexAmong}`;
+        const fieldPrefix = `/statements/${encoded}`;
+        const presented: PresentedViolation[] = presentStatementViolations(
+          errors.flatMap((error) => {
+            if (error.pointer === fieldPrefix)
+              return [{ pointer: '/statement', code: error.code as never }];
+            if (error.pointer !== prefix && !error.pointer.startsWith(`${prefix}/`)) return [];
+            return [{ pointer: `/statement${error.pointer.slice(prefix.length)}`, code: error.code as never }];
+          }),
+          row.statement,
+          release,
+          locale,
+          id,
+        );
+        return (
+          <ContentItemFrame as="div" key={row.key} className="min-w-0 py-4 sm:py-5">
+            <section id={id} className="min-w-0 space-y-4 [overflow-wrap:anywhere]">
+              <ContentItemHeading
+                level={3}
+                lang={name(property).lang ?? undefined}
+                className="min-w-0 max-w-full font-sans font-semibold [overflow-wrap:anywhere]"
+              >
+                {name(property).text}
+              </ContentItemHeading>
+              {admitted ? (
+                <StatementFields
+                  creation
+                  localDraft
+                  stablePartAddresses
+                  draft={row.statement}
+                  current={context}
+                  locale={locale}
+                  feedback={{ id, errors: presented }}
+                  guideReturn={`/${locale}/catalogue/screen`}
+                  heading="h4"
+                  valueControl={
+                    release.properties[property]?.datatype === 'wikibase-item' ? (
+                      <InitialValue
+                        id={id}
+                        part={row.statement}
+                        release={release}
+                        locale={locale}
+                        search={search}
+                        disabled={disabled}
+                        change={(value) => {
+                          writeStatement(row, { ...row.statement, value });
+                          return true;
+                        }}
+                      />
+                    ) : undefined
+                  }
+                  partControl={(part, changePart) =>
+                    release.properties[part.property.id]?.datatype === 'wikibase-item' ? (
+                      <InitialValue
+                        id={id}
+                        address={`part-${statementHolderKey(part) ?? ''}`}
+                        part={part}
+                        release={release}
+                        locale={locale}
+                        search={search}
+                        disabled={disabled}
+                        change={(value) => {
+                          changePart(value);
+                          return true;
+                        }}
+                      />
+                    ) : undefined
+                  }
+                  change={(statement) => writeStatement(row, statement)}
+                  reuse={
+                    onReuse && editable() && admittedRows.length > 1
+                      ? { disabled, onReuse: (index) => onReuse(row, index) }
+                      : undefined
+                  }
+                  focusReference={focusCopy && focusCopy.holder === id ? focusCopy : undefined}
+                />
+              ) : (
+                <>
+                  <EditorFailure reason="stale" locale={locale} />
+                  <PartValue part={row.statement} read={context} locale={locale} />
+                </>
+              )}
+              <ScreenInitialRemove
+                row={row}
+                disabled={disabled}
+                locale={locale}
+                onRemove={() => removeRow(row.key, row.statement.property.id)}
+              />
+            </section>
+          </ContentItemFrame>
+        );
+      })}
+      {reuse && onReuseSelected && onReuseApply && onReuseCancel && onReuseRefresh && onReuseOpen && (
+        <ReferenceReusePanel
+          source={reuse.source}
+          drafts={reuseDrafts}
+          selected={reuse.selected}
+          read={screenCreateFactsRead(release, type)}
+          locale={locale}
+          capture={reuse.capture}
+          applied={reuse.applied}
+          refused={reuse.refused}
+          onSelected={onReuseSelected}
+          onApply={onReuseApply}
+          onCancel={onReuseCancel}
+          onRefresh={onReuseRefresh}
+          onOpen={onReuseOpen}
+        />
+      )}
       <p className="text-sm text-muted-foreground">{m.screen_authored_after({}, o)}</p>
     </fieldset>
   );

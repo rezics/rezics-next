@@ -17,7 +17,16 @@ import type { RelationTransport } from '../../subject/relation-candidates';
 import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';
 import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
-import type { CreateResult, CreatedReader } from './create-subject';
+import type { CreateFailure, CreateResult, CreatedReader } from './create-subject';
+import { applyReuse, captureReuse, cloneReferenceGroup } from './reference-reuse';
+import {
+  captureScreenReuse,
+  screenAdmitCreatedReader,
+  screenFactDrafts,
+  screenFactsFromDrafts,
+  type ScreenReuseState,
+} from './screen-create-review';
+import { ScreenCreateReview } from './screen-create-review-view';
 import { ScreenEpisodeMembership, ScreenEpisodeResult } from './screen-episode-membership.tsx';
 import {
   episodeJourneyFromCreate,
@@ -36,14 +45,22 @@ import { AuthoringDepartureBoundary } from '../../threads/authoring-departure';
 import { CharacterClassifications, classificationFields } from './character-profile-classification';
 import { EditorFailure } from './statement-editor-view';
 import type { EditorRead } from './statement-editor';
-import { ScreenInitialFields, screenCreationControl, screenGroupLabel, type ScreenRow } from './screen-profile-fields';
+import {
+  ScreenInitialFields,
+  screenCreationControl,
+  screenGroupLabel,
+  screenRowId,
+  type ScreenRow,
+} from './screen-profile-fields';
 import {
   screenCreateTypes,
+  screenFactId,
   screenGroups,
   screenInitialFacts,
   type ScreenCommand,
-  type ScreenRead,
   type ScreenGroup,
+  type ScreenItem,
+  type ScreenRead,
 } from './screen-profile';
 
 export type ScreenTransport = {
@@ -181,7 +198,29 @@ function ScreenProfileLive({
   const [readingRevision, setReadingRevision] = useState(0);
   const readingEpoch = useRef(0);
   const [drafts, setDrafts] = useState<Record<string, ScreenRow[]>>({});
+  const [failure, setFailure] = useState<CreateFailure>();
+  const [reuse, setReuse] = useState<ScreenReuseState | null>(null);
+  const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number }>();
   const retained = useRef<Extract<ScreenRead, { ok: true }>>(undefined);
+  function jump(id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    for (let parent = target.parentElement; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
+    const focus = target.matches('input, select, textarea, button')
+      ? target
+      : target.querySelector<HTMLElement>(
+          'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
+        );
+    if (focus) focus.focus();
+    else {
+      target.setAttribute('tabindex', '-1');
+      target.focus();
+    }
+  }
+  function admitReader(id: string, reader: CreatedReader): CreatedReader {
+    return screenAdmitCreatedReader(reader, id);
+  }
   // Creation metadata is private draft scaffolding, never an existing subject's authority.
   if (!id && query.data?.ok) retained.current = query.data;
   const read = query.data?.ok ? query.data : retained.current;
@@ -351,11 +390,12 @@ function ScreenProfileLive({
             onNavigate(href);
           }}
           onCreated={(result) => {
+            const admitted = { ...result, reader: admitReader(result.id, result.reader) };
             if (!read.seriesId) return;
             const draft = membershipRef.current;
             setEpisodeJourney(
               episodeJourneyFromCreate(
-                result,
+                admitted,
                 draft,
                 !!membershipCreateStatement(read.release, read.series?.subject.type, draft),
               ),
@@ -369,9 +409,15 @@ function ScreenProfileLive({
               const next = !result.isError && result.data?.ok ? result.data : undefined;
               return next?.ok ? { ok: true, types: screenCreateTypes(next.release, locale) } : { ok: false };
             },
-            submit: (command) => transport.create(command as ScreenCommand),
+            submit: async (command) => {
+              const result = await transport.create(command as ScreenCommand);
+              if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
+              setFailure(result.ok ? undefined : result);
+              if (!result.ok) return result;
+              return { ...result, reader: admitReader(result.id, result.reader) };
+            },
             read: async (createdId) => {
-              const reader = await transport.read(createdId);
+              const reader = admitReader(createdId, await transport.read(createdId));
               const current = journeyRef.current;
               const draft = membershipRef.current;
               if (lifetime.active() && current && current.id === createdId) {
@@ -401,33 +447,124 @@ function ScreenProfileLive({
               const statements = (drafts[item.type] ?? []).map((row) => row.statement);
               const membership = membershipCreateStatement(read.release, read.series?.subject.type, membershipDraft);
               if (membership) statements.push(membership);
-              return screenInitialFacts(read.release, item, statements);
+              const prepared = screenInitialFacts(read.release, item, statements);
+              setFailure(prepared.errors.length ? { ok: false, reason: 'invalid', errors: prepared.errors } : undefined);
+              return prepared;
             },
-            fields: (type, disabled) => (
-              <>
-                {read.seriesId && (
-                  <ScreenEpisodeMembership
-                    read={read}
+            fields: (type, disabled, canEdit, invalidate) => {
+              const rows = drafts[type] ?? [];
+              const touch = () => invalidate?.();
+              const standalone = !read.seriesId;
+              return (
+                <>
+                  {read.seriesId && (
+                    <ScreenEpisodeMembership
+                      read={read}
+                      locale={locale}
+                      disabled={disabled}
+                      draft={membershipDraft}
+                      change={(next) => {
+                        setMembershipDraft(next);
+                        touch();
+                      }}
+                    />
+                  )}
+                  <ScreenInitialFields
+                    key={type}
+                    type={type}
+                    release={read.release}
                     locale={locale}
                     disabled={disabled}
-                    draft={membershipDraft}
-                    change={setMembershipDraft}
+                    search={search}
+                    rows={rows}
+                    canEdit={canEdit}
+                    errors={failure?.errors ?? []}
+                    change={(next) => {
+                      setDrafts((previous) => ({ ...previous, [type]: next }));
+                      setReuse((currentReuse) =>
+                        currentReuse &&
+                        currentReuse.type === type &&
+                        next.some((row) => screenRowId(row) === currentReuse.source.holder)
+                          ? currentReuse
+                          : currentReuse?.type === type
+                            ? null
+                            : currentReuse,
+                      );
+                      touch();
+                    }}
+                    omitProperties={read.seriesId ? ['schema:isPartOf'] : []}
+                    {...(standalone
+                      ? {
+                          reuse: reuse && reuse.type === type ? reuse : null,
+                          ...(focusCopy ? { focusCopy } : {}),
+                          onReuse: (row, index) => {
+                            if (!lifetime.active() || !canEdit()) return;
+                            const next = captureScreenReuse(rows, type, row, index);
+                            if (next) setReuse(next);
+                          },
+                          onReuseSelected: (selected) => {
+                            if (!lifetime.active() || !reuse) return;
+                            setReuse({ ...reuse, selected, applied: [], refused: [] });
+                          },
+                          onReuseApply: () => {
+                            if (!lifetime.active() || !canEdit() || !reuse || reuse.type !== type) return;
+                            const result = applyReuse(
+                              screenFactDrafts(rows),
+                              reuse.source,
+                              reuse.selected,
+                              read.release,
+                            );
+                            setDrafts((previous) => ({
+                              ...previous,
+                              [type]: screenFactsFromDrafts(result.drafts, previous[type] ?? []),
+                            }));
+                            setReuse({ ...reuse, applied: result.applied, refused: result.refused });
+                            const first = result.applied[0];
+                            if (first) setFocusCopy({ holder: first.holder, index: first.index, nonce: Date.now() });
+                            touch();
+                          },
+                          onReuseCancel: () => setReuse(null),
+                          onReuseRefresh: () => {
+                            if (!lifetime.active() || !reuse) return;
+                            const origin = rows.find((row) => screenRowId(row) === reuse.source.holder);
+                            const group = origin?.statement.references[reuse.source.groupIndex];
+                            if (!origin || !group) return;
+                            const source = { ...reuse.source, snapshot: cloneReferenceGroup(group) };
+                            setReuse({
+                              ...reuse,
+                              source,
+                              capture: captureReuse(source, screenFactDrafts(rows)),
+                              applied: [],
+                              refused: [],
+                            });
+                          },
+                          onReuseOpen: (holder, index) => setFocusCopy({ holder, index, nonce: Date.now() }),
+                        }
+                      : {})}
                   />
-                )}
-                <ScreenInitialFields
-                  key={type}
-                  type={type}
-                  release={read.release}
-                  locale={locale}
-                  disabled={disabled}
-                  search={search}
-                  rows={drafts[type] ?? []}
-                  change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
-                  omitProperties={read.seriesId ? ['schema:isPartOf'] : []}
-                />
-              </>
-            ),
+                </>
+              );
+            },
             control: (pointer, type) => screenCreationControl(pointer, drafts[type] ?? [], read.release, locale),
+            ...(read.seriesId
+              ? {}
+              : {
+                  review: ({ item, stale }) => (
+                    <ScreenCreateReview
+                      item={item as ScreenItem}
+                      release={read.release}
+                      locale={locale}
+                      stale={stale}
+                      onJump={jump}
+                      factId={(property, index) => {
+                        const match = (drafts[item.type] ?? []).filter(
+                          (row) => row.statement.property.id === property,
+                        )[index];
+                        return match ? screenRowId(match) : screenFactId(property);
+                      }}
+                    />
+                  ),
+                }),
           }}
         />
         {episodeJourney && read.seriesId && (

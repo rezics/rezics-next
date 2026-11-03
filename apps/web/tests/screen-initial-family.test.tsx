@@ -114,6 +114,11 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     within(scope).getByRole('combobox', { name }) as HTMLSelectElement;
   const click = (scope: HTMLElement, name: string) =>
     act(async () => user.click(within(scope).getByRole('button', { name })));
+  const confirm = async () => {
+    await click(host, m.catalogue_create_submit());
+    if (host.querySelector('[data-screen-create-review]'))
+      await click(host, m.catalogue_create_submit());
+  };
   const choose = (scope: HTMLElement, name: string, value: string) =>
     act(async () => user.selectOptions(select(scope, name), value));
   const replace = (control: HTMLElement, value: string) =>
@@ -654,7 +659,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     expect(fixture.creation.calls).toHaveLength(callsBefore);
     expect(loads).toBe(1);
     association(host);
-    await click(host, m.catalogue_create_submit());
+    await confirm();
     await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
     expect(nativeWrites(fixture)).toHaveLength(1);
     const frozen = structuredClone(commands[0]!);
@@ -705,7 +710,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
         await prepare();
         await add(host, 'schema:episodeNumber');
         await replace(textbox(section(host, fieldName('schema:episodeNumber')), m.correction_value()), '0.5');
-        await click(host, m.catalogue_create_submit());
+        await confirm();
         await until(() => host.textContent!.includes(m.catalogue_create_denied()));
         expect(textbox(host, m.catalogue_create_label()).value).toBe('The observatory');
         expect(nativeWrites(current)).toHaveLength(1);
@@ -754,8 +759,8 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await prepare();
     const staleRow = await add(host, 'schema:episodeNumber');
     await replace(textbox(staleRow, m.correction_value()), '0.5');
-    await click(host, m.catalogue_create_submit());
-    await until(() => host.textContent!.includes(m.correction_preserved()));
+    await confirm();
+    await until(() => host.textContent!.includes(m.correction_stale()));
     expect(section(host, 'schema:episodeNumber')).toBe(staleRow);
     expect(nativeWrites(staleRelease)).toHaveLength(1);
     await click(host, m.catalogue_create_submit());
@@ -816,7 +821,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await click(host, m.catalogue_create_add_language());
     await replace(host.querySelector<HTMLInputElement>('#create-language-1')!, 'ja');
     await replace(host.querySelector<HTMLInputElement>('#create-label-1')!, '天文台');
-    await click(host, m.catalogue_create_submit());
+    await confirm();
     await until(
       () => metadataReads === 2 && !within(host).queryByRole('button', { name: m.catalogue_create_saving() }),
     );
@@ -865,7 +870,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     for (const id of rejectedTargets) expect(window.document.getElementById(id)).toBeNull();
     await choose(host, m.catalogue_create_type(), 'schema:Episode');
     secondCredit = section(host, fieldName('schema:director'), 1);
-    await click(host, m.catalogue_create_submit());
+    await confirm();
     await until(() => submitted.length === 2 && correctionLinks().length === 3);
     expect(correctionLinks().map((link) => decodeURIComponent(link.hash.slice(1)))).toEqual(rejectedTargets);
     await replace(textbox(secondCredit, m.correction_value()), '4');
@@ -873,7 +878,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
     await replace(select(secondCredit, fieldName('schema:director')), 'A. Observer');
     await until(() => within(window.document.body).queryByRole('option', { name: /A\. Observer/ }) !== null);
     await act(async () => user.click(within(window.document.body).getByRole('option', { name: /A\. Observer/ })));
-    await click(host, m.catalogue_create_submit());
+    await confirm();
     await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
     expect(submitted[2]!.item.statements['schema:director']![0]).toEqual(
       submitted[0]!.item.statements['schema:director']![0],
@@ -967,7 +972,7 @@ test('Screen initial family keeps independent controls, complete facts/credits, 
         await render(editor());
         await prepare();
         const oldSubmit = queuedSubmit();
-        await click(host, m.catalogue_create_submit());
+        await confirm();
         await until(() => result !== undefined);
         expect(creates).toBe(1);
         if (transition === 'reader') await render(editor({ ...originalReader, subject: 'replacement-reader' }));
