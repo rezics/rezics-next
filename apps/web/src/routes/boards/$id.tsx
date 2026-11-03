@@ -98,9 +98,15 @@ function BoardPage() {
           sort={sort ?? 'active'}
           {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
           participation={
-            <BoardParticipation realm={currentPage.realm} community={currentPage.community} returnTo={returnTo} />
+            <BoardParticipation community={currentPage.community} returnTo={returnTo} />
           }
-          start={<BoardStartThread board={currentPage.board} realm={currentPage.realm} returnTo={returnTo} />}
+          start={
+            <BoardStartThread
+              board={currentPage.board}
+              advice={currentPage.actions.createThread}
+              returnTo={returnTo}
+            />
+          }
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
           postingInterval={
             session === 'signed-in' ? <SlowModeSetting boardId={id} onApplied={() => void router.invalidate()} /> : null

@@ -40,16 +40,16 @@ export function BoardCommunity({
 }) {
   const aboutHeadingId = useId();
   const rulesHeadingId = useId();
-  const { board, realm, threads, authors, now } = page;
+  const { board, threads, authors, now } = page;
   const title = board.title ?? m.threads_untitled();
   const community = page.community?.state === 'available' ? page.community.value : null;
-  const name = community?.name ?? realm?.title ?? title;
+  const name = community?.name ?? title;
   // An authored empty summary must not fall back to another container's description.
-  const summary = community ? community.description : realm?.summary;
+  const summary = community?.description;
   const avatar = community?.avatar.state === 'available' ? community.avatar.value : null;
   const banner = community?.banner.state === 'available' ? community.banner.value : null;
   const rules = community?.rules;
-  const contextRealm = community ? { id: community.realmId, title: community.name } : realm;
+  const contextRealm = community ? { id: community.realmId, title: community.name } : undefined;
   return (
     <article className="w-full min-w-0 max-w-6xl space-y-6 text-foreground" data-slot="board-community">
       <header className="overflow-hidden rounded-3xl bg-card">
@@ -78,6 +78,7 @@ export function BoardCommunity({
           boardId={board.id}
           sort={sort}
           page={threads}
+          openingCards={page.openingCards}
           authors={authors}
           now={now}
           actions={start}
@@ -97,7 +98,7 @@ export function BoardCommunity({
             {board.realmId === null ? (
               <p className="text-sm leading-relaxed text-muted-foreground">{m.board_community_global()}</p>
             ) : null}
-            {board.realmId !== null && !community && !realm ? (
+            {board.realmId !== null && !community ? (
               <p role="status" className="text-sm text-muted-foreground">
                 {m.board_community_source_unavailable()}
               </p>

@@ -1,10 +1,13 @@
-import type { loadBoardPageWithAuthors } from '../identity/page-loaders';
+import type { BoardPageAuthor, loadBoardPageWithAuthors } from '../identity/page-loaders';
 import { BOARD_PINNED_SECTION_LIMIT, pinnedIdentitySet } from './board-pins/contract';
 import type { PageAuthors } from '../identity/read';
 
 export type CommunityBoardPage = Awaited<ReturnType<typeof loadBoardPageWithAuthors>>;
 export type BoardFeedThread = CommunityBoardPage['threads']['threads'][number];
 export type BoardThreadPage = CommunityBoardPage['threads'];
+export type BoardOpeningCard = CommunityBoardPage['openingCards'][string];
+export type BoardFeedAuthor = BoardPageAuthor | NonNullable<PageAuthors>[string];
+export type BoardFeedAuthors = Record<string, BoardFeedAuthor> | null;
 
 export type BoardPinnedSection =
   | Readonly<{ state: 'empty' }>
@@ -84,13 +87,13 @@ export function ordinaryBoardThreads(page: BoardThreadPage): BoardThreadPage {
 
 /** Current disclosed authors only. A replacement page never keeps leftover private metadata. */
 export function authorsForCurrentReading(
-  previous: PageAuthors,
+  previous: BoardFeedAuthors,
   next: PageAuthors | undefined,
   authorIds: readonly string[],
-): PageAuthors {
+): BoardFeedAuthors {
   if (next === null) return null;
   const source = next ?? previous ?? {};
-  const current: NonNullable<PageAuthors> = {};
+  const current: NonNullable<BoardFeedAuthors> = {};
   for (const id of authorIds) {
     const author = source[id];
     if (author) current[id] = author;

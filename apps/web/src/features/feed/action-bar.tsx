@@ -30,8 +30,8 @@ export type FeedActionBarProps = {
   href?: string | undefined;
   signedIn: boolean;
   reaction?: FeedReaction | undefined;
-  /** Safe native count for the linked reply destination; missing means unavailable. */
-  replyCount?: number | undefined;
+  /** Current exact or lower-bound count for the linked reply destination; missing means unavailable. */
+  replyCount?: number | Readonly<{ kind: 'exact' | 'lower-bound'; value: number }> | undefined;
   /** Existing reaction engine presentation; feed cards keep their vote layout unless a caller opts in. */
   reactionPresentation?: 'chips' | 'vote' | 'vote-plain' | undefined;
   plain?: boolean | undefined;
@@ -165,15 +165,21 @@ function ActionVisit({
   isCurrent,
 }: FeedActionBarProps & { isCurrent(): boolean }) {
   const options = { locale: locale as Locale };
+  const replyCountValue = typeof replyCount === 'number' ? replyCount : replyCount?.value;
+  const replyCountIsLowerBound = typeof replyCount === 'object' && replyCount?.kind === 'lower-bound';
   const safeReplyCount =
-    typeof replyCount === 'number' && Number.isSafeInteger(replyCount) && replyCount >= 0 ? replyCount : undefined;
+    typeof replyCountValue === 'number' && Number.isSafeInteger(replyCountValue) && replyCountValue >= 0
+      ? replyCountValue
+      : undefined;
   const replyLabel = m.feed_action_reply({}, options);
   const exactReplyCount =
-    safeReplyCount === undefined ? undefined : new Intl.NumberFormat(locale).format(safeReplyCount);
+    safeReplyCount === undefined
+      ? undefined
+      : `${new Intl.NumberFormat(locale).format(safeReplyCount)}${replyCountIsLowerBound ? '+' : ''}`;
   const compactReplyCount =
     safeReplyCount === undefined
       ? undefined
-      : new Intl.NumberFormat(locale, { notation: 'compact' }).format(safeReplyCount);
+      : `${new Intl.NumberFormat(locale, { notation: 'compact' }).format(safeReplyCount)}${replyCountIsLowerBound ? '+' : ''}`;
   const replyName = exactReplyCount === undefined ? replyLabel : `${replyLabel} ${exactReplyCount}`;
   const replyContent = (
     <>

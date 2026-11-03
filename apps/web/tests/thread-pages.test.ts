@@ -50,10 +50,43 @@ test('the actual board feed uses heading-style titles and the available opening 
     fetch: async (input, init) => {
       const path = new URL(new Request(input, init).url).pathname;
       paths.push(path);
-      if (path === `/v1/boards/${boardRecording.board.id}`) return Response.json(boardRecording);
-      if (path === `/v1/boards/${boardRecording.board.id}/threads`)
-        return Response.json({ threads: [row], next: null });
-      if (path === '/v1/accounts') return Response.json(accountsRecording);
+      if (path === `/v1/boards/${boardRecording.board.id}/page`) {
+        const author = (id: string) => {
+          const account = accountsRecording.accounts.find((entry) => entry.id === id);
+          return account
+            ? {
+                state: 'available',
+                id: account.id,
+                kind: account.kind,
+                handle: account.handle,
+                displayName: account.displayName,
+                automated: false,
+              }
+            : { state: 'unavailable' };
+        };
+        return Response.json({
+          board: boardRecording.board,
+          pinnedThreads: [],
+          threads: [{
+            thread: row,
+            target: { kind: 'thread', id: row.id, boardId: row.boardId },
+            authors: { thread: author(row.authorId), openingPost: author(row.firstPost.authorId) },
+            media: { state: 'none', images: [] },
+            interaction: {
+              target: { kind: 'thread', id: row.id },
+              counts: { state: 'unavailable' },
+              viewer: { state: 'not-applicable' },
+            },
+            comments: { state: 'unavailable' },
+            actions: { reply: 'sign-in', react: 'sign-in', share: 'available' },
+          }],
+          next: null,
+          rankRefreshedAt: null,
+          reactionsAsOf: null,
+          viewer: { participation: 'sign-in' },
+          actions: { createThread: 'sign-in' },
+        });
+      }
       throw new Error(`Unexpected board read: ${path}`);
     },
   });
@@ -67,11 +100,7 @@ test('the actual board feed uses heading-style titles and the available opening 
   expect(html).toMatch(/<h3\b(?=[^>]*data-content-item-slot="title")(?=[^>]*data-slot="board-feed-card")[^>]*>/u);
   expect(html).toContain(`href="/en/threads/${row.id}/thread"`);
   expect(html).not.toContain('Letters from B-612');
-  expect(paths).toEqual([
-    `/v1/boards/${boardRecording.board.id}`,
-    `/v1/boards/${boardRecording.board.id}/threads`,
-    '/v1/accounts',
-  ]);
+  expect(paths).toEqual([`/v1/boards/${boardRecording.board.id}/page`]);
 });
 
 test('scrolling a thread at 390 shows the shell header once, at the top of the viewport', () => {

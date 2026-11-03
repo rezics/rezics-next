@@ -15,10 +15,6 @@ const { BoardCommunity } = await import('../src/threads/board-community');
 import { boardThreadPreview, type CommunityBoardPage } from '../src/threads/board-feed-data';
 import type { BoardSort } from '../src/threads/board-sort';
 
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 async function render(page: CommunityBoardPage, sort: BoardSort = 'active') {
   const root = createRootRoute({ component: () => createElement(BoardCommunity, { page, sort }) });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: ['/'] }) });
@@ -35,19 +31,7 @@ test('the actual community feed continues an empty page, preserves every sort an
       fetch: async (input, init) => {
         const request = new Request(input, init);
         calls.push(new URL(request.url));
-        const response = await recorded(input, init);
-        if (new URL(request.url).pathname.endsWith('/threads') && new URL(request.url).searchParams.has('cursor')) {
-          const body: unknown = await response.json();
-          if (!record(body) || !Array.isArray(body.threads)) throw new Error('The recorded thread page is missing.');
-          return Response.json({
-            ...body,
-            threads: body.threads.map((thread: unknown) => {
-              if (!record(thread)) throw new Error('The recorded thread row is missing.');
-              return { ...thread, reactions: { like: 3, insightful: 2 }, replyCount: 7 };
-            }),
-          });
-        }
-        return response;
+        return recorded(input, init);
       },
     });
     const first = await loadBoardPageWithAuthors(client, {
@@ -76,9 +60,9 @@ test('the actual community feed continues an empty page, preserves every sort an
     expect(feed).toContain(m.feed_action_reply());
     expect(feed).not.toContain(m.threads_next_page());
     expect(feed).not.toContain(m.realm_join());
-    expect(calls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(1);
-    expect(calls.filter((url) => url.pathname.endsWith('/threads')).map((url) => url.searchParams.get('sort'))).toEqual(
-      [sort === 'new' ? null : sort, sort === 'new' ? null : sort],
+    expect(calls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(0);
+    expect(calls.filter((url) => url.pathname.endsWith('/page')).map((url) => url.searchParams.get('sort'))).toEqual(
+      [sort, sort],
     );
     expect(calls.some((url) => /^\/v1\/(threads|posts|media)\//u.test(url.pathname))).toBe(false);
     const sorts = [...feed.matchAll(/href="([^"]+)"/gu)]
@@ -116,17 +100,13 @@ test('removed openings and denied sources never become hidden previews, fabricat
   expect(unavailable).toContain(m.board_community_source_unavailable());
   expect(unavailable).not.toContain(m.board_community_global());
   expect(unavailable).not.toContain(m.realm_join());
-  for (const resource of ['board', 'threads'])
-    for (const status of [404, 503]) {
+  for (const status of [404, 503]) {
       const denied = createKernelClient('https://kernel.test', {
         fetch: (input, init) => {
           const url = new URL(new Request(input, init).url);
-          const refuse =
-            resource === 'threads' ? url.pathname.endsWith('/threads') : url.pathname.endsWith(continuationBoardId);
+          const refuse = url.pathname === `/v1/boards/${continuationBoardId}/page`;
           return refuse
-            ? Promise.resolve(
-                Response.json({ code: status === 404 ? 'not_found' : 'dependency_unavailable' }, { status }),
-              )
+            ? Promise.resolve(Response.json({ code: status === 404 ? 'not_found' : 'dependency_unavailable' }, { status }))
             : recorded(input, init);
         },
       });

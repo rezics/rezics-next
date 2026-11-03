@@ -59,7 +59,7 @@ test('Next traverses an empty visible page to a returned thread with the exact c
     const target = new URL(href!, 'https://site.test');
     expect(target.searchParams.get('cursor')).toBe(continuationCursor);
     expect(target.searchParams.get('sort')).toBe(sort === 'active' ? null : sort);
-    expect(calls.filter((url) => url.pathname.endsWith('/threads'))).toHaveLength(1);
+    expect(calls.filter((url) => url.pathname === `/v1/boards/${continuationBoardId}/page`)).toHaveLength(1);
     expect(calls.some((url) => url.pathname === '/v1/accounts')).toBe(false);
     const continued = await loadBoardPageWithAuthors(client, {
       id: continuationBoardId,
@@ -71,11 +71,11 @@ test('Next traverses an empty visible page to a returned thread with the exact c
     expect(visible).not.toContain(m.board_threads_page_empty());
     expect(visible).not.toContain(m.threads_next_page());
     expect(visible.includes(`dateTime="${rankRefreshedAt}"`)).toBe(sort !== 'new');
-    const pages = calls.filter((url) => url.pathname.endsWith('/threads'));
+    const pages = calls.filter((url) => url.pathname === `/v1/boards/${continuationBoardId}/page`);
     expect(pages.map((url) => url.searchParams.get('cursor'))).toEqual([null, continuationCursor]);
     expect(pages.map((url) => url.searchParams.get('sort'))).toEqual([
-      sort === 'new' ? null : sort,
-      sort === 'new' ? null : sort,
+      sort,
+      sort,
     ]);
     const terminal = await loadBoardPageWithAuthors(client, { id: emptyBoardId });
     const empty = await render(terminal, sort);
@@ -87,14 +87,12 @@ test('Next traverses an empty visible page to a returned thread with the exact c
 });
 
 test('a continued board or page refusal stays a failure rather than becoming an empty success', async () => {
-  for (const resource of ['board', 'threads'])
-    for (const status of [404, 503]) {
+  for (const status of [404, 503]) {
       const recorded = createStoryRecordedKernelFetch();
       const client = createKernelClient('https://kernel.test', {
         fetch: async (input, init) => {
           const url = new URL(new Request(input, init).url);
-          const refused =
-            resource === 'threads' ? url.pathname.endsWith('/threads') : url.pathname.endsWith(continuationBoardId);
+          const refused = url.pathname === `/v1/boards/${continuationBoardId}/page`;
           return refused
             ? Response.json({ code: status === 404 ? 'not_found' : 'dependency_unavailable' }, { status })
             : recorded(input, init);

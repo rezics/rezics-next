@@ -69,6 +69,9 @@ type ClientApp = Elysia<
 
 /** Each group is derived from the complete mounted kernel, including routes contributed by other modules. */
 type GeneratedKernelClient = ReturnType<typeof treaty<ClientApp>>['v1'];
+type BoardPageCall = ReturnType<ReturnType<GeneratedKernelClient['boards']>['page']['get']>;
+/** Response declared by the mounted GET /v1/boards/:id/page route. */
+export type BoardPageResponse = NonNullable<Awaited<BoardPageCall>['data']>;
 type PersonalEntryPath = ReturnType<GeneratedKernelClient['libraryEntries']>;
 type PersonalEntryCall<T> = Promise<{
   data: T | null;

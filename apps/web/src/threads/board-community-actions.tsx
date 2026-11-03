@@ -1,67 +1,40 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { MessageSquarePlusIcon } from 'lucide-react';
 import { RealmMembership } from '../community/realm-membership';
-import { realmMembershipQuery } from '../community/realm-membership-queries';
-import { hasCurrentRealmMembership, useRealmMembershipCaller } from '../community/realm-membership-lifetime';
-import { personalRead } from '../kernel/query';
 import { m } from '../paraglide/messages.js';
 import { useSession } from '../session/query';
 import type { CommunityBoardPage } from './board-feed-data';
-import type { BoardRealm } from './board-context';
 import type { BoardCommunitySource } from './board-community-source';
 import { SignInPrompt } from './write-prompts';
 
 type Board = CommunityBoardPage['board'];
+type BoardAdvice = CommunityBoardPage['actions']['createThread'];
 
-/** A creation entry is not a permission grant; the existing composer command remains authoritative. */
+/** The mounted page's current advice controls the entry; the composer command remains authoritative. */
 export function BoardStartThread({
   board,
-  realm,
+  advice,
   returnTo,
 }: {
   board: Board;
-  realm?: BoardRealm | undefined;
+  advice: BoardAdvice;
   returnTo: string;
 }) {
-  const { state: session, subject, csrfToken } = useSession();
-  const client = useQueryClient();
-  const realmId = board.realmId ?? '';
-  const memberSubject = subject ?? '';
-  const caller = useRealmMembershipCaller(client, realmId, memberSubject, csrfToken);
+  const { state: session } = useSession();
   const available =
     board.availability === 'available' && board.visibility !== 'taken_down' && board.visibility !== 'draft';
-  const membership = useQuery({
-    ...realmMembershipQuery(board.realmId ?? '', session === 'signed-in' ? (subject ?? null) : null, caller),
-    enabled:
-      personalRead.enabled &&
-      available &&
-      session === 'signed-in' &&
-      !!subject &&
-      caller.isReady() &&
-      !!realm &&
-      realm.id === board.realmId &&
-      realm.state === 'active',
-  });
   if (!available) return null;
-  // A hidden/unavailable Realm never becomes a Global board.
-  if (board.realmId !== null && (!realm || realm.id !== board.realmId || realm.state !== 'active')) return null;
   if (session === 'unavailable' || session === 'unknown') return null;
-  if (session === 'signed-out') return <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact />;
-  if (!subject) return null;
-  // A cached earlier success cannot override a failed refresh.
-  const standingIsCurrent = board.realmId === null || hasCurrentRealmMembership(client, realmId, subject, caller);
-  if (
-    board.realmId !== null &&
-    (membership.isPending || membership.isFetching || membership.isError || !standingIsCurrent || !membership.data)
-  )
+  if (session === 'signed-out')
+    return advice === 'sign-in' ? <SignInPrompt returnTo={returnTo} label={m.board_sign_in_to_start()} compact /> : null;
+  if (advice === 'unavailable')
     return (
       <p role="status" className="text-sm text-muted-foreground">
-        {membership.isError ? m.realm_membership_unavailable() : m.realm_membership_loading()}
+        {m.realm_membership_unavailable()}
       </p>
     );
-  if (board.realmId !== null && membership.data?.state !== 'member' && membership.data?.state !== 'none') return null;
+  if (advice !== 'allowed') return null;
   return (
     <Link to="/boards/$id/new" params={{ id: board.id }} className={buttonVariants({ size: 'lg' })}>
       <MessageSquarePlusIcon aria-hidden="true" className="size-4" />
@@ -71,23 +44,23 @@ export function BoardStartThread({
 }
 
 export function BoardParticipation({
-  realm,
   community,
   returnTo,
 }: {
-  realm?: BoardRealm | undefined;
   community: BoardCommunitySource;
   returnTo: string;
 }) {
   const { state: session } = useSession();
-  if (!realm || realm.state !== 'active' || !realm.visibility) return null;
+  if (community?.state !== 'available') return null;
   if (session === 'unknown' || session === 'unavailable') return null;
+  const { realmId, join } = community.value;
+  if (join.action === null) return null;
   return (
     <RealmMembership
-      realm={{ id: realm.id, visibility: realm.visibility, viewer: null }}
+      realm={{ id: realmId, visibility: join.action === 'leave' ? 'protected' : 'public', viewer: null }}
       returnTo={returnTo}
       memberLabel={m.board_community_joined()}
-      admittedAction={community?.state === 'available' ? community.value.join.action : undefined}
+      admittedAction={join.action}
     />
   );
 }

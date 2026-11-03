@@ -22,36 +22,74 @@ native outcomes. Web does not refill sparse pages or derive activity from loaded
 
 ## Web receiving status
 
-Decision: keep the current Board route on its existing typed reads until `@rezics/client` publishes
-`boards({ id }).page.get`; do not hand-author or fetch the source-only endpoint.
+Decision: use the mounted Board page as the sole source for opening cards and inline action advice; keep the existing
+membership command's own settlement reads and the pin, watch, and slow-mode owners.
 
-The source route, response schema and `board_page.get` operation in `contracts/openapi.json` exist, but the installed
-`@rezics/client` has no generated `boards({ id }).page.get` method or `BoardPageResponse` export. The generated Board
-route declaration still omits the opening operation. The checked Web fixtures also have no native opening response.
-OpenAPI publication alone does not install the generated client surface needed by the typed loader. Web
-must not cast the client, introduce a parallel DTO, or call the route with direct `fetch`.
+The generated client now exposes `boards({ id }).page.get` and `BoardPageResponse`, derived from the mounted route
+declaration. `loadBoardPageWithAuthors` sends the selected cursor and sort, forwards the selected reader credential,
+and maps that response through the existing Board caller. It does not issue separate Board, Realm, thread-list, or
+author reads. The response remains private and `no-store`; the caller still checks its reader, cache owner, route,
+locale, and session before publishing it. A concealed Board remains not-found, and a failed read remains an error.
 
-Until that generated surface is installed, `loadBoardPageWithAuthors` remains the existing route reader: it composes
-the Board read, the optional separate Realm read, the board-threads page and one batched author read. The current
-Board route, its actual-reader admission, query ownership and transfer boundary, pin cohort, explicit cursor restart,
-shared actions and command return behavior remain in place. They do not establish a one-request native opening or
-consumer growth result.
+The producer factory contract is `createBoardOpeningPageReader(dependencies)`, returning
+`readBoardOpeningPage(boardId, { actor, deadline }, { cursor?, sort?: 'new' | 'active' | 'hot' })`. The installed
+activity reader seam is `readConversationActivityBatch(threadIds, { actor, deadline })`, returning
+`{ items: BoardOpeningActivityWitness[], anchors: AnchoredPosition[] }`. A current witness binds a thread to a public
+or matching viewer cohort, an exact or lower-bound count, last activity time, and source epoch/position; a withheld
+or unsupported witness returns `{ state: 'unavailable', threadId }`. Selected count and source fields are copied before
+hydration so a producer's in-place refresh cannot rewrite the initial observation.
 
-When generated publication arrives, bind its actual signature, DTO, errors and examples through this loader and the
-existing caller. Accept the envelope once before Query success, project the supplied fields into the existing
-`BoardCommunity`, card and `FeedActionBar` contracts, and retire only the joins it replaces. Keep exact pin, watch and
-slow-mode owners where the envelope has no corresponding authority. Do not treat Board readability, membership
-labels or successful reads as permission to contribute or moderate. Preserve the caller's current-reader comparison,
-source/session/locale retirement, and the independent-cache first-paint limit in
-[Board page lifetime](board-page-lifetime.md).
+The mounted response head is `board`, `pinnedThreads`, `threads`, `next`, `rankRefreshedAt`, `reactionsAsOf`,
+`viewer`, and `actions`. Each card includes `thread`, `target`, `authors`, `media`, `interaction`, `comments`, and
+`actions`. These examples show the consumer contract:
+
+```ts
+// Populated public observation; lower-bound counts keep their meaning in the UI.
+comments: {
+  state: 'current', cohort: 'public', count: { kind: 'lower-bound', value: 4 },
+  lastActivityAt: '2026-11-04T00:00:00.000Z', source: { epoch: 2, position: '10' },
+}
+interaction: {
+  target: { kind: 'thread', id: threadId },
+  counts: { state: 'as-of', values: { like: 3 }, source: { epoch: 2, position: '12' } },
+  viewer: { state: 'not-applicable' },
+}
+
+// Withheld comment or interaction evidence has no fallback read; exact zero is distinct.
+comments: { state: 'unavailable' }
+comments: {
+  state: 'current', cohort: 'public', count: { kind: 'exact', value: 0 },
+  lastActivityAt: null, source: { epoch: 2, position: '10' },
+}
+interaction: { target: { kind: 'thread', id: threadId }, counts: { state: 'unavailable' }, viewer: { state: 'not-applicable' } }
+
+// Failed and changed-witness responses carry no partial page; retry the exact input.
+HTTP 503 { code: 'dependency_unavailable' }
+```
+
+The reaction aggregate only supplies a target summary when at least one installed target row carries a source
+watermark. Its zero-valued kind rows are retained as tombstones, so omitted kinds in a represented target are zero;
+an entirely absent target row cannot prove an exact zero. The page reads per-target freshness and compares the
+selected aggregate with the final aggregate during hydration. A changed summary fails the whole request with retryable
+`503 dependency_unavailable`; Web never uses the old `ThreadView.reactions` field as a fallback. The returned
+`reactionsAsOf` is page-wide, while each card retains its own target source. An `epoch`/`position` stamp identifies the
+installed snapshot; by itself it is not a source-checkpoint certificate. Source retirement starts a new epoch, so an
+old stamp cannot establish that every new-epoch source event is represented. Treat these counts as `as-of`, preserve
+their per-target source, and leave an absent or changed summary unavailable until the producer supplies a new
+observation; do not substitute a page-derived count.
+
+The envelope supplies current create-thread, reply, and react advice. Web uses those values to decide which entry
+points to render; the native command remains authoritative. Membership's existing command and post-command
+verification remain in its owner. Pin, watch, and slow-mode commands remain with their existing owners. Readability,
+membership labels, and successful reads do not grant contribution or moderation authority.
 
 ## Evidence boundary
 
-The Content source schema and route establish the producer implementation, not installed Web transport or native
-execution. No Web fixture, story or type assertion can establish the missing generated publication, native authority,
-hydration witnesses or physical growth. The current native receiver tests, named page stories, 1/10/25 selected-row
-consumer measurement, and phone/desktop, theme, keyboard and locale review remain owed after publication. Content's
-physical 256/1024/4096 growth and nested-authority evidence remains separate from Web consumer measurements.
+The source schema and mounted route establish the producer implementation. The generated client and Web reader are
+now bound to that route, but fixtures and type assertions do not establish native authority, revocation, hydration
+witnesses, physical growth, or visual layout. Native persona, source-retirement, revocation, continuation, growth, and
+strict physical-plan runs remain part of controller acceptance. Phone and desktop, theme, keyboard, and locale review
+also remains part of controller acceptance.
 
 The Board activity fields remain unavailable in this response. A01 and A02 Home findings are not satisfied by a
 Board page, and A08 is not satisfied by post revision time or the loaded reply window. Keep existing plaintext,

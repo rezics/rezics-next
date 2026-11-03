@@ -41,12 +41,10 @@ mock.module('../src/community/space-actions', () => ({
 
 const sessionModule = await import('../src/session/query');
 const { RealmMembership } = await import('../src/community/realm-membership');
-const { BoardStartThread } = await import('../src/threads/board-community-actions');
 const { m } = await import('../src/paraglide/messages.js');
 
 const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const nextRealmId = '0192f3a0-6c1e-7b2a-9d4e-000000000202';
-const boardId = '0192f3a0-6c1e-7b2a-9d4e-000000000301';
 const spaceId = '0192f3a0-6c1e-7b2a-9d4e-000000000101';
 const subject = 'lifetime-person';
 const replacementSubject = 'replacement-person';
@@ -72,32 +70,12 @@ function deferred<T>() {
 
 type SurfaceConfig = {
   realmId: string;
-  boardRealmId?: string | null;
-  realmAvailable?: boolean;
 };
 
 function MembershipSurface({ config }: { config: SurfaceConfig }) {
   const id = config.realmId;
-  const boardRealmId = config.boardRealmId === undefined ? id : config.boardRealmId;
   const realm = { id, visibility: 'public' as const, viewer: null };
-  const board = {
-    id: boardId,
-    realmId: boardRealmId,
-    availability: 'available',
-    visibility: 'published',
-  } as Parameters<typeof BoardStartThread>[0]['board'];
-  const boardRealm =
-    config.realmAvailable === false
-      ? undefined
-      : boardRealmId
-        ? { id: boardRealmId, title: 'Realm', visibility: 'public' as const, state: 'active' }
-        : undefined;
-  return createElement(
-    'div',
-    null,
-    createElement(RealmMembership, { realm, returnTo: '/spaces/atlas', spaceId }),
-    createElement(BoardStartThread, { board, realm: boardRealm, returnTo: `/boards/${boardId}` }),
-  );
+  return createElement(RealmMembership, { realm, returnTo: '/spaces/atlas', spaceId });
 }
 
 /** A real caller starts the production shared query, then publishes several authority notifications in one effect. */
@@ -200,10 +178,6 @@ async function makeSurface(
     return host.textContent?.includes(text) ?? false;
   }
 
-  function hasBoardEntry() {
-    return [...host.querySelectorAll('a')].some((item) => item.textContent?.includes(m.board_start_thread()));
-  }
-
   async function dispose() {
     if (disposed) return;
     disposed = true;
@@ -216,7 +190,7 @@ async function makeSurface(
     }
   }
 
-  return { client, host, router, settle, until, updateConfig, setSessions, button, hasText, hasBoardEntry, dispose };
+  return { client, host, router, settle, until, updateConfig, setSessions, button, hasText, dispose };
 }
 
 function resetFixtures() {
@@ -263,10 +237,7 @@ test('queued standing imports and late reads retire across notification-time A-B
   };
   const surface = await makeSurface({ realmId }, undefined, { transitionWhileImportIsQueued: true });
   try {
-    await surface.until(
-      () => standingReads.length === 1 && surface.hasBoardEntry(),
-      'the current read after queued import retirement',
-    );
+    await surface.until(() => standingReads.length === 1, 'the current read after queued import retirement');
     expect(standingReads).toEqual([realmId]);
     expect(surface.button(m.realm_leave()).disabled).toBe(false);
 
@@ -277,23 +248,19 @@ test('queued standing imports and late reads retire across notification-time A-B
     await surface.until(() => standingReads.length === 3, 'a fresh standing read for the returned account');
     expect(surface.hasText(m.realm_membership_loading())).toBe(true);
     expect(surface.host.textContent).not.toContain(m.realm_leave());
-    expect(surface.hasBoardEntry()).toBe(false);
 
     staleRead.resolve(viewer('banned', 'obsolete-key'));
     await surface.settle();
     expect(surface.client.getQueryData(membershipKey)).not.toEqual(viewer('banned', 'obsolete-key'));
-    expect(surface.hasBoardEntry()).toBe(false);
     freshAbaRead.resolve(viewer('member'));
-    await surface.until(() => surface.hasBoardEntry(), 'the returned account standing and Board entry');
+    await surface.until(() => surface.hasText(m.realm_leave()), 'the returned account standing');
 
     await surface.setSessions(signedIn(subject, null));
-    expect(surface.hasBoardEntry()).toBe(false);
     expect(surface.host.textContent).not.toContain(m.realm_leave());
     await surface.setSessions(signedIn(subject, 'csrf-replacement'));
     await surface.until(() => standingReads.length === 4, 'a read after CSRF readiness returns');
-    expect(surface.hasBoardEntry()).toBe(false);
     nextCredentialRead.resolve(viewer('member'));
-    await surface.until(() => surface.hasBoardEntry(), 'the current standing after CSRF readiness');
+    await surface.until(() => surface.hasText(m.realm_leave()), 'the current standing after CSRF readiness');
     expect(surface.button(m.realm_leave()).disabled).toBe(false);
   } finally {
     await surface.dispose();
@@ -309,13 +276,13 @@ test('late accepted and failed commands cannot update a replacement CSRF lifetim
   const surface = await makeSurface();
   const followThrough = observeFollowThrough(surface);
   try {
-    await surface.until(() => surface.hasBoardEntry(), 'initial shared standing and Board entry');
+    await surface.until(() => standingReads.length === 1, 'initial shared standing');
     await click(surface, m.realm_leave());
     await surface.until(() => membershipCommands.length === 1, 'the original leave command');
 
     await surface.setSessions(signedIn(subject, 'csrf-rotated'));
     await surface.until(
-      () => standingReads.length === 2 && surface.hasBoardEntry() && surface.hasText(m.realm_leave_uncertain()),
+      () => standingReads.length === 2 && surface.hasText(m.realm_leave_uncertain()),
       'current standing and unresolved leave after CSRF rotation',
     );
     accepted.resolve({ outcome: 'accepted', workflowId: 'obsolete-accepted' });
@@ -333,7 +300,7 @@ test('late accepted and failed commands cannot update a replacement CSRF lifetim
     });
     await surface.setSessions(signedIn(subject, 'csrf-next'));
     await surface.until(
-      () => standingReads.length === 3 && surface.hasBoardEntry(),
+      () => standingReads.length === 3,
       'standing after the next credential change',
     );
     failed.resolve({ outcome: 'refused', detail: 'late failure detail' });
@@ -370,7 +337,7 @@ test('an uncertain leave check retires on transition, then exact retry and curre
   const originalSetTimeout = globalThis.setTimeout;
   const delays: number[] = [];
   try {
-    await surface.until(() => surface.hasBoardEntry(), 'initial current standing');
+    await surface.until(() => standingReads.length === 1, 'initial current standing');
     await click(surface, m.realm_leave());
     await surface.until(() => surface.hasText(m.realm_leave_uncertain()), 'uncertain leave recovery');
     expect(membershipCommands).toHaveLength(1);
@@ -477,7 +444,7 @@ test('refused leave recovery requires a current standing check before it release
   sendMembership = async () => ({ outcome: 'refused', effect: 'not-applied' });
   const surface = await makeSurface();
   try {
-    await surface.until(() => surface.hasBoardEntry(), 'initial shared standing');
+    await surface.until(() => standingReads.length === 1, 'initial shared standing');
     await click(surface, m.realm_leave());
     await surface.until(() => surface.hasText(m.realm_leave_refused()), 'refused leave recovery');
     const before = standingReads.length;
@@ -505,7 +472,6 @@ test('Realm and QueryClient replacement plus unmount prevent late standing cache
     await surface.until(() => standingReads.length === 1, 'the original Realm standing read');
     await surface.updateConfig({ realmId: nextRealmId }, nextClient);
     await surface.until(() => standingReads.includes(nextRealmId), 'the replacement Realm QueryClient read');
-    expect(surface.hasBoardEntry()).toBe(false);
     expect(surface.host.textContent).not.toContain(m.realm_leave());
 
     oldRealmRead.resolve(viewer('banned', 'old-realm-key'));
