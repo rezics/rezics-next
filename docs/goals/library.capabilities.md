@@ -152,6 +152,11 @@ session, update or correct either measure under explicit revision control, and r
 history or effects. `services/kernel/test/library/progress-http.test.ts` owns the focused native journey;
 [Independent progress measures](../library-progress-measures.md) defines the exact API contract and limits.
 
+Each existing occurrence also has a private journal for partial reported start/finish dates and a reflection, with
+one revision independent of progress values. [Private progress-session journal](../library-occurrence-reflections.md)
+defines the exact producer and Web318 receiving contract; [Personal consumption dates](../library-consumption-history.md)
+owns reported-date meaning.
+
 **User job and fixtures:** An owner changes one fact and reads the surviving facts and Everything membership
 immediately. The union includes live state, effective labels, retained sessions/history and holdings; following,
 curated occurrences and published snapshots alone do not create presence. Fixtures must use accepted subject

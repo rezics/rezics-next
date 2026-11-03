@@ -2056,6 +2056,13 @@ clear, private isolation, stale revision and replay. No separate measure-store g
 - Bound: `R` `O(1)`, `B` `O(L(N))`, `S` 1, plus the admit and begin and commit.
 - Growth check: `test/library/growth-personal-reads.test.ts`: `Session read has constant rows and statements as sessions grow`. Whole-read rows and statements stay constant and blocks stay logarithmic at scales 1, 4 and 16 as the reading account's sessions, other accounts' sessions in its partition and another partition, Access accounts, receipts, outbox and write-basis rows grow by 500 rows per population times scale.
 
+The private per-session journal is stored on that same owner row. Its exact read uses the session primary key; an
+effective edit locks that row and compare-and-swaps `journal_revision`, without touching progress revision, activity,
+units or progress-change history. Receipt replay retains only the session ID, resulting journal revision and changed
+flag; private fields are read through the owner-only journal GET. See
+[Private progress-session journal](../../../../docs/library-occurrence-reflections.md) for the source-derived fixed-cost
+terms and controller-owned growth acceptance that remains unmeasured.
+
 The owner detail additionally accepts `presentation=FULL`, independently of summary `view=FULL`. The
 [profile consumer contract](../../../../docs/library-profile-consumers.md#owner-session-display-and-current-recording)
 owns the exact display/advisory DTO and preservation rules. `progress-presentation.ts` uses the stored pin's exact

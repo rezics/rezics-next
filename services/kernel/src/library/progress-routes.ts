@@ -15,6 +15,7 @@ import { createSessionCommands, ProgressConflictError, ProgressInvalidError } fr
 import { LibraryNotFoundError } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
+import { MAX_JOURNAL_REFLECTION_CHARACTERS } from './progress-journal.ts';
 
 import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
 
@@ -24,6 +25,16 @@ const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const nullableString = t.Union([t.String(), t.Null()]);
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
+const journalRevision = t.Integer({ minimum: 0, maximum: 2_147_483_646 });
+const journalDate = t.Object(
+  {
+    year: t.Integer({ minimum: 1, maximum: 9_999 }),
+    month: t.Optional(t.Integer({ minimum: 1, maximum: 12 })),
+    day: t.Optional(t.Integer({ minimum: 1, maximum: 31 })),
+  },
+  closed,
+);
+const nullableJournalDate = t.Union([journalDate, t.Null()]);
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
 const unitInput = libraryVocabularyIdSchema;
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
@@ -105,6 +116,30 @@ export const sessionSchema = t.Object(
 );
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
+const sessionJournalSchema = t.Object(
+  {
+    sessionId: id,
+    revision: journalRevision,
+    startDate: nullableJournalDate,
+    finishDate: nullableJournalDate,
+    reflection: t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()]),
+  },
+  closed,
+);
+const sessionJournalResponse = t.Object({ journal: sessionJournalSchema }, closed);
+const sessionJournalWriteResponse = t.Object(
+  { journal: t.Object({ sessionId: id, revision: journalRevision, changed: t.Boolean() }, closed) },
+  closed,
+);
+const sessionJournalPatchBody = t.Object(
+  {
+    revision: journalRevision,
+    startDate: t.Optional(nullableJournalDate),
+    finishDate: t.Optional(nullableJournalDate),
+    reflection: t.Optional(t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()])),
+  },
+  closed,
+);
 const changeIntent = t.Union([
   t.Object({ clear: t.Literal(true) }, closed),
   t.Object({ measureId: libraryStoredVocabularySchema, clear: t.Literal(true) }, closed),
@@ -406,6 +441,54 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
             });
           }, 'not_found'),
         ),
+    )
+    .get(
+      '/v1/progressSessions/:sessionId/journal',
+      {
+        params: t.Object({ sessionId: t.String() }, closed),
+        response: {
+          200: sessionJournalResponse,
+          401: unauthorized,
+          404: notFound,
+          409: conflict,
+          503: unavailable,
+        },
+        detail: detail('progress_session.journal.read', 'progress_session:read'),
+      },
+      async ({ params, actor, admission, job, set }) =>
+        admission.run('normal', job, () =>
+          mapped(async () => {
+            set.headers['cache-control'] = 'private, no-store';
+            return { journal: await sessionCommands().readSessionJournal(actor, params.sessionId) };
+          }, 'not_found'),
+        ),
+    )
+    .patch(
+      '/v1/progressSessions/:sessionId/journal',
+      {
+        params: t.Object({ sessionId: t.String() }, closed),
+        headers: idempotencyHeaders,
+        body: sessionJournalPatchBody,
+        response: {
+          200: sessionJournalWriteResponse,
+          400: invalid,
+          401: unauthorized,
+          403: forbidden,
+          404: notFound,
+          409: problemSchema('conflict'),
+          503: unavailable,
+        },
+        detail: detail('progress_session.journal.update', 'progress_session:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => sessionCommands().patchSessionJournal(actor, params.sessionId, body, requestKey)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { journal: result.value };
+      },
     )
     .post(
       customMethod('/v1/progressSessions/:sessionId', 'record'),

@@ -222,6 +222,13 @@ published-log history without a CSRF token. Corrections, publication and withdra
 credential; an uncertain command retains its original credential, sender, request key and operands. Public log reads
 keep their existing public access rules.
 
+An owner can read and correct partial reported start/finish dates and a private reflection on the same existing
+progress session at `/v1/progressSessions/{sessionId}/journal`. One journal-local revision covers those fields and
+remains independent of the session's progress revision. Missing fields are unchanged, `null` clears, and edits do not
+change progress, activity or public snapshots. The exact producer and Web318 receiving contract is in
+[Private progress-session journal](library-occurrence-reflections.md); date meaning is in
+[Personal consumption dates](library-consumption-history.md).
+
 Decision: On a Progress detail page, non-whitespace publication notes and changed correction input share one
 Stay/Discard departure choice; only explicit Publish sends a public log command.
 

@@ -5,6 +5,7 @@ import type { KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
   mintReadTime,
+  noEffect,
   releaseOperationalTime,
   type AuthoritativeTime,
   type CommandTransaction,
@@ -31,6 +32,7 @@ import type {
   ProgressMeasurePresentation,
   ProgressPresentation,
   ProgressSession,
+  ProgressSessionJournalDate,
   ProgressSessionUpdate,
 } from './progress-model.ts';
 import * as store from './progress-store.ts';
@@ -50,6 +52,7 @@ import { prepareProgressPresentation } from './progress-presentation.ts';
 import sessionLock from './session-lock.sql';
 import { clearProgressValues, isProgressClear } from './progress-commands.ts';
 import { enterShelfWrite } from './shelf-counter-owner.ts';
+import { parseProgressSessionJournalPatch } from './progress-journal.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string };
@@ -90,12 +93,26 @@ function revisionInput(input: unknown): { revision: number; record: Record<strin
   return { revision, record };
 }
 
-function event(session: ProgressSession) {
+function event(session: Pick<ProgressSession, 'accountId' | 'id'>) {
   return {
     type: 'com.rezics.library.progress_session.updated.v1',
     subject: session.accountId,
     data: { sessionId: session.id },
   };
+}
+
+function sameJournalDate(
+  left: ProgressSessionJournalDate | null,
+  right: ProgressSessionJournalDate | null,
+): boolean {
+  return (
+    (left === null && right === null) ||
+    (left !== null &&
+      right !== null &&
+      left.year === right.year &&
+      (left.month ?? null) === (right.month ?? null) &&
+      (left.day ?? null) === (right.day ?? null))
+  );
 }
 
 /** Private progress commands and snapshot/keyset reads on the owning account's partition. */
@@ -365,6 +382,66 @@ export function createSessionCommands(config: Dependencies) {
   const readSession = (actor: Actor, sessionId: string) =>
     snapshot(actor, 'progress_session:read', (client, owner) => load(client, owner, sessionId));
 
+  const readSessionJournal = (actor: Actor, sessionId: string) =>
+    snapshot(actor, 'progress_session:read', async (client, owner) => {
+      const route = sameAccountRoute(owner.accountId, sessionId);
+      const journal = await store.readSessionJournal(client, route, owner.accountId, sessionId);
+      if (!journal) throw new LibraryNotFoundError();
+      return journal;
+    });
+
+  async function patchSessionJournal(actor: Actor, sessionId: string, input: unknown, requestKey: string) {
+    const owner = account(actor, 'progress_session:update');
+    const route = sameAccountRoute(owner.accountId, sessionId);
+    const parsed = parseProgressSessionJournalPatch(input);
+    if (!parsed.ok) throw new ProgressInvalidError(parsed.field);
+    const patch = parsed.value;
+    return runner.ownAccount(
+      actor,
+      {
+        action: 'progress_session:update',
+        kind: 'progress_session.journal',
+        requestKey,
+        input: { sessionId, patch },
+      },
+      async (tx) => {
+        const current = await store.lockSessionJournal(tx, route, owner.accountId, sessionId);
+        if (!current) throw new LibraryNotFoundError();
+        if (current.revision !== patch.revision) throw new ProgressConflictError();
+
+        const startDate = Object.hasOwn(patch, 'startDate') ? (patch.startDate ?? null) : current.startDate;
+        const finishDate = Object.hasOwn(patch, 'finishDate') ? (patch.finishDate ?? null) : current.finishDate;
+        const reflection = Object.hasOwn(patch, 'reflection') ? (patch.reflection ?? null) : current.reflection;
+        const unchanged =
+          sameJournalDate(startDate, current.startDate) &&
+          sameJournalDate(finishDate, current.finishDate) &&
+          reflection === current.reflection;
+        if (unchanged) return noEffect({ sessionId, revision: current.revision, changed: false });
+        if (current.revision >= 2_147_483_646) throw new ProgressConflictError();
+
+        const updated = await store.updateSessionJournal(
+          tx,
+          route,
+          owner.accountId,
+          sessionId,
+          current.revision,
+          {
+            sessionId,
+            revision: current.revision,
+            startDate,
+            finishDate,
+            reflection,
+          },
+        );
+        if (!updated) throw new ProgressConflictError();
+        return {
+          value: { sessionId, revision: updated.revision, changed: true },
+          events: [event({ accountId: owner.accountId, id: sessionId })],
+        };
+      },
+    );
+  }
+
   /** Presentation owns no stored state. Rendering runs between released reads and final native checks. */
   async function readPresentedSession<T>(
     actor: Actor,
@@ -542,6 +619,8 @@ export function createSessionCommands(config: Dependencies) {
     completeSession,
     abandonSession,
     readSession,
+    readSessionJournal,
+    patchSessionJournal,
     readPresentedSession,
     listSessions,
     listUnits,

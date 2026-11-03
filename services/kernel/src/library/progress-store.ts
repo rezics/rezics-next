@@ -9,6 +9,9 @@ import sessionInsert from './progress-store-session-insert.sql';
 import sessionPage from './progress-store-session-page.sql';
 import sessionRead from './progress-store-session-read.sql';
 import sessionUpdate from './progress-store-session-update.sql';
+import sessionJournalLock from './progress-store-session-journal-lock.sql';
+import sessionJournalRead from './progress-store-session-journal-read.sql';
+import sessionJournalUpdate from './progress-store-session-journal-update.sql';
 import unitAdd from './progress-store-unit-add.sql';
 import unitPage from './progress-store-unit-page.sql';
 import unitRemove from './progress-store-unit-remove.sql';
@@ -19,6 +22,8 @@ import {
   type ProgressChangePage,
   type ProgressScalarMeasure,
   type ProgressSession,
+  type ProgressSessionJournal,
+  type ProgressSessionJournalDate,
   type ProgressSessionDraft,
   type ProgressSessionPage,
   type ProgressSessionUpdate,
@@ -40,6 +45,19 @@ type SessionResult = Omit<
 };
 type ChangeResult = NonNullable<Awaited<ReturnType<typeof changeAppend.run>>>;
 type UnitResult = Awaited<ReturnType<typeof unitPage.run>>[number];
+type JournalResult = NonNullable<Awaited<ReturnType<typeof sessionJournalRead.run>>>;
+type JournalColumns = Pick<
+  JournalResult,
+  | 'sessionId'
+  | 'revision'
+  | 'startYear'
+  | 'startMonth'
+  | 'startDay'
+  | 'finishYear'
+  | 'finishMonth'
+  | 'finishDay'
+  | 'reflection'
+>;
 
 const MODES = new Set<ProgressMode>(['scalar_amount', 'cursor_position', 'completed_units']);
 const UNITS = new Set<string>(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
@@ -87,6 +105,29 @@ function asSession(row: SessionResult): ProgressSession {
     completedAt: row.completedAt === null ? null : iso(row.completedAt),
     transactionId: row.transactionId,
     ...(measures === undefined ? {} : { measures }),
+  };
+}
+
+function readJournalDate(year: number | null, month: number | null, day: number | null): ProgressSessionJournalDate | null {
+  if (year === null) {
+    if (month !== null || day !== null) throw new TypeError('Invalid stored progress journal date');
+    return null;
+  }
+  if (month === null && day !== null) throw new TypeError('Invalid stored progress journal date');
+  return {
+    year,
+    ...(month === null ? {} : { month }),
+    ...(day === null ? {} : { day }),
+  };
+}
+
+function asJournal(row: JournalColumns): ProgressSessionJournal {
+  return {
+    sessionId: row.sessionId,
+    revision: row.revision,
+    startDate: readJournalDate(row.startYear, row.startMonth, row.startDay),
+    finishDate: readJournalDate(row.finishYear, row.finishMonth, row.finishDay),
+    reflection: row.reflection,
   };
 }
 
@@ -201,6 +242,50 @@ export async function readSessionFact(
 ): Promise<{ session: ProgressSession; pin: LibraryProfilePin | null } | null> {
   const row = await sessionRead.run(queryClient(client), { route, session_id: sessionId });
   return row ? { session: asSession(row), pin: decodeLibraryProfilePin(row.libraryProfilePin) } : null;
+}
+
+export async function readSessionJournal(
+  client: Client,
+  route: number,
+  accountId: string,
+  sessionId: string,
+): Promise<ProgressSessionJournal | null> {
+  const row = await sessionJournalRead.run(queryClient(client), { route, account_id: accountId, session_id: sessionId });
+  return row ? asJournal(row) : null;
+}
+
+export async function lockSessionJournal(
+  client: Client,
+  route: number,
+  accountId: string,
+  sessionId: string,
+): Promise<ProgressSessionJournal | null> {
+  const row = await sessionJournalLock.run(queryClient(client), { route, account_id: accountId, session_id: sessionId });
+  return row ? asJournal(row) : null;
+}
+
+export async function updateSessionJournal(
+  client: Client,
+  route: number,
+  accountId: string,
+  sessionId: string,
+  expectedRevision: number,
+  journal: ProgressSessionJournal,
+): Promise<ProgressSessionJournal | null> {
+  const row = await sessionJournalUpdate.run(queryClient(client), {
+    route,
+    account_id: accountId,
+    session_id: sessionId,
+    revision: expectedRevision,
+    start_year: journal.startDate?.year ?? null,
+    start_month: journal.startDate?.month ?? null,
+    start_day: journal.startDate?.day ?? null,
+    finish_year: journal.finishDate?.year ?? null,
+    finish_month: journal.finishDate?.month ?? null,
+    finish_day: journal.finishDate?.day ?? null,
+    reflection: journal.reflection,
+  });
+  return row ? asJournal(row) : null;
 }
 
 export async function updateSession(
