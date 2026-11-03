@@ -15,8 +15,12 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { KeyRing } from '../tokens/seal.ts';
 import { DIARY_LIMIT, DIARY_PAYLOAD_BYTES, type DiaryPage, type DiarySubject } from './diary-model.ts';
 import {
-  cancelDiaryNavigation, createDiaryNavigation, diaryRows, readDiaryNavigation,
-  type DiaryKey, type DiaryNavigation,
+  cancelDiaryNavigation,
+  createDiaryNavigation,
+  diaryRows,
+  readDiaryNavigation,
+  type DiaryKey,
+  type DiaryNavigation,
 } from './diary-store.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock: KernelClock; routeKey: Uint8Array };
@@ -32,9 +36,9 @@ function ownerOf(actor: Actor): AccountActor {
 
 /** Do not retain credentials or permissions. A changed caller must start again with current authority. */
 function callerOf(owner: AccountActor): string {
-  return createHash('sha256').update(JSON.stringify([
-    owner.clientId, owner.requestedBy, owner.authnEpoch, [...new Set(owner.scopes)].sort(),
-  ])).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify([owner.clientId, owner.requestedBy, owner.authnEpoch, [...new Set(owner.scopes)].sort()]))
+    .digest('hex');
 }
 
 /** UTF-8 bounded display strings; never return a partial surrogate or a byte-fragment replacement. */
@@ -50,11 +54,13 @@ function bounded(value: string, bytes: number): string {
 }
 
 function subjectView(value: SubjectSummary | null | undefined): DiarySubject | null {
-  return value ? {
-    id: value.id,
-    label: value.label ? bounded(value.label.value, 256) : null,
-    language: value.label ? bounded(value.label.language, 64) : null,
-  } : null;
+  return value
+    ? {
+        id: value.id,
+        label: value.label ? bounded(value.label.value, 256) : null,
+        language: value.label ? bounded(value.label.language, 64) : null,
+      }
+    : null;
 }
 
 function sizeOf(options: PageOptions): number {
@@ -78,42 +84,68 @@ export function createDiaryReads(deps: Dependencies) {
     const [id, size, time, sessionId] = decoded.after;
     if (
       (decoded.after.length !== 2 && decoded.after.length !== 4) ||
-      typeof id !== 'string' || routeOf(id) !== routeOf(owner.accountId) ||
-      typeof size !== 'number' || !Number.isInteger(size) || size < 1 || size > DIARY_LIMIT ||
+      typeof id !== 'string' ||
+      routeOf(id) !== routeOf(owner.accountId) ||
+      typeof size !== 'number' ||
+      !Number.isInteger(size) ||
+      size < 1 ||
+      size > DIARY_LIMIT ||
       (limit !== undefined && (size !== limit || decoded.after.length !== 4)) ||
-      (decoded.after.length === 4 && (
-        typeof time !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(time) ||
-        !Number.isFinite(Date.parse(time)) || typeof sessionId !== 'string' ||
-        routeOf(sessionId) !== routeOf(owner.accountId)
-      ))
-    ) throw new ProblemError('invalid_cursor');
+      (decoded.after.length === 4 &&
+        (typeof time !== 'string' ||
+          !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(time) ||
+          !Number.isFinite(Date.parse(time)) ||
+          typeof sessionId !== 'string' ||
+          routeOf(sessionId) !== routeOf(owner.accountId)))
+    )
+      throw new ProblemError('invalid_cursor');
     return {
-      id, epoch: decoded.epoch,
+      id,
+      epoch: decoded.epoch,
       after: decoded.after.length === 4 ? { recordedStartedAt: time as string, id: sessionId as string } : null,
     };
   }
 
   /** Preparation releases foreign homes before the native account lock and snapshot. */
   async function snapshot<T>(
-    owner: AccountActor, deadline: number, body: (client: Client, epoch: number, now: Date) => Promise<T>,
+    owner: AccountActor,
+    deadline: number,
+    body: (client: Client, epoch: number, now: Date) => Promise<T>,
   ) {
     const at = await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
     try {
       const route = routeOf(owner.accountId)!;
-      const check = await accessCheck(access, owner, 'progress_session:list', { route, id: owner.accountId }, {
-        pool, deadline, time: at,
-      });
+      const check = await accessCheck(
+        access,
+        owner,
+        'progress_session:list',
+        { route, id: owner.accountId },
+        {
+          pool,
+          deadline,
+          time: at,
+        },
+      );
       return await withConnection(pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
         await client.query('BEGIN');
         try {
           // Serializes slot allocation and prevents terminal erasure from racing a retained navigation write.
-          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE',
-            [route, owner.accountId]);
+          await client.query('SELECT account_id FROM access.account WHERE route=$1 AND account_id=$2 FOR UPDATE', [
+            route,
+            owner.accountId,
+          ]);
           const account = await readAccount(client, route, owner.accountId);
-          if (!account || account.kind !== 'actor' || account.state !== 'active' || account.fenced ||
-            !Number.isSafeInteger(owner.authnEpoch) || owner.authnEpoch < 1 ||
-            account.minimumAuthnEpoch > BigInt(owner.authnEpoch) || !(await check(client, at)))
+          if (
+            !account ||
+            account.kind !== 'actor' ||
+            account.state !== 'active' ||
+            account.fenced ||
+            !Number.isSafeInteger(owner.authnEpoch) ||
+            owner.authnEpoch < 1 ||
+            account.minimumAuthnEpoch > BigInt(owner.authnEpoch) ||
+            !(await check(client, at))
+          )
             throw new ProblemError('forbidden');
           const partition = await readPartition(client, partitionOf(route));
           if (!partition) throw new ProblemError('partition_unavailable');
@@ -131,7 +163,11 @@ export function createDiaryReads(deps: Dependencies) {
   }
 
   async function currentNavigation(
-    client: Client, owner: AccountActor, id: string, epoch: number, now: Date,
+    client: Client,
+    owner: AccountActor,
+    id: string,
+    epoch: number,
+    now: Date,
   ): Promise<DiaryNavigation> {
     const value = await readDiaryNavigation(client, routeOf(owner.accountId)!, owner.accountId, id, callerOf(owner));
     if (!value || value.epoch !== epoch || Date.parse(value.expiresAt) <= now.getTime())
@@ -144,67 +180,86 @@ export function createDiaryReads(deps: Dependencies) {
       const owner = ownerOf(actor);
       const limit = sizeOf(options);
       const route = routeOf(owner.accountId)!;
-      return withRequestDeadline(deadline, () => within(deadline, async () => {
-        let after: DiaryKey | null = null;
-        let navigation: DiaryNavigation | null = null;
-        const before = await snapshot(owner, deadline, async (client, epoch, now) => {
-          if (options.cursor !== undefined) {
-            const decoded = decode(owner, options.cursor, now, limit);
-            if (decoded.epoch !== epoch) throw new ProblemError('stale_cursor');
-            navigation = await currentNavigation(client, owner, decoded.id, epoch, now);
-            after = decoded.after;
-          }
-          return { epoch, rows: await diaryRows(client, route, owner.accountId, after, limit + 1) };
-        });
-        const shown = before.rows.slice(0, limit);
-        const ids = [...new Set(shown.flatMap((row) =>
-          row.versionSubjectId ? [row.subjectId, row.versionSubjectId] : [row.subjectId]))];
-        // Shared native summary projection batches current disclosure, including redirects and missing subjects.
-        const summaries = await readSubjectSummaries({ ...deps, actor: owner, deadline }, ids);
-        const occurrences = shown.map((row) => ({
-          ...row,
-          reportedDates: { availability: 'unavailable' as const },
-          subject: subjectView(summaries.get(row.subjectId)),
-          versionSubject: row.versionSubjectId ? subjectView(summaries.get(row.versionSubjectId)) : null,
-        }));
-        const more = before.rows.length > limit;
-        navigation = await snapshot(owner, deadline, async (client, epoch, now) => {
-          if (epoch !== before.epoch) throw new ProblemError('stale_cursor');
-          const current = await diaryRows(client, route, owner.accountId, after, limit + 1);
-          if (JSON.stringify(current) !== JSON.stringify(before.rows)) throw new ProblemError('conflict');
-          if (navigation) return currentNavigation(client, owner, navigation.id, epoch, now);
-          return more ? createDiaryNavigation(client, route, owner.accountId, callerOf(owner), epoch, now) : null;
-        });
-        const last = shown.at(-1);
-        const token = (keys: (string | number)[]) => navigation ? encodeCursor(tokens, binding(owner), {
-          epoch: navigation.epoch, after: [navigation.id, limit, ...keys],
-        }, Date.parse(navigation.createdAt)) : null;
-        const result: DiaryPage = {
-          occurrences, order: 'recorded_started_desc_id_desc',
-          next: more && last ? token([last.recordedStartedAt, last.id]) : null,
-          continuation: token([]), expiresAt: navigation?.expiresAt ?? null,
-        };
-        if (Buffer.byteLength(JSON.stringify(result)) > DIARY_PAYLOAD_BYTES) throw new ProblemError('overloaded');
-        return result;
-      }));
+      return withRequestDeadline(deadline, () =>
+        within(deadline, async () => {
+          let after: DiaryKey | null = null;
+          let navigation: DiaryNavigation | null = null;
+          const before = await snapshot(owner, deadline, async (client, epoch, now) => {
+            if (options.cursor !== undefined) {
+              const decoded = decode(owner, options.cursor, now, limit);
+              if (decoded.epoch !== epoch) throw new ProblemError('stale_cursor');
+              navigation = await currentNavigation(client, owner, decoded.id, epoch, now);
+              after = decoded.after;
+            }
+            return { epoch, rows: await diaryRows(client, route, owner.accountId, after, limit + 1) };
+          });
+          const shown = before.rows.slice(0, limit);
+          const ids = [
+            ...new Set(
+              shown.flatMap((row) => (row.versionSubjectId ? [row.subjectId, row.versionSubjectId] : [row.subjectId])),
+            ),
+          ];
+          // Shared native summary projection batches current disclosure, including redirects and missing subjects.
+          const summaries = await readSubjectSummaries({ ...deps, actor: owner, deadline }, ids);
+          const occurrences = shown.map((row) => ({
+            ...row,
+            reportedDates: { availability: 'unavailable' as const },
+            subject: subjectView(summaries.get(row.subjectId)),
+            versionSubject: row.versionSubjectId ? subjectView(summaries.get(row.versionSubjectId)) : null,
+          }));
+          const more = before.rows.length > limit;
+          navigation = await snapshot(owner, deadline, async (client, epoch, now) => {
+            if (epoch !== before.epoch) throw new ProblemError('stale_cursor');
+            const current = await diaryRows(client, route, owner.accountId, after, limit + 1);
+            if (JSON.stringify(current) !== JSON.stringify(before.rows)) throw new ProblemError('conflict');
+            if (navigation) return currentNavigation(client, owner, navigation.id, epoch, now);
+            return more ? createDiaryNavigation(client, route, owner.accountId, callerOf(owner), epoch, now) : null;
+          });
+          const last = shown.at(-1);
+          const token = (keys: (string | number)[]) =>
+            navigation
+              ? encodeCursor(
+                  tokens,
+                  binding(owner),
+                  {
+                    epoch: navigation.epoch,
+                    after: [navigation.id, limit, ...keys],
+                  },
+                  Date.parse(navigation.createdAt),
+                )
+              : null;
+          const result: DiaryPage = {
+            occurrences,
+            order: 'recorded_started_desc_id_desc',
+            next: more && last ? token([last.recordedStartedAt, last.id]) : null,
+            continuation: token([]),
+            expiresAt: navigation?.expiresAt ?? null,
+          };
+          if (Buffer.byteLength(JSON.stringify(result)) > DIARY_PAYLOAD_BYTES) throw new ProblemError('overloaded');
+          return result;
+        }),
+      );
     },
 
     /** Authenticated, caller-bound and idempotent, including an already cancelled/expired navigation. */
     async cancel(actor: Actor, token: string, deadline: number): Promise<{ cancelled: true }> {
       const owner = ownerOf(actor);
-      return withRequestDeadline(deadline, () => within(deadline, async () => {
-        await snapshot(owner, deadline, async (client, _epoch, now) => {
-          let decoded: ReturnType<typeof decode>;
-          try { decoded = decode(owner, token, now); }
-          catch (error) {
-            // Expiration is already retirement; a malformed or foreign token is still invalid.
-            if (error instanceof ProblemError && error.code === 'stale_cursor') return;
-            throw error;
-          }
-          await cancelDiaryNavigation(client, routeOf(owner.accountId)!, owner.accountId, decoded.id);
-        });
-        return { cancelled: true };
-      }));
+      return withRequestDeadline(deadline, () =>
+        within(deadline, async () => {
+          await snapshot(owner, deadline, async (client, _epoch, now) => {
+            let decoded: ReturnType<typeof decode>;
+            try {
+              decoded = decode(owner, token, now);
+            } catch (error) {
+              // Expiration is already retirement; a malformed or foreign token is still invalid.
+              if (error instanceof ProblemError && error.code === 'stale_cursor') return;
+              throw error;
+            }
+            await cancelDiaryNavigation(client, routeOf(owner.accountId)!, owner.accountId, decoded.id);
+          });
+          return { cancelled: true };
+        }),
+      );
     },
   };
 }
