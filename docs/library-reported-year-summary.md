@@ -82,7 +82,7 @@ complete. A missing schema, marker, counter coverage or preparation is unavailab
 The opaque whole-owner revision changes when year derivation changes; `empty-v1` identifies no initialized source.
 It is not a journal or progress precondition, and is not numerically ordered. The reader holds the current owner
 account share lock through response preparation and rechecks native standing/authentication floor before commit.
-It checks deadline and abort immediately before returning the encoded response, with no intervening asynchronous
+It rereads the coverage/maintenance heads at delivery and refuses a changed revision or fence. It checks deadline and abort immediately before returning the encoded response, with no intervening asynchronous
 work. Reads are private, `no-store`, fixed at thirteen returned buckets, at most fourteen counter rows plus addressed
 heads, and 16,384 encoded UTF-8 bytes. Counts never expose raw journal dates, reflections or Subject membership IDs.
 Private inputs/counts do not enter Search, public DTOs, events or error payloads.
@@ -104,7 +104,7 @@ competing diary page, statistics page or client cache is introduced by this API-
 
 Let H be retained owner sessions, P=100 the installed maintenance page cap, and B=13 returned buckets. A summary
 cost is `Cfixed-authority + Csummary(B)`: installed Access/exposure/admission, account primary-key lock and two exact
-account reads, one installation key, one all-time owner key, one year owner key, one shelf gate key, and one
+account reads, two probes each of the installation key, all-time owner key, year owner key and shelf gate key, and one
 `(route,account_id,year,bucket)` index range bounded to fourteen rows. The one-statement snapshot joins only addressed
 heads and aggregates the bounded bucket range. It does not scan sessions, historical years or distinct Subjects.
 Absent/deep historical years use the same exact range and zero-fill the thirteen response buckets in memory.

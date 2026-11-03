@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createKernelClient } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 import { sessionScopes } from './support/session-profile-fixture.ts';
@@ -30,7 +31,15 @@ async function send(method: string, url: string, body?: unknown, key = entryKey(
   expect({ status: response.status, value }).toEqual({ status, value: expect.any(Object) });
   return value;
 }
-async function summary(year = 2020): Promise<ReportedYearSummary> { return send('GET', `${path}?year=${year}`); }
+async function summary(year = 2020): Promise<ReportedYearSummary> {
+  const client = createKernelClient('http://kernel.test', { fetch: (async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    return native.send(owner.bearer, request.method, url.pathname + url.search);
+  }) as typeof fetch });
+  const result = await client.libraryReportedYearSummary.get({ query: { year } });
+  expect(result.error).toBeNull();
+  return result.data!;
+}
 function counts(value: { completedOccurrences: string; distinctCompletedSubjects: string; repeatOccurrences: string }) {
   return [value.completedOccurrences, value.distinctCompletedSubjects, value.repeatOccurrences];
 }
@@ -114,6 +123,9 @@ test('concurrent first and last memberships, native retirement and bounded insta
     after: '00000000-0000-0000-0000-000000000000', run_id: entryKey() });
   expect(rows.length).toBeLessThanOrEqual(100);
   expect(counts(await summary(1600))).toEqual(['1', '1', '0']);
+  await native.pool.query("UPDATE library.shelf_maintenance SET mode='rebuilding' WHERE route=$1 AND account_id=$2", [route, owner.actor.accountId]);
+  try { expect((await native.send(owner.bearer, 'GET', `${path}?year=1600`)).status).toBe(503); }
+  finally { await native.pool.query("UPDATE library.shelf_maintenance SET mode='open' WHERE route=$1 AND account_id=$2", [route, owner.actor.accountId]); }
   expect(await eraseSession.run(native.pool, { route, account_id: owner.actor.accountId, parent_id: id })).toMatchObject({ removed: true });
   expect(counts(await summary(1600))).toEqual(['0', '0', '0']);
   expect((await native.pool.query('SELECT 1 FROM library.reported_year_subject WHERE route=$1 AND account_id=$2 AND year=1600',

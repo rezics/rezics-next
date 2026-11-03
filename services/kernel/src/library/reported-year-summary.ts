@@ -138,6 +138,9 @@ export function createReportedYearSummaryReads(deps: { pool: Pool }) {
           if (new TextEncoder().encode(encoded).byteLength > MAX_REPORTED_YEAR_SUMMARY_BYTES)
             throw new ProblemError('dependency_unavailable');
           await authorize();
+          const latest = (await client.query<Head>(headSql, [route, actor.accountId])).rows[0];
+          if (!latest?.complete || !latest.ready || latest.initialized !== latest.retained ||
+            latest.revision !== row.head.revision) throw new ProblemError('dependency_unavailable');
           alive();
           await client.query('COMMIT');
           committed = true;
