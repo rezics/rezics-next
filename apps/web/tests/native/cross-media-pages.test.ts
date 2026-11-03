@@ -92,10 +92,12 @@ test('mounted seeded franchises remain connected through Home, both Realms, work
       const connections = page.locator('[data-slot="subject-connections"]');
       await visible(connections).toBeVisible();
       for (const edge of visit.edges.filter((edge) => edge.from === reading.subject.subject.id)) {
-        const option = connections.locator(`option[value="${edge.direction}:${edge.property}"]`);
+        const key = `${edge.direction}:${edge.property}${edge.filter ? ':qualified' : ''}`;
+        if (edge.filter) expect(edge.filter).toBe(reading.subject.subject.id);
+        const option = connections.locator(`option[value="${key}"]`);
         await visible(option.first()).toBeAttached();
         const selector = option.first().locator('..');
-        await selector.selectOption(`${edge.direction}:${edge.property}`);
+        await selector.selectOption(key);
         const section = selector.locator('xpath=ancestor::section[1]');
         await visible(section.locator(`a[href*="/subjects/${edge.to}/"]`).first()).toBeVisible();
         for (const qualifier of edge.qualifiers) await visible(section).toContainText(qualifier);

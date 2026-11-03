@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -140,8 +141,9 @@ function ConnectionsReading({
     value.realm,
   );
   const Link = value.link;
-  const link: typeof PlainLink = (props) => (
-    <Link {...props} href={withSubjectVisitReturn(props.href, currentHref, value.locale)} />
+  const link = useMemo<typeof PlainLink>(
+    () => (props) => <Link {...props} href={withSubjectVisitReturn(props.href, currentHref, value.locale)} />,
+    [Link, currentHref, value.locale],
   );
   const rowValue = { ...value, link, ...(visit?.context ? { context: visit.context } : {}) };
   const failure = (status: number) =>

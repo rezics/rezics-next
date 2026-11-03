@@ -1370,7 +1370,7 @@ the same return behavior as its main work/person link. Returning re-resolves the
 and anchors at Connections. Native canonical redirects continue to preserve the original bounded search operands.
 
 **Explore nearby connections** explicitly selects up to eight release-admitted properties, depth 1 or 2 and the
-installed native limit of 25. It calls the existing native graph reader once; it does not perform traversal in Web.
+installed native limit of 25. It calls the existing native graph reader once through a minimal typed seam for the general Web reading owner; it does not perform traversal in Web.
 The current graph DTO has no Context selector or per-edge `qualifiers`/`related` projection. Realm exploration is
 therefore labelled unavailable, and Global graph connections use independent reveal controls. Exact qualified credits
 remain in the stream lists. A truncated graph says it is partial and links to exact readable destinations, whose
@@ -1402,7 +1402,8 @@ never accumulated across deliberate visits. Processing and retained current-page
 bounded components; unrelated catalogue population does not add calls or retained rows.
 
 `apps/web/tests/subject-connections.test.ts` exercises the actual Web loader/window boundary with native-format
-response doubles at catalogue populations 32, 256 and 2,048, counting calls, processed values and serialized bytes,
+response doubles for work, character and person destinations at catalogue populations 32, 256 and 2,048, counting
+calls, processed values and serialized bytes,
 including concealed summaries, sparse continuation, stale reading and late-delivery retirement. This is authored
 Web boundary coverage, not evidence of native SQL scan bounds or mounted seed admission. Existing native engines
 remain their owners' responsibility. The native acceptance uses actual mounted selected seed destinations.
@@ -1413,7 +1414,7 @@ remain their owners' responsibility. The native acceptance uses actual mounted s
 another campaign. `REZICS_CROSS_MEDIA_VISIT` names a private worktree-local configuration containing the mounted
 `origin`, retained `cdp` and `contextIndex`, authentic Imports `seedResult`, both actual `realms` paths, independently
 admitted `destinations` for Library, Collection, board thread, settings and creator sales, and selected native `edges`
-with holder/direction/property, target and expected qualifier text. Proposed-only or missing seed identities fail
+with holder/direction/property, an optional exact character `filter`, target and expected qualifier text. Proposed-only or missing seed identities fail
 acceptance; no canned seed or Storybook substitute is admitted. Native producer gaps remain visible.
 
 After the connected native journey succeeds, its last step captures Home, both Realms, one work for each of

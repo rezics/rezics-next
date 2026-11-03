@@ -53,10 +53,10 @@ export function createConnectionWindow(address: ConnectionAddress, read: Connect
     requests.delete(key);
     const remaining = new Set(snapshot.pending);
     remaining.delete(key);
-    if (!result.ok) {
+    if (!result.ok || result.id !== address.id) {
       // A refused current identity/reading removes all pages and fences sibling results, including graph reads.
       clear();
-      publish({ failure: result.status, pending: new Set() });
+      publish({ failure: result.ok ? 409 : result.status, pending: new Set() });
       return;
     }
     const prior = snapshot.visit;

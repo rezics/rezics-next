@@ -113,6 +113,7 @@ export async function readConnectionStream(
 ): Promise<Section> {
   const query = {
     property: stream.property,
+    language: address.locale,
     limit: CONNECTION_LIMIT,
     ...(context ? { context } : {}),
     ...(stream.filter ? { filter: stream.filter } : {}),
@@ -179,6 +180,7 @@ export async function readConnectionVisit(
     if (first.kind !== 'page') return { ok: false, status: first.kind === 'missing' ? 404 : 409 };
     const reading = subjectBody(first.page);
     if (!reading) return { ok: false, status: 503 };
+    if (first.page.subject !== address.id || reading.subject.id !== address.id) return { ok: false, status: 409 };
     if (address.context !== undefined && address.context !== reading.subject.context) return { ok: false, status: 409 };
     work.calls += 2;
     const release = await releaseRead(client, undefined, authorization ? { authorization } : {});
