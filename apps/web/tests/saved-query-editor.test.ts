@@ -1,9 +1,8 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { parseFilter } from '@rezics/filter';
 import { CollectionRuleEditor, RuleEditLink } from '../src/library/collection-rule-editor';
-import { SavedQueryEditor } from '../src/library/saved-query-editor/editor';
 import { SaveQueryLink } from '../src/library/saved-query-editor/link';
 import {
   admitSavedQueryInput,
@@ -13,6 +12,9 @@ import {
 import { unavailableRuleChoices } from '../src/library/collection-rule-read';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, setLocale } from '../src/paraglide/runtime.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { SavedQueryEditor } = await import('../src/library/saved-query-editor/editor');
 
 const presence = { owner: { presence: true } } as const;
 const book = { type: { in: ['schema:Book'] } };
