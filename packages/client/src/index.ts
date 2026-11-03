@@ -35,10 +35,14 @@ type Routes = KernelType['~Routes']['v1'];
 export type RatingQuestionDirectoryQuery = Routes['rating-questions']['get']['query'];
 export type RatingQuestionDirectory = Routes['rating-questions']['get']['response'][200];
 export type RatingQuestion = RatingQuestionDirectory['ratingQuestions'][number];
-type QuestionLabelHistoryResponse = Routes['rating-questions'][':questionId']['labels']['get']['response'][200];
+type QuestionRoutes = Routes['rating-questions'][':questionId'];
+type QuestionLabelHistoryResponse = QuestionRoutes['labels']['get']['response'][200];
 
+export type QuestionLabelInput = QuestionRoutes['label']['put']['body'];
+export type QuestionLabelResult = QuestionRoutes['label']['put']['response'][200];
 export type QuestionLabel = QuestionLabelHistoryResponse['labels'][number];
 export type QuestionLabelHistory = QuestionLabelHistoryResponse;
+export type QuestionLabelHistoryQuery = QuestionRoutes['labels']['get']['query'];
 
 /** Reuse each shared method's original declaration; retain every other mounted path and method. */
 type SharedRoutes<Mounted, Original> = Original extends { body: unknown; response: unknown }
