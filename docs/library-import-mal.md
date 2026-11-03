@@ -66,4 +66,15 @@ stops subsequent rows without undoing prior effects. Return outcomes and remaini
 failed rows are retried with their original review/operands, never a fresh identity. Preview changes only private
 import evidence; native facts change only after review and explicit field confirmation.
 
+The signed-in Web journey is `/library/import-mal`, documented in
+[personal MAL import](../apps/web/src/library/personal-mal-import.md). Library navigation adds that entry beside
+existing creation and discovery links. Upload, preview, review, confirmation, partial results and discard stay in
+the mounted visit: XML, comments and private rows never enter the URL or persistent browser storage. A replacement
+upload deletes the previous native document first. Viewer or CSRF replacement retires retry authority. Web binds the
+generated `libraryImports.mal` methods when present and otherwise shows unavailable; it does not parse XML or fork
+native matching.
+
+Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
+the explicit UUID submitted to `review.target` is identity.
+
 Integration decision: MAL and Bangumi retain their separate native review guards, routes and erasure phases.
