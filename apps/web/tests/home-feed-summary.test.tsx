@@ -139,6 +139,27 @@ function postWithParent(parent: unknown): FeedItem {
   } as FeedItem;
 }
 
+function reviewWithCitation(citation: unknown): FeedItem {
+  const item = reviewRow();
+  return {
+    ...item,
+    summary: {
+      ...item.summary,
+      reviewContext: {
+        target: {
+          state: 'available',
+          subject: {
+            id: reviewedSubjectId,
+            kind: 'schema:Book',
+            label: { value: 'The reviewed edition', language: 'en' },
+          },
+        },
+        citation,
+      },
+    },
+  } as FeedItem;
+}
+
 function spaceRow(): FeedItem {
   return {
     id: `activity:${spaceId}`,
@@ -210,29 +231,22 @@ test('Home review and reply cards keep current citation and immediate-parent ide
   expect(review).toContain('data-feed-review-question-revision="7"');
   expect(review).toContain('data-feed-review-units="8"');
 
-  const absent = reviewRow();
-  absent.summary = {
-    ...absent.summary,
-    reviewContext: {
-      target: { state: 'absent' },
-      citation: { state: 'absent' },
-    },
-  } as FeedItem['summary'];
-  const absentHtml = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(absent, 'en')} />);
+  const absentHtml = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(reviewWithCitation({ state: 'absent' }), 'en')} />,
+  );
   expect(absentHtml).not.toContain(questionId);
 
-  const withheld = reviewRow();
-  withheld.summary = {
-    ...withheld.summary,
-    reviewContext: {
-      target: { state: 'withheld' },
-      citation: { state: 'withheld' },
-    },
-  } as FeedItem['summary'];
-  const withheldHtml = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(withheld, 'en')} />);
+  const withheldHtml = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(reviewWithCitation({ state: 'withheld' }), 'en')} />,
+  );
   expect(withheldHtml).toContain(m.post_history_score_concealed({}, { locale: 'en' }));
   expect(withheldHtml).not.toContain(questionId);
-  expect(withheldHtml).not.toContain(reviewedSubjectId);
+
+  const failedHtml = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(reviewWithCitation({ state: 'failed' }), 'en')} />,
+  );
+  expect(failedHtml).toContain(m.post_history_score_failed({}, { locale: 'en' }));
+  expect(failedHtml).not.toContain(questionId);
 
   const threadId = '12345678-1234-1234-1234-123456789abc';
   const thread = { id: threadId, title: 'A discussion' };

@@ -67,7 +67,8 @@ ownership of native request and session retirement.
 Home's native `FeedItem` projection is `homeFeedItemPresentation(item, locale)`, typed from the generated Kernel
 client. It retains the supplied title, canonical destination, cover/avatar, language, preview, source and occurrence
 attributes, Continue progress, and separate resume link. Discovery Collections use the Commerce owner identity and
-open `/collections/{id}`; reviews keep their Content thread identity and admitted reviewed-Subject context; Spaces
+open `/collections/{id}`; reviews keep their Content thread identity and current admitted work/citation; replies keep
+their exact post identity and may show a disclosed immediate parent; Spaces
 keep the current address and show a supplied Realm title only as carrier text. Collection curator and cover data,
 and review ratings, stay absent until their bounded public owner summaries supply them. The adapter performs no
 reads, does not rank or apply public/private predicates, and omits missing descriptive fields. Following
