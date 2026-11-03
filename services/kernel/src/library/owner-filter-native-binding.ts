@@ -42,6 +42,12 @@ import { withAdmittedOwnerWorkingSource } from './owner-filter-working-source.ts
 import scopeQuery from './owner-filter-native-binding-scope.sql';
 import activeQuery from '../semantic/definitions-active.sql';
 import ownerFenceQuery from './owner-filter-native-binding-fence.sql';
+import { compileCurrentOwnerFilter, currentOwnerClauseKey } from '../search/current-filter-plan.ts';
+import type { PublicFilterQueriedObservation } from '../search/public-filter-consumer-contract.ts';
+import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import type { PublicFilterSource, PublicFilterCost } from '../semantic/public-filter-source-contract.ts';
+import type { FilterDocument } from '@rezics/filter';
+import { resolveSubject } from './subject-anchor.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -49,7 +55,20 @@ type Dependencies = {
   routeKey?: Uint8Array;
   clock?: KernelClock;
 };
-type NativeRead = Readonly<{ actor: Actor; at: AuthoritativeTime; work: NativeCollectionWork }>;
+/** References to an existing native execution, never a caller-issued safety assertion. */
+export type OwnerFilterQueryRead = Readonly<{
+  filter: FilterDocument;
+  source: PublicFilterSource;
+  binding: PublicFilterSourceBinding;
+  queried: PublicFilterQueriedObservation;
+  execution: string;
+}>;
+type NativeRead = Readonly<{
+  actor: Actor;
+  at: AuthoritativeTime;
+  work: NativeCollectionWork;
+  query?: OwnerFilterQueryRead;
+}>;
 const reads = new AsyncLocalStorage<NativeRead>();
 
 /** Additive accounting port for an enclosing native reader, with no new binder or allowance.
@@ -69,6 +88,8 @@ export type NativeOwnerFilterBinding = Readonly<{
   attempt?: CommandAttempt;
   ownsTime: boolean;
   ownerFence: string | null;
+  query?: OwnerFilterQueryRead;
+  originals: Map<string, string>;
 }>;
 const bindings = new WeakMap<OwnerFilterReadBinding, NativeOwnerFilterBinding>();
 
@@ -118,6 +139,71 @@ export function sameOwnerFilterSource(left: CollectionSourceObservation, right: 
 }
 
 export const ownerFilterUnavailable = () => new ProblemError('dependency_unavailable');
+
+/** Keep every original actually used, including rejected and order-only support, until final disclosure. */
+export function retainOwnerFilterOriginal(binding: OwnerFilterReadBinding, original: string, terminal: string) {
+  const saved = nativeOwnerFilterBinding(binding);
+  if (!saved) throw ownerFilterUnavailable();
+  const previous = saved.originals.get(original);
+  if (previous !== undefined && previous !== terminal) throw ownerFilterUnavailable();
+  saved.originals.set(original, terminal);
+}
+
+export async function revalidateOwnerFilterDisclosure(binding: OwnerFilterReadBinding, work: NativeCollectionWork) {
+  const saved = nativeOwnerFilterBinding(binding);
+  if (!saved) throw ownerFilterUnavailable();
+  for (const [original, terminal] of saved.originals) {
+    const current = await ownerFilterBounded(
+      work,
+      { nativeRows: 8192, nativePoints: 128, statements: 128, bytes: 1024 * 1024 },
+      () => resolveSubject(
+        saved.dependencies, binding.input.actor, original, binding.input.at,
+        ownerFilterAccessContext(saved.dependencies, binding.input.deadline, saved.attempt),
+      ),
+    );
+    if (current?.subjectId !== terminal) throw ownerFilterUnavailable();
+  }
+  await revalidateNativeOwnerFilter(binding, work);
+}
+
+/** Join the actual complete native filter/order execution, rather than certifying its returned IDs.
+ * The original execution start detects a reduction even if repair/ACK completed during this read.
+ */
+async function revalidateQuery(binding: OwnerFilterReadBinding, work: NativeCollectionWork) {
+  const saved = nativeOwnerFilterBinding(binding)!;
+  if (!saved.admission.owner) return;
+  const leaves = saved.admission.plan?.leaves.filter((leaf) => leaf.kind === 'catalogue') ?? [];
+  if (!leaves.length) return;
+  const query = saved.query;
+  if (!query || !isDeepStrictEqual(query.filter, saved.admission.filter)) throw ownerFilterUnavailable();
+  const context = { deadline: binding.input.deadline };
+  const charge = async <T extends { cost: PublicFilterCost }>(read: () => Promise<T>) => {
+    const result = await work.compose(async (allowance) => {
+      const value = await read();
+      const physical = value.cost as PublicFilterCost & { rows?: number; statements?: number; bytes?: number };
+      return { value, work: { reservationId: allowance.reservationId, used: {
+        ...zeroScopeWork(), candidateKeys: physical.inputKeys,
+        nativePoints: physical.accessPoints + physical.dependencyPoints,
+        nativeRows: physical.rows ?? 0, statements: physical.statements ?? 0, bytes: physical.bytes ?? 0,
+      } } };
+    });
+    return result.value;
+  };
+  const joined = await charge(() => query.binding.join({ queried: query.queried, execution: query.execution }, context));
+  if (joined.status !== 'joined' || !joined.execution || joined.execution.id !== query.execution ||
+      !isDeepStrictEqual(joined.queried, query.queried) ||
+      joined.definition.meaning.digest !== saved.admission.releaseDigest) throw ownerFilterUnavailable();
+  const capture = joined.definition.capture;
+  if ('purpose' in capture || 'representation' in capture || !capture.filterDocument) throw ownerFilterUnavailable();
+  const covered = new Set(compileCurrentOwnerFilter(capture.filterDocument).leaves.map(currentOwnerClauseKey));
+  if (leaves.some((leaf) => !covered.has(currentOwnerClauseKey(leaf)))) throw ownerFilterUnavailable();
+  const observed = await charge(() => query.source.readPrivacyReductionHeads({
+    kind: 'population', queried: query.queried, start: joined.execution!.start,
+    execution: query.execution, context,
+  }));
+  if (observed.status !== 'observed' || observed.coverage !== 'all_native_homes' || !observed.routingComplete ||
+      observed.blocking.length || observed.unacknowledged.length || observed.changed.length) throw ownerFilterUnavailable();
+}
 
 export function ownerFilterAllowance(work: NativeCollectionWork): WorkAllowance {
   const remaining = { ...zeroScopeWork() };
@@ -328,6 +414,7 @@ async function revalidateWorkingOwnerFilter(
     if (result.status !== 'current' || !isDeepStrictEqual(result.observation, binding.scope))
       throw ownerFilterUnavailable();
   });
+  await revalidateQuery(binding, work);
 }
 
 /** No capture creation or repair occurs in a read. Only current native producer evidence can bind. */
@@ -488,6 +575,8 @@ export async function bindNativeOwnerFilterRead(
           observation: source.source.observation,
           ownsTime: ownTime,
           ownerFence,
+          originals: new Map(),
+          ...(inherited?.query ? { query: inherited.query } : {}),
           ...(attempt ? { attempt } : {}),
         });
         await revalidateNativeOwnerFilter(binding, work);

@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createOwnerFilterFixture, ownerStatus } from './support/owner-filter-fixture.ts';
 
-test('common members execute all five owner leaves and Boolean catalogue composition over complete no-entry sources', async () => {
+test('common members execute all five owner leaves and refuse catalogue composition without query acknowledgement', async () => {
   const f = await createOwnerFilterFixture();
   try {
     const { subjects: s, leaves: q } = f;
@@ -15,11 +15,12 @@ test('common members execute all five owner leaves and Boolean catalogue composi
     expect(await f.members({ not: q.state })).toEqual(
       sorted(s.labelOnly.id, s.sessionOnly.id, s.copyOnly.id, s.noEntry.id),
     );
-    expect(
-      await f.members({
+    ownerStatus(
+      await f.native.request('alice', 'GET', f.path({
         and: [{ type: { in: [f.type] } }, { or: [q.state, q.label, q.session, q.holding] }, { not: q.session }],
-      }),
-    ).toEqual(sorted(s.entry.id, s.labelOnly.id, s.copyOnly.id));
+      })),
+      503,
+    );
     // Bob's completion must not exclude Alice's complete no-entry control.
     expect(await f.members({ not: q.session })).toContain(s.noEntry.id);
     expect(await f.members(q.label, 'bob')).toEqual([]);

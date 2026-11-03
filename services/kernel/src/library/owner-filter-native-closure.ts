@@ -22,12 +22,40 @@ import {
   ownerFilterQuery,
   ownerFilterUnavailable,
   revalidateNativeOwnerFilter,
+  retainOwnerFilterOriginal,
   sameOwnerFilterSource,
 } from './owner-filter-native-binding.ts';
 import factsQuery from './owner-filter-native-closure-facts.sql';
 import releaseSize from './owner-filter-native-closure-release-size.sql';
+import populationQuery from './owner-filter-native-closure-population.sql';
 
 type NativeFactKey = { driver: number; factId: string; labelId: string | null };
+
+/** A prepared answer must reauthorize its complete structural population, including exclusions/order.
+ * LIMIT bounds raw references before hydration. A full window is unavailable, never fabricated coverage.
+ */
+export async function retainNativeOwnerFilterPopulation(binding: OwnerFilterReadBinding, work: NativeCollectionWork) {
+  const saved = nativeOwnerFilterBinding(binding);
+  if (!saved) throw ownerFilterUnavailable();
+  const limit = Math.min(100, work.available('candidateKeys'));
+  if (limit < 1) throw ownerFilterUnavailable();
+  const rows = await withConnection(saved.dependencies.pool, (client) => ownerFilterQuery<{
+    original: string; terminal: string;
+  }>(deadlineClient(client, binding.input.deadline), work, populationQuery, {
+    route: saved.metadata.route, collection_id: saved.metadata.collectionId, limit,
+  }, { nativeRows: 8 * limit + 8, candidateKeys: limit, bytes: 128 * limit }));
+  if (rows.length === limit) throw ownerFilterUnavailable();
+  for (const row of rows) {
+    if (routeOf(row.original) === null || routeOf(row.terminal) === null) throw ownerFilterUnavailable();
+    retainOwnerFilterOriginal(binding, row.original, row.terminal);
+    retainOwnerFilterOriginal(binding, row.terminal, row.terminal);
+  }
+  // A ready source generation, rather than an empty/missing join, proves structural exhaustion.
+  const state = await ownerFilterCanonical(work, (allowance) => readCanonicalSourceState(saved.dependencies.pool, {
+    route: saved.metadata.route, collectionId: saved.metadata.collectionId, deadline: binding.input.deadline, allowance,
+  }));
+  if (state.state !== 'ready' || state.basis.digest !== saved.observation.basis.digest) throw ownerFilterUnavailable();
+}
 
 function locator(subjectId: string, row: NativeFactKey): OwnerFilterFactLocator {
   if (routeOf(row.factId) === null) throw ownerFilterUnavailable();
@@ -235,6 +263,7 @@ export async function readNativeOwnerFilterClosure(
       () => resolveSubject(dependencies, actor, original, at, context),
     );
     if (!resolved || resolved.subjectId !== subjectId) throw ownerFilterUnavailable();
+    retainOwnerFilterOriginal(binding, original, subjectId);
   }
   for (const original of originalIds) {
     await disclose(original);
@@ -314,8 +343,7 @@ export async function readNativeOwnerFilterClosure(
   }
   const catalogue = await catalogueEvidence(binding, subjectId, work);
   if (catalogue === null) return { status: 'unavailable' } as const;
-  // Negative, order-only and nonmatching originals pay ordinary original AND terminal guards too.
-  for (const original of originalIds) await disclose(original);
+  // The enclosing reader repeats ALL retained originals immediately before disclosure, including rejections.
   await revalidateNativeOwnerFilter(binding, work);
   const closure: OwnerFilterCandidateClosure = { subjectId, originals, releases, catalogue };
   return { status: 'complete', closure } as const;

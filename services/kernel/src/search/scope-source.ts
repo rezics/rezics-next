@@ -23,6 +23,7 @@ import { readRelease } from '../semantic/definitions.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
+import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import {
   createSearchScopeOrder,
   sameScopeObservation,
@@ -375,7 +376,17 @@ export function createSearchScopeSource({
     const nativeWork = new NativeCollectionWork(work.remaining(), reader.deadline);
     const bound = await (async () => {
       try {
-        return await withOwnerFilterNativeRead({ actor: reader.actor, at: reader.nativeT!, work: nativeWork }, () =>
+        const captured = value.ordered?.state;
+        const query = captured?.queried && captured.execution ? {
+          filter: value.filter,
+          source: publicFilterSource({ pool, routeKey: reader.routeKey, access: reader.access, clock }),
+          binding: createPublicFilterSourceBinding(pool, reader.routeKey, reader.access),
+          queried: captured.queried,
+          execution: captured.execution,
+        } : undefined;
+        return await withOwnerFilterNativeRead({ actor: reader.actor, at: reader.nativeT!, work: nativeWork,
+          ...(query ? { query } : {}),
+        }, () =>
           bindOwnerFilterRead(
             { pool, access: reader.access, routeKey: reader.routeKey, clock },
             reader.actor,

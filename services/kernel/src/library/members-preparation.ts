@@ -22,10 +22,12 @@ import {
   nativeOwnerFilterBinding,
   releaseNativeOwnerFilterRead,
   revalidateNativeOwnerFilter,
+  revalidateOwnerFilterDisclosure,
   withNativeOwnerFilterSource,
   sameOwnerFilterSource,
 } from './owner-filter-native-binding.ts';
 import { NativeCollectionWork } from './collection-source-work.ts';
+import { retainNativeOwnerFilterPopulation } from './owner-filter-native-closure.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
 import { requireMembersReservationBudget } from './members-preparation-cost.ts';
 import canonicalize from 'canonicalize';
@@ -1017,6 +1019,7 @@ async function bindPreparationRead(
       work.compose((allowance) => createCollectionSource(deps).prepare({ ...native.input, allowance })),
     );
     if (!sameOwnerFilterSource(saved.observation, prepared.source.observation)) throw new ProblemError('stale_cursor');
+    await withNativeOwnerFilterSource(native, work, () => retainNativeOwnerFilterPopulation(native, work));
     return {
       status: 'bound',
       binding: {
@@ -1078,7 +1081,7 @@ async function revalidatePreparationRead(
     }
     const final = await work.compose((allowance) => source.prepare({ ...native.input, allowance }));
     if (!sameOwnerFilterSource(binding.source, final.source.observation)) throw new ProblemError('stale_cursor');
-    await revalidateNativeOwnerFilter(native, work);
+    await revalidateOwnerFilterDisclosure(native, work);
     return { status: 'current', subjects: disclosed };
   });
 }

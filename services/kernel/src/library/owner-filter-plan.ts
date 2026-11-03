@@ -20,6 +20,8 @@ import {
   bindNativeOwnerFilterRead,
   releaseNativeOwnerFilterRead,
   revalidateNativeOwnerFilter,
+  revalidateOwnerFilterDisclosure,
+  nativeOwnerFilterBinding,
   withNativeOwnerFilterSource,
 } from './owner-filter-native-binding.ts';
 import { readNativeOwnerFilterClosure } from './owner-filter-native-closure.ts';
@@ -300,13 +302,14 @@ async function readWorkingOwnerFilterPage(
     if (!options.cursor || options.cursor.length > 4096) throw new ProblemError('invalid_cursor');
     const cursor = await decodeListCursor(deps.tokens, cursorBinding, options.cursor, (deps.clock ?? systemClock)());
     if (!cursor.ok) throw new ProblemError('invalid_cursor');
-    const [basis, capture, revision, last] = cursor.after;
-    if (cursor.after.length !== 4 || typeof last !== 'string' || routeOf(last) === null)
+    const [basis, capture, revision, fence, last] = cursor.after;
+    if (cursor.after.length !== 5 || typeof last !== 'string' || routeOf(last) === null)
       throw new ProblemError('invalid_cursor');
     if (
       cursor.epoch !== current.observation.stamp.epoch ||
       basis !== current.observation.basis.digest ||
       capture !== binding.scope.captureId ||
+      fence !== nativeOwnerFilterBinding(binding)?.ownerFence ||
       revision !== binding.scope.committedRevision.toString()
     )
       throw new ProblemError('stale_cursor');
@@ -383,7 +386,7 @@ async function readWorkingOwnerFilterPage(
   const revalidate = async () => {
     const final = await work.compose((allowance) => source.prepare({ ...input, allowance }));
     if (!compatible(current.observation, final.source.observation)) throw new ProblemError('stale_cursor');
-    await revalidateNativeOwnerFilter(binding, work);
+    await revalidateOwnerFilterDisclosure(binding, work);
   };
   await revalidate();
   let disclosed = members;
@@ -417,6 +420,7 @@ async function readWorkingOwnerFilterPage(
               current.observation.basis.digest,
               binding.scope.captureId,
               binding.scope.committedRevision.toString(),
+              nativeOwnerFilterBinding(binding)!.ownerFence,
               after!,
             ],
           },

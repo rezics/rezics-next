@@ -156,6 +156,17 @@ cannot hide a committed change behind catalogue lag. Public fields and cursor ba
 facts change without changing completed published output. Reauthorize every continuation and retain existing opaque
 cursor binding/restart behavior; cursor content must not reveal private query facts or cached permission.
 
+The native owner binding retains the current account fact fence alongside the complete Source and scoped
+identity observation. Direct continuations bind that fence too. Every original used by a match or rejection is
+reauthorized with its terminal before disclosure; prepared reads additionally retain the complete bounded native
+Source population, including excluded and order originals. A full population window is unavailable, never complete.
+Search's ordered reader can lend its existing native queried execution: Library joins its stored definition,
+requires every catalogue leaf (including NOT), and observes the original execution's complete filter/order privacy
+cut before execution and disclosure. Local repair alone, changed evidence, incomplete foreign routing or pending
+acknowledgement cannot pass. No observation or acknowledgement is created by an owner read.
+Private catalogue composition requires an existing native queried execution; direct owner reads without one remain unavailable.
+Owner-only saved rules continue to use current native personal facts without waiting for catalogue indexing.
+
 Admit filter, source and order together as a direct owner index or prepared owner result, composed with catalogue
 plans where supported. Success fills the requested page or proves genuine final exhaustion. Otherwise return preparing
 with retained bounded progress, or the existing unavailable outcome when no progress is possible. Finite ready input,

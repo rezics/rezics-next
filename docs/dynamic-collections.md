@@ -194,6 +194,16 @@ Ordinary catalogue edits become filterable within 60 seconds in healthy operatio
 lag over five minutes yields readiness. Engine refresh alone is insufficient. Privacy reductions apply immediately;
 owner writes appear on the owner's next read, including prepared owner views.
 
+Native owner-only saved reads bind the account fact fence, rule/source basis and complete scoped identity
+observation; continuations restart when those bases change and repeat current family/source authority.
+Match and rejection originals retain independent original AND terminal checks until disclosure. Prepared reads
+also check the complete bounded native Source population, including excluded/order support; incomplete coverage
+stays unavailable. Catalogue composition consumes Search's existing queried execution through its native
+definition join and complete filter/order privacy observation, retaining its original execution start across
+final revalidation. Pending affected foreign repair and unacknowledged reductions refuse disclosure even when
+returned subjects pass Access. A direct private read with no such native execution remains unavailable; it does
+not create a capture, acknowledgement, certificate or private/public fact mirror.
+
 ### Account deletion and adopted public output
 
 Account deletion is terminal at fresh authentication plus typed confirmation time `T`; only `account-tombstoned.v1`

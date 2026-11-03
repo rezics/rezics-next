@@ -24,7 +24,7 @@ export function ownerString(value: unknown): string {
 
 /** Ordinary APIs supply the facts; the existing released driver owns Auth and release setup. */
 export async function createOwnerFilterFixture(
-  options: Pick<NonNullable<Parameters<typeof createReleasedDiscoveryFixture>[0]>, 'kernelPool'> = {},
+  options: Pick<NonNullable<Parameters<typeof createReleasedDiscoveryFixture>[0]>, 'kernelPool' | 'search'> = {},
 ) {
   const native = await createReleasedDiscoveryFixture({ version: 1, ...options });
   try {
