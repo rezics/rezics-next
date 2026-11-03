@@ -61,6 +61,10 @@ export const REVIEW_DISCOVERY_SOURCE_TYPES = [
   'com.rezics.community.realm.restored.v1',
   'com.rezics.community.realm.ban.v1',
   'com.rezics.community.realm.unban.v1',
+  'com.rezics.community.realm.board-scheme.v1',
+  'com.rezics.community.publication.adopted.v1',
+  'com.rezics.community.publication.withdrawn.v1',
+  'com.rezics.community.publication.rejected.v1',
   'com.rezics.community.space.created.v1',
   'com.rezics.community.space.updated.v1',
   'com.rezics.community.space.removed.v1',
@@ -110,6 +114,10 @@ function scopes(event: CloudEvent): Scope[] {
     case 'com.rezics.content.source_fence.taken_down.v1':
       return [{ kind: 'source', route: data.route as number, source: data.source as string,
         externalId: data.external_id as string, fieldGroup: data.field_group as string }];
+    case 'com.rezics.community.publication.adopted.v1':
+    case 'com.rezics.community.publication.withdrawn.v1':
+    case 'com.rezics.community.publication.rejected.v1':
+      return point('subject', data.subjectId);
     case 'com.rezics.semantic.record.deleted.v1':
     case 'com.rezics.semantic.record.restored.v1':
       return point(data.kind === 'context' ? 'resource' : 'subject', data.kind === 'context' ? data.id : data.subject);
