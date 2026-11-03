@@ -125,9 +125,6 @@ function BoundOwnDraftsPage({
       setSelectionState(null);
       return;
     }
-    if (initial.current && retry === 0 && currentCursor === null) {
-      return;
-    }
     const controller = new AbortController();
     listController.current?.abort();
     selectionController.current?.abort();
