@@ -281,10 +281,15 @@ test('interrupted Open Library import reopens staging diagnostics without creden
         yield new TextEncoder().encode(dump([record]));
       })());
       expect(resumed.status, resumed.diagnostic).toBe('committed');
-      const phases = importer.session.store.database
-        .query('SELECT phase FROM run_conversion_diagnostics WHERE record_key=? ORDER BY phase')
-        .all(record.key) as { phase: string }[];
-      expect(phases.map((row) => row.phase)).toEqual(['application', 'staging']);
+      const pointer = importer.session.store.source(source);
+      const rows = importer.session.store.database
+        .query('SELECT run_id,phase FROM run_conversion_diagnostics WHERE record_key=? ORDER BY run_id,phase')
+        .all(record.key) as { run_id: string; phase: string }[];
+      expect(pointer.generation, JSON.stringify({ pointer, rows })).toBeString();
+      expect(
+        rows.filter((row) => row.run_id === pointer.generation).map((row) => row.phase),
+        JSON.stringify(rows),
+      ).toEqual(['application', 'staging']);
     } finally {
       await importer.close();
     }

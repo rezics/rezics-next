@@ -105,8 +105,17 @@ test('diagnostic pages and exact lookup stay indexed as current omissions and un
         current.view.pageRecords({ source, generation, limit: 20 }),
       );
       const page = current.view.pageRecords({ source, generation, limit: 20 });
+      expect(page.records).toHaveLength(20);
+      expect(page.nextCursor).toBeString();
+      const continued = current.view.pageRecords({
+        source,
+        generation,
+        limit: 20,
+        after: page.records.at(-1)!.recordKey,
+      });
+      expect(continued.records).toHaveLength(Math.min(20, scale - 20));
       const next = sample(current.probe, () =>
-        current.view.pageRecords({ source, generation, limit: 20, after: page.records.at(-1)!.recordKey }),
+        current.view.pageRecords({ source, generation, limit: 20, after: page.records[0]!.recordKey }),
       );
       const lastKey = key(2000000000, scale);
       const end = sample(current.probe, () => current.view.pageRecords({ source, generation, limit: 20, after: lastKey }));
