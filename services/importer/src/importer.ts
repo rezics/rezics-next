@@ -676,7 +676,7 @@ export class Importer {
           } else {
             skipCover = true;
             deferredCover = resolution.status === 'pending';
-            this.progress(signal)?.onMedia?.(resolution.status);
+            this.progress(signal)?.onMedia?.(resolution.status === 'pending' ? 'deferred' : 'rejected');
           }
         }
       }
