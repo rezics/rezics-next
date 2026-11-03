@@ -8,7 +8,7 @@ import { withConnection } from '../database/pool.ts';
 import { LibraryNotFoundError, createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
 import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
-import { routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
 import {
@@ -21,7 +21,16 @@ import { produceIdentityRatingVoteChange } from '../semantic/identity-rating-pro
 import {
   admitIdentityRatingEffect,
   IdentityRatingAdmissionPendingError,
+  readIdentityRatingEpochs,
+  compareIdentityRatingEpochs,
 } from '../semantic/identity-rating-admission.ts';
+import {
+  normalizeVoteReviewGuard, ownVoteReviewWitness, readVoteReviewSlots,
+  VoteReviewStaleError, VoteReviewUnavailableError,
+  type VoteReviewGuard, type VoteReviewRow, type VoteReviewEpoch,
+} from './own-votes-review.ts';
+export { VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
+export type { VoteReviewGuard } from './own-votes-review.ts';
 import questionRead from './question-read.sql';
 import voteInsert from './vote-insert.sql';
 import voteLock from './vote-lock.sql';
@@ -59,6 +68,7 @@ export type PutVoteInput = {
   questionId: string;
   targetId: string;
   units: number | null;
+  guard?: VoteReviewGuard;
 };
 export type PutVoteOutcome = {
   vote: Vote | null;
@@ -131,6 +141,14 @@ function asVote(row: VoteRow): Vote {
     changedAt: new Date(row.changedAt).toISOString(),
     transactionId: row.transactionId,
   };
+}
+
+function asReviewRow(row: VoteRow | null): VoteReviewRow | null {
+  return row ? {
+    targetId: row.targetId, units: row.units === null ? null : Number(row.units),
+    revision: Number(row.revision), countedRevision: Number(row.countedRevision),
+    countedTarget: row.countedTarget, changedAt: row.changedAt!, transactionId: row.transactionId,
+  } : null;
 }
 
 function changedVoteEvent(input: {
@@ -225,6 +243,7 @@ export function createVoteCommands(config: Dependencies) {
     pool,
     ...(clock === undefined ? {} : { clock }),
   });
+  const guardedRunner = createLibraryCommandRunner({ pool, access: config.access, ...(clock === undefined ? {} : { clock }) });
 
   async function putVoteOutcome(actor: Actor, input: PutVoteInput, idempotencyKey: string): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
@@ -237,10 +256,16 @@ export function createVoteCommands(config: Dependencies) {
       throw new VoteInvalidError('vote');
     if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
 
-    const { question, target: resolved } = await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
+    let guard: VoteReviewGuard | undefined;
+    if (input.guard !== undefined) {
+      try { guard = normalizeVoteReviewGuard(input.guard, input.targetId); }
+      catch { throw new VoteInvalidError('guard'); }
+    }
+    input = { questionId: input.questionId, targetId: input.targetId, units: input.units, ...(guard ? { guard } : {}) };
+    const initial = guard ? null : await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
 
     try {
-      const outcome = await runner.ownAccountPrepared(
+      const outcome = await (guard ? guardedRunner : runner).ownAccountPrepared(
         actor,
         {
           action: VOTE_SCOPE,
@@ -250,16 +275,38 @@ export function createVoteCommands(config: Dependencies) {
             questionId: input.questionId,
             targetId: input.targetId,
             units: input.units,
+            ...(guard ? { guard } : {}),
           },
           // Current question provenance is checked again on each native attempt,
           // before ownAccountPrepared permits receipt disclosure or execution.
           prepare: async (attempt) => {
-            const current = await prepareVoteTarget(config, actor, input, commandAttemptDeadline(attempt));
-            if (current.target.subjectId !== resolved.subjectId)
+            const deadline = commandAttemptDeadline(attempt);
+            // Current disclosure precedes replay; business review/scale/lifecycle evidence is deferred.
+            const current = await prepareVoteTarget(config, actor, guard ? { questionId: input.questionId, targetId: input.targetId } : input, deadline);
+            if (initial && current.target.subjectId !== initial.target.subjectId)
               throw new IdentityRatingAdmissionPendingError(input.targetId, 'source-pending');
+            let epochs: readonly VoteReviewEpoch[] = [];
+            let error: VoteReviewUnavailableError | null = null;
+            if (guard) {
+              try {
+                epochs = await readIdentityRatingEpochs(pool, [input.targetId, current.target.subjectId].map((id) => partitionOf(requireRoute(id))), deadline);
+              } catch (failure) {
+                if (!(failure instanceof VoteReviewUnavailableError)) throw failure;
+                error = failure;
+              }
+            }
+            return { ...current, epochs, error };
           },
         },
-        async (tx, command) => {
+        async (tx, command, prepared) => {
+          const { question, target: resolved } = initial ?? prepared;
+          if (guard) {
+            if (question.revision !== guard.question.revision || question.lifecycleRevision !== guard.question.lifecycleRevision)
+              throw new VoteReviewStaleError('question_changed');
+            if (resolved.subjectId !== guard.subject.canonicalId) throw new VoteReviewStaleError('subject_changed');
+            if (prepared.error) throw prepared.error;
+            compareIdentityRatingEpochs(guard.subject.epochs, prepared.epochs);
+          }
           const route = requireRoute(owner.accountId);
           const previousRow = await voteLock.run(queryClient(tx), {
             route,
@@ -273,6 +320,27 @@ export function createVoteCommands(config: Dependencies) {
             question_id: question.id,
             counted_target: resolved.subjectId,
           });
+          if (guard) {
+            const slots = await readVoteReviewSlots(tx, {
+              ownerId: owner.accountId, questionId: question.id,
+              targetIds: [input.targetId, resolved.subjectId],
+            });
+            const current = ownVoteReviewWitness({
+              ownerId: owner.accountId, questionId: question.id,
+              requestedTargetId: input.targetId, canonicalId: resolved.subjectId,
+              original: slots.find((slot) => slot.targetId === input.targetId)!.vote,
+              canonical: slots.find((slot) => slot.targetId === resolved.subjectId)!.vote,
+              effective: asReviewRow(countedRow),
+            });
+            if (current.state !== guard.ownVote.state || current.observation !== guard.ownVote.observation)
+              throw new VoteReviewStaleError('own_vote_changed');
+            if (input.units !== null && question.lifecycleState === 'retired') throw new RatingQuestionRetiredError();
+            validateUnits(question, input.units);
+            // The native question lifecycle writer locks only its question home, and identity
+            // publication has no released participant hold for this voter command. Account/shelf
+            // admission and local vote locks cannot fence either foreign authority through commit.
+            throw new VoteReviewUnavailableError('atomic_guard_unavailable');
+          }
           const previous = previousRow ? asVote(previousRow) : null;
           const isAlreadyCurrent = previousRow?.countedTarget === resolved.subjectId;
           if (

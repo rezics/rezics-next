@@ -1080,10 +1080,11 @@ question `00000000-0000-7000-8000-000000000001`, revision 1, units 0 through 20 
 The caller retains one reader instance and the exact same actor and ordered requested IDs through all three phases;
 preparations are instance-local and must not be serialized or reconstructed. The caller starts its own repeatable-read
 transaction on the account's native home and passes that `PoolClient` to `read(client, request, preparation)`. The
-read phase checks the same account standing and selects only `rating.vote.counted_target` rows for the admitted
-terminal IDs. It never searches original slots or decides which source vote wins. After releasing the owner checkout,
+read phase checks the same account standing and selects `rating.vote.counted_target` rows for the admitted
+terminal IDs. It also probes the exact requested and canonical original slots for review evidence, including explicit
+missing rows. Those slots never decide which source vote wins or replace counted-target truth. After releasing the owner checkout,
 the caller invokes `finish(request, preparation, readResult, deadline)`. Finish rechecks the actual account, question,
-identity mapping, Subject disclosure and selected counted rows. It returns `current` only when those observations
+identity mapping, published epochs on both identity homes, Subject disclosure, original slots and selected counted rows. It returns `current` only when those observations
 match; otherwise it returns `preparing` with a same-input retry. This composition spans native snapshots and is not
 one atomic snapshot.
 
@@ -1094,7 +1095,46 @@ destination. `unavailable` remains distinct from pending identity coverage. Call
 source witnesses, owner fencing and exact request on retry. The reader adds no route, derivative, writer or repair.
 
 Decision: native own-score reads prepare identity and disclosure before the caller checkout, read only counted-target
-rows in the caller snapshot, then return `preparing` with the same input when final native observations differ.
+truth plus exact original-slot witnesses in the caller snapshot, then return `preparing` with the same input when final native observations differ.
+
+### Conditional provider vote review
+
+`createVoteCommands({pool, access, clock?}).putVoteOutcome(actor, input, idempotencyKey)` accepts
+`input: {questionId, targetId, units: number | null, guard?: VoteReviewGuard}`. Its success result remains
+`{vote: Vote | null, component: SessionComponent | null}`. Unconditional callers keep their existing writer,
+receipt and matching-no-op behavior. The HTTP vote body remains unchanged; the guard is an internal producer input.
+
+Each available counted-reader observation now includes `review: VoteReviewGuard`, with version 1,
+`question: {revision, lifecycleRevision}`, `subject: {canonicalId, epochs: [{partition, epoch}]}` and
+`ownVote: {state: 'absent' | 'present', observation}`. Epochs are native published unsigned decimal strings from
+both requested and canonical homes, deduplicated and sorted. Missing or pending coverage cannot produce a review.
+The opaque observation is canonical JSON of the fixed tuple
+`[1, ownerId, questionId, requestedTargetId, canonicalId, originalSlot, canonicalSlot, effectiveSlot]`.
+Each slot is null for proven absence, or
+`[sourceTargetId, units, revision, countedRevision, countedTarget, changedAt, transactionId]`.
+It retains explicit clears, zero, source replacement and revision-only changes, with a 4096-byte input ceiling.
+Consumers retain it unchanged. This is review evidence across bounded native snapshots, not an atomic fence.
+
+The complete closed, copied guard participates in the existing vote receipt digest. Current native account and
+Access admission precede receipt lookup. Fresh execution compares question meaning/lifecycle, canonical target,
+exact identity epochs and the own-vote witness before no-op, cleanup or effects. A known mismatch throws
+`VoteReviewStaleError` (`question_changed`, `subject_changed`, `identity_epoch_changed`, `own_vote_changed`);
+missing published epoch evidence throws `VoteReviewUnavailableError`. Errors create no success receipt and an
+unchanged unavailable attempt may retry the original input/key. Guard validation rejects malformed versions,
+unsafe revisions, incomplete or extra identity-home evidence and oversized observations as `VoteInvalidError('guard')`.
+
+Decision: guarded provider effects remain `atomic_guard_unavailable` until question lifecycle and identity
+publication supply commit-held native participant fences; reviewed evidence alone never installs adoption.
+
+The missing owner contracts are a Rating question-home revision/lifecycle hold joined to the voter command commit,
+and a Semantic requested/canonical-home mapping and exact published-epoch hold joined to that same commit,
+including identity admission, publication and reconciliation writers. The current question writer locks its own
+question row; `identityEpochStore.readEpoch` and `admitIdentityRatingEffect` observe identity without such a hold.
+Account sharing, the shelf write gate and local vote row locks do not fence these foreign authorities. Even a
+matching guarded no-op therefore returns typed `atomic_guard_unavailable`; no guarded effect is installed or
+advertised to Library consumers. Guarded success/replay, absent-slot first-writer serialization and full native
+race/growth acceptance remain delivery work under those owner contracts. Bangumi, MAL and AniList independently
+retain unavailable adoption and do not depend on one another's publication.
 
 Commerce and own-score consumers import `OwnCountedVoteRequest`, `OwnCountedVotePreparation`,
 `OwnCountedVoteReadResult`, `OwnCountedVoteResult`, `OwnCountedVoteObservation` and their supporting types from
@@ -1111,8 +1151,8 @@ preserve each observation state.
 
 #### Native counted own-score reader Cost
 
-- Touches: preparation reads the account once, then reads the standard question and native identity mappings outside the caller checkout. The identity producer double-collects each supplied source/control home; Subject disclosure repeats a bounded identity collection and prepares and evaluates Access for each original and terminal. The caller phase binds the account home, reads the account once and probes at most 100 exact counted-target keys. Finish reads the question, mappings and Subject disclosure again, then re-reads the account and those same counted-target keys in one final account-home snapshot. It releases every foreign home before the caller checkout and before the final account snapshot.
-- Bound: at most 100 raw requested IDs, 100 distinct requested identities and 100 distinct counting destinations; duplicates are admitted against the raw limit and queried once. Each counted-target statement uses the exact `(route, voter_id, question_id, counted_target)` prefix and returns at most one row per requested destination under the native unique index. There is no vote-history scan, refill, winner selection, write or event. Account/question/identity rows and Access evidence are supplied-key bounded; B-tree positioning grows logarithmically with retained history. Original vote `revision`, `counted_revision`, units, time and transaction ID are retained separately through final comparison and the returned DTO.
+- Touches: preparation reads the account once, then reads the standard question, native identity mappings and published requested/canonical-home epochs outside the caller checkout. The identity producer double-collects each supplied source/control home; Subject disclosure repeats a bounded identity collection and prepares and evaluates Access for each original and terminal. The caller phase binds the account home, reads the account once, probes at most 100 exact counted-target keys and batch-probes at most 200 exact original-slot keys. Finish rechecks question, mappings, epochs and disclosure, then re-reads the account, counted rows and original slots in one final account-home snapshot. Every foreign home is released before the caller checkout and final account snapshot.
+- Bound: at most 100 raw requested IDs, 100 distinct requested identities, 100 counting destinations, 200 original slots and 200 identity homes, deduplicated. Each counted-target statement uses the exact `(route, voter_id, question_id, counted_target)` prefix and returns at most one row per destination. The additional original-slot statement uses the full `(route, voter_id, question_id, target_id)` prefix and returns one explicit present/absent observation per key. There is no vote-history scan, refill, winner selection, write or event. Account/question/identity rows and Access evidence are supplied-key bounded; B-tree positioning grows logarithmically with retained history. Revisions, counting identity, units, time and transaction ID survive final comparison and the review DTO; each opaque witness is bounded to 4096 bytes.
 - Growth check: `test/rating/own-votes-page.test.ts` covers registered vote outcomes, zero and clear, duplicate keys, native merge selection and changed observations. Controller acceptance retains physical-prefix plans and independent unrelated/selected identity-history growth at 256/1024/4096 with fixed requested keys, homes, page limits and byte caps; no returned-row count substitutes for those plans.
 
 ### My ratings

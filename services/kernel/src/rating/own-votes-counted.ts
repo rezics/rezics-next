@@ -13,6 +13,11 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { readVisibleRatingQuestion } from './question-directory.ts';
 import { STANDARD_QUESTION_ID, VOTE_SCOPE, VoteInvalidError } from './votes.ts';
 import countedVotes from './own-votes-counted.sql';
+import { readIdentityRatingEpochs } from '../semantic/identity-rating-admission.ts';
+import {
+  ownVoteReviewWitness, readVoteReviewSlots, VoteReviewUnavailableError,
+  type VoteReviewGuard, type VoteReviewEpoch, type VoteReviewSlot,
+} from './own-votes-review.ts';
 
 export const OWN_COUNTED_VOTE_TARGET_LIMIT = 100;
 
@@ -112,6 +117,7 @@ export type OwnCountedVoteReadResult =
       preparationFingerprint: string;
       account: OwnCountedVoteAccountObservation;
       rows: readonly OwnCountedVoteRow[];
+      slots: readonly VoteReviewSlot[];
       rowFingerprint: string;
     }>
   | Readonly<{
@@ -124,6 +130,7 @@ export type OwnCountedVoteObservation =
   | (OwnCountedVoteIdentity &
       Readonly<{
         state: 'counted';
+        review: VoteReviewGuard;
         measurement: StandardRatingMeasurement;
         originalTargetId: string;
         units: number;
@@ -135,6 +142,7 @@ export type OwnCountedVoteObservation =
   | (OwnCountedVoteIdentity &
       Readonly<{
         state: 'clear';
+        review: VoteReviewGuard;
         measurement: StandardRatingMeasurement;
         originalTargetId: string;
         units: null;
@@ -146,6 +154,7 @@ export type OwnCountedVoteObservation =
   | (OwnCountedVoteIdentity &
       Readonly<{
         state: 'absent';
+        review: VoteReviewGuard;
         measurement: StandardRatingMeasurement;
       }>)
   | Readonly<{ requestedTargetId: string; state: 'unavailable' }>;
@@ -324,9 +333,9 @@ function preparationFingerprint(
     .digest('hex');
 }
 
-function readFingerprint(requestHash: string, preparationHash: string, rows: readonly OwnCountedVoteRow[]): string {
+function readFingerprint(requestHash: string, preparationHash: string, rows: readonly OwnCountedVoteRow[], slots: readonly VoteReviewSlot[]): string {
   return createHash('sha256')
-    .update(JSON.stringify([requestHash, preparationHash, rows]))
+    .update(JSON.stringify([requestHash, preparationHash, rows, slots]))
     .digest('hex');
 }
 
@@ -388,6 +397,16 @@ function validPreparation(preparation: OwnCountedVotePreparation): boolean {
 export function createOwnCountedVoteReader(deps: Dependencies) {
   const identityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly IdentityMapping[]>();
   const visibilityWitnesses = new WeakMap<OwnCountedVotePreparation, readonly string[]>();
+  const epochWitnesses = new WeakMap<OwnCountedVotePreparation, readonly VoteReviewEpoch[]>();
+
+  function homes(targets: readonly OwnCountedVotePreparedTarget[]) {
+    return targets.flatMap((target) => 'countingTargetId' in target
+      ? [target.requestedTargetId, target.countingTargetId].map((id) => partitionOf(routeOf(id)!)) : []);
+  }
+
+  function slotIds(targets: readonly OwnCountedVotePreparedTarget[]) {
+    return targets.flatMap((target) => 'countingTargetId' in target ? [target.requestedTargetId, target.countingTargetId] : []);
+  }
 
   async function prepare(request: OwnCountedVoteRequest, deadline: number): Promise<OwnCountedVotePrepareResult> {
     const ids = targetIds(request);
@@ -419,6 +438,7 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       } satisfies OwnCountedVotePreparation;
       identityWitnesses.set(preparation, identities);
       visibilityWitnesses.set(preparation, visibleIds);
+      epochWitnesses.set(preparation, []);
       return { status: 'prepared', preparation };
     }
 
@@ -459,6 +479,13 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
         sourceEpoch: mapping.epoch.toString(),
       };
     });
+    let epochs: VoteReviewEpoch[];
+    try {
+      epochs = await readIdentityRatingEpochs(deps.pool, homes(targets), deadline);
+    } catch (error) {
+      if (!(error instanceof VoteReviewUnavailableError)) throw error;
+      return { status: 'preparing', reason: error.reason === 'identity_pending' ? 'identity-pending' : 'identity-changed', retry: 'same-input', targets: [] };
+    }
     const requestHash = requestFingerprint(request);
     const identityHash = identityFingerprint(last);
     const visibleIds = ids.filter((id) => visible.has(id));
@@ -482,6 +509,7 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
     } satisfies OwnCountedVotePreparation;
     identityWitnesses.set(preparation, last);
     visibilityWitnesses.set(preparation, visibleIds);
+    epochWitnesses.set(preparation, epochs);
     return { status: 'prepared', preparation };
   }
 
@@ -504,13 +532,15 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       'countingTargetId' in target ? [target.countingTargetId] : [],
     );
     const rows = await readRows(client, actor, countingTargetIds);
+    const slots = await readVoteReviewSlots(client, { ownerId: actor.accountId, questionId: STANDARD_QUESTION_ID, targetIds: slotIds(preparation.targets) });
     return {
       status: 'read',
       requestFingerprint: requestHash,
       preparationFingerprint: preparation.preparationFingerprint,
       account,
       rows,
-      rowFingerprint: readFingerprint(requestHash, preparation.preparationFingerprint, rows),
+      slots,
+      rowFingerprint: readFingerprint(requestHash, preparation.preparationFingerprint, rows, slots),
     };
   }
 
@@ -536,7 +566,7 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
     if (!accountObservationsEqual(readResult.account, preparation.account))
       return { status: 'preparing', reason: 'account-changed', retry: 'same-input' };
-    if (readFingerprint(requestHash, preparation.preparationFingerprint, readResult.rows) !== readResult.rowFingerprint)
+    if (readFingerprint(requestHash, preparation.preparationFingerprint, readResult.rows, readResult.slots) !== readResult.rowFingerprint)
       return { status: 'preparing', reason: 'preparation-changed', retry: 'same-input' };
 
     const actor = owner(request.actor);
@@ -575,6 +605,16 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
     if (preparation.targets.some((target) => 'countingTargetId' in target && !visible.has(target.requestedTargetId)))
       return { status: 'preparing', reason: 'identity-changed', retry: 'same-input' };
 
+    let epochs: VoteReviewEpoch[];
+    try {
+      epochs = await readIdentityRatingEpochs(deps.pool, homes(preparation.targets), deadline);
+    } catch (error) {
+      if (!(error instanceof VoteReviewUnavailableError)) throw error;
+      return { status: 'preparing', reason: 'identity-changed', retry: 'same-input' };
+    }
+    if (JSON.stringify(epochs) !== JSON.stringify(epochWitnesses.get(preparation)))
+      return { status: 'preparing', reason: 'identity-changed', retry: 'same-input' };
+
     const current = await withReadTransaction(
       deps.pool,
       async (client) => {
@@ -584,25 +624,40 @@ export function createOwnCountedVoteReader(deps: Dependencies) {
           'countingTargetId' in target ? [target.countingTargetId] : [],
         );
         const rows = await readRows(client, actor, countingTargetIds);
-        return { account, rows };
+        const slots = await readVoteReviewSlots(client, { ownerId: actor.accountId, questionId: STANDARD_QUESTION_ID, targetIds: slotIds(preparation.targets) });
+        return { account, rows, slots };
       },
       deadline,
     );
     if (!accountObservationsEqual(current.account, preparation.account))
       return { status: 'preparing', reason: 'account-changed', retry: 'same-input' };
-    if (JSON.stringify(current.rows) !== JSON.stringify(readResult.rows))
+    if (JSON.stringify(current.rows) !== JSON.stringify(readResult.rows) || JSON.stringify(current.slots) !== JSON.stringify(readResult.slots))
       return { status: 'preparing', reason: 'vote-changed', retry: 'same-input' };
 
     const rowsByCountingTarget = new Map(current.rows.map((row) => [row.countingTargetId, row]));
+    const slotsByTarget = new Map(current.slots.map((slot) => [slot.targetId, slot.vote]));
     const observations: OwnCountedVoteObservation[] = preparation.targets.map((target) => {
       if (target.state === 'unavailable') return target;
+      const row = rowsByCountingTarget.get(target.countingTargetId);
+      const review: VoteReviewGuard = {
+        version: 1,
+        question: { revision: preparation.question!.revision, lifecycleRevision: preparation.question!.lifecycleRevision },
+        subject: { canonicalId: target.countingTargetId, epochs: epochs.filter((epoch) => homes([target]).includes(epoch.partition)) },
+        ownVote: ownVoteReviewWitness({
+          ownerId: actor.accountId, questionId: STANDARD_QUESTION_ID,
+          requestedTargetId: target.requestedTargetId, canonicalId: target.countingTargetId,
+          original: slotsByTarget.get(target.requestedTargetId) ?? null,
+          canonical: slotsByTarget.get(target.countingTargetId) ?? null,
+          effective: row ? { ...row, targetId: row.originalTargetId, countedTarget: row.countingTargetId } : null,
+        }),
+      };
       const base = {
         requestedTargetId: target.requestedTargetId,
         countingTargetId: target.countingTargetId,
         sourceEpoch: target.sourceEpoch,
         measurement: STANDARD_RATING_MEASUREMENT,
+        review,
       };
-      const row = rowsByCountingTarget.get(target.countingTargetId);
       if (!row) return { ...base, state: 'absent' };
       if (row.units === null)
         return {
