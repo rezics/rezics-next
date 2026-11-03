@@ -177,7 +177,7 @@ export function producerHistoryFixture(scenario: ProducerHistoryScenario = 'curr
               subject: producerSimilarId,
               property: url.searchParams.get('property'),
               statement: similarStatement.id,
-              assertion: similarStatement,
+              ...(scenario === 'concealed' ? {} : { assertion: similarStatement }),
               summary: summary(similar),
               related: { [producerStudioId]: { ...summary(studio), type: studio.subject.type, types: [studio.subject.type] } },
             },

@@ -56,9 +56,9 @@ test('producer history binds admitted direction and inverse, keeps similar names
   expect(inverse.ok && inverse.stream?.meaning).toBe('subsidiary');
   expect(inverse.ok && inverse.rows[0]?.summary?.id).toBe(producerSimilarId);
   const concealed = producerHistoryFixture('concealed');
-  const hidden = await concealed.transport.read();
+  const hidden = await concealed.transport.read('inverse:wdt:P749');
   expect(hidden.ok && hidden.rows[0]?.statement).toBeUndefined();
-  expect(hidden.ok && producerHistoryCorrection(hidden.rows[0]!, hidden.stream!)).toBeUndefined();
+  expect(hidden.ok && hidden.stream && producerHistoryCorrection(hidden.rows[0]!, hidden.stream)).toBeUndefined();
   expect(await producerHistoryFixture('denied').transport.read()).toEqual({ ok: false, reason: 'denied' });
   expect(catalogueEntries.producerHistory({ id: producerStudioId, label: 'Lantern Studio', locale: 'en' }).href).toContain(
     '/producer',

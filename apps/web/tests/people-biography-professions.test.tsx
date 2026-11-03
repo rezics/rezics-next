@@ -62,8 +62,13 @@ function statement(
 test('Person biography groups bind admitted multilingual documents, occupations and languages and keep unreleased fields named unsupported', async () => {
   const fixture = peopleProfileFixture('ready', 'en', 'person');
   const closed = peopleBiographyGroups(fixture.release, 'schema:Person', 'en', fixture.person);
-  expect(closed.map((group) => group.kind)).toEqual(['biography', 'occupations', 'languages']);
-  expect(closed.flatMap((group) => group.fields).every((field) => field.status === 'unsupported')).toBe(true);
+  expect(closed.map((group) => group.kind)).toEqual(['biography', 'occupations', 'languages', 'affiliations']);
+  expect(
+    closed
+      .filter((group) => group.kind !== 'affiliations')
+      .flatMap((group) => group.fields)
+      .every((field) => field.status === 'unsupported'),
+  ).toBe(true);
   expect(peopleScalarFields(fixture.release, 'schema:Person', 'en')).toContain('schema:url');
   expect(peopleBiographyHref(peoplePersonId, 'Mira Sato', 'en', 'schema:abstract')).toContain('/authored?property=schema%3Aabstract');
 
