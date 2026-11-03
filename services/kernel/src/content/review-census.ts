@@ -74,8 +74,10 @@ type Installation = {
   cut: ReviewCensusCut | null;
   exhausted: boolean;
   observed_public: string;
+  examined: string;
 };
-const fields = 'generation::text,revision::text,after_route,after_id::text,after_token,cut,exhausted,observed_public::text';
+const fields =
+  'generation::text,revision::text,after_route,after_id::text,after_token,cut,exhausted,observed_public::text,examined::text';
 
 function assertPartition(partition: number): void {
   if (!Number.isInteger(partition) || partition < 0 || partition > 4095)
@@ -151,6 +153,11 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
             return { ...common, state: 'preparing', installed: false, missing: 'population-cut' };
           const installed = !!state?.exhausted;
           if (installed && state) {
+            const examined = Number(state.examined);
+            if (!Number.isSafeInteger(examined) || examined < 0)
+              return { ...common, state: 'preparing', installed: false, missing: 'examined-count-range' };
+            if (examined === 0)
+              return { ...common, state: 'preparing', installed: true, missing: 'empty-population' };
             const total = Number(state.observed_public);
             if (Number.isSafeInteger(total) && total >= 0)
               return {

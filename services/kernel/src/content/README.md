@@ -1256,7 +1256,7 @@ discussion-popularity counts continue to exclude reviews.
 #### Retained census installation
 
 Decision: expose a public total only after complete anonymous eligibility coverage for the current generation;
-every incomplete or stale witness keeps count unavailable.
+every incomplete or stale witness keeps count unavailable, and an empty candidate frontier cannot certify zero.
 
 `createReviewDiscoverySource` additionally returns `NativeReviewDiscoverySource`, with
 `maintainCensus(partition): Promise<ReviewCensusStep>` and
@@ -1278,8 +1278,9 @@ Installation writes follow the existing native candidate projection transaction:
 do not allocate a domain publication position. They release the checkout before native owner hydration. The final
 CAS reobserves core home metadata and native lifecycle progress; it cannot certify missing authority coverage.
 `installed: true` means the candidate keyset was exhausted at its captured cut. A current matching cut and durable
-eligibility contribution total are also required before `coverage` reports `ready`; an empty partition may then
-report a complete zero. Ongoing source repair invalidates the generation without advancing the domain position.
+eligibility contribution total are also required before `coverage` reports `ready`. An empty candidate frontier
+stays preparing; a complete zero requires at least one native candidate to have been checked and excluded. Ongoing
+source repair invalidates the generation without advancing the domain position.
 Three-scale physical acceptance remains a separate verification obligation.
 
 Decision: maintain the retained census hourly in bounded resumable partition turns; keep coverage preparing until native authority closure is complete.

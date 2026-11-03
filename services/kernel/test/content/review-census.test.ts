@@ -256,8 +256,8 @@ test('an empty census and a stale cut remain distinguishable from a complete zer
   const partition = 0xfed;
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 0 });
   const before = await source.censusCoverage(partition);
-  expect(before).toMatchObject({ state: 'ready', installed: true, total: 0 });
-  expect(await source.count(partition)).toMatchObject({ total: 0, coverage: 'complete' });
+  expect(before).toMatchObject({ state: 'preparing', installed: true, missing: 'empty-population' });
+  expect(await source.count(partition)).toMatchObject({ unavailable: true });
   await fixture.reader.query(
     `UPDATE content.review_census_installation SET cut=jsonb_set(cut,'{homes}',
       (SELECT jsonb_agg(home-'projection') FROM jsonb_array_elements(cut->'homes') home)) WHERE route=$1`,
