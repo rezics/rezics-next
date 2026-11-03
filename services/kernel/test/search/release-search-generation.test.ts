@@ -24,8 +24,7 @@ test('calendar readiness belongs to the completed physical incarnation', async (
         }
         return { status: 200, body: { [index]: { mappings: definition.mappings } } };
       }
-      if (path.endsWith('/_settings'))
-        return { status: 200, body: { [index]: { settings: { index: { uuid } } } } };
+      if (path.endsWith('/_settings')) return { status: 200, body: { [index]: { settings: { index: { uuid } } } } };
       throw new Error(`Unexpected Search request: ${path}`);
     },
   } as unknown as OpenSearch;

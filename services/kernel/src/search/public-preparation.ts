@@ -101,8 +101,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
           reconciliation.status === 'progress' || reconciliation.status === 'reconciled' ? 0 : 1000,
         );
       }
-      if (calendarFormat === 1)
-        await markSubjectCalendarReady(options.search, options.prefix, state.generation);
+      if (calendarFormat === 1) await markSubjectCalendarReady(options.search, options.prefix, state.generation);
       const activated = await options.runtime.publication.activate(publication.job, context);
       if (activated.status === 'activated') {
         if (activated.consumer.physicalTarget !== index)

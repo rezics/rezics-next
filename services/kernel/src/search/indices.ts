@@ -325,11 +325,7 @@ export async function markSubjectCalendarReady(
 }
 
 /** Read the UUID of one immutable physical generation, never through its mutable alias. */
-export async function readSubjectIndexUuid(
-  search: OpenSearch,
-  prefix: string,
-  generation: number,
-): Promise<string> {
+export async function readSubjectIndexUuid(search: OpenSearch, prefix: string, generation: number): Promise<string> {
   const index = subjectIndexName(prefix, generation);
   let response: { status: number; body: unknown };
   try {

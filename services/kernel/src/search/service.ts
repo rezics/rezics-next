@@ -141,11 +141,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function containsCalendarRange(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsCalendarRange);
   if (!isRecord(value)) return false;
-  if (
-    isRecord(value.statement) &&
-    isRecord(value.statement.range) &&
-    value.statement.range.type === 'time'
-  )
+  if (isRecord(value.statement) && isRecord(value.statement.range) && value.statement.range.type === 'time')
     return true;
   return Object.values(value).some(containsCalendarRange);
 }
