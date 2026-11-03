@@ -109,10 +109,17 @@ type Current = { entry: Entry; personal: PersonalEntry | null };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const invalid = () => new TypeError('Invalid selected annotation correction');
 
-function object(value: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
+function object(
+  value: unknown,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
   const fields = Object.keys(value);
-  if (required.some((field) => !fields.includes(field)) || fields.some((field) => !required.includes(field) && !optional.includes(field)))
+  if (
+    required.some((field) => !fields.includes(field)) ||
+    fields.some((field) => !required.includes(field) && !optional.includes(field))
+  )
     throw invalid();
   return value as Record<string, unknown>;
 }
@@ -132,7 +139,11 @@ function operation<T>(value: unknown, parse: (value: unknown) => T): Operation<T
 
 function parse(value: unknown): ParsedSelection[] {
   const input = object(value, ['items']);
-  if (!Array.isArray(input.items) || input.items.length < 1 || input.items.length > ENTRY_ANNOTATION_CORRECTION_LIMITS.selection)
+  if (
+    !Array.isArray(input.items) ||
+    input.items.length < 1 ||
+    input.items.length > ENTRY_ANNOTATION_CORRECTION_LIMITS.selection
+  )
     throw invalid();
   const items = input.items.map((value) => {
     const item = object(value, ['subjectId', 'incarnationId', 'currentRevision', 'note', 'priority']);
@@ -150,7 +161,11 @@ function parse(value: unknown): ParsedSelection[] {
   return items;
 }
 
-function requireOwner(actor: Actor, action: 'library_entry:read' | 'library_entry:update', alsoRead = false): AccountActor {
+function requireOwner(
+  actor: Actor,
+  action: 'library_entry:read' | 'library_entry:update',
+  alsoRead = false,
+): AccountActor {
   if (
     actor.kind !== 'account' ||
     !actor.scopes.includes(action) ||
@@ -270,10 +285,14 @@ export function createEntryAnnotationCorrectionCommands(dependencies: Dependenci
     const nowText = now.toISOString();
     const expires = new Date(now.getTime() + ENTRY_ANNOTATION_CORRECTION_LIMITS.reviewMinutes * 60_000).toISOString();
     const purgeAfter = new Date(
-      now.getTime() + (ENTRY_ANNOTATION_CORRECTION_LIMITS.reviewMinutes + ENTRY_ANNOTATION_CORRECTION_LIMITS.resultMinutes) * 60_000,
+      now.getTime() +
+        (ENTRY_ANNOTATION_CORRECTION_LIMITS.reviewMinutes + ENTRY_ANNOTATION_CORRECTION_LIMITS.resultMinutes) * 60_000,
     ).toISOString();
-    const snapshots = await Promise.all(selections.map(async (selected) => ({ selected, current: await current(actor, selected) })));
-    const reviewId = newId(route), epoch = newId(route);
+    const snapshots = await Promise.all(
+      selections.map(async (selected) => ({ selected, current: await current(actor, selected) })),
+    );
+    const reviewId = newId(route),
+      epoch = newId(route);
     await withConnection(pool, async (client) => {
       await client.query('BEGIN');
       try {
@@ -311,7 +330,8 @@ export function createEntryAnnotationCorrectionCommands(dependencies: Dependenci
         );
         for (const [position, { selected, current: snapshot }] of snapshots.entries()) {
           const previewState = snapshot
-            ? snapshot.entry.incarnationId === selected.incarnationId && snapshot.entry.revision === selected.currentRevision
+            ? snapshot.entry.incarnationId === selected.incarnationId &&
+              snapshot.entry.revision === selected.currentRevision
               ? 'ready'
               : 'stale'
             : 'unavailable';
@@ -392,7 +412,11 @@ export function createEntryAnnotationCorrectionCommands(dependencies: Dependenci
   async function readPage(actor: Actor, reviewId: string, page: number): Promise<EntryAnnotationCorrectionPage> {
     const owner = requireOwner(actor, 'library_entry:read');
     const id = routedId(reviewId);
-    if (!Number.isInteger(page) || page < 0 || page >= ENTRY_ANNOTATION_CORRECTION_LIMITS.selection / ENTRY_ANNOTATION_CORRECTION_LIMITS.page)
+    if (
+      !Number.isInteger(page) ||
+      page < 0 ||
+      page >= ENTRY_ANNOTATION_CORRECTION_LIMITS.selection / ENTRY_ANNOTATION_CORRECTION_LIMITS.page
+    )
       throw invalid();
     const review = await readHeader(actor, id);
     const route = requireRoute(owner.accountId);
@@ -474,13 +498,14 @@ export function createEntryAnnotationCorrectionCommands(dependencies: Dependenci
         snapshot.entry.incarnationId === selected.incarnationId &&
         snapshot.entry.revision === selected.entryRevision &&
         snapshot.personal.annotationRevision === selected.annotationRevision;
-      const eligibility = selected.outcome === 'stale'
-        ? 'stale'
-        : selected.outcome === 'unavailable'
-          ? 'unavailable'
-          : selected.previewState === 'stale' || (selected.outcome === null && !guardMatches)
-            ? 'stale'
-            : 'ready';
+      const eligibility =
+        selected.outcome === 'stale'
+          ? 'stale'
+          : selected.outcome === 'unavailable'
+            ? 'unavailable'
+            : selected.previewState === 'stale' || (selected.outcome === null && !guardMatches)
+              ? 'stale'
+              : 'ready';
       outputs.push({
         selected: {
           subjectId: selected.subjectId,
@@ -514,7 +539,12 @@ export function createEntryAnnotationCorrectionCommands(dependencies: Dependenci
     });
   }
 
-  async function recordOutcome(actor: Actor, reviewId: string, position: number, outcome: EntryAnnotationCorrectionItem['outcome']) {
+  async function recordOutcome(
+    actor: Actor,
+    reviewId: string,
+    position: number,
+    outcome: EntryAnnotationCorrectionItem['outcome'],
+  ) {
     const owner = requireOwner(actor, 'library_entry:update', true);
     const route = requireRoute(owner.accountId);
     await withConnection(pool, async (client) => {
@@ -688,7 +718,8 @@ export async function purgeExpiredEntryAnnotationReviews(
         cutoff: nowOf(clock).toISOString(),
         last: null,
       };
-    if (Buffer.byteLength(value) > 2048 || !/^[A-Za-z0-9_-]+$/.test(value)) throw new TypeError('Invalid expiry cursor');
+    if (Buffer.byteLength(value) > 2048 || !/^[A-Za-z0-9_-]+$/.test(value))
+      throw new TypeError('Invalid expiry cursor');
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString()) as Cursor;
     if (
       parsed?.version !== 1 ||
@@ -714,7 +745,8 @@ export async function purgeExpiredEntryAnnotationReviews(
     return parsed;
   };
   const cursor = decode(after);
-  let examined = 0, removed = 0;
+  let examined = 0,
+    removed = 0;
   while (cursor.route < (partition + 1) * 16 && examined < limit && Date.now() < deadline - 100) {
     const requested = limit - examined;
     const rows = await pool.query<{ route: number; accountId: string; reviewId: string; purgeAfter: string }>(

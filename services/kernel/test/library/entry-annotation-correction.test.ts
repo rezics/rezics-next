@@ -20,7 +20,11 @@ async function personal(subjectId: string) {
   return (await json(await f.send('owner', 'GET', `${path(subjectId)}/personal`), 200)).personalEntry;
 }
 
-async function annotate(subjectId: string, note: { op: string; value?: string }, priority: { op: string; value?: number }) {
+async function annotate(
+  subjectId: string,
+  note: { op: string; value?: string },
+  priority: { op: string; value?: number },
+) {
   const current = await personal(subjectId);
   return json(
     await f.send('owner', 'PUT', `${path(subjectId)}/annotations`, {
@@ -76,7 +80,12 @@ test('reviews only the fixed selection, preserves and clears independently, and 
   const preserve = await entry('correction preserve');
   const concurrent = await entry('correction concurrent');
   const unselected = await entry('correction unselected');
-  for (const [item, note] of [[priority, 'old priority'], [preserve, 'keep this'], [concurrent, 'old concurrent'], [unselected, 'untouched']] as const)
+  for (const [item, note] of [
+    [priority, 'old priority'],
+    [preserve, 'keep this'],
+    [concurrent, 'old concurrent'],
+    [unselected, 'untouched'],
+  ] as const)
     await annotate(item.subjectId, { op: 'set', value: note }, { op: 'set', value: 7 });
   const review = await createReview([
     selected(priority, { op: 'clear' }, { op: 'set', value: 3 }),
@@ -91,7 +100,14 @@ test('reviews only the fixed selection, preserves and clears independently, and 
   await annotate(concurrent.subjectId, { op: 'set', value: 'concurrent edit' }, { op: 'unchanged' });
   const ownerRoute = routeOf(f.owner.actor.accountId)!;
   const source = async () =>
-    Number((await f.pool.query('SELECT generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2', [ownerRoute, f.owner.actor.accountId])).rows[0]?.generation ?? 0);
+    Number(
+      (
+        await f.pool.query('SELECT generation FROM library.fact_source_head WHERE route=$1 AND account_id=$2', [
+          ownerRoute,
+          f.owner.actor.accountId,
+        ])
+      ).rows[0]?.generation ?? 0,
+    );
   const before = await source();
   expect((await confirm(review.reviewId, review.epoch, 0)).items[0].outcome).toBe('accepted');
   const accepted = await personal(priority.subjectId);
@@ -112,9 +128,7 @@ test('reviews only the fixed selection, preserves and clears independently, and 
 test('admits a maximum note and fixed sixteen-item first, deep and final pages', async () => {
   const entries = [];
   for (let index = 0; index < 16; index++) entries.push(await entry(`page ${index}`));
-  const review = await createReview(
-    entries.map((item) => selected(item, { op: 'preserve' }, { op: 'preserve' })),
-  );
+  const review = await createReview(entries.map((item) => selected(item, { op: 'preserve' }, { op: 'preserve' })));
   expect(review).toMatchObject({ total: 16, page: 0, pageCount: 4, nextPage: 1 });
   expect((await page(review.reviewId, 0)).items).toHaveLength(4);
   expect((await page(review.reviewId, 2)).nextPage).toBe(3);
@@ -160,7 +174,9 @@ test('does not create absent entries, rejects deleted incarnations, cancels pend
   expect((await personal(recreated.subjectId)).note).toBeNull();
 
   const revised = await entry('revision guarded entry');
-  const revisionReview = await createReview([selected(revised, { op: 'set', value: 'stale entry edit' }, { op: 'preserve' })]);
+  const revisionReview = await createReview([
+    selected(revised, { op: 'set', value: 'stale entry edit' }, { op: 'preserve' }),
+  ]);
   await f.commands.putEntry(
     f.owner.actor,
     revised.subjectId,
@@ -177,15 +193,22 @@ test('does not create absent entries, rejects deleted incarnations, cancels pend
     selected(second, { op: 'set', value: 'never started' }, { op: 'preserve' }),
   ]);
   expect((await confirm(cancelled.reviewId, cancelled.epoch, 0)).items[0].outcome).toBe('accepted');
-  const cancelResponse = await f.send('owner', 'POST', `/v1/libraryEntryAnnotationCorrections/${cancelled.reviewId}/cancel`, {
-    epoch: cancelled.epoch,
-  });
+  const cancelResponse = await f.send(
+    'owner',
+    'POST',
+    `/v1/libraryEntryAnnotationCorrections/${cancelled.reviewId}/cancel`,
+    {
+      epoch: cancelled.epoch,
+    },
+  );
   expect(await json(cancelResponse, 200)).toMatchObject({ state: 'cancelled' });
   expect((await confirm(cancelled.reviewId, cancelled.epoch, 1)).items[1].outcome).toBe('not-started');
   expect((await personal(first.subjectId)).note).toBe('accepted before cancel');
   expect((await personal(second.subjectId)).note).toBeNull();
 
-  const expired = await createReview([selected(second, { op: 'set', value: 'private expired note' }, { op: 'preserve' })]);
+  const expired = await createReview([
+    selected(second, { op: 'set', value: 'private expired note' }, { op: 'preserve' }),
+  ]);
   await f.pool.query(
     `UPDATE library.entry_annotation_review SET created_at=created_at-interval '16 minutes',
        expires_at=expires_at-interval '16 minutes', purge_after=purge_after-interval '16 minutes'
@@ -193,10 +216,15 @@ test('does not create absent entries, rejects deleted incarnations, cancels pend
     [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, expired.reviewId],
   );
   expect((await page(expired.reviewId)).state).toBe('expired');
-  const expiredConfirm = await f.send('owner', 'POST', `/v1/libraryEntryAnnotationCorrections/${expired.reviewId}/confirm`, {
-    epoch: expired.epoch,
-    position: 0,
-  });
+  const expiredConfirm = await f.send(
+    'owner',
+    'POST',
+    `/v1/libraryEntryAnnotationCorrections/${expired.reviewId}/confirm`,
+    {
+      epoch: expired.epoch,
+      position: 0,
+    },
+  );
   expect(expiredConfirm.status).toBe(409);
   expect(await expiredConfirm.text()).not.toContain('private expired note');
   expect((await personal(second.subjectId)).note).toBeNull();

@@ -554,14 +554,20 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       '/v1/libraryEntryAnnotationCorrections',
       {
         body: t.Object({ items: t.Array(correctionSelectionSchema, { minItems: 1, maxItems: 16 }) }, closed),
-        response: { 201: correctionPageResponse, ...failures, 409: problemSchema('library_entry_annotation_correction_limit') },
+        response: {
+          201: correctionPageResponse,
+          ...failures,
+          409: problemSchema('library_entry_annotation_correction_limit'),
+        },
         detail: personalDetail('library_entry_annotation_correction.create', 'library_entry:update'),
       },
       async ({ actor, body, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         account(actor);
         for (const selected of body.items) point(actor, selected.subjectId, 'library_entry:update');
-        const review = await admission.run('normal', job, () => correctionCommand(() => corrections().create(actor, body)));
+        const review = await admission.run('normal', job, () =>
+          correctionCommand(() => corrections().create(actor, body)),
+        );
         set.status = 201;
         return { review } satisfies Static<typeof correctionPageResponse>;
       },
@@ -627,7 +633,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             closed,
           ),
           ...failures,
-          409: problemSchema('library_entry_annotation_correction_epoch', 'library_entry_annotation_correction_expired'),
+          409: problemSchema(
+            'library_entry_annotation_correction_epoch',
+            'library_entry_annotation_correction_expired',
+          ),
         },
         detail: personalDetail('library_entry_annotation_correction.cancel', 'library_entry:update'),
       },

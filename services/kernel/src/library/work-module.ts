@@ -193,7 +193,8 @@ async function registerLabelConsolidationRetention({ pool, client, clock }: Work
 }
 
 export const ENTRY_ANNOTATION_CORRECTION_RETENTION_SWEEP_WORKFLOW = 'library.entryAnnotationCorrectionRetentionSweep';
-export const ENTRY_ANNOTATION_CORRECTION_RETENTION_SCHEDULE = 'library.entryAnnotationCorrectionRetention.every-10-minutes';
+export const ENTRY_ANNOTATION_CORRECTION_RETENTION_SCHEDULE =
+  'library.entryAnnotationCorrectionRetention.every-10-minutes';
 type EntryAnnotationCorrectionSweep = { root: string; sequence: number; partition: number; after: string | null };
 
 async function registerEntryAnnotationCorrectionRetention({ pool, client, clock }: WorkContext) {
@@ -222,15 +223,13 @@ async function registerEntryAnnotationCorrectionRetention({ pool, client, clock 
       after = (await page(partition, after)).next;
       if (after === null) partition++;
     }
-    if (partition < 4096)
-      await continuation({ ...input, sequence: input.sequence + 1, partition, after });
+    if (partition < 4096) await continuation({ ...input, sequence: input.sequence + 1, partition, after });
     return { partition, after };
   };
   DBOS.registerWorkflow(segment, { name: 'library.entryAnnotationCorrectionRetentionSegment' });
-  DBOS.registerWorkflow(
-    async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }),
-    { name: ENTRY_ANNOTATION_CORRECTION_RETENTION_SWEEP_WORKFLOW },
-  );
+  DBOS.registerWorkflow(async () => segment({ root: DBOS.workflowID!, sequence: 0, partition: 0, after: null }), {
+    name: ENTRY_ANNOTATION_CORRECTION_RETENTION_SWEEP_WORKFLOW,
+  });
   await client.applySchedules([
     {
       scheduleName: ENTRY_ANNOTATION_CORRECTION_RETENTION_SCHEDULE,

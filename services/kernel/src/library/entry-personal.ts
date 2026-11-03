@@ -390,14 +390,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
              WHERE h.route=$1 AND h.account_id=$2 AND h.review_id=$3 AND h.epoch=$4
                AND i.position=$5
              FOR SHARE OF h,i`,
-            [
-              route,
-              account.accountId,
-              reviewGuard.reviewId,
-              reviewGuard.epoch,
-              reviewGuard.position,
-              time,
-            ],
+            [route, account.accountId, reviewGuard.reviewId, reviewGuard.epoch, reviewGuard.position, time],
           );
           const row = bound.rows[0];
           if (row && (row.state !== 'open' || row.expired))
