@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import type { Pool, QueryResult } from 'pg';
 import type { FacetDiscoveryRequest } from '../../../src/search/facet-discovery-contract.ts';
-import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../support/growth.ts';
+import { capture, costOf, openGrowthDatabase, type Cost, type GrowthDatabase } from '../../support/growth.ts';
 import {
   createReleasedDiscoveryFixture,
   discoveryKey,
@@ -91,16 +91,26 @@ export async function retainedFacetGrowthFixture(count: number) {
     await fixture.catchUp([book, ...targets]);
     const expected = targets.map(({ id }) => id).sort();
     const owner = fixture;
-    const preparation: { request: FacetDiscoveryRequest; status: number; code: unknown }[] = [];
+    const preparation: { request: FacetDiscoveryRequest; status: number; code: unknown; cost: Cost }[] = [];
     async function ready(body: FacetDiscoveryRequest = request) {
       const deadline = Date.now() + 120_000;
       for (;;) {
-        const result = await owner.request('anonymous', 'POST', '/v1/subjects:facets', body);
-        preparation.push({ request: body, status: result.status, code: result.body.code });
-        if (result.status === 200) return result;
-        assert.equal(result.status, 503, JSON.stringify(result.body));
-        assert(['index_not_ready', 'semantic_not_ready'].includes(String(result.body.code)));
-        assert(Date.now() < deadline, `Native facet preparation unavailable: ${JSON.stringify(result.body)}`);
+        const database = await databases.values().next().value!;
+        const run = await capture(
+          database,
+          () => owner.request('anonymous', 'POST', '/v1/subjects:facets', body),
+          { includeBackends: true },
+        );
+        preparation.push({
+          request: body,
+          status: run.value.status,
+          code: run.value.body.code,
+          cost: costOf(run.capture),
+        });
+        if (run.value.status === 200) return run.value;
+        assert.equal(run.value.status, 503, JSON.stringify(run.value.body));
+        assert(['index_not_ready', 'semantic_not_ready'].includes(String(run.value.body.code)));
+        assert(Date.now() < deadline, `Native facet preparation unavailable: ${JSON.stringify(run.value.body)}`);
       }
     }
     async function measured(body: FacetDiscoveryRequest = request) {

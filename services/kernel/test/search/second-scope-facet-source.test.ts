@@ -3,6 +3,7 @@ import type { PublicFilterCost } from '../../src/semantic/public-filter-source-c
 import type { PublicFilterConsumerContext } from '../../src/search/public-filter-consumer-contract.ts';
 import { subjectPartition } from '../../src/search/source.ts';
 import {
+  bindScopedFacetPorts,
   createScopedFacetSource,
   scopedFacetIdentityKey,
   type ScopedFacetIdentity,
@@ -29,6 +30,32 @@ const admission = { identity, request: Object.freeze({ realm: 'private-request' 
 const context = {} as PublicFilterConsumerContext;
 const alice = '00000000-0000-7000-8000-000000000001';
 const bob = '00000000-0000-7000-8000-000000000002';
+
+test('the default adapter uses only an admission-bound source and fails closed without one', async () => {
+  const ports = {
+    async observe() {
+      return { status: 'observed' as const, identity, cost };
+    },
+    async readCandidates() {
+      return { status: 'complete' as const, identity, subjects: [alice], frontier: 'end', cost };
+    },
+    async readMembership(_request: unknown, subjects: readonly string[]) {
+      return {
+        status: 'matched' as const,
+        identity,
+        subjects: subjects.map((subject) => ({ subject, member: true })),
+        cost,
+      };
+    },
+  };
+  const source = createScopedFacetSource();
+  const bound = { identity, request: bindScopedFacetPorts(ports, admission.request) };
+
+  expect((await source.observe(admission, context)).status).toBe('unavailable');
+  expect((await source.readPage(bound, null, 1, context)).subjects).toEqual([
+    { partition: subjectPartition(alice), subject: alice },
+  ]);
+});
 
 test('scope candidate pages emit only current members under the admitted observation', async () => {
   const calls: string[] = [];

@@ -16,6 +16,9 @@ export function scopedRefinementRequests(
       {
         ...(search.text ? { text: search.text } : {}),
         ...(search.filter ? { filter: search.filter } : {}),
+        ...(state.resourceScope
+          ? { scope: state.resourceScope, ...(search.filter ? { conditions: search.filter } : {}) }
+          : {}),
         languages: search.languages,
       },
       requested,

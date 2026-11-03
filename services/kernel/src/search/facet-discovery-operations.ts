@@ -4,15 +4,18 @@ import type { Pool } from 'pg';
 import type { PublicFilterCost, PublicFilterSource } from '../semantic/public-filter-source-contract.ts';
 import { createFacetPopulationSource } from '../semantic/facet-population.ts';
 import type { PublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
+import type { PrivacyReductionStart } from '../semantic/public-filter-source-contract.ts';
 import { subjectPartition, type SubjectSource } from './source.ts';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import { compileFilter } from './filter.ts';
+import { isDeepStrictEqual } from 'node:util';
 import type {
   PublicFilterConsumerCapture,
   PublicFilterConsumerCaptureInput,
   PublicFilterConsumerContext,
   PublicFilterConsumerRepair,
   PublicFilterConsumerJob,
+  PublicFilterConsumerQuery,
   PublicFilterQueriedObservation,
 } from './public-filter-consumer-contract.ts';
 import type { OpenSearch } from './opensearch.ts';
@@ -103,6 +106,10 @@ export function createFacetNativeOperations(
     binding: PublicFilterSourceBinding;
     subjects: SubjectSource;
     scopedFacets?: ReturnType<typeof createScopedFacetSource>;
+    query: (
+      queried: PublicFilterQueriedObservation,
+      context: PublicFilterConsumerContext,
+    ) => Promise<PublicFilterConsumerQuery>;
     capture: (
       plan: PublicFilterConsumerCaptureInput,
       snapshot: 'pit' | 'prepared',
@@ -145,8 +152,27 @@ export function createFacetNativeOperations(
     return { labels: Object.fromEntries(target.labels.map(({ language, value }) => [language, value])) };
   }
 
-  async function observe(queried: PublicFilterQueriedObservation, context: PublicFilterConsumerContext) {
-    return config.source.readPrivacyReductionHeads({ kind: 'population', queried, start: null, context });
+  type RetainedExecution = Readonly<{ start: PrivacyReductionStart; execution: string }>;
+
+  function cleanForExecution(
+    observed: Awaited<ReturnType<PublicFilterSource['readPrivacyReductionHeads']>>,
+    retained: RetainedExecution,
+  ) {
+    return clean(observed) && observed.start.observation === retained.start.observation;
+  }
+
+  async function observe(
+    queried: PublicFilterQueriedObservation,
+    retained: RetainedExecution,
+    context: PublicFilterConsumerContext,
+  ) {
+    return config.source.readPrivacyReductionHeads({
+      kind: 'population',
+      queried,
+      start: retained.start,
+      execution: retained.execution,
+      context,
+    });
   }
 
   async function observeScope(admission: ScopedFacetAdmission, context: PublicFilterConsumerContext) {
@@ -161,6 +187,8 @@ export function createFacetNativeOperations(
         : current;
   }
 
+  const executions = new Map<string, RetainedExecution>();
+
   return {
     async captureFacet({ plan }, context) {
       const input = captureInput(plan);
@@ -169,40 +197,88 @@ export function createFacetNativeOperations(
         if (prepared.status === 'preparing') await config.repair(prepared.repair, context).catch(() => {});
         return prepared;
       }
+      const meter = empty();
+      add(meter, prepared.cost);
+      if (prepared.queried.snapshot.kind !== 'prepared')
+        return { status: 'preparing' as const, repair: prepared.repair, cost: meter };
       let textObservation: PublicFilterQueriedObservation | undefined;
       if (plan.text) {
         const pit = await config.capture(input, 'pit', context);
         if (pit.status !== 'captured' || pit.queried.snapshot.kind !== 'pit') {
           if (pit.status === 'preparing') await config.repair(pit.repair, context).catch(() => {});
-          return pit.status === 'captured' ? { status: 'preparing' as const, repair: pit.repair, cost: pit.cost } : pit;
+          add(meter, pit.cost);
+          return pit.status === 'captured'
+            ? { status: 'preparing' as const, repair: prepared.repair, cost: meter }
+            : { ...pit, cost: meter };
         }
+        add(meter, pit.cost);
         textObservation = pit.queried;
       }
-      const meter = empty();
-      add(meter, prepared.cost);
+      const observation = prepared.queried.snapshot.observation;
+      let retained = executions.get(observation);
+      if (!retained) {
+        const query = await config.query(prepared.queried, context);
+        add(meter, query.cost);
+        if (query.status !== 'queried') {
+          if (query.status === 'preparing') await config.repair(prepared.repair, context).catch(() => {});
+          return query.status === 'preparing'
+            ? { status: 'preparing' as const, repair: prepared.repair, cost: meter }
+            : { ...query, cost: meter };
+        }
+        if (
+          query.queried.snapshot.kind !== 'prepared' ||
+          !isDeepStrictEqual(query.queried, prepared.queried) ||
+          !query.execution ||
+          !query.start?.observation
+        )
+          return { status: 'preparing' as const, repair: prepared.repair, cost: meter };
+        retained = { start: query.start, execution: query.execution };
+        executions.set(observation, retained);
+      }
+      const start = await observe(prepared.queried, retained, context);
+      add(meter, start.cost);
+      if (start.status !== 'observed' || !cleanForExecution(start, retained)) {
+        executions.delete(observation);
+        return { status: 'preparing' as const, repair: prepared.repair, cost: meter };
+      }
       try {
         for (let step = 0; step < 256 && Date.now() < context.deadline; step++) {
           const charged = empty();
-          const published = await storage.prepareFacetStep(plan, prepared.queried, context, charged, textObservation);
+          const published = await storage.prepareFacetStep(
+            plan,
+            prepared.queried,
+            context,
+            charged,
+            textObservation,
+            retained,
+          );
           add(meter, charged);
           if (published === true) return { ...prepared, cost: meter };
         }
       } catch (error) {
-        if (!(error instanceof Error) || error.message !== 'Facet deadline exceeded') throw error;
+        if (!(error instanceof Error) || error.message !== 'Facet deadline exceeded') {
+          executions.delete(observation);
+          throw error;
+        }
       }
+      executions.delete(observation);
       return { status: 'preparing' as const, repair: prepared.repair, cost: meter };
     },
 
     async pageFacets({ reads }, context) {
+      const pageObservations = new Set(reads.map(({ queried }) => queried.snapshot.observation));
+      try {
       const meter = empty();
       if (reads.length === 0) return { status: 'preparing' as const, cost: meter };
       const seen = new Set<string>();
       for (const read of reads) {
         if (seen.has(read.queried.snapshot.observation)) continue;
         seen.add(read.queried.snapshot.observation);
-        const start = await observe(read.queried, context);
+        const retained = executions.get(read.queried.snapshot.observation);
+        if (!retained) return { status: 'preparing' as const, cost: meter };
+        const start = await observe(read.queried, retained, context);
         add(meter, start.cost);
-        if (start.status === 'unready' || start.status === 'unavailable' || !clean(start))
+        if (start.status === 'unready' || start.status === 'unavailable' || !cleanForExecution(start, retained))
           return { status: 'preparing' as const, cost: meter };
       }
       seen.clear();
@@ -220,23 +296,25 @@ export function createFacetNativeOperations(
       let asOf = '';
       for (const read of reads) {
         const eligible: { value: string; labels: Record<string, string> }[] = [];
-        let after = read.after;
-        for (;;) {
-          const found = await storage.readFacetCandidates({ ...read, after, size: read.size }, context);
-          add(meter, found.cost);
-          if (found.status !== 'candidates') return { status: 'preparing' as const, cost: meter };
-          asOf = found.asOf;
-          if (found.rows.length === 0) break;
-          for (const row of found.rows as StoredRow[]) {
-            const disclosed = await current(row, read.plan.valueKind);
-            meter.accessPoints++;
-            if (disclosed) {
-              eligible.push({ value: row.value, labels: disclosed.labels });
-              if (eligible.length === read.size + 1) break;
-            }
+        const found = await storage.readFacetCandidates(read, context);
+        add(meter, found.cost);
+        if (found.status !== 'candidates' || found.rows.length > read.size + 1)
+          return { status: 'preparing' as const, cost: meter };
+        asOf = found.asOf;
+        for (const row of found.rows as StoredRow[]) {
+          let disclosed: Awaited<ReturnType<typeof current>> | null;
+          try {
+            disclosed = await current(row, read.plan.valueKind);
+          } catch {
+            disclosed = null;
           }
-          if (eligible.length === read.size + 1 || found.rows.length < read.size + 1) break;
-          after = found.rows.at(-1)!.value;
+          meter.accessPoints++;
+          if (!disclosed) {
+            const invalidated = await storage.retireFacetCandidates(read, context);
+            add(meter, invalidated.cost);
+            return { status: 'preparing' as const, cost: meter };
+          }
+          eligible.push({ value: row.value, labels: disclosed.labels });
         }
         if (read.after !== null && eligible.length === 0) return { status: 'preparing' as const, cost: meter };
         const values = eligible.slice(0, read.size);
@@ -246,15 +324,39 @@ export function createFacetNativeOperations(
           after: values.at(-1)?.value ?? null,
           hasMore: eligible.length > read.size,
         });
+        const retained = executions.get(read.queried.snapshot.observation);
+        if (!retained) return { status: 'preparing' as const, cost: meter };
+        const currentSource = await observe(read.queried, retained, context);
+        add(meter, currentSource.cost);
+        const currentScope = read.plan.scope ? await observeScope(read.plan.scope, context) : undefined;
+        if (currentScope) add(meter, currentScope.cost);
+        if (
+          currentSource.status !== 'observed' ||
+          !cleanForExecution(currentSource, retained) ||
+          (currentScope !== undefined && currentScope.status !== 'observed')
+        ) {
+          for (const candidate of reads) {
+            const invalidated = await storage.retireFacetCandidates(candidate, context);
+            add(meter, invalidated.cost);
+          }
+          return { status: 'preparing' as const, cost: meter };
+        }
       }
       seen.clear();
       for (const read of reads) {
         if (seen.has(read.queried.snapshot.observation)) continue;
         seen.add(read.queried.snapshot.observation);
-        const final = await observe(read.queried, context);
+        const retained = executions.get(read.queried.snapshot.observation);
+        if (!retained) return { status: 'preparing' as const, cost: meter };
+        const final = await observe(read.queried, retained, context);
         add(meter, final.cost);
-        if (final.status === 'unready' || final.status === 'unavailable' || !clean(final))
+        if (final.status === 'unready' || final.status === 'unavailable' || !cleanForExecution(final, retained)) {
+          for (const candidate of reads) {
+            const invalidated = await storage.retireFacetCandidates(candidate, context);
+            add(meter, invalidated.cost);
+          }
           return { status: 'preparing' as const, cost: meter };
+        }
       }
       seen.clear();
       for (const read of reads) {
@@ -265,9 +367,18 @@ export function createFacetNativeOperations(
         seen.add(key);
         const final = await observeScope(admission, context);
         add(meter, final.cost);
-        if (final.status !== 'observed') return { status: 'preparing' as const, cost: meter };
+        if (final.status !== 'observed') {
+          for (const candidate of reads) {
+            const invalidated = await storage.retireFacetCandidates(candidate, context);
+            add(meter, invalidated.cost);
+          }
+          return { status: 'preparing' as const, cost: meter };
+        }
       }
       return { status: 'ready' as const, facets, asOf, cost: meter };
+      } finally {
+        for (const observation of pageObservations) executions.delete(observation);
+      }
     },
 
     repairStep: config.repair,

@@ -39,6 +39,7 @@ import { subjectGenerations, subjectIndexName } from './indices.ts';
 import type { OpenSearch } from './opensearch.ts';
 import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
 import { createFacetNativeOperations } from './facet-discovery-operations.ts';
+import { createScopedFacetSource } from './scoped-facet-source.ts';
 
 export type DefaultPublicFilterRuntimeConfig = Readonly<{
   pool: Pool;
@@ -450,6 +451,9 @@ export function createDefaultPublicFilterRuntime(config: DefaultPublicFilterRunt
             source,
             binding,
             subjects: nativeSource,
+            scopedFacets: createScopedFacetSource(),
+            query: async (queried, context) =>
+              (await subjectOperations(physicalTarget, current, context)).query(queried, context),
             capture: async (plan, snapshot, context) => {
               const handle = await subjectOperations(physicalTarget, current, context);
               return handle.capture({ plan: { ...plan, generation }, snapshot }, context);

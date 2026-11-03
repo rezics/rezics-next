@@ -7,6 +7,7 @@ import {
   type FilterRelease,
 } from '@rezics/filter';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
@@ -15,6 +16,7 @@ import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import {
   decodeSearchCursor,
   encodeSearchCursor,
@@ -45,6 +47,8 @@ import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rati
 import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
 import { registerSearchScopeRuntime, createSearchScopeForService } from './service-scope.ts';
+import { readScopedFacetDiscovery } from './scoped-facet-admission.ts';
+import { serviceScopeFacetAdmission } from './scoped-facet-source.ts';
 import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
 import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
@@ -112,6 +116,60 @@ function invalid(pointer: string, code: FieldErrorCode): never {
 
 function unsupported(pointer: string, code: FieldErrorCode = 'unsupported'): never {
   throw new ProblemError('unsupported_query', { errors: [{ pointer, code }] });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Remove the one top-level request scope leaf; the admitted native Scope carries its membership. */
+function scopedCatalogueCondition(value: unknown, scope: FacetDiscoveryScope): unknown {
+  if (value === undefined || value === '') return undefined;
+  let document = value;
+  if (typeof value === 'string') {
+    try {
+      document = JSON.parse(value);
+    } catch {
+      invalid('/conditions', 'invalid_format');
+    }
+  }
+  const leaves: { kind: string; leaf: Record<string, unknown>; operand: unknown }[] = [];
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (!isRecord(node)) return;
+    for (const kind of ['realm', 'collection'])
+      if (Object.hasOwn(node, kind)) leaves.push({ kind, leaf: node, operand: node[kind] });
+    for (const [key, child] of Object.entries(node))
+      if (key !== 'realm' && key !== 'collection') visit(child);
+  };
+  visit(document);
+  if (!leaves.length) return document;
+  const candidate = leaves[0]!;
+  const topLevel =
+    document === candidate.leaf ||
+    (isRecord(document) &&
+      Object.keys(document).length === 1 &&
+      Array.isArray(document.and) &&
+      document.and.includes(candidate.leaf));
+  if (
+    leaves.length !== 1 ||
+    !topLevel ||
+    candidate.kind !== scope.kind ||
+    Object.keys(candidate.leaf).length !== 1 ||
+    !isRecord(candidate.operand) ||
+    Object.keys(candidate.operand).length !== 1 ||
+    !Object.hasOwn(candidate.operand, 'id') ||
+    typeof candidate.operand.id !== 'string' ||
+    candidate.operand.id.toLowerCase() !== scope.id.toLowerCase()
+  )
+    invalid('/conditions', 'invalid_format');
+  if (document === candidate.leaf) return undefined;
+  const remaining = (document as { and: unknown[] }).and.filter((entry) => entry !== candidate.leaf);
+  if (!remaining.length) return undefined;
+  return remaining.length === 1 ? remaining[0] : { and: remaining };
 }
 
 function indexNotReady(): ProblemError {
@@ -1058,9 +1116,68 @@ export function createSearchService({
       principal: 'anonymous' | `account:${string}`,
       request: FacetRequest,
       now = clock().getTime(),
-      context = { deadline: deadlineFor(30_000) },
+      context: { deadline: number; scope?: LeafOptions } = { deadline: deadlineFor(30_000) },
     ): Promise<FacetDiscovery200Response> {
       request = ownSubjectRequest(request);
+      if (request.scope !== undefined) {
+        const provider =
+          (await facetProvider?.()) ?? (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
+        if (!provider) throw indexNotReady();
+        return readScopedFacetDiscovery(cursors, provider, request, async (scopedRequest) => {
+          if (!context.scope) throw indexNotReady();
+          if (scopedRequest.conditions !== undefined && scopedRequest.filter !== undefined &&
+              !isDeepStrictEqual(scopedRequest.conditions, scopedRequest.filter))
+            invalid('/conditions', 'invalid_format');
+          const submitted = scopedRequest.conditions ?? scopedRequest.filter;
+          const effectiveFilter = scopedCatalogueCondition(submitted, scopedRequest.scope);
+          const normalized = validate({
+            ...(scopedRequest.text === undefined ? {} : { text: scopedRequest.text }),
+            filter: effectiveFilter,
+          });
+          const languages = validateHitOptions({ languages: scopedRequest.languages }).languages;
+          const current = await release();
+          if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+          // The native facet population is pinned to schema:Thing by its registered provider meaning.
+          const predicate = normalized.filter ?? { type: { in: ['schema:Thing'] } };
+          const admitted = await admitQuery(normalized.text, predicate, current);
+          if (!admitted) throw indexNotReady();
+
+          // Content owns Realm enumeration. Keep its scoped facet factory closed until that source is installed.
+          if (scopedRequest.scope.kind !== 'collection') throw indexNotReady();
+          const scope = createSearchScopeForService(service, context.scope);
+          const scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
+          const prepared = await sourceRequest(() =>
+            scope.prepare(admitted, {
+              releaseDigest: kindDigest(current),
+              allowance: scopeWork.remaining(),
+            }),
+          );
+          scopeWork.native(scope.work(prepared));
+          return {
+            principal,
+            text: normalized.text,
+            filter: admitted,
+            originalFilter: normalized.filter,
+            release: current,
+            languages,
+            now,
+            context: { deadline: context.deadline },
+            scope: serviceScopeFacetAdmission({
+              resource: scopedRequest.scope,
+              scope,
+              prepared,
+              work: scopeWork,
+              principal,
+              meaning: {
+                text: normalized.text ?? null,
+                filter: admitted,
+                release: kindDigest(current),
+                languages: languages ?? null,
+              },
+            }),
+          };
+        });
+      }
       const { languages: languageChain, ...facetRequest } = request;
       const { languages } = validateHitOptions({ languages: languageChain });
       const facets = validateFacets(facetRequest);

@@ -440,7 +440,14 @@ export function searchRoutes<App>(
           {
             text: t.Optional(t.String()),
             filter: t.Optional(t.Any()),
+            conditions: t.Optional(t.Any()),
             languages: t.Optional(t.Array(t.String(), { minItems: 1, maxItems: 8 })),
+            scope: t.Optional(
+              t.Object(
+                { kind: t.Union([t.Literal('realm'), t.Literal('collection')]), id: t.String({ format: 'uuid' }) },
+                object,
+              ),
+            ),
             facets: t.Array(
               t.Object(
                 {
@@ -481,11 +488,16 @@ export function searchRoutes<App>(
         return admission.run('normal', job, async () => {
           if (!(await withConnection(pool, (client) => check(client)))) throw new ProblemError('forbidden');
           if (!search) throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
+          const scopeAccess =
+            gateAccess?.() ?? (typeof access === 'function' ? access({ actions: actionCatalogue(routed) }) : access);
           return search.facets(
             actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous',
             body,
             clock().getTime(),
-            { deadline: job.deadline },
+            {
+              deadline: job.deadline,
+              ...(scopeAccess ? { scope: { access: scopeAccess, actor, deadline: job.deadline, routeKey } } : {}),
+            },
           );
         });
       },

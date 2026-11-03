@@ -96,6 +96,11 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
   const scope = closed(body.scope, ['kind', 'id'], '/scope');
   if (scope.kind !== 'realm' && scope.kind !== 'collection') invalid('/scope/kind', 'invalid_format');
   if (typeof scope.id !== 'string' || !scope.id || !scope.id.isWellFormed()) invalid('/scope/id', 'invalid_format');
+  try {
+    subjectPartition(scope.id);
+  } catch {
+    invalid('/scope/id', 'invalid_format');
+  }
   if (body.text !== undefined && typeof body.text !== 'string') invalid('/text', 'invalid_type');
   if (
     body.languages !== undefined &&
@@ -108,7 +113,7 @@ export function validateScopedFacetRequest(request: unknown): ScopedFacetRequest
     facets: body.facets as FacetRequest['facets'],
   });
   return {
-    scope: { kind: scope.kind, id: scope.id },
+    scope: { kind: scope.kind, id: scope.id.toLowerCase() },
     ...(body.conditions === undefined ? {} : { conditions: body.conditions }),
     ...(body.text === undefined ? {} : { text: body.text as string }),
     ...(body.filter === undefined ? {} : { filter: body.filter }),

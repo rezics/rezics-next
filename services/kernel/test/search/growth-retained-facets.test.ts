@@ -53,7 +53,7 @@ test('native retained first, opaque deep and terminal pages consume the real can
   expect(all).toEqual(world.expected);
 }, 180_000);
 
-test('a real reduction after START with paused indexing charges the retained rejected prefix before withholding', async () => {
+test('a real reduction after START retires the retained page before another candidate seek', async () => {
   await world.native.indexing('paused');
   const barrier = world.barrier();
   const pending = world.measured();
@@ -73,13 +73,44 @@ test('a real reduction after START with paused indexing charges the retained rej
     expect(measured.value.status).toBe(503);
     expect(['index_not_ready', 'semantic_not_ready', 'deadline_exceeded']).toContain(String(measured.value.body.code));
     expect(measured.value.body).not.toHaveProperty('facets');
-    // A diagnostic lower bound exposes the missing dispatch guard. It is not a permissible page budget.
-    expect(measured.seeks.length).toBeGreaterThan(1);
+    // The structural invariant is one candidate SELECT per sibling page, independent of rejected rows.
+    expect(measured.seeks).toHaveLength(1);
     expect(measured.seeks.every(({ returned }) => returned <= 21)).toBe(true);
-    expect(measured.seeks.flatMap(({ values }) => values).length).toBeGreaterThan(21);
+    expect(measured.seeks.flatMap(({ values }) => values).length).toBeLessThanOrEqual(21);
   } finally {
     barrier.release();
     await pending;
     await world.native.indexing('running');
   }
 }, 180_000);
+
+test('native 1x/4x/16x source cardinality keeps fixed page seeks and records preparation separately', async () => {
+  const scales = [64, 256, 1024];
+  const runs: unknown[] = [];
+  for (const count of scales) {
+    const sample = await retainedFacetGrowthFixture(count);
+    try {
+      await sample.ready();
+      const measured = await sample.measured();
+      expect(measured.value.status).toBe(200);
+      const facet = page(measured.value.body);
+      expect(facet.values.map(({ value }) => value)).toEqual(sample.expected.slice(0, 20));
+      expect(facet.next === null).toBe(count <= 20);
+      expect(measured.seeks).toHaveLength(1);
+      expect(measured.seeks[0]!.returned).toBeLessThanOrEqual(21);
+      runs.push({
+        count,
+        preparation: sample.preparation.map(({ status, code, cost }) => ({ status, code, cost })),
+        readyPage: measured.cost,
+        seeks: measured.seeks,
+      });
+    } finally {
+      await sample.close();
+    }
+  }
+  console.info('retained facet cardinality growth', {
+    scales: runs,
+    structural: { readyPageSeeksPerSibling: 1, candidateLimit: 21 },
+    unmeasured: ['isolated Auth pools', 'native engine profiles', 'Source history H(id) bound'],
+  });
+}, 600_000);

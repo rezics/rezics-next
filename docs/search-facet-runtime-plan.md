@@ -1495,3 +1495,26 @@ The artifact acceptance command is the prescribed formatter check on this file a
 Current minimal mode runs no acceptance, worker-check, native/database/browser/remote check or probe.
 Documentation-only work requires no workspace compiler.
 Formatting and committing this artifact supply no product outcome/native proof.
+## Installed scoped composition and bounded paging
+
+The production caller is `POST /v1/subjects:facets` → `SearchService.facets` → `readScopedFacetDiscovery` →
+`readFacetDiscovery` → the default runtime's `facetProvider` → `createFacetNativeOperations`. The provider installs
+`createScopedFacetSource()` and the real retained consumer `query`; scoped admission binds an opaque service-owned
+handle to `createSearchScopeForService`. Collection preparation uses `Scope.prepare`, `Scope.sourcePrefix` and
+`Scope.evaluate` with the verified reader, principal, exact admitted catalogue predicate and request deadline.
+Conditions may include one matching top-level Realm or Collection leaf; the resource population is carried by the
+scope admission and that leaf is removed before catalogue admission. Realm remains unavailable until Content installs
+its canonical enumerator.
+
+Each ready sibling page issues one indexed candidate SELECT with `LIMIT size + 1` (`K = 1`). A contributor or target
+that is no longer current retires that retained value generation and returns preparation immediately, before another
+sibling candidate seek. Scope membership, authorization and source currentness are checked before population input,
+at publication and after page candidates. Both START and FINAL bind the same actual `query` execution and nonnull
+persisted start, so the Source can resolve its full admitted-key closure and original/terminal own rows. A rejection or
+uncertain final observation cannot publish values or exhaustion.
+
+An empty catalogue condition uses `{type:{in:["schema:Thing"]}}`, matching the registered facet provider's pinned
+native population. This keeps a scope-only request evaluable by the installed `Scope.prepare(FilterDocument)` contract
+and keeps the facet capture predicate identical to the scope predicate. The finite page work is `K = 1` per sibling;
+preparation remains resumable and separately charged. Source history reads `H(id)` still have no structural bound,
+and the 1x/4x/16x native growth profile remains unmeasured until its deferred native acceptance can run.
