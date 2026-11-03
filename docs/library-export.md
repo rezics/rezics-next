@@ -131,9 +131,9 @@ V1/V2 retain their historical redaction and byte meaning. SQL projection and fin
 65,536-byte record bounds before delivery, including escaping and UTF-8; oversize returns `limit`, never truncation.
 
 The received occurrence producer seam is `journal.assessment:{meaningRevision:1,units:number|null}` with integer
-units 0..20. V3 serializes the producer-owned nullable `journal_assessment_units` column through a JSON row lookup,
-so deployment before that producer's column exists yields the documented null initial state without adding a writer.
-The assessment owner must deliver its CAS/write semantics; this export adds no assessment adoption or archive writer.
+units 0..20. V3 serializes the installed producer-owned `journal_assessment_meaning_revision` and nullable
+`journal_assessment_units` columns. The assessment owner retains its CAS/write semantics; this export adds no
+assessment adoption or archive writer.
 V1/V2 absence never establishes an assessment. Their serialized journals stay unchanged.
 
 The same owner source generation covers VNDB parent and indexed evidence rows, plus every AniList header/source/
