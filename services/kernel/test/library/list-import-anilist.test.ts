@@ -36,9 +36,9 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
       actions: ['subject:batch_write'], valid: '(,)', key: entryKey(),
     });
   const mediaId = Math.floor(Math.random() * 1_000_000_000) + 1;
-  const made = await f.send(importer.bearer, 'POST', '/v1/subjects:batchWrite', { commands: [{ op: 'create', key: entryKey(),
-    source: { source: 'anilist', external_id: String(mediaId), record_revision: '1', digest: 'a'.repeat(64), converter_revision: 'fixture@1', field_group: 'facts' },
-    subject: { type: 'ex:Child', labels: { en: 'Admitted subject' } } }] });
+  const made = await f.send(importer.bearer, 'POST', '/v1/subjects:batchWrite', { commands: ['anilist', 'myanimelist'].map(source => ({ op: 'create', key: entryKey(),
+    source: { source, external_id: String(mediaId), record_revision: '1', digest: 'a'.repeat(64), converter_revision: 'fixture@1', field_group: 'facts' },
+    subject: { type: 'ex:Child', labels: { en: 'Admitted subject' } } })) });
   expect(made.status).toBe(200);
   const result = await made.json();
   expect(result.results[0].status).toBe(201);
@@ -56,6 +56,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(body.rows[1].match.state).toBe('unmatched');
   expect((await f.send(importer.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).status).toBe(404);
   expect((await f.send('other', 'GET', path)).status).toBe(404);
+  expect((await f.send('other', 'POST', path + ':review', { ordinal: 0, fields: ['status'] })).status).toBe(404);
   expect((await f.send('anonymous', 'GET', path)).status).toBeGreaterThanOrEqual(401);
   async function review(ordinal: number, input: Record<string, unknown>) {
     const response = await f.send(importer.bearer, 'POST', path + ':review', { ordinal, fields: ['status', 'score'], ...input });
@@ -87,6 +88,23 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   const unsupported = await f.send(importer.bearer, 'POST', path2 + ':review', { ordinal: 1, subjectId, fields: ['score'] });
   const unsupportedApply = await f.send(importer.bearer, 'POST', path2 + ':apply', { confirmations: [{ ordinal: 1, reviewId: (await unsupported.json()).review.id }] });
   expect((await unsupportedApply.json()).outcomes[0].status).toBe('unsupported');
+  const conflicts = await f.send(importer.bearer, 'POST', base + ':preview', { upload: JSON.stringify([
+    { mediaId, media: { idMal: mediaId }, status: 'PLANNING' }, { status: 'PLANNING' }, { status: 'PLANNING' }]) });
+  const path3 = base + '/' + (await conflicts.json()).id;
+  const ambiguous = await (await f.send(importer.bearer, 'GET', path3)).json();
+  expect(ambiguous.rows[0].match.state).toBe('ambiguous');
+  expect(ambiguous.rows[0].match.candidates).toHaveLength(2);
+  expect((await f.send(importer.bearer, 'POST', path3 + ':review', { ordinal: 0, fields: ['status'] })).status).toBe(409);
+  const guarded = await f.send(importer.bearer, 'POST', path3 + ':review', { ordinal: 1, subjectId, fields: ['status'], replace: true });
+  const guardedId = (await guarded.json()).review.id;
+  const before = (await (await f.send(importer.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).json()).libraryEntry;
+  expect((await f.send(importer.bearer, 'PUT', `/v1/libraryEntries/${subjectId}`, { state: 'planned', revision: before.revision, incarnationId: before.incarnationId })).status).toBe(200);
+  const stale = await f.send(importer.bearer, 'POST', path3 + ':apply', { confirmations: [{ ordinal: 1, reviewId: guardedId }] });
+  expect((await stale.json()).outcomes[0].status).toBe('stale');
+  const pending = await f.send(importer.bearer, 'POST', path3 + ':review', { ordinal: 2, subjectId, fields: ['status'] });
+  expect((await f.send(importer.bearer, 'POST', path3 + ':cancel', {})).status).toBe(200);
+  const cancelled = await f.send(importer.bearer, 'POST', path3 + ':apply', { confirmations: [{ ordinal: 2, reviewId: (await pending.json()).review.id }] });
+  expect(await cancelled.json()).toEqual({ outcomes: [], complete: false });
   expect((await f.send(importer.bearer, 'POST', base + ':preview', { upload: '{' })).status).toBe(400);
   expect((await f.send(importer.bearer, 'POST', base + ':preview', { upload: ' '.repeat(1048577) })).status).toBe(400);
   await f.revokeIdentity(importer.actor.accountId);

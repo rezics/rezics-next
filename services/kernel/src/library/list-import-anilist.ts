@@ -59,7 +59,12 @@ const role: Record<string, string> = {
   PAUSED: 'paused',
 };
 function owner(actor: Actor): AccountActor {
-  if (actor.kind !== 'account' || !actor.scopes.includes('library_entry:update')) throw new GrantDeniedError();
+  if (
+    actor.kind !== 'account' ||
+    !actor.scopes.includes('library_entry:update') ||
+    !actor.scopes.includes('library_entry:read')
+  )
+    throw new GrantDeniedError();
   return actor;
 }
 
@@ -350,8 +355,14 @@ export function createAniListImport(deps: Dependencies) {
         reviewed.id !== confirmation.reviewId ||
         reviewed.clientId !== account.clientId ||
         reviewed.requestedBy !== (account.requestedBy ?? null)
-      )
-        throw new LibraryConflictError();
+      ) {
+        outcomes.push({
+          ordinal: confirmation.ordinal,
+          status: 'stale',
+          retained: stored.source.fields.map((f) => f.field),
+        });
+        continue;
+      }
       if (stored.outcome) {
         outcomes.push(stored.outcome);
         continue;
@@ -432,6 +443,11 @@ export function createAniListImport(deps: Dependencies) {
       actor,
       { action: 'library_entry:update', kind: 'library.anilist.cancel', requestKey: key, input: { id, remove } },
       async (tx) => {
+        const exists = await tx.query(
+          'SELECT 1 FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=-1 FOR UPDATE',
+          [route, account.accountId, id],
+        );
+        if (!exists.rowCount) throw new LibraryNotFoundError();
         if (remove)
           await tx.query('DELETE FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3', [
             route,

@@ -6,7 +6,7 @@ semantics; Web owns presentation. Preview stores private evidence but changes no
 
 The supported dialect is `v1`, derived from retained primary AniList docs at commit
 `03281c0a4bbf0c7f2097e0c935cddaed1096aa65`: `object/medialist.md`, `medialistcollection.md`,
-`medialistgroup.md`, `fuzzydate.md`, and `enum/scoreformat.md`, `medialiststatus.md` under
+`medialistgroup.md`, `fuzzydate.md`, `media.md` (idMal/type), and `enum/scoreformat.md`, `medialiststatus.md` under
 `.reference/api-first-platform-coverage/anilist-docs/docs/reference`. These describe GraphQL types, not one
 universal official downloadable export. The parser accepts a MediaList array, a collection `{lists:[{entries:[]}]}`,
 `{MediaListCollection:collection}`, or `{data:{MediaListCollection:collection}}`. Deprecated statusLists/customLists
@@ -47,7 +47,7 @@ deadline (20 seconds outside HTTP). Cancellation does not undo committed native 
 finish after cancellation. `complete:false` leaves remaining confirmations resumable. Evidence remains until explicit
 remove or native account erasure; the account-leading store is erased in 100-key pages with the Library owned graph.
 Receipts/events contain locators and outcomes only, never uploads, raw notes or review evidence. These stores have
-no public Search projection. Shared history minimization retains its existing native owner responsibilities.
+no public Search projection. Read and update Library scopes are required. Shared history minimization retains its existing native owner responsibilities.
 
 Web uses these actual mounted methods (examples below are constructed, not execution evidence):
 
