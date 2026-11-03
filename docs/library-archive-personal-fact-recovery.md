@@ -73,17 +73,16 @@ The [merge owner caller derivation](library-archive-merge.md#bounds-and-verifica
 shared archive and nested native work.
 
 For fixed addressed selections `R <= 20`, journal fields `F <= 3`, reflection bytes `B <= 4096` and
-escaped frame `J <= 16384`, whole-caller work is `Cupload + Cpages + R × (Creview + Cintent + Cnative + Cresult)
-
-- Ccleanup`, repeating only the reached terms on retries. Upload remains `O(encoded bytes + N)`under existing caps;
-  preview/results seek at most`P+1 <= 101`indexed retained rows. Review performs exact retained-row, canonical
-  Subject/profile, owner/session and journal reads per selection; no owner-history search is involved. The native
-  current-profile/access reads and preparation remain charged per target, including their independent authority gates.
-  Apply preflights`R`retained keys under the upload lock, repeats each revision check at begin, serializes one original
-  patch and bounded guard into existing durable operands, then records one small result per reached item. Text appears
-  once in the original PATCH operands, keeping maximum escaped frames inside the existing 16,384-byte JSONB bound.
-  Review retains at most one bounded current reflection for comparison. JSON parsing, equality, hashing and full caller
-  serialization cost`O(R × (F + J))`, including simultaneous source, review and operand copies.
+escaped frame `J <= 16384`, whole-caller work includes upload, pages, `R × (Creview + Cintent + Cnative + Cresult)`
+and cleanup, repeating only the reached terms on retries. Upload remains `O(encoded bytes + N)` under existing caps;
+preview/results seek at most `P+1 <= 101` indexed retained rows. Review performs exact retained-row, canonical
+Subject/profile, owner/session and journal reads per selection; no owner-history search is involved. The native
+current-profile/access reads and preparation remain charged per target, including their independent authority gates.
+Apply preflights`R`retained keys under the upload lock, repeats each revision check at begin, serializes one original
+patch and bounded guard into existing durable operands, then records one small result per reached item. Text appears
+once in the original PATCH operands, keeping maximum escaped frames inside the existing 16,384-byte JSONB bound.
+Review retains at most one bounded current reflection for comparison. JSON parsing, equality, hashing and full caller
+serialization cost`O(R × (F + J))`, including simultaneous source, review and operand copies.
 
 Each native command charges current owner/scopes/currentness and terminal fencing, exact session/journal locking,
 profile checks, upload lifetime/cancellation lock, one native receipt lookup, at most one journal CAS, ordinary command
@@ -106,6 +105,6 @@ typechecks are worker checks; frozen acceptance and composed native growth measu
 After landing, Commerce receives the exact installed review/apply methods and field outcomes. Web323 remains the
 single coordinated archive consumer; no second restoration interface is introduced.
 
-The route/schema producer is implemented in this source. Generated client snapshot emission remains unavailable
-until the shared compiler/check host can run; the existing snapshot must not be presented as the reflection handoff.
+The route/schema producer is implemented in this source. Generated client snapshot emission awaits successful
+workspace compilation; the existing snapshot must not be presented as the reflection handoff.
 The remaining generation and focused verification are recorded in the reflection client continuation.
