@@ -136,10 +136,12 @@ type MetaRow = Readonly<{
   nativeOrder: string | null;
   lastOrder?: string;
   legacy: boolean;
+  subjectEpoch: string | null;
 }>;
 type HistoryQueryRow = Readonly<{
   hasRow: boolean;
   cursorRetained: boolean;
+  subjectEpoch: string | null;
   digest: string | null;
   sourceAlias: string | null;
   sourceRecordId: string | null;
@@ -288,10 +290,24 @@ function historyItems(rows: readonly HistoryQueryRow[]): { items: MetaRow[]; cur
         payloadVersion: row.payloadVersion,
         nativeOrder: row.nativeOrder,
         legacy: row.legacy,
+        subjectEpoch: row.subjectEpoch,
       },
     ];
   });
   return { items, cursorRetained: first.cursorRetained };
+}
+
+function subjectEpochOf(rows: readonly { subjectEpoch: string | null }[]): number | null {
+  const value = rows[0]?.subjectEpoch;
+  if (value === undefined || value === null) return null;
+  const epoch = Number(value);
+  if (!Number.isSafeInteger(epoch) || epoch < 0) throw new ProblemError('partition_unavailable');
+  return epoch;
+}
+
+function mergeSubjectEpoch(current: number | null, next: number | null): number | null {
+  if (current !== null && next !== null && current !== next) throw new ProblemError('conflict');
+  return current ?? next;
 }
 
 function tupleFor(routeKey: Uint8Array, source: SourceProvider, sourceRecordId: string, sourceAlias: string) {
@@ -457,19 +473,35 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
   ) {
     const currentRows = await query<MetaRow>(headQuery, { route, subject_id: input.subjectId, source }, input.deadline);
     const current = currentRows[0] ?? null;
+    let subjectEpoch = subjectEpochOf(currentRows);
     if (input.digest !== undefined) {
       const selectedRows = await query<MetaRow>(
         exactQuery,
         { route, subject_id: input.subjectId, source, digest: input.digest },
         input.deadline,
       );
+      subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(selectedRows));
       let selected = selectedRows[0] ?? null;
       const virtualLegacy = selected === null && current?.legacy && current.digest === null ? current : null;
       if (selected === null && virtualLegacy === null) throw new ProblemError('not_found');
-      return { current, selected, legacySelection: virtualLegacy, historyItems: [] as MetaRow[], lookahead: null };
+      return {
+        current,
+        selected,
+        legacySelection: virtualLegacy,
+        historyItems: [] as MetaRow[],
+        lookahead: null,
+        subjectEpoch,
+      };
     }
     if (input.cursor === undefined && !input.history)
-      return { current, selected: null, legacySelection: null, historyItems: [] as MetaRow[], lookahead: null };
+      return {
+        current,
+        selected: null,
+        legacySelection: null,
+        historyItems: [] as MetaRow[],
+        lookahead: null,
+        subjectEpoch,
+      };
 
     let native: MetaRow[] = [];
     let legacy: MetaRow[] = [];
@@ -486,6 +518,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
         },
         input.deadline,
       );
+      subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(nativeRows));
       const nativePage = historyItems(nativeRows);
       if (!nativePage.cursorRetained) throw new ProblemError('conflict');
       native = nativePage.items;
@@ -502,6 +535,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
           },
           input.deadline,
         );
+        subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(legacyRows));
         const legacyPage = historyItems(legacyRows);
         if (!legacyPage.cursorRetained) throw new ProblemError('conflict');
         legacy = legacyPage.items;
@@ -519,6 +553,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
         },
         input.deadline,
       );
+      subjectEpoch = mergeSubjectEpoch(subjectEpoch, subjectEpochOf(legacyRows));
       const legacyPage = historyItems(legacyRows);
       if (!legacyPage.cursorRetained) throw new ProblemError('conflict');
       legacy = legacyPage.items;
@@ -532,6 +567,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       legacySelection: null,
       historyItems: selected ? [selected] : [],
       lookahead,
+      subjectEpoch,
     };
   }
 
@@ -549,6 +585,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       input.cursor !== undefined || input.history ? historyCursorBinding(input, route, source) : null;
     const cursor = input.cursor === undefined ? null : readCursor(input.cursor, dependencies, historyBinding!);
     const initial = await metadataFor(input, source, route, cursor?.boundary ?? null);
+    if (cursor && (initial.subjectEpoch === null || cursor.epoch !== initial.subjectEpoch)) return invalidCursor();
     const currentMeta = initial.current;
     // Current and exact observations are required resources. History positions are
     // consumed independently of disclosure, including an unreturned lookahead.
@@ -570,22 +607,11 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     const before = new Map<string, FenceSnapshot>();
     for (const tuple of tupleList)
       before.set(tupleKey(tuple), await readFenceSnapshot(dependencies, tuple, input.deadline));
-    const expectedHome = partitionOf(route);
-    const firstSnapshot = tupleList.length > 0 ? (before.get(tupleKey(tupleList[0]!)) ?? null) : null;
-    if (!firstSnapshot && cursor) throw new ProblemError('conflict');
-    if (firstSnapshot) {
-      if (firstSnapshot.home !== expectedHome) throw new ProblemError('partition_unavailable');
-      if (
-        [...before.values()].some(
-          (snapshot) => snapshot.home !== firstSnapshot.home || snapshot.epoch !== firstSnapshot.epoch,
-        )
-      )
-        throw new ProblemError('conflict');
-      if (cursor && cursor.epoch !== firstSnapshot.epoch) return invalidCursor();
-    }
     for (const row of required) {
       const tuple = metadataTuple(dependencies.routeKey, source, row);
-      if (before.get(tupleKey(tuple))?.fence.takenDown) throw new ProblemError('not_found');
+      const snapshot = before.get(tupleKey(tuple));
+      if (!snapshot) throw new ProblemError('partition_unavailable');
+      if (snapshot.fence.takenDown) throw new ProblemError('not_found');
     }
 
     // A concealed raw candidate still advances history, but never enters payload
@@ -648,7 +674,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     const historyItem = disclosedHistory ? itemOf(disclosedHistory) : null;
 
     const currentDigest = currentItem?.digest ?? null;
-    const baseEpoch = firstSnapshot?.epoch;
+    const baseEpoch = initial.subjectEpoch ?? undefined;
     const nextCursor =
       historyMeta && initial.lookahead && historyMeta.digest !== null && historyBinding && baseEpoch !== undefined
         ? encodeHistoryCursor(dependencies, historyBinding, baseEpoch, {
@@ -707,7 +733,8 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
       ...finalMetadata.historyItems,
       ...(finalMetadata.lookahead ? [finalMetadata.lookahead] : []),
     ];
-    if (!sameRows(initialRows, finalRows)) throw new ProblemError('conflict');
+    if (initial.subjectEpoch !== finalMetadata.subjectEpoch || !sameRows(initialRows, finalRows))
+      throw new ProblemError('conflict');
 
     const after = new Map<string, FenceSnapshot>();
     for (const tuple of tupleList)

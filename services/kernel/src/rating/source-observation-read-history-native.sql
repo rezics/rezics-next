@@ -1,7 +1,9 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :subject_id::uuid AS subject_id, :source::text AS source,
          :cursor_order::bigint AS cursor_order, :cursor_digest::text AS cursor_digest,
-         :ceiling_order::bigint AS ceiling_order
+         :ceiling_order::bigint AS ceiling_order, p.epoch::text AS "subjectEpoch"
+  FROM core.partition AS p
+  WHERE p.partition_no = (:route::integer >> 4)
 ), boundary AS (
   SELECT (input.cursor_order IS NULL AND input.cursor_digest IS NULL) OR EXISTS (
     SELECT 1 FROM rating.source_statistic_observation AS retained
@@ -26,5 +28,5 @@ WITH input AS NOT MATERIALIZED (
 )
 SELECT page.digest, page."sourceAlias", page."sourceRecordId", page."asOf", page."payloadVersion",
        page."nativeOrder", page.legacy, (page.digest IS NOT NULL) AS "hasRow",
-       boundary."cursorRetained"
-FROM boundary LEFT JOIN page ON true;
+       boundary."cursorRetained", input."subjectEpoch"
+FROM boundary LEFT JOIN page ON true CROSS JOIN input;

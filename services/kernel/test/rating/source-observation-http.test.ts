@@ -5,7 +5,9 @@ import payloadQuery from '../../src/rating/source-observation-read-payload.sql';
 import headQuery from '../../src/rating/source-observation-read-head.sql';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../../src/tokens/cursor.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
+import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 import { createSourceStatisticIsolationFixture } from './source-statistic-isolation-fixture.ts';
 
 type IsolationActor = Awaited<ReturnType<typeof createSourceStatisticIsolationFixture>>['actors']['importer'];
@@ -174,6 +176,44 @@ test('history continuation keeps its original native ceiling when a new head arr
   const continued = await page(id, cursor);
   expect(continued.head.digest).toBe(added.observation.digest);
   expect(continued.history!.items.map((item) => item.digest)).toEqual([digests[1]]);
+});
+
+test('history fences each provider identity in its own home and keeps the cursor on the Subject home', async () => {
+  const sources: Array<{ alias: string; record: string; home: number }> = [];
+  const homes = new Set<number>();
+  for (let n = 1; sources.length < 3; n++) {
+    const alias = `history-${n}`;
+    const record = String(n);
+    const home = partitionOf(tupleRoute(testRouteKey(), alias, record));
+    if (homes.has(home)) continue;
+    homes.add(home);
+    sources.push({ alias, record, home });
+  }
+  expect(homes.size).toBe(3);
+
+  const id = await fixture.createSubject();
+  let expectedObservation: string | null = null;
+  for (const [index, source] of sources.entries()) {
+    const stored = await json(
+      await write(id, {
+        ...value(source.record),
+        sourceAlias: source.alias,
+        mean: 8 + index / 10,
+        expectedObservation,
+      }),
+    );
+    expectedObservation = stored.observation.digest;
+  }
+
+  const first = await page(id);
+  expect(first.history!.items[0]!.sourceAlias).toBe(sources[2]!.alias);
+  const second = await page(id, first.history!.nextCursor!);
+  expect(second.head.digest).toBe(expectedObservation);
+  expect(second.history!.items[0]!.sourceAlias).toBe(sources[1]!.alias);
+  expect(second.history!.nextCursor).toBeString();
+  const last = await page(id, second.history!.nextCursor!);
+  expect(last.history!.items[0]!.sourceAlias).toBe(sources[0]!.alias);
+  expect(last.history!.nextCursor).toBeNull();
 });
 
 test('history traverses immutable native rows into legacy rows and exact legacy digests', async () => {
