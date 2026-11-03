@@ -117,6 +117,11 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     cost.recordRender(page.length);
   }
 
+  function heldUnknown(): boolean {
+    const current = notice;
+    return current !== null && current.kind === 'unknown';
+  }
+
   function snapshot(): BangumiJourneySnapshot {
     retain();
     return {
@@ -332,7 +337,7 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
       if (token !== generation || !live() || stopApply) break;
       const batch = applyQueue[0]!;
       const done = await applyBatch(batch);
-      if (notice?.kind === 'unknown') return snapshot();
+      if (heldUnknown()) return snapshot();
       applyQueue.shift();
       if (!done && remaining.length) break;
     }
@@ -354,13 +359,13 @@ export function createBangumiJourney(input: { port: BangumiImportPort; visit: Ba
     }
     if (command.kind === 'apply') {
       const done = await applyBatch(command.body.rows, true);
-      if (notice && 'kind' in notice && notice.kind === 'unknown') return snapshot();
+      if (heldUnknown()) return snapshot();
       applyQueue.shift();
       const token = generation;
       while (applyQueue.length && token === generation && live() && !stopApply) {
         const batch = applyQueue[0]!;
         const nextDone = await applyBatch(batch);
-        if (notice && 'kind' in notice && notice.kind === 'unknown') return snapshot();
+        if (heldUnknown()) return snapshot();
         applyQueue.shift();
         if (!nextDone && remaining.length) break;
       }
