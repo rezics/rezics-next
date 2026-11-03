@@ -188,7 +188,43 @@ export async function fetchGuideDirectory(
   return response.data;
 }
 
-/** Read one exact active Type descriptor; never fetch or enumerate its Release. */
+function missingQualifierIds(descriptor: GuideTypeDescriptor): string[] {
+  const missing = new Set<string>();
+  for (const id of descriptor.definition.properties) {
+    const property = descriptor.properties[id];
+    if (!property) continue;
+    for (const qualifier of property.qualifiers) {
+      if (!Object.hasOwn(descriptor.properties, qualifier)) missing.add(qualifier);
+    }
+  }
+  return [...missing];
+}
+
+/** Complete omitted qualifier definitions from this Type's digest; never the active pointer. */
+async function completeGuideQualifiers(
+  client: KernelClient,
+  descriptor: GuideTypeDescriptor,
+  headers: Record<string, string>,
+): Promise<GuideTypeDescriptor> {
+  const missing = missingQualifierIds(descriptor);
+  if (missing.length === 0) return descriptor;
+  let release: GuideRelease;
+  try {
+    release = await fetchGuideRelease(client, descriptor.releaseDigest, headers);
+  } catch (error) {
+    if (error instanceof DefinitionReadError) throw new DefinitionReadError('unavailable');
+    throw error;
+  }
+  const properties = { ...descriptor.properties };
+  for (const id of missing) {
+    const definition = release.properties[id];
+    if (!definition) throw new DefinitionReadError('unavailable');
+    properties[id] = definition;
+  }
+  return { ...descriptor, properties };
+}
+
+/** Read one exact active Type descriptor; missing qualifiers come from that Type's digest. */
 export async function fetchGuideType(
   client: KernelClient,
   typeId: string,
@@ -200,7 +236,7 @@ export async function fetchGuideType(
   const response = await route.get({ query: { locale }, headers });
   requireDirectorySuccess(response.status, true);
   if (!typeDescriptor(response.data) || response.data.typeId !== typeId) throw new DefinitionReadError('invalid');
-  return response.data;
+  return completeGuideQualifiers(client, response.data, headers);
 }
 
 function failure(error: unknown, exact = false): GuideFailure {

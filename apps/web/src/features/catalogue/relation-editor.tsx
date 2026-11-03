@@ -1166,6 +1166,7 @@ function RelationEditorLive({
                         address={{
                           type: current.public.subject.type,
                           property: field?.id,
+                          ...(candidate?.release ? { release: candidate.release } : {}),
                           returnTo: `${subjectHref({ id, label: pickText(current.public.subject.labels, locale).text }, locale).href}/relation-edit`,
                         }}
                       />

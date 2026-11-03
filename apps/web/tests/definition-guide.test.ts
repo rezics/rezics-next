@@ -27,13 +27,19 @@ test('Understand released Types and fields before contributing a valid fact thro
   if (!guide.ok) throw new Error('Expected released Type descriptor');
   expect(guide.descriptor.definition.properties).toContain(address.property);
   expect(guide.descriptor.properties[address.property]!.datatype).toBe('time');
+  const author = guide.descriptor.properties['schema:author'];
+  expect(author).toBeDefined();
+  for (const id of author!.qualifiers) expect(guide.descriptor.properties[id]).toBeDefined();
   const matches = await guideFixture.transport.directory('en', 'book');
   expect(matches.ok && matches.page.types.some((type) => type.typeId === address.type)).toBe(true);
-  expect(guideFixture.calls.map((call) => call.path)).toEqual([
-    `/v1/definitionTypes/${address.type}`,
-    '/v1/definitionTypes',
-  ]);
-  expect(guideFixture.calls.some((call) => call.path.startsWith('/v1/definitions/releases/'))).toBe(false);
+  expect(guideFixture.calls[0]!.path).toBe(`/v1/definitionTypes/${address.type}`);
+  expect(guideFixture.calls.some((call) => call.path === '/v1/definitionTypes')).toBe(true);
+  expect(guideFixture.calls.some((call) => call.path === '/v1/definitions/active')).toBe(false);
+  expect(
+    guideFixture.calls
+      .filter((call) => call.path.startsWith('/v1/definitions/releases/'))
+      .every((call) => call.path === `/v1/definitions/releases/${guide.descriptor.releaseDigest}`),
+  ).toBe(true);
   const statement = statementInput(initial.source);
   statement.value = {
     type: 'value',

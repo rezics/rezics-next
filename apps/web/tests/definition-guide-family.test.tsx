@@ -534,7 +534,7 @@ test('loading, failure eligibility, empty and missing meaning stay distinct and 
   );
 });
 
-test('active exact descriptor reads retry only on explicit eligible actions and never fetch a Release', async () => {
+test('active exact descriptor reads retry only on explicit eligible actions and fill missing qualifiers from that Type digest', async () => {
   for (const scenario of ['unavailable', 'denied'] as const) {
     await mounted(async ({ host, render, act, DefinitionGuide, definitionGuideFixture, m, pointerClick }) => {
       const fixture = definitionGuideFixture(scenario);
@@ -549,26 +549,24 @@ test('active exact descriptor reads retry only on explicit eligible actions and 
       retry.focus();
       await act(async () => pointerClick(retry));
       await render(component);
+      const typeReads = fixture.calls.filter((call) => call.path === '/v1/definitionTypes/schema:Book');
+      const releaseReads = fixture.calls.filter((call) => call.path.startsWith('/v1/definitions/releases/'));
+      expect(typeReads).toHaveLength(2);
       if (scenario === 'unavailable') {
         expect(host.querySelector('[role="alert"]')).toBeNull();
         expect(host.querySelector('h2')).not.toBeNull();
         expect(document.activeElement).not.toBe(host.querySelector('h2'));
-        expect(fixture.calls.map((call) => call.path)).toEqual([
-          '/v1/definitionTypes/schema:Book',
-          '/v1/definitionTypes/schema:Book',
-        ]);
+        expect(releaseReads).toHaveLength(1);
+        expect(releaseReads[0]!.path).toMatch(/^\/v1\/definitions\/releases\/sha256:[a-f0-9]{64}$/);
         expect([...host.querySelectorAll('button')].some((button) => button.textContent === m.guide_retry())).toBe(
           false,
         );
       } else {
         expect(host.querySelector('[role="alert"]')!.textContent).toBe(m.guide_denied());
         expect(host.querySelector('input')).not.toBeNull();
-        expect(fixture.calls.map((call) => call.path)).toEqual([
-          '/v1/definitionTypes/schema:Book',
-          '/v1/definitionTypes/schema:Book',
-        ]);
+        expect(releaseReads).toHaveLength(0);
       }
-      expect(fixture.calls.every((call) => !call.path.startsWith('/v1/definitions/releases/'))).toBe(true);
+      expect(fixture.calls.some((call) => call.path === '/v1/definitions/active')).toBe(false);
       expect(fixture.calls.every((call) => call.method === 'GET')).toBe(true);
     });
   }

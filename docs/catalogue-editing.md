@@ -657,3 +657,6 @@ Decision: the active guide opens on the first bounded page and provides separate
 exact-Type-ID inputs; next-page navigation follows the current prefix cursor. Active browsing uses the released
 Type directory and exact selected-Type descriptors. An explicit release digest continues to mean its immutable
 historical release.
+Decision: missing qualifier definitions on an exact Type descriptor are completed from that descriptor's
+release digest through the existing immutable release reader; admitted fields stay the descriptor's list, and
+a missing pin stays unread rather than becoming the active bundle.
