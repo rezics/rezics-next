@@ -620,9 +620,9 @@ methods on the existing VNDB flow, indexed finite consent/items, native creation
 cascade cleanup. Focused source and erasure cases accompany the implementation. Web303 integration and executed
 native64/512/4096 whole-caller growth measurements remain controller work; derived bounds alone do not close them.
 
-Archive Entry/label confirmation uses generated upload/preview/review/apply methods and explicit per-item
+Archive Entry/label confirmation declares generator-visible upload/preview/review/apply methods and explicit per-item
 `reviewRevision` from the [merge owner](../library-archive-merge.md). Mixed stale batches are refused before native
 effects; accepted keys, canonical operands and receipts survive retries. Focused native coverage is
-`services/kernel/test/library/library-archive-merge.test.ts`; the typed transport journey is
-`packages/client/tests/library-archive-merge.test.ts`. The canonical Web archive consumer8bb owns file/recovery UI
-integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
+`services/kernel/test/library/library-archive-merge.test.ts`. Regenerating the retained client declarations and
+installing their typed transport journey remain required before Web file admission. The canonical Web archive
+consumer8bb owns file/recovery UI integration. Frozen acceptance and composed native cost measurements remain deferred to integration.
