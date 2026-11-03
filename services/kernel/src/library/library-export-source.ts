@@ -78,10 +78,16 @@ export type JournalExportRecordV3 = Omit<JournalExportRecordV2, 'journal'> & {
   };
 };
 export type JournalExportRecord = JournalExportRecordV2 | JournalExportRecordV3;
-export type ExportRecord = ExistingExportRecord | AnnotationExportRecord | ProvenanceExportRecord | JournalExportRecord;
-export type ProviderExportRecord = Record<string, unknown> & {
-  section: 'vndbUploads' | 'vndbEvidence' | 'anilistUploads' | 'anilistEvidence';
-};
+export type ProviderExportRecord =
+  | { section: 'vndbUploads'; upload_id: string; state: 'active' | 'cancelled'; expires_at: string }
+  | {
+      section: 'anilistUploads';
+      upload_id: string;
+      cancelled: boolean | null;
+      score_format: string | null;
+      row_count: number | null;
+    }
+  | { section: 'vndbEvidence' | 'anilistEvidence'; upload_id: string; ordinal: number; evidence: unknown };
 export type ExportRecord =
   | ExistingExportRecord
   | AnnotationExportRecord
@@ -253,7 +259,9 @@ export async function readExportSourcePage(
 ): Promise<ExportSourcePage> {
   const seek = {
     ...input,
-    sectionTotals: input.sectionTotals?.map(([rows, bytes]) => [rows, bytes] as [number, number]),
+    ...(input.sectionTotals
+      ? { sectionTotals: input.sectionTotals.map(([rows, bytes]) => [rows, bytes] as [number, number]) }
+      : {}),
   };
   const sections = sectionsForVersion(version);
   const section = sections[seek.section] as LibraryExportSectionV3 | undefined;

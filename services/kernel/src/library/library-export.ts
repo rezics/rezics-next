@@ -19,6 +19,9 @@ import {
   libraryExportManifest as manifest,
   LIBRARY_EXPORT_LIMITS,
   sectionsForVersion,
+  type LibraryExportFinalManifest,
+  type LibraryExportFinalManifestV2,
+  type LibraryExportFinalManifestV3,
   type LibraryExportVersion,
 } from './library-export-format.ts';
 
@@ -155,6 +158,21 @@ function status(deps: LibraryExportDependencies, accountId: string, capture: Cap
         ? cursor(deps, accountId, capture, initialExportSeek(capture.format_version))
         : null,
   };
+}
+
+function finalManifest(capture: Capture, seek: ExportSeek): LibraryExportFinalManifest {
+  const metadata = manifest(capture);
+  const totals = { fullExport: false as const, rows: seek.rows, recordBytes: seek.bytes };
+  if (metadata.version === 1) return { ...metadata, ...totals };
+  const sectionTotals = Object.fromEntries(
+    metadata.sections.map((section, index) => {
+      const [rows, recordBytes] = seek.sectionTotals![index]!;
+      return [section, { rows, recordBytes }];
+    }),
+  );
+  return metadata.version === 2
+    ? { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV2['sectionTotals'] }
+    : { ...metadata, ...totals, sectionTotals: sectionTotals as LibraryExportFinalManifestV3['sectionTotals'] };
 }
 
 /** No private artifact is retained: signed keysets replay only against the original unchanged source. */
@@ -383,24 +401,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           state: page.done ? ('ready' as const) : ('collecting' as const),
           records: page.records,
           next: page.done ? null : cursor(deps, accountId, capture, page.seek),
-          manifest: page.done
-            ? {
-                ...manifest(capture),
-                fullExport: false as const,
-                rows: page.seek.rows,
-                recordBytes: page.seek.bytes,
-                ...(capture.format_version >= 2
-                  ? {
-                      sectionTotals: Object.fromEntries(
-                        sectionsForVersion(capture.format_version).map((section, index) => {
-                          const [rows, recordBytes] = page.seek.sectionTotals?.[index] ?? [0, 0];
-                          return [section, { rows, recordBytes }];
-                        }),
-                      ),
-                    }
-                  : {}),
-              }
-            : null,
+          manifest: page.done ? finalManifest(capture, page.seek) : null,
         };
       });
     },
