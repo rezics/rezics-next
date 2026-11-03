@@ -149,9 +149,7 @@ export function sameHomeRealmMediaPopulation(fixture: PopulationFixture, name: s
             security_revision: 0,
           },
         ],
-        'core.receipt': [
-          receiptRow(partition, route, ordinal, requestId, { mediaId }, fixture.manager.accountId),
-        ],
+        'core.receipt': [receiptRow(partition, route, ordinal, requestId, { mediaId }, fixture.manager.accountId)],
       };
     },
   };
@@ -194,7 +192,9 @@ export async function growthRealmMediaReservationFixture() {
   const manager = native.alice;
   const wrongPrincipal = native.bob;
   const bytes = Uint8Array.from(
-    await sharp({ create: { width: 32, height: 24, channels: 3, background: '#354a62' } }).png().toBuffer(),
+    await sharp({ create: { width: 32, height: 24, channels: 3, background: '#354a62' } })
+      .png()
+      .toBuffer(),
   );
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   await native.grant(manager.accountId, selectedRealmId, ['realm:manage']);

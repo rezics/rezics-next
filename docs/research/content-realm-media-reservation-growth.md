@@ -19,10 +19,10 @@ media-reserved outbox event. No selected reservation, receipt, grant, event, or 
 
 ## Independent growth axes
 
-| Axis | Seeded outside observation at 256, 1024, and 4096 | Held fixed |
-| --- | --- | --- |
-| Same-home Realm, media, receipt population | Unrelated same-partition Spaces, Realms and their current revisions, reserved Realm media, and reserve receipts | Selected Realm, manager, request payload, and existing selected rows |
-| Retained Realm, grant, command history | Unrelated same-partition Spaces, Realms and revisions, expired `realm:manage` grants, and retained reserve receipts | Selected Realm, manager, request payload, and existing selected rows |
+| Axis                                       | Seeded outside observation at 256, 1024, and 4096                                                                   | Held fixed                                                           |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Same-home Realm, media, receipt population | Unrelated same-partition Spaces, Realms and their current revisions, reserved Realm media, and reserve receipts     | Selected Realm, manager, request payload, and existing selected rows |
+| Retained Realm, grant, command history     | Unrelated same-partition Spaces, Realms and revisions, expired `realm:manage` grants, and retained reserve receipts | Selected Realm, manager, request payload, and existing selected rows |
 
 Fresh admission, receipt replay, and refusals have separate growth captures on each axis. The refusal capture includes
 the original manager replaying after `realm:manage` is revoked and a different current principal with read but no

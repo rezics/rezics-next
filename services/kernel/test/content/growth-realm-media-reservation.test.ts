@@ -81,10 +81,7 @@ function assertGrownRelations(report: GrowthReport, names: readonly string[]) {
   }
 }
 
-function assertReservationResponse(
-  result: Awaited<ReturnType<typeof fixture.reserve>>,
-  key: string,
-) {
+function assertReservationResponse(result: Awaited<ReturnType<typeof fixture.reserve>>, key: string) {
   expect(result.response.status).toBe(201);
   const mediaId = result.value.media?.id;
   expect(mediaId).toBeString();
@@ -106,7 +103,11 @@ function assertReservationResponse(
   expect(result.response.headers.get('cache-control')).toBe('private, no-store');
 }
 
-async function assertCommittedReservation(key: string, result: Awaited<ReturnType<typeof fixture.reserve>>, purpose: RealmMediaPurpose) {
+async function assertCommittedReservation(
+  key: string,
+  result: Awaited<ReturnType<typeof fixture.reserve>>,
+  purpose: RealmMediaPurpose,
+) {
   assertReservationResponse(result, key);
   const mediaId = result.value.media.id as string;
   const route = routeOf(mediaId);
@@ -203,7 +204,12 @@ function reportRows() {
       relations: Object.fromEntries(
         indexedRelations.map((name) => {
           const relation = cost.relations[name];
-          return [name, relation ? { rows: relation.rows, blocks: relation.blocks, sequentialScans: relation.sequentialScans } : null];
+          return [
+            name,
+            relation
+              ? { rows: relation.rows, blocks: relation.blocks, sequentialScans: relation.sequentialScans }
+              : null,
+          ];
         }),
       ),
     })),
@@ -222,26 +228,37 @@ test('Realm asset reservation admission stays bounded across unrelated Realm and
   });
   assertGrownRelations(admission, ['community.realm', 'community.realm_revision', 'content.media', 'core.receipt']);
 
-  const selected = await assertCommittedReservation(iconKey, await fixture.reserve(iconKey, 'realm-icon'), 'realm-icon');
+  const selected = await assertCommittedReservation(
+    iconKey,
+    await fixture.reserve(iconKey, 'realm-icon'),
+    'realm-icon',
+  );
   const bannerKey = crypto.randomUUID();
   await assertCommittedReservation(bannerKey, await fixture.reserve(bannerKey, 'realm-banner'), 'realm-banner');
 
   await fixture.revoke(fixture.selectedRealmId, fixture.manager.accountId, ['realm:manage']);
   expect((await fixture.native.readRealm(fixture.selectedRealmId, fixture.manager.bearer)).response.status).toBe(200);
-  expect((await fixture.native.readRealm(fixture.selectedRealmId, fixture.wrongPrincipal.bearer)).response.status).toBe(200);
+  expect((await fixture.native.readRealm(fixture.selectedRealmId, fixture.wrongPrincipal.bearer)).response.status).toBe(
+    200,
+  );
   const deniedSameHome = await growAndMeasure(
     'same-home Realm/media/receipt',
     'refused replay and wrong principal',
     sameHome(),
     async () => {
       denied(await fixture.reserve(iconKey, 'realm-icon'), [fixture.sha256, selected.value.media.id]);
-      denied(
-        await fixture.reserve(crypto.randomUUID(), 'realm-banner', fixture.wrongPrincipal.bearer),
-        [fixture.sha256, selected.value.media.id],
-      );
+      denied(await fixture.reserve(crypto.randomUUID(), 'realm-banner', fixture.wrongPrincipal.bearer), [
+        fixture.sha256,
+        selected.value.media.id,
+      ]);
     },
   );
-  assertGrownRelations(deniedSameHome, ['community.realm', 'community.realm_revision', 'content.media', 'core.receipt']);
+  assertGrownRelations(deniedSameHome, [
+    'community.realm',
+    'community.realm_revision',
+    'content.media',
+    'core.receipt',
+  ]);
 
   await fixture.grant(fixture.manager.accountId, fixture.selectedRealmId, ['realm:manage']);
   const replaySameHome = await growAndMeasure(
@@ -254,14 +271,29 @@ test('Realm asset reservation admission stays bounded across unrelated Realm and
       expect(replay.value).toEqual(selected.value);
     },
   );
-  assertGrownRelations(replaySameHome, ['community.realm', 'community.realm_revision', 'content.media', 'core.receipt']);
+  assertGrownRelations(replaySameHome, [
+    'community.realm',
+    'community.realm_revision',
+    'content.media',
+    'core.receipt',
+  ]);
   await assertCommittedReservation(iconKey, await fixture.reserve(iconKey, 'realm-icon'), 'realm-icon');
 
-  const historyAdmission = await growAndMeasure('retained Realm/grant/command history', 'fresh admission', history(), async () => {
-    const key = crypto.randomUUID();
-    assertReservationResponse(await fixture.reserve(key, 'realm-icon'), key);
-  });
-  assertGrownRelations(historyAdmission, ['community.realm', 'community.realm_revision', 'access.resource_grant', 'core.receipt']);
+  const historyAdmission = await growAndMeasure(
+    'retained Realm/grant/command history',
+    'fresh admission',
+    history(),
+    async () => {
+      const key = crypto.randomUUID();
+      assertReservationResponse(await fixture.reserve(key, 'realm-icon'), key);
+    },
+  );
+  assertGrownRelations(historyAdmission, [
+    'community.realm',
+    'community.realm_revision',
+    'access.resource_grant',
+    'core.receipt',
+  ]);
 
   await fixture.revoke(fixture.selectedRealmId, fixture.manager.accountId, ['realm:manage']);
   expect((await fixture.native.readRealm(fixture.selectedRealmId, fixture.manager.bearer)).response.status).toBe(200);
@@ -271,13 +303,18 @@ test('Realm asset reservation admission stays bounded across unrelated Realm and
     history(),
     async () => {
       denied(await fixture.reserve(iconKey, 'realm-icon'), [fixture.sha256, selected.value.media.id]);
-      denied(
-        await fixture.reserve(crypto.randomUUID(), 'realm-banner', fixture.wrongPrincipal.bearer),
-        [fixture.sha256, selected.value.media.id],
-      );
+      denied(await fixture.reserve(crypto.randomUUID(), 'realm-banner', fixture.wrongPrincipal.bearer), [
+        fixture.sha256,
+        selected.value.media.id,
+      ]);
     },
   );
-  assertGrownRelations(deniedHistory, ['community.realm', 'community.realm_revision', 'access.resource_grant', 'core.receipt']);
+  assertGrownRelations(deniedHistory, [
+    'community.realm',
+    'community.realm_revision',
+    'access.resource_grant',
+    'core.receipt',
+  ]);
 
   await fixture.grant(fixture.manager.accountId, fixture.selectedRealmId, ['realm:manage']);
   const replayHistory = await growAndMeasure(
@@ -290,7 +327,12 @@ test('Realm asset reservation admission stays bounded across unrelated Realm and
       expect(replay.value).toEqual(selected.value);
     },
   );
-  assertGrownRelations(replayHistory, ['community.realm', 'community.realm_revision', 'access.resource_grant', 'core.receipt']);
+  assertGrownRelations(replayHistory, [
+    'community.realm',
+    'community.realm_revision',
+    'access.resource_grant',
+    'core.receipt',
+  ]);
   await assertCommittedReservation(iconKey, await fixture.reserve(iconKey, 'realm-icon'), 'realm-icon');
 
   process.stdout.write(`REALM_MEDIA_RESERVATION_GROWTH ${JSON.stringify(reportRows())}\n`);
