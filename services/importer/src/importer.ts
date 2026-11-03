@@ -349,7 +349,14 @@ export class Importer {
         record_revision: staged.row.recordRevision,
         record: staged.projection.normalizedRecord,
       },
-      { ...context, source: registration.source },
+      {
+        source: registration.source,
+        ...(context.subjectId === undefined ? {} : { subjectId: context.subjectId }),
+        ...(context.mediaIds === undefined ? {} : { mediaIds: context.mediaIds }),
+        ...(context.resolvedReferences === undefined ? {} : { resolvedReferences: context.resolvedReferences }),
+        ...(context.sourceClassification === undefined ? {} : { sourceClassification: context.sourceClassification }),
+        ...(context.sourceVocabulary === undefined ? {} : { sourceVocabulary: context.sourceVocabulary }),
+      },
     );
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
       throw new Error('Persisted source conversion differs from its registered projection');

@@ -22,7 +22,6 @@ import {
   crossMediaEntityKind,
   bangumiRecordUrl,
   vndbRecordUrl,
-  type CrossMediaEntityConversion,
 } from '@rezics/conversion/cross-media-entities';
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
@@ -45,12 +44,16 @@ export type SourceAssets = {
   readonly sourceVocabularyGaps?: readonly SourceVocabularyGap[];
 };
 
-type NativeConversion =
-  | BangumiConversion
-  | VndbConversion
-  | WikidataConversion
-  | OpenLibraryConversion
-  | CrossMediaEntityConversion;
+type NativeConversion = BangumiConversion | VndbConversion | WikidataConversion | OpenLibraryConversion;
+
+type VocabularySource = {
+  readonly external_id: string;
+  readonly digest: string;
+  readonly record_revision: string | null;
+  readonly converter_revision: string;
+  readonly proposals: NativeConversion['proposals'];
+  readonly sourceMetadata?: { recordUrl?: string };
+};
 
 // This importer consumes the pinned VNDB dump declared in packages/definitions/sources/vndb.yaml.
 const VNDB_DUMP_AS_OF = '2026-10-25';
@@ -196,8 +199,8 @@ function addAliases(
           sourceVocabularyGaps: vocabulary.gaps,
         }),
     normalized: result.normalizedRecord,
-    coverAssets,
-    mediaImportIntents,
+    coverAssets: [...coverAssets],
+    mediaImportIntents: [...mediaImportIntents],
     ...(sourceStatistic === undefined ? {} : { sourceStatistic }),
     ...(sourceStatisticClear === undefined ? {} : { sourceStatisticClear }),
     ...(context.sourceClassification === undefined
@@ -207,7 +210,7 @@ function addAliases(
 }
 
 function sourceVocabularyResult(
-  result: NativeConversion,
+  result: VocabularySource,
   sourceAlias: string,
   sourceKind: 'bangumi' | 'vndb',
   request: NonNullable<ConversionContext['sourceVocabulary']>,
@@ -268,7 +271,23 @@ export function createSourceRegistration(
         const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record);
         if (kind) {
           const entity = convertCrossMediaEntity(input, context, { converterRevision, sourceKind });
-          return addAliases(entity, source, sourceKind, context);
+          const base: ImportConversion<SourceAssets> = {
+            ...entity,
+            normalized: entity.normalizedRecord,
+            coverAssets: [],
+            mediaImportIntents: [],
+          };
+          if (!context.sourceVocabulary) return base;
+          const vocabulary = sourceVocabularyResult(entity, source, sourceKind, context.sourceVocabulary);
+          return {
+            ...base,
+            proposals: [...entity.proposals, ...vocabulary.proposals],
+            diagnostics: [
+              ...entity.diagnostics,
+              ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
+            ],
+            sourceVocabularyGaps: vocabulary.gaps,
+          };
         }
       }
       const result = native.convert(input, context, { converterRevision });

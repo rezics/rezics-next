@@ -134,21 +134,23 @@ test('operator plans authored episodes without using disc as identity and import
     expect(first.status).toBe('imported');
     expect(first.converterRevision).toBe(converter_revision);
     const proposed = commands.filter((command) => command.op === 'propose');
-    expect(
-      proposed.some((command) => command.statement.property.id === 'schema:episodeNumber' && command.statement.value.content === '1.5'),
-    ).toBe(true);
+    const content = (command: (typeof proposed)[number]) =>
+      command.statement.value.type === 'value' ? command.statement.value.content : undefined;
+    expect(proposed.some((command) => command.statement.property.id === 'schema:episodeNumber' && content(command) === '1.5')).toBe(
+      true,
+    );
     expect(
       proposed.some(
         (command) =>
           command.statement.property.id === 'schema:duration' &&
-          JSON.stringify(command.statement.value.content) ===
+          JSON.stringify(content(command)) ===
             JSON.stringify({ amount: '+1440', unit: 'http://www.wikidata.org/entity/Q11574' }),
       ),
     ).toBe(true);
     expect(proposed.some((command) => command.source.field_group === 'summary' && command.rights?.license === 'CC-BY-SA-3.0')).toBe(
       true,
     );
-    expect(proposed.some((command) => command.statement.property.id === 'schema:keywords' && command.statement.value.content === specialId)).toBe(
+    expect(proposed.some((command) => command.statement.property.id === 'schema:keywords' && content(command) === specialId)).toBe(
       true,
     );
     expect(proposed.some((command) => command.statement.property.id === 'schema:isPartOf')).toBe(true);

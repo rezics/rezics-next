@@ -45,13 +45,10 @@ export function episodeTypeConceptCode(uri: string): string | undefined {
   return /^[0-6]$/u.test(code) ? code : undefined;
 }
 
-function adoptedUrl(read: { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } }): string | undefined {
-  const content = read.subject?.statements?.['schema:url']?.[0]?.value?.content;
-  return typeof content === 'string' ? content : undefined;
-}
-
-function adoptedScheme(read: { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } }): string | undefined {
-  const content = read.subject?.statements?.['skos:inScheme']?.[0]?.value?.content;
+function adoptedContent(read: unknown, property: string): string | undefined {
+  const statements = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } }).subject
+    ?.statements?.[property];
+  const content = statements?.[0]?.value?.content;
   return typeof content === 'string' ? content : undefined;
 }
 
@@ -69,7 +66,7 @@ export async function readEpisodeTypeBindings(
   }
   const scheme = schemeRead as { subject?: { id?: string; type?: string } };
   if (scheme.subject?.id !== known.schemeId || scheme.subject.type !== 'skos:ConceptScheme') return empty;
-  if (adoptedUrl(schemeRead) !== episodeTypeSchemeUri) return empty;
+  if (adoptedContent(schemeRead, 'schema:url') !== episodeTypeSchemeUri) return empty;
   const concepts: SourceVocabularyBindings['concepts'][number][] = [];
   for (const item of known.concepts) {
     let conceptRead;
@@ -80,8 +77,8 @@ export async function readEpisodeTypeBindings(
     }
     const concept = conceptRead as { subject?: { id?: string; type?: string } };
     if (concept.subject?.id !== item.id || concept.subject.type !== 'skos:Concept') continue;
-    if (adoptedUrl(conceptRead) !== episodeTypeConceptUri(item.code)) continue;
-    if (adoptedScheme(conceptRead) !== known.schemeId) continue;
+    if (adoptedContent(conceptRead, 'schema:url') !== episodeTypeConceptUri(item.code)) continue;
+    if (adoptedContent(conceptRead, 'skos:inScheme') !== known.schemeId) continue;
     concepts.push({
       taxonomy: episodeTypeTaxonomy,
       code: item.code,
