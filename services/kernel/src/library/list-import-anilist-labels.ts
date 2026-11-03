@@ -82,7 +82,7 @@ export function createAniListLabelAdoption(deps: Dependencies) {
   }
   async function reviewLabels(actor: Actor, id: string, ordinal: number, input: AniListLabelReviewInput, key: string) {
     const account = owner(actor);
-    if (!Number.isInteger(ordinal) || ordinal < 0 || ordinal >= 200 || input.selections.length < 1 || input.selections.length > ANILIST_LABEL_LIMITS.selected)
+    if (input.selections.some(v => typeof v.key !== 'string' || v.key.length > 4096) || !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= 200 || input.selections.length < 1 || input.selections.length > ANILIST_LABEL_LIMITS.selected)
       throw new AniListInputError();
     const row = await deps.load(actor, id, ordinal), matching = await deps.match(actor, row.source);
     const selected = input.subjectId ?? row.review?.observation?.subjectId ?? (matching.state === 'matched' ? matching.candidates[0] : undefined);
@@ -128,6 +128,7 @@ export function createAniListLabelAdoption(deps: Dependencies) {
     });
     const current = await deps.load(actor, id, ordinal);
     if (current.labelReview?.id !== saved.reviewId) throw new LibraryConflictError();
+    if (!(await deps.observe(actor, current.labelReview.subjectId))) throw new LibraryNotFoundError();
     await deps.snapshot(actor, async () => undefined);
     return { ordinal, review: current.labelReview };
   }
@@ -169,6 +170,7 @@ export function createAniListLabelAdoption(deps: Dependencies) {
         const item = review.items[index]!, work = row.labelWork?.[index];
         if (work?.outcome) { result.items.push(work.outcome); continue; }
         let label: Label | undefined = 'label' in item.target ? item.target.label : row.labelWork?.[item.target.primary]?.label;
+        let accepted: AniListLabelItemOutcome | undefined;
         try {
           // Started effects reach their original native receipt, even after a lost acknowledgement.
           // Any subsequent fresh effect must pass the current source, Subject and label guards again.
@@ -194,10 +196,13 @@ export function createAniListLabelAdoption(deps: Dependencies) {
           const outcome: AniListLabelItemOutcome = {
             key: item.key, status: assigned.value.unchanged ? 'unchanged' : 'applied', label, assignment: assigned.value.assignment,
           };
+          accepted = outcome;
           await update(index, 'finish', outcome, { outcome });
           result.items.push(outcome);
         } catch (error) {
           if (error instanceof GrantDeniedError) throw error;
+          // A bookkeeping failure cannot turn a committed native assignment into an unaccepted effect.
+          if (accepted) { result.items.push(accepted); continue; }
           if (error instanceof LibraryNotFoundError && !await deps.snapshot(actor, async tx =>
             (await tx.query('SELECT 1 FROM library.list_import_anilist WHERE route=$1 AND account_id=$2 AND import_id=$3 AND ordinal=-1',
               [requireRoute(account.accountId), account.accountId, id])).rowCount)) throw error;
@@ -205,6 +210,8 @@ export function createAniListLabelAdoption(deps: Dependencies) {
             : error instanceof ProblemError && error.code === 'library_label_capacity' ? 'capacity' : 'failed', ...(label ? { label } : {}) });
         }
       }
+      const disclosed = await deps.observe(actor, review.subjectId);
+      if (!disclosed || disclosed.subjectId !== review.subjectId || disclosed.epoch !== review.identityEpoch) throw new LibraryNotFoundError();
       result.complete = result.items.length === review.items.length && result.items.every(v => v.status !== 'pending' && v.status !== 'failed');
     }
     await deps.snapshot(actor, async () => undefined);

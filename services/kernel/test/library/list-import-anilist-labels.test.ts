@@ -3,6 +3,7 @@ import { parseAniList } from '../../src/library/list-import-anilist-parser.ts';
 import { aniListLabelEvidence, ANILIST_LABEL_LIMITS } from '../../src/library/list-import-anilist-label-evidence.ts';
 import { aniListDigest } from '../../src/library/list-import-anilist-label-guard.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
+import purgeSource from '../../src/library/list-import-anilist-erase.sql';
 import { routeOf } from '../../src/route/route.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => { f = await createProfileEntryFixture(); }, 120000);
@@ -114,4 +115,38 @@ test('32-slot refusal is a per-item outcome; cancellation/removal preserve accep
   expect((await json('/v1/libraryLabelAssignments?subjectId=' + free)).assignments).toHaveLength(1);
   expect((await json('/v1/libraryLabelAssignments?subjectId=' + full)).assignments).toHaveLength(32);
   await json(path + ':cancel', 'POST', { remove: true });
+}, 120000);
+
+test('bounded first/deep/final retained pages and maximum selection preserve explicit duplicate outcomes', async () => {
+  const subjectId = await f.createSubject('unprofiled'), label = await createLabel('AniList maximum');
+  const customLists = Object.fromEntries(Array.from({ length: 32 }, (_, n) => ['Value' + n, true]));
+  const path = await upload(Array.from({ length: 45 }, () => ({ customLists })));
+  for (const [after, count, next] of [[-1, 20, 19], [19, 20, 39], [39, 5, null]] as const) {
+    const page = await json(path + '?after=' + after);
+    expect(page.rows).toHaveLength(count); expect(page.next).toBe(next);
+    expect(page.rows[0].labelEvidence.selectable).toHaveLength(32);
+    expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(ANILIST_LABEL_LIMITS.pageBytes);
+  }
+  const selections = Array.from({ length: 8 }, (_, n) => existing('customLists:Value' + n, label.id));
+  const confirmation = await review(path, 0, subjectId, selections);
+  expect((await apply(path, [confirmation])).outcomes[0].items.map((v: { status: string }) => v.status)).toEqual(['applied', ...Array(7).fill('unchanged')]);
+  expect((await f.send('owner', 'POST', path + ':reviewLabels', { ordinal: 1, subjectId, selections: [...selections, existing('customLists:Value8', label.id)] })).status).toBe(400);
+  expect((await f.send('owner', 'POST', path + ':reviewLabels', { ordinal: 1, subjectId, selections: Array.from({ length: 5 }, (_, n) => proposed('customLists:Value' + n, 'New cap ' + n)) })).status).toBe(400);
+  await json(path + ':cancel', 'POST', { remove: true });
+}, 120000);
+
+test('current owner fences deny label review/replay and the installed terminal cleanup removes new retained state', async () => {
+  const subjectId = await f.createSubject('unprofiled');
+  const account = await f.identity(['subject:read', 'library_entry:read', 'library_entry:update']);
+  await f.grantLibraryGate(account.actor.accountId);
+  const preview = await json(base + ':preview', 'POST', { upload: JSON.stringify([{ customLists: { Private: true } }]) }, 200, account.bearer);
+  const path = base + '/' + preview.id;
+  const reviewed = await json(path + ':reviewLabels', 'POST', { ordinal: 0, subjectId, selections: [proposed('customLists:Private', 'Terminal evidence')] }, 200, account.bearer);
+  await f.revokeIdentity(account.actor.accountId);
+  for (const [method, suffix, body] of [['GET', '', undefined], ['POST', ':applyLabels', { confirmations: [{ ordinal: 0, reviewId: reviewed.review.id }] }]] as const)
+    expect((await f.send(account.bearer, method, path + suffix, body)).status).toBeGreaterThanOrEqual(401);
+  // Run the same account-leading finite query registered with the native terminal owner.
+  const removed = await purgeSource.run(f.pool, { route: routeOf(account.actor.accountId)!, account_id: account.actor.accountId });
+  expect(removed).toHaveLength(2);
+  expect((await purgeSource.run(f.pool, { route: routeOf(account.actor.accountId)!, account_id: account.actor.accountId })).length).toBe(0);
 }, 120000);
