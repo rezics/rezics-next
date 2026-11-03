@@ -1041,11 +1041,20 @@ These envelope fragments share the original decision fields; current titles neve
 ```ts
 // Reversed post; current native header disclosure succeeds.
 const populated = {
-  viewer: { affectedAuthor: true, observedAt: '2026-11-04T00:00:00.000Z',
-    appeal: { state: 'unavailable', reason: 'already_appealed' } },
-  targetContext: { state: 'available', kind: 'thread', threadId: originalThreadId,
-    postId: originalPostId, boardId: currentBoardId,
-    threadTitle: 'Current context after reversal', boardTitle: 'Current board' },
+  viewer: {
+    affectedAuthor: true,
+    observedAt: '2026-11-04T00:00:00.000Z',
+    appeal: { state: 'unavailable', reason: 'already_appealed' },
+  },
+  targetContext: {
+    state: 'available',
+    kind: 'thread',
+    threadId: originalThreadId,
+    postId: originalPostId,
+    boardId: currentBoardId,
+    threadTitle: 'Current context after reversal',
+    boardTitle: 'Current board',
+  },
 };
 // Taken-down post; author ownership does not disclose its ordinary header.
 const concealed = {
