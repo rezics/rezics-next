@@ -99,8 +99,7 @@ test('reading-page cursor, reply and withheld-entry bounds are closed', () => {
   expect(page.Check(response(0))).toBe(true);
   expect(page.Check(response(20))).toBe(true);
   expect(page.Check(response(21))).toBe(false);
-  const withheld = response(1);
-  withheld.replies.items[0] = {
+  const withheldEntry = {
     id: id('10'),
     threadId,
     route: 0,
@@ -111,8 +110,12 @@ test('reading-page cursor, reply and withheld-entry bounds are closed', () => {
     sha256: null,
     authorId,
     decisionId: id('6'),
-  } as (typeof withheld.replies.items)[number];
+  };
+  const withheld = { ...response(1), replies: { items: [withheldEntry], next: null } };
   expect(page.Check(withheld)).toBe(false);
+  Reflect.deleteProperty(withheldEntry, 'authorId');
+  Reflect.deleteProperty(withheldEntry, 'decisionId');
+  expect(page.Check(withheld)).toBe(true);
   const unavailableReactions = response(0);
   unavailableReactions.currentness.reactions = 'unavailable';
   expect(page.Check(unavailableReactions)).toBe(true);

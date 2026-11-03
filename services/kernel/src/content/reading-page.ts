@@ -19,7 +19,7 @@ import {
   withViewerReactions,
   readBoard,
 } from './reads.ts';
-import type { ContentReadDependencies, PostEntry, ThreadView } from './reads.ts';
+import type { ContentReadDependencies, PostEntry, ThreadView, ViewerReactionKind } from './reads.ts';
 import type { AnchoredPosition } from './model.ts';
 import type { ViewerActionResources } from '../access/viewer-actions.ts';
 import { ItemViewSchema, ErasedPlaceholderSchema, ThreadViewSchema } from './schemas.ts';
@@ -300,10 +300,11 @@ export type ContentReadingCardBatch = Readonly<{
   finish(): Promise<SelectedReadingCardBatchResult>;
 }>;
 
-type EntryWithReaction = PostEntry & {
-  readonly viewerReaction?: string | null;
-  readonly reactions?: Readonly<Record<string, number>>;
+type ReadingReactionFields = {
+  readonly viewerReaction?: ViewerReactionKind | null;
+  readonly reactions?: Readonly<Partial<Record<ViewerReactionKind, number>>>;
 };
+type EntryWithReaction = PostEntry & ReadingReactionFields;
 type AccountSummaryMap = Awaited<ReturnType<typeof readAccountDiscoverySummaries>>;
 type AccountSummaryValue = AccountSummaryMap extends ReadonlyMap<string, infer Value> ? Value : never;
 type AccountSummary = NonNullable<AccountSummaryValue>;
@@ -333,7 +334,9 @@ type ReadingReference = {
   operations: ReadingOperation[];
 };
 
-function safeEntry(entry: EntryWithReaction): EntryWithReaction | SafeWithheldEntry {
+function safeEntry(
+  entry: EntryWithReaction,
+): Exclude<EntryWithReaction, { availability: 'withheld' }> | SafeWithheldEntry {
   if (entry.availability !== 'withheld') return entry;
   return {
     id: entry.id,
@@ -876,7 +879,7 @@ export async function createContentReadingCardBatch(
     postSources.push({
       reference,
       state,
-      witness: entryWitness(entry),
+      witness: JSON.stringify(entryWitness(entry)),
       revisionId,
       securityRevision: 'securityRevision' in entry ? entry.securityRevision : null,
       ...(state === 'current' && 'authorId' in entry ? { authorId: entry.authorId } : {}),
@@ -966,7 +969,7 @@ export async function createContentReadingCardBatch(
       const targetIds = reactionTargets.map((target) => ({ id: target.id }));
       const personalized = await withViewerReactions(dependencies, actor, targetIds, deadline);
       const counted = await withReactionCountsAndCoverage(dependencies, personalized, deadline);
-      const covered = new Set(counted.targetsWithRows);
+      const covered = new Set(counted.targetFreshness.map((target) => target.id));
       if (
         readingPageReactionCoverageState(
           targetIds.map((target) => target.id),
@@ -1092,7 +1095,7 @@ export async function createContentReadingCardBatch(
             post.state = 'withheld';
             continue;
           }
-          if (entryWitness(current.value) !== post.witness) throw sourceChanged();
+          if (JSON.stringify(entryWitness(current.value)) !== post.witness) throw sourceChanged();
           finalAnchors.push(current.anchor);
         }
 
@@ -1181,7 +1184,7 @@ export async function createContentReadingCardBatch(
               | undefined) ?? 'unavailable'
           );
         };
-        const selectedResults = references.map((reference) => {
+        const selectedResults = references.map<SelectedReadingCardBatchResult['selected'][number]>((reference) => {
           const threadId = selectedReferenceThreadId(reference);
           const group = groups.get(threadId);
           if (!group || group.state !== 'current')
@@ -1456,7 +1459,7 @@ export async function readContentReadingPage(
     if (
       readingPageReactionCoverageState(
         reactionTargets.map((target) => target.id),
-        new Set(counted.targetsWithRows),
+        new Set(counted.targetFreshness.map((target) => target.id)),
       ) === 'current'
     ) {
       countedById = new Map(counted.items.map((entry) => [entry.id, entry]));
@@ -1468,8 +1471,9 @@ export async function readContentReadingPage(
     if (!selectedCardUnavailable(error)) throw error;
     reactionState = 'unavailable';
   }
-  const countedThread = (countedById.get(thread.id) as (ThreadView & EntryWithReaction) | undefined) ?? thread;
+  const countedThread = (countedById.get(thread.id) as (ThreadView & ReadingReactionFields) | undefined) ?? thread;
   const opening = (countedById.get(thread.firstPost.id) ?? thread.firstPost) as EntryWithReaction;
+  if (opening.availability === 'withheld') throw new ContentNotFoundError();
   const countedReplies = replies.map((entry) => (countedById.get(entry.id) ?? entry) as EntryWithReaction);
   const displayThread = { ...countedThread, firstPost: opening };
 
