@@ -8,6 +8,7 @@ export const LIBRARY_EVENTS = {
     { operation: Type.String({ maxLength: 16 }) },
     { additionalProperties: false },
   ),
+  'com.rezics.library.export.requested.v1': Type.Object({ exportId: id }, { additionalProperties: false }),
   'com.rezics.library.bulk.confirmed.v1': Type.Object({ operationId: id }, { additionalProperties: false }),
   'com.rezics.library.bulk.changed.v1': Type.Object({ operationId: id }, { additionalProperties: false }),
   'com.rezics.library.collection.order-repair.advanced.v1': Type.Object(

@@ -24,6 +24,39 @@ CREATE SCHEMA library;
 
 
 --
+-- Name: advance_export_collection_fence(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.advance_export_collection_fence() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE item record; owner uuid; step integer;
+BEGIN
+  FOR step IN 1..2 LOOP
+    IF step=1 THEN
+      IF TG_OP='INSERT' THEN CONTINUE; END IF;
+      item := OLD;
+    ELSE
+      IF TG_OP='DELETE' THEN CONTINUE; END IF;
+      item := NEW;
+    END IF;
+    IF TG_TABLE_NAME='collection' THEN owner := item.curator_account_id;
+    ELSE
+      SELECT curator_account_id INTO owner FROM library.collection
+        WHERE route=item.route AND collection_id=item.collection_id;
+    END IF;
+    IF owner IS NOT NULL THEN
+      INSERT INTO library.native_source_fence(route,kind,owner_id,generation,account_id)
+        VALUES(item.route,'account',owner,1,owner)
+      ON CONFLICT (route,kind,owner_id) DO UPDATE
+        SET generation=library.native_source_fence.generation+1;
+    END IF;
+  END LOOP;
+  RETURN NULL;
+END; $$;
+
+
+--
 -- Name: advance_fact_source_head(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -2798,6 +2831,25 @@ CREATE TABLE library.label_assignment (
 
 
 --
+-- Name: library_export; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.library_export (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    export_id uuid NOT NULL,
+    generation bigint NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    state text NOT NULL,
+    CONSTRAINT library_export_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT library_export_check1 CHECK ((expires_at = (created_at + '00:15:00'::interval))),
+    CONSTRAINT library_export_route_check CHECK (((route >= 0) AND (route <= 65535))),
+    CONSTRAINT library_export_state_check CHECK ((state = ANY (ARRAY['collecting'::text, 'ready'::text, 'stale'::text, 'cancelled'::text, 'expired'::text, 'limit'::text])))
+);
+
+
+--
 -- Name: list_import_mal; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -4521,6 +4573,14 @@ ALTER TABLE ONLY library.label_assignment
 
 
 --
+-- Name: library_export library_export_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.library_export
+    ADD CONSTRAINT library_export_pkey PRIMARY KEY (route, account_id);
+
+
+--
 -- Name: list_import_mal list_import_mal_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -5642,6 +5702,20 @@ CREATE INDEX label_assignment_reserved_source ON library.label_assignment USING 
 
 
 --
+-- Name: library_export_copy_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_copy_seek ON library.copy USING btree (route, account_id, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: library_export_unit_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX library_export_unit_seek ON library.progress_unit USING btree (route, session_id, unit_id COLLATE "C");
+
+
+--
 -- Name: list_import_mal_expiry; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -6206,6 +6280,27 @@ CREATE TRIGGER entry_fact_source_update AFTER UPDATE ON library.entry FOR EACH R
 --
 
 CREATE TRIGGER entry_profile_migration_writer BEFORE INSERT OR UPDATE ON library.entry FOR EACH ROW EXECUTE FUNCTION library.fence_profile_migration_writer();
+
+
+--
+-- Name: collection export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.collection FOR EACH ROW EXECUTE FUNCTION library.advance_export_collection_fence();
+
+
+--
+-- Name: collection_member export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.collection_member FOR EACH ROW EXECUTE FUNCTION library.advance_export_collection_fence();
+
+
+--
+-- Name: collection_pins export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.collection_pins FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
 
 
 --

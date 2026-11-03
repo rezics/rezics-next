@@ -62,6 +62,7 @@ export const OWNED_PHASES = [
   'members_preparation_owner',
   'bangumi_upload',
   'list_import_mal',
+  'library_export',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -92,7 +93,8 @@ type Kind =
   | 'collections'
   | 'collectionLocal'
   | 'bangumi_upload'
-  | 'list_import_mal';
+  | 'list_import_mal'
+  | 'library_export';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -162,6 +164,24 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
     },
     async (tx): Promise<CommandResult<OwnedGraphPage>> => {
       const args = { route, account_id: accountId, after_id: after };
+      if (kind === 'library_export') {
+        const result = await tx.query(`DELETE FROM library.library_export WHERE route=$1 AND account_id=$2`, [
+          route,
+          accountId,
+        ]);
+        const removed = result.rowCount ?? 0;
+        if (!removed) return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false });
+        return {
+          value: { kind, removed, parent: null, retain: false, blocked: false },
+          events: [
+            {
+              type: 'com.rezics.library.account-graph.purged.v1',
+              subject: accountId,
+              data: { accountId, kind, removed },
+            },
+          ],
+        };
+      }
       if (kind === 'bangumi_upload') {
         const rows = await tx.query(
           `WITH keys AS MATERIALIZED (SELECT upload_id,ordinal

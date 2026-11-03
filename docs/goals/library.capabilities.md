@@ -433,6 +433,14 @@ viewport does not establish coarse-pointer behavior. Record fine/coarse pointer,
 separately, including focus order, Escape/focus return, target size and retry behavior. Capture after story completion
 and font readiness; a recorded response or source export is not a screenshot or a visual pass.
 
+## Personal Library portability
+
+Native `POST /v1/libraryExports`, owner status/pages GET and DELETE cancellation are mounted; the
+[portable format and Web handoff](../library-export.md) own schema, meanings, bounds and failure states.
+Focused native HTTP cases cover two owners, independent facts, paging, stale edits, cancellation and terminal
+barriers. Full integration acceptance remains deferred. Import evidence/provider identifiers are explicitly
+unavailable in the owner store; no Web export page or re-import compatibility is claimed.
+
 ## Evidence stage
 
 Specification, native driver, implementation exposure, user-case acceptance at a recorded revision, and promotion
