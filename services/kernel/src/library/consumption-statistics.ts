@@ -55,8 +55,8 @@ export function createConsumptionStatisticsReads(deps: { pool: Pool }) {
       alive();
       return within(deadline, () => withConnection(deps.pool, async (connection) => {
         const client = deadlineClient(connection, deadline);
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
           alive();
           const owner = await readAccount(client, route, actor.accountId);
           if (!owner || owner.kind !== 'actor' || owner.state !== 'active' || owner.fenced ||

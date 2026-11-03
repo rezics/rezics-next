@@ -106,6 +106,7 @@ test('native corrections, unknown historical profile meaning and retirement upda
 test('unavailable authority, cancellation, bounded reads and terminal fences never become successful zeros', async () => {
   const reader = createConsumptionStatisticsReads(native);
   const statements: string[] = [];
+  let abortDuringRead: AbortController | undefined;
   // Observe the real production SQL, forwarding every request to the native pool.
   const trackedPool = Object.create(native.pool);
   trackedPool.connect = async () => {
@@ -113,6 +114,7 @@ test('unavailable authority, cancellation, bounded reads and terminal fences nev
     const original = client.query;
     client.query = ((...args: unknown[]) => {
       statements.push(typeof args[0] === 'string' ? args[0] : 'prepared');
+      if (typeof args[0] === 'string' && args[0].includes('consumption_statistics_installation')) abortDuringRead?.abort();
       return (original as Function).apply(client, args);
     }) as typeof original;
     const release = client.release;
@@ -141,6 +143,9 @@ test('unavailable authority, cancellation, bounded reads and terminal fences nev
   await expect(reader.summary(owner.actor, Date.now() - 1)).rejects.toMatchObject({ code: 'deadline_exceeded' });
   const cancelled = AbortSignal.abort();
   await expect(reader.summary(owner.actor, Date.now() + 30_000, cancelled)).rejects.toMatchObject({ code: 'deadline_exceeded' });
+  abortDuringRead = new AbortController();
+  await expect(tracked.summary(owner.actor, Date.now() + 30_000, abortDuringRead.signal)).rejects.toMatchObject({ code: 'deadline_exceeded' });
+  abortDuringRead = undefined;
   await native.pool.query('UPDATE library.consumption_statistics_installation SET complete=false');
   try { expect((await native.send(owner.bearer, 'GET', path)).status).toBe(503); }
   finally { await native.pool.query('UPDATE library.consumption_statistics_installation SET complete=true'); }
