@@ -17,8 +17,8 @@ authority.
 
 The mounted interface remains the existing `POST /v1/libraryArchiveMerges`, `GET /:id`, `GET /:id/preview`,
 `PATCH /:id/review`, `POST /:id/apply`, `GET /:id/results`, `DELETE /:id`, and `POST /:id/prune` journey. Review
-and preview are private and no-store. Web323 owns the only archive interface; Web318 continues to own manual Entry
-and journal editing.
+and preview are private and no-store. The canonical archive consumer8bb owns the only archive interface; manual
+Entry and journal editing retain their existing interface owners.
 
 | Retained row  | Explicit current target                         | Selected fields           | Native operation                                |
 | ------------- | ----------------------------------------------- | ------------------------- | ----------------------------------------------- |
@@ -54,15 +54,14 @@ The consumer keeps its existing single retained upload per owner for seven days.
 apply accept at most 20 selected rows; cleanup and account-erasure steps remove at most 100 retained rows. Selected
 annotation and journal rows share the existing retained item table and lifecycle.
 
-For bounded evidence rows `N`, selected targets `R`, selected fields `F`, page size `P`, and bytes `B`, upload work
-is bounded by `O(B+N)`. Preview/results read at most `P+1` indexed rows. Review performs addressed owner/profile
-and current-target reads for `R`; apply performs at most `R×F` native field decisions and at most `R` native
-commands, including each command's preparation, transaction, receipt, History/events, export-source fence and
-summary maintenance. Profile/Subject authority and journal/Entry controls are charged per addressed target.
-Cleanup is capped at 100 rows per call; it does not scan owner history. Source-derived bounds do not establish
-measured growth. Performance has been asked to review the composed native bounds; native64/512/4096, final-page,
-negative-target, maximum-field, replay, disclosure-cancellation, and cleanup measurements remain deferred to
-integration.
+The [merge owner's complete caller derivation](library-archive-merge.md#bounds-and-cost) charges every archive
+operation and repeated caller authority/receipt read, producer pages (16 rows/120,000 bytes), consumer pages
+(100 rows plus lookahead), retained canonical operands, full simultaneous JSON serialization, and each native
+command's preparation, locks, receipts, History, export fences and summaries. Each apply attempt adds preflight,
+one begin per reached selection and one acknowledgement/refusal per completed dispatch; retries repeat their
+actual work. Cleanup selects at most 100 retained keys; native cascades retain their own bounds. No payer allowance
+is increased. Source-derived bounds do not establish measured growth; native64/512/4096, final-page, negative-target,
+maximum-field, replay, disclosure-cancellation, expiry and physical cleanup measurements remain deferred to integration.
 
 ## Verification and ownership
 

@@ -77,7 +77,8 @@ A refresh cannot change an applying/acknowledged item. Those items keep their or
 accepted receipts can be retried after cancellation, while expiry/pruning never undoes native effects.
 
 The route producer declares the revised `KernelClient.libraryArchiveMerges` upload, preview, review and apply contract. Upload's declared body is
-`{manifest: Record<string,unknown>, records: Record<string,unknown>[]}`; ingress still preserves raw bytes and the
+`string | {manifest: Record<string,unknown>, records: Record<string,unknown>[]}`. Original JSON text is sent unchanged;
+ingress still preserves raw bytes and the
 strict bounded decoder alone admits the artifact. Web's canonical archive consumer8bb retains the existing
 `/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
 a handwritten client, proxy cast or alternate upload route. Generated declarations must be regenerated before
