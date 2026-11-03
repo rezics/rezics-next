@@ -10,6 +10,10 @@ statement bounds.
 
 ## Operation binding
 
+Measurement decision: keep `L = 2` and six selected pending appeals fixed for first, deep, denied and authority-loss
+paths; define terminal-empty as a real cursor page after resolving a fixed four-appeal queue; vary pending unrelated
+rows and resolved retained rows independently.
+
 `services/kernel/test/content/growth-appeal-boundaries.test.ts` uses a production native Content system, its Access
 factory, real Kernel HTTP requests, the shared `checkGrowth` observer/classifier and registered `registerContent`
 effects. It creates six selected pending appeals from native report, takedown and author-appeal commands. The
@@ -39,6 +43,10 @@ native rows, shared blocks, statements and failed-statement counts for each path
 prints each three-scale report.
 
 Acceptance command: `bun run --cwd services/kernel check test/content/growth-appeal-boundaries.test.ts`.
-This controller run defers that acceptance to integration. No three-scale observation is claimed here; the report
-output from the exact integrated revision is the measured record. The frozen
+The typecheck ran on source revision `fccafeec9b0b046eb117b46dc0ec4b13146a9119` with
+`bun run --cwd services/kernel typecheck`; it exited on unchanged
+`services/kernel/src/semantic/identity-rating-admission.sql` errors at lines 3 and 4:
+`error reylo3: The parameter :subject_id appears more than once; use each parameter once, and select it in a with to read it twice, cast it to its type, as in: with input as (select :subject_id::<type> as subject_id) select … from input`.
+This controller run defers the acceptance command to integration. No three-scale observation is claimed here;
+the report output from the exact integrated revision is the measured record. The frozen
 `services/kernel/test/content/appeals-http.test.ts` remains unchanged.
