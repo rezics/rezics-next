@@ -413,9 +413,7 @@ export async function listBoardThreads(
     anchors.push(...pinnedItems.map((result) => result.anchor), pinnedFinalState.boardAnchor);
     if (!pinnedFinalState.parentAllowed) throw new ContentNotFoundError();
     pinnedThreads = pinnedItems.flatMap((result) =>
-      result.value?.boardId === boardId && result.value.firstPost.availability === 'available'
-        ? [result.value]
-        : [],
+      result.value?.boardId === boardId && result.value.firstPost.availability === 'available' ? [result.value] : [],
     );
   }
   // Release every thread/parent disclosure snapshot before taking the final
