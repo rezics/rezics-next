@@ -96,6 +96,12 @@ do not supply three-scale observations or a promotion claim. The runtime report 
 and observations; until the focused runner reaches them, their status is deferred, never passed. No root, browser,
 worker-check, remote-check or additional native suite is requested by this slice.
 
+The typecheck launch on `2bcffe8a20` exited before compilation: `error: script "typecheck" exited with code 70`.
+The shared runner classified run `mvzyt1ve-a647f983` as `infrastructure-failure`, with
+`absolute preparation deadline exceeded` in `source-artifact-publication` on host `b`.
+This reaches no compiler assertion and supplies no growth observations. The focused landing launch uses the
+following committed document revision; any reached three-scale observations are emitted with its full source hash.
+
 Read for binding: the Content Goal and Realm media/Cost sections; agent conduct and workflow verification;
 the existing functional Realm assets and media/download growth tests; the shared native Realm/download and
 native collection fixtures; media completion, its HTTP/schema/SQL and image/work registration seams;
