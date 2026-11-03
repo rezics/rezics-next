@@ -39,8 +39,7 @@ function request(href: string) {
   });
   expect(state.invalidInput).toBeUndefined();
   // Library's ordinary-filter reader selection remains a documented producer mismatch.
-  if (!Object.hasOwn(JSON.parse(params.get('filter')!), 'owner'))
-    expect(searchRequiresCurrentReader(state)).toBe(true);
+  if (!Object.hasOwn(JSON.parse(params.get('filter')!), 'owner')) expect(searchRequiresCurrentReader(state)).toBe(true);
   return discoveryRequest(state, ['fr']);
 }
 
