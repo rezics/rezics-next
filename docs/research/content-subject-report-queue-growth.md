@@ -2,7 +2,7 @@
 
 This operation binding adds the missing native measurements for [Content Done-when 5](../goals/content.md#done-when)
 and the [moderation quality map](content-quality-moderation.md). The owning bounds are
-[Subject report snapshots](../../services/kernel/src/content/README.md#reports-and-moderation) and
+[Subject report snapshots](../../services/kernel/src/content/README.md#notifications) and
 [selected report pages](../../services/kernel/src/content/README.md#selected-report-pages).
 It changes no production contract or existing measurement.
 
@@ -13,10 +13,10 @@ produce the selected records. Report command replay must retain the receipt iden
 module enqueues committed native log envelopes through the real worker, waits for every registered effect and
 replays that enqueue before any selection. Projection and replay are setup, with no projection growth claim.
 
-| Axis | Independently varied pressure at 32 / 256 / 2048 | Fixed neighbourhood |
-| --- | --- | --- |
-| Population | Unrelated Subjects and reports, exact-target references and Global candidates, sharing the selected Subject and report routes | Seven native selected reports; page limit 1, candidate limit 2; unrelated timestamps between fixed head and tail |
-| Retained history | Same-report-home outbox envelopes, command receipts and original write bases referencing one fixed unrelated source | 32 unrelated Subject/report populations, seven selected reports and unchanged candidate indexes |
+| Axis             | Independently varied pressure at 32 / 256 / 2048                                                                              | Fixed neighbourhood                                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Population       | Unrelated Subjects and reports, exact-target references and Global candidates, sharing the selected Subject and report routes | Seven native selected reports; page limit 1, candidate limit 2; unrelated timestamps between fixed head and tail |
+| Retained history | Same-report-home outbox envelopes, command receipts and original write bases referencing one fixed unrelated source           | 32 unrelated Subject/report populations, seven selected reports and unchanged candidate indexes                  |
 
 Noise is privileged unobserved setup, never the source of asserted workflow results. Each new series removes
 only its previous noise so scales describe the same independent axis rather than cumulative earlier series.
