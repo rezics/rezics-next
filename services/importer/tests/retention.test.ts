@@ -207,6 +207,16 @@ test('operator retires a superseded complete capture, keeps authority, and resum
     expect(JSON.parse(diagnostics.stdout)).toMatchObject({ coverage: 'unavailable', status: 'retired' });
     const session = new ImportSession(state);
     try {
+      expect(
+        session.store.database
+          .query('SELECT command_key,body FROM run_payloads WHERE source=? ORDER BY command_key')
+          .all(source),
+      ).toEqual(seeded.payload);
+      expect(
+        session.store.database
+          .query('SELECT record_key,row_json FROM run_acknowledged WHERE source=? ORDER BY record_key')
+          .all(source),
+      ).toEqual(seeded.ack);
       const reopened = session.reopen(session.acquire(source) as Exclude<ReturnType<ImportSession['acquire']>, 'busy'>);
       expect(reopened?.id).toBe(seeded.active);
       session.store.acknowledge(reopened!, {
@@ -223,11 +233,11 @@ test('operator retires a superseded complete capture, keeps authority, and resum
           .query('SELECT command_key,body FROM run_payloads WHERE source=? ORDER BY command_key')
           .all(source),
       ).toEqual(seeded.payload);
-      expect(
-        session.store.database
-          .query('SELECT record_key,row_json FROM run_acknowledged WHERE source=? ORDER BY record_key')
-          .all(source),
-      ).toEqual(seeded.ack);
+      const ackAfter = session.store.database
+        .query('SELECT record_key,row_json FROM run_acknowledged WHERE source=? ORDER BY record_key')
+        .all(source) as { record_key: string; row_json: string }[];
+      expect(ackAfter.filter((row) => row.record_key !== 'Q3')).toEqual(seeded.ack);
+      expect(ackAfter.some((row) => row.record_key === 'Q3')).toBe(true);
       expect(
         session.store.database.query('SELECT COUNT(*) AS n FROM run_entries WHERE source=? AND run_id=?').get(other, seeded.other),
       ).toEqual({ n: 1 });

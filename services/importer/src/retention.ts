@@ -1246,10 +1246,11 @@ export async function applyRetentionPlan(
     throw new RetentionFailure('Apply requires the current plan identity as --confirm; the selected set is never expanded.', 'usage');
   if (!plan.applyable)
     throw new RetentionFailure('This plan includes ineligible generations; build a fresh explicit plan of eligible captures.', 'ineligible');
-  throwIfAborted(options.signal);
-  const opened = await openWritable(input.state, options);
+  let opened: Awaited<ReturnType<typeof openWritable>> | undefined;
   let session: ImportSession | undefined;
   try {
+    throwIfAborted(options.signal);
+    opened = await openWritable(input.state, options);
     if (opened.identity.dev !== plan.state.dev || opened.identity.ino !== plan.state.ino)
       throw new RetentionFailure('State file identity does not match the plan; build a fresh explicit plan.', 'stale');
     const database = opened.database;
@@ -1281,13 +1282,13 @@ export async function applyRetentionPlan(
         retired: [],
         inProgress: plan.selected.map((row) => row.id),
         sqliteNote: SQLITE_NOTE,
-        snapshot: snapshotAdvice(opened.path),
+        snapshot: snapshotAdvice(opened?.path ?? plan.state.path),
       };
     }
     throw error;
   } finally {
     session?.close();
-    opened.close({ database: session === undefined });
+    opened?.close({ database: session === undefined });
   }
 }
 

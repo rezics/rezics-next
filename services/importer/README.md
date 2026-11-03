@@ -168,7 +168,8 @@ second inspector. Ordinary import remains a separate invocation under current cr
 recommend `rezics-import backup` without turning snapshot restore into this workflow.
 
 Decision: generation pages use stored `seq` order with exact string IDs; VNDB materialization rows are enumerated for
-per-run cleanup when those tables exist.
+per-run cleanup when those tables exist. An already-aborted apply reports the cancelled apply document and does not
+claim a lease.
 
 ## Resolve VNDB source-observation conflicts
 
