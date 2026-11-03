@@ -231,9 +231,9 @@ export class BindingInspectionStore {
   }
 
   private static tableExists(database: Database, name: string): boolean {
-    const found = database
-      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
-      .get('table', name) as { found: number } | null;
+    const found = database.query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?').get('table', name) as {
+      found: number;
+    } | null;
     return !!found;
   }
 
@@ -282,9 +282,7 @@ export class BindingInspectionStore {
     const recordColumns = BindingInspectionStore.columns(database, 'binding_records');
     const missing = REQUIRED_RECORDS.find((column) => !recordColumns.has(column));
     if (missing)
-      throw new InspectionFailure(
-        `Unsupported importer binding schema: column binding_records.${missing} is missing.`,
-      );
+      throw new InspectionFailure(`Unsupported importer binding schema: column binding_records.${missing} is missing.`);
     const metadata = BindingInspectionStore.family(database, 'binding_metadata_journal', JOURNAL_COLUMNS, [
       'binding_metadata_journal',
       'binding_metadata_current',
@@ -363,14 +361,9 @@ export class BindingInspectionStore {
     const groups = this.readGroups(request.source, request.record);
     const currentMetadataKey = this.readCurrentMetadataKey(request.source, request.record);
     const runRow = this.readRunRow(request.source);
-    const page =
-      request.page !== undefined && request.request === undefined
-        ? this.readPage(request, signal)
-        : null;
+    const page = request.page !== undefined && request.request === undefined ? this.readPage(request, signal) : null;
     const detail =
-      request.page !== undefined && request.request !== undefined
-        ? this.readDetail(request, signal)
-        : null;
+      request.page !== undefined && request.request !== undefined ? this.readDetail(request, signal) : null;
     return {
       version: 1,
       source: request.source,
@@ -515,15 +508,9 @@ export class BindingInspectionStore {
   private requireFamily(kind: BindingInspectionPageKind): void {
     const status = this.schema[kind];
     if (status === 'not-retained')
-      throw new InspectionFailure(
-        `The ${kind} journal family was not retained in this state file.`,
-        2,
-      );
+      throw new InspectionFailure(`The ${kind} journal family was not retained in this state file.`, 2);
     if (status !== 'available')
-      throw new InspectionFailure(
-        `The ${kind} journal family is present but cannot be interpreted safely.`,
-        1,
-      );
+      throw new InspectionFailure(`The ${kind} journal family is present but cannot be interpreted safely.`, 1);
   }
 
   private readPage(request: BindingInspectionRequest, signal?: AbortSignal): BindingInspectionPage {
@@ -727,7 +714,13 @@ export class BindingInspectionStore {
     const byteLength = integerOrNull(row.byte_length);
     const loaded = typeof row.bytes === 'string' ? row.bytes : null;
     const body = projectBody(loaded, byteLength, this.metrics);
-    if (!key) return unavailableRow(kind, typeof row.key === 'string' ? row.key : 'unknown', 'stored request key is unsupported', body);
+    if (!key)
+      return unavailableRow(
+        kind,
+        typeof row.key === 'string' ? row.key : 'unknown',
+        'stored request key is unsupported',
+        body,
+      );
     if (byteLength === null)
       return unavailableRow(kind, key, 'stored request body length is not a bounded integer', body);
     if (body.digestOmitted && byteLength > BINDING_BODY_BUDGET)
@@ -748,7 +741,8 @@ export class BindingInspectionStore {
         };
       }
       const native = acknowledged ? decodeSemanticAck(ackLoaded, this.metrics) : null;
-      if (!decoded.usable) return unavailableRow(kind, key, 'original request body is not a supported semantic shape', body);
+      if (!decoded.usable)
+        return unavailableRow(kind, key, 'original request body is not a supported semantic shape', body);
       return this.semanticRow(key, signature, body, decoded, acknowledged ? 'present' : 'absent', native);
     }
     const decoded = decodeMetadataBody(loaded, this.metrics);
@@ -756,8 +750,11 @@ export class BindingInspectionStore {
     if (row.acknowledged !== 0 && row.acknowledged !== 1)
       return unavailableRow(kind, key, 'acknowledgement presence flag is unsupported', body);
     const ackLoaded = typeof row.acknowledgement === 'string' ? row.acknowledgement : null;
-    const ack = acknowledged ? decodeMetadataAck(ackLoaded, this.metrics) : { effect: null, metadataRevision: null, usable: false };
-    if (!decoded.usable) return unavailableRow(kind, key, 'original metadata request body is not a supported shape', body);
+    const ack = acknowledged
+      ? decodeMetadataAck(ackLoaded, this.metrics)
+      : { effect: null, metadataRevision: null, usable: false };
+    if (!decoded.usable)
+      return unavailableRow(kind, key, 'original metadata request body is not a supported shape', body);
     return {
       display: 'retained',
       category: 'metadata',
@@ -866,12 +863,7 @@ export class BindingInspectionStore {
     };
   }
 
-  private projectMedia(
-    source: string,
-    record: string,
-    row: MediaSqlRow,
-    signal?: AbortSignal,
-  ): BindingInspectionRow {
+  private projectMedia(source: string, record: string, row: MediaSqlRow, signal?: AbortSignal): BindingInspectionRow {
     if (signal?.aborted) throw new InspectionFailure('Inspection was cancelled.', 130);
     const key = this.tryJournalKey(source, record, row.key);
     const byteLength = integerOrNull(row.byte_length);

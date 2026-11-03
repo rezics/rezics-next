@@ -165,9 +165,7 @@ function sectionLabel(value: BindingInspectionDocument['sections'][BindingInspec
 }
 
 function bodyLine(row: BindingInspectionRow): string {
-  const digest =
-    row.body.sha256 ??
-    (row.body.digestOmitted ? `omitted (${row.body.digestOmitted})` : 'omitted');
+  const digest = row.body.sha256 ?? (row.body.digestOmitted ? `omitted (${row.body.digestOmitted})` : 'omitted');
   const length = row.body.byteLength === null ? 'unknown' : String(row.body.byteLength);
   return `${length} bytes; SHA-256 ${digest}`;
 }
@@ -185,15 +183,11 @@ function nativeLine(row: BindingInspectionRow): string {
 
 function renderRow(row: BindingInspectionRow): string[] {
   if (row.display === 'unavailable') {
-    return [
-      `  ${terminalString(row.key)} unavailable: ${row.reason ?? 'display failed'}; ${bodyLine(row)}`,
-    ];
+    return [`  ${terminalString(row.key)} unavailable: ${row.reason ?? 'display failed'}; ${bodyLine(row)}`];
   }
   const lines = [`  ${terminalString(row.key)} ${bodyLine(row)}`];
   if (row.operation || row.fieldGroup)
-    lines.push(
-      `    operation ${row.operation ?? 'unknown'} / field-group ${row.fieldGroup ?? 'unknown'}`,
-    );
+    lines.push(`    operation ${row.operation ?? 'unknown'} / field-group ${row.fieldGroup ?? 'unknown'}`);
   if (row.category === 'semantic' || row.category === 'metadata')
     lines.push(`    acknowledgement: ${row.acknowledgement}; ${nativeLine(row)}`);
   if (row.category === 'candidates') {

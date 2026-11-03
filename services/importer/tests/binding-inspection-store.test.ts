@@ -187,17 +187,12 @@ test('binding inspection pages original requests, distinguishes pending from ack
     const coverRequest = mediaRequest(bound, subject);
     state.bindings.prepareMedia(bound, mediaKey, signature, coverRequest);
     state.bindings.acceptMedia(bound, mediaKey, mediaAccepted(cover, subject));
-    state.bindings.prepareMetadata(
-      bound,
-      metadataKey,
-      signature,
-      {
-        source,
-        external_id: bound.external_id,
-        expected_metadata_revision: null,
-        metadata: { name: 'Private catalogue name', url: 'https://example.org/private-metadata' },
-      },
-    );
+    state.bindings.prepareMetadata(bound, metadataKey, signature, {
+      source,
+      external_id: bound.external_id,
+      expected_metadata_revision: null,
+      metadata: { name: 'Private catalogue name', url: 'https://example.org/private-metadata' },
+    });
     state.bindings.acknowledgeMetadata(bound, metadataKey, {
       effect: 'filled',
       metadata_revision: 1,
@@ -373,7 +368,13 @@ test('binding inspection pages original requests, distinguishes pending from ack
     });
     expect(metadata.stdout).not.toContain('https://example.org/private-metadata');
 
-    const unknownSource = await inspect(state.path, ['--source', 'openlibrary', '--record', bound.external_id, '--json']);
+    const unknownSource = await inspect(state.path, [
+      '--source',
+      'openlibrary',
+      '--record',
+      bound.external_id,
+      '--json',
+    ]);
     expect(JSON.parse(unknownSource.stdout)).toMatchObject({
       binding: { state: 'absent' },
       runRow: 'absent',
@@ -425,15 +426,7 @@ test('binding inspection reports missing files, missing tables, symlinks, corrup
       )
       .run(record.source, record.external_id, huge, 'x'.repeat(70_000), signature, null);
 
-    const page = await inspect(state.path, [
-      '--source',
-      'wikidata',
-      '--record',
-      'Q1',
-      '--page',
-      'semantic',
-      '--json',
-    ]);
+    const page = await inspect(state.path, ['--source', 'wikidata', '--record', 'Q1', '--page', 'semantic', '--json']);
     expect(page.code).toBe(0);
     const rows = JSON.parse(page.stdout).page.rows as { key: string; display: string; reason: string | null }[];
     expect(rows.map((row) => row.key)).toEqual([bad, good, huge]);

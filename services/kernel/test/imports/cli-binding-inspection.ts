@@ -210,7 +210,11 @@ export async function runCliBindingInspectionJourney() {
   }
 }
 
-function readBindings(path: string, source: string, record: string): { record: BindingRow | null; journals: JournalRow[] } {
+function readBindings(
+  path: string,
+  source: string,
+  record: string,
+): { record: BindingRow | null; journals: JournalRow[] } {
   const database = new Database(path, { readonly: true });
   try {
     return {

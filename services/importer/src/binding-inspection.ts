@@ -169,7 +169,12 @@ export function validBindingSource(value: unknown): asserts value is string {
 }
 
 export function validBindingRecord(value: unknown): asserts value is string {
-  if (typeof value !== 'string' || value.length === 0 || utf8Bytes(value) > BINDING_RECORD_BYTES || value.includes('\0'))
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    utf8Bytes(value) > BINDING_RECORD_BYTES ||
+    value.includes('\0')
+  )
     throw new InspectionFailure('Record key must be an exact stored external record identifier.', 2);
 }
 
@@ -246,7 +251,11 @@ export function decodeBindingCursor(
   )
     throw new InspectionFailure('Cursor belongs to a different source, record, category or schema.', 2);
   if (request.page === 'candidates') {
-    if (!isFieldGroup(result.fieldGroup) || typeof result.candidate !== 'string' || !BINDING_UUID.test(result.candidate))
+    if (
+      !isFieldGroup(result.fieldGroup) ||
+      typeof result.candidate !== 'string' ||
+      !BINDING_UUID.test(result.candidate)
+    )
       throw new InspectionFailure('Cursor candidate ordering key is invalid.', 2);
   } else if (
     typeof result.key !== 'string' ||
@@ -286,8 +295,7 @@ export function nextBindingCursor(
 }
 
 export function safeSignature(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length === 0 || utf8Bytes(value) > BINDING_SIGNATURE_BYTES)
-    return null;
+  if (typeof value !== 'string' || value.length === 0 || utf8Bytes(value) > BINDING_SIGNATURE_BYTES) return null;
   if (!/^[\x20-\x7e]+$/u.test(value)) return null;
   return value;
 }
@@ -410,9 +418,14 @@ function resultProjection(result: unknown): BindingNativeIdentifiers | null {
 export function decodeSemanticBody(
   text: string | null,
   metrics: MutableBindingMetrics,
-): { operation: BindingOperation | null; fieldGroup: BindingFieldGroup | null; subject: string | null; candidate: string | null; usable: boolean } {
-  if (text === null)
-    return { operation: null, fieldGroup: null, subject: null, candidate: null, usable: false };
+): {
+  operation: BindingOperation | null;
+  fieldGroup: BindingFieldGroup | null;
+  subject: string | null;
+  candidate: string | null;
+  usable: boolean;
+} {
+  if (text === null) return { operation: null, fieldGroup: null, subject: null, candidate: null, usable: false };
   try {
     const parsed = boundedJson(text, metrics);
     if (checkBatch(parsed).length !== 0)
@@ -442,7 +455,10 @@ export function decodeSemanticAck(
   }
 }
 
-export function decodeMediaBody(text: string | null, metrics: MutableBindingMetrics): { subject: string | null; usable: boolean } {
+export function decodeMediaBody(
+  text: string | null,
+  metrics: MutableBindingMetrics,
+): { subject: string | null; usable: boolean } {
   if (text === null) return { subject: null, usable: false };
   try {
     const parsed = boundedJson(text, metrics);
@@ -482,9 +498,7 @@ export function decodeMediaStatus(
     const parsed = boundedJson(text, metrics);
     if (checkMediaImportStatus(parsed).length !== 0) return { state: null, media: null, usable: false };
     const media = asRecord(asRecord(parsed)?.media);
-    const state = MEDIA_STATES.includes(media?.state as BindingMediaState)
-      ? (media!.state as BindingMediaState)
-      : null;
+    const state = MEDIA_STATES.includes(media?.state as BindingMediaState) ? (media!.state as BindingMediaState) : null;
     const id = typeof media?.id === 'string' && BINDING_UUID.test(media.id) ? media.id : null;
     return { state, media: id, usable: state !== null };
   } catch {

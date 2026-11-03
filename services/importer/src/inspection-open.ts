@@ -46,8 +46,7 @@ export async function openReadonlySqlite(
     database = new Database(path, { readonly: true, create: false, strict: true });
     if (options.instrumentDatabase) database = options.instrumentDatabase(database);
     const afterOpen = await stat(path);
-    if (!sameFile(identity, afterOpen))
-      throw new InspectionFailure('State path changed while it was being opened.', 2);
+    if (!sameFile(identity, afterOpen)) throw new InspectionFailure('State path changed while it was being opened.', 2);
     const opened = { path, descriptor, database };
     descriptor = undefined;
     database = undefined;

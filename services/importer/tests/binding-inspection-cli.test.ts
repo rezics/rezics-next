@@ -33,7 +33,16 @@ test('binding inspection help is self-contained and rejects import-only options'
     ]),
   ).toThrow('integer from 1 through 100');
   expect(() =>
-    parseBindingInspectionArgs(['--state', 'state.sqlite', '--source', 'wikidata', '--record', 'Q42', '--page', 'pending']),
+    parseBindingInspectionArgs([
+      '--state',
+      'state.sqlite',
+      '--source',
+      'wikidata',
+      '--record',
+      'Q42',
+      '--page',
+      'pending',
+    ]),
   ).toThrow('semantic, candidates, media or metadata');
   const help = await runBindingInspectionCli(['--help']);
   expect(help.code).toBe(0);
