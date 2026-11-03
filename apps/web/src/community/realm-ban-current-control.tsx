@@ -184,29 +184,27 @@ export function RealmBanCurrentObservationView({ observation }: { observation: R
   if (observation.state === 'absent') return <p>{m.realm_bans_inspect_absent()}</p>;
   const { ban } = observation;
   return (
-    <dl className="space-y-3">
-      <div>
-        <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
-        <dd className="whitespace-pre-wrap wrap-anywhere">{ban.reason || m.realm_bans_no_reason()}</dd>
-      </div>
-      <div>
-        <dt className="font-medium">{m.realm_bans_details_moderator()}</dt>
-        <dd>{ban.actor ? <bdi>{ban.actor}</bdi> : m.realm_bans_moderator_erased()}</dd>
-      </div>
-      <div>
-        <dt className="font-medium">{m.realm_bans_details_at()}</dt>
-        <dd>
-          <time dateTime={ban.at} dir="ltr">
-            {ban.at.replace('T', ' ').replace(/Z$/, '')} UTC
-          </time>
-        </dd>
-      </div>
-      <div>
-        <dd>{m.realm_bans_active()}</dd>
-      </div>
-      <div>
-        <dd>{m.realm_bans_help()}</dd>
-      </div>
-    </dl>
+    <div className="space-y-3">
+      <dl className="space-y-3">
+        <div>
+          <dt className="font-medium">{m.realm_bans_details_reason()}</dt>
+          <dd className="whitespace-pre-wrap wrap-anywhere">{ban.reason || m.realm_bans_no_reason()}</dd>
+        </div>
+        <div>
+          <dt className="font-medium">{m.realm_bans_details_moderator()}</dt>
+          <dd>{ban.actor ? <bdi>{ban.actor}</bdi> : m.realm_bans_moderator_erased()}</dd>
+        </div>
+        <div>
+          <dt className="font-medium">{m.realm_bans_details_at()}</dt>
+          <dd>
+            <time dateTime={ban.at} dir="ltr">
+              {ban.at.replace('T', ' ').replace(/Z$/, '')} UTC
+            </time>
+          </dd>
+        </div>
+      </dl>
+      <p>{m.realm_bans_active()}</p>
+      <p>{m.realm_bans_help()}</p>
+    </div>
   );
 }
