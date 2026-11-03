@@ -4,6 +4,7 @@ import { act, useMemo, useRef, useState } from 'react';
 import type { Release } from '@rezics/definitions';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { CreateResult, CreateType, InitialSubject } from '../src/features/catalogue/create-subject';
+import type { StatementInput } from '../src/features/catalogue/statement-editor';
 import * as start from '../.storybook/react-start';
 import { withConcreteReleaseDescriptors } from '../src/kernel/fake/release-fidelity';
 
@@ -23,6 +24,13 @@ test('A contributor reviews a file grain, repairs a nested citation, copies evid
     HTMLElement: window.HTMLElement,
     Element: window.Element,
     Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -43,9 +51,9 @@ test('A contributor reviews a file grain, repairs a nested citation, copies evid
     catalogueFileCreateHolders,
     catalogueFileCreatePreparedFacts,
     catalogueFileCreateTypes,
-    type CatalogueFileCreateFact,
-    type CatalogueFileCreateItem,
   } = await import('../src/features/catalogue/catalogue-file-create');
+  type CatalogueFileCreateFact = { key: string; statement: StatementInput };
+  type CatalogueFileCreateItem = InitialSubject & { statements: Record<string, StatementInput[]> };
   const { m } = await import('../src/paraglide/messages.js');
   const release = withConcreteReleaseDescriptors(bundledRelease);
   const createdId = '00000000-0000-4000-8000-00000000a301';
@@ -182,11 +190,16 @@ test('A contributor reviews a file grain, repairs a nested citation, copies evid
     expect(host.textContent).toContain(m.catalogue_file_create_group_grain());
     await act(async () => user.selectOptions(type, 'schema:MediaObject'));
     await act(async () => user.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed file'));
-    const add = canvas.getByRole('combobox', { name: m.catalogue_file_create_add_fact() });
-    await act(async () => user.selectOptions(add, 'schema:sameAs'));
-    await act(async () => user.click(canvas.getByRole('button', { name: m.catalogue_file_create_add_fact() })));
-    await act(async () => user.selectOptions(add, 'schema:sha256'));
-    await act(async () => user.click(canvas.getByRole('button', { name: m.catalogue_file_create_add_fact() })));
+    async function addProperty(property: string) {
+      const add = canvas.getByRole('combobox', { name: m.catalogue_file_create_add_fact() });
+      await act(async () => user.selectOptions(add, property));
+      const button = canvas
+        .getAllByRole('button', { name: m.correction_add() })
+        .find((node) => !(node as HTMLButtonElement).disabled);
+      await act(async () => user.click(button!));
+    }
+    await addProperty('schema:sameAs');
+    await addProperty('schema:sha256');
     expect(host.textContent).toContain(m.catalogue_file_hash_statement());
     const same = host.querySelector('[id^="catalogue-file-initial-"]') as HTMLElement;
     const urls = within(same).getAllByRole('textbox');
