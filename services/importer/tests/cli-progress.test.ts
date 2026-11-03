@@ -166,7 +166,7 @@ test('launch dump decoders report committed staging and acknowledgement transiti
       expect(progress.phases).toContain('staging');
       expect(progress.phases).toContain('reconciling');
       expect(progress.classified).toBeGreaterThan(0);
-      expect(progress.acknowledged).toBeGreaterThan(0);
+      expect(progress.acknowledged, `${source}: no acknowledged effects`).toBeGreaterThan(0);
     } finally {
       await subject.close();
     }
