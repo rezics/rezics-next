@@ -22,7 +22,7 @@ after:
   - 7ddb94bc-e247-4f93-9e68-4a65ff41e983
 acceptance:
   tests:
-    - "Import an admitted classification observation through the production converter/coordinator and mounted generated native client; bind the authentic Semantic association, preserve separate provenance/native ballots, recover unknown delivery and deliberate CAS resolution with immutable original intent, and independently read the result. Unadmitted VNDB payload/licence combinations have zero native effects."
+    - 'Import an admitted classification observation through the production converter/coordinator and mounted generated native client; bind the authentic Semantic association, preserve separate provenance/native ballots, recover unknown delivery and deliberate CAS resolution with immutable original intent, and independently read the result. Unadmitted VNDB payload/licence combinations have zero native effects.'
 ---
 
 # Remaining outcome

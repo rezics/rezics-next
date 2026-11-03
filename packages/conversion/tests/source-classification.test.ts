@@ -51,9 +51,10 @@ describe('source classification projection', () => {
 
   test('maps admitted provenance onto native source version and observed instant', () => {
     expect(classificationSourceVersion(provenance)).toEqual({ kind: 'revision', revision: 'revision-4' });
-    expect(
-      classificationSourceVersion({ ...provenance, sourceRevision: null, sourceDigest: 'a'.repeat(64) }),
-    ).toEqual({ kind: 'unversioned', digest: 'a'.repeat(64) });
+    expect(classificationSourceVersion({ ...provenance, sourceRevision: null, sourceDigest: 'a'.repeat(64) })).toEqual({
+      kind: 'unversioned',
+      digest: 'a'.repeat(64),
+    });
     expect(classificationObservedInstant(null)).toBeNull();
     expect(classificationObservedInstant('2026-11-03T00:00:00Z')).toBe('2026-11-03T00:00:00.000Z');
   });
