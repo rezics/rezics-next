@@ -373,8 +373,9 @@ export function createFacetDiscoveryStorage(
           if (record.subject !== subject || record.terminal !== terminal) return false;
           for (const [index, leaf] of (planner?.leaves ?? []).entries()) {
             if (leaf.facet !== 'statement' || leaf.property !== record.statement.property.id) continue;
-            if (record.indexed && holdsCurrentStatements([record.indexed], leaf)) accumulator[index] = true;
-            else if (!record.indexed && accumulator[index] !== true) accumulator[index] = 'not_proven';
+            const match = record.indexed ? holdsCurrentStatements([record.indexed], leaf) : 'not_proven';
+            if (match === true) accumulator[index] = true;
+            else if (match === 'not_proven' && accumulator[index] !== true) accumulator[index] = 'not_proven';
           }
           if (plan.valueKind === 'type' || record.statement.property.id !== plan.property) continue;
           if (record.statement.value.type !== 'value') continue;

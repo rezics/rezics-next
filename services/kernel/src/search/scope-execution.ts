@@ -134,14 +134,15 @@ function match(
   clause: FactClause,
   result: Extract<Awaited<ReturnType<typeof readScopeLeafEvidence>>, { state: 'current' }>,
 ): RelationFacetMatch {
-  const present =
+  const present: RelationFacetMatch =
     clause.facet === 'type'
       ? result.type !== null && holdsCurrentType(result.type, clause)
       : holdsCurrentStatements(
           result.facts.map((fact) => fact.statement),
           clause,
         );
-  if (present) return true;
+  if (present === true) return true;
+  if (present === 'not_proven') return present;
   return result.coverage !== null && result.coverage.basis === result.basis && result.progress === null
     ? false
     : 'not_proven';
@@ -310,7 +311,7 @@ export async function evaluateScopeSubjects(
         const witnesses =
           value === true && clause.facet === 'statement'
             ? result.facts
-                .filter((fact) => holdsCurrentStatements([fact.statement], clause))
+                .filter((fact) => holdsCurrentStatements([fact.statement], clause) === true)
                 .slice(0, 1)
                 .map((fact) => fact.witness)
             : [];
@@ -341,7 +342,7 @@ export async function evaluateScopeSubjects(
                 (fact) =>
                   fact.witness === witness &&
                   clause.facet === 'statement' &&
-                  holdsCurrentStatements([fact.statement], clause),
+                  holdsCurrentStatements([fact.statement], clause) === true,
               )
             ) {
               value = 'not_proven';

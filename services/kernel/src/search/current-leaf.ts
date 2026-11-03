@@ -1,5 +1,5 @@
 import type { FactClause } from './disclosure/check.ts';
-import type { IndexedStatement } from './source.ts';
+import type { IndexedStatement, RelationFacetMatch } from './source.ts';
 import { calendarRangeMatches } from '@rezics/filter';
 
 /** Match the current type by exact membership in the clause's values. */
@@ -17,36 +17,50 @@ export function holdsCurrentType(type: string, clause: Extract<FactClause, { fac
 export function holdsCurrentStatements(
   statements: readonly IndexedStatement[],
   clause: Extract<FactClause, { facet: 'statement' }>,
-): boolean {
-  return statements.some((statement) => {
-    if (statement.property !== clause.property) return false;
+): RelationFacetMatch {
+  let uncertain = false;
+  for (const statement of statements) {
+    if (statement.property !== clause.property) continue;
     if ('values' in clause) {
-      if (!clause.values.includes(statement.value)) return false;
+      if (!clause.values.includes(statement.value)) continue;
     } else if (clause.range.type === 'time') {
-      if (statement.facet?.kind !== 'time' || !calendarRangeMatches(statement.facet, clause.range)) return false;
+      if (statement.facet?.kind !== 'time' || !calendarRangeMatches(statement.facet, clause.range)) continue;
     } else {
       const { gte, lte, unit } = clause.range;
       const facet = statement.facet;
       let value: number;
       if (unit === undefined) {
-        if (facet?.kind !== 'time') return false;
+        if (facet?.kind !== 'time') continue;
         value = facet.year;
       } else {
-        if (facet?.kind !== 'quantity' || facet.unit !== unit) return false;
+        if (facet?.kind !== 'quantity' || facet.unit !== unit) continue;
         value = facet.amount;
       }
       if (!Number.isFinite(value) || (gte !== undefined && value < gte) || (lte !== undefined && value > lte))
-        return false;
+        continue;
     }
-    return (clause.qualifiers ?? []).every((qualifier) => {
+    let matches = true;
+    for (const qualifier of clause.qualifiers ?? []) {
       const evidence = statement.qualifiers?.filter((value) => value.property === qualifier.property) ?? [];
-      // A contradictory spoiler level is uncertain, even if one of its values
-      // would satisfy the threshold. Partial sources keep this as not_proven.
       if (qualifier.property === 'rezics:spoilerLevel') {
         const levels = new Set(evidence.map((value) => value.value));
-        if (levels.size !== 1 || !['0', '1', '2'].includes(evidence[0]!.value)) return false;
+        if (levels.size > 1) {
+          uncertain = true;
+          matches = false;
+          break;
+        }
+        if (levels.size === 1 && !['0', '1', '2'].includes(evidence[0]!.value)) {
+          uncertain = true;
+          matches = false;
+          break;
+        }
       }
-      return evidence.some((value) => qualifier.in.includes(value.value));
-    });
-  });
+      if (!evidence.some((value) => qualifier.in.includes(value.value))) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return uncertain ? 'not_proven' : false;
 }

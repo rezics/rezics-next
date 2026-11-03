@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { holdsCurrentStatements, holdsCurrentType } from '../../src/search/current-leaf.ts';
+import { compileCurrentFilter } from '../../src/search/current-filter-plan.ts';
 import type { FactClause } from '../../src/search/disclosure/check.ts';
 import type { IndexedStatement } from '../../src/search/source.ts';
 
@@ -196,6 +197,29 @@ test('empty qualifier lists impose no restriction; duplicate clauses and qualifi
       qualifiers: [...qualified.qualifiers!, ...qualified.qualifiers!],
     }),
   ).toBe(true);
+});
+
+test('conflicting spoiler witnesses remain unknown through NOT while identical levels retain meaning', () => {
+  const spoiler = { property: 'rezics:spoilerLevel', in: ['0'] };
+  const filter = compileCurrentFilter({
+    not: { statement: { property: 'schema:code', in: ['ABC'], qualifiers: [spoiler] } },
+  });
+  const clause = filter.leaves[0]!;
+  const conflict = statement({
+    qualifiers: [
+      { property: 'rezics:spoilerLevel', value: '0' },
+      { property: 'rezics:spoilerLevel', value: '2' },
+    ],
+  });
+  const duplicate = statement({
+    qualifiers: [
+      { property: 'rezics:spoilerLevel', value: '0' },
+      { property: 'rezics:spoilerLevel', value: '0' },
+    ],
+  });
+  expect(holdsCurrentStatements([conflict], clause)).toBe('not_proven');
+  expect(filter.evaluate([holdsCurrentStatements([conflict], clause)])).toBe('not_proven');
+  expect(holdsCurrentStatements([duplicate], clause)).toBe(true);
 });
 
 test('matching leaves never mutate frozen types, clauses, statement arrays or nested evidence', () => {

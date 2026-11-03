@@ -46,7 +46,7 @@ export function planCharacterPersonWitnesses(
       property: probe.property,
       values: [probe.value],
       ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
-    });
+    }) === true;
   const characters = (statement: IndexedStatement) => [
     ...new Set(statement.qualifiers?.filter((q) => q.property === 'wdt:P453').map((q) => q.value)),
   ];
@@ -154,7 +154,7 @@ export async function matchCharacterPersonWitnessPlan(
       property: probe.property,
       values: [probe.value],
       ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
-    });
+    }) === true;
   const characters = (statement: IndexedStatement) => [
     ...new Set(statement.qualifiers?.filter((q) => q.property === 'wdt:P453').map((q) => q.value)),
   ];

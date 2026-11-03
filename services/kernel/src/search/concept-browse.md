@@ -113,6 +113,9 @@ partial or withheld native evidence cannot set it. The enclosing caller must rev
 statement evidence before publishing results. Source cost derivation and universal Search and page
 installation remain separate work.
 
+Conflicting explicit spoiler levels on one selected statement remain `not_proven`; duplicate identical
+levels retain their meaning.
+
 ## Native hierarchy closure source
 
 Decision: descendant closure reads ready selected `skos:broader` edges scoped by selected `skos:inScheme`, confirms both relations through current native witnesses, and uses a short raw page or an empty terminal seek to prove exhaustion.

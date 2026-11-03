@@ -139,7 +139,7 @@ export async function checkHits(
             if (leaf !== undefined) order.add(leaf);
           }
           for (const leaf of plan.leaves.keys()) order.add(leaf);
-          const values: (boolean | Point[])[] = new Array(plan.leaves.length);
+          const values: (RelationFacetMatch | Point[])[] = new Array(plan.leaves.length);
           for (const leaf of order) {
             const clause = plan.leaves[leaf]!;
             const overflow = clause.facet === 'statement' && subject.relationFacetOverflow?.includes(clause.property);
@@ -174,7 +174,7 @@ export async function checkHits(
           }
           evaluations.set(subject.id, () => {
             const resolved = values.map((value) =>
-              typeof value === 'boolean' ? value : anyCurrentMatch(value.map((point) => point.result!)),
+              Array.isArray(value) ? anyCurrentMatch(value.map((point) => point.result!)) : value,
             );
             // Bounded uncertainty remains unknown through negation and cannot disclose a hit.
             const passed = plan.evaluate(resolved) === true;
@@ -186,13 +186,14 @@ export async function checkHits(
                 !passed &&
                 values.some((value, leaf) => {
                   const clause = plan.leaves[leaf]!;
+                  if (value === 'not_proven') return true;
                   return (
                     Array.isArray(value) &&
                     (plan.positive.has(leaf) ||
                       (clause.facet === 'statement' &&
                         (!!clause.qualifiers?.length ||
                           options?.spoilerThreshold !== undefined ||
-                          ('values' in clause && clause.inverse === true))))
+                          ('values' in clause && clause.inverse === true)))
                   );
                 }),
             };
@@ -206,7 +207,7 @@ export async function checkHits(
               clause === undefined ||
               (clause.facet === 'type'
                 ? holdsCurrentType(subject.type, clause)
-                : holdsCurrentStatements(subject.statements, clause))
+                : holdsCurrentStatements(subject.statements, clause) === true)
             );
           })
         )
