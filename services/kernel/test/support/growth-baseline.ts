@@ -112,11 +112,6 @@ export const GROWTH_BASELINE: readonly GrowthBaselineEntry[] = [
     file: 'services/kernel/test/semantic/growth-relations.test.ts',
     reason: 'B: docs/research/growth-shadow-triage-other.md',
   },
-  {
-    name: 'workflow retention batch',
-    file: 'services/kernel/test/work/growth-retention.test.ts',
-    reason: 'T: docs/research/growth-shadow-triage-other.md',
-  },
 ] as const;
 
 const repositoryRoot = resolve(import.meta.dir, '../../../../');

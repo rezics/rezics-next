@@ -47,6 +47,7 @@ payloads rather than with unrelated history. Permanent writer fences stay. MVCC 
 `test/work/growth-retention.test.ts` measures empty, short (10) and full (1,000) batches at scales 64, 512 and 4,096
 history units (16 rows each) with selected work fixed, and a fourth series that grows selected-application eligible
 backlog with the returned batch fixed at 1,000. Plans must use `workflow_retention_selector` with no sequential scan.
+The full-batch series bound retires the former `GROWTH_BASELINE` step exemption for `workflow retention batch`.
 Measured rows/statements/blocks are logged from that native check.
 
 Remaining limits: deletion still follows owned payload/cascade rows, so a batch with large per-workflow payloads is
