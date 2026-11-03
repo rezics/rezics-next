@@ -19,6 +19,9 @@ deadline: number; work: AccessWorkAccounting }>`. `RealmSubjectDisclosure` has o
 `RealmSubjectFreshness = Readonly<{ before: string; final: string; expiresAt: number; anchors: readonly AnchoredPosition[] }>`
 is internal native freshness, never permission or a reusable bearer proof. Signatures hash actual native
 source and parent observations. No concealed identifiers, counts, denial details or public DTOs are returned.
+The internal `reads.ts` export `prepareRealmSubjectThreadDisclosure` returns `state`, nullable `signature`,
+`anchors` and `final(): Promise<{ signature: string; anchors: readonly AnchoredPosition[] } | null>`;
+its state is `positive | absent | withheld`. It reuses native source, ancestry and board disclosure without bytes.
 
 Decision: exact evidence pins the original Subject and requires its native reference to remain terminal;
 a redirect never substitutes a different Subject. Missing native capabilities and dependency failures produce
