@@ -70,7 +70,13 @@ export type ReviewDiscoveryIncompletePage = Readonly<{
   position: bigint;
   incomplete: 'cut-required' | 'cut-changed';
 }>;
-export type ReviewDiscoveryHomeObservation = Readonly<{ partition: number; epoch: number; position: string }>;
+export type ReviewDiscoveryHomeObservation = Readonly<{
+  partition: number;
+  epoch: number;
+  position: string;
+  /** Native projection equality, independent of domain publication positions. */
+  projection?: string;
+}>;
 export type ReviewDiscoveryContinuation = ReviewDiscoveryPageKey & Readonly<{ token: string }>;
 export type ReviewDiscoveryPopulationPage =
   | (ReviewDiscoverySnapshot & Readonly<{ state: 'ready'; next: ReviewDiscoveryContinuation | null }>)
@@ -382,7 +388,7 @@ async function readDependencies(
   };
 }
 
-type HomeObservation = Readonly<{ partition: number; epoch: number; position: bigint }>;
+type HomeObservation = Readonly<{ partition: number; epoch: number; position: bigint; projection: bigint }>;
 type PopulationCut = Readonly<{ homes: readonly HomeObservation[]; frontier: bigint }>;
 type CutState =
   | Readonly<{ position: bigint; cut: PopulationCut; status: 'ready' }>
@@ -417,11 +423,22 @@ async function captureCut(
     `SELECT position::text FROM content.review_discovery_frontier WHERE route=$1`,
     [partition * 16],
   );
+  const projections = await client.query<{ partition: number; revision: string }>(
+    `SELECT route/16 AS partition,revision::text FROM content.review_census_source_frontier
+     WHERE route=ANY($1::integer[])`,
+    [selected.map((home) => home * 16)],
+  );
+  const revisions = new Map(projections.rows.map((row) => [row.partition, BigInt(row.revision)]));
   return {
     position: root.position,
     cut: {
       homes: partitions
-        .map((item) => ({ partition: item.partitionNo, epoch: item.epoch, position: item.position }))
+        .map((item) => ({
+          partition: item.partitionNo,
+          epoch: item.epoch,
+          position: item.position,
+          projection: revisions.get(item.partitionNo) ?? 0n,
+        }))
         .sort((a, b) => a.partition - b.partition),
       frontier: BigInt(frontier.rows[0]?.position ?? '0'),
     },
@@ -439,7 +456,8 @@ function sameCut(left: PopulationCut, right: PopulationCut): boolean {
         current !== undefined &&
         home.partition === current.partition &&
         home.epoch === current.epoch &&
-        home.position === current.position
+        home.position === current.position &&
+        home.projection === current.projection
       );
     })
   );
@@ -451,7 +469,7 @@ function sourceVersion(value: Candidate, dependencyHomes: readonly number[], cut
     ...value,
     homes: cut.homes
       .filter((home) => selected.has(home.partition))
-      .map((home) => [home.partition, home.epoch, home.position.toString()]),
+      .map((home) => [home.partition, home.epoch, home.position.toString(), home.projection.toString()]),
   };
   return `rv1_${createHash('sha256').update(JSON.stringify(state)).digest('base64url')}`;
 }
@@ -512,7 +530,8 @@ function verifyCut(
           home.partition > 0xfff ||
           !Number.isSafeInteger(home.epoch) ||
           home.epoch < 1 ||
-          !/^(0|[1-9][0-9]*)$/.test(home.position),
+          !/^(0|[1-9][0-9]*)$/.test(home.position) ||
+          (home.projection !== undefined && !/^(0|[1-9][0-9]*)$/.test(home.projection)),
       )
     )
       return null;
@@ -634,7 +653,13 @@ export class ReviewDiscoverySourceError extends Error {
 
 function cutFromToken(value: SignedCut): PopulationCut {
   return {
-    homes: value.homes.map((home) => ({ ...home, position: BigInt(home.position) })),
+    // Old signed cuts have no projection observation and must restart, including
+    // on a home whose native projection counter is still zero.
+    homes: value.homes.map((home) => ({
+      ...home,
+      position: BigInt(home.position),
+      projection: home.projection === undefined ? -1n : BigInt(home.projection),
+    })),
     frontier: BigInt(value.frontier),
   };
 }
@@ -650,6 +675,7 @@ function tokenObservation(cut: PopulationCut): ReviewDiscoveryHomeObservation[] 
     partition: home.partition,
     epoch: home.epoch,
     position: home.position.toString(),
+    projection: home.projection.toString(),
   }));
 }
 

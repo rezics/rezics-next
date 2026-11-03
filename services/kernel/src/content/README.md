@@ -1281,11 +1281,21 @@ The census commit rechecks those source versions and their current dependency di
 so a repair between the producer's final snapshot and installation cannot commit stale contribution eligibility.
 A changed commit observation resets the generation and signed frontier together, invalidating earlier page deltas.
 
+Decision: include a native projection revision for every observed home in the signed cut and source version, so
+repairs invalidate exhausted generations without allocating domain publication positions.
+
+`review_census_source_frontier` advances in the native writer transaction for changed Review thread/opening rows,
+Review boards and retained dependency directory rows. Its route is the changed row's home; a shared Board invalidates
+each captured cut that observed that Board home without enumerating its Reviews. No-op writes do not advance it.
+Coverage and maintenance compare these keyed revisions even after exhaustion, reset a stale generation before the
+next installation page, and retain earlier cleanup episodes. Older cuts without projection revisions require a
+restart. This closes native source repair equality only; anonymous authority closure and public totals remain pending.
+
 ##### Cost: retained census page
 
 - **Touches:** one coherent producer page and its real Content/Access/Semantic owner calls; one installation point
   before that page; one locked installation point, bounded previous-contribution points, retained episode inserts,
-  contribution replacements and installation CAS after it. The existing coherent cut is reobserved before writes.
+  contribution replacements and installation CAS after it. The existing coherent cut, including native projection revisions, is reobserved before writes.
 - **Bound:** the page retains at most 100 episodes and 256 home observations. Installation adds at most 16 SQL
   statements and four transaction controls to the existing coherent-page operation. Previous contributions use
   exact `(route, thread_id)` keys; episode conflicts and foreign keys use exact `(route, thread_id, source_version)`
@@ -1299,11 +1309,12 @@ A changed commit observation resets the generation and signed frontier together,
 
 - **Touches:** one installation primary-key read and the existing native cut observation; no candidate page,
   contribution history, body, member enumeration or author presentation.
-- **Bound:** at most four SQL statements and two transaction controls, one installation row, at most 256 keyed
-  home observations, one indexed pending-work probe and one native frontier point. Changed, missing and fenced
+- **Bound:** at most five SQL statements and two transaction controls, one installation row, at most 256 keyed
+  home observations and 256 exact projection-revision points, one indexed pending-work probe and one native frontier point. Changed, missing and fenced
   observations cannot report installed coverage. An installed cut still reports missing native eligibility coverage.
 - **Growth check:** the focused census test distinguishes preparing, stale, empty and unavailable without reading
-  retained episodes on a coverage request; three-scale physical coverage measurement remains pending.
+  retained episodes on a coverage request, and rejects exhausted cuts after native source/directory repairs or an
+  older cut without projection equality; three-scale physical coverage measurement remains pending.
 
 `read` and `hydrate` accept at most 100 IDs from one partition. Legacy `page` keeps its key and result shape and accepts
 the initial page position as an optional `cut`. A continuation without that cut returns `cut-required`; a changed

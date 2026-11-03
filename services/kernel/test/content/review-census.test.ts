@@ -183,6 +183,33 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
   expect((await source.censusCoverage(partition)).generation).not.toBe(beforeRestoration.generation);
   expect(await source.count(partition)).toMatchObject({ unavailable: true });
 
+  // Repair an already-exhausted generation without a domain publication. The
+  // bounded coverage read must reject it even though there is no page to hydrate.
+  const nativePosition = async () =>
+    (await fixture.reader.query('SELECT position::text FROM core.partition WHERE partition_no=$1', [partition]))
+      .rows[0]!.position;
+  for (const repair of [
+    ['UPDATE content.thread SET security_revision=security_revision+1 WHERE route=$1 AND thread_id=$2',
+      [routeOf(written.value.threadId), written.value.threadId]],
+    ['UPDATE content.post SET security_revision=security_revision+1 WHERE route=$1 AND post_id=$2',
+      [routeOf(written.value.itemId), written.value.itemId]],
+    ["UPDATE content.board SET visibility='protected' WHERE route=$1 AND board_id=$2",
+      [board.route, board.board_id]],
+    ["UPDATE content.board SET visibility='published' WHERE route=$1 AND board_id=$2",
+      [board.route, board.board_id]],
+    ["DELETE FROM content.review_discovery_dependency WHERE route=$1 AND thread_id=$2 AND gate_kind='context'",
+      [routeOf(written.value.threadId), written.value.threadId]],
+  ] as const) {
+    const previous = await source.censusCoverage(partition);
+    const at = await nativePosition();
+    await fixture.reader.query(repair[0], [...repair[1]]);
+    expect(await nativePosition()).toBe(at);
+    expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
+    expect(await source.maintainCensus(partition)).toMatchObject({ state: 'changed', examined: 0 });
+    expect((await source.censusCoverage(partition)).generation).not.toBe(previous.generation);
+    expect(await maintainReviewCensusBatch(partition, source.maintainCensus)).toMatchObject({ state: 'exhausted' });
+  }
+
   // A native projection repair need not publish a new domain position. Its source
   // row must still match after owner hydration before a census episode is retained.
   const observer = observeSql(fixture.pool);
@@ -202,7 +229,7 @@ test('a retained native census resumes, replaces restored lifecycles and keeps i
     } finally {
       barrier.release();
     }
-    expect(await pending).toMatchObject({ state: 'changed', missing: 'source-lifecycle', reviews: [], next: null });
+    expect(await pending).toMatchObject({ state: 'changed', missing: 'eligibility-dependency', reviews: [], next: null });
   } finally {
     await observer.close();
   }
@@ -214,6 +241,15 @@ test('an empty census and a stale cut remain distinguishable from a complete zer
   expect(await source.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 0 });
   const before = await source.censusCoverage(partition);
   expect(before).toMatchObject({ state: 'preparing', installed: true });
+  await fixture.reader.query(
+    `UPDATE content.review_census_installation SET cut=jsonb_set(cut,'{homes}',
+      (SELECT jsonb_agg(home-'projection') FROM jsonb_array_elements(cut->'homes') home)) WHERE route=$1`,
+    [partition * 16],
+  );
+  expect(await source.censusCoverage(partition)).toMatchObject({ installed: false, missing: 'population-cut' });
+  expect(await source.maintainCensus(partition)).toMatchObject({ state: 'changed', examined: 0 });
+  expect((await source.censusCoverage(partition)).generation).not.toBe(before.generation);
+  expect(await source.maintainCensus(partition)).toMatchObject({ state: 'exhausted', examined: 0 });
   await fixture.reader.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [partition]);
   try {
     expect(await source.censusCoverage(partition)).toMatchObject({ state: 'unavailable', installed: false });

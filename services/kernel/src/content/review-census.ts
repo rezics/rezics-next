@@ -82,7 +82,8 @@ export function sameReviewCensusCut(left: ReviewCensusCut, right: ReviewCensusCu
         other !== undefined &&
         home.partition === other.partition &&
         home.epoch === other.epoch &&
-        home.position === other.position
+        home.position === other.position &&
+        home.projection === other.projection
       );
     })
   );
