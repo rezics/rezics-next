@@ -216,6 +216,80 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
   expect((await f.call(reader, 'GET', management(reader))).value).toEqual({ items: [], next: null });
 });
 
+test('board stop and restart rotate the private episode identity and reject stale CAS revisions', async () => {
+  const reader = f.accounts.actor;
+  const route = routeOf(reader)!;
+  await f.db.admin.query('DELETE FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
+  expect((await f.call(reader, 'GET', path())).value).toEqual({ watching: false, revision: 0 });
+  expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 0 })).value).toEqual({
+    watching: true,
+    revision: 1,
+  });
+  const first = (
+    await f.db.admin.query('SELECT watch_id FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [
+      route,
+      reader,
+    ])
+  ).rows[0]!.watch_id as string;
+  expect((await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 1 })).value).toEqual({
+    watching: false,
+    revision: 2,
+  });
+  expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 1 })).status).toBe(409);
+  expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 2 })).value).toEqual({
+    watching: true,
+    revision: 3,
+  });
+  const second = (
+    await f.db.admin.query('SELECT watch_id FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [
+      route,
+      reader,
+    ])
+  ).rows[0]!.watch_id as string;
+  expect(second).not.toBe(first);
+  expect((await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 2 })).status).toBe(409);
+  expect((await f.call(reader, 'GET', management(reader, 'board'))).value.items).toMatchObject([
+    { id: second, state: 'available', resourceId: f.boardId, revision: 3 },
+  ]);
+});
+
+test('empty inventory is terminal and a full sparse raw page returns no refill before same-cursor continuation', async () => {
+  const reader = f.accounts.actor;
+  const route = routeOf(reader)!;
+  await f.db.admin.query('DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
+  expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value).toEqual({ items: [], next: null });
+
+  const first = await f.thread();
+  const watchIds = Array.from({ length: 100 }, () => newId(route));
+  const targets = [first.id, ...Array.from({ length: 99 }, () => newId(route))];
+  await f.db.admin.query(
+    `INSERT INTO content.thread_watch(route,watch_id,thread_id,watcher_account_id,created_at)
+     SELECT $1,watch,thread,$2,'2026-11-01T00:00:00Z'::timestamptz + ordinal * interval '1 second'
+     FROM unnest($3::uuid[],$4::uuid[]) WITH ORDINALITY n(watch,thread,ordinal)`,
+    [route, reader, watchIds, targets],
+  );
+  const gate = interceptThreadSnapshot(f.db.pool, first.id, 'pause');
+  try {
+    const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
+    await gate.reached;
+    await f.db.admin.query('DELETE FROM content.thread_watch WHERE watch_id=ANY($1::uuid[])', [watchIds]);
+    gate.release();
+    const sparse = await pending;
+    expect(sparse.status).toBe(200);
+    expect(sparse.value.items).toEqual([]);
+    expect(sparse.value.next).toBeString();
+    const continued = await f.call(
+      reader,
+      'GET',
+      `${management(reader, 'thread', 20)}&cursor=${encodeURIComponent(sparse.value.next)}`,
+    );
+    expect(continued).toMatchObject({ status: 200, value: { items: [], next: null } });
+  } finally {
+    gate.restore();
+    await f.db.admin.query('DELETE FROM content.thread_watch WHERE watch_id=ANY($1::uuid[])', [watchIds]);
+  }
+});
+
 test('inventory retries a reused source identity and the exact same cursor after an unavailable native read', async () => {
   const reader = f.accounts.actor;
   const route = routeOf(reader)!;

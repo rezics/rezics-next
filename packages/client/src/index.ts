@@ -31,7 +31,11 @@ export type {
   EntryAnnotationCorrectionPage,
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
-export type { WatchManagementItem, WatchManagementKind, WatchManagementPage } from './kernel/content/schemas';
+export type {
+  WatchManagementItem,
+  WatchManagementKind,
+  WatchManagementPage,
+} from './kernel/content/watch-management-contract';
 export type {
   RealmClaimReviewApprovalAdvice,
   RealmClaimReviewClaimant,
