@@ -16,7 +16,20 @@ const subject = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
 const reviewIds = ['0192f3a0-6c1e-7b2a-9d4e-00000000cccc', '0192f3a0-6c1e-7b2a-9d4e-00000000dddd'];
 
 function visit(): VndbVisit {
-  return { subject, csrfToken: 'captured-csrf', controller: new AbortController(), current: () => true, retire() {} };
+  const controller = new AbortController();
+  let retired = false;
+  return {
+    subject,
+    csrfToken: 'captured-csrf',
+    controller,
+    retire() {
+      retired = true;
+      controller.abort();
+    },
+    current() {
+      return !retired && !controller.signal.aborted;
+    },
+  };
 }
 
 function row(ordinal: number): VndbRow {
