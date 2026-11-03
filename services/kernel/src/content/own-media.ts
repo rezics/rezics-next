@@ -100,18 +100,19 @@ function cursorBinding(actor: AccountActor): CursorBinding {
 /** Keep the original native Access check across foreign preparation. The local
  * account observation also checks revocation that happened after its preparation.
  * This neither registers an Actor nor substitutes ownership for authentication. */
-async function verifyViewer(
-  client: AccessClient,
-  actor: AccountActor,
-  check: AccessCheck,
-): Promise<void> {
+async function verifyViewer(client: AccessClient, actor: AccountActor, check: AccessCheck): Promise<void> {
   if (!(await check(client))) throw new ProblemError('not_found');
   const account = await readAccount(client, accountRoute(actor), actor.accountId);
   if (
-    !account || account.kind !== 'actor' || account.state !== 'active' || account.fenced ||
-    !Number.isSafeInteger(actor.authnEpoch) || actor.authnEpoch < 1 ||
+    !account ||
+    account.kind !== 'actor' ||
+    account.state !== 'active' ||
+    account.fenced ||
+    !Number.isSafeInteger(actor.authnEpoch) ||
+    actor.authnEpoch < 1 ||
     BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
-  ) throw new ProblemError('not_found');
+  )
+    throw new ProblemError('not_found');
 }
 
 async function readLocatorPage(
@@ -137,9 +138,13 @@ async function readLocatorPage(
         if (cursor !== undefined) {
           const decoded = decodeCursor(deps.tokens, cursorBinding(actor), cursor, deps.clock().getTime());
           if (
-            !decoded.ok || decoded.epoch !== home.epoch || decoded.after.length !== 1 ||
-            typeof decoded.after[0] !== 'string' || routeOf(decoded.after[0]) === null
-          ) throw new ProblemError('invalid_request');
+            !decoded.ok ||
+            decoded.epoch !== home.epoch ||
+            decoded.after.length !== 1 ||
+            typeof decoded.after[0] !== 'string' ||
+            routeOf(decoded.after[0]) === null
+          )
+            throw new ProblemError('invalid_request');
           after = decoded.after[0];
         }
         const rows = await page.run(bounded, {
@@ -282,8 +287,13 @@ function baseCandidate(
         recheckAtUse: true,
       }
     : null;
-  const canResume = row.purpose === 'post-image' && row.browser_reservation && live && containerAvailable &&
-    Date.parse(row.created_at) + 24 * 60 * 60_000 > now && (state === 'reserved' || state === 'uploaded');
+  const canResume =
+    row.purpose === 'post-image' &&
+    row.browser_reservation &&
+    live &&
+    containerAvailable &&
+    Date.parse(row.created_at) + 24 * 60 * 60_000 > now &&
+    (state === 'reserved' || state === 'uploaded');
   return {
     row,
     partitionEpoch,
@@ -489,9 +499,16 @@ export async function readOwnMediaInventory(
 ): Promise<OwnMediaInventoryPage> {
   if (actor.kind !== 'account') throw new ProblemError('not_found');
   const locatorRoute = accountRoute(actor);
-  const viewer = await accessCheck(deps.access, actor, 'account:read', {
-    route: locatorRoute, id: actor.accountId,
-  }, { pool: deps.pool, deadline });
+  const viewer = await accessCheck(
+    deps.access,
+    actor,
+    'account:read',
+    {
+      route: locatorRoute,
+      id: actor.accountId,
+    },
+    { pool: deps.pool, deadline },
+  );
   const raw = await readLocatorPage(deps.pool, locatorRoute, actor, input.cursor, deps, viewer, deadline);
   const rawIds = raw.ids;
   const homes = homesFor(rawIds);
@@ -514,36 +531,46 @@ export async function readOwnMediaInventory(
     actions: new Set(mediaActions),
     context: { pool: deps.pool, deadline },
   });
-  const finalCandidates = (await Promise.all(homes.map((home) =>
-    readObjectHome(deps.pool, actor, home, finalDecisions, deps.clock, deadline),
-  ))).flat().sort((left, right) => left.row.id.localeCompare(right.row.id));
-  if (JSON.stringify(finalCandidates) !== JSON.stringify(candidates))
-    throw new ProblemError('dependency_unavailable');
+  const finalCandidates = (
+    await Promise.all(homes.map((home) => readObjectHome(deps.pool, actor, home, finalDecisions, deps.clock, deadline)))
+  )
+    .flat()
+    .sort((left, right) => left.row.id.localeCompare(right.row.id));
+  if (JSON.stringify(finalCandidates) !== JSON.stringify(candidates)) throw new ProblemError('dependency_unavailable');
   // Empty pages receive the same final viewer and home qualification. No failed
   // authority round can return a terminal empty page or consume a raw frontier.
-  await within(deadline, () => withConnection(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, deadline);
-    try {
-      await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      const home = await readPartition(bounded, partitionOf(locatorRoute));
-      if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
-      if (home.epoch !== raw.epoch) throw new ProblemError('dependency_unavailable');
-      await verifyViewer(bounded, actor, viewer);
-      await bounded.query('COMMIT');
-    } catch (error) {
+  await within(deadline, () =>
+    withConnection(deps.pool, async (client) => {
+      const bounded = deadlineClient(client, deadline);
       try {
-        await bounded.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
+        await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const home = await readPartition(bounded, partitionOf(locatorRoute));
+        if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+        if (home.epoch !== raw.epoch) throw new ProblemError('dependency_unavailable');
+        await verifyViewer(bounded, actor, viewer);
+        await bounded.query('COMMIT');
+      } catch (error) {
+        try {
+          await bounded.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(client, rollbackError as Error);
+        }
+        throw error;
       }
-      throw error;
-    }
-  }));
-  const nextCursor = rawIds.length === OWN_MEDIA_PAGE_SIZE
-    ? encodeCursor(deps.tokens, cursorBinding(actor), {
-        epoch: raw.epoch, after: [rawIds.at(-1)!],
-      }, deps.clock().getTime())
-    : null;
+    }),
+  );
+  const nextCursor =
+    rawIds.length === OWN_MEDIA_PAGE_SIZE
+      ? encodeCursor(
+          deps.tokens,
+          cursorBinding(actor),
+          {
+            epoch: raw.epoch,
+            after: [rawIds.at(-1)!],
+          },
+          deps.clock().getTime(),
+        )
+      : null;
   return {
     availability: 'available',
     entries: current.map(entry),

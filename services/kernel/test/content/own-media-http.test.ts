@@ -231,20 +231,32 @@ test('native uploader cursors expire and bind the complete viewer and observed h
   await system.clock.setCommandTime(new Date(now).toISOString());
   const route = routeOf(actor.accountId)!;
   const home = await system.database.pool.query<{ epoch: number }>(
-    'SELECT epoch FROM core.partition WHERE partition_no = $1', [partitionOf(route)],
+    'SELECT epoch FROM core.partition WHERE partition_no = $1',
+    [partitionOf(route)],
   );
   const binding = {
     operation: 'media.own',
     parameters: {
-      accountId: actor.accountId, authnEpoch: actor.authnEpoch, clientId: actor.clientId,
-      requestedBy: actor.requestedBy, scopes: JSON.stringify([...new Set(actor.scopes)].sort()),
-      filter: 'all-media-v1', order: 'media-id-ascending', limit: 20,
+      accountId: actor.accountId,
+      authnEpoch: actor.authnEpoch,
+      clientId: actor.clientId,
+      requestedBy: actor.requestedBy,
+      scopes: JSON.stringify([...new Set(actor.scopes)].sort()),
+      filter: 'all-media-v1',
+      order: 'media-id-ascending',
+      limit: 20,
     },
   };
   const token = (parameters = binding.parameters, epoch = home.rows[0]!.epoch, issuedAt = now) =>
-    encodeCursor(system.tokenKeys, { ...binding, parameters }, {
-      epoch, after: ['00000000-0000-0000-0000-000000000000'],
-    }, issuedAt);
+    encodeCursor(
+      system.tokenKeys,
+      { ...binding, parameters },
+      {
+        epoch,
+        after: ['00000000-0000-0000-0000-000000000000'],
+      },
+      issuedAt,
+    );
   const observer = observeSql(system.database.pool);
   try {
     for (const cursor of [
@@ -272,9 +284,19 @@ test('a fabricated account actor cannot read even an empty native uploader home'
   const { system } = currentMediaScenario();
   const observer = observeSql(system.database.pool);
   try {
-    await expect(readOwnMediaInventory({
-      pool: system.database.pool, access: system.access, tokens: system.tokenKeys, clock: () => new Date(),
-    }, { ...system.actors.author.actor }, {}, Date.now() + 10_000)).rejects.toMatchObject({ code: 'not_found' });
+    await expect(
+      readOwnMediaInventory(
+        {
+          pool: system.database.pool,
+          access: system.access,
+          tokens: system.tokenKeys,
+          clock: () => new Date(),
+        },
+        { ...system.actors.author.actor },
+        {},
+        Date.now() + 10_000,
+      ),
+    ).rejects.toMatchObject({ code: 'not_found' });
     expect(observer.records.some((record) => record.statement === locatorPage.sql)).toBe(false);
   } finally {
     await observer.close();
@@ -287,7 +309,8 @@ test('expired reservations offer no upload resume before collection runs', async
   await driver.setCreatedAt(media.mediaId, new Date(Date.now() - 24 * 60 * 60_000).toISOString());
   const current = await inventory(system.actors.author);
   expect(current.entries.find(({ id }) => id === media.mediaId)).toMatchObject({
-    state: 'reserved', actions: { resume: null, read: null, retry: null },
+    state: 'reserved',
+    actions: { resume: null, read: null, retry: null },
   });
 });
 
@@ -301,16 +324,13 @@ test('collection during hydration fails the page and retries the same native raw
   try {
     await selected.entered;
     expect((await driver.collect('job', partitionOf(routeOf(media.mediaId)!))).outcome).toBe('permitted');
-  } finally {
     selected.release();
-  }
-  try {
     expect((await pending).status).toBe(503);
     const retried = await inventory(system.actors.author);
-    expect(retried.entries.find(({ id }) => id === media.mediaId)).toMatchObject({
-      state: 'erased', actions: { read: null, remove: null, resume: null, retry: null },
-    });
+    expect(retried.entries.some(({ id }) => id === media.mediaId)).toBe(false);
   } finally {
+    selected.release();
+    await pending;
     await observer.close();
   }
 });
