@@ -120,11 +120,7 @@ function decryptFrontier(
   }
 }
 
-function validPosition(
-  epoch: number | null,
-  phase: unknown,
-  after: unknown,
-): after is SearchSortValue[] {
+function validPosition(epoch: number | null, phase: unknown, after: unknown): after is SearchSortValue[] {
   if (!Array.isArray(after)) return false;
   let name: unknown;
   let id: unknown;
@@ -151,11 +147,7 @@ export async function encodeRatingCursor(
   cursor: { generation: number; phase: RatingPhase; after: readonly SearchSortValue[] },
   now = Date.now(),
 ): Promise<string> {
-  if (
-    !validContext(context) ||
-    !cursor ||
-    !validPosition(context.priorEpoch, cursor.phase, cursor.after)
-  )
+  if (!validContext(context) || !cursor || !validPosition(context.priorEpoch, cursor.phase, cursor.after))
     throw new TypeError('Invalid rating cursor');
   const frontier = context.realm ? [encryptFrontier(ring, context, cursor.phase, cursor.after)] : cursor.after;
   return encodeSearchCursor(
