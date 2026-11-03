@@ -131,9 +131,9 @@ test('expired and unavailable sessions stay refused and do not become anonymous 
   const failed = request(aliceId);
   await expect(prepareSession(failed, sessions)).rejects.toMatchObject(unavailable);
   expect(viewerCredential(failed)).toBeNull();
-  await expect(
-    prepareSession(request(aliceId, { method: 'POST', csrf: aliceCsrf }), sessions),
-  ).rejects.toMatchObject(unavailable);
+  await expect(prepareSession(request(aliceId, { method: 'POST', csrf: aliceCsrf }), sessions)).rejects.toMatchObject(
+    unavailable,
+  );
   await expect(prepareSession(request(aliceId, { method: 'POST', csrf: bobCsrf }), sessions)).rejects.toMatchObject(
     forbidden,
   );
@@ -176,7 +176,10 @@ test('stale caller state cannot authorize a replacement request', async () => {
 test('unsafe session requests need the site Origin and matching CSRF token', async () => {
   const sessions = env({ [aliceId]: aliceActive });
   const cookie = { method: 'POST' as const, csrf: aliceCsrf };
-  for (const headers of [{ ...cookie, origin: null }, { ...cookie, origin: 'https://evil.example' }])
+  for (const headers of [
+    { ...cookie, origin: null },
+    { ...cookie, origin: 'https://evil.example' },
+  ])
     await expect(prepareSession(request(aliceId, headers), sessions)).rejects.toMatchObject(forbidden);
   await expect(prepareSession(request(aliceId, { method: 'POST', csrf: null }), sessions)).rejects.toMatchObject(
     forbidden,
