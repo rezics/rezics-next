@@ -396,14 +396,17 @@ async function worker() {
       await storage.deletePrefix(prefix);
     },
   };
-  client.enqueue = (async (options: Parameters<WorkClient['enqueue']>[0], ...args: unknown[]) => {
+  client.enqueue = async <T extends (...args: any[]) => Promise<any>>(
+    options: Parameters<WorkClient['enqueue']>[0],
+    ...args: Parameters<T>
+  ) => {
     if (options.workflowName === RUN || options.workflowName === RETENTION) {
       assert(options.workflowID);
       held.add(options.workflowID);
-      return enqueue({ ...options, delaySeconds: 3600 }, ...args);
+      return enqueue<T>({ ...options, delaySeconds: 3600 }, ...args);
     }
-    return enqueue(options, ...args);
-  }) as WorkClient['enqueue'];
+    return enqueue<T>(options, ...args);
+  };
   const runtime = await composeWork(
     [
       {
