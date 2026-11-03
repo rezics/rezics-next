@@ -85,6 +85,18 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     icon: Import,
   },
   {
+    id: 'library.recover-archive',
+    kind: 'navigation',
+    group: 'personal',
+    order: 21,
+    href: '/library/recover-archive',
+    match: 'exact',
+    signedIn: true,
+    operation: 'library_entry.list',
+    label: ({ locale }) => m.library_archive_title({}, { locale }),
+    icon: Import,
+  },
+  {
     id: 'library.create-collection',
     kind: 'creation',
     group: 'create',
