@@ -7695,5 +7695,10 @@
   "own_classifications_next": "Nächste Seite",
   "own_classifications_current": "Deine aufbewahrte Bewertung ist aktuell.",
   "own_classifications_unknown": "Ob diese aufbewahrte Bewertung gezählt wird, ist unbekannt.",
-  "own_classifications_revision": "Eigene Revision"
+  "own_classifications_revision": "Eigene Revision",
+  "library_occurrence_assessment": "Private Bewertung dieses Eintrags",
+  "library_occurrence_assessment_help": "0–10 in halben Schritten. Leer bedeutet keine Bewertung; null ist ein Wert. Die Abstimmung zum Werk bleibt unverändert.",
+  "library_occurrence_clear_assessment": "Bewertung löschen",
+  "library_occurrence_read_current": "Aktuelles Journal lesen",
+  "library_occurrence_observed": "Aktuelle Journalrevision {revision}, Bewertung {assessment}. Diese Abfrage bestätigt das Ergebnis des ursprünglichen Befehls nicht."
 }

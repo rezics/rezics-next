@@ -47,7 +47,9 @@ export const readPrivateDiary = createServerFn({ method: 'GET' })
     if (!identity) return { kind: 'signed-out' };
     const client = kernelClient();
     const [diary, summary, reportedYear] = await Promise.all([
-      readDiaryPage(client, identity.authorization, data.cursor).catch(() => ({ kind: 'unavailable' as const })),
+      readDiaryPage(client, identity.authorization, data.cursor, { year: data.year, month: data.month }).catch(() => ({
+        kind: 'unavailable' as const,
+      })),
       data.year === undefined
         ? readConsumptionSummary(client, identity.authorization).catch(() => ({ kind: 'unavailable' as const }))
         : Promise.resolve({ kind: 'not-selected' as const }),

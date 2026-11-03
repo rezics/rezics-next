@@ -7695,5 +7695,10 @@
   "own_classifications_next": "下一頁",
   "own_classifications_current": "保留的評估與目前狀態一致。",
   "own_classifications_unknown": "無法確認此保留評估是否已計入統計。",
-  "own_classifications_revision": "自己的修訂版本"
+  "own_classifications_revision": "自己的修訂版本",
+  "library_occurrence_assessment": "本次紀錄的私密評分",
+  "library_occurrence_assessment_help": "以半分為單位輸入0–10。空白表示未評分，0是有效評分。不會變更作品投票。",
+  "library_occurrence_clear_assessment": "清除評分",
+  "library_occurrence_read_current": "讀取目前紀錄",
+  "library_occurrence_observed": "目前紀錄修訂為{revision}，評分為{assessment}。這次讀取無法確認原命令的結果。"
 }

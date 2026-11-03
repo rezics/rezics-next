@@ -7695,5 +7695,10 @@
   "own_classifications_next": "Página siguiente",
   "own_classifications_current": "Tu evaluación conservada está actualizada.",
   "own_classifications_unknown": "Se desconoce si esta evaluación conservada se ha contabilizado.",
-  "own_classifications_revision": "Revisión propia"
+  "own_classifications_revision": "Revisión propia",
+  "library_occurrence_assessment": "Valoración privada de esta ocasión",
+  "library_occurrence_assessment_help": "De 0 a 10 en medios puntos. Vacío significa sin valoración; cero es un valor. No cambia tu voto sobre la obra.",
+  "library_occurrence_clear_assessment": "Borrar valoración",
+  "library_occurrence_read_current": "Leer el diario actual",
+  "library_occurrence_observed": "Revisión actual del diario: {revision}, valoración: {assessment}. Esta lectura no confirma el resultado de la orden original."
 }

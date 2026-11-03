@@ -1,3 +1,4 @@
+import type { DiaryAddress } from './address';
 import type { KernelClient } from '@rezics/client';
 
 export const PRIVATE_DIARY_PAGE_LIMIT = 25;
@@ -10,9 +11,14 @@ export type ConsumptionSummary = NonNullable<
 
 export type DiaryRead = { kind: 'ready'; page: DiaryPage } | { kind: 'stale' | 'retired' | 'unavailable' };
 
-export async function readDiaryPage(client: KernelClient, authorization: string, cursor?: string): Promise<DiaryRead> {
+export async function readDiaryPage(
+  client: KernelClient,
+  authorization: string,
+  cursor?: string,
+  filter: Pick<DiaryAddress, 'year' | 'month'> = {},
+): Promise<DiaryRead> {
   const result = await client.libraryDiary.get({
-    query: { limit: PRIVATE_DIARY_PAGE_LIMIT, ...(cursor ? { cursor } : {}) },
+    query: { limit: PRIVATE_DIARY_PAGE_LIMIT, ...filter, ...(cursor ? { cursor } : {}) },
     headers: { authorization },
   });
   if (!result.error && result.data) return { kind: 'ready', page: result.data };

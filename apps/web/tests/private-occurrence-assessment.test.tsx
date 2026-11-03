@@ -42,22 +42,23 @@ mock.module('../src/session/query', () => ({
   useSession: () => ({ state: 'signed-in', subject: owner, csrfToken: owner + '-csrf' }),
 }));
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => allowed }));
-const journal = (sessionId: string, reflection = sessionId, revision = 3) => ({
+const journal = (sessionId: string, reflection = sessionId, revision = 3, units: number | null = null) => ({
   sessionId,
   revision,
   startDate: null,
   finishDate: { year: 2020 },
   reflection,
+  assessment: { meaningRevision: 1 as const, units },
 });
 const read = mock(async ({ data }: { data: { sessionId: string } }): Promise<JournalReadResult> => ({
   kind: 'ready',
   viewer: owner,
   csrfToken: owner + '-csrf',
-  journal: journal(data.sessionId),
+  journal: journal(data.sessionId, data.sessionId, 3, data.sessionId === 'second' ? 13 : null),
 }));
 let finish!: (result: JournalCommandResult) => void;
 const write = mock(
-  (_input: unknown) =>
+  (_input: Parameters<typeof import('../src/library/private-diary/occurrence-server').correctOccurrenceJournal>[0]) =>
     new Promise<JournalCommandResult>((resolve) => {
       finish = resolve;
     }),
@@ -140,6 +141,17 @@ async function mount() {
     show,
     submit,
     edit,
+    assess: (value: string) =>
+      act(async () => {
+        const field = host.querySelector('input[type=number]')!;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, value);
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      }),
+    click: (label: string) =>
+      act(async () => {
+        [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }),
     close: async () => {
       await act(async () => root.unmount());
       client.clear();
@@ -148,13 +160,12 @@ async function mount() {
   };
 }
 
-test('missing assessment stays unavailable; exact journal intent and independent progress revision survive lost acknowledgement', async () => {
+test('assessment omission preserves absence; exact journal intent and independent progress revision survive lost acknowledgement', async () => {
   const h = await mount();
   try {
     await h.show();
     await h.show();
-    expect(h.host.textContent).toContain(m.library_occurrence_assessment_unavailable());
-    expect(h.host.querySelector('input[type=number]')).toBeNull();
+    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('');
     await h.edit('private edit');
     await h.submit();
     expect(write).toHaveBeenCalledTimes(1);
@@ -207,6 +218,101 @@ test('same-Subject occurrence, credential and exposure replacements discard priv
     await h.show('second');
     expect(h.host.querySelector('textarea')).toBeNull();
     expect(h.host.textContent).toContain(m.library_occurrence_unavailable());
+  } finally {
+    await h.close();
+  }
+});
+
+test('selected occurrence sets zero, explicitly clears, and keeps independent repeat values', async () => {
+  const h = await mount();
+  try {
+    await h.show();
+    await h.show();
+    await h.assess('0');
+    await h.edit('keep unrelated draft');
+    await h.submit();
+    expect(write.mock.calls[0]).toMatchObject([
+      {
+        data: {
+          sessionId: 'exact',
+          body: {
+            revision: 3,
+            assessment: { units: 0 },
+            reflection: 'keep unrelated draft',
+          },
+        },
+      },
+    ]);
+    await act(async () => finish({ kind: 'saved', journal: journal('exact', 'keep unrelated draft', 4, 0) }));
+    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('0');
+    await h.click(m.library_occurrence_clear_assessment());
+    await h.submit();
+    expect(write.mock.calls[1]).toMatchObject([{ data: { body: { revision: 4, assessment: null } } }]);
+    await act(async () => finish({ kind: 'saved', journal: journal('exact', 'keep unrelated draft', 5) }));
+    await h.show('second');
+    await h.show('second');
+    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('6.5');
+    expect(session('second').revision).toBe(7);
+  } finally {
+    await h.close();
+  }
+});
+
+test('stale journal review retains edited fields while adopting unrelated fresh values', async () => {
+  const h = await mount();
+  try {
+    await h.show();
+    await h.show();
+    await h.assess('8.5');
+    await h.submit();
+    read.mockImplementationOnce(async () => ({
+      kind: 'ready',
+      viewer: owner,
+      csrfToken: owner + '-csrf',
+      journal: { ...journal('exact', 'fresh reflection', 4), finishDate: { year: 2021 } },
+    }));
+    await act(async () => {
+      finish({ kind: 'conflict' });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(h.host.querySelector('textarea')!.value).toBe('fresh reflection');
+    expect(h.host.querySelector<HTMLInputElement>('input[type=number]')!.value).toBe('8.5');
+    await h.submit();
+    expect(write).toHaveBeenCalledTimes(1);
+    await h.click(m.library_occurrence_review_latest());
+    await h.submit();
+    expect(write.mock.calls[1]).toMatchObject([{ data: { body: { revision: 4, assessment: { units: 17 } } } }]);
+    expect(write.mock.calls[1]![0].data.body).toEqual({ revision: 4, assessment: { units: 17 } });
+    await act(async () => finish({ kind: 'missing' }));
+    expect(h.host.querySelector('input[type=number]')).toBeNull();
+  } finally {
+    await h.close();
+  }
+});
+
+test('matching independent readback leaves an uncertain assessment bound to its original retry', async () => {
+  const h = await mount();
+  try {
+    await h.show();
+    await h.show();
+    await h.assess('10');
+    await h.submit();
+    const original = write.mock.calls[0];
+    await act(async () => finish({ kind: 'uncertain' }));
+    read.mockImplementationOnce(async () => ({
+      kind: 'ready',
+      viewer: owner,
+      csrfToken: owner + '-csrf',
+      journal: journal('exact', 'exact', 4, 20),
+    }));
+    await h.click(m.library_occurrence_read_current());
+    expect(h.host.textContent).toContain(m.library_occurrence_observed({ revision: 4, assessment: '10' }));
+    await h.submit();
+    expect(write).toHaveBeenCalledTimes(1);
+    await h.click(m.library_rich_entry_retry());
+    expect(write.mock.calls[1]).toEqual(original);
+    await act(async () => finish({ kind: 'retired' }));
+    expect(h.host.querySelector('input[type=number]')).toBeNull();
   } finally {
     await h.close();
   }

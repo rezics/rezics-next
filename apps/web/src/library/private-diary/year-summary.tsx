@@ -1,3 +1,5 @@
+import { Link } from '@tanstack/react-router';
+import type { DiaryAddress } from './address';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import type { ReportedYearRead, ReportedYearSummary } from './native';
@@ -31,15 +33,17 @@ function CountsView({ counts }: { counts: Counts }) {
   );
 }
 
-/** Counts come from the installed summary. Bucket opening awaits the native filtered diary. */
+/** Counts and bucket membership share the native reported finish-date contract. */
 export function ReportedYearPanel({
   year,
   result,
   retry,
+  address = { year },
 }: {
   year: number;
   result: ReportedYearRead;
   retry: () => void;
+  address?: DiaryAddress;
 }) {
   const summary = result.kind === 'ready' && result.value.year === year ? result.value : null;
   const monthName = (month: number) =>
@@ -72,32 +76,29 @@ export function ReportedYearPanel({
             })}
           </p>
           <p className="text-sm">{m.library_diary_currentness({ state: summary.currentness.state })}</p>
-          <p id="library-diary-bucket-unavailable" role="status">
-            {m.library_diary_bucket_unavailable()}
-          </p>
           <ul className="grid gap-3 sm:grid-cols-2">
             {summary.months.map((bucket) => (
               <li key={bucket.month} className="min-w-0 rounded-md border p-3">
-                <button
-                  type="button"
-                  disabled
-                  aria-describedby="library-diary-bucket-unavailable"
-                  className="min-h-11 text-start font-medium"
+                <Link
+                  to="/library/history"
+                  search={{ year, month: bucket.month, returnTo: address.returnTo }}
+                  aria-current={address.month === bucket.month ? 'page' : undefined}
+                  className="inline-flex min-h-11 items-center text-start font-medium underline"
                 >
                   {monthName(bucket.month)}
-                </button>
+                </Link>
                 <CountsView counts={bucket} />
               </li>
             ))}
             <li className="min-w-0 rounded-md border p-3">
-              <button
-                type="button"
-                disabled
-                aria-describedby="library-diary-bucket-unavailable"
-                className="min-h-11 text-start font-medium"
+              <Link
+                to="/library/history"
+                search={{ year, month: 'unallocated', returnTo: address.returnTo }}
+                aria-current={address.month === 'unallocated' ? 'page' : undefined}
+                className="inline-flex min-h-11 items-center text-start font-medium underline"
               >
                 {m.library_diary_year_unallocated()}
-              </button>
+              </Link>
               <CountsView counts={summary.monthUnallocated} />
             </li>
           </ul>

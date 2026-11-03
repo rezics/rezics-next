@@ -129,13 +129,15 @@ controls and the caller's progress-session authority stay with the existing page
 
 ## Occurrence assessment availability and editor lifetime
 
-The installed generated journal GET/PATCH declarations in
-`packages/client/src/kernel/library/progress-routes.d.ts` and `progress-model.d.ts` at source head
-`bd78d5aa5b40c51d76be768082002076b6121017` expose only dates and reflection. An occurrence-local assessment export
-is absent. The existing editor therefore names assessment as unavailable; it does not create an assessment field,
-infer one from an imported score or public Subject vote, or write an unsupported journal patch. The standard scale
-and assessment activation remain dependent on their actual published producer contracts. Older absent archive fields
-and the existing archive annotation recovery writer retain their meaning and owner.
+The generated journal GET/PATCH declarations publish meaning revision 1 with integer assessment units 0–20.
+The existing editor displays the standard 0–10 scale in half steps on the exact selected occurrence, including zero.
+An absent value renders blank; explicit clear sends `assessment:null`, while an unchanged assessment is omitted.
+Dates, reflection and assessment share the exact journal CAS, independently of progress revision and the current
+Subject vote. Only edited fields survive conflict review, so adopting the latest revision preserves unrelated current
+fields and unsaved edits. A current read after an uncertain command is labelled as an observation; only an exact
+original-key/body replay can resolve that command. It never infers success from matching current values.
+Older archive decoding, V3 assessment meaning and V4 inert provider evidence retain their existing owners; this
+editor adds no archive writer or recovery path.
 
 Editor commands bind exact Session identity, viewer, credential and current source/return visit. Owner, credential,
 occurrence or source replacement unmounts the prior private editor; read-exposure loss conceals it. Delayed results

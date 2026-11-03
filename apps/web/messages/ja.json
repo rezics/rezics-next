@@ -7695,5 +7695,10 @@
   "own_classifications_next": "次のページ",
   "own_classifications_current": "保持された評価は現在の状態です。",
   "own_classifications_unknown": "保持された評価が集計済みかどうかは不明です。",
-  "own_classifications_revision": "自分のリビジョン"
+  "own_classifications_revision": "自分のリビジョン",
+  "library_occurrence_assessment": "この記録の非公開評価",
+  "library_occurrence_assessment_help": "0～10を0.5刻みで入力します。空欄は評価なし、0は評価値です。作品への投票は変更されません。",
+  "library_occurrence_clear_assessment": "評価を消去",
+  "library_occurrence_read_current": "現在の記録を確認",
+  "library_occurrence_observed": "現在の記録のリビジョンは{revision}、評価は{assessment}です。この確認では元の操作の結果は確定しません。"
 }

@@ -16,7 +16,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Supplied summary responses in the existing connected story host. Native bucket navigation and occurrence assessment are unavailable. Browser and publisher verification remains with integration.',
+          'Supplied summary responses in the existing connected story host. Month and year-only links use the native diary filters. Browser and publisher verification remains with integration.',
       },
     },
   },

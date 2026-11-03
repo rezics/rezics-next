@@ -50,18 +50,17 @@ navigation. Counts, precision, whole-owner coverage and snapshot currentness are
 viewer, credential or exposure replacement hides retained values; an unavailable summary never supplies a zero.
 Reported-year meaning remains with [the native owner](library-reported-year-summary.md).
 
-Decision: while the native diary has no reported-year filter, show reported-year counts with disabled month and
-unallocated actions and explicitly label the occurrence list as all history; never approximate a bucket locally.
+The generated diary query accepts the selected `year` and numbered `month` or literal `unallocated`; omission
+of month opens the whole reported year. The existing summary's month links open exactly that native bucket,
+including empty buckets. Both month and cursor repeat on every next request. The server owns completed-state
+inclusion, partial precision, recording-time/full-UUID ordering, filter-bound keysets and eight-slot allocation.
+Unknown finish dates remain outside every selected year. Web does not scan history or repair totals.
 
-The installed `packages/client/src/kernel/library/diary-routes.d.ts` query has only `limit` and `cursor` at source
-head `bd78d5aa5b40c51d76be768082002076b6121017`. Native filter-bound month/unallocated navigation is unavailable.
-This is independent of the available reported-year summary export. The summary retains year-only precision in
-`monthUnallocated`; missing finishes remain outside every selected year. Web does not scan history or repair totals.
-
-Each occurrence link carries an encoded history return context: exact opaque cursor, selected year and original
-caller. The existing progress detail preserves it, and journal/lifecycle return opens that native page afresh. Native
-stale-cursor refusal offers a first-page restart with the selected year retained. Corrections and retirement never
-adjust displayed counts locally. The progress detail route is extended only to retain this validated return context.
+Filtered page and summary revisions must agree before the occurrence list is shown. A mismatch offers a restart
+of the same bucket; missing current counts offers an explicit retry. Each occurrence link carries the exact opaque
+cursor, selected year/month, original caller and opened Session ID for keyboard focus on return. Detail returns to
+that frontier deliberately and reads it afresh. A stale native cursor offers a first-page restart retaining the bucket.
+Date correction, retirement and deletion never adjust displayed counts locally.
 
 One page visit uses one diary GET and one summary GET, all-time or reported-year. The retained diary page is at most
 25 rows / 65,536 bytes; reported-year summary is at most 16,384 bytes, twelve months and one unallocated bucket.
@@ -71,3 +70,10 @@ Detail adds one addressed journal GET to the existing progress detail reads. A j
 most one GET; each exact uncertain replay has the same bound and retains only one original key/body. Accepted PATCH
 acknowledgement is distinct from supported current readback. No Web cost term depends on unrelated occurrence count.
 Native index, maintenance, export and growth acceptance retain their existing owners.
+
+Touches: one bounded native summary, one diary page, and one addressed occurrence on detail; explicit next, retry
+and independent readback repeat only their fixed reads. Bound: 25 rows / 65,536 diary bytes, thirteen summary buckets /
+16,384 bytes, and one journal with at most 1,000 characters / 4,096 UTF-8 reflection bytes and fixed assessment/date
+fields; PATCH is capped at 16,384 bytes. Growth: retained Web state is one page, one summary and one original uncertain
+journal intent, independent of unrelated history. Native indexes, maintenance, archive export and physical growth
+measurement remain producer/controller responsibilities.

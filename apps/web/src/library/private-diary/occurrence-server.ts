@@ -9,7 +9,7 @@ import { readSubjectSlotSession } from '../subject-slot';
 const keyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type JournalDate = { year: number; month?: number; day?: number } | null;
-type JournalPatch = Parameters<ReturnType<KernelClient['progressSessions']>['journal']['patch']>[0];
+export type JournalPatch = Parameters<ReturnType<KernelClient['progressSessions']>['journal']['patch']>[0];
 type Journal = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['progressSessions']>['journal']['get']>>['data']
 >['journal'];
@@ -44,7 +44,7 @@ function parsePatch(value: unknown): JournalPatch | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
   if (!Number.isSafeInteger(item.revision) || (item.revision as number) < 0) return null;
-  const patch: { revision: number; startDate?: JournalDate; finishDate?: JournalDate; reflection?: string | null } = {
+  const patch: JournalPatch = {
     revision: item.revision as number,
   };
   let changed = false;
@@ -61,6 +61,24 @@ function parsePatch(value: unknown): JournalPatch | null {
   if ('reflection' in item) {
     if (item.reflection !== null && typeof item.reflection !== 'string') return null;
     patch.reflection = item.reflection;
+    changed = true;
+  }
+  if ('assessment' in item) {
+    const assessment = item.assessment;
+    if (assessment === null) patch.assessment = null;
+    else {
+      if (
+        !assessment ||
+        typeof assessment !== 'object' ||
+        !('units' in assessment) ||
+        typeof assessment.units !== 'number' ||
+        !Number.isInteger(assessment.units) ||
+        assessment.units < 0 ||
+        assessment.units > 20
+      )
+        return null;
+      patch.assessment = { units: assessment.units };
+    }
     changed = true;
   }
   return changed ? patch : null;

@@ -7695,5 +7695,10 @@
   "own_classifications_next": "Page suivante",
   "own_classifications_current": "Votre évaluation conservée est à jour.",
   "own_classifications_unknown": "La prise en compte de cette évaluation conservée est inconnue.",
-  "own_classifications_revision": "Révision personnelle"
+  "own_classifications_revision": "Révision personnelle",
+  "library_occurrence_assessment": "Évaluation privée de cette occurrence",
+  "library_occurrence_assessment_help": "De 0 à 10 par demi-points. Un champ vide signifie aucune évaluation ; zéro est une valeur. Votre vote sur l’œuvre reste inchangé.",
+  "library_occurrence_clear_assessment": "Effacer l’évaluation",
+  "library_occurrence_read_current": "Lire le journal actuel",
+  "library_occurrence_observed": "Révision actuelle du journal : {revision}, évaluation : {assessment}. Cette lecture ne confirme pas le résultat de la commande initiale."
 }

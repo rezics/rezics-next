@@ -40,7 +40,7 @@ export function PrivateDiaryPage({
   binding.current = { loaded, address, session, href: location.href };
   const [closing, setClosing] = useState(false);
   const [closeUnavailable, setCloseUnavailable] = useState(false);
-  const currentReturn = safeReturnTo(returnTo);
+  const currentReturn = safeReturnTo(returnTo ?? address.returnTo);
   const load =
     allowed &&
     location.pathname.endsWith('/library/history') &&
@@ -57,6 +57,15 @@ export function PrivateDiaryPage({
     authorizedLoad?.summary.kind === 'retired' ||
     authorizedLoad?.reportedYear?.kind === 'retired';
   const page = !retired && authorizedLoad?.diary.kind === 'ready' ? authorizedLoad.diary.page : null;
+  const yearSummary = authorizedLoad?.reportedYear;
+  const currentPage =
+    address.year === undefined ||
+    (yearSummary?.kind === 'ready' && page?.currentness?.revision === yearSummary.value.currentness.revision);
+  const visiblePage = currentPage ? page : null;
+  useEffect(() => {
+    if (visiblePage && address.focus && visiblePage.occurrences.some((row) => row.id === address.focus))
+      document.getElementById('diary-occurrence-' + address.focus)?.focus();
+  }, [visiblePage, address.focus]);
   const statistics =
     !retired && authorizedLoad?.summary.kind === 'ready' ? consumptionStatistics(authorizedLoad.summary.value) : null;
 
@@ -161,6 +170,7 @@ export function PrivateDiaryPage({
       {address.year !== undefined && authenticated && !retired ? (
         <ReportedYearPanel
           year={address.year}
+          address={{ ...address, returnTo: currentReturn }}
           result={authorizedLoad?.reportedYear ?? { kind: 'unavailable' }}
           retry={() => void router.invalidate()}
         />
@@ -215,18 +225,19 @@ export function PrivateDiaryPage({
         <p role="status" className="rounded-md border p-4">
           {m.library_diary_unavailable()}
         </p>
-      ) : retired ? null : authorizedLoad?.diary.kind === 'stale' ? (
+      ) : retired ? null : authorizedLoad?.diary.kind === 'stale' ||
+        (page && !currentPage && yearSummary?.kind === 'ready') ? (
         <section className="rounded-md border p-4">
           <p>{m.library_diary_stale()}</p>
           <Link
             className="mt-2 inline-flex min-h-11 items-center rounded-md border px-3"
             to="/library/history"
-            search={{ year: address.year, returnTo: currentReturn }}
+            search={{ year: address.year, month: address.month, returnTo: currentReturn }}
           >
             {m.library_diary_restart()}
           </Link>
         </section>
-      ) : authorizedLoad?.diary.kind === 'unavailable' ? (
+      ) : authorizedLoad?.diary.kind === 'unavailable' || (page && !currentPage) ? (
         <section className="rounded-md border p-4">
           <p>{m.library_diary_read_unavailable()}</p>
           <button
@@ -237,7 +248,7 @@ export function PrivateDiaryPage({
             {m.library_selection_retry()}
           </button>
         </section>
-      ) : page ? (
+      ) : visiblePage ? (
         <section aria-labelledby="library-diary-occurrences" className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <h2 id="library-diary-occurrences" className="text-lg font-semibold">
@@ -290,9 +301,12 @@ export function PrivateDiaryPage({
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Link
                       className="inline-flex min-h-11 items-center rounded-md bg-primary px-3 text-primary-foreground"
+                      id={'diary-occurrence-' + occurrence.id}
                       to="/library/progress/$id"
                       params={{ id: occurrence.id }}
-                      search={{ history: diaryReturnContext({ ...address, returnTo: currentReturn }) }}
+                      search={{
+                        history: diaryReturnContext({ ...address, focus: occurrence.id, returnTo: currentReturn }),
+                      }}
                     >
                       {m.library_diary_open_occurrence()}
                     </Link>
@@ -306,7 +320,7 @@ export function PrivateDiaryPage({
               className="inline-flex min-h-11 items-center rounded-md border px-4"
               to="/library/history"
               replace
-              search={{ cursor: page.next, year: address.year, returnTo: currentReturn }}
+              search={{ cursor: page.next, year: address.year, month: address.month, returnTo: currentReturn }}
             >
               {m.library_diary_next()}
             </Link>

@@ -10,18 +10,14 @@ import {
   readOccurrenceJournal,
   changeOccurrenceLifecycle,
   type JournalReadResult,
+  type JournalPatch,
 } from './occurrence-server';
 
 import { historyReturn } from './address';
 
 type DateShape = { year: number; month?: number; day?: number };
-type JournalDraft = { startDate: string; finishDate: string; reflection: string };
-type JournalBody = {
-  revision: number;
-  startDate?: DateShape | null;
-  finishDate?: DateShape | null;
-  reflection?: string | null;
-};
+type JournalDraft = { startDate: string; finishDate: string; reflection: string; assessment: string };
+type JournalBody = JournalPatch;
 type JournalCommand = {
   sessionId: string;
   viewer: string;
@@ -74,6 +70,7 @@ function journalDraft(journal: PrivateJournal): JournalDraft {
     startDate: dateText(journal.startDate),
     finishDate: dateText(journal.finishDate),
     reflection: journal.reflection ?? '',
+    assessment: journal.assessment.units === null ? '' : String(journal.assessment.units / 2),
   };
 }
 
@@ -96,7 +93,16 @@ function changedJournalBody(revision: number, current: JournalDraft, draft: Jour
     body.reflection = draft.reflection === '' ? null : draft.reflection;
     changed = true;
   }
+  if (current.assessment !== draft.assessment) {
+    if (!validAssessment(draft.assessment)) return null;
+    body.assessment = draft.assessment === '' ? null : { units: Number(draft.assessment) * 2 };
+    changed = true;
+  }
   return changed ? body : null;
+}
+
+function validAssessment(value: string) {
+  return value === '' || /^(?:[0-9](?:\.5|\.0)?|10(?:\.0)?)$/.test(value);
 }
 
 function currentJournal(
@@ -188,8 +194,11 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
     acceptedJournal.csrfToken === csrfToken
       ? acceptedJournal.journal
       : currentJournal(query.data, session.id, currentViewer, csrfToken);
-  const [draft, setDraft] = useState<JournalDraft | null>(null);
-  const working = draft ?? (journal ? journalDraft(journal) : { startDate: '', finishDate: '', reflection: '' });
+  const [draft, setDraft] = useState<Partial<JournalDraft> | null>(null);
+  const working: JournalDraft = {
+    ...(journal ? journalDraft(journal) : { startDate: '', finishDate: '', reflection: '', assessment: '' }),
+    ...draft,
+  };
   const body = journal ? changedJournalBody(journal.revision, journalDraft(journal), working) : null;
   const [journalCommand, setJournalCommand] = useState<JournalCommand | null>(null);
   const [journalNotice, setJournalNotice] = useState<
@@ -451,7 +460,6 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
           {m.library_diary_heading()}
         </Link>
       ) : null}
-      <p role="status">{m.library_occurrence_assessment_unavailable()}</p>
       {query.isPending ? <p role="status">{m.library_occurrence_loading()}</p> : null}
       {query.data?.kind === 'unavailable' ? (
         <div className="space-y-2">
@@ -476,13 +484,13 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
                 aria-describedby="library-occurrence-date-help"
                 value={working.startDate}
                 disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onChange={(event) => setDraft({ ...working, startDate: event.currentTarget.value })}
+                onChange={(event) => setDraft({ ...draft, startDate: event.currentTarget.value })}
               />
               <button
                 type="button"
                 className="mt-2 min-h-11 rounded-md border px-3"
                 disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onClick={() => setDraft({ ...working, startDate: '' })}
+                onClick={() => setDraft({ ...draft, startDate: '' })}
               >
                 {m.library_occurrence_clear_date()}
               </button>
@@ -495,31 +503,57 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
                 aria-describedby="library-occurrence-date-help"
                 value={working.finishDate}
                 disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onChange={(event) => setDraft({ ...working, finishDate: event.currentTarget.value })}
+                onChange={(event) => setDraft({ ...draft, finishDate: event.currentTarget.value })}
               />
               <button
                 type="button"
                 className="mt-2 min-h-11 rounded-md border px-3"
                 disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-                onClick={() => setDraft({ ...working, finishDate: '' })}
+                onClick={() => setDraft({ ...draft, finishDate: '' })}
               >
                 {m.library_occurrence_clear_date()}
               </button>
             </label>
           </div>
           <label className="block">
-            <span className="mb-1 block text-sm font-medium">{m.library_occurrence_reflection()}</span>
-            <textarea
-              className="min-h-28 w-full rounded-md border bg-background p-3"
-              value={working.reflection}
+            <span className="mb-1 block text-sm font-medium">{m.library_occurrence_assessment()}</span>
+            <p id="library-occurrence-assessment-help" className="text-sm text-muted-foreground">
+              {m.library_occurrence_assessment_help()}
+            </p>
+            <input
+              type="number"
+              min="0"
+              max="10"
+              step="0.5"
+              className="min-h-11 w-full rounded-md border bg-background px-3"
+              aria-describedby="library-occurrence-assessment-help"
+              value={working.assessment}
               disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-              onChange={(event) => setDraft({ ...working, reflection: event.currentTarget.value })}
+              onChange={(event) => setDraft({ ...draft, assessment: event.currentTarget.value })}
             />
             <button
               type="button"
               className="mt-2 min-h-11 rounded-md border px-3"
               disabled={!journalUpdateAllowed || journalCommand !== null || busy}
-              onClick={() => setDraft({ ...working, reflection: '' })}
+              onClick={() => setDraft({ ...draft, assessment: '' })}
+            >
+              {m.library_occurrence_clear_assessment()}
+            </button>
+          </label>
+          {!validAssessment(working.assessment) ? <p role="alert">{m.library_occurrence_assessment_help()}</p> : null}
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium">{m.library_occurrence_reflection()}</span>
+            <textarea
+              className="min-h-28 w-full rounded-md border bg-background p-3"
+              value={working.reflection}
+              disabled={!journalUpdateAllowed || journalCommand !== null || busy}
+              onChange={(event) => setDraft({ ...draft, reflection: event.currentTarget.value })}
+            />
+            <button
+              type="button"
+              className="mt-2 min-h-11 rounded-md border px-3"
+              disabled={!journalUpdateAllowed || journalCommand !== null || busy}
+              onClick={() => setDraft({ ...draft, reflection: '' })}
             >
               {m.library_occurrence_clear_reflection()}
             </button>
@@ -544,16 +578,35 @@ function OccurrenceControls({ session, isCurrent }: { session: ProgressSessionVi
               {m.library_occurrence_save()}
             </button>
             {journalCommand ? (
-              <button
-                type="button"
-                className="min-h-11 rounded-md border px-3"
-                disabled={busy || !journalUpdateAllowed}
-                onClick={() => void sendJournal(journalCommand)}
-              >
-                {m.library_rich_entry_retry()}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="min-h-11 rounded-md border px-3"
+                  disabled={busy || query.isFetching}
+                  onClick={() => void query.refetch()}
+                >
+                  {m.library_occurrence_read_current()}
+                </button>
+                <button
+                  type="button"
+                  className="min-h-11 rounded-md border px-3"
+                  disabled={busy || !journalUpdateAllowed}
+                  onClick={() => void sendJournal(journalCommand)}
+                >
+                  {m.library_rich_entry_retry()}
+                </button>
+              </>
             ) : null}
           </div>
+          {journalCommand && query.data?.kind === 'ready' ? (
+            <p role="status">
+              {m.library_occurrence_observed({
+                revision: query.data.journal.revision,
+                assessment:
+                  query.data.journal.assessment.units === null ? '—' : String(query.data.journal.assessment.units / 2),
+              })}
+            </p>
+          ) : null}
           {journalNotice === 'uncertain' || journalNotice === 'acknowledged' ? (
             <p role="status">
               {journalNotice === 'acknowledged'

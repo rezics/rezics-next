@@ -7745,5 +7745,10 @@
   "own_classifications_next": "Next page",
   "own_classifications_current": "Your retained assessment is current.",
   "own_classifications_unknown": "Whether this retained assessment is counted is unknown.",
-  "own_classifications_revision": "Own revision"
+  "own_classifications_revision": "Own revision",
+  "library_occurrence_assessment": "Private occurrence assessment",
+  "library_occurrence_assessment_help": "Use 0–10 in half steps. Blank means no assessment; zero is a value. This does not change your Subject vote.",
+  "library_occurrence_clear_assessment": "Clear assessment",
+  "library_occurrence_read_current": "Read current journal",
+  "library_occurrence_observed": "Current journal revision {revision}, assessment {assessment}. This observation does not resolve the original command."
 }

@@ -3,7 +3,12 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import { createKernelClient } from '@rezics/client';
 import { diarySearch, diaryReturnContext, historyReturn } from '../src/library/private-diary/address';
-import { readReportedYearSummary, type ReportedYearSummary } from '../src/library/private-diary/native';
+import {
+  readDiaryPage,
+  readReportedYearSummary,
+  type DiaryPage,
+  type ReportedYearSummary,
+} from '../src/library/private-diary/native';
 import type { PrivateDiaryLoad } from '../src/library/private-diary/server';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
@@ -84,13 +89,14 @@ const loaded: PrivateDiaryLoad = {
     page: {
       occurrences: [],
       order: 'recorded_started_desc_id_desc',
+      currentness: summary.currentness,
       next: null,
       continuation: 'retain-on-empty',
       expiresAt: null,
     },
   },
 };
-async function mount() {
+async function mount(initialAddress = { year: 2020 } as ReturnType<typeof diarySearch>) {
   setLocale('en', { reload: false });
   const host = document.createElement('div');
   document.body.append(host);
@@ -99,7 +105,7 @@ async function mount() {
   const route = createRoute({ getParentRoute: () => base, path: '/library/history', validateSearch: diarySearch });
   const router = createRouter({
     routeTree: base.addChildren([route]),
-    history: createMemoryHistory({ initialEntries: ['/library/history?year=2020'] }),
+    history: createMemoryHistory({ initialEntries: [diaryReturnContext(initialAddress)] }),
   });
   await router.load();
   const show = (value: PrivateDiaryLoad = loaded, owner = 'owner') =>
@@ -108,7 +114,7 @@ async function mount() {
         <RouterContextProvider router={router}>
           <PrivateDiaryPage
             loaded={value}
-            address={{ year: 2020 }}
+            address={diarySearch(router.state.location.search)}
             session={{ state: 'signed-in', subject: owner, csrfToken: 'csrf' }}
           />
         </RouterContextProvider>,
@@ -117,6 +123,10 @@ async function mount() {
   return {
     host,
     root,
+    navigate: (address: ReturnType<typeof diarySearch>) =>
+      act(async () => {
+        await router.navigate({ to: '/library/history', search: address });
+      }),
     show,
     close: async () => {
       await act(async () => root.unmount());
@@ -142,16 +152,17 @@ test('native year read uses one addressed summary, retains exact strings and rej
   expect(await readReportedYearSummary(client, 'Bearer current', 2020)).toEqual({ kind: 'unavailable' });
 });
 
-test('mounted year counts keep year-only separate, disable unsupported buckets and remove stale owner/year values', async () => {
+test('mounted year counts keep year-only separate, open exact buckets and remove stale owner/year values', async () => {
   const h = await mount();
   try {
     await h.show();
     expect(h.host.textContent).toContain('9,007,199,254,740,993');
-    const buckets = h.host.querySelectorAll('li button');
+    const buckets = h.host.querySelectorAll<HTMLAnchorElement>('li a');
     expect(buckets).toHaveLength(13);
-    expect([...buckets].every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+    expect(new URL(buckets[1]!.href).searchParams.get('month')).toBe('2');
+    expect(new URL(buckets[12]!.href).searchParams.get('month')).toBe('unallocated');
     expect(buckets[12]!.textContent).toBe(m.library_diary_year_unallocated());
-    expect(h.host.textContent).toContain(m.library_diary_bucket_unavailable());
+    expect(h.host.textContent).not.toContain(m.library_diary_bucket_unavailable());
     await h.show({ ...loaded, reportedYear: { kind: 'unavailable' } });
     expect(h.host.textContent).not.toContain('9,007,199,254,740,993');
     expect(h.host.textContent).toContain(m.library_diary_year_unavailable());
@@ -170,11 +181,103 @@ test('mounted year counts keep year-only separate, disable unsupported buckets a
 });
 
 test('return context preserves exact opaque page/year/caller and refuses external destinations', () => {
-  const address = { year: 1, cursor: 'original/+?q=原文#一% &==', returnTo: '/library?context=exact#item' };
+  const address = {
+    year: 1,
+    month: 'unallocated' as const,
+    focus: 'exact-session',
+    cursor: 'original/+?q=原文#一% &==',
+    returnTo: '/library?context=exact#item',
+  };
   expect(historyReturn(diaryReturnContext(address))).toEqual(address);
   expect(historyReturn('//outside.test/library/history')).toBeUndefined();
   expect(historyReturn('/library/history-extra?year=2020')).toBeUndefined();
   expect(diarySearch({ year: '0001' }).year).toBe(1);
   expect(diarySearch({ year: '0' }).year).toBeUndefined();
   expect(diarySearch({ year: 10000 }).year).toBeUndefined();
+});
+
+test('native filtered first/middle/final/sparse pages repeat exact filters and stay bounded', async () => {
+  const requests: URL[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const url = new URL(new Request(input, init).url);
+      requests.push(url);
+      const cursor = url.searchParams.get('cursor');
+      return Response.json({
+        ...(loaded.diary.kind === 'ready' ? loaded.diary.page : {}),
+        occurrences: [],
+        next: cursor === 'middle' ? 'final' : cursor === 'final' ? null : 'middle',
+      });
+    },
+  });
+  for (const month of [2, 'unallocated'] as const) {
+    for (const cursor of [undefined, 'middle', 'final']) {
+      expect((await readDiaryPage(client, 'Bearer current', cursor, { year: 2020, month })).kind).toBe('ready');
+      expect(requests.at(-1)!.searchParams.get('month')).toBe(String(month));
+      expect(requests.at(-1)!.searchParams.get('year')).toBe('2020');
+      expect(requests.at(-1)!.searchParams.get('limit')).toBe('25');
+      expect(requests.at(-1)!.searchParams.get('cursor')).toBe(cursor ?? null);
+    }
+  }
+  expect(requests).toHaveLength(6);
+  expect(diarySearch({ month: 2 }).month).toBeUndefined();
+  expect(diarySearch({ year: 2020, month: 13 }).month).toBeUndefined();
+  expect(diarySearch({ year: 2020, month: true }).month).toBeUndefined();
+});
+
+test('bucket return restores exact frontier/focus and rejects old bucket or changed native summary', async () => {
+  const id = '00000000-0000-4000-8000-000000000002';
+  const address = { year: 2020, month: 2, cursor: 'middle/+==', focus: id };
+  const row: DiaryPage['occurrences'][number] = {
+    id,
+    subjectId: 'same-subject',
+    versionSubjectId: null,
+    state: 'completed',
+    revision: 7,
+    recordedStartedAt: '2021-01-01T00:00:00Z',
+    recordedCompletedAt: '2021-01-02T00:00:00Z',
+    reportedDates: { availability: 'available', revision: 3, startDate: null, finishDate: { year: 2020, month: 2 } },
+    assessment: { meaningRevision: 1, units: 0 },
+    subject: null,
+    versionSubject: null,
+  };
+  const value: PrivateDiaryLoad = {
+    ...loaded,
+    address,
+    diary: {
+      kind: 'ready',
+      page: {
+        occurrences: [row],
+        next: 'final',
+        continuation: 'same-slot',
+        expiresAt: null,
+        order: 'recorded_started_desc_id_desc',
+        currentness: summary.currentness,
+      },
+    },
+  };
+  const h = await mount(address);
+  try {
+    await h.show(value);
+    const open = h.host.querySelector<HTMLAnchorElement>('[id="diary-occurrence-' + id + '"]')!;
+    expect(document.activeElement).toBe(open);
+    expect(new URL(open.href).pathname).toBe('/library/progress/' + id);
+    expect(historyReturn(new URL(open.href).searchParams.get('history'))).toMatchObject(address);
+    const next = [...h.host.querySelectorAll('a')].find((a) => a.textContent === m.library_diary_next())!;
+    expect(new URL(next.href).searchParams.get('month')).toBe('2');
+    await h.show({
+      ...value,
+      reportedYear: { kind: 'ready', value: { ...summary, currentness: { state: 'snapshot', revision: 'corrected' } } },
+    });
+    expect(h.host.textContent).toContain(m.library_diary_stale());
+    expect(h.host.querySelector('[id="diary-occurrence-' + id + '"]')).toBeNull();
+    const restart = [...h.host.querySelectorAll('a')].find((a) => a.textContent === m.library_diary_restart())!;
+    expect(new URL(restart.href).searchParams.get('month')).toBe('2');
+    expect(new URL(restart.href).searchParams.has('cursor')).toBe(false);
+    await h.navigate({ year: 2020, month: 'unallocated' });
+    await h.show(value);
+    expect(h.host.querySelector('ol')).toBeNull();
+  } finally {
+    await h.close();
+  }
 });
