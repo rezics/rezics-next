@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { ToggleGroup, ToggleGroupItem } from '@rezics/ui/shadcn/toggle-group';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -201,6 +202,8 @@ export function SortControls({
   const navigate = useNavigate();
   const entries = useOperation('library_entry.list');
   const progress = useOperation('progress_session.list');
+  const [selectedOrder, setSelectedOrder] = useState(sort.orderBy);
+  const scoreOrder = selectedOrder === 'personalScore';
   if (!entries || !progress) return null;
   return (
     <form
@@ -221,20 +224,27 @@ export function SortControls({
       {display.columns ? <input type="hidden" name="columns" value={display.columns} /> : null}
       <label className="grid gap-1 text-sm">
         {m.library_sort_by()}
-        <select name="orderBy" defaultValue={sort.orderBy} className="rounded-md border bg-background p-2">
+        <select
+          name="orderBy"
+          defaultValue={sort.orderBy}
+          onChange={(event) => setSelectedOrder(validateShelfSearch({ orderBy: event.target.value }).orderBy ?? sort.orderBy)}
+          className="min-h-11 max-w-full rounded-md border bg-background p-2"
+        >
           <option value="lastActivity">{m.library_sort_activity()}</option>
           <option value="createdAt">{m.library_sort_created()}</option>
           <option value="finishedAt">{m.library_sort_finished()}</option>
+          <option value="personalScore" disabled>{m.library_score_order()}</option>
         </select>
       </label>
       <label className="grid gap-1 text-sm">
         {m.library_sort_direction()}
-        <select name="direction" defaultValue={sort.direction} className="rounded-md border bg-background p-2">
-          <option value="desc">{m.library_sort_newest()}</option>
-          <option value="asc">{m.library_sort_oldest()}</option>
+        {scoreOrder ? <input type="hidden" name="direction" value={sort.direction} /> : null}
+        <select name="direction" disabled={scoreOrder} defaultValue={sort.direction} className="min-h-11 max-w-full rounded-md border bg-background p-2">
+          <option value="desc">{scoreOrder ? m.library_score_highest() : m.library_sort_newest()}</option>
+          <option value="asc">{scoreOrder ? m.library_score_lowest() : m.library_sort_oldest()}</option>
         </select>
       </label>
-      <Button type="submit" variant="outline">
+      <Button type="submit" variant="outline" className="min-h-11">
         {m.library_sort_apply()}
       </Button>
     </form>

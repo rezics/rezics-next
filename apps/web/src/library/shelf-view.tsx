@@ -4,6 +4,7 @@ import { CoverCard, CoverGrid, type CoverDensity } from '@rezics/ui/cover-card';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { Tombstone } from '@rezics/ui/tombstone';
 import { ItemMenu, ItemMenuTriggerSlot, type ItemMenuEntry } from '@rezics/ui/item-menu';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { ShelfList, ShelfListRow } from '@rezics/ui/shelf-list';
 import { ShelfTable, type ShelfColumn, type ShelfTableRow } from '@rezics/ui/shelf-table';
@@ -33,10 +34,12 @@ import {
   shelfColumnIds,
   shelfColumns,
   shelfHref,
+  shelfSort,
   type ShelfDisplay,
   type ShelfLayout,
   type ShelfSize,
   type ShelfSort,
+  type ShelfSearch,
 } from './shelf-params';
 import { shelfColumnLabel } from './shelf-columns';
 import {
@@ -600,7 +603,7 @@ function TableView({ controls, state }: { controls: Controls; state?: string }) 
     <ShelfTable
       rows={tableRows}
       columns={columns}
-      {...(controls.sort
+      {...(controls.sort && controls.sort.orderBy !== 'personalScore'
         ? {
             sort: {
               field:
@@ -1169,4 +1172,23 @@ export function LabelShelfEntries({
     };
   });
   return <ShelfTable rows={tableRows} columns={tableColumns} onSort={() => {}} />;
+}
+
+/** The generated score reader is absent. Keep the addressed visit explicit without exposing obsolete rows. */
+export function ShelfScoreUnavailable({ locale, view }: { locale: string; view: ShelfSearch }) {
+  const { cursor: _cursor, ...restart } = view;
+  const dateOrder = shelfSort(view.state ? { state: view.state } : {});
+  return (
+    <div data-shelf-score-state="unavailable" className="flex min-w-0 flex-col items-start gap-3">
+      <p role="alert">{m.library_score_unavailable()}</p>
+      <div className="flex max-w-full flex-wrap gap-2">
+        <a href={shelfHref(locale, restart)} className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}>
+          {m.library_entries_first_page()}
+        </a>
+        <a href={shelfHref(locale, { ...restart, ...dateOrder })} className={buttonVariants({ variant: 'outline', className: 'min-h-11 h-auto whitespace-normal' })}>
+          {m.library_score_date_order()}
+        </a>
+      </div>
+    </div>
+  );
 }

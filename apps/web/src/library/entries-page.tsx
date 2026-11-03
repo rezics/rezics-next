@@ -13,7 +13,7 @@ import { Exposure, useOperation } from '../kernel/exposure';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import { shelfHref, shelfSort, type ShelfDisplay } from './shelf-params';
-import { ShelfEntries } from './shelf-view';
+import { ShelfEntries, ShelfScoreUnavailable } from './shelf-view';
 import { DisplayControls, SortControls, EntriesFirstPage } from './entries-current';
 import { shelfMutationLease, type ShelfMutationLease } from './shelf-rows';
 import { LabelShelfEntries } from './shelf-view';
@@ -203,7 +203,9 @@ export function PersonalLibraryPage({
             {m.library_filtered_by({ status: page.stateLabel ?? m.library_other() })}
           </p>
         ) : null}
-        {page.readState ? (
+        {page.readState === 'score-unavailable' ? (
+          <ShelfScoreUnavailable locale={locale} view={firstPage} />
+        ) : page.readState ? (
           <div className="flex flex-col items-start gap-3">
             <p role={page.readState === 'preparing' ? 'status' : 'alert'}>
               {page.readState === 'closed'
@@ -266,7 +268,7 @@ export function PersonalLibraryPage({
             }
           />
         )}
-        {page.next ? (
+        {page.next && !page.readState ? (
           <a
             className={buttonVariants({ variant: 'outline' })}
             href={shelfHref(locale, {

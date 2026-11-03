@@ -130,3 +130,20 @@ export const PinnedCollections: Story = {
     ).toBeVisible();
   },
 };
+
+// Uses the connected loader and its unavailable branch, not a fabricated successful native score page.
+export const PersonalScoreUnavailable: Story = {
+  render: () => {
+    setLibraryEntriesStoryMode('recorded');
+    setContinueStorySize(0);
+    setLibraryNavigationStoryState({ pinCount: 0, builtins: 'none', collectionCount: 0 });
+    return <PageStory visitor="Signed In" path={`${pagePaths['library-entries']}?orderBy=personalScore&direction=asc&layout=table`} />;
+  },
+  play: async (context) => {
+    await libraryHeadingReady(context, m.library_heading);
+    const main = within(within(context.canvasElement).getByRole('main'));
+    await expect(await main.findByText(m.library_score_unavailable())).toBeVisible();
+    await expect(main.getByRole('option', { name: m.library_score_order() })).toBeDisabled();
+    await expect(main.getByRole('link', { name: m.library_score_date_order() })).not.toHaveAttribute('href', expect.stringContaining('personalScore'));
+  },
+};

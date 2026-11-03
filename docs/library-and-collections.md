@@ -3,6 +3,31 @@
 [Personal-score shelf ordering](library-personal-score-order.md) defines the native standard-question order,
 bounded explicit installation and Content currentness prerequisite.
 
+
+## Web personal-score availability
+
+Decision: retain an explicit `personalScore` address as an unavailable visit until the generated native score contract
+is published; a saved unsupported `rating` preference does not activate that order.
+
+At source head `ed91a343d2998cbacb1211c2a59abab8bd010bdd`, the installed
+`packages/client/src/kernel/library/personal-routes.d.ts` lacks the `personalScore` query literal, entry `personalScore`,
+page `scoreQuestion`, and `libraryShelfScorePreparation` method. The generated `shelf-contract.d.ts` also omits the
+score order and question descriptor. Native source alone does not activate Web. Content's owner-wide score currentness
+port remains independently required. Web sends no score request, preparation command, vote read or vote write while
+these declarations are absent. It shows unavailable, separately from native preparation, empty, final and expired
+cursor outcomes. Explicit score URLs retain direction, state/type, display choices and opaque cursor in navigation;
+restart drops the cursor and date-order recovery deliberately begins a new visit. Changing the native predicate
+retires the prior page through the existing personal-shelf address owner. No old rows decorate an unavailable order.
+
+The existing route reads one preference snapshot, then prepares shelf, Continue and navigation reads independently
+and accepts only matching viewer/credential origins. Chronological shelf reads request one FULL page of 20 entries;
+invalid/stale cursors permit one first-page retry. Next and restart replace that page. Continue retains six subjects,
+navigation requests eight pins and one existing owner-collection page, and opening the type chooser reads one bounded
+type page. Score selection adds zero requests and retains zero score rows/cursors in the rendered result. There is no
+per-row score fetch, browser aggregation or local page sort. The shelf address bounds each opaque cursor to 2048
+characters. The existing FULL reader has no independent response-byte ceiling; a row limit alone is not a byte or
+native indexed-growth proof. Generated publication, Content currentness and native cost acceptance retain their owners.
+
 The [private reported-year summary](library-reported-year-summary.md) extends native completed occurrences with
 explicit journal finish-year membership, twelve months and a year-only bucket, preserving separate all-time semantics.
 

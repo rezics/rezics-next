@@ -63,7 +63,7 @@ export type PersonalLibraryView =
       sortExplicit?: boolean;
       cursorReset?: boolean;
       addressIssues?: ShelfAddressField[];
-      readState?: 'closed' | 'denied' | 'preparing' | 'unavailable';
+      readState?: 'closed' | 'denied' | 'preparing' | 'unavailable' | 'score-unavailable';
       entries: PersonalLibraryEntry[];
       next: string | null;
     };
@@ -199,7 +199,7 @@ async function bearer(request: Request, sessionEnv: Partial<SessionEnv>): Promis
 }
 
 class ShelfPageUnavailableError extends Error {
-  constructor(readonly state: 'denied' | 'preparing' | 'unavailable') {
+  constructor(readonly state: 'denied' | 'preparing' | 'unavailable' | 'score-unavailable') {
     super('Library shelf unavailable');
   }
 }
@@ -222,6 +222,9 @@ export async function readEntryPage(
 ) {
   const addressIssues = shelfAddressIssues({ type, state, cursor });
   if (addressIssues.length) throw new InvalidShelfAddressError(addressIssues);
+  // The installed generated client has neither personalScore/scoreQuestion nor the score preparation method.
+  // Do not send an unsupported query, fall back to dates, fetch votes, or claim that a native index is preparing.
+  if (sort?.orderBy === 'personalScore') throw new ShelfPageUnavailableError('score-unavailable');
   const result = await client.libraryEntries.get({
     query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort, ...(type ? { type } : {}) },
     headers: { authorization },
