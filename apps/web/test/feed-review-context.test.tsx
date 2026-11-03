@@ -16,11 +16,15 @@ const ids = {
   author: '00000000-0000-7000-8000-000000000018',
 };
 
-function review(context: NonNullable<Extract<FeedItem, { source: 'discovery' }>['summary'] extends infer S
-  ? S extends { reviewContext?: infer C }
-    ? C
-    : never
-  : never>): FeedItem {
+function review(
+  context: NonNullable<
+    Extract<FeedItem, { source: 'discovery' }>['summary'] extends infer S
+      ? S extends { reviewContext?: infer C }
+        ? C
+        : never
+      : never
+  >,
+): FeedItem {
   return {
     id: 'review-activity',
     source: 'discovery',

@@ -179,10 +179,15 @@ export function FeedCardSubjectContext({ item, locale }: { item: FeedItem; local
             <span className="flex min-w-0 flex-wrap items-center gap-x-2" data-feed-card-reviewed-subject>
               <span>{m.home_card_review_subject({}, options)}</span>
               <a
-                href={subjectHref(
-                  { id: target.subject.id, label: target.subject.label?.value || m.subject_value_unlabelled({}, options) },
-                  locale,
-                ).href}
+                href={
+                  subjectHref(
+                    {
+                      id: target.subject.id,
+                      label: target.subject.label?.value || m.subject_value_unlabelled({}, options),
+                    },
+                    locale,
+                  ).href
+                }
                 className={feedCardLinkClassName}
                 {...(target.subject.label?.language ? { lang: target.subject.label.language } : {})}
               >

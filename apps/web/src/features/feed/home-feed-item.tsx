@@ -51,12 +51,7 @@ export function homeFeedItemPresentation(
     preview: (
       <>
         <FeedCardPreview item={item} />
-        <FeedCardParentContext
-          key={parentKey}
-          item={item}
-          locale={locale}
-          origin={origin}
-        />
+        <FeedCardParentContext key={parentKey} item={item} locale={locale} origin={origin} />
       </>
     ),
     state: progress?.text,
