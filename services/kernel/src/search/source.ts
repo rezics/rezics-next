@@ -1,4 +1,4 @@
-import type { FilterQualifier } from '@rezics/filter';
+import type { FilterQualifier, SpoilerThreshold } from '@rezics/filter';
 import { partitionOf, routeOf } from '../route/route.ts';
 import type { CalendarDate } from '@rezics/filter';
 import type { PublicRatingFigure } from './rating-source.ts';
@@ -14,6 +14,8 @@ export type RelationFacetProbe = {
   property: string;
   value: string;
   qualifiers?: readonly FilterQualifier[];
+  /** Journey policy: voice credits also need permitted appearances of their own characters. */
+  spoilerThreshold?: SpoilerThreshold;
 };
 
 /** `true` and `false` are definitive; `not_proven` is bounded witness uncertainty and never `false`. */

@@ -1034,6 +1034,7 @@ export function createSearchService({
               ? {
                   filter: admitted,
                   relationProperties,
+                  ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
                   observeRelationRelease: async () => {
                     await assertCurrentRelease();
                     return current

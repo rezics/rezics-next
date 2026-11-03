@@ -1,5 +1,5 @@
 import { matchInverseRelationFacets, type CurrentRelationRelease } from '../character-person.ts';
-import type { ConceptSelection, FilterDocument, FilterQualifier, FilterRange } from '@rezics/filter';
+import type { ConceptSelection, FilterDocument, FilterQualifier, FilterRange, SpoilerThreshold } from '@rezics/filter';
 import { anyCurrentMatch, compileCurrentFilter, currentClauseKey } from '../current-filter-plan.ts';
 import { holdsCurrentStatements, holdsCurrentType } from '../current-leaf.ts';
 import { RequestSourceLifetime } from '../request-source-lifetime.ts';
@@ -40,6 +40,7 @@ export async function checkHits(
     concurrency?: number;
     filter?: FilterDocument;
     relationProperties?: readonly string[];
+    spoilerThreshold?: SpoilerThreshold;
     observeRelationRelease?: () => Promise<CurrentRelationRelease | null>;
   },
 ): Promise<{ passed: { hit: Hit; subject: IndexedSubject }[]; dropped: number; relationRejected?: true }> {
@@ -141,7 +142,7 @@ export async function checkHits(
             const live =
               clause.facet === 'statement' &&
               relationProperties.has(clause.property) &&
-              (plan.positive.has(leaf) || !!clause.qualifiers?.length);
+              (plan.positive.has(leaf) || !!clause.qualifiers?.length || options?.spoilerThreshold !== undefined);
             const inverse = clause.facet === 'statement' && 'values' in clause && clause.inverse;
             if (clause.facet !== 'statement' || !('values' in clause) || !(overflow || live || inverse)) {
               values[leaf] =
@@ -156,6 +157,7 @@ export async function checkHits(
                 property: clause.property,
                 value,
                 ...(clause.qualifiers ? { qualifiers: clause.qualifiers } : {}),
+                ...(options?.spoilerThreshold === undefined ? {} : { spoilerThreshold: options.spoilerThreshold }),
               };
               const key = JSON.stringify([inverse === true, probe]);
               let point = points.get(key);
@@ -184,7 +186,9 @@ export async function checkHits(
                     Array.isArray(value) &&
                     (plan.positive.has(leaf) ||
                       (clause.facet === 'statement' &&
-                        (!!clause.qualifiers?.length || ('values' in clause && clause.inverse === true))))
+                        (!!clause.qualifiers?.length ||
+                          options?.spoilerThreshold !== undefined ||
+                          ('values' in clause && clause.inverse === true))))
                   );
                 }),
             };
@@ -223,6 +227,7 @@ export async function checkHits(
                   source: probe.value,
                   property: probe.property,
                   ...(probe.qualifiers ? { qualifiers: probe.qualifiers } : {}),
+                  ...(probe.spoilerThreshold === undefined ? {} : { spoilerThreshold: probe.spoilerThreshold }),
                 })),
                 options.observeRelationRelease,
               );

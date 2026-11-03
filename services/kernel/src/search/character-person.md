@@ -36,6 +36,27 @@ Candidate anchors and runtime release observations span the complete disclosure 
 separate batches. Retained capture uses the same broadened compiler and dependency properties;
 it does not itself certify inverse membership.
 
+## Voice appearance policy
+
+Decision: when a journey threshold is supplied, every portrayed character on a voice-credit statement must have its own permitted appearance on that same work; credits without a portrayed character remain unknown.
+
+Universal current checks forward the threshold through both forward and inverse probes, including
+negative leaves. For each matching selected `wdt:P725` statement, the native source checks its own
+`wdt:P453` characters through selected-value `schema:character` probes with explicit spoiler levels
+at or below the threshold. Another credit for the same person cannot provide that appearance.
+Repeated credits for different characters remain independent witnesses. Ordinary unthresholded
+relation queries retain their existing meaning.
+
+Appearance probes reuse source-type facet and qualifier admission, selection readiness, original
+and terminal identity checks, and tuple fences. Missing, hidden, retired or conflicting evidence
+cannot certify a negative. Credits are disclosed again after appearance checks; changed source
+revisions retire the old witness. The outer runtime activation observation covers the entire call.
+
+Let U be the distinct work/character/threshold keys encountered in matching disclosed credit rows.
+This step adds ceil(U/256) native appearance batches, each subject to the existing 1000-row seek
+bound, plus one credit disclosure reanchor when U is nonzero. This describes the additional step;
+deriving U and the complete retained whole-page bound before dispatch remains continuation work.
+
 Candidate index facts are hints. Current checks forward the complete qualifier conjunction to
 the Semantic relation source, including when the selected relation sample overflows. Qualified
 relation leaves under NOT also require current native evidence; absence from a sample cannot
@@ -87,7 +108,7 @@ per admitted variant; retained raw rows remain at most 1000. Existing source, ta
 disclosure work is unchanged. Progress writes at most A cursor rows using the existing lifecycle.
 
 This is one bounded native evidence step, not an absence certificate, a whole-page bound or a
-measurement of total preparation. Appearance-constrained voice membership, complete journey spoiler thresholds, measured finite
+measurement of total preparation. Complete journey spoiler thresholds, measured finite
 authorized preparation, matching context previews and the installed character/person Web journey
 still require the continuation contract.
 A complete whole-page K must be

@@ -1,4 +1,10 @@
-import { FilterError, parseFilter, type FilterQualifier, type FilterRelease } from '@rezics/filter';
+import {
+  FilterError,
+  parseFilter,
+  type FilterQualifier,
+  type FilterRelease,
+  type SpoilerThreshold,
+} from '@rezics/filter';
 import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
 import {
   MAX_RELATION_FACET_PROBES,
@@ -14,6 +20,7 @@ export type InverseRelationFacetProbe = {
   source: string;
   property: string;
   qualifiers?: readonly FilterQualifier[];
+  spoilerThreshold?: SpoilerThreshold;
 };
 
 export type CurrentRelationRelease = { digest: string; head: number; release: FilterRelease };
@@ -55,7 +62,10 @@ export async function matchInverseRelationFacets(
     try {
       if (
         !probe ||
-        Object.keys(probe).some((key) => !['subject', 'source', 'property', 'qualifiers'].includes(key)) ||
+        Object.keys(probe).some(
+          (key) => !['subject', 'source', 'property', 'qualifiers', 'spoilerThreshold'].includes(key),
+        ) ||
+        (probe.spoilerThreshold !== undefined && ![0, 1, 2].includes(probe.spoilerThreshold)) ||
         subjectPartition(probe.subject) !== partition
       )
         throw new TypeError('Invalid inverse relation probe');
@@ -106,6 +116,7 @@ async function matchInverseWindow(
       property: probe.property,
       value: probe.subject,
       ...(probe.qualifiers === undefined ? {} : { qualifiers: probe.qualifiers }),
+      ...(probe.spoilerThreshold === undefined ? {} : { spoilerThreshold: probe.spoilerThreshold }),
     };
     const key = JSON.stringify(forward);
     const point = group.get(key) ?? { probe: forward, indices: [] };
