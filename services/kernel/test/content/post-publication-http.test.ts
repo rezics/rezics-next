@@ -3,8 +3,12 @@ import { mentionDocument, postPublicationFixture, publicationType } from './supp
 
 setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof postPublicationFixture>>;
-beforeAll(async () => { f = await postPublicationFixture(); });
-afterAll(async () => { await f?.close(); });
+beforeAll(async () => {
+  f = await postPublicationFixture();
+});
+afterAll(async () => {
+  await f?.close();
+});
 const publications = async (id: string) => (await f.evidence(id)).filter((event) => event.type === publicationType);
 
 test('native draft A and silent edit publish B exactly once, pinning its actual revision across replay and later edits', async () => {
@@ -12,7 +16,13 @@ test('native draft A and silent edit publish B exactly once, pinning its actual 
   const draft = await f.reply(thread.id, 'draft');
   expect(draft.visibility).toBe('draft');
   expect((await f.call('GET', `/v1/posts/${draft.id}`, undefined, { other: true })).status).toBe(404);
-  expect((await f.call('GET', `/v1/posts/${draft.id}`, undefined, { anonymous: true })).status).toBe(404);
+  expect(
+    (
+      await f.call('GET', `/v1/posts/${draft.id}`, undefined, {
+        anonymous: true,
+      })
+    ).status,
+  ).toBe(404);
   expect(await publications(draft.id)).toEqual([]);
   const edit = await f.revise(draft, { visibility: 'draft' });
   expect(edit.status).toBe(200);
@@ -22,16 +32,29 @@ test('native draft A and silent edit publish B exactly once, pinning its actual 
   expect(preserved.value.post.visibility).toBe('draft');
   expect(await publications(draft.id)).toEqual([]);
   const key = crypto.randomUUID();
-  const input = { body: mentionDocument(f.system.actors.moderator.actor.accountId), visibility: 'published' };
+  const input = {
+    body: mentionDocument(f.system.actors.moderator.actor.accountId),
+    visibility: 'published',
+  };
   const published = await f.revise(preserved.value.post, input, { key });
   expect(published.status).toBe(200);
   expect(published.value.post.visibility).toBe('published');
   expect(published.value.post.revisionId).not.toBe(preserved.value.post.revisionId);
-  expect(await publications(draft.id)).toEqual([{ type: publicationType, data: {
-    threadId: thread.id, itemId: draft.id, revisionId: published.value.post.revisionId,
-    actorId: f.author.actor.accountId, placeId: f.realm.realmId,
-    kind: 'discussion', subjectIds: [], activityAt: expect.any(String),
-  } }]);
+  expect(await publications(draft.id)).toEqual([
+    {
+      type: publicationType,
+      data: {
+        threadId: thread.id,
+        itemId: draft.id,
+        revisionId: published.value.post.revisionId,
+        actorId: f.author.actor.accountId,
+        placeId: f.realm.realmId,
+        kind: 'discussion',
+        subjectIds: [],
+        activityAt: expect.any(String),
+      },
+    },
+  ]);
   const exact = await f.call('GET', `/v1/posts/${draft.id}/revisions/${published.value.post.revisionId}`);
   expect(exact.status).toBe(200);
   expect(exact.value.post.body).toEqual(input.body);
@@ -55,14 +78,24 @@ test('immediate opening and default/explicit published replies emit publication;
   const draft = await f.thread('draft');
   expect(await publications(draft.firstPost.id)).toEqual([]);
   const before = await f.state(draft.firstPost.id);
-  const published = await f.revise(draft.firstPost, { visibility: 'published' });
+  const published = await f.revise(draft.firstPost, {
+    visibility: 'published',
+  });
   expect(published.status).toBe(200);
   expect(await f.state(draft.firstPost.id)).toMatchObject({
-    visibility: 'published', thread_visibility: 'published', head_revision_id: published.value.post.revisionId,
+    visibility: 'published',
+    thread_visibility: 'published',
+    head_revision_id: published.value.post.revisionId,
     security_revision: String(BigInt(before.security_revision) + 1n),
     thread_security_revision: String(BigInt(before.thread_security_revision) + 1n),
   });
-  expect((await f.call('GET', `/v1/threads/${draft.id}`, undefined, { anonymous: true })).status).toBe(200);
+  expect(
+    (
+      await f.call('GET', `/v1/threads/${draft.id}`, undefined, {
+        anonymous: true,
+      })
+    ).status,
+  ).toBe(200);
   expect(await publications(draft.firstPost.id)).toHaveLength(1);
 });
 
@@ -71,9 +104,20 @@ test('closed visibility, stale heads and competing publication preserve a single
   const draft = await f.reply(thread.id, 'draft');
   for (const visibility of ['protected', 'taken_down', null, true]) {
     expect((await f.revise(draft, { visibility })).status).toBe(400);
-    expect((await f.call('POST', `/v1/threads/${thread.id}/posts`, { body: mentionDocument(f.author.actor.accountId), licence: 'MIT', visibility })).status).toBe(400);
+    expect(
+      (
+        await f.call('POST', `/v1/threads/${thread.id}/posts`, {
+          body: mentionDocument(f.author.actor.accountId),
+          licence: 'MIT',
+          visibility,
+        })
+      ).status,
+    ).toBe(400);
   }
-  const attempts = await Promise.all([f.revise(draft, { visibility: 'published' }), f.revise(draft, { visibility: 'published' })]);
+  const attempts = await Promise.all([
+    f.revise(draft, { visibility: 'published' }),
+    f.revise(draft, { visibility: 'published' }),
+  ]);
   expect(attempts.filter((result) => result.status === 200)).toHaveLength(1);
   expect([404, 412]).toContain(attempts.find((result) => result.status !== 200)!.status);
   expect((await f.revise(draft, { visibility: 'published' })).status).toBe(412);
@@ -88,7 +132,9 @@ test('publication event failure rolls back revision, opening/thread visibility a
   const key = crypto.randomUUID();
   await f.pool.query(`CREATE FUNCTION public.reject_test_publication() RETURNS trigger LANGUAGE plpgsql AS $$
     BEGIN IF NEW.type='com.rezics.content.post.published.v1' THEN RAISE EXCEPTION 'publication rollback fault'; END IF; RETURN NEW; END $$`);
-  await f.pool.query(`CREATE TRIGGER reject_test_publication BEFORE INSERT ON core.outbox FOR EACH ROW EXECUTE FUNCTION public.reject_test_publication()`);
+  await f.pool.query(
+    `CREATE TRIGGER reject_test_publication BEFORE INSERT ON core.outbox FOR EACH ROW EXECUTE FUNCTION public.reject_test_publication()`,
+  );
   try {
     expect((await f.revise(thread.firstPost, { visibility: 'published' }, { key })).status).toBe(500);
     expect(await f.state(thread.firstPost.id)).toEqual(before);

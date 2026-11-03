@@ -35,12 +35,32 @@ const fixtures = {
   'com.rezics.content.feed.delivered.v1': {},
   'com.rezics.content.feed.erased.v1': {},
   'com.rezics.content.feed.expired.v1': {},
-  'com.rezics.content.edition.creator-indexed.v1': { editionId: itemId, creatorAccountId: actorId },
-  'com.rezics.content.edition.created.v1': { editionId: itemId, editionRevision: '1' },
-  'com.rezics.content.edition.published.v1': { editionId: itemId, editionRevision: '2' },
-  'com.rezics.content.edition.unpublished.v1': { editionId: itemId, editionRevision: '3' },
-  'com.rezics.content.realm-discovery.prepared.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
-  'com.rezics.content.realm-discovery.outcome.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
+  'com.rezics.content.edition.creator-indexed.v1': {
+    editionId: itemId,
+    creatorAccountId: actorId,
+  },
+  'com.rezics.content.edition.created.v1': {
+    editionId: itemId,
+    editionRevision: '1',
+  },
+  'com.rezics.content.edition.published.v1': {
+    editionId: itemId,
+    editionRevision: '2',
+  },
+  'com.rezics.content.edition.unpublished.v1': {
+    editionId: itemId,
+    editionRevision: '3',
+  },
+  'com.rezics.content.realm-discovery.prepared.v1': {
+    route: 1234,
+    intent: 'a'.repeat(64),
+    generation: '1',
+  },
+  'com.rezics.content.realm-discovery.outcome.v1': {
+    route: 1234,
+    intent: 'a'.repeat(64),
+    generation: '1',
+  },
   'com.rezics.content.realm-discovery.changed.v1': {
     realmId: newId(4321),
     realmEpoch: '1',
@@ -55,6 +75,7 @@ const fixtures = {
   },
   'com.rezics.content.thread.created.v1': { ...authored, ...threadIndex },
   'com.rezics.content.post.created.v1': { ...authored, ...threadIndex },
+  'com.rezics.content.post.published.v1': { ...authored, ...threadIndex },
   'com.rezics.content.revision.created.v1': {
     ...authored,
     ...threadIndex,
@@ -85,7 +106,10 @@ const fixtures = {
   'com.rezics.content.media.collection-pending.v1': media,
   'com.rezics.content.media.collected.v1': media,
   'com.rezics.content.media.import-requested.v1': { mediaId },
-  'com.rezics.content.media.taken-down.v1': { mediaId, securityRevision: '9223372036854775807' },
+  'com.rezics.content.media.taken-down.v1': {
+    mediaId,
+    securityRevision: '9223372036854775807',
+  },
   'com.rezics.content.moderation.appeal-created.v1': { appealId: itemId },
   'com.rezics.content.moderation.appeal-resolved.v1': { appealId: itemId },
   'com.rezics.content.moderation.takedown.v1': {
@@ -98,13 +122,32 @@ const fixtures = {
     targetId: itemId,
     securityRevision: '9223372036854775807',
   },
-  'com.rezics.content.post.erased.v1': { postId: itemId, securityRevision: '9223372036854775807' },
-  'com.rezics.content.moderation.erasure.v1': { threadId, postIds: [itemId], mediaIds: [mediaId] },
-  'com.rezics.content.post.restored.v1': { postId: itemId, securityRevision: '9223372036854775807' },
+  'com.rezics.content.post.erased.v1': {
+    postId: itemId,
+    securityRevision: '9223372036854775807',
+  },
+  'com.rezics.content.moderation.erasure.v1': {
+    threadId,
+    postIds: [itemId],
+    mediaIds: [mediaId],
+  },
+  'com.rezics.content.post.restored.v1': {
+    postId: itemId,
+    securityRevision: '9223372036854775807',
+  },
   'com.rezics.content.report.resolved.v1': { reportId },
-  'com.rezics.content.report.created.v1': { reportId, targetKind: 'post', targetId: itemId, revisionId },
+  'com.rezics.content.report.created.v1': {
+    reportId,
+    targetKind: 'post',
+    targetId: itemId,
+    revisionId,
+  },
   'com.rezics.content.catalogue-report.projected.v1': { reportId },
-  'com.rezics.content.report-target.projected.v1': { reportId, targetKind: 'post', targetId: itemId },
+  'com.rezics.content.report-target.projected.v1': {
+    reportId,
+    targetKind: 'post',
+    targetId: itemId,
+  },
   'com.rezics.content.reaction.changed.v1': {
     actorId,
     targetKind: 'post',
@@ -112,7 +155,11 @@ const fixtures = {
     previousKind: 'upvote',
     kind: 'like',
   },
-  'com.rezics.content.author-erasure.requested.v1': { operationId: revisionId, threadId, authorId: actorId },
+  'com.rezics.content.author-erasure.requested.v1': {
+    operationId: revisionId,
+    threadId,
+    authorId: actorId,
+  },
   'com.rezics.content.board-thread.projected.v1': {
     boardId: containerId,
     threadId,
@@ -218,7 +265,13 @@ test('reaction event types retain the closed kinds and nullable transitions', ()
 
 test('native registerEffects accepts every closed content event', () => {
   expect(() =>
-    registerEffects(entries.map(([type], index) => ({ name: `content_${index}`, types: [type], run: async () => {} }))),
+    registerEffects(
+      entries.map(([type], index) => ({
+        name: `content_${index}`,
+        types: [type],
+        run: async () => {},
+      })),
+    ),
   ).not.toThrow();
 });
 
@@ -236,8 +289,14 @@ test.each(unknownTypes)('native registerEffects still refuses %s', (type) => {
   expect(() => registerEffects([{ name: 'unknown', types: [type], run: async () => {} }])).toThrow(RangeError);
 });
 
-const poisons: { event: CommandEvent; reason: 'unknown_type' | 'invalid_data' }[] = [
-  ...unknownTypes.map((type) => ({ event: { type, data: authored }, reason: 'unknown_type' as const })),
+const poisons: {
+  event: CommandEvent;
+  reason: 'unknown_type' | 'invalid_data';
+}[] = [
+  ...unknownTypes.map((type) => ({
+    event: { type, data: authored },
+    reason: 'unknown_type' as const,
+  })),
   ...entries.map(([type, data]) => ({
     event: { type, data: { ...data, body: 'must not enter an event payload' } },
     reason: 'invalid_data' as const,
@@ -255,7 +314,10 @@ test.each(poisons)(
   'native reader refuses $reason: $event without advancing its checkpoint',
   async ({ event, reason }) => {
     const partition = nextPartition++;
-    const valid = { type: 'com.rezics.subject.created.v1', data: { id: actorId } };
+    const valid = {
+      type: 'com.rezics.subject.created.v1',
+      data: { id: actorId },
+    };
     const before = await append(partition, [valid]);
     const apply = async () => {};
     expect(await readBatch(pool, { consumer, partition, apply })).toEqual({
@@ -273,7 +335,12 @@ test.each(poisons)(
           partition,
           apply: async () => void (applied = true),
         }),
-      ).toEqual({ status: 'stopped', reason, envelopes: 0, position: before.position });
+      ).toEqual({
+        status: 'stopped',
+        reason,
+        envelopes: 0,
+        position: before.position,
+      });
       expect(await checkpoint(partition)).toBe(before.position);
     }
     expect(applied).toBe(false);

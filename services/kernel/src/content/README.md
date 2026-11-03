@@ -108,6 +108,15 @@ revision projection (digest, bounded arrays/citation and optional body) has no d
 before dispatch as `Content read eligibility revision projection native work producer`. Ordinary unmetered reads
 retain their existing behavior. Focused callback and receipt cases are in `test/content/eligibility-access-work.test.ts`.
 
+Native post creation accepts optional `visibility: published | draft`, defaulting to `published`. Revision input
+accepts the same optional field; omission preserves visibility. Explicit draft edits remain drafts. Only the first
+`draft` to `published` revision changes visibility; published-to-draft and protected-state changes are refused.
+Publication chooses the new revision, advances the post security revision and, for an opening, publishes its draft
+thread with a security revision increase in the same transaction. Existing Access and current ancestry checks apply.
+Immediate published creation and draft publication emit the closed publication event with `threadId`, `itemId`,
+`revisionId`, `actorId`, `placeId`, `kind`, `subjectIds` and `activityAt`. Drafts, subsequent edits, rollback and receipt
+replay emit no publication event. Reply index fields retain the existing opening-post subject inheritance.
+
 ## Notifications
 
 Content owns minimal in-app notices for `reply`, `mention` and `moderation_decision`, using the names in accounts'
@@ -120,8 +129,9 @@ notifies the thread's opening-post author. Creating the opening post never notif
 inline node with `attrs.accountId` in a post's first published revision notifies each distinct named account, in
 document order, up to the first ten. Duplicate nodes do not consume additional slots. A draft sends nothing;
 its first publication uses that published revision's mentions. Later revisions send no mentions. Web adds the
-mention node to `packages/document`. The actual published opening consumes `thread.created.v1`;
-subsequent posts consume `post.created.v1`. Revision events deliver no mentions. Draft creation is not a
+mention node to `packages/document`. The explicit `com.rezics.content.post.published.v1` event is the
+first-publication authority for openings and replies, pinning the exact published revision. Creation and revision
+events retain their existing consumers but are not notice authority. Draft creation is not a
 publication transition, and this delivery path adds no draft publication command.
 
 For these post notices a recipient gets at most one notice per post, with `reply` winning over `mention`.

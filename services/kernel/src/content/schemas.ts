@@ -21,7 +21,9 @@ import type { Operation } from './operation-contract.ts';
 import type { DocumentMediaPage } from './media-presentation.ts';
 
 type ViewerReactionKind = (typeof REACTION_KINDS)[number];
-type ViewerReactionSlot = { readonly viewerReaction?: ViewerReactionKind | null };
+type ViewerReactionSlot = {
+  readonly viewerReaction?: ViewerReactionKind | null;
+};
 type ReactionCountMap = { readonly [kind in ViewerReactionKind]?: number };
 type ReactionCountsSlot = { readonly reactions?: ReactionCountMap };
 
@@ -39,7 +41,9 @@ export function strictContentSchema<S extends TSchema>(
       validate(value: unknown) {
         return (check ? check(value).length === 0 : validator.Check(value))
           ? { value: value as Static<S> }
-          : { issues: [{ message: 'Value does not match the content schema' }] };
+          : {
+              issues: [{ message: 'Value does not match the content schema' }],
+            };
       },
       jsonSchema: { input: () => schema, output: () => schema },
     },
@@ -49,8 +53,16 @@ export function strictContentSchema<S extends TSchema>(
 const closed = { additionalProperties: false } as const;
 export const SourceFenceQuerySchema = t.Object(
   {
-    source: t.String({ minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9_-]{0,31}$' }),
-    externalId: t.String({ minLength: 1, maxLength: 1024, pattern: '^[^\\u0000-\\u001f\\u007f-\\u009f]+$' }),
+    source: t.String({
+      minLength: 1,
+      maxLength: 32,
+      pattern: '^[a-z][a-z0-9_-]{0,31}$',
+    }),
+    externalId: t.String({
+      minLength: 1,
+      maxLength: 1024,
+      pattern: '^[^\\u0000-\\u001f\\u007f-\\u009f]+$',
+    }),
     fieldGroup: t.Union([t.Literal('facts'), t.Literal('summary'), t.Literal('cover')]),
   },
   closed,
@@ -95,8 +107,14 @@ export const ReportInputSchema = t.Object(
     ...closed,
     allOf: [
       {
-        if: { properties: { reason: { enum: ['illegal', 'other'] } }, required: ['reason'] },
-        then: { required: ['evidence'], properties: { evidence: { type: 'string', minLength: 1 } } },
+        if: {
+          properties: { reason: { enum: ['illegal', 'other'] } },
+          required: ['reason'],
+        },
+        then: {
+          required: ['evidence'],
+          properties: { evidence: { type: 'string', minLength: 1 } },
+        },
       },
     ],
   },
@@ -167,7 +185,9 @@ const subjectReactionKinds = ['like', 'love', 'laugh', 'insightful', 'sad'] as c
 const subjectReactionKind = t.Unsafe<(typeof subjectReactionKinds)[number]>(
   t.Union(subjectReactionKinds.map((kind) => t.Literal(kind))),
 );
-const viewerReaction = { viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])) };
+const viewerReaction = {
+  viewerReaction: t.Optional(t.Union([reactionKind, t.Null()])),
+};
 const reactionCount = t.Integer({ minimum: 1 });
 const reactions = {
   reactions: t.Optional(
@@ -186,7 +206,13 @@ const reactions = {
   ),
 };
 const reactionFreshness = t.Union([
-  t.Object({ epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) }, closed),
+  t.Object(
+    {
+      epoch: t.Integer({ minimum: 1 }),
+      position: t.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    closed,
+  ),
   t.Null(),
 ]);
 const availability = t.Union([t.Literal('available'), t.Literal('erased')]);
@@ -304,6 +330,7 @@ export const ThreadInputSchema = t.Object(
 );
 export const PostInputSchema = t.Object(
   {
+    visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft')])),
     body: document,
     licence,
     parentId: t.Optional(nullableId),
@@ -315,6 +342,7 @@ export const PostInputSchema = t.Object(
 );
 export const RevisionInputSchema = t.Object(
   {
+    visibility: t.Optional(t.Union([t.Literal('published'), t.Literal('draft')])),
     body: document,
     licence: t.Optional(licence),
     subjectIds: t.Optional(subjects),
@@ -361,7 +389,10 @@ export const GlobalBoardDirectoryQuerySchema = t.Object(
   closed,
 );
 export const GlobalBoardDirectoryResponseSchema = t.Object(
-  { boards: t.Array(BoardViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  {
+    boards: t.Array(BoardViewSchema, { maxItems: 100 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
   closed,
 );
 export const PostPageResponseSchema = t.Object(
@@ -373,7 +404,10 @@ export const PostPageResponseSchema = t.Object(
   closed,
 );
 export const RevisionPageResponseSchema = t.Object(
-  { revisions: t.Array(ItemViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+  {
+    revisions: t.Array(ItemViewSchema, { maxItems: 100 }),
+    next: t.Union([t.String(), t.Null()]),
+  },
   closed,
 );
 
@@ -408,11 +442,21 @@ export const SitemapQuerySchema = t.Object(
 );
 export const sitemapLastModified = t.String({ format: 'date-time' });
 export function sitemapPageSchema<Item extends TSchema>(item: Item) {
-  return t.Object({ items: t.Array(item, { maxItems: 1000 }), next: t.Union([t.String(), t.Null()]) }, closed);
+  return t.Object(
+    {
+      items: t.Array(item, { maxItems: 1000 }),
+      next: t.Union([t.String(), t.Null()]),
+    },
+    closed,
+  );
 }
 export const SitemapBoardItemSchema = t.Object({ id: ContentIdSchema, lastModified: sitemapLastModified }, closed);
 export const SitemapThreadItemSchema = t.Object(
-  { id: ContentIdSchema, title: t.Union([t.String(), t.Null()]), lastModified: sitemapLastModified },
+  {
+    id: ContentIdSchema,
+    title: t.Union([t.String(), t.Null()]),
+    lastModified: sitemapLastModified,
+  },
   closed,
 );
 export const SitemapBoardPageSchema = sitemapPageSchema(SitemapBoardItemSchema);
@@ -566,7 +610,10 @@ export const MediaReservationInputSchema = t.Union([
   ),
 ]);
 export const RealmMediaReservationInputSchema = t.Object(
-  { purpose: t.Union([t.Literal('realm-icon'), t.Literal('realm-banner')]), ...mediaReservationFields },
+  {
+    purpose: t.Union([t.Literal('realm-icon'), t.Literal('realm-banner')]),
+    ...mediaReservationFields,
+  },
   closed,
 );
 export const MediaCompletionInputSchema = t.Object(
@@ -649,7 +696,9 @@ export const ReportPageQuerySchema = t.Object(
 
 export const ReportPageResponseSchema = t.Object(
   {
-    reports: t.Array(ModeratorReportResponseSchema.properties.report, { maxItems: 100 }),
+    reports: t.Array(ModeratorReportResponseSchema.properties.report, {
+      maxItems: 100,
+    }),
     next: t.Union([t.String(), t.Null()]),
   },
   closed,
@@ -665,7 +714,9 @@ export const CatalogueReportPageQuerySchema = t.Object(
 export const CatalogueReportPageResponseSchema = t.Object(
   {
     ...ReportPageResponseSchema.properties,
-    reports: t.Array(ModeratorReportResponseSchema.properties.report, { maxItems: 50 }),
+    reports: t.Array(ModeratorReportResponseSchema.properties.report, {
+      maxItems: 50,
+    }),
   },
   closed,
 );
@@ -673,8 +724,14 @@ export const CatalogueReportPageResponseSchema = t.Object(
 export const ModerationReasonSchema = t.Object({ reason: t.String({ minLength: 1, maxLength: 1024 }) }, closed);
 export const ModerationResponseSchema = t.Object({ securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }) }, closed);
 export const AuthorErasureInputSchema = t.Object({ authorId: ContentIdSchema }, closed);
-const operationCount = t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER });
-const operationCounts = { processedPosts: operationCount, erasedRevisions: operationCount };
+const operationCount = t.Integer({
+  minimum: 0,
+  maximum: Number.MAX_SAFE_INTEGER,
+});
+const operationCounts = {
+  processedPosts: operationCount,
+  erasedRevisions: operationCount,
+};
 const operationBase = {
   name: t.String({ pattern: '^operations/[0-9a-f-]{36}$' }),
   metadata: t.Object(
@@ -692,7 +749,14 @@ const operationBase = {
 export const OperationSchema = t.Unsafe<Operation>(
   t.Union([
     t.Object({ ...operationBase, done: t.Literal(false) }, closed),
-    t.Object({ ...operationBase, done: t.Literal(true), response: t.Object(operationCounts, closed) }, closed),
+    t.Object(
+      {
+        ...operationBase,
+        done: t.Literal(true),
+        response: t.Object(operationCounts, closed),
+      },
+      closed,
+    ),
     t.Object(
       {
         ...operationBase,
