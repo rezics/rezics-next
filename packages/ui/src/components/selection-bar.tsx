@@ -5,7 +5,7 @@ import { Menu } from './menu.tsx';
 
 export interface SelectionBarProps {
   count: number;
-  label: (count: number) => string;
+  label: (count: number) => ReactNode;
   actions: ReactNode;
   primaryAction?: ReactNode;
   statusMessage?: ReactNode;

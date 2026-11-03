@@ -318,7 +318,7 @@ function ShelfSelectionBar({
       <div className="[&_[data-slot=button]]:min-h-11">
         <SharedSelectionBar
           count={controls.selected.length}
-          label={m.library_selection_count}
+          label={(count) => m.library_selection_count({ count })}
           ariaLabel={m.library_selection_heading()}
           bottomOffset="var(--bottom-nav-height, 5rem)"
           statusMessage={selectionLimitReached ? m.library_selection_limit_reached({ limit: shelfSelectionLimit }) : undefined}
