@@ -201,7 +201,6 @@ export function createDiaryReads(deps: Dependencies) {
           const summaries = await readSubjectSummaries({ ...deps, actor: owner, deadline }, ids);
           const occurrences = shown.map((row) => ({
             ...row,
-            reportedDates: { availability: 'unavailable' as const },
             subject: subjectView(summaries.get(row.subjectId)),
             versionSubject: row.versionSubjectId ? subjectView(summaries.get(row.versionSubjectId)) : null,
           }));

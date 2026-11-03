@@ -24,7 +24,11 @@ The typed Eden client exposes `client.v1.libraryDiary.get({ query: { limit, curs
     revision: number;
     recordedStartedAt: string;
     recordedCompletedAt: string | null;
-    reportedDates: { availability: 'unavailable' };
+    reportedDates: {
+      availability: 'available'; revision: number;
+      startDate: { year: number; month?: number; day?: number } | null;
+      finishDate: { year: number; month?: number; day?: number } | null;
+    };
     subject: { id: string; label: string | null; language: string | null } | null;
     versionSubject: { id: string; label: string | null; language: string | null } | null;
   }>;
@@ -51,9 +55,14 @@ continuation. It never selects the subject's newest session in place of the addr
 
 Show `recordedStartedAt` as **Recorded start** and `recordedCompletedAt` as **Recorded completion**. Detail's existing
 `startedAt` and `completedAt` have that same audit meaning. None is a person-reported historical date. The optional
-historical-date owner is absent on this source: `reportedDates.availability` truthfully says `unavailable`, no date
-is inferred, and no historical-date sort or write/correction is offered. A future adapter must use that owner's
-accepted metadata and independently preserve these recording keys.
+historical-date owner is now installed: `reportedDates.availability` is `available`, with its independent journal
+revision and accepted partial `startDate` and `finishDate`. Unknown dates remain `null`; unknown components remain
+absent. Decision: project the installed journal's date columns in the same bounded session seek, preserving its
+precision and independent revision while keeping recording order unchanged. Reflection remains on addressed detail.
+Read or correct dates with the existing [journal methods](library-occurrence-reflections.md), including their exact
+revision, retry and clear semantics; this reader adds no writer or historical-date sort. Navigation still works
+when all dates are unknown. After a date correction, retry the current page or reopen the same journal; an edit
+during page rendering yields the same `409 conflict` recovery as a progress correction.
 
 ## Currentness and recovery
 

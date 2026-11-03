@@ -7,7 +7,7 @@ import type { DiaryOccurrence } from './diary-model.ts';
 type Client = Pick<PoolClient, 'query'>;
 export type DiaryRow = Pick<
   DiaryOccurrence,
-  'id' | 'subjectId' | 'versionSubjectId' | 'state' | 'revision' | 'recordedStartedAt' | 'recordedCompletedAt'
+  'id' | 'subjectId' | 'versionSubjectId' | 'state' | 'revision' | 'recordedStartedAt' | 'recordedCompletedAt' | 'reportedDates'
 >;
 export type DiaryKey = { recordedStartedAt: string; id: string };
 export type DiaryNavigation = {
@@ -27,6 +27,11 @@ export async function diaryRows(
 ): Promise<DiaryRow[]> {
   const columns = `session_id AS id, subject_id AS "subjectId", version_subject_id AS "versionSubjectId",
     state, revision,
+    jsonb_build_object('availability', 'available', 'revision', journal_revision,
+      'startDate', CASE WHEN journal_start_year IS NULL THEN NULL ELSE jsonb_strip_nulls(jsonb_build_object(
+        'year', journal_start_year, 'month', journal_start_month, 'day', journal_start_day)) END,
+      'finishDate', CASE WHEN journal_finish_year IS NULL THEN NULL ELSE jsonb_strip_nulls(jsonb_build_object(
+        'year', journal_finish_year, 'month', journal_finish_month, 'day', journal_finish_day)) END) AS "reportedDates",
     to_char(started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedStartedAt",
     to_char(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "recordedCompletedAt"`;
   const parameters = after ? [route, accountId, after.recordedStartedAt, after.id, limit] : [route, accountId, limit];
