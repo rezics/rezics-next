@@ -5,7 +5,7 @@ import { csrfTokenFromRequest } from '../session/csrf';
 import { sessionSubject, viewerCredential } from '../session/request';
 import { normalizeLibraryLabelName } from './subject-label-name';
 import { subjectLabelInputIssue } from './subject-label-input.ts';
-import { refused, statusOf, type LibraryLabelSummary, type SubjectLabelMutationResult } from './subject-labels';
+import { refused, statusOf, type LibraryLabelSummary, type SubjectLabelMutationResult } from './subject-labels.ts';
 
 /** Opaque command data, never a receipt or evidence that either native write completed. */
 export type SubjectLabelStep = {

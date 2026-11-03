@@ -16,7 +16,7 @@ import { manageLabel } from './labels-actions';
 import { readLabelsPage } from './labels-read-route';
 import type { LabelInput, LabelsPage, LabelFeedback } from './labels-read';
 import { shelfHref } from './shelf-params';
-import type { LibraryLabelSummary } from './subject-labels';
+import type { LibraryLabelSummary } from './subject-labels.ts';
 import type { ManagementGuard } from './management-current-origin';
 import type { GatedOperation } from '../kernel/exposure';
 import { hasUnsentLabelName, useLabelDraftNavigation } from './label-draft-navigation';

@@ -4,7 +4,7 @@ import { cookie, SESSION_COOKIE, setCookie } from '../session/cookies';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { readSessionIdentity } from '../session/state';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
-import type { LibraryLabelSummary } from './subject-labels';
+import type { LibraryLabelSummary } from './subject-labels.ts';
 import { libraryLabelNameIssue } from './subject-label-name';
 
 export type LibraryLabel = LibraryLabelSummary;
