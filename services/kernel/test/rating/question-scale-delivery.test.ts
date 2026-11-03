@@ -13,11 +13,7 @@ import {
 } from '../../src/rating/question-scale.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import {
-  body,
-  createNativePublicationFixture,
-  votePath,
-} from './public-figure-native-publication-fixture.ts';
+import { body, createNativePublicationFixture, votePath } from './public-figure-native-publication-fixture.ts';
 
 const voteEventType = 'com.rezics.rating.vote.changed.v1';
 const scale = { minimumUnits: 10, maximumUnits: 4096, stepUnits: 6 };
@@ -118,10 +114,7 @@ test('custom stored units survive the mounted vote, worker aggregate, clear and 
     expect(second).toMatchObject({ units: 4090, revision: 2 });
     await fixture.settle();
     const secondEvent = await latestEvent(2);
-    const replay = createRatingAggregateEffect(
-      database.pool,
-      createRatingCounter({ secret: Buffer.alloc(32, 43) }),
-    );
+    const replay = createRatingAggregateEffect(database.pool, createRatingCounter({ secret: Buffer.alloc(32, 43) }));
     await replay.run(firstEvent);
     expect(await aggregate()).toMatchObject({ count: 1n, sum: 4090n });
     expect((await aggregate()).histogram[680]).toBe(1n);
