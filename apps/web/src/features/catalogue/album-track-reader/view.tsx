@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
-import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { ContentItemFrame } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
@@ -49,9 +49,9 @@ export function AlbumTrackReader(props: Props) {
         focused.current = event.target;
       }}
     >
-      <ContentItemHeading id={headingId} ref={heading} tabIndex={-1} level={2} className="text-xl font-semibold">
+      <h2 id={headingId} ref={heading} tabIndex={-1} className="text-xl font-semibold">
         {m.album_tracks_title({}, o)}
-      </ContentItemHeading>
+      </h2>
       {reading.available ? (
         <AlbumTrackWindow
           key={reading.key}
