@@ -20,6 +20,18 @@ export type RealmRatingContext = RatingCursorContext & {
   realm: { authority: string; revision: string };
   generation: number;
   asOf: string;
+  /** Opaque current native observations bound into the signed continuation scope. */
+  questionIdentity: string;
+  questionRevision: number;
+  questionProvenance: string;
+  observation: string;
+  priorGeneration: string;
+  canonicalGeneration: string;
+  publicationGeneration: string;
+  meaningDigest: string | null;
+  searchGeneration: number;
+  priorActive: boolean;
+  priorUpdating: boolean;
 };
 export type RealmRatingQuery = {
   principal: string;
@@ -38,6 +50,8 @@ export type RealmRatingHit = SearchHit & {
   position: bigint;
   threshold: 5 | 10;
   figure: PublicRatingFigure | null;
+  /** Consumed canonical row which already appeared in the scored phase. */
+  suppressed?: true;
 };
 
 /** Content-owned native seam. No default provider is fabricated from Global/indexed figures.
@@ -53,7 +67,17 @@ export type RealmRatingHit = SearchHit & {
  */
 export interface RealmRatingSource {
   observe(query: RealmRatingQuery): Promise<RealmRatingContext>;
-  read(
+  /** Bounded rating-index pages keyed by their subject-home partition. Search owns their merge. */
+  readScoredFrontiers(
+    query: RealmRatingQuery,
+    context: RealmRatingContext,
+    request: SearchFrontier & { size: number },
+  ): Promise<{
+    context: RealmRatingContext;
+    partitions: readonly Readonly<{ partition: number; hits: readonly RealmRatingHit[] }>[];
+  }>;
+  /** Current Search name_sort walk. It must prove every candidate's rating eligibility natively. */
+  readUnscored(
     query: RealmRatingQuery,
     context: RealmRatingContext,
     request: SearchFrontier & { size: number },
@@ -90,7 +114,32 @@ function validateContext(value: RealmRatingContext, populationId: string): Realm
     !Number.isSafeInteger(value.generation) ||
     value.generation < 1 ||
     typeof value.asOf !== 'string' ||
-    !Number.isFinite(Date.parse(value.asOf))
+    !Number.isFinite(Date.parse(value.asOf)) ||
+    typeof value.questionIdentity !== 'string' ||
+    value.questionIdentity.length < 1 ||
+    value.questionIdentity.length > 256 ||
+    !Number.isSafeInteger(value.questionRevision) ||
+    value.questionRevision < 1 ||
+    typeof value.questionProvenance !== 'string' ||
+    value.questionProvenance.length < 1 ||
+    value.questionProvenance.length > 256 ||
+    typeof value.observation !== 'string' ||
+    value.observation.length < 1 ||
+    value.observation.length > 256 ||
+    typeof value.priorGeneration !== 'string' ||
+    !/^[0-9]+$/.test(value.priorGeneration) ||
+    typeof value.canonicalGeneration !== 'string' ||
+    value.canonicalGeneration.length < 1 ||
+    value.canonicalGeneration.length > 256 ||
+    typeof value.publicationGeneration !== 'string' ||
+    value.publicationGeneration.length < 1 ||
+    value.publicationGeneration.length > 256 ||
+    !(value.meaningDigest === null || (typeof value.meaningDigest === 'string' && value.meaningDigest.length <= 256)) ||
+    !Number.isSafeInteger(value.searchGeneration) ||
+    value.searchGeneration < 1 ||
+    typeof value.priorActive !== 'boolean' ||
+    typeof value.priorUpdating !== 'boolean' ||
+    (!value.priorActive && value.priorUpdating)
   )
     throw notReady();
   return structuredClone(value);
@@ -102,6 +151,17 @@ function sameContext(left: RealmRatingContext, right: RealmRatingContext): boole
     left.populationId === right.populationId &&
     left.priorEpoch === right.priorEpoch &&
     left.generation === right.generation &&
+    left.questionIdentity === right.questionIdentity &&
+    left.questionRevision === right.questionRevision &&
+    left.questionProvenance === right.questionProvenance &&
+    left.observation === right.observation &&
+    left.priorGeneration === right.priorGeneration &&
+    left.canonicalGeneration === right.canonicalGeneration &&
+    left.publicationGeneration === right.publicationGeneration &&
+    left.meaningDigest === right.meaningDigest &&
+    left.searchGeneration === right.searchGeneration &&
+    left.priorActive === right.priorActive &&
+    left.priorUpdating === right.priorUpdating &&
     left.realm.authority === right.realm.authority &&
     left.realm.revision === right.realm.revision
   );
@@ -118,6 +178,11 @@ export function normalizeRealmRatingHit(hit: RealmRatingHit, context: RealmRatin
   )
     throw notReady();
   const figure = hit.figure;
+  if (
+    hit.suppressed !== undefined &&
+    (hit.suppressed !== true || (hit.ratingPhase === 'unscored' && figure !== null))
+  )
+    throw notReady();
   if (figure !== null) {
     if (
       !figure ||
@@ -138,6 +203,7 @@ export function normalizeRealmRatingHit(hit: RealmRatingHit, context: RealmRatin
       !Number.isFinite(Date.parse(figure.asOf)) ||
       !(figure.priorEpoch === null || (Number.isSafeInteger(figure.priorEpoch) && figure.priorEpoch > 0)) ||
       (figure.count < hit.threshold && (figure.mean !== null || figure.score !== null)) ||
+      figure.count < hit.threshold ||
       (figure.score !== null && (figure.mean === null || figure.priorEpoch === null)) ||
       (figure.count >= hit.threshold && figure.mean === null)
     )
@@ -154,6 +220,7 @@ export function normalizeRealmRatingHit(hit: RealmRatingHit, context: RealmRatin
     tuple.length !== (scored ? 3 : 2) ||
     tuple.at(-1) !== hit.id ||
     (scored && tuple[0] !== figure!.score) ||
+    (scored && name !== null) ||
     !(name === null || (typeof name === 'string' && name.length <= 512 && name.isWellFormed()))
   )
     throw notReady();
@@ -164,6 +231,8 @@ function compare(left: SearchFrontier, right: SearchFrontier): number {
   const a = left.after!;
   const b = right.after!;
   if (left.ratingPhase === 'scored' && a[0] !== b[0]) return (b[0] as number) - (a[0] as number);
+  if (left.ratingPhase === 'scored')
+    return Buffer.compare(Buffer.from(b.at(-1) as string), Buffer.from(a.at(-1) as string));
   const offset = left.ratingPhase === 'scored' ? 1 : 0;
   for (let index = offset; index < a.length; index++) {
     if (a[index] === b[index]) continue;
@@ -172,6 +241,53 @@ function compare(left: SearchFrontier, right: SearchFrontier): number {
     return Buffer.compare(Buffer.from(a[index] as string), Buffer.from(b[index] as string));
   }
   return 0;
+}
+
+function validateReadPageContext(value: RealmRatingContext, context: RealmRatingContext, populationId: string) {
+  const observed = validateContext(value, populationId);
+  if (!sameContext(context, observed)) throw restart();
+  return observed;
+}
+
+function orderPartitionPages(
+  partitions: readonly {
+    partition: number;
+    hits: readonly RealmRatingHit[];
+  }[],
+  request: SearchFrontier & { size: number },
+  context: RealmRatingContext,
+): RealmRatingHit[] {
+  const seenPartitions = new Set<number>();
+  const hits: RealmRatingHit[] = [];
+  for (const page of partitions) {
+    if (
+      !page ||
+      !Number.isInteger(page.partition) ||
+      page.partition < 0 ||
+      page.partition > 4095 ||
+      seenPartitions.has(page.partition) ||
+      !Array.isArray(page.hits) ||
+      page.hits.length > request.size
+    )
+      throw notReady();
+    seenPartitions.add(page.partition);
+    let previous: SearchFrontier | undefined = request.ratingPhase === 'scored' ? request : undefined;
+    for (const hit of page.hits) {
+      normalizeRealmRatingHit(hit, context);
+      if (hit.ratingPhase !== 'scored' || hit.partition !== page.partition) throw notReady();
+      const current = { after: hit.sort, ratingPhase: hit.ratingPhase };
+      if (previous && compare(previous, current) >= 0) throw notReady();
+      previous = current;
+      hits.push(hit);
+    }
+  }
+  hits.sort((a, b) => compare({ after: a.sort, ratingPhase: 'scored' }, { after: b.sort, ratingPhase: 'scored' }));
+  const ids = new Set<string>();
+  for (const hit of hits) {
+    if (ids.has(hit.id)) throw notReady();
+    ids.add(hit.id);
+  }
+  return hits.slice(0, request.size);
 }
 
 export async function readRealmRatingOrder(options: {
@@ -234,14 +350,28 @@ export async function readRealmRatingOrder(options: {
       ...(frontier ? { frontier } : {}),
       read: async (request) => {
         if (Date.now() >= query.deadline) throw new ProblemError('deadline_exceeded');
-        const page = await ratings.read(query, context, request);
-        const observed = validateContext(page.context, query.populationId);
-        if (!sameContext(context, observed)) throw restart();
-        if (!Array.isArray(page.hits) || page.hits.length > request.size) throw notReady();
+        let hits: RealmRatingHit[] = [];
+        if (request.ratingPhase !== 'unscored' && context.priorEpoch !== null) {
+          const page = await ratings.readScoredFrontiers(query, context, request);
+          validateReadPageContext(page.context, context, query.populationId);
+          if (!Array.isArray(page.partitions)) throw notReady();
+          hits = orderPartitionPages(page.partitions, request, context);
+        }
+        if (request.ratingPhase === 'unscored' || hits.length < request.size) {
+          const page = await ratings.readUnscored(query, context, {
+            ...(request.ratingPhase === 'unscored' && request.after !== undefined
+              ? { after: request.after, ratingPhase: 'unscored' as const }
+              : {}),
+            size: request.size - hits.length,
+          });
+          validateReadPageContext(page.context, context, query.populationId);
+          if (!Array.isArray(page.hits) || page.hits.length > request.size - hits.length) throw notReady();
+          hits = [...hits, ...page.hits];
+        }
         positions.clear();
         let previous: SearchFrontier | undefined = request.after ? request : undefined;
         const ids = new Set<string>();
-        for (const hit of page.hits) {
+        for (const hit of hits) {
           normalizeRealmRatingHit(hit, context);
           const current = { after: hit.sort, ratingPhase: hit.ratingPhase };
           if ((previous && compare(previous, current) >= 0) || ids.has(hit.id)) throw notReady();
@@ -250,7 +380,7 @@ export async function readRealmRatingOrder(options: {
           ids.add(hit.id);
           previous = current;
         }
-        return { hits: page.hits };
+        return { hits };
       },
       check: async (hits) => {
         const checked = await checkHits(
@@ -259,7 +389,11 @@ export async function readRealmRatingOrder(options: {
           clauses,
           query.filter ? { filter: query.filter, relationProperties } : undefined,
         );
-        return new Map(checked.passed.map(({ hit, subject }) => [hit as SearchHit, subject]));
+        return new Map(
+          checked.passed
+            .filter(({ hit }) => !(hit as RealmRatingHit).suppressed)
+            .map(({ hit, subject }) => [hit as SearchHit, subject]),
+        );
       },
       canonicalId: (subject) => subject.id,
     }),

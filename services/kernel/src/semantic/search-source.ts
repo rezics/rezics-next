@@ -93,6 +93,16 @@ type StatementRow = {
   ordinal: number;
 };
 
+/** Current name/fact/visibility publication fence used by complete Search traversals. */
+export async function readSearchCanonicalGeneration(pool: Pool): Promise<string> {
+  const result = await pool.query<{ last_value: string; is_called: boolean }>(
+    `SELECT last_value::text,is_called FROM semantic.search_canonical_generation`,
+  );
+  const row = result.rows[0];
+  if (!row || !/^[0-9]+$/.test(row.last_value)) throw new Error('Search canonical generation is unavailable');
+  return `${row.last_value}:${row.is_called ? 1 : 0}`;
+}
+
 const ASCII = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
