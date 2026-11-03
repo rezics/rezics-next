@@ -58,12 +58,13 @@ independent rather than making shared files or unfinished producer delivery into
   `PUT .../rule` with CAS revision. Confirmed creation offers members and rule destinations. Ordinary saved identities
   use the existing Dynamic Collection reader at `/collections/{id}` with distinct preparing, empty, unavailable and
   stale-cursor recovery states. Public readers receive only published permitted membership, never the owner
-  predicate. The reader exposes owner management only for the current owner of an ordinary saved dynamic Collection
+  predicate. An admitted owner reaches the existing `/collections/{id}/publish` selected-members route through
+  `SavedQueryPublicationAction` consumed by saved-query management; rule edits do not auto-publish. The reader exposes owner management only for the current owner of an ordinary saved dynamic Collection
   with current native update/delete admission. Management rereads current metadata and revision, edits only title and
   description, and preserves the rule's accepted release. Delete has explicit review and returns to the same bounded
   directory page; the Collection delete does not delete Library facts. Existing metadata update and delete commands
-  remain Commerce-owned. Commerce still owns complete paged dynamic owner metadata, dynamic member preparation and
-  native outcome proof. The Web lifecycle is documented in [saved-query directory](../../apps/web/src/library/saved-query-directory.md);
+  remain Commerce-owned. Commerce still owns complete paged dynamic owner metadata, dynamic member preparation,
+  publication and native outcome proof. The Web lifecycle is documented in [saved-query directory](../../apps/web/src/library/saved-query-directory.md);
   the results seam remains in [saved-query results](../../apps/web/src/library/saved-query-results.md).
 - **Advanced facets.** Extend the common Collection filter surface with released property selection and native
   count-free value continuation for that exact Collection. Eight active properties is a UI window; changing the

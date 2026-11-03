@@ -46,6 +46,13 @@ export function CollectionPublicationReview({ review }: { review: PublicationRev
     >
       <p className="font-medium break-words">{review.title}</p>
       {review.description ? <p className="whitespace-pre-wrap break-words">{review.description}</p> : null}
+      {Number.isSafeInteger(review.revision) && review.revision > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {m.library_publication_revision({ revision: String(review.revision) })}
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">{m.library_publication_meaning_unavailable()}</p>
+      )}
       <ol className="list-decimal space-y-1 ps-5" aria-label={m.library_publication_choose()}>
         {review.subjects.map(({ id, label }) => {
           const title = displayLibraryTitle(label, locale);

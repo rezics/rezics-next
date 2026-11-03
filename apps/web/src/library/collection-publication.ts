@@ -2,6 +2,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { isNotFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../session/client';
 import { requestCsrfToken, sessionSubject } from '../session/request';
 import { personalRead } from '../kernel/query';
@@ -9,7 +10,7 @@ import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platfo
 import { readCollectionPage } from './collection-queries';
 import { collectionResultMatches, type CollectionPageResult } from './collection-load';
 import type { DynamicCollectionPage } from './dynamic-collection';
-import { asSession, isRecord, writeSession } from './collection-records';
+import { asSession, isRecord, kernelHeaders, writeSession } from './collection-records';
 
 export type PublicationViewer = { subject: string; csrfToken: string | null };
 export type PublicationAddress = { id: string; cursor?: string };
@@ -155,17 +156,49 @@ export async function publishSelectedRecord(
   }
 }
 
+/** Exact generated `collections({id}).$publishSelected.post`; an absent runtime stays unavailable. */
+export async function publishSelectedNative(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: PublicationInput,
+): Promise<PublicationResult> {
+  const validated = publicationInput(input);
+  const session = await writeSession(request, sessionEnv);
+  if (!asSession(session)) return { ok: false, reason: session.reason === 'unavailable' ? 'unavailable' : 'denied' };
+  try {
+    const result = await client.collections({ collectionId: validated.collectionId }).$publishSelected.post(
+      { revision: validated.revision, subjectIds: validated.subjectIds },
+      { headers: kernelHeaders(session.authorization, validated.idempotencyKey) },
+    );
+    const status = typeof result.status === 'number' ? result.status : (result.error?.status ?? 0);
+    const body = result.data ?? result.error?.value ?? null;
+    return publicationResponse(status, body, validated);
+  } catch (error) {
+    return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unknown' };
+  }
+}
+
 export const publishSelectedCollection = createServerFn({ method: 'POST' })
   .validator(publicationInput)
   .handler(async ({ data }): Promise<PublicationResult> => {
     setResponseHeader('cache-control', 'private, no-store');
     const { env } = await import('cloudflare:workers');
-    return publishSelectedRecord(
-      selectedPublicationAdapter((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN),
-      getRequest(),
-      env as Partial<SessionEnv>,
-      data,
-    );
+    const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
+    if (!origin && !import.meta.env.DEV) {
+      return publishSelectedRecord(
+        selectedPublicationAdapter(undefined),
+        getRequest(),
+        env as Partial<SessionEnv>,
+        data,
+      );
+    }
+    const { kernelClient } = await import('../kernel/client');
+    try {
+      return await publishSelectedNative(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+    } catch (error) {
+      return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
+    }
   });
 
 export const readCollectionPublication = createServerFn({ method: 'GET' })

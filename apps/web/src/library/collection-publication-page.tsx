@@ -25,6 +25,12 @@ import {
   type PublicationPage,
   type PublicationResult,
 } from './collection-publication';
+import {
+  SavedQueryAcceptedMeaning,
+  SavedQueryPublishedMembership,
+  acceptedMeaningFromPage,
+  publishedMembership,
+} from './saved-query-publication';
 
 export type PublicationSubmit = (input: PublicationInput) => Promise<PublicationResult>;
 
@@ -84,6 +90,7 @@ type IntentState = {
   } | null;
   result: PublicationResult | null;
   complete: PublicationComplete | null;
+  publishedReview: PublicationReview | null;
   busy: boolean;
 };
 
@@ -115,6 +122,7 @@ function PublicationIntentView({
     attempt: null,
     result: null,
     complete: null,
+    publishedReview: null,
     busy: false,
   });
   // Events and completions share the same synchronous gate, including before React renders again.
@@ -140,7 +148,8 @@ function PublicationIntentView({
       ...(previous.attempt ? {} : { selected: [], confirmed: false, result: null }),
     }));
   }, [sourceKey]);
-  const { selected, confirmed, result, complete, busy } = state;
+  const { selected, confirmed, result, complete, publishedReview, busy } = state;
+  const published = publishedMembership(complete, ready ? source.page : null);
   const ratio = rowRatio(candidates.map((member) => member.subject));
   // A refusal on a later retry proves nothing about the original dispatch's commit.
   const unknown = state.attempt?.uncertain === true;
@@ -207,6 +216,7 @@ function PublicationIntentView({
         ...(outcome.ok
           ? {
               complete: outcome,
+              publishedReview: previous.attempt?.review ?? previous.publishedReview,
               attempt: null,
               confirmed: false,
               selected: previous.sourceKey === previous.attempt?.sourceKey ? previous.selected : [],
@@ -254,6 +264,7 @@ function PublicationIntentView({
                   : m.library_publication_unavailable()}
           </p>
           <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_previous()}</p>
+          <SavedQueryPublishedMembership published={published} review={publishedReview} />
           {unknown && review ? <CollectionPublicationReview review={review} /> : null}
           {feedback}
           <Button type="button" disabled>
@@ -267,10 +278,11 @@ function PublicationIntentView({
         </div>
       ) : (
         <>
-          <section className="space-y-4" aria-labelledby="publication-selection" aria-busy={busy}>
+          <section className="space-y-4" aria-labelledby="publication-selection" aria-busy={busy} data-publication-current>
             <h2 id="publication-selection" className="text-xl font-semibold">
-              {m.library_publication_choose()}
+              {m.library_publication_current()}
             </h2>
+            <p className="max-w-prose text-sm text-muted-foreground">{m.library_publication_choose()}</p>
             {candidates.length ? (
               <ul className="space-y-4">
                 {candidates.map((member) => {
@@ -336,6 +348,9 @@ function PublicationIntentView({
               <p id="publication-replacement" className="max-w-prose text-sm">
                 {m.library_publication_previous()}
               </p>
+              <SavedQueryAcceptedMeaning
+                meaning={ready ? acceptedMeaningFromPage(source.page, source.revision) : null}
+              />
               {review ? <CollectionPublicationReview review={review} /> : null}
               <label className="flex min-h-11 items-start gap-3 py-2">
                 <input
@@ -378,6 +393,7 @@ function PublicationIntentView({
               </div>
             </div>
           </section>
+          <SavedQueryPublishedMembership published={published} review={publishedReview} />
           {source.page.next && !locked ? (
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">{m.library_publication_more_pages()}</p>
@@ -404,6 +420,12 @@ function PublicationIntentView({
           <a className="inline-flex min-h-11 items-center text-primary underline" href={base}>
             {m.library_publication_view()}
           </a>
+          {publishedReview ? (
+            <div className="space-y-2">
+              <p className="font-medium">{m.library_publication_output_review()}</p>
+              <CollectionPublicationReview review={publishedReview} />
+            </div>
+          ) : null}
         </section>
       ) : null}
       {ready ? (

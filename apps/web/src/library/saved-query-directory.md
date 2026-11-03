@@ -20,7 +20,8 @@ authenticated Collection detail read before showing editable metadata. It uses t
 visibility and CAS revision. Saving sends the existing `collection.update` command with title and description while
 preserving visibility; it does not read or rewrite the private rule. The saved rule keeps its accepted immutable
 release. Rule editing remains at `/collections/{id}/rule` under its own current owner checks. Publication stays a
-separate owner action.
+separate owner action: `SavedQueryPublicationAction` opens `/collections/{id}/publish` without rewriting metadata
+or the private rule.
 
 Delete requires a review of the Collection title, exact ID and current revision. Confirmation sends the existing
 `collection.delete` command. A confirmed delete returns to the same bounded directory page and removes only the

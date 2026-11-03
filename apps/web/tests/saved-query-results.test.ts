@@ -111,14 +111,17 @@ test('a saved results page keeps unique subjects, omits counts, notes and the bu
   expect(html).toContain('Saved query');
   expect(html).toContain('A book');
   expect(html).toContain('/collections/saved/rule');
+  expect(html).toContain('/collections/saved/publish');
   expect(html).not.toContain(m.library_collection_builtin_rule());
   expect(html).not.toContain('owner:{');
   expect(text).not.toMatch(/\bUpdated\b/);
-  expect(text).not.toMatch(/\bitems?\b/);
+  expect(text).not.toMatch(/\b\d+ items?\b/);
   expect(text).not.toMatch(/\bAdd\b/);
   expect(text).not.toMatch(/\bNote\b/);
   expect(renderPage(savedPage, 'reader')).not.toContain('/collections/saved/rule');
+  expect(renderPage(savedPage, 'reader')).not.toContain('/collections/saved/publish');
   expect(renderPage({ ...savedPage, builtinKind: 'everything' })).toContain(m.library_collection_builtin_rule());
+  expect(renderPage({ ...savedPage, builtinKind: 'everything' }, 'owner')).not.toContain('/publish');
 });
 
 test('202 preparing, empty 200 and 503 stay distinct; stale cursors restart once on the same Collection', async () => {
