@@ -1,5 +1,6 @@
 import '../../src/http/kernel.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { routeOf } from '../../src/route/route.ts';
 import { postPublicationFixture } from './support/post-publication-fixture.ts';
@@ -44,8 +45,52 @@ afterAll(async () => {
   await f?.close();
 });
 
+test('preserves a pre-upgrade board-scoped actor interval during key migration', async () => {
+  const route = routeOf(f.board.id)!;
+  const actorId = f.author.actor.accountId;
+  const legacyKey = createHmac('sha256', f.system.routeKey)
+    .update(`content.board.slow-mode\n${f.board.id}\n${actorId}`)
+    .digest();
+  expect((await set(60)).value).toMatchObject({
+    intervalSeconds: 60,
+    retryAt: null,
+    nextEligibleAt: null,
+    canChange: true,
+    exempt: true,
+    admissionState: 'ready',
+    retryAfterSeconds: 0,
+  });
+  await f.pool.query(
+    `INSERT INTO content.board_slow_actor(route,board_id,actor_key,posted_at)
+     VALUES ($1,$2,$3,clock_timestamp())`,
+    [route, f.board.id, legacyKey],
+  );
+  try {
+    const status = (await f.call('GET', path())).value;
+    expect(status.retryAt).toBe(status.nextEligibleAt);
+    expect(Date.parse(status.retryAt)).toBeGreaterThan(Date.now());
+    expect((await post()).status).toBe(429);
+    const rows = await f.pool.query<{ actor_key: Buffer }>(
+      'SELECT actor_key FROM content.board_slow_actor WHERE route=$1 AND board_id=$2',
+      [route, f.board.id],
+    );
+    expect(rows.rows.some(({ actor_key }) => actor_key.equals(legacyKey))).toBe(false);
+  } finally {
+    await f.pool.query('DELETE FROM content.board_slow_actor WHERE route=$1 AND board_id=$2', [route, f.board.id]);
+    await set(0);
+  }
+});
+
 test('bounded moderator setting, cross-thread concurrent admission, stable retry, replay and ordinary edits', async () => {
-  expect((await f.call('GET', path())).value).toEqual({ intervalSeconds: 0, retryAt: null, exempt: false });
+  expect((await f.call('GET', path())).value).toEqual({
+    intervalSeconds: 0,
+    retryAt: null,
+    nextEligibleAt: null,
+    canChange: false,
+    exempt: false,
+    admissionState: 'ready',
+    retryAfterSeconds: 0,
+  });
   expect((await f.call('PUT', path(), { intervalSeconds: 60 })).status).toBe(403);
   for (const intervalSeconds of [-1, 86401, 0.5]) expect((await set(intervalSeconds)).status).toBe(400);
   const settingKey = key();
@@ -73,9 +118,14 @@ test('bounded moderator setting, cross-thread concurrent admission, stable retry
     const deniedStart = observer.records.length;
     expect((await post()).value.retryAt).toBe(retryAt);
     // One setting seek, one attempted reservation and one exact retry point.
-    expect(observer.records.slice(deniedStart).filter((r) => r.statement.includes('content.board_slow_'))).toHaveLength(
-      3,
-    );
+    const deniedSlowWrites = observer.records
+      .slice(deniedStart)
+      .filter(
+        ({ statement }) =>
+          /\b(?:INSERT|UPDATE|DELETE)\s+content\.board_slow_(?:mode|permit|ticket)\b/i.test(statement) ||
+          /\bUPDATE\s+content\.board_slow_actor\s+SET\s+posted_at\b/i.test(statement),
+      );
+    expect(deniedSlowWrites).toHaveLength(0);
     await f.pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
       routeOf(f.author.actor.accountId),
       f.author.actor.accountId,
@@ -110,7 +160,15 @@ test('bounded moderator setting, cross-thread concurrent admission, stable retry
     ).toBe(201);
     expect((await f.call('POST', `/v1/threads/${threads[1]!.id}/posts`, input, { other: true })).status).toBe(429);
     // Status reports only the actual actor; explicit moderator writes reserve nothing.
-    expect((await moderator('GET')).value).toEqual({ intervalSeconds: 60, retryAt: null, exempt: true });
+    expect((await moderator('GET')).value).toEqual({
+      intervalSeconds: 60,
+      retryAt: null,
+      nextEligibleAt: null,
+      canChange: true,
+      exempt: true,
+      admissionState: 'ready',
+      retryAfterSeconds: 0,
+    });
     for (let i = 0; i < 2; i++) {
       const response = await f.system.kernel.handle(
         new Request(`https://content.test/v1/threads/${threads[0]!.id}/posts`, {

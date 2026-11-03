@@ -59,7 +59,11 @@ import insertRevision from './create-revision.sql';
 import updateHead from './update-head.sql';
 import publishOpeningThread from './publish-opening-thread.sql';
 import readReviewVote from './read-review-vote.sql';
-import { boardSlowAdmission } from './board-slow.ts';
+import {
+  BoardSlowAdmissionUnavailableError,
+  boardSlowAdmission,
+  type BoardSlowReceiptReference,
+} from './board-slow.ts';
 
 export type { ReviewVoteCitation } from './model.ts';
 
@@ -76,6 +80,7 @@ type ThreadCreationInput = ThreadInput & Readonly<{ mediaIds?: readonly string[]
 const CREATE_THREAD = 'content.thread.create';
 const CREATE_POST = 'content.post.create';
 const REVISE_POST = 'content.post.revise';
+const SLOW_MODE_REPLAY_PROBE = Symbol('slow mode replay probe');
 const CONTENT_GRANT_TYPES = ['content.thread', 'content.post'] as const;
 
 /** Role resolution drops a content template when any named action is unmounted.
@@ -245,6 +250,28 @@ function options(
     },
   };
 }
+
+/** Current authorization and receipt lookup finish before admission opens a
+ * board-home checkout. No-receipt probes roll back before admission begins.
+ */
+async function probeSlowModeReplay(
+  pool: Pool,
+  commandOptions: ReturnType<typeof options>,
+  authorization: CommandAuthorization,
+): Promise<CommandOutcome<ContentCommandValue> | null> {
+  try {
+    return await runCommand<ContentCommandValue>(
+      pool,
+      { ...commandOptions, authorization },
+      async () => {
+        throw SLOW_MODE_REPLAY_PROBE;
+      },
+    );
+  } catch (error) {
+    if (error === SLOW_MODE_REPLAY_PROBE) return null;
+    throw error;
+  }
+}
 // Snapshot the request before the first await; semantic document validation belongs
 // after authorization and receipt lookup, inside the body phase.
 function request<T>(input: T): T {
@@ -372,7 +399,9 @@ function containerAuthorization(
   itemId: string | null,
   context: RequestContext,
   revising: boolean,
+  receipt: BoardSlowReceiptReference,
   concealDepartedMember = false,
+  admitSlowMode = false,
 ) {
   const r = route(threadId);
   const resource = { route: r, id: revising ? itemId! : threadId };
@@ -381,7 +410,7 @@ function containerAuthorization(
   let checks: Awaited<ReturnType<typeof accessCheck>>[] = [];
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   let currentPlaceId = GLOBAL_CONTEXT;
-  const slow = boardSlowAdmission(dependencies, actor, context);
+  const slow = boardSlowAdmission(dependencies, actor, context, r, receipt);
   const limit = revising ? 33 : 32;
   // A non-author never held a revise receipt. Keep today's not_found ahead of
   // the authorship denial. The author's fresh key is refused in the body so an
@@ -412,7 +441,7 @@ function containerAuthorization(
     get placeId() {
       return currentPlaceId;
     },
-    wrap(base: CommandAuthorization): CommandAuthorization {
+    wrap(base: CommandAuthorization, includeSlowMode = admitSlowMode): CommandAuthorization {
       return {
         ...base,
         async prepare(attempt) {
@@ -440,7 +469,6 @@ function containerAuthorization(
               );
           }
           const boardId = prepared.thread.board_id;
-          await slow.prepare(boardId, attempt.time);
           const boardCheck = await accessCheck(
             dependencies.access,
             actor,
@@ -472,8 +500,9 @@ function containerAuthorization(
             if (!proof.allowed) throw new ContentForbiddenError();
             participation.set(attempt.time, proof);
           }
+          let evidence: unknown;
           try {
-            return await base.prepare!(attempt);
+            evidence = await base.prepare!(attempt);
           } catch (error) {
             // Erasure used to fail closed before the creation grant. A fresh reply
             // from a persona without post:create stays not_found and writes nothing.
@@ -482,6 +511,8 @@ function containerAuthorization(
               throw new ContentNotFoundError();
             throw error;
           }
+          if (includeSlowMode) await slow.prepare(prepared.thread.board_id, attempt.time);
+          return evidence;
         },
         async authorize(tx, attempt, evidence) {
           const mode = await base.authorize(tx, attempt, evidence);
@@ -625,6 +656,7 @@ export async function createThread(
   );
   const postTarget = { route: target.route, id: newId(target.route) };
   const value = { threadId: target.id, itemId: postTarget.id, revisionId: newId(target.route) };
+  const commandOptions = options(dependencies, actor, target.route, CREATE_THREAD, body, context);
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(
     actor,
@@ -634,7 +666,7 @@ export async function createThread(
     ],
     inserted,
   );
-  const slow = boardSlowAdmission(dependencies, actor, context);
+  const slow = boardSlowAdmission(dependencies, actor, context, target.route, commandOptions.receipt);
   let boardCheck: Awaited<ReturnType<typeof accessCheck>>;
   let threadPlaceId = GLOBAL_CONTEXT;
   const discovery = new WeakMap<AuthoritativeTime, { boardVersion: string; binding: RealmDiscoveryBinding }>();
@@ -680,10 +712,9 @@ export async function createThread(
       manifest: createResourceCreationManifest(entries),
     },
   });
-  const authorization: CommandAuthorization = {
+  const makeAuthorization = (admitSlowMode: boolean): CommandAuthorization => ({
     ...base,
     async prepare(attempt) {
-      await slow.prepare(body.boardId, attempt.time);
       boardCheck = await accessCheck(dependencies.access, actor, 'board:read', board, {
         pool: dependencies.pool,
         deadline: context.deadline,
@@ -725,14 +756,24 @@ export async function createThread(
           if (binding) discovery.set(attempt.time, { boardVersion: original.security_revision, binding });
         }
       }
-      return base.prepare!(attempt);
+      const evidence = await base.prepare!(attempt);
+      if (admitSlowMode) await slow.prepare(body.boardId, attempt.time);
+      return evidence;
     },
-  };
+    async authorize(tx, attempt, evidence) {
+      return base.authorize(tx, attempt, evidence);
+    },
+  });
+  const preflightAuthorization = makeAuthorization(false);
+  const authorization = makeAuthorization(true);
   try {
-    return await runCommand(
+    const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
+    if (replay) return replay;
+    const outcome = await runCommand(
       dependencies.pool,
-      { ...options(dependencies, actor, target.route, CREATE_THREAD, body, context), authorization },
+      { ...commandOptions, authorization },
       async (tx, command) => {
+        slow.assertAllowed(command.time);
         if (
           typeof body.title !== 'string' ||
           body.title.trim().length === 0 ||
@@ -751,7 +792,6 @@ export async function createThread(
           ? await currentReviewCitation(tx, author.accountId, body.subjectIds[0]!, body.voteCitation)
           : null;
         const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
-        await slow.reserve(tx, body.boardId, command.time);
         const at = authoritativeTimeValue(command.time);
         await insertThread.run(tx, {
           route: target.route,
@@ -798,6 +838,12 @@ export async function createThread(
             revisionId: value.revisionId,
             boardId: body.boardId,
           });
+        await slow.claim(tx, command.time, {
+          targetPostId: value.itemId,
+          revisionId: value.revisionId,
+          transactionId: command.transactionId,
+          postedAt: at,
+        });
         const created = result(
           value,
           actor,
@@ -822,7 +868,18 @@ export async function createThread(
         return { value: created.value, events: [...created.events, ...deltas] };
       },
     );
+    try {
+      await slow.finish(outcome);
+    } catch {
+      // Registered Content recovery finalizes the committed ticket after transient board-home failure.
+    }
+    return outcome;
   } catch (error) {
+    try {
+      await slow.recoverLatest();
+    } catch {
+      throw new BoardSlowAdmissionUnavailableError();
+    }
     if (postgresConstraint(error) === 'thread_one_live_review_idx') throw new ReviewConflictError();
     throw error;
   }
@@ -840,6 +897,7 @@ export async function createPost(
   const r = route(body.threadId);
   const target = { route: r, id: newId(r) };
   const value = { threadId: body.threadId, itemId: target.id, revisionId: newId(r) };
+  const commandOptions = options(dependencies, actor, r, CREATE_POST, body, context);
   const container = containerAuthorization(
     dependencies,
     actor,
@@ -847,11 +905,12 @@ export async function createPost(
     body.parentId ?? null,
     context,
     false,
+    commandOptions.receipt,
     true,
   );
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(actor, [{ resource: target, type: 'content.post' }], inserted);
-  const authorization = container.wrap(
+  const baseAuthorization =
     parentCreationAuthorization({
       access: dependencies.access,
       actor,
@@ -864,12 +923,17 @@ export async function createPost(
         creation: entries[0]!.creation,
         manifest: createResourceCreationManifest(entries),
       },
-    }),
-  );
-  return runCommand(
-    dependencies.pool,
-    { ...options(dependencies, actor, r, CREATE_POST, body, context), authorization },
-    async (tx, command) => {
+    });
+  const preflightAuthorization = container.wrap(baseAuthorization, false);
+  const authorization = container.wrap(baseAuthorization, true);
+  try {
+    const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
+    if (replay) return replay;
+    const outcome = await runCommand(
+      dependencies.pool,
+      { ...commandOptions, authorization },
+      async (tx, command) => {
+      container.slow.assertAllowed(command.time);
       if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
       if (
         body.visibility !== undefined &&
@@ -889,7 +953,6 @@ export async function createPost(
         body.licence,
         body.subjectIds === undefined ? firstPost.subject_ids : body.subjectIds,
       );
-      await container.slow.reserve(tx, root.board_id, command.time);
       await insertPost.run(tx, {
         route: r,
         thread_id: value.threadId,
@@ -912,6 +975,12 @@ export async function createPost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
+      await container.slow.claim(tx, command.time, {
+        targetPostId: value.itemId,
+        revisionId: value.revisionId,
+        transactionId: command.transactionId,
+        postedAt: authoritativeTimeValue(command.time),
+      });
       return result(
         value,
         actor,
@@ -924,8 +993,22 @@ export async function createPost(
         },
         visibility === 'published',
       );
-    },
-  );
+      },
+    );
+    try {
+      await container.slow.finish(outcome);
+    } catch {
+      // Registered Content recovery finalizes the committed ticket after transient board-home failure.
+    }
+    return outcome;
+  } catch (error) {
+    try {
+      await container.slow.recoverLatest();
+    } catch {
+      throw new BoardSlowAdmissionUnavailableError();
+    }
+    throw error;
+  }
 }
 
 export async function revisePost(
@@ -938,20 +1021,34 @@ export async function revisePost(
   const body = request({ ...input, expectedRevisionId: input.expectedRevisionId ?? null });
   const r = route(body.threadId);
   const value = { threadId: body.threadId, itemId: body.itemId, revisionId: newId(r) };
-  const container = containerAuthorization(dependencies, actor, body.threadId, body.itemId, context, true);
-  const authorization = container.wrap(
+  const commandOptions = options(dependencies, actor, r, REVISE_POST, body, context);
+  const container = containerAuthorization(
+    dependencies,
+    actor,
+    body.threadId,
+    body.itemId,
+    context,
+    true,
+    commandOptions.receipt,
+  );
+  const baseAuthorization =
     resourceAuthorization({
       access: dependencies.access,
       actor,
       action: 'post:revise',
       anchor: { resource: container.resource, validate: container.validate },
       context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(r) },
-    }),
-  );
-  return runCommand(
-    dependencies.pool,
-    { ...options(dependencies, actor, r, REVISE_POST, body, context), authorization },
-    async (tx, command) => {
+    });
+  const preflightAuthorization = container.wrap(baseAuthorization, false);
+  const authorization = container.wrap(baseAuthorization, true);
+  try {
+    const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
+    if (replay) return replay;
+    const outcome = await runCommand(
+      dependencies.pool,
+      { ...commandOptions, authorization },
+      async (tx, command) => {
+      container.slow.assertAllowed(command.time);
       const previous = container.current.posts[0]!;
       const threadSecurityRevision = container.current.thread.security_revision;
       if (previous.security_revision === null || threadSecurityRevision === null) throw new ContentNotFoundError();
@@ -992,7 +1089,6 @@ export async function revisePost(
       const currentCitation = citation
         ? await currentReviewCitation(tx, author.accountId, container.current.thread.review_subject_id!, citation)
         : null;
-      await container.slow.reserve(tx, container.current.thread.board_id, command.time);
       const revisedSubjectIds = await appendRevision(
         tx,
         value,
@@ -1053,6 +1149,12 @@ export async function revisePost(
       const indexSubjectIds = isFirstPost
         ? revisedSubjectIds
         : storedSubjectIds((await post(tx, container.current.thread.first_post_id!, value.threadId)).subject_ids);
+      await container.slow.claim(tx, command.time, {
+        targetPostId: value.itemId,
+        revisionId: value.revisionId,
+        transactionId: command.transactionId,
+        postedAt: authoritativeTimeValue(command.time),
+      });
       return result(
         value,
         actor,
@@ -1066,6 +1168,20 @@ export async function revisePost(
         },
         firstPublication,
       );
-    },
-  );
+      },
+    );
+    try {
+      await container.slow.finish(outcome);
+    } catch {
+      // Registered Content recovery finalizes the committed ticket after transient board-home failure.
+    }
+    return outcome;
+  } catch (error) {
+    try {
+      await container.slow.recoverLatest();
+    } catch {
+      throw new BoardSlowAdmissionUnavailableError();
+    }
+    throw error;
+  }
 }

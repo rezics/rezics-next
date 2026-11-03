@@ -21,10 +21,11 @@ import type { MediaStorage } from './media-storage.ts';
 import { eraseFeedInboxPage } from './feed-activity.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { eraseAccountNoticesPage, type NoticeErasureCursor } from './notices.ts';
+import { eraseBoardSlowModeAccountPage } from './board-slow.ts';
 
 const workflow = 'content.account-erasure.step';
 const retentionWorkflow = 'content.account-erasure.retention';
-type Phase = 'close' | 'authored' | 'uploads' | 'reactions' | 'moderation' | 'notices' | 'proof' | 'complete';
+type Phase = 'close' | 'slow-mode' | 'authored' | 'uploads' | 'reactions' | 'moderation' | 'notices' | 'proof' | 'complete';
 type Progress = {
   step: string;
   phase: Exclude<Phase, 'close'>;
@@ -79,7 +80,7 @@ async function start(pool: Pool, accountId: string): Promise<Continuation> {
       await closeErasureFence(tx, accountId);
       await tx.query(
         `INSERT INTO content.account_erasure_progress(route,account_id,step,phase,cursor,erased_at)
-         VALUES ($1,$2,1,'authored',NULL,$3::timestamptz) ON CONFLICT (route,account_id) DO NOTHING`,
+         VALUES ($1,$2,1,'slow-mode',NULL,$3::timestamptz) ON CONFLICT (route,account_id) DO NOTHING`,
         [home, accountId, status.at],
       );
       return noEffect(null);
@@ -200,7 +201,13 @@ async function persist(
   );
 }
 
-async function step(pool: Pool, storage: MediaStorage, accountId: string, expectedStep: number): Promise<Continuation> {
+async function step(
+  pool: Pool,
+  storage: MediaStorage,
+  routeKey: Uint8Array,
+  accountId: string,
+  expectedStep: number,
+): Promise<Continuation> {
   const home = route(accountId);
   const progress = await readProgress(pool, accountId);
   if (!progress) return start(pool, accountId);
@@ -216,7 +223,23 @@ async function step(pool: Pool, storage: MediaStorage, accountId: string, expect
   let retentionAt: string | null = null;
   let finished = false;
 
-  if (currentPhase === 'authored') {
+  if (currentPhase === 'slow-mode') {
+    const readyAt = progress.erased_at.getTime() + 30_000;
+    if (Date.now() < readyAt) {
+      delayMs = readyAt - Date.now();
+    } else {
+      const page = await eraseBoardSlowModeAccountPage(pool, routeKey, accountId, undefined, deadlineFor(120_000));
+      if (page.pending) {
+        pendingNow = true;
+        delayMs = 60_000;
+      } else if (page.more) {
+        nextCursor = null;
+      } else {
+        nextPhase = 'authored';
+        nextCursor = null;
+      }
+    }
+  } else if (currentPhase === 'authored') {
     const feedRows = await eraseFeedInboxPage(pool, accountId, deadlineFor(5000));
     if (feedRows > 0) {
       await persist(pool, accountId, progress, {
@@ -415,9 +438,14 @@ export function createAccountErasureEffect(context: Pick<WorkContext, 'client'>)
 }
 
 /** Registers the content participant and its expiry purge as durable platform work. */
-export function registerAccountErasureWork(context: WorkContext, storage: MediaStorage): void {
+export function registerAccountErasureWork(
+  context: WorkContext,
+  storage: MediaStorage,
+  routeKey: Uint8Array,
+): void {
   const run = DBOS.registerStep(
-    async (accountId: string, expectedStep: number) => step(context.pool, storage, accountId, expectedStep),
+    async (accountId: string, expectedStep: number) =>
+      step(context.pool, storage, routeKey, accountId, expectedStep),
     { name: 'content.account-erasure.run', retriesAllowed: true, maxAttempts: 10, intervalSeconds: 1 },
   );
   DBOS.registerWorkflow(

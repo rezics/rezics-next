@@ -43,6 +43,12 @@ import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
 import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
 import {
+  BOARD_SLOW_RECOVERY_PAGE_SIZE,
+  BOARD_SLOW_RETENTION_MS,
+  pruneBoardSlowModeHistoryPage,
+  recoverBoardSlowModePage,
+} from './board-slow.ts';
+import {
   createRealmSubjectLifecycle,
   REALM_SUBJECT_CENSUS_PAGE,
   REALM_SUBJECT_CENSUS_SCHEDULE,
@@ -65,10 +71,14 @@ export const CONTENT_OPERATION_PROGRESS = 'content.authorErasure.progress';
 export const CONTENT_COLLECTION_SCHEDULE = 'content.collection.hourly';
 export const CONTENT_BOARD_RANK_SCHEDULE = 'content.board-rank.every-10-minutes';
 export const CONTENT_NOTICE_RETENTION_SCHEDULE = 'content.notice-retention.hourly';
+export const BOARD_SLOW_RECOVERY_SCHEDULE = 'content.board-slow.recovery.each-minute';
+export const BOARD_SLOW_RETENTION_SCHEDULE = 'content.board-slow.retention.daily';
 const PARTITION_WORKFLOW = 'content.collect.partition';
 const BOARD_RANK_WORKFLOW = 'content.board-rank.refresh';
 const NOTICE_RETENTION_WORKFLOW = 'content.notice-retention';
 const NOTICE_RETENTION_PARTITION_WORKFLOW = 'content.notice-retention.partition';
+const BOARD_SLOW_RECOVERY_WORKFLOW = 'content.board-slow.recovery';
+const BOARD_SLOW_RETENTION_WORKFLOW = 'content.board-slow.retention';
 const BATCH_SIZE = 100;
 const PARTITION_CONCURRENCY = 8;
 const STEP_RETRY_DELAY_SECONDS = 1;
@@ -142,7 +152,7 @@ async function registerWork(
   const { storage } = options;
   registerReviewDiscoveryWork(context);
   const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
-  if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage);
+  if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage, options.routeKey);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
@@ -424,6 +434,38 @@ async function registerWork(
     },
     { name: NOTICE_RETENTION_WORKFLOW },
   );
+  const boardSlowRecoveryPage = DBOS.registerStep(
+    async () =>
+      recoverBoardSlowModePage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, context.clock(), Date.now() + 120_000),
+    { name: 'content.board-slow.recovery.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      for (let page = 0; page < 16; page++) {
+        if ((await boardSlowRecoveryPage()) < BOARD_SLOW_RECOVERY_PAGE_SIZE) return;
+      }
+    },
+    { name: BOARD_SLOW_RECOVERY_WORKFLOW },
+  );
+  const boardSlowRetentionPage = DBOS.registerStep(
+    async (cutoff: string) =>
+      pruneBoardSlowModeHistoryPage(
+        context.pool,
+        BOARD_SLOW_RECOVERY_PAGE_SIZE,
+        cutoff,
+        Date.now() + 120_000,
+      ),
+    { name: 'content.board-slow.retention.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      const cutoff = new Date(context.clock().getTime() - BOARD_SLOW_RETENTION_MS).toISOString();
+      for (let page = 0; page < 16; page++) {
+        if ((await boardSlowRetentionPage(cutoff)) < BOARD_SLOW_RECOVERY_PAGE_SIZE) return;
+      }
+    },
+    { name: BOARD_SLOW_RETENTION_WORKFLOW },
+  );
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
@@ -456,6 +498,22 @@ async function registerWork(
       workflowName: NOTICE_RETENTION_WORKFLOW,
       schedule: '0 * * * *',
       queueName: CONTENT_QUEUES.collect,
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: BOARD_SLOW_RECOVERY_SCHEDULE,
+      workflowName: BOARD_SLOW_RECOVERY_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: BOARD_SLOW_RETENTION_SCHEDULE,
+      workflowName: BOARD_SLOW_RETENTION_WORKFLOW,
+      schedule: '0 2 * * *',
+      queueName: 'maintenance',
       cronTimezone: 'UTC',
       automaticBackfill: false,
     },

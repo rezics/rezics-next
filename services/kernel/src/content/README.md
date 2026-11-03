@@ -2009,37 +2009,122 @@ grants still use the ordinary formula. No Content permission evaluator is added.
 
 Decision: all opening/reply creation (including drafts) and revisions count; only a current explicit
 `moderation:takedown` capability on that board exempts the actual actor, never a role label or authorship.
+Decision: existing board-scoped actor HMAC rows transfer their latest timestamp on first use; untouched legacy hashes expire under the seven-day retention sweep.
 
 `PUT /v1/boards/{id}/slowMode` requires that moderator capability, bearer and idempotency key, and the closed
-body `{ intervalSeconds }` (integer 0–86400; zero disables). It returns the committed setting. Replaying the
+body `{ intervalSeconds }` (integer 0–86400; zero disables). It returns the committed setting and the additive
+Web policy fields with `canChange` and `exempt` true for its authorized moderator. Replaying the
 same key returns its original result without resetting any author's timer. Current account, scope and board
 state pass the existing command pipeline on every attempt, including receipt replay.
-`GET /v1/boards/{id}/slowMode` requires ordinary current board/Realm disclosure before and after reading and
-returns `{ intervalSeconds, retryAt, exempt }`. `retryAt` is null when ready, disabled, anonymous or exempt;
-it describes only the actual actor. Web can load this point for its composer and moderator controls.
+`GET /v1/boards/{id}/slowMode` requires ordinary current board/Realm disclosure before and after reading.
+It returns `{ intervalSeconds, retryAt, nextEligibleAt, canChange, exempt, admissionState, retryAfterSeconds }`.
+`nextEligibleAt` and `canChange` preserve the delivered Web policy names; the other fields are additive. The retry
+timestamp describes only the actual actor. A pending reservation returns a one-second retry hint until recovery
+decides it. No response exposes the posting identity or another account's state.
 An early ordinary write returns HTTP 429 `board_slow_mode`, `effect_status=not_applied`, the current
 `intervalSeconds`, stable UTC `retryAt` and `Retry-After`. Changing the interval applies it to the last
-successful ordinary admission; disabling does not clear that timestamp. Exempt writes do not advance it.
+successful ordinary admission; disabling does not clear that timestamp. Exempt writes do not advance it. A
+temporarily unresolved command returns retryable 503 with `effect_status=not_applied`; it is never treated as a
+successful admission.
 
-Every native creation and revision reserves one unique board/opaque-actor key inside its serializable content
-transaction, after authorization and successful-receipt lookup. This shared native coordination key is used
-across thread routes; it is not a board projection or an asynchronously replicated allowance. A conflict retries
-through the executor with fresh Access evidence. Content, reservation, grants, receipt and outbox commit or roll
-back together. No other checkout is held and no application lock is introduced. Invalid documents and later
-write failures consume nothing. Successful replay never reaches reservation. Draft creation and publication
-both count, so precreated drafts cannot evade admission. Ordinary edits count too.
+Each posting attempt first runs current authorization and exact receipt lookup. A replay returns its original result
+before admission. For a new command, Content reserves a monotonic, command-bound permit on the board home, prepares
+one ticket on the target thread home, and releases both checkouts before the thread transaction starts. The
+explicit moderator decision uses that command attempt's authoritative T. The thread transaction changes only its
+own partition: it writes the thread/post/revision and commits the ticket witness atomically. Finalization reads
+that committed revision witness and advances the board actor timestamp only for a committed post. A rollback
+cancels the permit without moving the interval. Concurrent work for one board actor is serialized; unresolved
+work blocks with explicit retryable unavailability until the registered recovery worker fences the target ticket.
+Changing an interval advances the security episode, retiring stale preparations. A live post fence prevents an
+interval change from overtaking its commit. No foreign checkout is held with the thread transaction and no
+application lock is introduced.
+
+Receipts remain the replay authority. If transport fails after commit, a retry of the same authorized immutable
+command returns the one stored post; it does not issue a new post. Recovery uses the ticket and the exact revision's
+`recorded_transaction_id`, never a new command. The posting journey has no separate Web writer, and service
+proposals cannot opt out of native admission. Draft creation, first publication, replies and ordinary revisions
+all enter this same boundary.
 Imports have no native thread/post creation authority: imported authored-field proposals are a separate service
 operation, not ordinary board posts. Service authority cannot be selected by caller input or a skip flag;
 any future service posting must explicitly enter this same native admission boundary. Edition publication uses
 an already published/protected native source and never inserts or publishes a board post. It cannot evade the
 source's creation/revision admission, nor does it charge the same source a second time.
 
-Cost: each admitted ordinary write adds one setting PK probe, one explicit Access check and one board/actor
-PK upsert; a refusal adds one PK probe for retry metadata. Disabled writes prepare the same bounded capability evidence but add only the setting probe in the body.
-One opaque HMAC key/timestamp per board/actor is retained, without bodies, account IDs or request keys.
-Setting changes use one board point validation and one setting PK upsert; status uses one setting point and at
-most one actor point plus ordinary disclosure/Access bounds. B-tree work is O(log N), constant returned rows;
-no thread, grant, account or history enumeration. Focused outcomes are in `test/content/board-slow.test.ts`.
+The permit keeps only the keyed actor, command digest/key, home routes, generation, interval episode and terminal
+state. It stores no body, account ID or idempotency key. The actor HMAC is secret-keyed and is never returned.
+Account erasure removes its current keyed rows in pages of 25 after fencing pending work. Older board-scoped HMACs
+cannot be associated with an account after migration; they contain no identifier and age out within seven days.
+
+### Cost: posting admission preparation
+
+- Touches: one preflight authorization/receipt lookup, one fixed board Access explicit check, one board serializable
+  reservation, one target-home ticket transaction and one board activation transaction. The legacy hash handoff
+  adds at most one actor point read/update/delete. The normal command then uses its existing target-home Access,
+  receipt and write path.
+- Bound: at most 20 slow-protocol statements over three sequential checkouts, plus the existing bounded Access
+  evidence/formula and command executor work; at most one selected actor, one permit and one ticket. The legacy
+  handoff may inspect two actor keys. No thread, account, permit-history or board enumeration; indexed blocks are
+  logarithmic in unrelated rows. Permit metadata and ticket payloads are fixed-size and contain no body bytes.
+- Growth check: controller native acceptance must hold selected board/actor/command fixed and independently grow
+  unrelated actors, threads and permit/receipt history at 256, 1024 and 4096, capturing Access and every pool;
+  verify strict physical-prefix plans for empty, denied, stale and replay branches.
+
+### Cost: post transaction and finalization
+
+- Touches: the existing single-thread authorization, revision/post writes and command receipt/outbox, plus one
+  local ticket update in the same thread-home transaction. Finalization reads that ticket/revision witness, then
+  locks and updates one board mode, actor and permit row on a separate board checkout.
+- Bound: one target ticket row and one target revision witness; at most six finalization statements after one
+  witness query. Thread/post/revision rows remain confined to the command partition. Total query rows are constant
+  at fixed command and Access evidence; unrelated board actors, threads, receipts and permits affect indexed blocks
+  logarithmically only.
+- Growth check: controller native acceptance must capture post and board pools separately at all three scales,
+  including successful, rolled-back and uncertain-commit outcomes; no failed outcome may advance `posted_at`.
+
+### Cost: board slow-mode status
+
+- Touches: the route's existing before/after board and Realm disclosure, one mode point read, one actor-key point
+  read across current and legacy hashes, one pending-permit existence probe, and the existing explicit Access check.
+- Bound: two Content statements and one fixed-size result, in addition to the existing bounded disclosure and
+  Access work. At most two actor rows and one boolean pending result are examined; no identity or history scan.
+  Retry timestamps and the response body are constant-size.
+- Growth check: controller native acceptance must keep the selected board and actor fixed while unrelated actors,
+  threads and command history grow at 256, 1024 and 4096; include ready, interval, pending, anonymous and exempt reads.
+
+### Cost: setting changes
+
+- Touches: existing `moderation:takedown` resource authorization and one board setting point read/upsert in the
+  board command transaction; a changed interval increments one security episode.
+- Bound: one selected board row and at most two setting statements, independent of threads, actors and permit
+  history. A live in-flight post returns retryable unavailability before changing the setting.
+- Growth check: controller native acceptance must grow unrelated board actors, thread homes and permits while
+  keeping the selected setting fixed; verify stale reserved preparations cannot activate after an interval change.
+
+### Cost: permit recovery
+
+- Touches: one recovery-index page (at most 25), one permit point read and fence per candidate, one target-home
+  ticket/revision witness transaction, and one board finalization or safe cancellation transaction. Checkouts are
+  released between homes; a busy target is restored to pending for a later scheduled pass.
+- Bound: at most 25 candidates per call and no more than 25 target and 25 board row groups; all pages and SQL
+  results are fixed-size. Work is O(page size × indexed point checks), with logarithmic index blocks as unrelated
+  permits, threads and revisions grow. An unfenced or ambiguous ticket is never discarded.
+- Growth check: controller native acceptance must capture the registered worker at all three scales, including
+  empty, denied, stale, committed-witness, rollback and locked-target branches.
+
+### Cost: account erasure and retention
+
+- Touches: one actor-key indexed permit page, sequential recovery/finalization for pending items, one actor-key
+  existence probe, one actor page and one mode-fenced delete per selected row. Retention selects a fixed page of
+  terminal permits and actors, then deletes each target ticket and board permit in separate checkouts.
+- Bound: page size is 25; one invocation examines at most 25 permits and 25 actor rows and deletes at most 25
+  tickets/permits. The existing worker caps each scheduled run at 16 pages. No cross-home joins, unbounded sweep or
+  unbounded transaction; unrelated rows affect indexed blocks logarithmically.
+- Growth check: controller native acceptance must hold selected account/board/command fixed while unrelated actor,
+  thread and retained-history rows grow at 256, 1024 and 4096; assert pages, statements, rows, bytes and all pools.
+
+Focused outcomes are in `test/content/board-slow.test.ts` and
+`test/content/board-slow-partition.test.ts`. Worker schedule registration is covered in
+`test/content/register.test.ts`.
 
 ## Realm Subject structural census
 

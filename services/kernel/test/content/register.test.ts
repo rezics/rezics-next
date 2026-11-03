@@ -12,6 +12,8 @@ import {
 import { CONTENT_WORKFLOWS } from '../../src/content/work-contract.ts';
 import {
   CONTENT_BOARD_RANK_SCHEDULE,
+  BOARD_SLOW_RECOVERY_SCHEDULE,
+  BOARD_SLOW_RETENTION_SCHEDULE,
   CONTENT_COLLECTION_SCHEDULE,
   CONTENT_NOTICE_RETENTION_SCHEDULE,
 } from '../../src/content/work.ts';
@@ -182,6 +184,8 @@ if (process.argv.includes('--content-registration')) {
         'content.board-rank.refresh',
         'content.notice-retention',
         'content.notice-retention.partition',
+        'content.board-slow.recovery',
+        'content.board-slow.retention',
         'content.erasePostRevisions',
       ]),
     );
@@ -250,6 +254,22 @@ if (process.argv.includes('--content-registration')) {
         cronTimezone: 'UTC',
         automaticBackfill: false,
       },
+      {
+        scheduleName: BOARD_SLOW_RECOVERY_SCHEDULE,
+        workflowName: 'content.board-slow.recovery',
+        schedule: '* * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
+        scheduleName: BOARD_SLOW_RETENTION_SCHEDULE,
+        workflowName: 'content.board-slow.retention',
+        schedule: '0 2 * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
     ]);
     expect(empty.registration.steps).toEqual(
       expect.arrayContaining([
@@ -260,6 +280,8 @@ if (process.argv.includes('--content-registration')) {
         'content.collect.step',
         'content.notice-retention.cutoff',
         'content.notice-retention.page',
+        'content.board-slow.recovery.page',
+        'content.board-slow.retention.page',
       ]),
     );
     expect(absenceLines(full.output)).toEqual([]);

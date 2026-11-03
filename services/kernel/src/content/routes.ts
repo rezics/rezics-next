@@ -110,7 +110,13 @@ import {
   AuthorPostsQuerySchema,
   AuthorPostsResponseSchema,
 } from './schemas.ts';
-import { BoardSlowModeError, BoardSlowModeInputError, readBoardSlowMode, setBoardSlowMode } from './board-slow.ts';
+import {
+  BoardSlowAdmissionUnavailableError,
+  BoardSlowModeError,
+  BoardSlowModeInputError,
+  readBoardSlowMode,
+  setBoardSlowMode,
+} from './board-slow.ts';
 
 export type Dependencies = ContentCommandDependencies & ContentBoardDependencies & ContentRuntime;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
@@ -180,7 +186,11 @@ const slowModeResponse = t.Object(
   {
     intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
     retryAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    nextEligibleAt: t.Union([t.String({ format: 'date-time' }), t.Null()]),
+    canChange: t.Boolean(),
     exempt: t.Boolean(),
+    admissionState: t.Union([t.Literal('ready'), t.Literal('interval'), t.Literal('pending')]),
+    retryAfterSeconds: t.Integer({ minimum: 0, maximum: 86400 }),
   },
   { additionalProperties: false },
 );
@@ -281,6 +291,11 @@ async function contentOperation<T>(operation: () => Promise<T>): Promise<T> {
         effectStatus: 'not_applied',
         extensions: { retryAt: error.retryAt, intervalSeconds: error.intervalSeconds },
         headers: { 'retry-after': new Date(Math.ceil(Date.parse(error.retryAt) / 1000) * 1000).toUTCString() },
+      });
+    if (error instanceof BoardSlowAdmissionUnavailableError)
+      throw new ProblemError('dependency_unavailable', {
+        effectStatus: 'not_applied',
+        headers: { 'retry-after': String(error.retryAfterSeconds) },
       });
     if (error instanceof ContentUndisclosedError)
       throw new ProblemError('not_found', { effectStatus: 'not_applicable' });
@@ -451,7 +466,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         headers: commandHeaders,
         body: strictContentSchema(slowModeInput),
-        response: { 200: withHeaders(slowModeInput, sessionHeader), ...writeFailures },
+        response: { 200: withHeaders(slowModeResponse, sessionHeader), ...writeFailures },
         detail: {
           operationId: 'board.set_slow_mode',
           'x-action': 'moderation:takedown',
