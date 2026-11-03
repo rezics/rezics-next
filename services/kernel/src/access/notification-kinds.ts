@@ -3,6 +3,7 @@ export const NOTIFICATION_KINDS = Object.freeze([
   Object.freeze({ kind: 'reply', optional: true, default: true } as const),
   Object.freeze({ kind: 'mention', optional: true, default: true } as const),
   Object.freeze({ kind: 'thread_watch', optional: true, default: true } as const),
+  Object.freeze({ kind: 'board_activity', optional: true, default: true } as const),
   Object.freeze({ kind: 'moderation_decision', optional: false, default: true } as const),
 ] as const);
 

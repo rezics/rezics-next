@@ -30,6 +30,14 @@ const editionEvent = Type.Object(
 );
 
 export const CONTENT_EVENTS = {
+  'com.rezics.content.board.watch.changed.v1': Type.Object(
+    { accountId: UUID, boardId: UUID, watching: Type.Boolean(), revision: Type.Integer({ minimum: 1 }) },
+    { additionalProperties: false },
+  ),
+  'com.rezics.content.watch.removed.v1': Type.Object(
+    { accountId: UUID, kind: Type.Union([Type.Literal('thread'), Type.Literal('board')]), watchId: UUID },
+    { additionalProperties: false },
+  ),
   'com.rezics.content.board.slow-mode.changed.v1': Type.Object(
     { boardId: UUID, intervalSeconds: Type.Integer({ minimum: 0, maximum: 86400 }) },
     { additionalProperties: false },

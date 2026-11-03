@@ -23,7 +23,7 @@ export async function replyNoticeFixture() {
       return Reflect.apply(query, client, args);
     },
   });
-  const accounts = await standingFixture(['account:update', 'realm:read', 'realm:participate']);
+  const accounts = await standingFixture(['account:read', 'account:update', 'realm:read', 'realm:participate']);
   await accounts.reset();
   const credentials = new Map<string, string>();
   const authenticate = accounts.access.authenticate;
@@ -60,13 +60,13 @@ export async function replyNoticeFixture() {
     await accounts.grant(id, 'thread:create', { route: routeOf(boardId)!, id: boardId });
     await accounts.grant(id, 'account:update', { route: routeOf(id)!, id });
   }
-  async function call(account: string, method: string, path: string, body?: unknown) {
+  async function call(account: string, method: string, path: string, body?: unknown, key = randomUUID()) {
     const response = await app.handle(
       new Request(`http://kernel.test${path}`, {
         method,
         headers: {
           authorization: `Bearer ${credentials.get(account)}`,
-          'idempotency-key': JSON.stringify(randomUUID()),
+          'idempotency-key': JSON.stringify(key),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

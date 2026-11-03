@@ -19,7 +19,7 @@ async function readableThread(dependencies: Dependencies, actor: Actor, threadId
   return result;
 }
 
-async function requireLiveAccount(client: PoolClient, accountId: string) {
+async function requireLiveAccount(client: Pick<PoolClient, 'query'>, accountId: string) {
   const route = routeOf(accountId);
   if (route === null) throw new ProblemError('not_found');
   const account = await readAccount(client, route, accountId);

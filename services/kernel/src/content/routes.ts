@@ -58,6 +58,7 @@ import { isErasedPlaceholder } from './model.ts';
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { clearReaction, setReaction, type ReactionKind } from './reactions.ts';
 import { readThreadWatchState, unwatchThread, watchThread } from './watch.ts';
+import { watchRoutes } from './watch-routes.ts';
 import type { ContentRuntime } from './runtime.ts';
 import { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 import {
@@ -1414,7 +1415,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       },
     );
 
-  return routes
+  return watchRoutes(routes, dependencies)
     .get(
       '/v1/threads/:id/watch',
       {
