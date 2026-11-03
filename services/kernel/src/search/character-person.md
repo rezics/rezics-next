@@ -28,7 +28,7 @@ on an item-valued `statement` leaf. Its `in` operands are selected source works,
 result anchor remains the candidate Character or Person. Current native forward probes check
 source-type facet admission and the complete same-statement qualifier conjunction.
 
-Decision: inverse syntax uses `statement.inverse: true` with explicit source UUIDs; consumers opt in only when they execute current inverse evidence, and inverse range or concept expansion remains unsupported.
+Decision: keep inverse selection on the existing `statement.inverse: true` form with explicit source UUIDs; consumers opt in only when they execute current inverse evidence, and inverse range or concept expansion remains unsupported. Do not add a second top-level inverse form.
 
 Both polarities retain candidates without trusting outbound index samples. The current Boolean
 matcher resolves inverse leaves through this seam and retains unknown inverse negatives.
