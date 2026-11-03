@@ -435,6 +435,11 @@ export async function executeProgressAdoption(
       }
     }
     try {
+      console.info('progress-adoption-start-input', {
+        mode: plan.occurrence.input.mode,
+        unit: plan.occurrence.input.unit,
+        additionalMeasureCount: plan.occurrence.input.additionalMeasures?.length ?? 0,
+      });
       const command = await sessions.startSession(actor, plan.occurrence.input, plan.occurrence.requestKey);
       controls.recordNative?.(command);
       const session = command.value;
@@ -447,6 +452,7 @@ export async function executeProgressAdoption(
       checkpoint.lastRevision = session.revision;
       await controls.save(checkpoint);
     } catch (error) {
+      console.info('progress-adoption-start-error', error instanceof Error ? error.message : 'unknown');
       if (staleError(error)) {
         await stopRemaining(0, 'stale', 'native-occurrence-start-was-refused');
         return checkpoint;
