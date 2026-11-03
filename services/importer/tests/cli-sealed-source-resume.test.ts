@@ -54,6 +54,9 @@ for (const source of ['vndb', 'wikidata'] as const) {
         async writeSourceStatistic(value: unknown) {
           statistics.push(value);
         },
+        async clearSourceStatistic(value: unknown) {
+          statistics.push(value);
+        },
         async batchWrite(body: BatchWriteRequest): Promise<BatchWriteResult> {
           sent.push(JSON.stringify(body));
           const results = body.commands.map((command) => {

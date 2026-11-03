@@ -61,6 +61,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
     const receipts = new Map<string, BatchWriteResult['results'][number]>();
     const clearRequests = new Map<string, string>();
     const fences = new Set<string>();
+    let activeAlias: string = source;
     const transport = {
       setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
       // This coordinator-only protocol double acknowledges exact clear requests separately
@@ -68,6 +69,7 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
       async clearSourceStatistic(input: Parameters<NonNullable<ImportTransport['clearSourceStatistic']>>[0]) {
         expect(input.source).toBe('vndb');
         expect(input.value).toEqual({
+          ...(activeAlias === 'vndb' ? {} : { sourceAlias: activeAlias }),
           sourceRecordId: expect.stringMatching(/^v[0-9]+$/),
           count: 0,
           asOf: '2026-10-25',
@@ -104,14 +106,16 @@ for (const source of ['bangumi', 'vndb', 'openlibrary', 'wikidata'] as const) {
       },
     };
     let importer = new Importer({ path, transport });
-    const run = (version: number, absent = false, alias: string = source, invalid = false) =>
-      importer.runRecords(
+    const run = (version: number, absent = false, alias: string = source, invalid = false) => {
+      activeAlias = alias;
+      return importer.runRecords(
         createSourceRegistration(source, { source: alias }),
         (async function* () {
           for (let i = absent ? 1 : 0; i < 5; i++) yield record(source, i, version);
           if (invalid) throw new Error('Synthetic late acquisition failure');
         })(),
       );
+    };
     const reopen = async () => {
       await importer.close();
       importer = new Importer({ path, transport });

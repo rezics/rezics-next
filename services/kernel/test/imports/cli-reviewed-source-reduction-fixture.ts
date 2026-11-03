@@ -14,9 +14,6 @@ import { IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from '../../../importer/src/cre
 import { ImportSession } from '../../../importer/src/import-session.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
-import { openApiRuntime } from './api-runtime.ts';
-import { openApiObserver } from './api-observer.ts';
-import { identitySupport } from './identity-fixture.ts';
 
 type Provider = 'vndb' | 'openlibrary' | 'wikidata';
 const providers: Provider[] = ['vndb', 'openlibrary', 'wikidata'];
@@ -130,6 +127,12 @@ type Exchange = {
 
 /** A single native application/Auth/worker world; the only routing seam is external fetch. */
 export async function runReviewedProviderReduction() {
+  // Input preflight shares these exact bytes without loading the native SQL runtime.
+  const [{ openApiRuntime }, { openApiObserver }, { identitySupport }] = await Promise.all([
+    import('./api-runtime.ts'),
+    import('./api-observer.ts'),
+    import('./identity-fixture.ts'),
+  ]);
   const runtime = await openApiRuntime({
     batchRecords: 8,
     maxFields: 64,
