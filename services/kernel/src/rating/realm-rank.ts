@@ -51,6 +51,10 @@ export interface RealmRankSource {
   page(actor: Actor, request: RealmRankRequest, context: { deadline: number }): Promise<RealmRankPage>;
 }
 export type RealmRankOrderObservation = Readonly<{
+  populationId: string;
+  questionPublication: string;
+  questionProvenance: string;
+  populationHome: Readonly<{ partition: number; epoch: number; position: string }>;
   question: RealmRankQuestion;
   questionIdentity: string;
   questionRevision: number;
@@ -428,6 +432,7 @@ export function createRealmRankSource(deps: Dependencies): RealmRankSource {
 }
 
 type PriorObservation = {
+  home: Readonly<{ partition: number; epoch: number; position: string }>;
   generation: string;
   active: boolean;
   identity: string | null;
@@ -441,7 +446,7 @@ async function readPriorObservation(
   deadline: number,
 ): Promise<PriorObservation> {
   const route = routeOf(realmId)!;
-  return observe(pool, partitionOf(route), deadline, async (client) => {
+  return observe(pool, partitionOf(route), deadline, async (client, epoch, home) => {
     const freshness = await readFreshness.run(client, { route, population_id: realmId });
     if (!freshness) throw new Error('Rating prior freshness is unavailable');
     const result = await client.query<{ generation: string; active: boolean; identity: string | null }>(
@@ -449,7 +454,11 @@ async function readPriorObservation(
        FROM rating.population_prior_epoch WHERE route=$1 AND question_id=$2 AND population_id=$3`,
       [route, questionId, realmId],
     );
-    return { ...(result.rows[0] ?? { generation: '0', active: false, identity: null }), updating: freshness.updating };
+    return {
+      ...(result.rows[0] ?? { generation: '0', active: false, identity: null }),
+      updating: freshness.updating,
+      home: { partition: partitionOf(route), epoch, position: home.position.toString() },
+    };
   });
 }
 
@@ -458,22 +467,72 @@ function authorityDigest(actor: Actor): string {
   return createHash('sha256').update(JSON.stringify(authority)).digest('hex');
 }
 
-/** Current native producer for Search's complete ordered Realm traversal. The legacy page remains scored-only. */
+/** Native observations and scored/figure primitives. Canonical population/name seeks are still required
+ * before Search can bind a complete order; the compatibility page remains scored-only. */
 export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSource {
-  return {
+  const reobserve = async (
+    actor: Actor,
+    input: Readonly<{ realmId: string; questionId: string }>,
+    expected: RealmRankOrderObservation,
+    deadline: number,
+  ) => {
+    const current = await source.observe(actor, input, { deadline });
+    if (
+      current.populationId !== expected.populationId ||
+      current.questionIdentity !== expected.questionIdentity ||
+      current.questionRevision !== expected.questionRevision ||
+      current.questionPublication !== expected.questionPublication ||
+      current.questionProvenance !== expected.questionProvenance ||
+      current.priorGeneration !== expected.priorGeneration ||
+      current.priorEpoch !== expected.priorEpoch ||
+      current.priorIdentity !== expected.priorIdentity ||
+      current.priorActive !== expected.priorActive ||
+      current.priorUpdating !== expected.priorUpdating ||
+      current.realmAuthority !== expected.realmAuthority ||
+      current.realmRevision !== expected.realmRevision ||
+      current.publicationGeneration !== expected.publicationGeneration ||
+      current.populationHome.partition !== expected.populationHome?.partition ||
+      current.populationHome.epoch !== expected.populationHome?.epoch ||
+      current.populationHome.position !== expected.populationHome?.position
+    )
+      throw new ProblemError('search_restart_required');
+  };
+  // Reobserve even empty batches. Caller-held metadata never replaces current Realm/question authority.
+  const checked = async <T>(
+    actor: Actor,
+    input: Readonly<{ realmId: string; questionId: string }>,
+    expected: RealmRankOrderObservation,
+    deadline: number,
+    partition: number,
+    read: (
+      client: PoolClient,
+      epoch: number,
+      home: NonNullable<Awaited<ReturnType<typeof readPartition>>>,
+    ) => Promise<T>,
+  ): Promise<T> => {
+    await reobserve(actor, input, expected, deadline);
+    const result = await observe(deps.pool, partition, deadline, read);
+    await reobserve(actor, input, expected, deadline);
+    return result;
+  };
+  const source: RealmRankOrderSource = {
     async observe(actor, input, { deadline }) {
       if (routeOf(input.realmId) === null || input.realmId === GLOBAL_CONTEXT.id || routeOf(input.questionId) === null)
         throw new ProblemError('invalid_request');
       const realm = await readRealm(deps, actor, input.realmId, { deadline });
       if (!realm) throw new ProblemError('not_found');
       const question = await readVisibleRatingQuestion(deps, actor, input.questionId, deadline);
-      if (!question) throw new ProblemError('not_found');
+      if (!question || (question.realmId !== null && question.realmId !== input.realmId))
+        throw new ProblemError('not_found');
+      if (question.lifecycleState === 'retired') throw new RealmRankQuestionUnavailableError('retired');
       if (!realmRankQuestionEligible(question)) throw new ProblemError('invalid_request');
       const questionIdentity = ratingQuestionIdentity(question);
       const prior = await readPriorObservation(deps.pool, input.realmId, input.questionId, deadline);
-      // An ended or mismatched prior proves all-unscored only after the native population work is settled.
+      // A pending population cannot prove eligibility, including for an empty scored set.
+      if (prior.updating) throw new ProblemError('index_not_ready');
       const priorActive = prior.active && prior.identity === questionIdentity;
-      if (!priorActive && prior.updating) throw new ProblemError('index_not_ready');
+      if (priorActive && (!Number.isSafeInteger(Number(prior.generation)) || Number(prior.generation) < 1))
+        throw new Error('Invalid prior generation');
       const publication = await deps.pool.query<{ last_value: string; is_called: boolean }>(
         `SELECT last_value::text,is_called FROM rating.realm_rank_publication_generation`,
       );
@@ -481,6 +540,10 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       if (!generation || !/^[0-9]+$/.test(generation.last_value))
         throw new Error('Rank publication generation is unavailable');
       return {
+        populationId: input.realmId,
+        questionPublication: questionPublication(question),
+        questionProvenance: question.realmId ?? GLOBAL_CONTEXT.id,
+        populationHome: prior.home,
         question: ratingQuestionView(question),
         questionIdentity,
         questionRevision: question.revision,
@@ -495,7 +558,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       };
     },
 
-    async listScoredPartitions(_actor, input, observation, { deadline }) {
+    async listScoredPartitions(actor, input, observation, { deadline }) {
       if (
         routeOf(input.realmId) === null ||
         input.realmId === GLOBAL_CONTEXT.id ||
@@ -505,7 +568,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       )
         throw new ProblemError('invalid_request');
       const populationRoute = routeOf(input.realmId)!;
-      return observe(deps.pool, partitionOf(populationRoute), deadline, async (client) => {
+      return checked(actor, input, observation, deadline, partitionOf(populationRoute), async (client) => {
         const result = await client.query<{ partition: number }>(
           `SELECT partition_no AS partition FROM rating.realm_rank_generation
            WHERE question_id=$1 AND population_id=$2
@@ -549,7 +612,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
           partitionOf(routeOf(input.after.subjectId)!) !== input.partition)
       )
         throw new ProblemError('invalid_cursor');
-      return observe(deps.pool, input.partition, deadline, async (client, epoch, home) => {
+      return checked(actor, input, observation, deadline, input.partition, async (client, epoch, home) => {
         const current = await generation(client, {
           realmId: input.realmId,
           questionId: input.questionId,
@@ -628,7 +691,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
         new Set(input.subjectIds).size !== input.subjectIds.length
       )
         throw new ProblemError('invalid_request');
-      return observe(deps.pool, input.partition, deadline, async (client, epoch, home) => {
+      return checked(actor, input, observation, deadline, input.partition, async (client, epoch, home) => {
         if (observation.priorUpdating) throw new ProblemError('index_not_ready');
         if (pairs.length === 0)
           return { partition: input.partition, epoch, position: BigInt(home.position), figures: [] };
@@ -728,4 +791,5 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       });
     },
   };
+  return source;
 }
