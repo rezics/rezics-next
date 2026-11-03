@@ -157,15 +157,24 @@ describe('public review discovery adapter', () => {
     const stale = reviewDiscoveryDocument(partition, 20n, active);
     const context = {} as DiscoveryReadContext;
 
-    expect((await adapter.currentSummaries([stale], context)).value?.size).toBe(0);
+    const afterWithdrawal = await adapter.currentSummaries([stale], context);
+    expect(afterWithdrawal.status).toBe('ready');
+    if (afterWithdrawal.status !== 'ready') return;
+    expect(afterWithdrawal.value.size).toBe(0);
     current = {
       position: 22n,
       observation: { state: 'deleted', id: active.id, route: active.route, version: 8n },
     };
-    expect((await adapter.currentSummaries([stale], context)).value?.size).toBe(0);
+    const afterDeletion = await adapter.currentSummaries([stale], context);
+    expect(afterDeletion.status).toBe('ready');
+    if (afterDeletion.status !== 'ready') return;
+    expect(afterDeletion.value.size).toBe(0);
     const restored = review(active.id, 9n);
     current = { position: 23n, observation: { state: 'eligible', ...restored } };
-    expect((await adapter.currentSummaries([stale], context)).value?.size).toBe(0);
+    const beforeReindex = await adapter.currentSummaries([stale], context);
+    expect(beforeReindex.status).toBe('ready');
+    if (beforeReindex.status !== 'ready') return;
+    expect(beforeReindex.value.size).toBe(0);
 
     const restoredDocument = reviewDiscoveryDocument(partition, 23n, restored);
     const summaries = await adapter.currentSummaries([restoredDocument], context);
@@ -188,7 +197,7 @@ describe('public review discovery adapter', () => {
           partition,
           position: atLeast,
           observations: [{
-            state: 'concealed',
+            state: 'concealed' as const,
             id: id(4),
             route: routeOf(id(4))!,
             version: 1n,
