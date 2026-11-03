@@ -75,3 +75,39 @@ Exact TypeScript request/result types are inferred by `list-import-anilist-route
 in `list-import-anilist.ts`; arbitrary evidence uses unknown JSON values. Owner/current-authority errors use native
 problems; malformed uploads return invalid_request and oversized HTTP bodies return 413 without input echoes; foreign ids return not_found,
 and review conflicts return conflict. No user-supplied account id or native command key is accepted.
+
+## Web journey
+
+The signed-in page is `/library/import-anilist`, documented in
+[personal AniList import](../apps/web/src/library/personal-anilist-import.md). Library navigation adds that entry
+beside the Bangumi and MyAnimeList importers; the three sources keep separate controllers. Upload, preview, review,
+confirmation, partial results, cancel and evidence removal stay in the mounted visit. JSON, notes and private rows
+never enter the URL or persistent browser storage. A replacement upload removes the previous native document first.
+Viewer or CSRF replacement retires retry authority. Web binds the generated `libraryImports.anilist` methods when
+present and otherwise shows unavailable.
+
+Decision: unmatched target search is display assistance through the existing authenticated subject suggestions; only
+the explicit UUID submitted to `review.subjectId` is identity. Apply defaults to preserving local facts
+(`replace:false`). Only admitted `status` is selectable. Missing `scoreFormat` stays unknown scale and is never
+converted into native enjoyment. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated
+client snapshot may omit this surface; missing methods render unavailable rather than a local parser.
+
+Own-upload attestation does not verify an AniList account. Preview does not mutate Library facts. Apply revalidates
+identity, access, claim fingerprint and release; a stale unstarted review refreshes, and started original work keeps
+its identity. Cancellation stops new admission; already admitted work may finish. Evidence removal removes evidence,
+not admitted facts. `complete:false` is resumable, not success for every row.
+
+## Cost
+
+- Operation: `library.anilist.preview`, paged owner read, `library.anilist.review`, `library.anilist` apply
+  batches and cancel/remove. Existing Library entry writes remain Commerce-owned.
+- Touched neighbourhood: `library.list_import_anilist` on the owner route, unique AniList and separate MyAnimeList
+  external claims, current released profile state roles, and the personal Library entry command. Web retains the
+  current 20-row page plus N metadata rows; it does not scan other owners or fork the native engine.
+- Formula: `1 preview + K page reads + M reviews + Q apply batches + lifecycle + R retries`, with page `<= 20`,
+  apply `<= 20`, `M <= N <= 200` and `Q <= ceil(M/20)` only when the user confirms full batches.
+- Installed caps: `ANILIST_LIMITS` in `services/kernel/src/library/list-import-anilist-parser.ts`.
+- Growth check: Web focused test `apps/web/tests/personal-anilist-import.test.tsx` drives 20, 100 and 200
+  native-shaped rows through the same controller and asserts call counts, 20-row reads, 20-row writes and the
+  retained-byte bound. Native statement/index bounds stay with the Commerce engine; this journey introduces no new
+  kernel query path.
