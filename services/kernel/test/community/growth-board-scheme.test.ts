@@ -61,9 +61,15 @@ for (const axis of axes) {
     const selectedRoute = routeOf(selected.realm.realmId)!;
     let revisionBase = 0;
     let series = 0;
+    const homes = [...new Set(creationTargets.map(({ realm }) => partitionOf(routeOf(realm.realmId)!)))]
+      .filter((partition) => partition !== partitionOf(selectedRoute));
+    let positions = new Map<number, number>();
     const grow = async (scale: number, previous: number) => {
       if (previous === 0) {
         series++;
+        positions = new Map((await f.db.admin.query<{ partition_no: number; position: string }>(
+          'SELECT partition_no, position::text FROM core.partition WHERE partition_no=ANY($1::integer[])', [homes],
+        )).rows.map(({ partition_no, position }) => [partition_no, Number(position)]));
         revisionBase = Number((await f.db.admin.query(
           'SELECT max(revision) AS revision FROM semantic.revision WHERE route=$1 AND subject_id=$2',
           [schemeRoute, scheme],
@@ -72,10 +78,32 @@ for (const axis of axes) {
       const population: Population = {
         name: `community-board-${selected.realm.realmId}-${axis}-${series}`,
         hotPartition: partitionOf(selectedRoute), hotShare: 1,
-        rows({ route, ordinal }) {
+        rows({ ordinal }) {
           const transaction = crypto.randomUUID();
           const at = '2020-01-01T00:00:00.000Z';
+          const commands = homes.map((partition) => {
+            const position = positions.get(partition)! + ordinal * 100 + 1;
+            const transaction = crypto.randomUUID();
+            return { partition, position, transaction };
+          });
+          const commandHistory = {
+            'core.receipt': commands.map(({ partition, position, transaction }) => ({
+              partition_no: partition, principal_kind: 'account', principal_id: f.owner.actor.accountId,
+              command_kind: 'content.board.create', idempotency_key: `${series}-${ordinal}-${selected.realm.realmId}`,
+              request_digest: Buffer.alloc(32), epoch: 1, position, transaction_id: transaction, response: {},
+            })),
+            'core.outbox': commands.map(({ partition, position, transaction }) => ({
+              partition_no: partition, position, event_seq: 0, event_count: 1, epoch: 1,
+              id: transaction, type: 'com.rezics.content.board.created.v1', subject: concept, data: {},
+            })),
+            'editorial.write_basis': commands.map(({ partition, position, transaction }) => ({
+              partition_no: partition, transaction_id: transaction, epoch: 1, position,
+              principal_kind: 'account', principal_id: f.owner.actor.accountId, client_id: f.owner.actor.clientId,
+              requested_by: null, recorded_at: at,
+            })),
+          };
           if (axis === 'history') return {
+            ...commandHistory,
             'community.realm_revision': creationTargets.map(({ realm }) => ({
               route: routeOf(realm.realmId)!, realm_id: realm.realmId, revision_id: newId(routeOf(realm.realmId)!),
               predecessor: null, title: 'Retained scheme adoption', summary: '', visibility: 'protected',
@@ -86,25 +114,47 @@ for (const axis of axes) {
               kind: 'identity', release: bundledDigest, recorded_transaction_id: transaction,
             }],
           };
-          const space = newId(route), realm = newId(route), revision = newId(route), neighbour = newId(schemeRoute);
+          const neighbour = newId(schemeRoute);
+          // Grow every creation target's home as well as the listing target's home.
+          const containers = [selected, ...creationTargets].map(({ realm }) => {
+            const route = routeOf(realm.realmId)!;
+            return { route, space: newId(route), realm: newId(route), revision: newId(route) };
+          });
           return {
-            'community.space': [{ route, space_id: space, state: 'active', head_revision_id: revision,
-              created_at: at, creator: f.owner.actor.accountId }],
-            'community.space_revision': [{ route, space_id: space, revision_id: revision, predecessor: null,
-              title: 'Unrelated board host', summary: '', created_at: at, author: f.owner.actor.accountId }],
-            'community.realm': [{ route, realm_id: realm, space_id: space, state: 'active', visibility: 'protected',
-              context_id: GLOBAL_CONTEXT, head_revision_id: revision, created_at: at, creator: f.owner.actor.accountId }],
-            'community.realm_revision': [{ route, realm_id: realm, revision_id: revision, predecessor: null,
+            ...commandHistory,
+            'community.space': containers.map(({ route, space, revision }) => ({
+              route, space_id: space, state: 'active', head_revision_id: revision,
+              created_at: at, creator: f.owner.actor.accountId,
+            })),
+            'community.space_revision': containers.map(({ route, space, revision }) => ({
+              route, space_id: space, revision_id: revision, predecessor: null,
+              title: 'Unrelated board host', summary: '', created_at: at, author: f.owner.actor.accountId,
+            })),
+            'community.realm': containers.map(({ route, space, realm, revision }) => ({
+              route, realm_id: realm, space_id: space, state: 'active', visibility: 'protected',
+              context_id: GLOBAL_CONTEXT, head_revision_id: revision, created_at: at, creator: f.owner.actor.accountId,
+            })),
+            'community.realm_revision': containers.map(({ route, realm, revision }) => ({
+              route, realm_id: realm, revision_id: revision, predecessor: null,
               title: 'Unrelated board Realm', summary: '', visibility: 'protected', context_id: GLOBAL_CONTEXT,
-              created_at: at, author: f.owner.actor.accountId }],
+              board_scheme_id: scheme, created_at: at, author: f.owner.actor.accountId,
+            })),
             'semantic.subject': [{ route: schemeRoute, subject_id: neighbour,
               type: 'skos:ConceptScheme', recorded_transaction_id: transaction }],
             'semantic.revision': [{ route: schemeRoute, subject_id: neighbour, revision: 1,
               kind: 'create', release: bundledDigest, recorded_transaction_id: transaction }],
-            'content.board': [{ route, board_id: newId(route), subject_id: neighbour, realm_id: realm,
+            'content.board': containers.map(({ route, realm }) => ({
+              route, board_id: newId(route), subject_id: concept, realm_id: realm,
               title: 'Unrelated board', visibility: 'published', security_revision: 1,
-              recorded_transaction_id: transaction, created_at: at }],
+              recorded_transaction_id: transaction, created_at: at,
+            })),
           };
+        },
+        async finish(admin) {
+          await admin.query(
+            'UPDATE core.partition p SET position=(SELECT max(o.position) FROM core.outbox o WHERE o.partition_no=p.partition_no) WHERE p.partition_no=ANY($1::integer[])',
+            [homes],
+          );
         },
       };
       await seed(f.db, population, { from: previous, to: scale });
@@ -128,6 +178,10 @@ for (const axis of axes) {
     await f.measure('community board creation and native read', selected, axis, async () => {
       const target = creationTargets[targetIndex++];
       if (!target) throw new Error('Missing prepared board creation target');
+      const empty = await f.call<{ items: unknown[]; next: string | null }>(
+        'GET', `/v1/realms/${target.realm.realmId}/boards?limit=2`, 200,
+      );
+      expect(empty).toMatchObject({ items: [], next: null });
       const board = await create(target, concept);
       const { items, next } = await f.call<{ items: { id: string }[]; next: string | null }>(
         'GET', `/v1/realms/${target.realm.realmId}/boards?limit=2`, 200,
