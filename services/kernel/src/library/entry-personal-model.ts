@@ -49,7 +49,19 @@ export type PersonalEntry = Readonly<{
   annotationUpdatedAt: string | null;
   sourceObservations: readonly PersonalEntryObservation[];
 }>;
-export type PersonalEntryGuard = Readonly<{ incarnationId: string; currentRevision: number }>;
+export type PersonalEntryProfileGuard = Readonly<{
+  subjectId: string;
+  identityEpoch: string;
+  acceptingType: string;
+  requestedSubjectId: string | null;
+  component: Readonly<Record<string, unknown>>;
+  pin: Readonly<Record<string, unknown>>;
+}>;
+export type PersonalEntryGuard = Readonly<{
+  incarnationId: string;
+  currentRevision: number;
+  profileGuard?: PersonalEntryProfileGuard;
+}>;
 export type PersonalEntryFieldChange<T> = FieldChange<T>;
 export type PersonalEntryPrivacyValue = PrivacyValue;
 export type PersonalEntryPrivacy = PrivacyFact;

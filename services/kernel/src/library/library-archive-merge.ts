@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { readAccount } from '../access/account-data.ts';
@@ -36,11 +37,15 @@ import {
   type ArchiveRecord,
 } from './library-archive.ts';
 import { createEntryCommands, LibraryConflictError } from './entries.ts';
+import { createEntryPersonalCommands } from './entry-personal.ts';
+import { parsePersonalNote, parsePersonalPriority } from './entry-personal-model.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands, type AssignmentReviewGuard } from './label-assignment-commands.ts';
 import { normalizePersonalLabelName } from './label-store.ts';
 import { hasEntryState, type LibraryProfilePin } from './profile.ts';
 import { readLibraryProfileAnchor, readLibraryProfileSourceObservation } from './profile-source.ts';
+import { parseProgressSessionJournalPatch } from './progress-journal.ts';
+import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
 
 export const LIBRARY_ARCHIVE_MERGE_LIMITS = {
   ...LIBRARY_ARCHIVE_LIMITS,
@@ -56,6 +61,10 @@ export type LibraryArchiveMergeDependencies = {
   access: Access;
   tokens: KeyRing;
   workClient: WorkClient | (() => Promise<WorkClient>);
+  journalCommands?: Pick<
+    ReturnType<typeof createSessionCommands>,
+    'readSession' | 'readSessionJournal' | 'patchSessionJournal'
+  >;
   clock?: KernelClock;
 };
 
@@ -77,7 +86,23 @@ export type ArchiveMergeReviewInput =
       kind: 'assignment';
       subjectId: string;
       action: 'assign' | 'preserve';
+    }
+  | {
+      ordinal: number;
+      kind: 'annotation';
+      subjectId: string;
+      incarnationId: string;
+      fields: { note?: ArchiveFieldChoice; priority?: ArchiveFieldChoice };
+    }
+  | {
+      ordinal: number;
+      kind: 'journal';
+      subjectId: string;
+      sessionId: string;
+      fields: { startDate?: ArchiveFieldChoice; finishDate?: ArchiveFieldChoice };
     };
+
+export type ArchiveFieldChoice = 'preserve' | 'set' | 'clear';
 
 type Action = 'library_entry:read' | 'library_entry:update';
 type ItemStatus =
@@ -115,7 +140,7 @@ type Item = {
   result: Record<string, unknown> | null;
 };
 type Effect = {
-  kind: 'entry' | 'label' | 'assignment';
+  kind: 'entry' | 'label' | 'assignment' | 'annotation' | 'journal';
   key: string;
   operands: Record<string, unknown>;
 };
@@ -170,11 +195,80 @@ function sameIdentity(left: string | null, right: unknown): left is string {
   return left !== null && left === right;
 }
 
+function isPersonalRecovery(section: string) {
+  return section === 'annotations' || section === 'journals';
+}
+
+function personalOutcome(section: string, status: string, result: Record<string, unknown> | null) {
+  if (!isPersonalRecovery(section)) return status;
+  if (typeof result?.outcome === 'string') return result.outcome;
+  if (status === 'mapped' || status === 'applying') return status;
+  if (status === 'already_equal' || status === 'preserved') return 'unchanged';
+  if (status === 'unsupported') return 'unsupported';
+  if (status === 'unresolved' || status === 'current_conflict') return 'stale';
+  return 'failed';
+}
+
+function sameJson(left: unknown, right: unknown) {
+  return canonicalize(left) === canonicalize(right);
+}
+
+function selectedFields(value: unknown, allowed: readonly string[]): Record<string, ArchiveFieldChoice> {
+  const fields = object(value);
+  if (!fields || Object.keys(fields).length < 1 || Object.keys(fields).some((key) => !allowed.includes(key)))
+    throw new ProblemError('invalid_request');
+  const result: Record<string, ArchiveFieldChoice> = {};
+  for (const [key, choice] of Object.entries(fields)) {
+    if (choice !== 'preserve' && choice !== 'set' && choice !== 'clear') throw new ProblemError('invalid_request');
+    result[key] = choice;
+  }
+  return result;
+}
+
+function nativeChange(choice: ArchiveFieldChoice, value: unknown) {
+  if (choice === 'preserve') return { op: 'unchanged' };
+  if (choice === 'clear') return { op: 'clear' };
+  return { op: 'set', value };
+}
+
+function unchangedPersonalResult(item: Item): Record<string, unknown> {
+  const review = item.review ?? {};
+  const choices = object(review.fields) ?? {};
+  if (item.section === 'annotations')
+    return {
+      outcome: 'unchanged',
+      visibility: 'private',
+      fields: {
+        note: choices.note === undefined || choices.note === 'preserve' ? 'preserved' : 'unchanged',
+        priority: choices.priority === undefined || choices.priority === 'preserve' ? 'preserved' : 'unchanged',
+      },
+    };
+  const fields = Object.fromEntries(
+    ['startDate', 'finishDate']
+      .filter((field) => choices[field] !== undefined)
+      .map((field) => [field, choices[field] === 'preserve' ? 'preserved' : 'unchanged']),
+  );
+  return { outcome: 'unchanged', fields };
+}
+
+function reviewedPersonalRefusal(item: Item): Record<string, unknown> {
+  const review = item.review ?? {};
+  return {
+    outcome: personalOutcome(item.section, item.status, null),
+    ...(typeof review.reason === 'string' ? { reason: review.reason } : {}),
+    ...(typeof review.field === 'string' ? { field: review.field } : {}),
+  };
+}
+
 /** Private bounded archive retention. Effects are delegated to the installed Library command owners. */
 export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies) {
   const clock = deps.clock ?? systemClock;
   const runner = createLibraryCommandRunner({ ...deps, clock });
   const entries = () => createEntryCommands({ pool: deps.pool, access: deps.access, tokens: deps.tokens, clock });
+  const personal = () =>
+    createEntryPersonalCommands({ pool: deps.pool, access: deps.access, clock });
+  const sessionCommands = () =>
+    deps.journalCommands ?? createSessionCommands({ pool: deps.pool, access: deps.access, tokens: deps.tokens, clock });
   const labels = () => createPersonalLabelCommands({ pool: deps.pool, tokens: deps.tokens, clock });
   const assignments = () =>
     createLabelAssignmentCommands({ pool: deps.pool, access: deps.access, tokens: deps.tokens, clock });
@@ -333,7 +427,12 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         const records = parsed.records.map((record, ordinal) => ({
           ordinal,
           section: record.section,
-          source_subject_id: typeof record.subject_id === 'string' ? record.subject_id : null,
+          source_subject_id:
+            typeof record.subject_id === 'string'
+              ? record.subject_id
+              : typeof record.subjectId === 'string'
+                ? record.subjectId
+                : null,
           source_label_id:
             record.section === 'labels'
               ? typeof record.label_id === 'string'
@@ -348,7 +447,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           `INSERT INTO library.library_archive_merge_item
             (route,account_id,upload_id,ordinal,section,source_subject_id,source_label_id,record_json,status)
           SELECT $1,$2,$3,r.ordinal,r.section,r.source_subject_id,r.source_label_id,r.evidence,
-            CASE WHEN r.section IN ('entries','labels','assignments') THEN 'unresolved' ELSE 'unsupported' END
+            CASE WHEN r.section IN ('entries','labels','assignments','annotations','journals') THEN 'unresolved' ELSE 'unsupported' END
           FROM jsonb_to_recordset($4::jsonb) AS r(
             ordinal integer,section text,source_subject_id uuid,source_label_id uuid,evidence text)`,
           [route, owner.accountId, uploadId, JSON.stringify(records)],
@@ -428,7 +527,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         results: visible.map((item) => ({
           ordinal: item.ordinal,
           section: item.section,
-          status: item.status,
+          status: personalOutcome(item.section, item.status, item.result),
           result: item.result,
         })),
         next: hasMore ? visible.at(-1)!.ordinal : null,
@@ -594,6 +693,212 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       }
     }
 
+    if (decision.kind === 'annotation') {
+      if (item.section !== 'annotations' || !sameIdentity(item.source_subject_id, evidence.subjectId))
+        throw new ProblemError('invalid_request');
+      if (!isRoutedId(decision.subjectId) || !isRoutedId(decision.incarnationId))
+        throw new ProblemError('invalid_request');
+      const choices = selectedFields(decision.fields, ['note', 'priority']);
+      return identityTime(async (at) => {
+        const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+        const observation = await readLibraryProfileSourceObservation(
+          { pool: deps.pool, access: deps.access, actor, at, deadline },
+          decision.subjectId,
+        );
+        if (!observation)
+          return {
+            status: 'unresolved',
+            review: {
+              requestedSubjectId: decision.subjectId,
+              incarnationId: decision.incarnationId,
+              fields: choices,
+              reason: 'target-unavailable',
+            },
+          };
+        const { source, anchor } = observation;
+        const base = {
+          requestedSubjectId: decision.subjectId,
+          targetSubjectId: source.subjectId,
+          requestedIncarnationId: decision.incarnationId,
+          fields: choices,
+          visibility: 'private',
+        };
+        if (source.kind !== 'supported')
+          return { status: 'unsupported', review: { ...base, reason: 'current-profile-unsupported' } };
+        if (source.subjectId !== decision.subjectId)
+          return { status: 'current_conflict', review: { ...base, reason: 'target-not-canonical' } };
+
+        let currentEntry: Awaited<ReturnType<ReturnType<typeof createEntryCommands>['readEntry']>>;
+        try {
+          currentEntry = await entries().readEntry(actor, source.subjectId);
+        } catch (error) {
+          if (error instanceof LibraryNotFoundError)
+            return { status: 'unresolved', review: { ...base, reason: 'entry-unavailable' } };
+          throw error;
+        }
+        const currentBinding = {
+          incarnationId: currentEntry.incarnationId,
+          entryRevision: currentEntry.revision,
+        };
+        if (!currentEntry.incarnationId || currentEntry.incarnationId !== decision.incarnationId)
+          return {
+            status: 'current_conflict',
+            review: { ...base, current: currentBinding, reason: 'entry-incarnation-changed' },
+          };
+
+        const current = await personal().readPersonalEntry(actor, source.subjectId);
+        const currentAnnotation = {
+          annotationRevision: current.annotationRevision,
+          note: current.note,
+          priority: current.priority,
+        };
+        const values = decodeRecord(item);
+        let unsupportedField: string | null = null;
+        for (const field of ['note', 'priority'] as const) {
+          if (choices[field] !== 'set') continue;
+          try {
+            if (!Object.hasOwn(values, field) || values[field] === null) throw new TypeError('missing value');
+            if (field === 'note') parsePersonalNote(values[field]);
+            else parsePersonalPriority(values[field]);
+          } catch {
+            unsupportedField = field;
+            break;
+          }
+        }
+        if (unsupportedField)
+          return {
+            status: 'unsupported',
+            review: {
+              ...base,
+              current: { ...currentBinding, ...currentAnnotation, visibility: 'private' },
+              reason: 'unsupported-field-value',
+              field: unsupportedField,
+            },
+          };
+
+        const changes = ['note', 'priority'].some((field) => {
+          const choice = choices[field];
+          if (choice === undefined || choice === 'preserve') return false;
+          const value = choice === 'clear' ? null : values[field];
+          return currentAnnotation[field as 'note' | 'priority'] !== value;
+        });
+        return {
+          status: changes ? 'mapped' : 'already_equal',
+          review: {
+            ...base,
+            profile: {
+              subjectId: source.subjectId,
+              identityEpoch: anchor.identityEpoch.toString(),
+              acceptingType: anchor.acceptingType,
+              requestedSubjectId: anchor.requestedSubjectId,
+              component: anchor.component,
+              pin: source.pin,
+            },
+            current: { ...currentBinding, ...currentAnnotation, visibility: 'private' },
+          },
+        };
+      });
+    }
+
+    if (decision.kind === 'journal') {
+      if (item.section !== 'journals' || !sameIdentity(item.source_subject_id, evidence.subjectId))
+        throw new ProblemError('invalid_request');
+      if (!isRoutedId(decision.subjectId) || !isRoutedId(decision.sessionId)) throw new ProblemError('invalid_request');
+      const choices = selectedFields(decision.fields, ['startDate', 'finishDate']);
+      return identityTime(async (at) => {
+        const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
+        const observation = await readLibraryProfileSourceObservation(
+          { pool: deps.pool, access: deps.access, actor, at, deadline },
+          decision.subjectId,
+        );
+        if (!observation)
+          return {
+            status: 'unresolved',
+            review: {
+              requestedSubjectId: decision.subjectId,
+              requestedSessionId: decision.sessionId,
+              fields: choices,
+              reason: 'target-unavailable',
+            },
+          };
+        const { source, anchor } = observation;
+        const base = {
+          requestedSubjectId: decision.subjectId,
+          targetSubjectId: source.subjectId,
+          sessionId: decision.sessionId,
+          fields: choices,
+        };
+        if (source.kind !== 'supported')
+          return { status: 'unsupported', review: { ...base, reason: 'current-profile-unsupported' } };
+        if (source.subjectId !== decision.subjectId)
+          return { status: 'current_conflict', review: { ...base, reason: 'target-not-canonical' } };
+
+        let session: Awaited<ReturnType<ReturnType<typeof sessions>['readSession']>>;
+        let current: Awaited<ReturnType<ReturnType<typeof sessions>['readSessionJournal']>>;
+        try {
+          session = await sessionCommands().readSession(actor, decision.sessionId);
+          current = await sessionCommands().readSessionJournal(actor, decision.sessionId);
+        } catch (error) {
+          if (error instanceof LibraryNotFoundError)
+            return { status: 'unresolved', review: { ...base, reason: 'session-unavailable' } };
+          throw error;
+        }
+        const currentBinding = {
+          sessionId: session.id,
+          subjectId: session.subjectId,
+          sessionRevision: session.revision,
+          state: session.state,
+          journalRevision: current.revision,
+          startDate: current.startDate,
+          finishDate: current.finishDate,
+        };
+        if (session.subjectId !== source.subjectId)
+          return { status: 'current_conflict', review: { ...base, current: currentBinding, reason: 'session-subject-mismatch' } };
+        if (session.state === 'retired')
+          return { status: 'unresolved', review: { ...base, current: currentBinding, reason: 'session-retired' } };
+
+        const archiveJournal = object(evidence.journal) ?? {};
+        const patch: Record<string, unknown> = { revision: current.revision };
+        let unsupportedField: string | null = null;
+        for (const field of ['startDate', 'finishDate'] as const) {
+          const choice = choices[field];
+          if (choice === undefined || choice === 'preserve') continue;
+          if (choice === 'clear') patch[field] = null;
+          else if (!Object.hasOwn(archiveJournal, field) || archiveJournal[field] === null) {
+            unsupportedField = field;
+            break;
+          } else patch[field] = archiveJournal[field];
+        }
+        if (unsupportedField)
+          return { status: 'unsupported', review: { ...base, current: currentBinding, reason: 'unsupported-field-value', field: unsupportedField } };
+        const parsed = parseProgressSessionJournalPatch(patch);
+        if (!parsed.ok)
+          return { status: 'unsupported', review: { ...base, current: currentBinding, reason: 'invalid-journal-date', field: parsed.field } };
+
+        const changes = (['startDate', 'finishDate'] as const).some((field) => {
+          const choice = choices[field];
+          if (choice === undefined || choice === 'preserve') return false;
+          const next = choice === 'clear' ? null : archiveJournal[field];
+          return !sameJson(current[field], next);
+        });
+        return {
+          status: changes ? 'mapped' : 'already_equal',
+          review: {
+            ...base,
+            profile: {
+              subjectId: source.subjectId,
+              identityEpoch: anchor.identityEpoch.toString(),
+              acceptingType: anchor.acceptingType,
+              requestedSubjectId: anchor.requestedSubjectId,
+              component: anchor.component,
+              pin: source.pin,
+            },
+            current: currentBinding,
+          },
+        };
+      });
+    }
+
     if (item.section !== 'assignments' || !sameIdentity(item.source_subject_id, evidence.subject_id))
       throw new ProblemError('invalid_request');
     return identityTime(async (at) => {
@@ -688,7 +993,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
             native_command_kind=NULL,native_request_key=NULL,native_operands=NULL,result=NULL
           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4 AND review_revision=$5
             AND status NOT IN ('applying','acknowledged') RETURNING ordinal,status,review_revision`,
-          [route, accountId, id, item.ordinal, item.expectedRevision, item.status, JSON.stringify(item.review)],
+          [route, accountId, id, item.ordinal, item.expectedRevision, item.status, canonicalize(item.review)],
         );
         if (!result.rows[0]) throw conflict();
         saved.push({ ordinal: item.ordinal, status: item.status });
@@ -733,6 +1038,86 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         },
       };
     }
+    if (item.status === 'mapped' && item.section === 'annotations' && object(decision.current)) {
+      const profile = object(decision.profile);
+      if (!profile) return null;
+      const evidence = decodeRecord(item);
+      const choices = object(decision.fields) ?? {};
+      const noteChoice = (choices.note ?? 'preserve') as ArchiveFieldChoice;
+      const priorityChoice = (choices.priority ?? 'preserve') as ArchiveFieldChoice;
+      const current = object(decision.current)!;
+      const noteValue = noteChoice === 'set' ? evidence.note : null;
+      const priorityValue = priorityChoice === 'set' ? evidence.priority : null;
+      return {
+        kind: 'annotation',
+        key: '',
+        operands: {
+          subjectId: decision.targetSubjectId,
+          incarnationId: object(decision.current)!.incarnationId,
+          entryRevision: object(decision.current)!.entryRevision,
+          annotationRevision: object(decision.current)!.annotationRevision,
+          profile,
+          fields: {
+            note: {
+              ...nativeChange(noteChoice, evidence.note),
+              outcome:
+                noteChoice === 'preserve'
+                  ? 'preserved'
+                  : current.note === (noteChoice === 'clear' ? null : noteValue)
+                    ? 'unchanged'
+                    : 'accepted',
+            },
+            priority: {
+              ...nativeChange(priorityChoice, evidence.priority),
+              outcome:
+                priorityChoice === 'preserve'
+                  ? 'preserved'
+                  : current.priority === (priorityChoice === 'clear' ? null : priorityValue)
+                    ? 'unchanged'
+                    : 'accepted',
+            },
+          },
+        },
+      };
+    }
+    if (item.status === 'mapped' && item.section === 'journals' && object(decision.current)) {
+      const profile = object(decision.profile);
+      if (!profile) return null;
+      const evidence = object(decodeRecord(item).journal);
+      if (!evidence) return null;
+      const choices = object(decision.fields) ?? {};
+      const fields: Record<string, unknown> = {};
+      const current = object(decision.current)!;
+      for (const field of ['startDate', 'finishDate'] as const) {
+        const choice = choices[field] as ArchiveFieldChoice | undefined;
+        if (choice !== undefined) {
+          const value = choice === 'set' ? evidence[field] : null;
+          fields[field] = {
+            choice,
+            value,
+            outcome:
+              choice === 'preserve'
+                ? 'preserved'
+                : sameJson(current[field], choice === 'clear' ? null : value)
+                  ? 'unchanged'
+                  : 'accepted',
+          };
+        }
+      }
+      return {
+        kind: 'journal',
+        key: '',
+        operands: {
+          sessionId: decision.sessionId,
+          subjectId: decision.targetSubjectId,
+          sessionRevision: object(decision.current)!.sessionRevision,
+          state: object(decision.current)!.state,
+          journalRevision: object(decision.current)!.journalRevision,
+          profile,
+          fields,
+        },
+      };
+    }
     if (item.status === 'create' && item.section === 'labels' && decision.mode === 'create')
       return {
         kind: 'label',
@@ -759,12 +1144,14 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       const upload = await readUpload(tx, route, accountId, id, true);
       requireLive(upload, now);
       const item = await readItem(tx, route, accountId, id, ordinal, true);
-      if (item.status === 'acknowledged') return { mode: 'done' as const, status: item.status, result: item.result };
+      if (item.status === 'acknowledged')
+        return { mode: 'done' as const, section: item.section, status: item.status, result: item.result };
       if (item.status === 'applying') {
         if (!item.native_command_kind || !item.native_request_key || !item.native_operands)
           throw new Error('Archive merge applying row is missing its native command binding');
         return {
           mode: 'run' as const,
+          section: item.section,
           effect: {
             kind: item.native_command_kind as Effect['kind'],
             key: item.native_request_key,
@@ -773,18 +1160,43 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         };
       }
       if (upload.cancelled_at !== null) throw conflict();
-      if (item.status === 'mapped' || item.status === 'already_equal' || item.status === 'preserved')
-        return { mode: 'done' as const, status: item.status, result: item.result };
+      if (
+        (item.status === 'mapped' && !isPersonalRecovery(item.section)) ||
+        item.status === 'already_equal' ||
+        item.status === 'preserved'
+      ) {
+        let result = item.result;
+        if (isPersonalRecovery(item.section) && item.status === 'already_equal' && result === null) {
+          result = unchangedPersonalResult(item);
+          await tx.query(
+            `UPDATE library.library_archive_merge_item SET result=$5::jsonb
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+            [route, accountId, id, ordinal, JSON.stringify(result)],
+          );
+        }
+        return { mode: 'done' as const, section: item.section, status: item.status, result };
+      }
       if (item.review?.action === 'preserve') {
         await tx.query(
           `UPDATE library.library_archive_merge_item SET status='preserved'
           WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
           [route, accountId, id, ordinal],
         );
-        return { mode: 'done' as const, status: 'preserved' as const, result: null };
+        return { mode: 'done' as const, section: item.section, status: 'preserved' as const, result: null };
       }
       const proposed = effectable(item);
-      if (!proposed) return { mode: 'done' as const, status: item.status, result: item.result };
+      if (!proposed) {
+        let result = item.result;
+        if (isPersonalRecovery(item.section) && result === null) {
+          result = reviewedPersonalRefusal(item);
+          await tx.query(
+            `UPDATE library.library_archive_merge_item SET result=$5::jsonb
+             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+            [route, accountId, id, ordinal, JSON.stringify(result)],
+          );
+        }
+        return { mode: 'done' as const, section: item.section, status: item.status, result };
+      }
       const key = commandKey(id, ordinal, item.review_revision);
       const binding = { ...proposed, key };
       const updated = await tx.query(
@@ -799,13 +1211,13 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           ordinal,
           binding.kind,
           binding.key,
-          JSON.stringify(binding.operands),
+          canonicalize(binding.operands),
           item.status,
           item.review_revision,
         ],
       );
       if (!updated.rowCount) throw conflict();
-      return { mode: 'run' as const, effect: binding };
+      return { mode: 'run' as const, section: item.section, effect: binding };
     });
   }
 
@@ -834,6 +1246,130 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
         state: entry.state,
         revision: entry.revision,
         incarnationId: entry.incarnationId,
+      };
+    }
+    if (effect.kind === 'annotation') {
+      const profile = object(effect.operands.profile);
+      const fields = object(effect.operands.fields);
+      const note = object(fields?.note);
+      const priority = object(fields?.priority);
+      if (
+        typeof effect.operands.subjectId !== 'string' ||
+        typeof effect.operands.incarnationId !== 'string' ||
+        typeof effect.operands.entryRevision !== 'number' ||
+        typeof effect.operands.annotationRevision !== 'number' ||
+        !profile ||
+        !note ||
+        !priority ||
+        (note.op !== 'unchanged' && note.op !== 'clear' && note.op !== 'set') ||
+        (priority.op !== 'unchanged' && priority.op !== 'clear' && priority.op !== 'set')
+      )
+        throw new Error('Archive annotation binding is invalid');
+      const result = await personal().saveAnnotations(
+        actor,
+        effect.operands.subjectId,
+        {
+          revision: effect.operands.annotationRevision,
+          entryGuard: {
+            incarnationId: effect.operands.incarnationId,
+            currentRevision: effect.operands.entryRevision,
+            profileGuard: profile,
+          },
+          note: note.op === 'set' ? { op: 'set', value: note.value } : { op: note.op },
+          priority: priority.op === 'set' ? { op: 'set', value: priority.value } : { op: priority.op },
+        },
+        effect.key,
+      );
+      return {
+        outcome: result.value.annotationRevision > effect.operands.annotationRevision ? 'accepted' : 'unchanged',
+        effect: 'entry.annotations.save',
+        subjectId: result.value.subjectId,
+        incarnationId: effect.operands.incarnationId,
+        annotationRevision: result.value.annotationRevision,
+        visibility: 'private',
+        fields: {
+          note: (note.outcome as string | undefined) ?? 'unchanged',
+          priority: (priority.outcome as string | undefined) ?? 'unchanged',
+        },
+      };
+    }
+    if (effect.kind === 'journal') {
+      const profile = object(effect.operands.profile);
+      const fields = object(effect.operands.fields);
+      if (
+        typeof effect.operands.sessionId !== 'string' ||
+        typeof effect.operands.subjectId !== 'string' ||
+        typeof effect.operands.sessionRevision !== 'number' ||
+        typeof effect.operands.state !== 'string' ||
+        typeof effect.operands.journalRevision !== 'number' ||
+        !profile ||
+        !fields
+      )
+        throw new Error('Archive journal binding is invalid');
+      const patch: Record<string, unknown> = { revision: effect.operands.journalRevision };
+      const fieldOutcomes: Record<string, string> = {};
+      for (const field of ['startDate', 'finishDate'] as const) {
+        const selected = object(fields[field]);
+        if (!selected || (selected.choice !== 'preserve' && selected.choice !== 'set' && selected.choice !== 'clear'))
+          continue;
+        if (selected.choice !== 'preserve') patch[field] = selected.choice === 'clear' ? null : selected.value;
+        fieldOutcomes[field] = typeof selected.outcome === 'string' ? selected.outcome : 'unchanged';
+      }
+      const parsedPatch = parseProgressSessionJournalPatch(patch);
+      if (!parsedPatch.ok) throw new ProgressInvalidError(parsedPatch.field);
+      const ownerRoute = routeOf(owner.accountId)!;
+      const admission = {
+        identity: {
+          profile,
+          subjectId: effect.operands.subjectId,
+          sessionRevision: effect.operands.sessionRevision,
+          state: effect.operands.state,
+        },
+        assert: async (tx: OperationalTransaction) => {
+          const session = await tx.query<{ subjectId: string; revision: number; state: string }>(
+            `SELECT subject_id::text AS "subjectId",revision,state FROM library.progress_session
+             WHERE route=$1 AND account_id=$2 AND session_id=$3`,
+            [ownerRoute, owner.accountId, effect.operands.sessionId],
+          );
+          if (
+            session.rows[0]?.subjectId !== effect.operands.subjectId ||
+            session.rows[0]?.revision !== effect.operands.sessionRevision ||
+            session.rows[0]?.state !== effect.operands.state
+          )
+            throw new ProgressConflictError();
+          await identityTime(async (at) => {
+            const observation = await readLibraryProfileSourceObservation(
+              { pool: deps.pool, access: deps.access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+              effect.operands.subjectId,
+            );
+            const source = observation?.source;
+            if (
+              !observation ||
+              source?.kind !== 'supported' ||
+              source.subjectId !== effect.operands.subjectId ||
+              observation.anchor.identityEpoch.toString() !== profile.identityEpoch ||
+              observation.anchor.acceptingType !== profile.acceptingType ||
+              observation.anchor.requestedSubjectId !== profile.requestedSubjectId ||
+              !sameJson(observation.anchor.component, profile.component) ||
+              !sameJson(source.pin, profile.pin)
+            )
+              throw new ProgressConflictError();
+          });
+        },
+      };
+      const result = await sessionCommands().patchSessionJournal(
+        actor,
+        effect.operands.sessionId,
+        parsedPatch.value,
+        effect.key,
+        admission,
+      );
+      return {
+        outcome: result.value.changed ? 'accepted' : 'unchanged',
+        effect: 'progress_session.journal',
+        sessionId: result.value.sessionId,
+        journalRevision: result.value.revision,
+        fields: fieldOutcomes,
       };
     }
     if (effect.kind === 'label') {
@@ -890,17 +1426,25 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
     id: string,
     ordinal: number,
     status: 'current_conflict' | 'unsupported' | 'unresolved',
+    outcome?: 'stale' | 'unsupported' | 'failed',
+    reason?: string,
   ) {
     return operation(actor, 'library_entry:update', undefined, async (tx, route, accountId) => {
       await readUpload(tx, route, accountId, id, true);
       const item = await readItem(tx, route, accountId, id, ordinal, true);
       if (item.status !== 'applying') throw conflict();
+      const result = isPersonalRecovery(item.section)
+        ? {
+            outcome: outcome ?? personalOutcome(item.section, status, null),
+            ...(reason ? { reason } : {}),
+          }
+        : { code: status };
       await tx.query(
         `UPDATE library.library_archive_merge_item SET status=$5,result=$6::jsonb
         WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
-        [route, accountId, id, ordinal, status, JSON.stringify({ code: status })],
+        [route, accountId, id, ordinal, status, JSON.stringify(result)],
       );
-      return { status, result: { code: status } };
+      return { status: isPersonalRecovery(item.section) ? result.outcome : status, result };
     });
   }
 
@@ -919,27 +1463,52 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
       signal?.throwIfAborted();
       const start = await beginEffect(actor, id, ordinal, signal);
       if (start.mode === 'done') {
-        applied.push({ ordinal, status: start.status, result: start.result });
+        applied.push({
+          ordinal,
+          status: personalOutcome(start.section, start.status, start.result),
+          result: start.result,
+        });
         continue;
       }
       try {
         const result = await runEffect(actor, start.effect);
         const acknowledged = await acknowledge(actor, id, ordinal, result);
-        applied.push({ ordinal, status: 'acknowledged', result: acknowledged });
+        applied.push({
+          ordinal,
+          status: personalOutcome(start.section, 'acknowledged', acknowledged),
+          result: acknowledged,
+        });
       } catch (error) {
-        if (error instanceof LibraryConflictError) {
-          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'current_conflict')) });
+        if (error instanceof LibraryConflictError || error instanceof ProgressConflictError) {
+          applied.push({
+            ordinal,
+            ...(await refuse(actor, id, ordinal, 'current_conflict', isPersonalRecovery(start.section) ? 'stale' : undefined)),
+          });
           continue;
         }
         if (error instanceof LibraryNotFoundError) {
-          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'unresolved')) });
+          applied.push({
+            ordinal,
+            ...(await refuse(actor, id, ordinal, 'unresolved', isPersonalRecovery(start.section) ? 'stale' : undefined)),
+          });
           continue;
         }
         if (
           error instanceof ProblemError &&
           (error.code === 'unsupported_library_profile' || error.code === 'library_label_capacity')
         ) {
-          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'unsupported')) });
+          applied.push({
+            ordinal,
+            ...(await refuse(actor, id, ordinal, 'unsupported', isPersonalRecovery(start.section) ? 'unsupported' : undefined)),
+          });
+          continue;
+        }
+        if (error instanceof ProgressInvalidError) {
+          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'unsupported', 'unsupported', 'invalid-native-date')) });
+          continue;
+        }
+        if (isPersonalRecovery(start.section) && error instanceof ProblemError && error.code === 'invalid_request') {
+          applied.push({ ordinal, ...(await refuse(actor, id, ordinal, 'current_conflict', 'failed', 'native-command-rejected')) });
           continue;
         }
         throw error;

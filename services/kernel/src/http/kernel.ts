@@ -686,6 +686,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     workClient,
+    journalCommands,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
   copyArchiveRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {

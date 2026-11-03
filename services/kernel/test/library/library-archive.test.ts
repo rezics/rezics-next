@@ -7,7 +7,7 @@ import {
   type ArchiveRecord,
   type ArchiveValidationCode,
 } from '../../src/library/library-archive.ts';
-import { libraryExportManifest } from '../../src/library/library-export-format.ts';
+import { exportSectionsV2, libraryExportManifest } from '../../src/library/library-export-format.ts';
 
 const first = randomUUID(),
   second = randomUUID(),
@@ -67,6 +67,31 @@ function archive(records: ArchiveRecord[] = [entry(first), entry(second, 'planne
     records,
   };
 }
+function archiveV2(records: ArchiveRecord[]) {
+  return {
+    manifest: {
+      ...libraryExportManifest({
+        export_id: randomUUID(),
+        created_at: at,
+        expires_at: '2026-01-01 00:15:00.123456+00',
+        format_version: 2,
+      }),
+      fullExport: false,
+      rows: records.length,
+      recordBytes: records.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)), 0),
+      sectionTotals: Object.fromEntries(
+        exportSectionsV2.map((section) => {
+          const rows = records.filter((row) => row.section === section);
+          return [
+            section,
+            { rows: rows.length, recordBytes: rows.reduce((bytes, row) => bytes + Buffer.byteLength(JSON.stringify(row)), 0) },
+          ];
+        }),
+      ),
+    },
+    records,
+  };
+}
 const decode = (value: unknown) => decodeLibraryArchive(Buffer.from(JSON.stringify(value)));
 function refuses(value: unknown, code: ArchiveValidationCode) {
   expect(() => decode(value)).toThrow(new ArchiveValidationError(code));
@@ -120,6 +145,86 @@ test('unsupported versions, unfinished captures and inconsistent final counts ar
   );
   refuses({ ...file, manifest: { ...file.manifest, fullExport: true } }, 'invalid_envelope');
   refuses({ ...file, manifest: { ...file.manifest, state: 'collecting' } }, 'invalid_envelope');
+});
+
+test('version 2 retains exact annotation presence and partial journal dates while provenance stays unsupported', () => {
+  const annotation = {
+    section: 'annotations',
+    accountId: first,
+    subjectId: second,
+    entryIncarnationId: first,
+    libraryProfilePin: { provenance: 'profile' },
+    annotationRevision: 4,
+    annotationUpdatedAt: at,
+    priority: null,
+  } as ArchiveRecord;
+  const provenance = {
+    section: 'provenance',
+    subjectId: second,
+    observation: { provider: 'source', recordId: 'row-4' },
+  } as ArchiveRecord;
+  const journal = {
+    section: 'journals',
+    accountId: first,
+    sessionId: label,
+    subjectId: second,
+    versionSubjectId: null,
+    state: 'active',
+    progressRevision: 2,
+    libraryProfilePin: { provenance: 'profile' },
+    startedAt: at,
+    completedAt: null,
+    lastChangedAt: null,
+    journal: { sessionId: label, revision: 3, startDate: { year: 2004, month: 2 }, finishDate: null, reflection: 'evidence only' },
+  } as ArchiveRecord;
+  const file = archiveV2([annotation, provenance, journal]);
+  const decoded = decode(file);
+  expect(decoded.records).toEqual(file.records);
+  expect(decoded.coverage.find((row) => row.section === 'annotations')).toMatchObject({
+    capture: 'present',
+    treatment: 'requires-explicit-mapping',
+    rows: 1,
+  });
+  expect(decoded.coverage.find((row) => row.section === 'provenance')).toMatchObject({
+    capture: 'present',
+    treatment: 'retained-unsupported',
+    rows: 1,
+  });
+  const v1 = decode(archive([]));
+  expect(v1.coverage.find((row) => row.section === 'journals')).toMatchObject({
+    capture: 'empty',
+    treatment: 'retained-unsupported',
+  });
+});
+
+test('invalid archived calendar dates and empty notes are rejected without normalization', () => {
+  const journal = {
+    section: 'journals',
+    accountId: first,
+    sessionId: label,
+    subjectId: second,
+    versionSubjectId: null,
+    state: 'active',
+    progressRevision: 2,
+    libraryProfilePin: null,
+    startedAt: at,
+    completedAt: null,
+    lastChangedAt: null,
+    journal: { sessionId: label, revision: 3, startDate: { year: 2023, month: 2, day: 29 }, finishDate: null, reflection: null },
+  } as ArchiveRecord;
+  refuses(archiveV2([journal]), 'invalid_record');
+  const annotation = {
+    section: 'annotations',
+    accountId: first,
+    subjectId: second,
+    entryIncarnationId: first,
+    libraryProfilePin: null,
+    annotationRevision: 4,
+    note: '',
+    priority: null,
+    annotationUpdatedAt: at,
+  } as ArchiveRecord;
+  refuses(archiveV2([annotation]), 'invalid_record');
 });
 
 test('duplicate native rows and names cannot select repeated effects or guess label equivalence', () => {

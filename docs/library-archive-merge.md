@@ -4,8 +4,9 @@ Collection archive recovery is owned by [Native Library archive Collection recov
 The installed v1 export and its producer-side guarantees remain owned by [Library export](library-export.md).
 
 The [installed personal export](library-export.md) produces a completed local `{manifest,records}` file.
-Its v1 manifest, section order and encoded-record limits are shared by the producer and the archive decoder;
-there is no second archive schema. Export coverage and its integration evidence status remain unchanged.
+Its V1 and V2 manifest, section order and encoded-record limits are shared by the producer and archive decoder;
+there is no second archive schema. Export coverage and its integration evidence status remain unchanged. V2 personal
+fact recovery is specified in [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
 
 ## Delivered validation boundary
 
@@ -15,16 +16,16 @@ private consumer is `POST /v1/libraryArchiveMerges`, owner status `GET /:id`, in
 evidence pruning `POST /:id/prune`. These methods do not change the producer's export interface or claim Web UI
 completion.
 
-Decision: accept completed v1 artifacts within 34 MiB and depth 32, reject duplicate rows and exact stored label
+Decision: accept completed V1 and V2 artifacts within 34 MiB and depth 32, reject duplicate rows and exact stored label
 names, and keep expired capture timestamps as evidence rather than treating them as permission or file expiry.
 
 Decision: retain one seven-day archive per account; cap preview/result pages and review/apply batches at 100/20;
 replay uncertain effects with journaled native request keys and prune expired evidence in 100-row pages.
 
-Validation requires the producer's final manifest, all fourteen declared installed sections in producer order,
-the global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes in `recordBytes`. The format
-does not declare per-section counts; the decoder computes them without inventing declarations. A missing final
-manifest, missing section declaration or absent assignment label parent is incomplete, never explicitly empty.
+Validation requires the producer's final manifest, all version-declared installed sections in producer order, the
+global `rows` count and the sum of compact UTF-8 `JSON.stringify(record)` bytes in `recordBytes`. V2 section totals
+are verified against the records. A missing final manifest, missing section declaration or absent assignment label
+parent is incomplete, never explicitly empty.
 Malformed envelopes, unsupported formats/versions, inconsistent counts, duplicate JSON keys, invalid Unicode,
 unknown record sections, repeated native record identities and out-of-order sections are refused. Failures expose
 only fixed codes, without raw JSON parser messages, archive values or private names.
@@ -34,14 +35,14 @@ computed count, `present` or `empty` capture, and one of these treatments:
 
 | Sections                                                                     | Treatment                                                       |
 | ---------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| entries, labels, assignments                                                 | `requires-explicit-mapping`; validation admits no native effect |
+| entries, labels, assignments, annotations, journals                          | `requires-explicit-mapping`; validation admits no native effect |
 | sessions, units, history, holdings, collections, collectionPins, occurrences | `retained-unsupported`                                          |
-| bangumiUploads, bangumiEvidence, malImports, malEvidence                     | `retained-unsupported`                                          |
+| bangumiUploads, bangumiEvidence, malImports, malEvidence, provenance         | `retained-unsupported`                                          |
 
 Excluded trash, Commerce/financial evidence, publication output and unavailable sources remain the producer's
-explicit omissions. Source observations, annotations, ratings and other absent sources gain no synthetic section,
-empty count or successful restoration claim. Unsupported records retain inert evidence; their payloads receive
-structural/identity checks, not a claim of native semantic admission.
+explicit omissions. V2 provenance remains evidence only; it cannot grant visibility or become an annotation.
+Unsupported records retain inert evidence; their payloads receive structural/identity checks, not a claim of native
+semantic admission.
 
 Archived Subjects and references, accepting meanings and pins, revisions, incarnations, state text and label names
 never establish current admission. In particular, unavailable old states remain readable; equal names do not map
@@ -56,6 +57,10 @@ current conflicts and preserves local work by default. Selected effects bind the
 current incarnation/revision, canonical identity and operands, and revalidate through the installed native command
 owners, including entry History. No replace-all, implicit label removal, inferred holding, progress completion,
 vote or publication is supported.
+
+V2 annotation and journal rows use the same retained item, review epoch, cancellation and pruning lifecycle.
+Supported fields, private visibility behavior, native setters, and exact per-item outcomes are owned by
+[Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
 
 A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
 success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results

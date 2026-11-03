@@ -50,6 +50,7 @@ const pageQuery = t.Object(
   closed,
 );
 const ordinal = t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS.records - 1 });
+const fieldChoice = t.Union([t.Literal('preserve'), t.Literal('set'), t.Literal('clear')]);
 const reviewItem = t.Union([
   t.Object(
     {
@@ -87,6 +88,26 @@ const reviewItem = t.Union([
       kind: t.Literal('assignment'),
       subjectId: id,
       action: t.Union([t.Literal('assign'), t.Literal('preserve')]),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ordinal,
+      kind: t.Literal('annotation'),
+      subjectId: id,
+      incarnationId: id,
+      fields: t.Object({ note: t.Optional(fieldChoice), priority: t.Optional(fieldChoice) }, closed),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      ordinal,
+      kind: t.Literal('journal'),
+      subjectId: id,
+      sessionId: id,
+      fields: t.Object({ startDate: t.Optional(fieldChoice), finishDate: t.Optional(fieldChoice) }, closed),
     },
     closed,
   ),
