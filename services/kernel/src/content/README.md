@@ -2,6 +2,41 @@
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+## Realm Subject exact-candidate disclosure
+
+`realm-subject-disclosure.ts` exports `prepareRealmSubjectDisclosure(dependencies, input, context)`.
+The sole `realm-subject-source.ts` census/factory owner supplies original keys; this evaluator creates no
+population, candidate storage, bootstrap, event consumer or registration. Until that composition lands,
+Realm population enumeration remains unavailable. `listSubjectThreads` is not a census.
+
+Exported types are `RealmSubjectCandidate = Readonly<{ threadId: string; openingPostId: string;
+subjectId: string }>`, `RealmSubjectDisclosureInput = Readonly<{ realmId: string;
+candidates: readonly RealmSubjectCandidate[] }>`, `RealmSubjectDisclosureDependencies = Readonly<{
+pool: Pool; access: Access }>`, and `RealmSubjectDisclosureContext = Readonly<{ actor: Actor;
+deadline: number; work: AccessWorkAccounting }>`. `RealmSubjectDisclosure` has only
+`finish(): Promise<readonly RealmSubjectEvidence[]>`. Evidence is aligned with input, without echoed keys:
+`{ state: 'positive'; freshness: RealmSubjectFreshness }` or `{ state: 'absent' | 'withheld' | 'unknown' }`.
+`RealmSubjectFreshness = Readonly<{ before: string; final: string; anchors: readonly AnchoredPosition[] }>`
+is internal native freshness, never permission or a reusable bearer proof. Signatures hash actual native
+source and parent observations. No concealed identifiers, counts, denial details or public DTOs are returned.
+
+Decision: exact evidence pins the original Subject and requires its native reference to remain terminal;
+a redirect never substitutes a different Subject. Missing native capabilities and dependency failures produce
+unknown, never complete empty membership. Absent means only this exact readable opening lacks the requested
+link, kind or Realm placement. Only the census owner can establish coverage across all candidates.
+
+A batch contains 1–8 candidates, copied at entry, under one actual actor, fixed deadline and additive caller
+work root. Preparation observes current authority; one `finish` repeats it against the same signatures and
+rechecks the exact source. Calling finish again returns the same promise, not another round. Every home is
+released before another is checked out. There are two source rounds, at most 33 native post ancestors per
+source round, one current revision, one board, one Realm/Space binding, and one original terminal Subject.
+Only metadata is read: no bodies, history ranges, Realm board enumeration, refill, global generation or table
+scan. Native statements, transaction/partition work and existing Access producers debit the supplied root;
+a missing producer refuses the attempt. The deadline is capped at the caller root's existing deadline.
+Final evidence expires after 1,000 ms from preparation, also bounded by that fixed deadline. Public Realm
+bans include the actual actor and authenticated delegating principal. Protected grants, account fences,
+source/parent revisions, takedown and restoration retain native read authority at both rounds.
+
 ## Mixed Home summaries
 
 [The feed contract](../../../../docs/feeds.md) owns selection, source limits and sparse cursors.

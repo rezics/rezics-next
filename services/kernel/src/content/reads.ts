@@ -2,6 +2,11 @@ import { ProblemError } from '../http/problem.ts';
 import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
 import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { createHash } from 'node:crypto';
+import {
+  bindRealmSubjectReadWork, realmSubjectBegin, realmSubjectCommit,
+  realmSubjectPartition, realmSubjectContentPoint, realmSubjectReadRoot,
+  type RealmSubjectReadContext,
+} from './realm-subject-disclosure-work.ts';
 import { parseStoredDocument, serializeDocument } from '@rezics/document';
 import { isSpdxLicense } from './document.ts';
 import presentationRuleBodies from './community-presentation-rules.sql';
@@ -198,21 +203,24 @@ function route(id: string): number {
 export async function snapshot<T>(
   dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
   id: string,
-  context: Pick<ReadContext, 'deadline'>,
+  context: Pick<RealmSubjectReadContext, 'deadline' | 'work'>,
   work: (client: AccessClient) => Promise<T>,
 ): Promise<Anchored<T>> {
   return within(context.deadline, () =>
     withConnection(dependencies.pool, async (connection) => {
       const client = deadlineClient(connection, context.deadline);
+      bindRealmSubjectReadWork(client, context.work);
       try {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        await realmSubjectBegin(client);
         const partitionNo = partitionOf(route(id));
-        const partition = await readPartition(client, partitionNo);
+        const partition = context.work
+          ? await realmSubjectPartition(client, partitionNo)
+          : await readPartition(client, partitionNo);
         if (!partition) throw new CommandUnavailableError('deadline', partitionNo);
         if (partition.writeState === 'moved')
           throw new CommandUnavailableError('moved', partitionNo, partition.movedTo);
         const value = await work(client);
-        await client.query('COMMIT');
+        await realmSubjectCommit(client);
         return { value, anchor: { partition, epoch: partition.epoch, position: partition.position } };
       } catch (error) {
         try {
@@ -428,12 +436,16 @@ export async function prepareBoardPageDecisions(
   }
 }
 
-async function point(client: AccessClient, kind: Kind, id: string, threadId = id, bytes = false): Promise<Row | null> {
+async function point(
+  client: AccessClient, kind: Kind, id: string, threadId = id, bytes = false, nativeEligibility = false,
+): Promise<Row | null> {
   const parameters = { route: route(id), id, kind, thread_id: threadId, include_body: bytes };
-  const { rows } = await client.query<Row>(
-    read.sql,
-    read.params.map((name) => parameters[name as keyof typeof parameters]),
-  );
+  const values = read.params.map((name) => parameters[name as keyof typeof parameters]);
+  const dispatch = () => client.query<Row>(read.sql, values);
+  // Access's native eligibility producer already accounts its own verification.
+  const { rows } = nativeEligibility || !realmSubjectReadRoot(client)
+    ? await dispatch()
+    : await realmSubjectContentPoint(client, kind, values, dispatch);
   return rows.length === 1 ? rows[0]! : null;
 }
 
@@ -524,7 +536,7 @@ export function readResource(
       },
       async verify(context) {
         const { client, actor, at } = context;
-        const current = await native.point(context, () => point(client, row.kind, row.id, row.thread_id ?? row.id));
+        const current = await native.point(context, () => point(client, row.kind, row.id, row.thread_id ?? row.id, false, true));
         if (!current || signature(current) !== signature(row) || !admissible(current, actor, tombstone))
           throw new ContentNotFoundError();
         if (
@@ -565,7 +577,7 @@ export function readResource(
 async function prepare(
   dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
   row: Row,
-  context: ReadContext,
+  context: RealmSubjectReadContext,
   evidence: object,
   tombstone = false,
   placeholder = false,
@@ -575,7 +587,7 @@ async function prepare(
 ): Promise<AccessCheck> {
   const action = `${row.kind}:read`;
   const resourceWithEligibility = readResource(row, evidence, tombstone, placeholder, withheldReference);
-  const accessContext = sharedContext ?? { pool: dependencies.pool, deadline: context.deadline };
+  const accessContext = sharedContext ?? { pool: dependencies.pool, deadline: context.deadline, work: context.work };
   if (erasedProof) {
     const check = await accessExplicitCheck(
       dependencies.access,
@@ -1550,6 +1562,74 @@ export async function readSubjectThread(
     subjectId,
     placeId,
   })) as Anchored<ThreadView | null>;
+}
+/** Internal exact-opening evidence. This shares the ordinary native resources,
+ * board observation, ancestry, account fences and Access evaluator. It loads no
+ * document bytes and cannot enumerate candidates or establish census coverage.
+ */
+export async function prepareRealmSubjectThreadDisclosure(
+  dependencies: Pick<ContentReadDependencies, 'pool' | 'access'>,
+  candidate: Readonly<{ threadId: string; openingPostId: string; subjectId: string }>,
+  realmId: string,
+  context: RealmSubjectReadContext,
+): Promise<Readonly<{
+  state: 'positive' | 'absent' | 'withheld';
+  signature: string | null;
+  anchors: readonly AnchoredPosition[];
+  final(): Promise<boolean>;
+}>> {
+  const observed = await snapshot(dependencies, candidate.threadId, context, async (client) => {
+    const thread = await point(client, 'thread', candidate.threadId);
+    return thread?.first_post_id ? chain(client, candidate.threadId, thread.first_post_id) : null;
+  });
+  const initial = observed.value;
+  const unavailable = {
+    state: 'withheld' as const, signature: null, anchors: [], final: async () => false,
+  };
+  if (!initial?.thread.board_id || !initial.revision || !initial.posts[0]) return unavailable;
+  const boardObservation = await observeBoard(dependencies, initial.thread.board_id, context);
+  const board = boardObservation.result;
+  if (!board.value) return unavailable;
+  const rows = [initial.thread, ...initial.posts];
+  const checks: AccessCheck[] = [];
+  for (const row of rows) {
+    // Exact positive evidence never comes from erased or withheld placeholders.
+    if (!['published', 'protected'].includes(row.visibility) || row.availability !== 'available')
+      return unavailable;
+    checks.push(await prepare(dependencies, row, context, { observed, board }));
+  }
+  if (initial.revision.availability !== 'available') return unavailable;
+  const sourceSignature = (value: Chain) => JSON.stringify([
+    fingerprint(value), value.revision?.subject_ids, value.revision?.sha256?.toString('hex'),
+    value.revision?.licence, board.value,
+  ]);
+  const baseline = sourceSignature(initial);
+  const allowed = async (client: AccessClient) => {
+    const current = await chain(client, candidate.threadId, initial.posts[0]!.id);
+    if (!current || sourceSignature(current) !== baseline) return false;
+    for (let index = 0; index < checks.length; index++) if (!(await checks[index]!(client))) return false;
+    return true;
+  };
+  if (!(await snapshot(dependencies, candidate.threadId, context, allowed)).value) return unavailable;
+  if (!(await boardObservation.recheck())) return unavailable;
+  const exact = initial.thread.first_post_id === candidate.openingPostId &&
+    initial.posts[0].id === candidate.openingPostId && initial.posts[0].parent_id === null &&
+    initial.revision.parent_id === candidate.openingPostId &&
+    initial.revision.board_id === initial.thread.board_id &&
+    initial.revision.subject_ids.includes(candidate.subjectId) &&
+    board.value.realmId === realmId &&
+    ((initial.thread.thread_kind === 'discussion' && board.value.purpose === 'discussion') ||
+      (initial.thread.thread_kind === 'review' && board.value.purpose === 'reviews'));
+  return {
+    state: exact ? 'positive' : 'absent',
+    signature: createHash('sha256').update(baseline).digest('hex'),
+    anchors: [observed.anchor, board.anchor],
+    async final() {
+      // Reuse the original baseline. Re-reading cannot bless a changed source.
+      if (!(await snapshot(dependencies, candidate.threadId, context, allowed)).value) return false;
+      return boardObservation.recheck();
+    },
+  };
 }
 /** Send-time disclosure uses the ordinary read resources and current account standing,
  * without constructing a bearer principal. Release every observation before Access checks. */
