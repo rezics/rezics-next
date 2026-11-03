@@ -34,8 +34,9 @@ test('routing uses observable features and task sequence; retry sequence does no
   );
   for (const kind of ['interface', 'bulk-text', 'specification', 'research', 'mechanical'] as const)
     expect(classifyTask({ ...brief(), kind })).toBe(kind);
-  expect(() => classifyTask({ ...brief(), estimate: { lines: 1501, files: 8 } })).toThrow('manager');
-  expect(classifyTask({ ...brief(), estimate: { lines: 1500, files: 24 } })).toBe('implementation');
+  expect(() => classifyTask({ ...brief(), estimate: { lines: 4001, files: 8 } })).toThrow('manager');
+  expect(() => classifyTask({ ...brief(), estimate: { lines: 2500, files: 61 } })).toThrow('manager');
+  expect(classifyTask({ ...brief(), estimate: { lines: 4000, files: 60 } })).toBe('implementation');
   expect(() => classifyTask({ ...brief(), acceptance: { ...brief().acceptance, failing: false } })).toThrow('manager');
 });
 
