@@ -23,10 +23,15 @@ const USAGE = [
   '       [--compression none|gzip] [--decode-budget <bytes>]',
   '       [--page new|changed|unchanged|vanished] [--limit 1..100] [--cursor <opaque-cursor>]',
   '       [--record <native-record-key>] [--json]',
+  '       rezics-import preview --source openlibrary --dump-set <manifest-path>',
+  '       [--source-alias <configured-source-id>] [--baseline <sqlite-path>] [--output-dir <path>]',
+  '       [--decode-budget <bytes>] [--page ...] [--record ...] [--json]',
   '       rezics-import preview --plan-dir <path> [--page ...] [--record ...] [--json]',
   '       rezics-import preview --help',
   'Pages default to 20 rows. Preview is local and offline; it never imports, writes import state, or contacts the API.',
   'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. --plan-dir does not reopen or decompress input.',
+  '--dump-set is Open Library only and mutually exclusive with --dump and --plan-dir. Members declare none or gzip in a version-2 manifest; version 1 stays plain.',
+  '--decode-budget is the whole-set decoded-byte ceiling for gzip or a dump set (default 256 GiB), never a per-member multiple.',
 ].join('\n');
 
 export type PreviewCliResult = Readonly<{ code: number; stdout: string; stderr: string; openHandles: number }>;
@@ -40,6 +45,7 @@ export type PreviewCliOptions = Readonly<{
 export type ParsedPreviewArgs = Readonly<{
   source?: SourceId;
   dump?: string;
+  dumpSet?: string;
   sourceAlias?: string;
   baseline?: string;
   outputDir?: string;
@@ -78,6 +84,7 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
   const valueFlags = new Set([
     '--source',
     '--dump',
+    '--dump-set',
     '--source-alias',
     '--baseline',
     '--output-dir',
@@ -108,10 +115,12 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
   const planDir = values.get('--plan-dir');
   const source = values.get('--source');
   const dump = values.get('--dump');
+  const dumpSet = values.get('--dump-set');
   if (planDir) {
     if (
       source ||
       dump ||
+      dumpSet ||
       values.has('--source-alias') ||
       values.has('--baseline') ||
       values.has('--output-dir') ||
@@ -121,6 +130,12 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
       throw new UsageFailure(
         '--plan-dir reopens a retained preview and cannot be combined with dump acquisition flags.',
       );
+  } else if (dumpSet) {
+    if (dump) throw new UsageFailure('--dump-set cannot be combined with --dump.');
+    if (!source || source !== 'openlibrary') throw new UsageFailure('--dump-set requires --source openlibrary.');
+    if (!dumpSet.trim() || dumpSet === '-') throw new UsageFailure('Preview dump-set path is invalid.');
+    if (values.has('--compression'))
+      throw new UsageFailure('Dump-set members declare none or gzip in the manifest; --compression does not apply.');
   } else {
     if (!source || !VALID_SOURCE.test(source) || !dump) throw new UsageFailure('Preview requires --source and --dump.');
     if (dump !== '-' && !dump.trim()) throw new UsageFailure('Preview dump path is invalid.');
@@ -128,11 +143,12 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
   let compression: DumpCompression = 'none';
   const compressionValue = values.get('--compression');
   if (compressionValue !== undefined) compression = parseDumpCompression(compressionValue);
-  if (source) admitDumpCompression(source, compression);
+  if (source && !dumpSet) admitDumpCompression(source, compression);
   let decodeBudget: number | undefined;
   const decodeBudgetValue = values.get('--decode-budget');
   if (decodeBudgetValue !== undefined) {
-    if (compression !== 'gzip') throw new UsageFailure('--decode-budget applies only with --compression gzip.');
+    if (!dumpSet && compression !== 'gzip')
+      throw new UsageFailure('--decode-budget applies only with --compression gzip or --dump-set.');
     if (!/^[1-9][0-9]{0,15}$/.test(decodeBudgetValue))
       throw new UsageFailure('--decode-budget must be a positive safe integer byte count.');
     decodeBudget = Number(decodeBudgetValue);
@@ -170,6 +186,7 @@ export function parsePreviewArgs(argv: readonly string[]): ParsedPreviewArgs | '
     json,
     ...(source ? { source: source as SourceId } : {}),
     ...(dump ? { dump } : {}),
+    ...(dumpSet ? { dumpSet } : {}),
     ...(planDir ? { planDir } : {}),
     ...(alias ? { sourceAlias: alias } : {}),
     ...(baseline ? { baseline } : {}),
@@ -206,9 +223,11 @@ function terminalSafeMessage(value: string): string {
 
 function importInvocation(plan: PreviewPlan): string[] {
   const alias = plan.source === plan.sourceKind ? '' : ` --source-alias ${terminalString(plan.source)}`;
+  const input =
+    plan.inputKind === 'dump-set' ? '--dump-set <complete-manifest-path>' : '--dump <complete-input-path>';
   return [
-    'Ordinary import reopens the actual dump, acquires its lease, and rechecks authority and fences. Preview evidence does not license a later file or bypass those checks.',
-    `  bun services/importer/src/cli.ts --source ${plan.sourceKind}${alias} --dump <complete-input-path> --state <sqlite-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>`,
+    'Ordinary import reopens the actual dump, acquires its lease, and rechecks authority and fences. Preview evidence does not license a later file or bypass those checks. Preview is not local import finalization or native publication.',
+    `  bun services/importer/src/cli.ts --source ${plan.sourceKind}${alias} ${input} --state <sqlite-path> --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>`,
   ];
 }
 
@@ -219,7 +238,14 @@ function renderPlan(plan: PreviewPlan, directory: string): string[] {
     `Configured source: ${terminalString(plan.source)}`,
     `Converter revision: ${terminalString(plan.converterRevision)}`,
     `View: ${plan.viewKind === 'first-import' ? 'first-import preview; this is not proof that the server has no existing subjects' : `baseline-comparison against captured generation ${terminalString(plan.baselineId ?? '')}`}`,
-    `Input: ${plan.complete ? 'complete' : `incomplete (${plan.errorIdentity ?? 'invalid-input'})`}`,
+    `Acquisition: ${plan.inputKind === 'dump-set' ? 'open-library-dump-set' : 'single-dump'}`,
+    ...(plan.inputFamilies.length
+      ? [
+          `Input families: ${plan.inputFamilies.map((member) => `${member.family}=${member.compression}`).join(', ')}`,
+        ]
+      : []),
+    `Input: ${plan.complete ? 'complete (decoded EOF and gzip members verified)' : `incomplete (${plan.errorIdentity ?? 'invalid-input'})`}`,
+    `Phases: ${plan.complete ? 'decompression verified; preview complete; local import finalization and native publication remain ordinary-CLI steps' : 'decompression or decoded EOF failed; preview incomplete; no vanished plan; prior baseline unchanged'}`,
     `Admitted ${plan.admitted} of ${plan.admitted} decoded source members; skipped=${plan.skipped}`,
     `Counts: new=${plan.newCount} changed=${plan.changedCount} unchanged=${plan.unchangedCount} vanished=${plan.complete ? plan.vanishedCount : 'withheld'} prior=${plan.prior} survivors=${plan.survivors}`,
     `Disappearance rule would block application: ${plan.disappearanceWouldBlock ? 'yes' : 'no'}`,
@@ -285,6 +311,21 @@ function documentFor(preview: DumpPreview, parsed: ParsedPreviewArgs): Record<st
     view: plan.viewKind,
     baseline: plan.baselineId ? { generation: plan.baselineId, presentCount: plan.baselinePresent } : null,
     complete: plan.complete,
+    acquisition: plan.inputKind,
+    inputFamilies: plan.inputFamilies,
+    phases: plan.complete
+      ? {
+          decompression: 'verified',
+          preview: 'complete',
+          localImportFinalization: 'not-started',
+          nativePublication: 'not-started',
+        }
+      : {
+          decompression: 'failed-or-incomplete',
+          preview: 'incomplete',
+          localImportFinalization: 'not-started',
+          nativePublication: 'not-started',
+        },
     error: plan.errorIdentity ? { identity: plan.errorIdentity, message: plan.errorMessage } : null,
     disappearanceWouldBlock: plan.disappearanceWouldBlock,
     counts: {
@@ -367,7 +408,8 @@ export async function runPreviewCli(
       ? await DumpPreview.open(parsed.planDir)
       : await DumpPreview.build({
           source: parsed.source!,
-          dump: parsed.dump!,
+          ...(parsed.dump ? { dump: parsed.dump } : {}),
+          ...(parsed.dumpSet ? { dumpSet: parsed.dumpSet } : {}),
           ...(parsed.sourceAlias ? { sourceAlias: parsed.sourceAlias } : {}),
           ...(parsed.baseline ? { baseline: parsed.baseline } : {}),
           ...(parsed.outputDir ? { outputDir: parsed.outputDir } : {}),

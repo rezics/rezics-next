@@ -159,12 +159,29 @@ function requireColumns(actual: Set<string>, required: readonly string[], table:
 }
 
 function mapPreviewPlan(row: Record<string, unknown>): PreviewPlan {
+  let inputFamilies: PreviewPlan['inputFamilies'] = [];
+  if (typeof row.input_selection === 'string' && row.input_selection.length) {
+    try {
+      const parsed = JSON.parse(row.input_selection) as unknown;
+      if (Array.isArray(parsed))
+        inputFamilies = parsed.flatMap((item) => {
+          if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+          const family = Reflect.get(item, 'family');
+          const compression = Reflect.get(item, 'compression');
+          return typeof family === 'string' && typeof compression === 'string' ? [{ family, compression }] : [];
+        });
+    } catch {
+      inputFamilies = [];
+    }
+  }
   return {
     previewId: String(row.preview_id),
     source: String(row.source),
     sourceKind: String(row.source_kind),
     converterRevision: String(row.converter_revision),
     dumpPath: String(row.dump_path),
+    inputKind: row.input_kind === 'dump-set' ? 'dump-set' : 'dump',
+    inputFamilies,
     viewKind: row.view_kind as PreviewPlan['viewKind'],
     baselineId: row.baseline_id === null ? null : String(row.baseline_id),
     baselinePresent: Number(row.baseline_present),

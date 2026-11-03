@@ -21,6 +21,12 @@ import {
   type DumpInputObserver,
   type RawVndbEntry,
 } from './dump-input.ts';
+import {
+  admitOpenLibraryDumpSet,
+  OpenLibraryDumpSetError,
+  type OpenLibraryDumpSetAdmission,
+} from './open-library-dump-set.ts';
+import { readOpenLibraryDumpSet } from './open-library-dump-set-records.ts';
 import { readArchive } from './archive.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import { iterateVndbRecords, VndbInputError } from './vndb-materialization.ts';
@@ -41,7 +47,8 @@ export class DumpPreviewFailure extends PreviewStoreFailure {}
 
 export type DumpPreviewOptions = Readonly<{
   source: SourceId;
-  dump: string;
+  dump?: string;
+  dumpSet?: string;
   sourceAlias?: string;
   baseline?: string;
   outputDir?: string;
@@ -410,8 +417,19 @@ export class DumpPreview {
   static async build(options: DumpPreviewOptions): Promise<DumpPreview> {
     const signal = options.signal ?? new AbortController().signal;
     if (signal.aborted) throw new DumpPreviewFailure('Preview was cancelled.', 130);
+    if (Boolean(options.dump) === Boolean(options.dumpSet))
+      throw new DumpPreviewFailure('Preview requires exactly one of a dump path or a dump-set manifest.', 2);
+    if (options.dumpSet && options.source !== 'openlibrary')
+      throw new DumpPreviewFailure('Dump-set preview is admitted only for Open Library.', 2);
+    if (options.dumpSet && (options.stdin || options.entries))
+      throw new DumpPreviewFailure('Dump-set preview cannot read stdin or injected archive members.', 2);
     const compression = options.compression ?? 'none';
-    admitDumpCompression(options.source, compression);
+    if (!options.dumpSet) admitDumpCompression(options.source, compression);
+    else if (compression !== 'none')
+      throw new DumpPreviewFailure(
+        'Dump-set members declare none or gzip in the manifest; --compression does not apply.',
+        2,
+      );
     const retain = Boolean(options.outputDir);
     const ownedDir = options.outputDir
       ? await createOutputDir(options.outputDir)
@@ -427,6 +445,13 @@ export class DumpPreview {
     const registration = createSourceRegistration(options.source, { source });
     try {
       throwIfAborted(signal, 'Preview interrupted');
+      let dumpSet: OpenLibraryDumpSetAdmission | undefined;
+      if (options.dumpSet) {
+        dumpSet = await admitOpenLibraryDumpSet(options.dumpSet, {
+          ...(options.baseline === undefined ? {} : { baseline: options.baseline }),
+          ...(options.outputDir === undefined ? {} : { outputDir: options.outputDir }),
+        });
+      }
       let viewKind: 'first-import' | 'baseline-comparison' = 'first-import';
       let baselineId: string | null = null;
       let baselinePresent = 0;
@@ -451,38 +476,51 @@ export class DumpPreview {
         source,
         sourceKind: options.source,
         converterRevision: registration.converter_revision,
-        dumpPath: options.dump,
+        dumpPath: dumpSet?.manifestPath ?? options.dump!,
         viewKind,
         baselineId,
         baselinePresent,
+        inputKind: dumpSet ? 'dump-set' : 'dump',
+        inputFamilies: dumpSet
+          ? dumpSet.members.map((member) => ({ family: member.family, compression: member.compression }))
+          : [],
       });
-      dumpHandle = await openDump(options.dump, handles);
-      const dumpBytes = decodeDumpBytes(
-        ownedChunks(
-          dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (async function* () {})()),
-          signal,
-          'dump',
-          options.observer,
-          dumpHandle !== undefined,
-        ),
-        {
-          compression,
-          signal,
-          ...(options.decodeBudget === undefined ? {} : { decodeBudget: options.decodeBudget }),
-        },
-      );
       const restoreRetention = observeDumpRetention(() => {});
       try {
         let records: AsyncIterable<SourceRecord>;
-        if (options.source === 'vndb') {
-          records = await vndbRecords(store, source, options.entries ?? dumpBytes, {
-            entries: options.entries !== undefined,
+        if (dumpSet) {
+          records = readOpenLibraryDumpSet(dumpSet, {
             signal,
+            handleCount: handles,
             ...(options.observer === undefined ? {} : { observer: options.observer }),
-          });
+            ...(options.decodeBudget === undefined ? {} : { decodeBudget: options.decodeBudget }),
+          }).records;
         } else {
-          const native = options.source === 'openlibrary' ? openLibraryMetadata(dumpBytes, signal) : dumpBytes;
-          records = readDump(options.source, native);
+          dumpHandle = await openDump(options.dump!, handles);
+          const dumpBytes = decodeDumpBytes(
+            ownedChunks(
+              dumpHandle ? fileChunks(dumpHandle, signal) : (options.stdin ?? (async function* () {})()),
+              signal,
+              'dump',
+              options.observer,
+              dumpHandle !== undefined,
+            ),
+            {
+              compression,
+              signal,
+              ...(options.decodeBudget === undefined ? {} : { decodeBudget: options.decodeBudget }),
+            },
+          );
+          if (options.source === 'vndb') {
+            records = await vndbRecords(store, source, options.entries ?? dumpBytes, {
+              entries: options.entries !== undefined,
+              signal,
+              ...(options.observer === undefined ? {} : { observer: options.observer }),
+            });
+          } else {
+            const native = options.source === 'openlibrary' ? openLibraryMetadata(dumpBytes, signal) : dumpBytes;
+            records = readDump(options.source, native);
+          }
         }
         for await (const record of records) {
           throwIfAborted(signal, 'Preview interrupted');
@@ -554,7 +592,7 @@ export class DumpPreview {
               ? 'Preview was cancelled.'
               : error instanceof DumpPreviewFailure || error instanceof PreviewStoreFailure
                 ? error.message
-                : error instanceof DumpInputError
+                : error instanceof OpenLibraryDumpSetError || error instanceof DumpInputError
                   ? error.message
                   : 'Input is incomplete or invalid.',
           });

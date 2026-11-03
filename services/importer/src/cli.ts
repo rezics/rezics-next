@@ -1,4 +1,4 @@
-import type { Database } from 'bun:sqlite';
+import { Database } from 'bun:sqlite';
 import { lstat, type FileHandle } from 'node:fs/promises';
 import type { SourceId } from '@rezics/conversion';
 import { createImporter, type Importer, type ImporterOptions } from './importer.ts';
@@ -150,7 +150,7 @@ function usage(): string {
     '       [--checkpoint-staging] [--resume-staging --generation <id>]',
     '       rezics-import --source openlibrary --dump-set <manifest-path> --state <sqlite-path>',
     '       --api <https-origin> --account-key <path> --account <uuid> --client <client-id> --auth <https-origin>',
-    '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>]',
+    '       [--source-alias <name>] [--disappearance-threshold <0..1>] [--progress <human|jsonl>] [--decode-budget <bytes>]',
     '       rezics-import diagnostics --source <bangumi|vndb|openlibrary|wikidata> --state <sqlite-path>',
     '       [--generation <id>] [--record <key>] [--limit <1..100>] [--cursor <token>] [--phase staging|application] [--format json|text]',
     '       rezics-import observations --state <sqlite-path> --source <configured-source-id> [--after <operation-id>] [--limit 1..20]',
@@ -162,7 +162,7 @@ function usage(): string {
     '       [--progress human|jsonl] [--json]',
     'Exit 6 means a source observation needs explicit resolution; it is not an authorization failure.',
     'Options: --source --dump --dump-set --state --api --account-key --account --client --auth --source-alias --disappearance-threshold --progress --compression --decode-budget --checkpoint-staging --resume-staging --generation --help',
-    'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. A .gz suffix is not a source identity. --decode-budget is a gzip decoded-byte ceiling (default 256 GiB). Dump-set members are decompressed local files.',
+    'gzip is admitted only for Open Library and Wikidata streamed dumps. Default --compression none. A .gz suffix is not a source identity. --decode-budget is a whole-set decoded-byte ceiling (default 256 GiB) for one gzip dump or one complete dump set, never a per-member multiple. Dump-set version 1 stays plain; version 2 requires explicit per-member none or gzip. --compression does not apply to --dump-set.',
     '--checkpoint-staging and --resume-staging apply only to one uncompressed Open Library or Wikidata regular file. They re-hash the complete file before any capture or resume mutation. Default import still discards unsealed staging. After sealing, resume with the ordinary command; do not replace input. Dump-set manifests are not a checkpointed capture.',
     STAGING_COST,
   ].join('\n');
@@ -245,7 +245,7 @@ function parse(argv: readonly string[]): Config | 'help' {
   if (dump !== undefined && dump !== '-' && !dump.trim()) throw new InputFailure();
   if (dumpSet !== undefined && (!dumpSet.trim() || dumpSet === '-')) throw new InputFailure();
   if (dumpSet !== undefined && source !== 'openlibrary') throw new InputFailure();
-  if (dumpSet !== undefined && (values.has('--compression') || values.has('--decode-budget'))) throw new InputFailure();
+  if (dumpSet !== undefined && values.has('--compression')) throw new InputFailure();
   if (!state.trim() || state === '-') throw new InputFailure();
   if (!accountKey.trim()) throw new InputFailure();
 
@@ -276,7 +276,7 @@ function parse(argv: readonly string[]): Config | 'help' {
   if (compression !== undefined) result.compression = parseDumpCompression(compression);
   const decodeBudget = values.get('--decode-budget');
   if (decodeBudget !== undefined) {
-    if (result.compression !== 'gzip') throw new InputFailure();
+    if (result.dumpSet === undefined && result.compression !== 'gzip') throw new InputFailure();
     if (!/^[1-9][0-9]{0,15}$/.test(decodeBudget)) throw new InputFailure();
     const parsedBudget = Number(decodeBudget);
     if (!Number.isSafeInteger(parsedBudget) || parsedBudget <= 0) throw new InputFailure();
@@ -478,6 +478,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   const handles = { value: 0 };
   let dumpHandle: FileHandle | undefined;
   let dumpSet: OpenLibraryDumpSetAdmission | undefined;
+  let resumeSealedDumpSet = false;
   let importer: Importer | undefined;
   let lastHttpStatus: number | undefined;
   let capture: StagingCaptureIdentity | undefined;
@@ -493,11 +494,21 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
   let tokenProvider: Awaited<ReturnType<typeof createAccountTokenProvider>>;
   try {
     if (config.dumpSet) {
-      dumpSet = await admitOpenLibraryDumpSet(
-        config.dumpSet,
-        { state: config.state, accountKey: config.accountKey },
-        'openlibrary',
-      );
+      try {
+        dumpSet = await admitOpenLibraryDumpSet(
+          config.dumpSet,
+          { state: config.state, accountKey: config.accountKey },
+          'openlibrary',
+        );
+      } catch (error) {
+        if (
+          error instanceof OpenLibraryDumpSetError &&
+          error.reason === 'unavailable' &&
+          sealedDumpSetResumePossible(config.state, config.sourceAlias ?? config.source)
+        )
+          resumeSealedDumpSet = true;
+        else throw error;
+      }
     } else {
       dumpHandle = await openDump(config.dump!, handles);
       if (config.mode !== 'ordinary') {
@@ -559,8 +570,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
       stderr: diagnostic(
         error instanceof CredentialInputError
           ? 'Input or account key is unavailable or invalid.'
-          : error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
-            ? `Input is unavailable or invalid (member ${error.memberIndex}).`
+          : error instanceof OpenLibraryDumpSetError
+            ? error.message
             : error instanceof DumpInputError
               ? error.message
               : 'Input is unavailable or invalid.',
@@ -809,7 +820,7 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             },
           });
       output = resultFor(run, lastHttpStatus, signal);
-    } else if (dumpSet) {
+    } else if (dumpSet || resumeSealedDumpSet) {
       const restoreRetention = observeDumpRetention((sample) => options.observer?.onInputBuffer?.(sample.total));
       try {
         options.observer?.onCoordinator?.({
@@ -819,13 +830,16 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
           converterModule: converterModule(config.source),
           decoderModule,
         });
-        const capture = readOpenLibraryDumpSet(dumpSet, {
-          signal,
-          handleCount: handles,
-          ...(options.observer === undefined ? {} : { observer: options.observer }),
-          ...(progress === undefined ? {} : { progress }),
-        });
-        const run = await importer.runDumpSet(registration, capture.records, {
+        const records = dumpSet
+          ? readOpenLibraryDumpSet(dumpSet, {
+              signal,
+              handleCount: handles,
+              ...(options.observer === undefined ? {} : { observer: options.observer }),
+              ...(progress === undefined ? {} : { progress }),
+              ...(config.decodeBudget === undefined ? {} : { decodeBudget: config.decodeBudget }),
+            }).records
+          : (async function* () {})();
+        const run = await importer.runDumpSet(registration, records, {
           ...(config.disappearanceThreshold === undefined
             ? {}
             : { disappearanceThreshold: config.disappearanceThreshold }),
@@ -900,8 +914,8 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
             : 'Import interrupted; durable state is retained for resume.'
           : missingState
             ? STAGING_MISSING_STATE
-            : error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
-              ? `Input is unavailable or invalid (member ${error.memberIndex}).`
+            : error instanceof OpenLibraryDumpSetError
+              ? error.message
               : error instanceof DumpInputError
                 ? error.message
                 : 'Import failed safely.',
@@ -951,6 +965,26 @@ export async function runImportCli(argv: readonly string[], options: ImportCliOp
     }
   }
   return output;
+}
+
+function sealedDumpSetResumePossible(statePath: string, source: string): boolean {
+  let database: Database | undefined;
+  try {
+    database = new Database(statePath, { readonly: true, create: false, strict: true });
+    const row = database
+      .query(
+        `SELECT 1 AS found
+         FROM run_sources AS s
+         JOIN run_generations AS g ON g.source=s.source AND g.id=s.lease_run
+         WHERE s.source=? AND s.lease_run IS NOT NULL AND g.status IN ('ready','finalizing')`,
+      )
+      .get(source) as { found: number } | null;
+    return Boolean(row);
+  } catch {
+    return false;
+  } finally {
+    database?.close();
+  }
 }
 
 function progressTerminal(

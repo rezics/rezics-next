@@ -2,6 +2,12 @@ import { createHash } from 'node:crypto';
 import type { FileHandle } from 'node:fs/promises';
 import type { SourceRecord } from '@rezics/conversion';
 import {
+  createGzipDumpCounters,
+  decodeBudgetLimit,
+  decodeDumpBytes,
+  type GzipDumpCounters,
+} from './compressed-dump.ts';
+import {
   DumpInputError,
   fileChunks,
   openLibraryMetadata,
@@ -21,6 +27,8 @@ export type OpenLibraryDumpSetStreamOptions = Readonly<{
   observer?: DumpInputObserver;
   progress?: DumpByteProgress;
   counters?: DumpCounters;
+  gzipCounters?: GzipDumpCounters;
+  decodeBudget?: number;
   maxRecordBytes?: number;
   maxChunkBytes?: number;
 }>;
@@ -28,12 +36,42 @@ export type OpenLibraryDumpSetStreamOptions = Readonly<{
 export type OpenLibraryDumpSetStream = Readonly<{
   records: AsyncIterable<SourceRecord>;
   consumedBytes(): number;
+  decodedBytes(): number;
+  compressedBytes(): number;
   /** SHA-256 of each member's consumed bytes followed by its 8-byte length, in manifest order. */
   digestHex(): string | null;
 }>;
 
 function failMember(index: number, reason: string): never {
   throw new OpenLibraryDumpSetError(reason, index);
+}
+
+function failMemberFrom(index: number, error: unknown, signal: AbortSignal): never {
+  if (error instanceof OpenLibraryDumpSetError) throw error;
+  if (signal.aborted) throw signal.reason ?? new DOMException('Import interrupted', 'AbortError');
+  if (error instanceof DOMException && error.name === 'AbortError') throw error;
+  if (error instanceof DumpInputError) failMember(index, error.identity);
+  failMember(index, 'framing');
+}
+
+async function* countPlainDecoded(
+  input: AsyncIterable<Uint8Array>,
+  gzipCounters: GzipDumpCounters,
+  budget: number,
+  progress?: DumpByteProgress,
+): AsyncGenerator<Uint8Array> {
+  for await (const chunk of input) {
+    gzipCounters.decodedBytes += chunk.byteLength;
+    gzipCounters.decodeVisits++;
+    gzipCounters.peakDecodedWindow = Math.max(gzipCounters.peakDecodedWindow, chunk.buffer.byteLength);
+    progress?.add('decodedBytes', chunk.byteLength);
+    if (gzipCounters.decodedBytes > budget)
+      throw new DumpInputError(
+        `Decoded dump bytes exceeded the ${budget}-byte budget (one transform window overshoot is included).`,
+        'decode-budget',
+      );
+    yield chunk;
+  }
 }
 
 function lengthPrefix(bytes: number): Uint8Array {
@@ -64,6 +102,8 @@ export function readOpenLibraryDumpSet(
   options: OpenLibraryDumpSetStreamOptions,
 ): OpenLibraryDumpSetStream {
   const counters = options.counters ?? createDumpCounters();
+  const gzipCounters = options.gzipCounters ?? createGzipDumpCounters();
+  const budget = decodeBudgetLimit(options.decodeBudget);
   const hash = createHash('sha256');
   let consumed = 0;
   let digest: string | null = null;
@@ -96,7 +136,17 @@ export function readOpenLibraryDumpSet(
               yield chunk;
             }
           })();
-          const native = openLibraryMetadata(hashed, options.signal);
+          const decoded =
+            member.compression === 'gzip'
+              ? decodeDumpBytes(hashed, {
+                  compression: 'gzip',
+                  signal: options.signal,
+                  decodeBudget: budget,
+                  counters: gzipCounters,
+                  ...(options.progress === undefined ? {} : { progress: options.progress }),
+                })
+              : countPlainDecoded(hashed, gzipCounters, budget, options.progress);
+          const native = openLibraryMetadata(decoded, options.signal);
           try {
             for await (const record of readDump('openlibrary', native, {
               ...(options.maxRecordBytes === undefined ? {} : { maxRecordBytes: options.maxRecordBytes }),
@@ -108,10 +158,7 @@ export function readOpenLibraryDumpSet(
               yield record;
             }
           } catch (error) {
-            if (error instanceof OpenLibraryDumpSetError) throw error;
-            if (options.signal.aborted)
-              throw options.signal.reason ?? new DOMException('Import interrupted', 'AbortError');
-            failMember(member.index, 'framing');
+            failMemberFrom(member.index, error, options.signal);
           }
           hash.update(lengthPrefix(memberBytes));
         } finally {
@@ -128,6 +175,8 @@ export function readOpenLibraryDumpSet(
   return {
     records,
     consumedBytes: () => consumed,
+    decodedBytes: () => gzipCounters.decodedBytes,
+    compressedBytes: () => gzipCounters.compressedBytes,
     digestHex: () => digest,
   };
 }

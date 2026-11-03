@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { gzipSync } from 'node:zlib';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { admitOpenLibraryDumpSet } from '../src/open-library-dump-set.ts';
@@ -334,6 +335,107 @@ test('duplicate keys across members do not publish a partial capture', async () 
     } finally {
       await importer.close();
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+async function writeMixedSet(
+  root: string,
+  files: { authors: Uint8Array; works: Uint8Array; editions: Uint8Array },
+) {
+  await writeFile(join(root, 'authors.txt.gz'), files.authors, { mode: 0o600 });
+  await writeFile(join(root, 'works.txt'), files.works, { mode: 0o600 });
+  await writeFile(join(root, 'editions.txt.gz'), files.editions, { mode: 0o600 });
+  const path = join(root, 'manifest.json');
+  await writeFile(
+    path,
+    JSON.stringify({
+      version: 2,
+      source: 'openlibrary',
+      members: [
+        { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
+        { family: 'work', path: 'works.txt', compression: 'none' },
+        { family: 'edition', path: 'editions.txt.gz', compression: 'gzip' },
+      ],
+    }),
+    { mode: 0o600 },
+  );
+  return path;
+}
+
+test('mixed gzip and plain members match the plain-equivalent keys and digest compressed bytes', async () => {
+  const root = await mkdtemp('/dev/shm/ol-dump-set-mixed-');
+  try {
+    const authors = `${row(author)}\n`;
+    const works = `${row(workSource)}\n`;
+    const editions = Buffer.concat([gzipSync(Buffer.from(`${row(editionSource)}\n`)), gzipSync(Buffer.alloc(0))]);
+    const manifest = await writeMixedSet(root, {
+      authors: gzipSync(Buffer.from(authors)),
+      works: Buffer.from(works),
+      editions,
+    });
+    const { records, stream } = await drain(root, manifest);
+    expect(records.map((record) => record.key)).toEqual(['/works/OL900000001W', '/books/OL900000002M']);
+    expect(stream.decodedBytes()).toBe(Buffer.byteLength(authors + works + `${row(editionSource)}\n`));
+    const files = [
+      await readFile(join(root, 'authors.txt.gz')),
+      await readFile(join(root, 'works.txt')),
+      await readFile(join(root, 'editions.txt.gz')),
+    ];
+    const hash = createHash('sha256');
+    for (const file of files) {
+      hash.update(file);
+      const prefix = new Uint8Array(8);
+      new DataView(prefix.buffer).setBigUint64(0, BigInt(file.byteLength));
+      hash.update(prefix);
+    }
+    expect(stream.digestHex()).toBe(hash.digest('hex'));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('trailing garbage, a late truncated member and the whole-set budget invalidate the capture', async () => {
+  const root = await mkdtemp('/dev/shm/ol-dump-set-gzip-fail-');
+  try {
+    const garbage = await writeMixedSet(root, {
+      authors: gzipSync(Buffer.from(`${row(author)}\n`)),
+      works: Buffer.from(`${row(workSource)}\n`),
+      editions: Buffer.concat([gzipSync(Buffer.from(`${row(editionSource)}\n`)), Buffer.from('not-gzip')]),
+    });
+    await expect(drain(root, garbage)).rejects.toMatchObject({
+      memberIndex: 2,
+      identity: 'gzip-trailing-garbage',
+    });
+
+    const truncated = await writeMixedSet(root, {
+      authors: gzipSync(Buffer.from(`${row(author)}\n`)),
+      works: Buffer.from(`${row(workSource)}\n`),
+      editions: gzipSync(Buffer.from(`${row(editionSource)}\n`)).subarray(0, 8),
+    });
+    await expect(drain(root, truncated)).rejects.toMatchObject({ memberIndex: 2, identity: 'gzip-truncated' });
+
+    const small = await writeMixedSet(root, {
+      authors: gzipSync(Buffer.from(`${row(author)}\n`)),
+      works: Buffer.from(`${row(workSource)}\n`),
+      editions: gzipSync(Buffer.from(`${row(editionSource)}\n`)),
+    });
+    const admission = await admitOpenLibraryDumpSet(small);
+    const handles = { value: 0 };
+    const stream = readOpenLibraryDumpSet(admission, {
+      signal: new AbortController().signal,
+      handleCount: handles,
+      decodeBudget: 40,
+    });
+    await expect(
+      (async () => {
+        for await (const _record of stream.records) {
+          /* drain */
+        }
+      })(),
+    ).rejects.toMatchObject({ identity: 'decode-budget' });
+    expect(handles.value).toBe(0);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

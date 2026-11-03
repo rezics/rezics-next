@@ -82,7 +82,43 @@ const rejections: [string, (root: string) => Promise<void>][] = [
     'unsupported version',
     async (root) => {
       await writeSet(root, {});
-      await writeFile(join(root, 'manifest.json'), JSON.stringify({ version: 2, source: 'openlibrary', members: [] }));
+      await writeFile(join(root, 'manifest.json'), JSON.stringify({ version: 3, source: 'openlibrary', members: [] }));
+    },
+  ],
+  [
+    'version-1 member with compression field',
+    async (root) => {
+      await writeSet(root, {});
+      await writeFile(
+        join(root, 'manifest.json'),
+        JSON.stringify({
+          version: 1,
+          source: 'openlibrary',
+          members: [
+            { family: 'author', path: 'authors.txt', compression: 'none' },
+            { family: 'work', path: 'works.txt' },
+            { family: 'edition', path: 'editions.txt' },
+          ],
+        }),
+      );
+    },
+  ],
+  [
+    'version-2 member omitting compression',
+    async (root) => {
+      await writeSet(root, {});
+      await writeFile(
+        join(root, 'manifest.json'),
+        JSON.stringify({
+          version: 2,
+          source: 'openlibrary',
+          members: [
+            { family: 'author', path: 'authors.txt' },
+            { family: 'work', path: 'works.txt', compression: 'none' },
+            { family: 'edition', path: 'editions.txt', compression: 'gzip' },
+          ],
+        }),
+      );
     },
   ],
   [
@@ -194,4 +230,29 @@ test('rejects reserved path confusion with the state file', async () => {
 
 test('member ceiling is 64 and is not pre-allocated', async () => {
   expect(OPEN_LIBRARY_DUMP_SET_MAX_MEMBERS).toBe(64);
+});
+
+test('admits a version-2 manifest with explicit per-member none and gzip', async () => {
+  const root = await directory();
+  try {
+    await writeSet(root, {});
+    await writeFile(join(root, 'authors.txt.gz'), '');
+    await writeFile(
+      join(root, 'manifest.json'),
+      JSON.stringify({
+        version: 2,
+        source: 'openlibrary',
+        members: [
+          { family: 'author', path: 'authors.txt.gz', compression: 'gzip' },
+          { family: 'work', path: 'works.txt', compression: 'none' },
+          { family: 'edition', path: 'editions.txt', compression: 'gzip' },
+        ],
+      }),
+    );
+    const admitted = await admitOpenLibraryDumpSet(join(root, 'manifest.json'));
+    expect(admitted.version).toBe(2);
+    expect(admitted.members.map((member) => member.compression)).toEqual(['gzip', 'none', 'gzip']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

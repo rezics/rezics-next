@@ -12,11 +12,14 @@ access, a writer lease or the configured import state. Help is available without
 bun services/importer/src/cli.ts preview --help
 bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json
 bun services/importer/src/cli.ts preview --source wikidata --dump /srv/imports/wikidata.json.gz --compression gzip
+bun services/importer/src/cli.ts preview --source openlibrary --dump-set /srv/imports/open-library/manifest.json --baseline .state/imports.sqlite
 ```
 
 `--source` is one of the four launch kinds. `--compression none|gzip` defaults to `none` for exact compatibility;
 gzip is admitted only for Open Library and Wikidata streamed dumps. A `.gz` suffix is not a source identity,
-revision or licence. `--decode-budget` is a gzip decoded-byte ceiling. `--plan-dir` reopens a retained plan
+revision or licence. `--dump-set` previews one complete Open Library author/work/edition manifest and is
+mutually exclusive with `--dump` and `--plan-dir`. `--decode-budget` is a decoded-byte ceiling for one gzip
+dump or one complete dump set (default 256 GiB for the whole set). `--plan-dir` reopens a retained plan
 without reopening or decompressing input. `--source-alias` names the configured source identifier used in local
 state; the two remain distinct. `--baseline` opens an existing importer state file read-only and copies only that
 source's completed generation into a caller-owned temporary store under `os.tmpdir()` (or `--output-dir`). A live
@@ -490,16 +493,19 @@ bun services/importer/src/cli.ts \
   --auth https://auth.rezics.example
 ```
 
-`--source` accepts `bangumi`, `vndb`, `openlibrary`, or `wikidata`. `--dump -` reads standard input. `--compression none|gzip` defaults to `none`; gzip is admitted only for Open Library and Wikidata streamed dumps and is never inferred from a filename suffix. `--decode-budget` is a positive decoded-byte ceiling for gzip (shipped default 256 GiB). `--source-alias` selects a configured source identifier, and `--disappearance-threshold` accepts a number from 0 through 1. `--api` and `--auth` must be HTTPS origins with no path, query, fragment, or credentials. `--account-key` names the private JWK, `--account` is its account UUID, and `--client` is the registered first-party client ID. The CLI has no switch for weakening the origin rules. `--help` prints usage without reading the key, opening SQLite, or contacting Auth or the API. VNDB archives and Bangumi input reject gzip before credentials or state are opened.
+`--source` accepts `bangumi`, `vndb`, `openlibrary`, or `wikidata`. `--dump -` reads standard input. `--compression none|gzip` defaults to `none`; gzip is admitted only for Open Library and Wikidata streamed dumps and is never inferred from a filename suffix. `--decode-budget` is a positive decoded-byte ceiling for one gzip dump or one complete dump set (shipped default 256 GiB for the whole capture). `--source-alias` selects a configured source identifier, and `--disappearance-threshold` accepts a number from 0 through 1. `--api` and `--auth` must be HTTPS origins with no path, query, fragment, or credentials. `--account-key` names the private JWK, `--account` is its account UUID, and `--client` is the registered first-party client ID. The CLI has no switch for weakening the origin rules. `--help` prints usage without reading the key, opening SQLite, or contacting Auth or the API. VNDB archives and Bangumi input reject gzip before credentials or state are opened.
 
 ### Open Library dump set
 
-Open Library publishes author, work and edition dumps as separate files. `--dump-set` names one version-1
-local JSON manifest that lists those files as one complete capture for the configured source alias. It is
-mutually exclusive with `--dump` and is accepted only for `--source openlibrary`. `--compression` and
-`--decode-budget` apply only to a single `--dump` stream; dump-set members are already decompressed
-local files. The set is the entire alias generation, not a patch, append, native-profile choice or
-disappearance override.
+Open Library publishes author, work and edition dumps as separate files. `--dump-set` names one local JSON
+manifest that lists those files as one complete capture for the configured source alias. It is mutually
+exclusive with `--dump` and is accepted only for `--source openlibrary`. Version 1 remains family/path only
+and means uncompressed members. Version 2 requires explicit per-member `compression: "none"|"gzip"` and is
+the supported mixed-input format; unknown fields stay refused. `--compression` stays a single `--dump`
+option. `--decode-budget` on a dump set is the whole-set decoded-byte ceiling (default 256 GiB), including
+plain members, and is never multiplied by member count. The set is the entire alias generation, not a patch,
+append, native-profile choice or disappearance override. Preview the same manifest with
+`rezics-import preview --source openlibrary --dump-set` before ordinary import.
 
 ```json
 {
@@ -529,11 +535,24 @@ members, malformed late input and cancellation invalidate the whole capture. One
 and one coordinator run cover every member. A local SHA-256 of consumed member bytes and per-member
 lengths is a capture digest, not a source revision or licence.
 
-Decision: dump-set admission uses a version-1 JSON manifest with required `source` and ordered
-`family`/`path` members; authors remain non-catalogue framing members. `--compression` and
-`--decode-budget` stay single-stream options and are rejected with `--dump-set`.
-`--checkpoint-staging` and `--resume-staging` also refuse `--dump-set`; a complete dump set remains
-ordinary acquisition until API66 owns a checkpointed multi-file capture.
+```json
+{
+  "version": 2,
+  "source": "openlibrary",
+  "members": [
+    { "family": "author", "path": "ol_dump_authors.txt.gz", "compression": "gzip" },
+    { "family": "work", "path": "ol_dump_works.txt", "compression": "none" },
+    { "family": "edition", "path": "ol_dump_editions.txt.gz", "compression": "gzip" }
+  ]
+}
+```
+
+Decision: dump-set admission keeps version-1 family/path manifests as uncompressed complete sets and
+adds version 2 with explicit per-member none/gzip. Authors remain non-catalogue framing members.
+`--decode-budget` on `--dump-set` is the aggregate decoded-byte ceiling. `--compression` remains
+single-stream and is rejected with `--dump-set`. `--checkpoint-staging` and `--resume-staging` also
+refuse `--dump-set`; a complete dump set remains ordinary acquisition. Preview and import share one
+acquisition iterator; a completed preview plan reopens without member files.
 
 Ordinary rerun of the same `--dump-set` command first resolves prior sealed work under existing
 ready/finalizing recovery. Changing or deleting the manifest does not rewrite unknown native bodies.

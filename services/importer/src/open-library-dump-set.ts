@@ -1,10 +1,13 @@
 import { dirname, isAbsolute, resolve as resolvePath } from 'node:path';
-import { DumpInputError, openRegularFile } from './dump-input.ts';
+import type { DumpCompression } from './compressed-dump.ts';
+import { DumpInputError, type DumpInputFailureIdentity, openRegularFile } from './dump-input.ts';
 import type { OpenLibraryDumpFamily } from './dumps.ts';
 
 export type { OpenLibraryDumpFamily };
 
 export const OPEN_LIBRARY_DUMP_SET_VERSION = 1;
+export const OPEN_LIBRARY_DUMP_SET_FORMAT_VERSIONS = [1, 2] as const;
+export type OpenLibraryDumpSetFormatVersion = (typeof OPEN_LIBRARY_DUMP_SET_FORMAT_VERSIONS)[number];
 export const OPEN_LIBRARY_DUMP_SET_MAX_MEMBERS = 64;
 export const OPEN_LIBRARY_DUMP_SET_MAX_MANIFEST_BYTES = 65536;
 export const OPEN_LIBRARY_DUMP_SET_MAX_PATH_BYTES = 4096;
@@ -16,10 +19,11 @@ export type OpenLibraryDumpSetMember = Readonly<{
   index: number;
   family: OpenLibraryDumpFamily;
   path: string;
+  compression: DumpCompression;
 }>;
 
 export type OpenLibraryDumpSetAdmission = Readonly<{
-  version: typeof OPEN_LIBRARY_DUMP_SET_VERSION;
+  version: OpenLibraryDumpSetFormatVersion;
   sourceKind: 'openlibrary';
   manifestPath: string;
   members: readonly OpenLibraryDumpSetMember[];
@@ -28,14 +32,34 @@ export type OpenLibraryDumpSetAdmission = Readonly<{
 export type OpenLibraryDumpSetReservedPaths = Readonly<{
   state?: string;
   accountKey?: string;
+  baseline?: string;
+  outputDir?: string;
 }>;
+
+const MEMBER_IDENTITIES = new Set<DumpInputFailureIdentity>([
+  'gzip-integrity',
+  'gzip-truncated',
+  'gzip-trailing-garbage',
+  'decode-budget',
+  'filesystem-changed',
+  'compression-unsupported',
+]);
 
 /** Bounded dump-set failure with a safe member index when the member is known. */
 export class OpenLibraryDumpSetError extends DumpInputError {
   readonly memberIndex: number | null;
   readonly reason: string;
   constructor(reason: string, memberIndex: number | null = null) {
-    super();
+    const identity = MEMBER_IDENTITIES.has(reason as DumpInputFailureIdentity)
+      ? (reason as DumpInputFailureIdentity)
+      : 'invalid-input';
+    const member =
+      memberIndex === null
+        ? ''
+        : MEMBER_IDENTITIES.has(reason as DumpInputFailureIdentity)
+          ? ` (member ${memberIndex}, ${reason})`
+          : ` (member ${memberIndex})`;
+    super(`Input is unavailable or invalid${member}.`, identity);
     this.name = 'OpenLibraryDumpSetError';
     this.reason = reason;
     this.memberIndex = memberIndex;
@@ -216,9 +240,11 @@ async function assertAvailableMember(path: string, index: number): Promise<void>
 }
 
 /**
- * Admit a version-1 local Open Library dump-set manifest and check every member
- * is an available regular file. Relative member paths resolve from the manifest
- * directory. Admission does not read member bodies or treat path/mtime as identity.
+ * Admit a version-1 or version-2 local Open Library dump-set manifest and check
+ * every member is an available regular file. Version 1 is family/path only and
+ * means uncompressed members. Version 2 requires explicit per-member none/gzip.
+ * Relative member paths resolve from the manifest directory. Admission does not
+ * read member bodies or treat path/mtime as identity.
  */
 export async function admitOpenLibraryDumpSet(
   manifestPath: string,
@@ -231,6 +257,8 @@ export async function admitOpenLibraryDumpSet(
   const resolvedManifest = resolvePath(manifestPath);
   if (reserved.state && sameResolved(resolvedManifest, reserved.state)) fail('reserved-path');
   if (reserved.accountKey && sameResolved(resolvedManifest, reserved.accountKey)) fail('reserved-path');
+  if (reserved.baseline && sameResolved(resolvedManifest, reserved.baseline)) fail('reserved-path');
+  if (reserved.outputDir && sameResolved(resolvedManifest, reserved.outputDir)) fail('reserved-path');
 
   const handles = { value: 0 };
   const handle = await openRegularFile(resolvedManifest, handles);
@@ -259,7 +287,8 @@ export async function admitOpenLibraryDumpSet(
   const keys = ownKeys(document);
   if (keys.length !== 3 || !keys.includes('version') || !keys.includes('source') || !keys.includes('members'))
     fail('manifest');
-  if (document.version !== OPEN_LIBRARY_DUMP_SET_VERSION) fail('version');
+  if (document.version !== 1 && document.version !== 2) fail('version');
+  const version: OpenLibraryDumpSetFormatVersion = document.version === 2 ? 2 : 1;
   if (document.source !== 'openlibrary' || sourceKind !== 'openlibrary') fail('source');
   if (!Array.isArray(document.members) || document.members.length === 0) fail('manifest');
   if (document.members.length > OPEN_LIBRARY_DUMP_SET_MAX_MEMBERS) fail('manifest');
@@ -272,27 +301,43 @@ export async function admitOpenLibraryDumpSet(
     const entry = document.members[index];
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) fail('manifest', index);
     const memberKeys = ownKeys(entry);
-    if (memberKeys.length !== 2 || !memberKeys.includes('family') || !memberKeys.includes('path'))
-      fail('manifest', index);
     const family = Reflect.get(entry, 'family');
     const path = Reflect.get(entry, 'path');
+    const compressionValue = Reflect.get(entry, 'compression');
+    if (version === 1) {
+      if (memberKeys.length !== 2 || !memberKeys.includes('family') || !memberKeys.includes('path'))
+        fail('manifest', index);
+    } else if (
+      memberKeys.length !== 3 ||
+      !memberKeys.includes('family') ||
+      !memberKeys.includes('path') ||
+      !memberKeys.includes('compression')
+    )
+      fail('manifest', index);
     if (!isFamily(family)) fail('family', index);
     if (typeof path !== 'string' || !path.trim() || pathBytes(path) > OPEN_LIBRARY_DUMP_SET_MAX_PATH_BYTES)
       fail('path', index);
+    let compression: DumpCompression = 'none';
+    if (version === 2) {
+      if (compressionValue !== 'none' && compressionValue !== 'gzip') fail('compression', index);
+      compression = compressionValue;
+    }
     rejectUrlOrExpansion(path);
     const resolved = isAbsolute(path) ? resolvePath(path) : resolvePath(origin, path);
     if (sameResolved(resolved, resolvedManifest)) fail('reserved-path', index);
     if (reserved.state && sameResolved(resolved, reserved.state)) fail('reserved-path', index);
     if (reserved.accountKey && sameResolved(resolved, reserved.accountKey)) fail('reserved-path', index);
+    if (reserved.baseline && sameResolved(resolved, reserved.baseline)) fail('reserved-path', index);
+    if (reserved.outputDir && sameResolved(resolved, reserved.outputDir)) fail('reserved-path', index);
     if (seenPaths.has(resolved)) fail('duplicate', index);
     seenPaths.add(resolved);
     seenFamilies.add(family);
-    members.push({ index, family, path: resolved });
+    members.push({ index, family, path: resolved, compression });
   }
   for (const family of FAMILIES) if (!seenFamilies.has(family)) fail('family');
   for (const member of members) await assertAvailableMember(member.path, member.index);
   return {
-    version: OPEN_LIBRARY_DUMP_SET_VERSION,
+    version,
     sourceKind: 'openlibrary',
     manifestPath: resolvedManifest,
     members,

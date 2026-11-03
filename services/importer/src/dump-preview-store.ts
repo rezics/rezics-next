@@ -10,12 +10,17 @@ export const DEFAULT_DISAPPEARANCE_THRESHOLD = 0.2;
 export type PreviewKind = 'new' | 'changed' | 'unchanged' | 'vanished';
 export type PreviewViewKind = 'first-import' | 'baseline-comparison';
 
+export type PreviewInputKind = 'dump' | 'dump-set';
+export type PreviewInputFamily = Readonly<{ family: string; compression: string }>;
+
 export type PreviewPlan = Readonly<{
   previewId: string;
   source: string;
   sourceKind: string;
   converterRevision: string;
   dumpPath: string;
+  inputKind: PreviewInputKind;
+  inputFamilies: readonly PreviewInputFamily[];
   viewKind: PreviewViewKind;
   baselineId: string | null;
   baselinePresent: number;
@@ -89,6 +94,24 @@ function validRecordKey(value: string): void {
     throw new PreviewStoreFailure('Record key must be an exact native source record key.', 2);
 }
 
+function parseInputFamilies(value: unknown): readonly PreviewInputFamily[] {
+  if (value === null || value === undefined || value === '') return [];
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+      const family = Reflect.get(item, 'family');
+      const compression = Reflect.get(item, 'compression');
+      if (typeof family !== 'string' || typeof compression !== 'string') return [];
+      return [{ family, compression }];
+    });
+  } catch {
+    return [];
+  }
+}
+
 function cursorEncode(value: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
 }
@@ -160,8 +183,20 @@ export class DumpPreviewStore {
         vanished_count INTEGER NOT NULL,
         prior INTEGER NOT NULL,
         survivors INTEGER NOT NULL,
-        stored_bytes INTEGER NOT NULL
+        stored_bytes INTEGER NOT NULL,
+        input_kind TEXT NOT NULL DEFAULT 'dump',
+        input_selection TEXT
       ) WITHOUT ROWID`);
+      try {
+        this.database.exec(`ALTER TABLE preview_plans ADD COLUMN input_kind TEXT NOT NULL DEFAULT 'dump'`);
+      } catch {
+        // Column already exists on newly created tables.
+      }
+      try {
+        this.database.exec(`ALTER TABLE preview_plans ADD COLUMN input_selection TEXT`);
+      } catch {
+        // Column already exists on newly created tables.
+      }
       this.database.exec(`CREATE TABLE IF NOT EXISTS preview_records (
         preview_id TEXT NOT NULL,
         source TEXT NOT NULL,
@@ -218,16 +253,20 @@ export class DumpPreviewStore {
     viewKind: PreviewViewKind;
     baselineId: string | null;
     baselinePresent: number;
+    inputKind?: PreviewInputKind;
+    inputFamilies?: readonly PreviewInputFamily[];
   }): void {
     this.assertOpen();
     validSource(plan.source);
+    const inputKind = plan.inputKind ?? 'dump';
+    const selection = plan.inputFamilies ? JSON.stringify(plan.inputFamilies) : null;
     this.database
       .query(
         `INSERT INTO preview_plans(
           preview_id,source,source_kind,converter_revision,dump_path,view_kind,baseline_id,baseline_present,
           complete,error_identity,error_message,disappearance_would_block,admitted,skipped,new_count,changed_count,
-          unchanged_count,vanished_count,prior,survivors,stored_bytes
-        ) VALUES (?,?,?,?,?,?,?,?,0,NULL,NULL,0,0,0,0,0,0,0,?,?,0)`,
+          unchanged_count,vanished_count,prior,survivors,stored_bytes,input_kind,input_selection
+        ) VALUES (?,?,?,?,?,?,?,?,0,NULL,NULL,0,0,0,0,0,0,0,?,?,0,?,?)`,
       )
       .run(
         plan.previewId,
@@ -240,6 +279,8 @@ export class DumpPreviewStore {
         plan.baselinePresent,
         plan.baselinePresent,
         0,
+        inputKind,
+        selection,
       );
   }
 
@@ -397,6 +438,8 @@ export class DumpPreviewStore {
       sourceKind: String(row.source_kind),
       converterRevision: String(row.converter_revision),
       dumpPath: String(row.dump_path),
+      inputKind: row.input_kind === 'dump-set' ? 'dump-set' : 'dump',
+      inputFamilies: parseInputFamilies(row.input_selection),
       viewKind: row.view_kind as PreviewViewKind,
       baselineId: row.baseline_id === null ? null : String(row.baseline_id),
       baselinePresent: Number(row.baseline_present),
