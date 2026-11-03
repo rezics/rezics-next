@@ -478,8 +478,8 @@ export async function changePreferences(
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { ok: false, reason: 'forbidden' };
     const { idempotencyKey, ...body } = change;
-    const preferences = client.accounts({ accountId }).preferences;
-    const result = await preferences.patch(body as Parameters<typeof preferences.patch>[0], {
+    const nativePreferences = client.accounts({ accountId }).preferences;
+    const result = await nativePreferences.patch(body as Parameters<typeof nativePreferences.patch>[0], {
       headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
         'idempotency-key': string;
       },

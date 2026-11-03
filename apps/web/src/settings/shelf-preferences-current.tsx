@@ -13,6 +13,12 @@ export type ShelfPreferenceSnapshot = {
   shelf: ShelfPreferences | null;
 };
 
+type ShelfViewer = {
+  state: string;
+  subject?: string | null | undefined;
+  csrfToken: string | null;
+};
+
 /** Private, bounded preference read for the current Library route visit. */
 export const readCurrentShelfPreferences = createServerFn({ method: 'GET' }).handler(
   async (): Promise<ShelfPreferenceSnapshot> => {
@@ -31,7 +37,7 @@ export const readCurrentShelfPreferences = createServerFn({ method: 'GET' }).han
 /** A loader snapshot can only affect the viewer who produced its current session read. */
 export function shelfForCurrentViewer(
   snapshot: ShelfPreferenceSnapshot | undefined,
-  viewer: { state: string; subject?: string | null; csrfToken: string | null },
+  viewer: ShelfViewer,
 ): ShelfPreferences {
   if (
     !snapshot ||
@@ -51,7 +57,7 @@ export class ShelfPreferenceSnapshotOwner {
   private viewer: string | undefined;
   private retired = false;
 
-  observe(viewer: { state: string; subject?: string | null; csrfToken: string | null }) {
+  observe(viewer: ShelfViewer) {
     if (viewer.state === 'unknown') {
       if (this.viewer !== undefined) this.retired = true;
       return;
@@ -72,7 +78,7 @@ export class ShelfPreferenceSnapshotOwner {
     this.retired = true;
   }
 
-  private matchesSnapshot(viewer: { state: string; subject?: string | null; csrfToken: string | null }) {
+  private matchesSnapshot(viewer: ShelfViewer) {
     return this.snapshotAccountId === viewer.subject && this.snapshotCsrfToken === viewer.csrfToken;
   }
 
@@ -81,7 +87,7 @@ export class ShelfPreferenceSnapshotOwner {
 
   resolve(
     snapshot: ShelfPreferenceSnapshot | undefined,
-    viewer: { state: string; subject: string | null | undefined; csrfToken: string | null },
+    viewer: ShelfViewer,
   ): ShelfPreferences {
     if (snapshot && snapshot.generation !== this.generation) {
       this.generation = snapshot.generation;
