@@ -105,7 +105,7 @@ export async function setBoardThreadPin(
   if (typeof input.pinned !== 'boolean') throw new TypeError('Invalid board pin state');
   const boardRoute = routeOf(input.boardId);
   const threadRoute = routeOf(input.threadId);
-  if (boardRoute === null || threadRoute === null || threadRoute !== boardRoute) throw new ContentNotFoundError();
+  if (boardRoute === null || threadRoute === null) throw new ContentNotFoundError();
 
   const identity = principalCommandIdentity(actor);
   const commandKind = 'content.board-thread.pin-state';
@@ -141,7 +141,7 @@ export async function setBoardThreadPin(
         'post',
         input.threadId,
       );
-      if (!post || post.thread_id !== input.threadId || routeOf(post.id) !== boardRoute)
+      if (!post || post.thread_id !== input.threadId || routeOf(post.id) !== threadRoute)
         throw new ContentNotFoundError();
 
       const boardIdentity = { route: boardRoute, id: input.boardId };

@@ -141,6 +141,7 @@ an open ban overrides every independent grant, while public boards and Global bo
 safe, and requesting the current state does not change ordering. At most five same-board threads are pinned.
 New pins lead the section; existing pins keep their position; unpinning compacts the remaining positions.
 `409 conflict` means the five slots are full. The board row lock serializes competing commands.
+Same-board membership comes from the current thread row and board projection; a thread and its opening may have a different native home from the board.
 
 Only an initial board page includes current `pinnedThreads` (at most five), newest pin first. Continuations return
 `pinnedThreads: []`. All four sorts exclude the same cohort observed with the initial ordinary candidate range.
