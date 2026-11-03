@@ -8,6 +8,10 @@ array and do not imply the board has no pins. Web never scans ordinary pages to 
 historical cohorts, and never sorts downloaded threads into a second feed. Concealed pins leave no title, placeholder
 or inferred count.
 
+The native opening response now exists in Content source, but Web still consumes the existing board-threads route
+because the generated opening method and DTO are unpublished. The receiver gap and current query are documented in
+[Native Board opening receiver](board-opening.md); this page's cohort and command contracts remain unchanged.
+
 Readers see a localized pinned section and a pinned badge on those disclosed rows. Empty continuation keeps the
 feed's existing empty and sparse-page meanings. Malformed native pin data is unavailable with an explicit refresh,
 distinct from a denied read and from `400 invalid_cursor`. Preparing, denied and unavailable pin reads do not hide

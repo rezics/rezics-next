@@ -22,6 +22,13 @@ Decision: The expanded reader stays in page flow on phones and uses a bounded si
 The pin and unpin consumer contract, native-order presentation and pending Content binding are documented in
 [Board pins](board-pins.md).
 
+## Native Board opening
+
+Content's native opening reader is installed in service source, but its generated `@rezics/client` method and DTO
+are not published. Keep the existing route reader until `boards({ id }).page.get` is generated; do not add a copied
+DTO, cast, or direct request. The source response, current retry/restart contract, and the exact publication gap are
+recorded in [Native Board opening receiver](board-opening.md).
+
 ## Board row sharing
 
 Clipboard failures reveal an inline read-only URL field, focus/select it after menu dismissal, and return focus to

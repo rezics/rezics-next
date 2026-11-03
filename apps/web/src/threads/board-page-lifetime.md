@@ -4,6 +4,11 @@ The Board detail loader owns one caller visit from before its existing `boardPag
 The visit captures the QueryClient, Board id, cursor, sort, locale, credential mode and the exact session cache source,
 revision and tuple. Private reads use a visit-specific query key; the public anonymous key remains shared.
 
+The installed Web query still composes the Board read, board-threads page, optional Realm read and batched authors.
+Content's source-side `/v1/boards/:id/page` reader is not yet available through a generated `@rezics/client` method
+or DTO. This lifetime documents the actual current route and does not claim that Web consumes the one-request native
+opening envelope. See [Native Board opening receiver](board-opening.md).
+
 The query wrapper checks the captured route, session, abort state and the exact query object before the original read.
 Once the original envelope returns, it compares the actual reader origin with the immutable expected reader and
 rechecks the same source generation and query owner before returning the envelope to TanStack Query. A mismatch or

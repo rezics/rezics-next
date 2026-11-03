@@ -96,6 +96,11 @@ independent rather than making shared files or unfinished producer delivery into
   absent, so controls appear only from explicit producer actions. Effective pin/unpin, including ABA, invalidates the
   cursor: Web offers an explicit restart of this board/sort with no cursor. Content owns cap (five), `pin_revision`,
   storage, order and authorization. Details: [board pins](../../apps/web/src/threads/board-pins.md).
+- **Native Board opening receiver.** Content's source-side `GET /v1/boards/:id/page` exists, but the generated
+  `boards({ id }).page.get` method and `BoardPageResponse` DTO are absent from `@rezics/client` and the installed
+  OpenAPI contract. Decision: keep the existing typed Board reads until publication; do not hand-author a DTO, cast,
+  or fetch the source-only route. Native opening fields remain unavailable to Web. Details:
+  [Board opening receiver](../../apps/web/src/threads/board-opening.md).
 - **Slow mode.** Show the native board posting interval (`off`, 30, 60 or 300 seconds) and the caller's next
   permitted attempt beside new-thread and reply writing. An admitted moderator inspects and changes that interval on
   the board. Waiting preserves the draft; countdown text is display guidance; Send and Retry stay explicit, so a
