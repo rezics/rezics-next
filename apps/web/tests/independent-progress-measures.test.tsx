@@ -1,6 +1,11 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import type { ProgressFailure, ProgressRecorded, ProgressRecordInput, ProgressSessionView } from '../src/library/progress-reads';
+import type {
+  ProgressFailure,
+  ProgressRecorded,
+  ProgressRecordInput,
+  ProgressSessionView,
+} from '../src/library/progress-reads';
 import {
   collectEdits,
   draftsFrom,
@@ -9,7 +14,11 @@ import {
 } from '../src/library/independent-measures/contract';
 import { editMeasure, readyVisit, stageIndependentReview } from '../src/library/independent-measures/controller';
 import { loadIndependentMeasureVisit } from '../src/library/independent-measures/load';
-import { INDEPENDENT_VISIT_READ_CALLS, observeIndependentWork, workWithinBound } from '../src/library/independent-measures/cost';
+import {
+  INDEPENDENT_VISIT_READ_CALLS,
+  observeIndependentWork,
+  workWithinBound,
+} from '../src/library/independent-measures/cost';
 import { submitIndependentEdits, type MeasureSender } from '../src/library/independent-measures/commands';
 import { independentActionClass } from '../src/library/independent-measures/recovery';
 import { newCsrfToken } from '../src/session/csrf';
@@ -67,8 +76,24 @@ function sessionView(overrides: Partial<ProgressSessionView> = {}): ProgressSess
     recordingState: 'supported',
     unitLabel: 'chapters',
     measures: [
-      { unit: 'chapter', amount: '10.5', total: '24', primary: true, meaning: 'known', recordingState: 'supported', unitLabel: 'chapters' },
-      { unit: 'volume', amount: null, total: '12', primary: false, meaning: 'known', recordingState: 'supported', unitLabel: 'volumes' },
+      {
+        unit: 'chapter',
+        amount: '10.5',
+        total: '24',
+        primary: true,
+        meaning: 'known',
+        recordingState: 'supported',
+        unitLabel: 'chapters',
+      },
+      {
+        unit: 'volume',
+        amount: null,
+        total: '12',
+        primary: false,
+        meaning: 'known',
+        recordingState: 'supported',
+        unitLabel: 'volumes',
+      },
     ],
     changes: [],
     changesNext: null,
@@ -279,7 +304,14 @@ test('wrapping actions stay 44px and historical descriptors stay unlabeled guess
     sessionView({
       measures: [
         { unit: 'chapter', amount: '10.5', total: '24', primary: true, meaning: 'unknown' },
-        { unit: 'volume', amount: '1', total: '12', primary: false, meaning: 'unavailable', recordingState: 'unavailable' },
+        {
+          unit: 'volume',
+          amount: '1',
+          total: '12',
+          primary: false,
+          meaning: 'unavailable',
+          recordingState: 'unavailable',
+        },
       ],
     }),
   );

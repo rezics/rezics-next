@@ -303,9 +303,7 @@ function isScalarAmount(value: unknown): value is string {
   return typeof value === 'string' && decimal.test(value);
 }
 
-function isNativeMeasure(
-  value: unknown,
-): value is {
+function isNativeMeasure(value: unknown): value is {
   unit: string;
   amount: string | null;
   total: string | null;

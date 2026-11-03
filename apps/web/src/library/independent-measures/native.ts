@@ -42,7 +42,11 @@ export function independentMeasureMethods(client: KernelClient): {
     record = false;
     read = false;
   }
-  const seam = !record ? INDEPENDENT_MEASURE_SEAM : !read ? INDEPENDENT_MEASURE_READ_SEAM : INDEPENDENT_MEASURE_CREATE_SEAM;
+  const seam = !record
+    ? INDEPENDENT_MEASURE_SEAM
+    : !read
+      ? INDEPENDENT_MEASURE_READ_SEAM
+      : INDEPENDENT_MEASURE_CREATE_SEAM;
   return { record, read, create, seam: record && read ? INDEPENDENT_MEASURE_SEAM : seam };
 }
 
@@ -72,7 +76,11 @@ export async function readNativeIndependentSession(
   return session;
 }
 
-function recordingFromPresentation(presentation: NonNullable<NativeProgressSession['measures']>[number]['presentation'] | ReturnType<typeof nativeProgressPresentation>): IndependentMeasure['recording'] {
+function recordingFromPresentation(
+  presentation:
+    | NonNullable<NativeProgressSession['measures']>[number]['presentation']
+    | ReturnType<typeof nativeProgressPresentation>,
+): IndependentMeasure['recording'] {
   if (!presentation) return 'unavailable';
   if (presentation.meaning === 'unknown' || presentation.meaning === 'unavailable') return 'historical';
   if (presentation.recording.state === 'supported') return 'supported';
@@ -95,7 +103,12 @@ function independentFromNativeMeasure(
     recording,
     ...(presentation?.recording.state === 'supported' ? { inputRules: presentation.recording.inputRules } : {}),
     amount: measure.amount,
-    kind: measure.amount === null ? 'absent' : measure.amount === '0' || /^0(?:\.0+)?$/.test(measure.amount) ? 'zero' : 'recorded',
+    kind:
+      measure.amount === null
+        ? 'absent'
+        : measure.amount === '0' || /^0(?:\.0+)?$/.test(measure.amount)
+          ? 'zero'
+          : 'recorded',
   };
 }
 
@@ -107,7 +120,10 @@ export function measuresFromNative(session: NativeProgressSession): IndependentM
       .filter((measure) => measure.unit !== primary.unit)
       .slice()
       .sort((left, right) => (left.unit < right.unit ? -1 : left.unit > right.unit ? 1 : 0));
-    return [independentFromNativeMeasure(primary, true), ...additional.map((measure) => independentFromNativeMeasure(measure, false))];
+    return [
+      independentFromNativeMeasure(primary, true),
+      ...additional.map((measure) => independentFromNativeMeasure(measure, false)),
+    ];
   }
   if (session.mode !== 'scalar_amount') return [];
   const presentation = nativeProgressPresentation(session);
@@ -121,7 +137,12 @@ export function measuresFromNative(session: NativeProgressSession): IndependentM
       recording: recordingFromPresentation(presentation),
       ...(presentation?.recording.state === 'supported' ? { inputRules: presentation.recording.inputRules } : {}),
       amount: session.amount,
-      kind: session.amount === null ? 'absent' : session.amount === '0' || /^0(?:\.0+)?$/.test(session.amount) ? 'zero' : 'recorded',
+      kind:
+        session.amount === null
+          ? 'absent'
+          : session.amount === '0' || /^0(?:\.0+)?$/.test(session.amount)
+            ? 'zero'
+            : 'recorded',
     },
   ];
 }

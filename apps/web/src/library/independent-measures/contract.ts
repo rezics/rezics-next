@@ -53,7 +53,13 @@ export type IndependentCommand = {
 
 export type IndependentOutcome =
   | { state: 'acknowledged'; revision: number; snapshot: ProgressSnapshot; remaining: MeasureEdit[] }
-  | { state: 'partial'; revision: number; snapshot: ProgressSnapshot; remaining: MeasureEdit[]; failed: IndependentCommand }
+  | {
+      state: 'partial';
+      revision: number;
+      snapshot: ProgressSnapshot;
+      remaining: MeasureEdit[];
+      failed: IndependentCommand;
+    }
   | { state: 'conflict'; command: IndependentCommand; revision: number }
   | { state: 'uncertain'; command: IndependentCommand }
   | { state: 'unsupported'; command: IndependentCommand }
@@ -118,7 +124,9 @@ export function toIndependentMeasure(measure: ProgressMeasureView): IndependentM
 }
 
 /** Primary stays first; additional units keep native order and never replace the primary. */
-export function projectIndependentMeasures(session: Pick<ProgressSessionView, 'unit' | 'mode' | 'measures'>): IndependentMeasure[] {
+export function projectIndependentMeasures(
+  session: Pick<ProgressSessionView, 'unit' | 'mode' | 'measures'>,
+): IndependentMeasure[] {
   if (session.mode !== 'scalar_amount' || !session.measures?.length) return [];
   const projected = session.measures.slice(0, PROGRESS_MEASURE_CAP).map(toIndependentMeasure);
   const primary = projected.find((measure) => measure.unit === session.unit) ?? projected[0];
@@ -172,7 +180,11 @@ export function replaceDraft(drafts: MeasureDraft[], unit: string, change: Parti
   });
 }
 
-export function retainUnedited(measures: IndependentMeasure[], drafts: MeasureDraft[], unit: string): IndependentMeasure[] {
+export function retainUnedited(
+  measures: IndependentMeasure[],
+  drafts: MeasureDraft[],
+  unit: string,
+): IndependentMeasure[] {
   return measures.map((measure) => {
     if (measure.unit === unit) return measure;
     const draft = drafts.find((item) => item.unit === measure.unit);
@@ -181,10 +193,7 @@ export function retainUnedited(measures: IndependentMeasure[], drafts: MeasureDr
   });
 }
 
-export function applySnapshot(
-  measures: IndependentMeasure[],
-  snapshot: ProgressSnapshot,
-): IndependentMeasure[] {
+export function applySnapshot(measures: IndependentMeasure[], snapshot: ProgressSnapshot): IndependentMeasure[] {
   const values = snapshot.measures;
   return measures.map((measure) => {
     const next =
@@ -211,12 +220,7 @@ export function sameCommand(left: IndependentCommand, right: IndependentCommand)
   );
 }
 
-export function operandsFor(
-  sessionId: string,
-  revision: number,
-  key: string,
-  edit: MeasureEdit,
-): ProgressRecordInput {
+export function operandsFor(sessionId: string, revision: number, key: string, edit: MeasureEdit): ProgressRecordInput {
   return {
     sessionId,
     revision,

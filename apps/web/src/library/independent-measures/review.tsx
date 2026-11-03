@@ -28,7 +28,8 @@ export function IndependentMeasuresReview({
           return (
             <div key={measure.unit}>
               <dt className="text-sm font-medium">
-                {measure.primary ? m.library_progress_measure_primary() : m.library_progress_measure_additional()} · {label}
+                {measure.primary ? m.library_progress_measure_primary() : m.library_progress_measure_additional()} ·{' '}
+                {label}
               </dt>
               <dd className="break-all text-sm">
                 {!edit

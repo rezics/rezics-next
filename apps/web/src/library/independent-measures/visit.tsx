@@ -4,11 +4,7 @@ import { m } from '../../paraglide/messages.js';
 import { useAuthoringDeparture } from '../../threads/authoring-departure';
 import type { ProgressSessionPage, ProgressSessionView, ProgressSnapshot } from '../progress-reads';
 import { progressDecimalIssue } from '../progress-decimal-input';
-import {
-  collectEdits,
-  sessionHasIndependentMeasures,
-  type IndependentVisit,
-} from './contract';
+import { collectEdits, sessionHasIndependentMeasures, type IndependentVisit } from './contract';
 import {
   applyIndependentOutcome,
   cancelIndependentReview,
@@ -113,7 +109,14 @@ export function IndependentMeasuresVisit({
       if (!result || !current()) return;
       if (result.ok) {
         onAcknowledged(result.session);
-        setVisit(refreshIndependentVisit({ ...visit, retry: null, outcome: null }, result.session.revision, visit.measures, result.session));
+        setVisit(
+          refreshIndependentVisit(
+            { ...visit, retry: null, outcome: null },
+            result.session.revision,
+            visit.measures,
+            result.session,
+          ),
+        );
         return;
       }
       setVisit(applyIndependentOutcome(visit, outcomeFromResult(visit.retry, result, visit.edits)));

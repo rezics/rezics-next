@@ -2,11 +2,7 @@ import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
-import {
-  loadProgressSession,
-  type ProgressSessionPage,
-  type ProgressSessionView,
-} from '../progress-reads';
+import { loadProgressSession, type ProgressSessionPage, type ProgressSessionView } from '../progress-reads';
 import {
   draftsFrom,
   INDEPENDENT_MEASURE_SEAM,
@@ -80,7 +76,12 @@ export async function loadIndependentMeasureVisit(
     };
   } catch (error) {
     if (isPlatformClosedError(error)) {
-      return { state: 'unavailable', work: finishIndependentWork(calls, [], null), closed: true, seam: INDEPENDENT_MEASURE_SEAM };
+      return {
+        state: 'unavailable',
+        work: finishIndependentWork(calls, [], null),
+        closed: true,
+        seam: INDEPENDENT_MEASURE_SEAM,
+      };
     }
     const status = error && typeof error === 'object' && 'status' in error ? Number(error.status) : 0;
     if (status === 401 || status === 403 || status === 404) {
@@ -91,7 +92,9 @@ export async function loadIndependentMeasureVisit(
 }
 
 /** Project independent measures from an already loaded session page; adds no native list of history N. */
-export function visitFromSessionPage(page: ProgressSessionPage): IndependentVisit | { kind: 'denied' } | { kind: 'empty' } {
+export function visitFromSessionPage(
+  page: ProgressSessionPage,
+): IndependentVisit | { kind: 'denied' } | { kind: 'empty' } {
   if (!page.signedIn) return { kind: 'denied' };
   const measures = projectIndependentMeasures(page.session);
   if (!sessionHasIndependentMeasures(page.session) || measures.length <= 1) {

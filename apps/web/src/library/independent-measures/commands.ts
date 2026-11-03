@@ -8,14 +8,12 @@ import {
 } from './contract';
 import { progressWriteOutcome } from '../configured-profile-controls/commands';
 
-export type MeasureSender = (input: { data: ProgressRecordInput; headers: HeadersInit }) => Promise<
-  ProgressRecorded | ProgressFailure
->;
+export type MeasureSender = (input: {
+  data: ProgressRecordInput;
+  headers: HeadersInit;
+}) => Promise<ProgressRecorded | ProgressFailure>;
 
-export function captureMeasureCommand(
-  credential: HeadersInit,
-  operands: ProgressRecordInput,
-): IndependentCommand {
+export function captureMeasureCommand(credential: HeadersInit, operands: ProgressRecordInput): IndependentCommand {
   return {
     sender: 'recordProgressSession',
     credential,
@@ -26,10 +24,7 @@ export function captureMeasureCommand(
 
 export type BoundMeasureCommand = IndependentCommand & { dispatch: MeasureSender };
 
-export function bindMeasureCommand(
-  command: IndependentCommand,
-  sender: MeasureSender,
-): BoundMeasureCommand {
+export function bindMeasureCommand(command: IndependentCommand, sender: MeasureSender): BoundMeasureCommand {
   return { ...command, dispatch: sender };
 }
 
@@ -82,7 +77,13 @@ export async function submitIndependentEdits(
     if (!current()) {
       const retry = commands[commands.length - 1];
       return {
-        outcome: retry ? uncertainOutcome(retry) : { state: 'unavailable', command: captureMeasureCommand(credential, operandsFor(sessionId, currentRevision, keys[index]!, edit)), seam: INDEPENDENT_MEASURE_SEAM },
+        outcome: retry
+          ? uncertainOutcome(retry)
+          : {
+              state: 'unavailable',
+              command: captureMeasureCommand(credential, operandsFor(sessionId, currentRevision, keys[index]!, edit)),
+              seam: INDEPENDENT_MEASURE_SEAM,
+            },
         commands,
       };
     }
@@ -129,7 +130,15 @@ export async function submitIndependentEdits(
   return {
     outcome: lastSnapshot
       ? { state: 'acknowledged', revision: lastSnapshot.revision, snapshot: lastSnapshot, remaining: [] }
-      : { state: 'invalid', command: commands[0] ?? captureMeasureCommand(credential, operandsFor(sessionId, revision, keys[0] ?? crypto.randomUUID(), edits[0]!)) },
+      : {
+          state: 'invalid',
+          command:
+            commands[0] ??
+            captureMeasureCommand(
+              credential,
+              operandsFor(sessionId, revision, keys[0] ?? crypto.randomUUID(), edits[0]!),
+            ),
+        },
     commands,
   };
 }

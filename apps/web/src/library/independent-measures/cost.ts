@@ -94,7 +94,10 @@ function countPoint(target: object, onCall: (name: string) => void, name: string
 }
 
 /** Count native progress session calls at the loader boundary without changing operands. */
-export function observeIndependentWork<T extends { progressSessions: unknown }>(client: T, onCall: (name: string) => void): T {
+export function observeIndependentWork<T extends { progressSessions: unknown }>(
+  client: T,
+  onCall: (name: string) => void,
+): T {
   return new Proxy(client, {
     get(target, key, receiver) {
       const value = Reflect.get(target, key, receiver);

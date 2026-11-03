@@ -40,7 +40,13 @@ export function readyVisit(
 export function editMeasure(visit: IndependentVisit, unit: string, change: Partial<MeasureDraft>): IndependentVisit {
   if (visit.kind === 'submitting' || visit.retry) return visit;
   const drafts = replaceDraft(visit.drafts, unit, change);
-  return { ...visit, kind: visit.kind === 'review' ? 'ready' : visit.kind === 'preparing' ? 'preparing' : 'ready', drafts, edits: collectEdits(visit.measures, drafts), outcome: visit.kind === 'review' ? null : visit.outcome };
+  return {
+    ...visit,
+    kind: visit.kind === 'review' ? 'ready' : visit.kind === 'preparing' ? 'preparing' : 'ready',
+    drafts,
+    edits: collectEdits(visit.measures, drafts),
+    outcome: visit.kind === 'review' ? null : visit.outcome,
+  };
 }
 
 export function stageIndependentReview(visit: IndependentVisit): IndependentVisit {
@@ -101,7 +107,13 @@ export function applyIndependentOutcome(visit: IndependentVisit, outcome: Indepe
     return { ...visit, kind: 'denied', outcome, retry: null };
   }
   if (outcome.state === 'unsupported') {
-    return { ...visit, kind: 'unavailable', outcome, retry: null, ...(visit.seam === undefined ? {} : { seam: visit.seam }) };
+    return {
+      ...visit,
+      kind: 'unavailable',
+      outcome,
+      retry: null,
+      ...(visit.seam === undefined ? {} : { seam: visit.seam }),
+    };
   }
   return { ...visit, kind: 'ready', outcome, retry: null };
 }
@@ -153,7 +165,11 @@ export async function submitIndependentVisit(
     edits.map((edit, index) => (retry && index === 0 ? retry.key : crypto.randomUUID())),
     retry ? [retry, ...(captured ?? []).slice(1)] : captured,
   );
-  if (!current()) return { visit: applyIndependentOutcome(submitting, { state: 'uncertain', command: result.commands[0] ?? retry! }), commands: result.commands };
+  if (!current())
+    return {
+      visit: applyIndependentOutcome(submitting, { state: 'uncertain', command: result.commands[0] ?? retry! }),
+      commands: result.commands,
+    };
   return { visit: applyIndependentOutcome(submitting, result.outcome), commands: result.commands };
 }
 

@@ -1038,7 +1038,10 @@ function SessionEditor({
             {...(logsCursor === undefined ? {} : { logsCursor })}
           />
         ) : null}
-        {offered && session.state === 'active' && session.mode !== 'completed_units' && !sessionHasIndependentMeasures(session) ? (
+        {offered &&
+        session.state === 'active' &&
+        session.mode !== 'completed_units' &&
+        !sessionHasIndependentMeasures(session) ? (
           <form
             className="max-w-xl space-y-4"
             noValidate
@@ -1242,10 +1245,7 @@ function SessionEditor({
               <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
             </p>
             {sessionHasIndependentMeasures(session) ? (
-              <IndependentMeasuresReadout
-                measures={projectIndependentMeasures(session)}
-                revision={session.revision}
-              />
+              <IndependentMeasuresReadout measures={projectIndependentMeasures(session)} revision={session.revision} />
             ) : (
               <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
             )}
