@@ -18,7 +18,12 @@ export async function readDiaryPage(
   filter: Pick<DiaryAddress, 'year' | 'month'> = {},
 ): Promise<DiaryRead> {
   const result = await client.libraryDiary.get({
-    query: { limit: PRIVATE_DIARY_PAGE_LIMIT, ...filter, ...(cursor ? { cursor } : {}) },
+    query: {
+      limit: PRIVATE_DIARY_PAGE_LIMIT,
+      ...(filter.year === undefined ? {} : { year: filter.year }),
+      ...(filter.month === undefined ? {} : { month: filter.month }),
+      ...(cursor ? { cursor } : {}),
+    },
     headers: { authorization },
   });
   if (!result.error && result.data) return { kind: 'ready', page: result.data };

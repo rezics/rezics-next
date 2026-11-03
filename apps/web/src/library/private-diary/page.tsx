@@ -256,16 +256,16 @@ export function PrivateDiaryPage({
             </h2>
             <p className="text-sm text-muted-foreground">
               {m.library_diary_page_bound({
-                count: Math.min(PRIVATE_DIARY_PAGE_LIMIT, page.occurrences.length),
+                count: Math.min(PRIVATE_DIARY_PAGE_LIMIT, visiblePage.occurrences.length),
                 bytes: PRIVATE_DIARY_PAGE_BYTES,
               })}
             </p>
           </div>
-          {page.occurrences.length === 0 ? (
+          {visiblePage.occurrences.length === 0 ? (
             <p className="rounded-md border p-4">{m.library_diary_empty()}</p>
           ) : (
             <ol className="space-y-3">
-              {page.occurrences.map((occurrence) => (
+              {visiblePage.occurrences.map((occurrence) => (
                 <li key={occurrence.id} className="rounded-lg border p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -315,12 +315,12 @@ export function PrivateDiaryPage({
               ))}
             </ol>
           )}
-          {page.next ? (
+          {visiblePage.next ? (
             <Link
               className="inline-flex min-h-11 items-center rounded-md border px-4"
               to="/library/history"
               replace
-              search={{ cursor: page.next, year: address.year, month: address.month, returnTo: currentReturn }}
+              search={{ cursor: visiblePage.next, year: address.year, month: address.month, returnTo: currentReturn }}
             >
               {m.library_diary_next()}
             </Link>
