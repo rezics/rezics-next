@@ -422,8 +422,7 @@ const typed = [
   'POST /v1/accounts/:accountId/notifications/$markSeen',
 ] as const satisfies readonly Routes[];
 type Missing = Exclude<Routes, (typeof typed)[number]>;
-const missing: Record<Missing, never> = {};
-const complete = Object.keys(missing).length === 0;
+const complete: [Missing] extends [never] ? true : Missing = true;
 type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 
