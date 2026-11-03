@@ -1,3 +1,5 @@
+import type { SourceClassificationProjection } from './source-classification.ts';
+
 export type SourceId = 'bangumi' | 'vndb' | 'openlibrary' | 'wikidata';
 
 export type SourceRecord<T = Record<string, unknown>> = {
@@ -43,7 +45,16 @@ export type ConvertedRecord<Proposal = unknown> = {
   converter_revision: string;
   proposals: readonly Proposal[];
   diagnostics: readonly ConversionDiagnostic[];
+  sourceClassification?: SourceClassificationProjection;
 };
+
+export { projectSourceClassification } from './source-classification.ts';
+export type {
+  SourceClassificationCoverage,
+  SourceClassificationProjection,
+  SourceClassificationProvenance,
+  SourceClassificationValue,
+} from './source-classification.ts';
 
 export class ConversionError extends Error {
   readonly code: string;
