@@ -20,9 +20,13 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { WorkClient } from '../work/client.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { withConnection } from '../database/pool.ts';
-import { createLibraryCommandRunner } from './command-support.ts';
-import { createSessionCommands } from './sessions.ts';
-import { createEpisodeProgressCommands, MAX_EPISODE_IDS } from './episode-progress.ts';
+import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
+import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
+import {
+  createEpisodeProgressCommands,
+  MAX_EPISODE_IDS,
+  type EpisodeProgressView,
+} from './episode-progress.ts';
 import {
   readLibraryProfileSourceObservation,
   sameLibraryProfileAnchor,
@@ -30,7 +34,7 @@ import {
   type LibraryProfileSource,
 } from './profile-source.ts';
 import { readEpisodeSources } from './episode-source.ts';
-import { nativeProgressUnit, progressUnit } from './profile.ts';
+import { nativeProgressUnit, progressUnit, type LibraryProgressUnitDescriptor } from './profile.ts';
 import {
   MAX_PROGRESS_MEASURES,
   parseProgressMeasureCreate,
@@ -39,7 +43,7 @@ import {
   type ProgressMode,
 } from './progress.ts';
 import type { ProgressSession } from './progress-model.ts';
-import type { ArchivedProgressMeasure, ArchivedProgressSession } from './copy-archive-format.ts';
+import type { ArchivedProgressMeasure, ArchivedProgressSession, ArchivedProgressUnit } from './copy-archive-format.ts';
 import {
   COPY_ARCHIVE_LIMITS,
   parseCopyArchive,
@@ -70,16 +74,16 @@ type Header = {
   removing: boolean;
 };
 const missing = () => new ProblemError('not_found');
-type ProgressMeasureMapping = { sourceUnit: string; unit: string };
-type ProgressReviewRequest = {
+export type CopyArchiveProgressMeasureMapping = { sourceUnit: string; unit: string };
+export type CopyArchiveProgressReviewRequest = {
   sessionId: string;
   subjectId: string;
-  versionSubjectId: string | null;
   mode: ProgressMode;
   unit: string;
-  additionalMeasures: ProgressMeasureMapping[];
+  additionalMeasures: CopyArchiveProgressMeasureMapping[];
   unitIds: string[];
 };
+type ProgressReviewRequest = CopyArchiveProgressReviewRequest;
 type ProgressRecoveryPlan = {
   subjectId: string;
   versionSubjectId: string | null;
@@ -102,14 +106,88 @@ type ProgressReviewEvidence = {
     pin: Extract<NonNullable<LibraryProfileSource>, { kind: 'supported' }>['pin'] | null;
   } | null;
   plan: ProgressRecoveryPlan | null;
-  response: Record<string, unknown>;
+  response: CopyArchiveProgressReview;
+};
+export type CopyArchiveProgressState = 'applying' | 'partial' | 'applied' | 'stale' | 'failed';
+export type CopyArchiveProgressReview = {
+  uploadId: string;
+  reviewId: string;
+  sourceSessionId: string;
+  sourceSubjectId: string;
+  subjectId: string;
+  historical: {
+    mode: string;
+    unit: string;
+    total: string | null;
+    amount: string | null;
+    additionalMeasures: ArchivedProgressMeasure[];
+    completedUnitCount: number;
+    state: string;
+    sourceRevision: number;
+    versionSubjectId: string | null;
+    profilePin: unknown;
+    sourceTimes: { startedAt: string; completedAt: string | null; lastChangedAt: string };
+  };
+  current: {
+    profile: { kind: 'supported' | 'unsupported'; subjectId: string; acceptingType: string; profileId?: string; releaseDigest?: string };
+    mode: ProgressMode;
+    unit: string;
+  };
+  measures: {
+    sourceUnit: string;
+    sourceAmount: string | null;
+    sourceTotal: string | null;
+    currentUnit: string | null;
+    currentMeaning: LibraryProgressUnitDescriptor | null;
+    amount: 'absent' | 'supported' | 'unsupported';
+    total: 'supported' | 'unsupported';
+  }[];
+  completedUnits: { unitId: string; admission: 'member' | 'detached' | 'unavailable' }[];
+  unsupportedHistoricalDates: string[];
+  unsupported: string[];
+  applicable: boolean;
+  recovery: 'complete' | 'partial' | 'unsupported';
+  expiresAt: string;
+};
+export type CopyArchiveProgressApplication = {
+  uploadId: string;
+  reviewId: string;
+  state: CopyArchiveProgressState;
+  sessionId: string | null;
+  acceptedSteps: number;
+  totalSteps: number;
+  error: string | null;
+};
+export type CopyArchiveProgressPage = {
+  uploadId: string;
+  state: 'cancelled' | 'inspecting';
+  expiresAt: string;
+  manifest: CopyArchiveManifest;
+  coverage: ArchiveSectionCoverage[];
+  occurrences: { ordinal: number; evidence: ArchivedProgressSession }[];
+  next: number | null;
+};
+export type CopyArchiveProgressUnitPage = {
+  uploadId: string;
+  sourceSessionId: string;
+  state: 'cancelled' | 'inspecting';
+  units: { ordinal: number; evidence: ArchivedProgressUnit }[];
+  next: number | null;
+};
+export type CopyArchiveProgressResult = {
+  uploadId: string;
+  review: CopyArchiveProgressReview;
+  application: Pick<CopyArchiveProgressApplication, 'state' | 'sessionId' | 'acceptedSteps' | 'error'> | null;
+  progressSession: ProgressSession | null;
+  completedEpisodes: EpisodeProgressView | null;
+  expiresAt: string;
 };
 const sha256 = (value: string) => Buffer.from(createHash('sha256').update(value).digest());
 
 function parseReviewRequest(value: unknown): ProgressReviewRequest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ProblemError('invalid_request');
   const row = value as Record<string, unknown>,
-    keys = ['sessionId', 'subjectId', 'mode', 'unit', 'additionalMeasures', 'unitIds', 'versionSubjectId'];
+    keys = ['sessionId', 'subjectId', 'mode', 'unit', 'additionalMeasures', 'unitIds'];
   if (Object.keys(row).some((key) => !keys.includes(key)) || !keys.slice(0, 6).every((key) => Object.hasOwn(row, key)))
     throw new ProblemError('invalid_request');
   if (
@@ -127,10 +205,7 @@ function parseReviewRequest(value: unknown): ProgressReviewRequest {
     row.unitIds.length > MAX_EPISODE_IDS
   )
     throw new ProblemError('invalid_request');
-  const versionSubjectId = row.versionSubjectId === undefined ? null : row.versionSubjectId;
-  if (versionSubjectId !== null && (typeof versionSubjectId !== 'string' || routeOf(versionSubjectId) === null))
-    throw new ProblemError('invalid_request');
-  const additionalMeasures: ProgressMeasureMapping[] = row.additionalMeasures.map((candidate) => {
+  const additionalMeasures: CopyArchiveProgressMeasureMapping[] = row.additionalMeasures.map((candidate) => {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) throw new ProblemError('invalid_request');
     const mapping = candidate as Record<string, unknown>;
     if (
@@ -159,7 +234,6 @@ function parseReviewRequest(value: unknown): ProgressReviewRequest {
   return {
     sessionId: row.sessionId,
     subjectId: row.subjectId,
-    versionSubjectId,
     mode: row.mode as ProgressMode,
     unit: row.unit,
     additionalMeasures,
@@ -202,6 +276,18 @@ function sameBinding(
     before.component.position === current.component.position &&
     JSON.stringify(before.pin) === JSON.stringify(current.pin)
   );
+}
+
+function nativeBinding(binding: NonNullable<ProgressReviewEvidence['binding']>) {
+  if (!binding.pin) throw new ProblemError('unsupported_library_profile');
+  return {
+    subjectId: binding.subjectId,
+    requestedSubjectId: binding.requestedSubjectId,
+    acceptingType: binding.acceptingType,
+    identityEpoch: binding.identityEpoch,
+    component: binding.component,
+    profilePin: binding.pin,
+  };
 }
 
 /** Private evidence only. This service has no native copy, entry or catalogue writer. */
@@ -465,7 +551,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       };
     });
   }
-  async function progressPage(actor: Actor, id: string, after = -1, signal?: AbortSignal) {
+  async function progressPage(
+    actor: Actor,
+    id: string,
+    after = -1,
+    signal?: AbortSignal,
+  ): Promise<CopyArchiveProgressPage> {
     if (!Number.isInteger(after) || after < -1 || after >= COPY_ARCHIVE_LIMITS.records)
       throw new ProblemError('invalid_request');
     return operation(
@@ -474,7 +565,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       async (tx, route, account, now) => {
         const h = await header(tx, route, account, id, now);
         const rows = (
-          await tx.query<{ ordinal: number; evidence: unknown }>(
+          await tx.query<{ ordinal: number; evidence: ArchivedProgressSession }>(
             `SELECT ordinal,evidence FROM library.copy_archive_row
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND section='sessions' AND ordinal>$4
             ORDER BY ordinal LIMIT $5`,
@@ -503,7 +594,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     sessionId: string,
     after = -1,
     signal?: AbortSignal,
-  ) {
+  ): Promise<CopyArchiveProgressUnitPage> {
     if (
       !Number.isInteger(after) ||
       after < -1 ||
@@ -516,6 +607,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       signal,
       async (tx, route, account, now) => {
         const h = await header(tx, route, account, id, now);
+        if (routeOf(sessionId) !== route) throw missing();
         if (
           !(
             await tx.query(
@@ -527,7 +619,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         )
           throw missing();
         const rows = (
-          await tx.query<{ ordinal: number; evidence: unknown }>(
+          await tx.query<{ ordinal: number; evidence: ArchivedProgressUnit }>(
             `SELECT ordinal,evidence FROM library.copy_archive_row
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND section='units'
               AND source_session_id=$4 AND ordinal>$5 ORDER BY ordinal LIMIT $6`,
@@ -551,7 +643,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     requestKey: string,
     input: unknown,
     signal?: AbortSignal,
-  ) {
+  ): Promise<CopyArchiveProgressReview> {
     const request = parseReviewRequest(input),
       requestDigest = sha256(JSON.stringify(request)),
       requestKeyHash = sha256(requestKey);
@@ -599,19 +691,21 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     const observation = await profileObservation(actor, request.subjectId);
     if (!observation || observation.source.subjectId !== request.subjectId) throw missing();
     let unitReview: { unitId: string; admission: 'member' | 'detached' | 'unavailable' }[] = [];
+    const canonicalUnitIds = request.unitIds.filter((unitId) => routeOf(unitId) !== null);
     if (
       request.mode === 'completed_units' &&
       request.unit === 'episode' &&
-      request.unitIds.length > 0 &&
+      canonicalUnitIds.length > 0 &&
       observation.source.kind === 'supported' &&
       nativeProgressUnit(observation.source.profile, { mode: request.mode, unit: request.unit })
     ) {
-      const membership = await episodeUnits(actor, request.subjectId, request.unitIds);
+      const membership = await episodeUnits(actor, request.subjectId, canonicalUnitIds),
+        admitted = new Map(canonicalUnitIds.map((unitId, index) => [unitId, membership[index]?.membership]));
       unitReview = request.unitIds.map((unitId, index) => ({
         unitId,
-        admission: membership[index]?.membership === 'member'
+        admission: admitted.get(unitId) === 'member'
           ? 'member'
-          : membership[index]?.membership === 'detached'
+          : admitted.get(unitId) === 'detached'
             ? 'detached'
             : 'unavailable',
       }));
@@ -632,14 +726,17 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     const binding = profileBinding(observation.anchor, observation.source),
       archived = evidence.session.evidence,
       unsupported: string[] = [],
-      measureReviews: Record<string, unknown>[] = [];
+      measureReviews: CopyArchiveProgressReview['measures'] = [];
     let plan: ProgressRecoveryPlan | null = null;
     if (archived.mode !== request.mode) unsupported.push('mode-mapping-not-supported');
     if (observation.source.kind !== 'supported') unsupported.push('current-profile-unavailable');
-    if (archived.state !== 'active' && archived.state !== 'completed' && archived.state !== 'abandoned')
+    const stateAdmitted = archived.state === 'active' || archived.state === 'completed' || archived.state === 'abandoned';
+    if (!stateAdmitted)
       unsupported.push('historical-state-not-expressible');
+    if (archived.version_subject_id !== null) unsupported.push('version-subject-mapping-not-supported');
+    if (!Object.hasOwn(archived, 'additional_measures')) unsupported.push('additional-measures-not-in-source-record');
 
-    if (archived.mode === request.mode && observation.source.kind === 'supported') {
+    if (stateAdmitted && archived.mode === request.mode && observation.source.kind === 'supported') {
       const profile = observation.source.profile,
         descriptor = progressUnit(profile, request.mode, request.unit),
         currentUnit = nativeProgressUnit(profile, { mode: request.mode, unit: request.unit });
@@ -710,12 +807,20 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             }
           }
           if (!parsedExtra.ok) {
-            applicable = false;
             unsupported.push(`additional-total:${sourceMeasure.unit}`);
+            measureReviews.push({
+              sourceUnit: sourceMeasure.unit,
+              sourceAmount: sourceMeasure.amount,
+              sourceTotal: sourceMeasure.total,
+              currentUnit: mapping.unit,
+              currentMeaning: extraDescriptor,
+              amount: sourceMeasure.amount === null ? 'absent' : 'unsupported',
+              total: 'unsupported',
+            });
             continue;
           }
           additionalMeasures.push(parsedExtra.value);
-          let amountStatus: string = 'absent';
+          let amountStatus: 'absent' | 'supported' | 'unsupported' = 'absent';
           if (sourceMeasure.amount !== null) {
             const parsedAmount = parseRecord(
               'scalar_amount',
@@ -829,7 +934,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             record = { kind: 'cursor', locator: parsed.value.locator, position: parsed.value.position };
           else unsupported.push('cursor-value-not-admitted');
         } else if (archived.position !== null || archived.locator !== null) unsupported.push('incomplete-cursor-value');
-        if (parsedCreate.ok && (archived.completed_unit_count === 0 || archived.mode !== 'completed_units'))
+        if (parsedCreate.ok)
           plan = {
             subjectId: request.subjectId,
             versionSubjectId: null,
@@ -878,7 +983,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         : {}),
     };
     const reviewId = newId(evidence.route),
-      response = {
+      response: CopyArchiveProgressReview = {
         uploadId: id,
         reviewId,
         sourceSessionId: archived.session_id,
@@ -892,6 +997,8 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           additionalMeasures: archived.additional_measures ?? [],
           completedUnitCount: archived.completed_unit_count,
           state: archived.state,
+          sourceRevision: archived.revision,
+          versionSubjectId: archived.version_subject_id,
           profilePin: archived.library_profile_pin,
           sourceTimes: {
             startedAt: archived.started_at,
@@ -905,6 +1012,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         unsupportedHistoricalDates: ['started_at', 'completed_at', 'last_changed_at'],
         unsupported,
         applicable: plan !== null,
+        recovery: plan === null ? 'unsupported' : unsupported.length ? 'partial' : 'complete',
         expiresAt: evidence.expiresAt,
       };
     const stored: ProgressReviewEvidence = { binding, plan, response };
@@ -977,7 +1085,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
     requestKey: string,
     signal?: AbortSignal,
     onCommand?: (receipt: { partition: number; epoch: number; position: number }) => void,
-  ) {
+  ): Promise<CopyArchiveProgressApplication> {
     if (routeOf(reviewId) === null) throw new ProblemError('invalid_request');
     const requestKeyHash = sha256(requestKey);
     const initial = await operation(
@@ -1011,7 +1119,7 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           const app = (
             await tx.query<{
               request_key_hash: Buffer;
-              state: string;
+              state: CopyArchiveProgressState;
               next_step: number;
               active_step: number | null;
               session_id: string | null;
@@ -1027,6 +1135,15 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           let current = app;
           if (!current) {
             if (h.cancelled) throw new ProblemError('conflict');
+            const keyOwner = (
+              await tx.query<{ review_id: string }>(
+                `SELECT review_id FROM library.copy_archive_progress_apply
+                WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND request_key_hash=$4
+                LIMIT 1`,
+                [route, account, id, requestKeyHash],
+              )
+            ).rows[0];
+            if (keyOwner && keyOwner.review_id !== reviewId) throw new ProblemError('idempotency_conflict');
             current = (
               await tx.query({
                 text: `INSERT INTO library.copy_archive_progress_apply
@@ -1038,7 +1155,13 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             ).rows[0] as NonNullable<typeof current>;
           }
           if (['applied', 'partial', 'stale', 'failed'].includes(current.state))
-            return { done: true as const, state: current.state, sessionId: current.session_id, error: current.error_code };
+            return {
+              done: true as const,
+              state: current.state,
+              sessionId: current.session_id,
+              acceptedSteps: current.next_step,
+              error: current.error_code,
+            };
           if (current.active_step !== null)
             return {
               done: false as const,
@@ -1052,7 +1175,13 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
               [route, account, id, reviewId, now],
             );
-            return { done: true as const, state: 'partial', sessionId: current.session_id, error: null };
+            return {
+              done: true as const,
+              state: 'partial' as const,
+              sessionId: current.session_id,
+              acceptedSteps: current.next_step,
+              error: null,
+            };
           }
           if (current.next_step >= totalSteps) {
             await tx.query(
@@ -1060,7 +1189,13 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
               WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
               [route, account, id, reviewId, now],
             );
-            return { done: true as const, state: 'applied', sessionId: current.session_id, error: null };
+            return {
+              done: true as const,
+              state: 'applied' as const,
+              sessionId: current.session_id,
+              acceptedSteps: current.next_step,
+              error: null,
+            };
           }
           const step = current.next_step;
           await tx.query(
@@ -1073,15 +1208,23 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         'progress_session:create',
       );
       if (reservation.done)
-        return applicationResult(id, reviewId, reservation.state, reservation.sessionId, totalSteps, reservation.error);
+        return applicationResult(
+          id,
+          reviewId,
+          reservation.state,
+          reservation.sessionId,
+          totalSteps,
+          reservation.error,
+          reservation.acceptedSteps,
+        );
       const step = steps[reservation.step];
       if (!step) throw new Error('Invalid archive progress step');
       signal?.throwIfAborted();
       const plan = initial.evidence.plan!;
+      const expected = nativeBinding(initial.evidence.binding!);
       let sessionId = reservation.sessionId;
       try {
-        const nativeKey = `archive:${reviewId}:${reservation.step}`,
-          expected = { subjectId: plan.subjectId, profilePin: initial.evidence.binding!.pin! };
+        const nativeKey = `archive:${reviewId}:${reservation.step}`;
         if (step.kind === 'create') {
           const created = await sessions.startSession(
             actor,
@@ -1118,8 +1261,8 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
             onCommand?.(recorded);
           } else if (step.kind === 'transition') {
             const transitioned = step.action === 'complete'
-              ? await sessions.completeSession(actor, sessionId, { revision: current.revision }, nativeKey)
-              : await sessions.abandonSession(actor, sessionId, { revision: current.revision }, nativeKey);
+              ? await sessions.completeSession(actor, sessionId, { revision: current.revision }, nativeKey, expected)
+              : await sessions.abandonSession(actor, sessionId, { revision: current.revision }, nativeKey, expected);
             onCommand?.(transitioned);
           }
         }
@@ -1153,10 +1296,19 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
           'progress_session:create',
         );
         if (checkpoint.state === 'partial' || checkpoint.state === 'applied')
-          return applicationResult(id, reviewId, checkpoint.state, sessionId, totalSteps, null);
+          return applicationResult(id, reviewId, checkpoint.state, sessionId, totalSteps, null, reservation.step + 1);
       } catch (error) {
-        if (error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)) {
-          const state = error.code === 'unsupported_library_profile' ? 'stale' : 'failed';
+        const failure: { state: CopyArchiveProgressState; code: string } | null =
+          error instanceof ProblemError && ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code)
+            ? { state: error.code === 'unsupported_library_profile' || error.code === 'conflict' ? 'stale' : 'failed', code: error.code }
+            : error instanceof ProgressConflictError
+              ? { state: 'stale', code: 'conflict' }
+              : error instanceof ProgressInvalidError
+                ? { state: 'failed', code: 'invalid_request' }
+                : error instanceof LibraryNotFoundError
+                  ? { state: 'failed', code: 'not_found' }
+                  : null;
+        if (failure) {
           await operation(
             actor,
             signal,
@@ -1165,12 +1317,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
                 `UPDATE library.copy_archive_progress_apply SET state=$5,error_code=$6,active_step=NULL,
                 session_id=COALESCE(session_id,$7),updated_at=to_timestamp($8/1000.0)
                 WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
-                [route, account, id, reviewId, state, error.code, sessionId, now],
+                [route, account, id, reviewId, failure.state, failure.code, sessionId, now],
               );
             },
             'progress_session:create',
           );
-          return applicationResult(id, reviewId, state, sessionId, totalSteps, error.code);
+          return applicationResult(id, reviewId, failure.state, sessionId, totalSteps, failure.code, reservation.step);
         }
         throw error;
       }
@@ -1179,22 +1331,28 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
   function applicationResult(
     uploadId: string,
     reviewId: string,
-    state: string,
+    state: CopyArchiveProgressState,
     sessionId: string | null,
     totalSteps: number,
     error: string | null,
+    acceptedSteps = state === 'applied' ? totalSteps : 0,
   ) {
     return {
       uploadId,
       reviewId,
       state,
       sessionId,
-      acceptedSteps: state === 'applied' ? totalSteps : null,
+      acceptedSteps,
       totalSteps,
       error,
     };
   }
-  async function progressResult(actor: Actor, id: string, reviewId: string, signal?: AbortSignal) {
+  async function progressResult(
+    actor: Actor,
+    id: string,
+    reviewId: string,
+    signal?: AbortSignal,
+  ): Promise<CopyArchiveProgressResult> {
     if (routeOf(reviewId) === null) throw new ProblemError('invalid_request');
     const captured = await operation(
       actor,
@@ -1210,7 +1368,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
         ).rows[0];
         if (!review) throw missing();
         const app = (
-          await tx.query<{ state: string; next_step: number; session_id: string | null; error_code: string | null }>(
+          await tx.query<{
+            state: CopyArchiveProgressState;
+            next_step: number;
+            session_id: string | null;
+            error_code: string | null;
+          }>(
             `SELECT state,next_step,session_id,error_code FROM library.copy_archive_progress_apply
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
             [route, account, id, reviewId],
@@ -1242,7 +1405,12 @@ export function createCopyArchive(deps: CopyArchiveDependencies) {
       async (tx, route, account, now) => {
         await header(tx, route, account, id, now);
         const current = (
-          await tx.query<{ state: string; next_step: number; session_id: string | null; error_code: string | null }>(
+            await tx.query<{
+              state: CopyArchiveProgressState;
+              next_step: number;
+              session_id: string | null;
+              error_code: string | null;
+            }>(
             `SELECT state,next_step,session_id,error_code FROM library.copy_archive_progress_apply
             WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND review_id=$4`,
             [route, account, id, reviewId],

@@ -36,7 +36,7 @@ import type {
   ProgressSessionUpdate,
 } from './progress-model.ts';
 import * as store from './progress-store.ts';
-import { readLibraryProfileSource } from './profile-source.ts';
+import { readLibraryProfileSource, readLibraryProfileSourceObservation } from './profile-source.ts';
 import type { LibraryProfilePin } from './profile.ts';
 import {
   compatibleProgressUnits,
@@ -58,20 +58,35 @@ import { parseProgressSessionJournalPatch } from './progress-journal.ts';
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
 type Page = { limit?: number; cursor?: string };
 type Client = CommandTransaction;
-type ExpectedProgressBinding = { subjectId: string; profilePin: Extract<LibraryProfilePin, { provenance: 'profile' }> };
+type ExpectedProgressBinding = {
+  subjectId: string;
+  requestedSubjectId: string | null;
+  acceptingType: string;
+  identityEpoch: string;
+  component: { partition: number; epoch: number; position: number };
+  profilePin: Extract<LibraryProfilePin, { provenance: 'profile' }>;
+};
 
 function assertExpectedBinding(
-  source: Awaited<ReturnType<typeof readLibraryProfileSource>>,
+  observation: Awaited<ReturnType<typeof readLibraryProfileSourceObservation>>,
   expected?: ExpectedProgressBinding,
 ) {
+  const source = observation?.source;
   if (
     expected &&
-    (!source ||
+    (!observation ||
+      !source ||
       source.kind !== 'supported' ||
       source.subjectId !== expected.subjectId ||
-      JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin))
+      JSON.stringify(source.pin) !== JSON.stringify(expected.profilePin) ||
+      observation.anchor.requestedSubjectId !== expected.requestedSubjectId ||
+      observation.anchor.acceptingType !== expected.acceptingType ||
+      observation.anchor.identityEpoch.toString() !== expected.identityEpoch ||
+      observation.anchor.component.partition !== expected.component.partition ||
+      observation.anchor.component.epoch !== expected.component.epoch ||
+      observation.anchor.component.position !== expected.component.position)
   )
-    throw new ProgressConflictError();
+    throw new ProblemError('conflict');
 }
 
 export class ProgressInvalidError extends Error {
@@ -179,14 +194,15 @@ export function createSessionCommands(config: Dependencies) {
         async prepare(attempt) {
           try {
             const deps = { pool, access, actor: owner, at: attempt.time, deadline };
-            const source = await readLibraryProfileSource(deps, parsed.subjectId);
+            const observation = await readLibraryProfileSourceObservation(deps, parsed.subjectId),
+              source = observation?.source ?? null;
             const version =
               parsed.versionSubjectId === null
                 ? null
                 : parsed.versionSubjectId === parsed.subjectId
                   ? source
                   : await readLibraryProfileSource(deps, parsed.versionSubjectId);
-            assertExpectedBinding(source, expected);
+            assertExpectedBinding(observation, expected);
             return { source, version };
           } catch (error) {
             return { error };
@@ -260,11 +276,10 @@ export function createSessionCommands(config: Dependencies) {
               const session = await snapshot(owner, 'progress_session:update', (client) =>
                 load(client, owner, sessionId),
               );
-              const source = await readLibraryProfileSource(
-                { pool, access, actor: owner, at: attempt.time, deadline },
-                session.subjectId,
-              );
-              assertExpectedBinding(source, expected);
+              const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },
+                observation = await readLibraryProfileSourceObservation(sourceDeps, session.subjectId),
+                source = observation?.source ?? null;
+              assertExpectedBinding(observation, expected);
               if (!source) throw new LibraryNotFoundError();
               // No new value is admitted. The original session identity and meaning stay intact,
               // including when the current profile no longer offers its unit.
@@ -289,11 +304,14 @@ export function createSessionCommands(config: Dependencies) {
             const release = await readRelease(pool, fact.pin.releaseDigest, { composed: false });
             const original = release && resolveLibraryProfilePin({ digest: fact.pin.releaseDigest, release }, fact.pin);
             if (!original) throw new ProblemError('unsupported_library_profile');
-            const source = await readLibraryProfileSource(
-              { pool, access, actor: owner, at: attempt.time, deadline },
-              fact.session.subjectId,
-            );
-            assertExpectedBinding(source, expected);
+            const sourceDeps = { pool, access, actor: owner, at: attempt.time, deadline },
+              observation = expected
+                ? await readLibraryProfileSourceObservation(sourceDeps, fact.session.subjectId)
+                : null,
+              source = expected
+                ? observation?.source ?? null
+                : await readLibraryProfileSource(sourceDeps, fact.session.subjectId);
+            assertExpectedBinding(observation, expected);
             return { original, source, pin: fact.pin };
           } catch (error) {
             return { error };
@@ -312,7 +330,11 @@ export function createSessionCommands(config: Dependencies) {
         if (!fact || fact.session.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const current = fact.session;
         if (current.state === 'retired') throw new LibraryNotFoundError();
-        if (expected) assertExpectedBinding(prepared.source, expected);
+        if (expected) {
+          // Prepared profile and identity were checked against the reviewed binding before effects.
+          // Record's original compatibility check remains below.
+          if (!prepared.source || prepared.source.subjectId !== expected.subjectId) throw new ProblemError('conflict');
+        }
         if (
           measureId !== undefined &&
           (current.mode !== 'scalar_amount' ||
@@ -399,10 +421,20 @@ export function createSessionCommands(config: Dependencies) {
     requestKey: string,
     expected?: ExpectedProgressBinding,
   ) => update(actor, sessionId, input, requestKey, 'record', expected);
-  const completeSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
-    update(actor, sessionId, input, requestKey, 'complete');
-  const abandonSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
-    update(actor, sessionId, input, requestKey, 'abandon');
+  const completeSession = (
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    expected?: ExpectedProgressBinding,
+  ) => update(actor, sessionId, input, requestKey, 'complete', expected);
+  const abandonSession = (
+    actor: Actor,
+    sessionId: string,
+    input: unknown,
+    requestKey: string,
+    expected?: ExpectedProgressBinding,
+  ) => update(actor, sessionId, input, requestKey, 'abandon', expected);
   const reopenSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>
     update(actor, sessionId, input, requestKey, 'reopen');
   const retireSession = (actor: Actor, sessionId: string, input: unknown, requestKey: string) =>

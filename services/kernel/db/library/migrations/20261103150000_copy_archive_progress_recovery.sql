@@ -52,12 +52,13 @@ CREATE TABLE library.copy_archive_progress_apply (
   review_id uuid NOT NULL,
   request_key_hash bytea NOT NULL CHECK (octet_length(request_key_hash) = 32),
   state text NOT NULL CHECK (state IN ('applying', 'partial', 'applied', 'stale', 'failed')),
-  next_step integer NOT NULL DEFAULT 0 CHECK (next_step BETWEEN 0 AND 40),
-  active_step integer CHECK (active_step BETWEEN 0 AND 39),
+  next_step integer NOT NULL DEFAULT 0 CHECK (next_step BETWEEN 0 AND 10),
+  active_step integer CHECK (active_step BETWEEN 0 AND 9),
   session_id uuid,
   error_code text,
   updated_at timestamptz NOT NULL,
   PRIMARY KEY (route, account_id, upload_id, review_id),
+  UNIQUE (route, account_id, upload_id, request_key_hash),
   FOREIGN KEY (route, account_id, upload_id, review_id)
     REFERENCES library.copy_archive_progress_review (route, account_id, upload_id, review_id)
 );
