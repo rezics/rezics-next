@@ -1,37 +1,39 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/rating/source-observation-read*.ts",
-    "services/kernel/src/rating/source-observation-read*.sql",
-    "services/kernel/src/rating/source-provider-observation.ts",
-    "services/kernel/src/rating/source-provider.ts",
-    "services/kernel/src/rating/source-statistics.ts",
-    "services/kernel/src/rating/README.md",
-    "services/kernel/db/rating/**",
-    "services/kernel/test/rating/*source-observation*.ts",
-    "services/kernel/test/rating/support/*source-observation*.ts",
-    "services/kernel/test/rating/source-statistic-isolation-fixture.ts",
-    "services/kernel/test/rating/source-statistics.test.ts",
-    "services/kernel/test/rating/growth-source-figures.test.ts",
-    "packages/client/src/kernel/**",
-    "packages/client/src/index.ts",
-    "contracts/openapi.json"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "waiting": [],
-  "after": ["1c1f09c4-9afc-41b3-bceb-f7cab57792d7"],
-  "estimate": { "lines": 1400, "files": 12 },
-  "inseparable": true,
-  "acceptance": [
-    "Complete mounted native and generated-client inspection, exact comparison and existing CAS recovery while preserving concealed raw history continuation and required current-head authority.",
-    "Exercise native/legacy boundaries, native restoration, suspended and revoked callers, account switching, immutable replay, uncertain-write readback and payload/final-fill source changes.",
-    "Independently grow history, authority and unrelated data at 256/1024/4096, including all pools and runners, strict physical ordered prefixes and derived materialization costs.",
-    "Deliver schema-generated declarations and OpenAPI to Imports API43 and Web; retain Web's existing phone/desktop provenance and action-recovery experience acceptance."
-  ]
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/rating/source-observation-read*.ts',
+      'services/kernel/src/rating/source-observation-read*.sql',
+      'services/kernel/src/rating/source-provider-observation.ts',
+      'services/kernel/src/rating/source-provider.ts',
+      'services/kernel/src/rating/source-statistics.ts',
+      'services/kernel/src/rating/README.md',
+      'services/kernel/db/rating/**',
+      'services/kernel/test/rating/*source-observation*.ts',
+      'services/kernel/test/rating/support/*source-observation*.ts',
+      'services/kernel/test/rating/source-statistic-isolation-fixture.ts',
+      'services/kernel/test/rating/source-statistics.test.ts',
+      'services/kernel/test/rating/growth-source-figures.test.ts',
+      'packages/client/src/kernel/**',
+      'packages/client/src/index.ts',
+      'contracts/openapi.json',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': ['1c1f09c4-9afc-41b3-bceb-f7cab57792d7'],
+  'estimate': { 'lines': 1400, 'files': 12 },
+  'inseparable': true,
+  'acceptance':
+    [
+      'Complete mounted native and generated-client inspection, exact comparison and existing CAS recovery while preserving concealed raw history continuation and required current-head authority.',
+      'Exercise native/legacy boundaries, native restoration, suspended and revoked callers, account switching, immutable replay, uncertain-write readback and payload/final-fill source changes.',
+      'Independently grow history, authority and unrelated data at 256/1024/4096, including all pools and runners, strict physical ordered prefixes and derived materialization costs.',
+      "Deliver schema-generated declarations and OpenAPI to Imports API43 and Web; retain Web's existing phone/desktop provenance and action-recovery experience acceptance.",
+    ],
 }
 ---
 

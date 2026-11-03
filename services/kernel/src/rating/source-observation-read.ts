@@ -359,7 +359,12 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
     ) as Promise<T[]>;
   }
 
-  async function metadataFor(input: SourceObservationReadInput, source: SourceProvider, route: number, cursor: Cursor | null) {
+  async function metadataFor(
+    input: SourceObservationReadInput,
+    source: SourceProvider,
+    route: number,
+    cursor: Cursor | null,
+  ) {
     const currentRows = await query<MetaRow>(headQuery, { route, subject_id: input.subjectId, source }, input.deadline);
     const current = currentRows[0] ?? null;
     if (input.digest !== undefined) {
@@ -556,9 +561,7 @@ export function createSourceObservationReadCommands(dependencies: SourceObservat
             history: {
               items: historyItem ? [historyItem] : [],
               nextCursor:
-                historyMeta &&
-                initial.lookahead &&
-                historyMeta.digest !== null
+                historyMeta && initial.lookahead && historyMeta.digest !== null
                   ? signCursor(
                       {
                         version: 1,

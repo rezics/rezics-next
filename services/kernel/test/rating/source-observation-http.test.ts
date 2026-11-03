@@ -21,9 +21,14 @@ afterAll(async () => {
 
 const path = (id: string) => `/v1/subjects/${id}/source-statistics/bangumi`;
 const value = (record: string) => ({
-  sourceAlias: `catalogue-${record}`, sourceRecordId: record,
-  scale: { min: 0, max: 10 }, mean: 8, count: 2, asOf: '2026-11-01',
-  licence: 'LicenseRef-Authorized-Test', attribution: 'Permitted source users',
+  sourceAlias: `catalogue-${record}`,
+  sourceRecordId: record,
+  scale: { min: 0, max: 10 },
+  mean: 8,
+  count: 2,
+  asOf: '2026-11-01',
+  licence: 'LicenseRef-Authorized-Test',
+  attribution: 'Permitted source users',
 });
 async function json(response: Response, status = 200): Promise<any> {
   const text = await response.text();
@@ -36,10 +41,19 @@ const inspect = (id: string, query = '', actor = fixture.actors.importer) =>
   fixture.request('GET', `${path(id)}/observations${query}`, { actor });
 const page = async (id: string, cursor?: string): Promise<SourceObservationReadResponse> =>
   json(await inspect(id, cursor ? `?cursor=${encodeURIComponent(cursor)}` : '?history=true'));
-const fence = async (record: string) => json(await fixture.request('POST', '/v1/sourceFences:takedown', {
-  actor: fixture.actors.governance, key: crypto.randomUUID(),
-  body: { source: value(record).sourceAlias, externalId: record, fieldGroup: 'facts', reason: 'Protect retained source' },
-}));
+const fence = async (record: string) =>
+  json(
+    await fixture.request('POST', '/v1/sourceFences:takedown', {
+      actor: fixture.actors.governance,
+      key: crypto.randomUUID(),
+      body: {
+        source: value(record).sourceAlias,
+        externalId: record,
+        fieldGroup: 'facts',
+        reason: 'Protect retained source',
+      },
+    }),
+  );
 async function history(records: string[]) {
   const id = await fixture.createSubject();
   const digests: string[] = [];
@@ -51,12 +65,15 @@ async function history(records: string[]) {
 }
 
 test('a concealed lookahead and raw item preserve current head and bounded continuation', async () => {
-  const { id, digests: [old, middle, latest] } = await history(['101', '102', '103']);
+  const {
+    id,
+    digests: [old, middle, latest],
+  } = await history(['101', '102', '103']);
   await fence('102');
   observer.records.length = 0;
   const first = await page(id);
   expect(first.head.digest).toBe(latest);
-  expect(first.history!.items.map(item => item.digest)).toEqual([latest!]);
+  expect(first.history!.items.map((item) => item.digest)).toEqual([latest!]);
   expect(first.history!.nextCursor).toBeString();
   const withheld = await page(id, first.history!.nextCursor!);
   expect(withheld.head).toEqual(first.head);
@@ -65,11 +82,11 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   expect(JSON.stringify(withheld)).not.toContain('catalogue-102');
   const last = await page(id, withheld.history!.nextCursor!);
   expect(last.head).toEqual(first.head);
-  expect(last.history!.items.map(item => item.digest)).toEqual([old!]);
+  expect(last.history!.items.map((item) => item.digest)).toEqual([old!]);
   expect(last.history!.nextCursor).toBeNull();
-  const fetched = observer.records.filter(row => row.statement === payloadQuery.sql);
+  const fetched = observer.records.filter((row) => row.statement === payloadQuery.sql);
   expect(fetched).toHaveLength(3);
-  expect(JSON.stringify(fetched.map(row => row.parameters))).not.toContain(middle!);
+  expect(JSON.stringify(fetched.map((row) => row.parameters))).not.toContain(middle!);
   await json(await inspect(id, `?digest=${middle}`), 404);
   const exact = await json(await inspect(id, `?digest=${old}`));
   expect(exact.head.digest).toBe(latest);
@@ -80,7 +97,11 @@ test('a concealed lookahead and raw item preserve current head and bounded conti
   const finalHead = observer.hold({ statement: payloadQuery.sql }, 'after');
   const required = inspect(id, `?digest=${old}`);
   await finalHead.entered;
-  try { await fence('103'); } finally { finalHead.release(); }
+  try {
+    await fence('103');
+  } finally {
+    finalHead.release();
+  }
   const concealed = await json(await required, 404);
   expect(JSON.stringify(concealed)).not.toContain('catalogue-103');
   await json(await inspect(id, `?digest=${old}`), 404);
@@ -93,7 +114,11 @@ test('source changes and failed fills retry the same raw cursor, without publish
   const hold = observer.hold({ statement: payloadQuery.sql }, 'after');
   const pending = inspect(id, `?cursor=${encodeURIComponent(cursor)}`);
   await hold.entered;
-  try { await fence('202'); } finally { hold.release(); }
+  try {
+    await fence('202');
+  } finally {
+    hold.release();
+  }
   const failure = await json(await pending, 409);
   expect(JSON.stringify(failure)).not.toContain('catalogue-202');
   const retried = await page(id, cursor);
@@ -103,7 +128,11 @@ test('source changes and failed fills retry the same raw cursor, without publish
   const finalFill = observer.hold({ statement: headQuery.sql, occurrence: 2 }, 'after');
   const changingLookahead = inspect(id, `?cursor=${encodeURIComponent(cursor)}`);
   await finalFill.entered;
-  try { await fence('201'); } finally { finalFill.release(); }
+  try {
+    await fence('201');
+  } finally {
+    finalFill.release();
+  }
   await json(await changingLookahead, 409);
   const stable = await page(id, cursor);
   expect(stable.history!.items).toEqual([]);
@@ -111,7 +140,11 @@ test('source changes and failed fills retry the same raw cursor, without publish
   const end = await page(id, stable.history!.nextCursor!);
   expect(end.head).toEqual(stable.head);
   expect(end.history).toEqual({ items: [], nextCursor: null });
-  observer.armFault({ match: { statement: headQuery.sql }, boundary: 'before', error: new Error('inspection dependency failed') });
+  observer.armFault({
+    match: { statement: headQuery.sql },
+    boundary: 'before',
+    error: new Error('inspection dependency failed'),
+  });
   expect((await inspect(id, `?cursor=${encodeURIComponent(cursor)}`)).status).toBeGreaterThanOrEqual(500);
   expect(await page(id, cursor)).toEqual(stable);
 });
@@ -129,11 +162,21 @@ test('inspection supports deliberate CAS correction, clear, replay and revoked/a
   await json(await write(id, { ...body, mean: 9 }), 409);
   const corrected = await json(await write(id, { ...body, mean: 9, ...current.resolution.put }));
   await json(await write(id, { ...body, ...current.resolution.put }), 409);
-  const clear = { sourceAlias: body.sourceAlias, sourceRecordId: body.sourceRecordId,
-    count: 0, asOf: '2026-11-02', expectedObservation: corrected.observation.digest };
-  await json(await fixture.request('POST', `${path(id)}:clear`, {
-    actor: fixture.actors.importer, key: crypto.randomUUID(), body: clear,
-  }), 204);
+  const clear = {
+    sourceAlias: body.sourceAlias,
+    sourceRecordId: body.sourceRecordId,
+    count: 0,
+    asOf: '2026-11-02',
+    expectedObservation: corrected.observation.digest,
+  };
+  await json(
+    await fixture.request('POST', `${path(id)}:clear`, {
+      actor: fixture.actors.importer,
+      key: crypto.randomUUID(),
+      body: clear,
+    }),
+    204,
+  );
   const cleared = await json(await inspect(id));
   expect(cleared.head.state).toBe('cleared');
   expect(cleared.head.observation.payload.count).toBe(0);
@@ -143,6 +186,8 @@ test('inspection supports deliberate CAS correction, clear, replay and revoked/a
   try {
     await json(await inspect(id), 403);
     await json(await write(id, body, key), 403);
-  } finally { await fixture.grantImporter(fixture.actors.importer); }
+  } finally {
+    await fixture.grantImporter(fixture.actors.importer);
+  }
   expect((await json(await inspect(id))).head).toEqual(cleared.head);
 });

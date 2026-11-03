@@ -920,8 +920,7 @@ while signed history uses descending committed local order and marks legacy rows
 Decision: history consumes one raw position even when concealed, returning empty items with continuation when
 another raw position exists; a changed source observation returns a conflict for retry with the original cursor.
 
-Current head and exact digest remain required: a concealed required tuple returns the existing indistinguishable
-404. A stable concealed historical candidate is omitted before payload acquisition. Lookahead metadata is used
+Current head and exact digest remain required: a concealed required tuple returns the existing indistinguishable 404. A stable concealed historical candidate is omitted before payload acquisition. Lookahead metadata is used
 only for continuation and currentness, never as a returned resource or permission. An empty history page with a
 non-null cursor is therefore continuing, not exhausted. There is no refill. Initial and final native metadata and
 all tuple security revisions must agree; a change to an optional candidate or lookahead returns 409 without a new
