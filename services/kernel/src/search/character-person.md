@@ -23,7 +23,18 @@ probes, groups selected works by their native partition and preserves separate s
 qualifier conjunctions. It reanchors result subjects after foreign I/O. Hidden, unavailable or
 unproven source evidence stays unknown under NOT. The caller supplies the runtime release
 observation for the complete window; individual native probes also observe the runtime release.
-This seam does not yet admit inverse syntax through the universal API.
+The universal Subject search and its retained public candidate capture admit `inverse: true`
+on an item-valued `statement` leaf. Its `in` operands are selected source works, while the
+result anchor remains the candidate Character or Person. Current native forward probes check
+source-type facet admission and the complete same-statement qualifier conjunction.
+
+Decision: inverse syntax uses `statement.inverse: true` with explicit source UUIDs; consumers opt in only when they execute current inverse evidence, and inverse range or concept expansion remains unsupported.
+
+Both polarities retain candidates without trusting outbound index samples. The current Boolean
+matcher resolves inverse leaves through this seam and retains unknown inverse negatives.
+Candidate anchors and runtime release observations span the complete disclosure window, including
+separate batches. Retained capture uses the same broadened compiler and dependency properties;
+it does not itself certify inverse membership.
 
 Candidate index facts are hints. Current checks forward the complete qualifier conjunction to
 the Semantic relation source, including when the selected relation sample overflows. Qualified
@@ -76,9 +87,9 @@ per admitted variant; retained raw rows remain at most 1000. Existing source, ta
 disclosure work is unchanged. Progress writes at most A cursor rows using the existing lifecycle.
 
 This is one bounded native evidence step, not an absence certificate, a whole-page bound or a
-measurement of total preparation. Universal inverse admission, appearance-constrained voice
-membership, complete journey spoiler thresholds, finite authorized preparation, matching context
-previews and the installed character/person Web journey still require the continuation contract.
+measurement of total preparation. Appearance-constrained voice membership, complete journey spoiler thresholds, measured finite
+authorized preparation, matching context previews and the installed character/person Web journey
+still require the continuation contract.
 A complete whole-page K must be
 derived before dispatch for that integrated plan; a raw native LIMIT cannot certify it.
 

@@ -47,6 +47,8 @@ export type FilterStatement =
       readonly property: string;
       readonly in: readonly string[];
       readonly concept?: ConceptSelection;
+      /** Selected source subjects point to the candidate through this relation. */
+      readonly inverse?: true;
       readonly qualifiers?: readonly FilterQualifier[];
     }
   | { readonly property: string; readonly range: FilterRange; readonly qualifiers?: readonly FilterQualifier[] };
@@ -109,7 +111,12 @@ function spoilerThresholdSupport(release: FilterRelease, property: string): 'sup
 }
 
 /** Owner-context admission checks structure, not authorization, capabilities or accepted historical pins. */
-export type FilterAdmissionOptions = { saved?: boolean; owner?: true; spoilerThreshold?: SpoilerThreshold };
+export type FilterAdmissionOptions = {
+  saved?: boolean;
+  owner?: true;
+  inverse?: true;
+  spoilerThreshold?: SpoilerThreshold;
+};
 
 export type FilterValidationError = { problem: FilterProblem; pointer: string; code: FieldErrorCode };
 
@@ -465,8 +472,11 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
         const hasIn = Object.hasOwn(statementFields, 'in');
         const hasRange = Object.hasOwn(statementFields, 'range');
         const hasConcept = Object.hasOwn(statementFields, 'concept');
+        const hasInverse = Object.hasOwn(statementFields, 'inverse');
 
         if (hasIn && hasRange) fail(appendPointer(fieldPointer, 'range'), 'unsupported');
+        if (hasInverse && (!hasIn || hasRange || hasConcept))
+          fail(appendPointer(fieldPointer, 'inverse'), 'unsupported');
         if (hasConcept && (!hasIn || hasRange)) fail(appendPointer(fieldPointer, 'concept'), 'unsupported');
 
         let property: string | undefined;
@@ -474,6 +484,7 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
         let range: FilterRange | undefined;
         let concept: ConceptSelection | undefined;
         let qualifiers: FilterQualifier[] | undefined;
+        let inverse: true | undefined;
         for (const statementKey of statementKeys) {
           const propertyPointer = appendPointer(fieldPointer, statementKey);
           if (statementKey === 'property') {
@@ -484,6 +495,10 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
             range = parseRange(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
           } else if (statementKey === 'concept') {
             concept = parseConceptSelection(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
+          } else if (statementKey === 'inverse') {
+            if (ownValue(statementFields, statementKey, propertyPointer) !== true)
+              fail(propertyPointer, 'invalid_format');
+            inverse = true;
           } else if (statementKey === 'qualifiers') {
             qualifiers = parseQualifiers(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
           } else {
@@ -501,7 +516,13 @@ function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocum
           statement:
             selected === undefined
               ? { property, range: range!, ...qualifierField }
-              : { property, in: selected, ...(concept ? { concept } : {}), ...qualifierField },
+              : {
+                  property,
+                  in: selected,
+                  ...(concept ? { concept } : {}),
+                  ...(inverse ? { inverse } : {}),
+                  ...qualifierField,
+                },
         };
       }
       case 'owner':
@@ -852,12 +873,29 @@ function admitConstructed(
   ): void {
     const statement = node.statement;
     const propertyPointer = appendPointer(appendPointer(pointer, 'statement'), 'property');
-    if (!allowedFacet(statement.property)) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
+    const inverse = 'inverse' in statement && statement.inverse !== undefined;
+    if (inverse) {
+      if (
+        options.inverse !== true ||
+        statement.inverse !== true ||
+        !('in' in statement) ||
+        statement.concept !== undefined ||
+        !construction.all.has(statement.property) ||
+        !relationFacetProperty(release, statement.property)
+      )
+        reject(
+          appendPointer(appendPointer(pointer, 'statement'), 'inverse'),
+          source,
+          'unsupported',
+          'unsupported_query',
+        );
+    } else if (!allowedFacet(statement.property)) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
 
     const properties = dataField(release, 'properties');
     const definition = propertyDefinition(properties, statement.property);
     if (!definition) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
     const datatype = dataField(definition, 'datatype');
+    if (inverse && datatype !== 'wikibase-item') reject(propertyPointer, source, 'unsupported', 'unsupported_query');
 
     if ('in' in statement) {
       const inPointer = appendPointer(appendPointer(pointer, 'statement'), 'in');
@@ -1128,6 +1166,7 @@ function admitConstructed(
           ? {
               property: admittedStatement.property,
               in: [...admittedStatement.in],
+              ...(admittedStatement.inverse ? { inverse: true as const } : {}),
               ...(admittedStatement.concept
                 ? {
                     concept: {

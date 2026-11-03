@@ -1,8 +1,9 @@
-import { calendarRangeBounds, FilterError, type FilterDocument, type FilterRange } from '@rezics/filter';
+import { calendarRangeBounds, FilterError, type FilterDocument, type FilterRange, walkFilter } from '@rezics/filter';
 import type { FactClause } from './disclosure/check.ts';
 import { SearchUnavailableError } from './opensearch.ts';
 
 type FilterClause =
+  | { match_all: { _name: string } }
   | { terms: { type: string[]; _name: string } }
   | { terms: { statements: string[]; _name?: string } }
   | { term: Record<string, string> }
@@ -28,6 +29,11 @@ export function compileFilter(
   },
 ): { query: FilterClause; leaves: FilterLeaf[] } {
   const leaves: FilterLeaf[] = [];
+  // Inbound edges are absent from the index. Both polarities retain every candidate
+  // for current native evidence, including beneath mixed Boolean expressions.
+  relationOverflow ||= [...walkFilter(filter)].some(
+    (node) => 'statement' in node && 'in' in node.statement && node.statement.inverse === true,
+  );
 
   function statementQuery(exact: FilterClause, property: string, name: string, negated: boolean): FilterClause {
     if (!relationOverflow) return exact;
@@ -81,7 +87,16 @@ export function compileFilter(
       throw new SearchUnavailableError('Concept membership preparation is unavailable');
     const condition: { values: string[] } | { range: FilterRange } =
       'in' in node.statement ? { values: [...node.statement.in] } : { range: node.statement.range };
-    leaves.push({ name, facet: 'statement', property, ...condition, ...(qualifiers ? { qualifiers } : {}), negated });
+    leaves.push({
+      name,
+      facet: 'statement',
+      property,
+      ...condition,
+      ...('in' in node.statement && node.statement.inverse ? { inverse: true as const } : {}),
+      ...(qualifiers ? { qualifiers } : {}),
+      negated,
+    });
+    if ('in' in node.statement && node.statement.inverse) return { match_all: { _name: name } };
     // Name the broadened literal once, so marker-only matches retain the same lineage as exact matches.
     const named = relationOverflow ? {} : { _name: name };
     if ('values' in condition && !qualifiers?.length)

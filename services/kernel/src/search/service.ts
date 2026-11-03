@@ -594,6 +594,7 @@ export function createSearchService({
     current?: FilterRelease,
     nativeOrder = false,
     spoilerThreshold?: SpoilerThreshold,
+    inverse = false,
   ) {
     let admitted;
     if (filter) {
@@ -608,7 +609,7 @@ export function createSearchService({
           });
         } else {
           admitted = admitFilter(filter as FilterDocument, active, {
-            ...(containsOwnerPredicate(filter) ? { owner: true as const } : {}),
+            ...(containsOwnerPredicate(filter) ? { owner: true as const } : inverse ? { inverse: true as const } : {}),
             ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
           });
         }
@@ -676,6 +677,7 @@ export function createSearchService({
         current ?? undefined,
         request.population !== undefined,
         spoilerThreshold,
+        !request.population,
       );
       if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
       if (request.kindCursor !== undefined && typeof request.kindCursor !== 'string')
@@ -1028,7 +1030,18 @@ export function createSearchService({
             disclosureSource,
             hits,
             clauses,
-            admitted && !preparedScope ? { filter: admitted, relationProperties } : undefined,
+            admitted && !preparedScope
+              ? {
+                  filter: admitted,
+                  relationProperties,
+                  observeRelationRelease: async () => {
+                    await assertCurrentRelease();
+                    return current
+                      ? { release: current, digest: kinds!.digest, head: releaseBinding?.head ?? 0 }
+                      : null;
+                  },
+                }
+              : undefined,
           ),
         );
         inexact ||= relationRejected === true;

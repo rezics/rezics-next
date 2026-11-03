@@ -76,6 +76,7 @@ export function currentClauseKey(clause: FactClause): string {
     'statement',
     clause.property,
     condition,
+    ...('values' in clause && clause.inverse ? [['inverse']] : []),
     ...('values' in clause && clause.concept
       ? [['concept', clause.concept.scheme, clause.concept.includeChildren ?? false]]
       : []),
@@ -165,6 +166,7 @@ function compileCurrentPlan<Leaf>(
                       ...('in' in node.statement
                         ? {
                             values: node.statement.in,
+                            ...(node.statement.inverse ? { inverse: true as const } : {}),
                             ...(node.statement.concept ? { concept: node.statement.concept } : {}),
                           }
                         : { range: node.statement.range }),

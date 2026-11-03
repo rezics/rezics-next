@@ -76,3 +76,33 @@ test('journey thresholds admit only explicit levels through the selected value',
     ),
   ).toThrow();
 });
+
+test('inverse relations select released source facets independently of candidate type', () => {
+  const input = {
+    and: [{ type: { in: ['wd:Q95074'] } }, { statement: { property: 'schema:character', inverse: true, in: [id] } }],
+  };
+  const filter = parseFilter(input);
+  expect(() => admitFilter(filter, release)).toThrow();
+  expect(admitFilter(filter, release, { inverse: true, spoilerThreshold: 1 })).toEqual({
+    and: [
+      input.and[0],
+      {
+        statement: {
+          property: 'schema:character',
+          inverse: true,
+          in: [id],
+          qualifiers: [{ property: spoiler, in: ['0', '1'] }],
+        },
+      },
+    ],
+  });
+  for (const invalid of [
+    { inverse: false, in: [id] },
+    { inverse: true, range: { gte: 1 } },
+    { inverse: true, in: [id], concept: { scheme: id } },
+  ])
+    expect(() => parseFilter({ statement: { property: 'schema:character', ...invalid } })).toThrow();
+  const retired = structuredClone(release);
+  retired.types['schema:Movie']!.facets = [];
+  expect(() => admitFilter(filter, retired, { inverse: true })).toThrow();
+});

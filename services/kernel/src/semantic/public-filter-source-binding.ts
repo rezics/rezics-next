@@ -748,7 +748,7 @@ function captureKeys(meaning: PublicFilterProjectionMeaning, input: PublicFilter
   if (input.filterDocument !== undefined) {
     for (const node of walkFilter(input.filterDocument))
       if ('owner' in node || 'saved' in node) throw new TypeError('Only expanded public filters may bind');
-    const admitted = admitFilter(input.filterDocument, meaning.release);
+    const admitted = admitFilter(input.filterDocument, meaning.release, { inverse: true });
     if (!isDeepStrictEqual(admitted, input.filterDocument)) throw new TypeError('Capture must already be admitted');
   }
   const filter =
