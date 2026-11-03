@@ -8,6 +8,13 @@ import {
   type ConceptStatementRead,
 } from '../search/concept-browse-statements.ts';
 import readConcepts from './search-source-concepts.sql';
+import readConceptObservation from './search-source-concept-observation.sql';
+import readConceptChildren from './search-source-concept-children.sql';
+import type {
+  ConceptBrowseBinding,
+  ConceptBrowseSource,
+  ConceptDescendantSelection,
+} from '../search/concept-browse.ts';
 import { releaseDigest, type Release } from '@rezics/definitions';
 import type { Source } from '@rezics/definitions/bulk';
 import {
@@ -59,6 +66,17 @@ export type SelectedStatement = {
   relation: boolean;
   eligible: boolean | null;
 };
+
+/** Conservative native allowance reserved before each hierarchy observation or seek. */
+export type ConceptBrowseNativeReservation = Readonly<{
+  keys: number;
+  rows: number;
+  points: number;
+  statements: number;
+  bytes: number;
+  emptySeeks: number;
+}>;
+export type ConceptBrowseNativeReserve = (reservation: ConceptBrowseNativeReservation) => void;
 type SourceSubject = {
   id: string;
   route: number;
@@ -693,5 +711,238 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       return probes.map((p) => results.get(keyOf(p)) ?? 'not_proven');
     },
   };
-  return source;
+  function conceptBrowse(
+    selection: ConceptDescendantSelection,
+    identity: Pick<ConceptBrowseBinding, 'principal' | 'request'>,
+    reserve?: ConceptBrowseNativeReserve,
+  ): ConceptBrowseSource {
+    const route = routeOf(selection.concept);
+    const schemeRoute = routeOf(selection.scheme);
+    if (
+      route === null ||
+      schemeRoute === null ||
+      selection.includeChildren !== true ||
+      typeof selection.property !== 'string' ||
+      !selection.property ||
+      typeof identity.principal !== 'string' ||
+      !identity.principal ||
+      typeof identity.request !== 'string' ||
+      !identity.request
+    )
+      throw new TypeError('Invalid concept browse definition');
+
+    const allowance = (cost: ConceptBrowseNativeReservation) => reserve?.(cost);
+    async function snapshot() {
+      return inSearchSnapshot(pool, async (client) => {
+        const home = await readPartition(client, partitionOf(route));
+        const schemeHome = partitionOf(route) === partitionOf(schemeRoute)
+          ? home
+          : await readPartition(client, partitionOf(schemeRoute));
+        if (!home || !schemeHome || home.writeState === 'moved' || schemeHome.writeState === 'moved') return null;
+        const runtime = await activeRelease(client);
+        if (!runtime) return null;
+        const [row] = await readConceptObservation.run(client, {
+          concept: selection.concept,
+          scheme: selection.scheme,
+          route,
+        });
+        if (!row) return null;
+        const graph = await client.query<{ last_value: string; is_called: boolean }>(
+          `SELECT last_value::text,is_called FROM semantic.search_canonical_generation`,
+        );
+        const generation = graph.rows[0];
+        if (!generation || !/^[0-9]+$/.test(generation.last_value)) return null;
+        return {
+          runtime,
+          graph: `${generation.last_value}:${generation.is_called ? 1 : 0}`,
+          conceptType: row.concept_type,
+          conceptVisibility: row.concept_visibility,
+          conceptSecurityRevision: row.concept_security_revision,
+          conceptRelease: row.concept_release,
+          conceptReady: row.concept_ready,
+          schemeType: row.scheme_type,
+          schemeVisibility: row.scheme_visibility,
+          schemeReady: row.scheme_ready,
+          member: row.member,
+        };
+      });
+    }
+    const bind = (value: NonNullable<Awaited<ReturnType<typeof snapshot>>>): ConceptBrowseBinding => ({
+      release: `${value.runtime.digest}:${value.runtime.head ?? 0}`,
+      graph: value.graph,
+      scheme: selection.scheme,
+      membership: createHash('sha256')
+        .update(
+          JSON.stringify([
+            selection.concept,
+            selection.scheme,
+            value.conceptSecurityRevision,
+            value.conceptRelease,
+            value.graph,
+            value.member,
+          ]),
+        )
+        .digest('hex'),
+      principal: identity.principal,
+      request: identity.request,
+    });
+    const same = (left: ConceptBrowseBinding, right: ConceptBrowseBinding) =>
+      left.release === right.release &&
+      left.graph === right.graph &&
+      left.scheme === right.scheme &&
+      left.membership === right.membership &&
+      left.principal === right.principal &&
+      left.request === right.request;
+    const expected = (value: NonNullable<Awaited<ReturnType<typeof snapshot>>>) =>
+      value.conceptType === 'skos:Concept' &&
+      value.conceptVisibility === 'visible' &&
+      value.schemeType === 'skos:ConceptScheme' &&
+      value.schemeVisibility === 'visible';
+
+    return {
+      async observe() {
+        allowance({ keys: 1, rows: 12, points: 8, statements: 12, bytes: 96_000, emptySeeks: 1 });
+        const first = await snapshot();
+        if (!first) return { status: 'unavailable' as const };
+        if (!first.conceptReady || !first.schemeReady) return { status: 'preparing' as const };
+        if (!expected(first) || !first.member) return { status: 'rejected' as const };
+        const rootMember = await source.match(partitionOf(route), [
+          { subject: selection.concept, property: 'skos:inScheme', value: selection.scheme },
+        ]);
+        if (rootMember[0] !== true)
+          return { status: rootMember[0] === false ? ('rejected' as const) : ('unavailable' as const) };
+        const final = await snapshot();
+        if (!final) return { status: 'unavailable' as const };
+        if (!final.conceptReady || !final.schemeReady) return { status: 'preparing' as const };
+        if (!expected(final) || !final.member) return { status: 'rejected' as const };
+        const binding = bind(final);
+        return same(bind(first), binding)
+          ? { status: 'current' as const, binding }
+          : { status: 'preparing' as const };
+      },
+      async children(input) {
+        const { parent, after, binding, limit } = input;
+        const cursor = after === null ? null : /^(\d{5}):([0-9a-f-]{36}):([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(after);
+        const cursorRoute = cursor ? Number(cursor[1]) : null;
+        if (
+          routeOf(parent) === null ||
+          !Number.isSafeInteger(limit) ||
+          limit < 1 ||
+          limit > 64 ||
+          (after !== null &&
+            (!cursor ||
+              !Number.isSafeInteger(cursorRoute) ||
+              cursorRoute! > 65535 ||
+              routeOf(cursor[2]) !== cursorRoute ||
+              !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(cursor[3]!) ||
+              !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(cursor[4]!)))
+        )
+          return { status: 'rejected' as const };
+        allowance({
+          keys: limit,
+          rows: limit * 4,
+          points: limit * 2 + 2,
+          statements: 8 + limit * 4,
+          bytes: 16_384 + limit * 4_096,
+          emptySeeks: 1,
+        });
+        const page = await inSearchSnapshot(pool, async (client) => {
+          const current = await activeRelease(client);
+          if (!current) return null;
+          const graph = await client.query<{ last_value: string; is_called: boolean }>(
+            `SELECT last_value::text,is_called FROM semantic.search_canonical_generation`,
+          );
+          const generation = graph.rows[0];
+          if (!generation || !/^[0-9]+$/.test(generation.last_value)) return null;
+          const observation = await readConceptObservation.run(client, {
+            concept: selection.concept,
+            scheme: selection.scheme,
+            route,
+          });
+          const root = observation[0];
+          if (!root) return null;
+          const currentBinding = bind({
+            runtime: current,
+            graph: `${generation.last_value}:${generation.is_called ? 1 : 0}`,
+            conceptType: root.concept_type,
+            conceptVisibility: root.concept_visibility,
+            conceptSecurityRevision: root.concept_security_revision,
+            conceptRelease: root.concept_release,
+            conceptReady: root.concept_ready,
+            schemeType: root.scheme_type,
+            schemeVisibility: root.scheme_visibility,
+            schemeReady: root.scheme_ready,
+            member: root.member,
+          });
+          const values = cursor
+            ? {
+                after_route: Number(cursor[1]),
+                after_subject: cursor[2],
+                after_slot: cursor[3],
+                after_candidate: cursor[4],
+              }
+            : {
+                after_route: -1,
+                after_subject: '00000000-0000-0000-0000-000000000000',
+                after_slot: '00000000-0000-0000-0000-000000000000',
+                after_candidate: '00000000-0000-0000-0000-000000000000',
+              };
+          const rows = await readConceptChildren.run(client, {
+            parent,
+            scheme: selection.scheme,
+            ...values,
+            limit,
+          });
+          return { binding: currentBinding, rows };
+        });
+        if (!page) return { status: 'unavailable' as const };
+        if (!same(page.binding, binding))
+          return {
+            status: 'current' as const,
+            page: { binding: page.binding, children: [], examined: 0, after, hasMore: false },
+          };
+        const byPartition = new Map<number, typeof page.rows>();
+        for (const row of page.rows) {
+          const childRoute = routeOf(row.child);
+          if (childRoute === null) return { status: 'rejected' as const };
+          const partition = partitionOf(childRoute);
+          const group = byPartition.get(partition) ?? [];
+          group.push(row);
+          byPartition.set(partition, group);
+        }
+        const children: string[] = [];
+        for (const [partition, rows] of byPartition) {
+          const results = await source.match(
+            partition,
+            rows.flatMap((row) => [
+              { subject: row.child, property: 'skos:broader', value: parent },
+              { subject: row.child, property: 'skos:inScheme', value: selection.scheme },
+            ]),
+          );
+          if (results.length !== rows.length * 2 || results.includes('not_proven'))
+            return { status: 'unavailable' as const };
+          for (const [index, row] of rows.entries())
+            if (results[index * 2] === true && results[index * 2 + 1] === true) children.push(row.child);
+        }
+        const last = page.rows.at(-1);
+        const next = last
+          ? `${String(last.route).padStart(5, '0')}:${last.child}:${last.slot}:${last.candidate}`
+          : after;
+        return {
+          status: 'current' as const,
+          page: {
+            binding: page.binding,
+            children,
+            examined: page.rows.length,
+            after: next,
+            // A full bounded page continues; the next seek, including an empty terminal seek,
+            // proves whether another edge exists.
+            hasMore: page.rows.length === limit,
+          },
+        };
+      },
+    };
+  }
+
+  return { ...source, conceptBrowse };
 }

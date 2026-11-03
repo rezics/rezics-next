@@ -19,6 +19,7 @@ import {
   type ConceptBrowseState,
 } from './concept-browse.ts';
 import { createConceptBrowseStore } from './concept-browse-store.ts';
+import { relationSource } from '../semantic/search-relations.ts';
 
 /** One bounded structural step under the existing Search WorkModule. No native receiving receipts
  * are constructed here. Expiry stops scheduling but retains unknown native custody for its owner.
@@ -118,10 +119,33 @@ export function createScopePreparation(
           work.consume({ ...zeroScopeWork(), statements, nativeRows: rows, bytes }),
       });
       if (Number(record.expires_at) <= Date.now()) return retained.retire(state);
-      // The native adapter must observe the live release and source and account for its own work.
-      // Absence of that adapter cannot seal an empty hierarchy or enable concept Search.
-      if (!config.conceptSource) return retained.checkpoint(state, 30000);
-      const source = await config.conceptSource(record.definition, { deadline, work });
+      const reserve = (cost: {
+        keys: number;
+        rows: number;
+        points: number;
+        statements: number;
+        bytes: number;
+        emptySeeks: number;
+      }) =>
+        work.consume({
+          ...zeroScopeWork(),
+          candidateKeys: cost.keys,
+          nativeRows: cost.rows,
+          nativePoints: cost.points,
+          statements: cost.statements,
+          bytes: cost.bytes,
+          emptySeeks: cost.emptySeeks,
+        });
+      const source = config.conceptSource
+        ? await config.conceptSource(record.definition, { deadline, work })
+        : config.routeKey
+          ? relationSource(config.pool, config.routeKey).conceptBrowse(
+              record.definition.selection,
+              record.definition.binding,
+              reserve,
+            )
+          : null;
+      if (!source) return retained.checkpoint(state, 30000);
       const result = await advanceConceptBrowse(source, retained, state, CONCEPT_BROWSE_WORKER_LIMITS);
       if (result.status === 'preparing') await retained.checkpoint(result.state, 1000);
       return;

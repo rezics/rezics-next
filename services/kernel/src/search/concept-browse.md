@@ -112,6 +112,12 @@ partial or withheld native evidence cannot set it. The enclosing caller must rev
 statement evidence before publishing results. These ports do not implement that native producer,
 its completeness proof, source cost derivation or the universal Search and page installation.
 
+## Native hierarchy closure source
+
+Decision: descendant closure reads ready selected `skos:broader` edges scoped by selected `skos:inScheme`, confirms both relations through current native witnesses, and uses a short raw page or an empty terminal seek to prove exhaustion.
+
+`relationSource.conceptBrowse` binds each worker step to the active release, the canonical generation and the selected root's current identity and scheme membership. It reads a bounded keyset page of ready selected broader edges, then confirms each edge and its scheme membership through the native relation matcher. The full raw edge key advances the retained frontier even when a candidate is rejected or duplicates an existing member. Full pages require another bounded seek; a short page or empty terminal seek closes that parent. The worker reserves the observation or seek allowance before native I/O, including replayed pages. Changes to statement disclosure also advance the canonical generation so a changed witness restarts the retained cut.
+
 ## Native classified-statement windows
 
 `subjectSource.readConceptStatements` reads the full selected statement prefix for one subject/property,

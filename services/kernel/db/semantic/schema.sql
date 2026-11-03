@@ -12197,6 +12197,13 @@ CREATE INDEX search_selected_value ON semantic.search_selected USING btree (rout
 
 
 --
+-- Name: search_selected_concept_broader; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_selected_concept_broader ON semantic.search_selected USING btree (property, (((body -> 'value'::text) ->> 'content'::text) COLLATE "C"), route, subject_id, slot_id, candidate_id) WHERE (active AND relation AND (((body -> 'value'::text) ->> 'type'::text) = 'value'::text));
+
+
+--
 -- Name: source_candidate_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -14436,6 +14443,13 @@ CREATE CONSTRAINT TRIGGER source_candidate_erasure_capture AFTER INSERT OR UPDAT
 --
 
 CREATE CONSTRAINT TRIGGER statement_disclosure_erasure_capture AFTER INSERT OR UPDATE ON semantic.statement_disclosure DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION semantic.capture_statement_disclosure_erasure();
+
+
+--
+-- Name: statement_disclosure statement_disclosure_search_canonical_generation; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER statement_disclosure_search_canonical_generation AFTER INSERT OR DELETE OR UPDATE ON semantic.statement_disclosure FOR EACH ROW EXECUTE FUNCTION semantic.bump_search_canonical_generation();
 
 
 --
