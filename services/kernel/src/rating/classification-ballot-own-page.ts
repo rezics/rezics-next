@@ -385,10 +385,10 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       const initialAssociations = await associations(deps, owner, seedSlots, CLASSIFICATION_BALLOT_READ_OWN, deadline);
       const readableSlots = seedSlots.filter((slot) => initialAssociations.get(keyOf(slot)) !== null);
       const setAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_SET)
-        ? await associations(deps, readableSlots, CLASSIFICATION_BALLOT_SET, deadline)
+        ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_SET, deadline)
         : new Map<string, CurrentClassificationAssociation | null>();
       const aggregateAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_READ_AGGREGATE)
-        ? await associations(deps, readableSlots, CLASSIFICATION_BALLOT_READ_AGGREGATE, deadline)
+        ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_READ_AGGREGATE, deadline)
         : new Map<string, CurrentClassificationAssociation | null>();
 
       const readable = readableSlots.filter((slot) => {
@@ -448,9 +448,22 @@ export function createClassificationBallotOwnPageReader(deps: Dependencies) {
       const aggregateByKey = new Map(aggregateRows.map((row) => [keyOf(row), row]));
 
       const finalAssociations = await associations(deps, owner, seedSlots, CLASSIFICATION_BALLOT_READ_OWN, deadline);
+      const finalSetAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_SET)
+        ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_SET, deadline)
+        : new Map<string, CurrentClassificationAssociation | null>();
+      const finalAggregateAssociations = owner.scopes.includes(CLASSIFICATION_BALLOT_READ_AGGREGATE)
+        ? await associations(deps, owner, readableSlots, CLASSIFICATION_BALLOT_READ_AGGREGATE, deadline)
+        : new Map<string, CurrentClassificationAssociation | null>();
       for (const slot of seedSlots) {
-        if (!sameAssociation(initialAssociations.get(keyOf(slot)) ?? null, finalAssociations.get(keyOf(slot)) ?? null))
+        const key = keyOf(slot);
+        if (!sameAssociation(initialAssociations.get(key) ?? null, finalAssociations.get(key) ?? null))
           throw new AccessUnavailableError('contention');
+        if (readableSlots.includes(slot)) {
+          if (!sameAssociation(setAssociations.get(key) ?? null, finalSetAssociations.get(key) ?? null))
+            throw new AccessUnavailableError('contention');
+          if (!sameAssociation(aggregateAssociations.get(key) ?? null, finalAggregateAssociations.get(key) ?? null))
+            throw new AccessUnavailableError('contention');
+        }
       }
       if (!(await summaryObservation.current())) throw new AccessUnavailableError('contention');
 
