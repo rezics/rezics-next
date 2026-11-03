@@ -311,7 +311,7 @@ export function PeopleCreate({
   ) {
     const key = JSON.stringify([type, property]);
     if (!lifetime.active() || !canEdit() || rowIds.current.get(key) !== id) return;
-    if (change && !metadata.current.profiles.find((entry) => entry.id === type)?.fields.includes(property) && change)
+    if (change && !metadata.current.profiles.find((entry) => entry.id === type)?.fields.includes(property))
       return;
     const updatedId = change ? rowId(type, property) : undefined;
     if (!change) rowIds.current.delete(key);
@@ -447,7 +447,7 @@ export function PeopleCreate({
                 rowId={rowId}
                 fieldsets={fieldsets}
                 reuse={reuse && reuse.source.holder === rowId(type, reuse.source.property) ? reuse : null}
-                focusCopy={focusCopy}
+                {...(focusCopy ? { focusCopy } : {})}
                 onAdd={(property, statement) => {
                   const added = update(type, property, undefined, canEdit, () => statement);
                   touch();
