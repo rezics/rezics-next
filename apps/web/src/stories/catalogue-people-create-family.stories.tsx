@@ -242,33 +242,44 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
     await expect(fieldset.querySelector('[data-slot="people-initial-fact"]')).not.toBeNull();
     await expect(fieldset.querySelector('[data-slot="people-initial-fact"]')).not.toBeNull();
     const datatype = (definitions.release.properties as Record<string, { datatype: string }>)[property]!.datatype;
+    let valueControl: HTMLInputElement | undefined;
+    let valueText: string | undefined;
     if (datatype === 'time') {
       await userEvent.selectOptions(group.getByRole('combobox', { name: m.correction_precision() }), '11');
       await userEvent.type(group.getByRole('textbox', { name: m.correction_year() }), '1980');
       await userEvent.type(group.getByRole('spinbutton', { name: m.correction_month() }), '4');
       await userEvent.type(group.getByRole('spinbutton', { name: m.correction_day() }), '3');
-    } else
-      await setValue(
-        root,
-        property,
+    } else {
+      valueText =
         property === 'wdt:P3180'
           ? 'p123'
           : property === 'wdt:P6298'
             ? '123'
             : property === 'wdt:P648'
               ? 'OL23919A'
-              : longUrl,
-      );
+              : longUrl;
+      valueControl = await setValue(root, property, valueText);
+    }
     const cite = citation(root, property);
     await userEvent.type(cite, longCitation);
     await expect(cite).toHaveValue(longCitation);
+    const addPart = within(fieldset).getByRole('combobox', { name: m.correction_add_part() });
+    const remove = group.getByRole('button', { name: m.people_profile_remove_fact() });
     cite.focus();
     await expect(cite).toHaveFocus();
     await userEvent.keyboard('{Tab}');
-    await expect(within(fieldset).getByRole('combobox', { name: m.correction_add_part() })).toHaveFocus();
+    await expect(addPart).toHaveFocus();
+    const tabStops: Element[] = [addPart];
+    for (let tabs = 0; root.ownerDocument.activeElement !== remove && tabs < 12; tabs++) {
+      await userEvent.keyboard('{Tab}');
+      if (root.ownerDocument.activeElement) tabStops.push(root.ownerDocument.activeElement);
+    }
+    await expect(tabStops.length).toBeGreaterThan(1);
+    await expect(tabStops.at(-1)).toBe(remove);
+    await expect(remove).toHaveFocus();
     await expect(cite).toHaveValue(longCitation);
+    if (valueControl && valueText) await expect(valueControl).toHaveValue(valueText);
     await bounds(cite, fieldset);
-    const remove = group.getByRole('button', { name: m.people_profile_remove_fact() });
     await expect(remove).toHaveAttribute('type', 'button');
     const focus = root.ownerDocument.defaultView!.getComputedStyle(remove);
     await expect(focus.outlineWidth !== '0px' || focus.boxShadow !== 'none').toBe(true);
