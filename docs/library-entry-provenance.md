@@ -110,3 +110,6 @@ the generated libraryEntries(...).sourceObservations methods. Import journeys mu
 record identity, confirm its native preview evidence, and retain an exact idempotent retry before admitting those
 facts. VNDB remains unavailable until its generated libraryImports.vndb client family is delivered; no second
 parser or import route is introduced.
+
+Provider source admissions are separate exact-retry commands after the owner confirms the existing provider preview;
+an uncertain source admission never replays the accepted import command.
