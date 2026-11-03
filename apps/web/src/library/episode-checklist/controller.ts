@@ -8,7 +8,13 @@ import {
   type ChecklistViewerBinding,
   type ChecklistVisit,
 } from './contract';
-import { bindEpisodeCommand, intentFromSelection, submitEpisodeIntent, type BoundEpisodeCommand, type EpisodeSender } from './commands';
+import {
+  bindEpisodeCommand,
+  intentFromSelection,
+  submitEpisodeIntent,
+  type BoundEpisodeCommand,
+  type EpisodeSender,
+} from './commands';
 
 export function preparingVisit(binding: ChecklistViewerBinding | null): ChecklistVisit {
   return {
@@ -201,7 +207,12 @@ export function applyChecklistOutcome(visit: ChecklistVisit, outcome: ChecklistO
   return visit;
 }
 
-export function applyReadback(visit: ChecklistVisit, rows: ChecklistRow[], revision: number, retainedNext: string | null): ChecklistVisit {
+export function applyReadback(
+  visit: ChecklistVisit,
+  rows: ChecklistRow[],
+  revision: number,
+  retainedNext: string | null,
+): ChecklistVisit {
   return {
     ...visit,
     kind: rows.length ? 'ready' : 'empty',
@@ -246,9 +257,7 @@ export async function submitChecklistVisit(
   clear = false,
 ): Promise<{ visit: ChecklistVisit; command: BoundEpisodeCommand | undefined }> {
   if (!visit.binding) return { visit: { ...visit, kind: 'denied' }, command: captured };
-  const intent = clear
-    ? { kind: 'clear' as const }
-    : mutationIntent(visit.selection.add, visit.selection.remove);
+  const intent = clear ? { kind: 'clear' as const } : mutationIntent(visit.selection.add, visit.selection.remove);
   if (!intent) return { visit: { ...visit, kind: visit.rows.length ? 'ready' : 'empty' }, command: captured };
   const submitting: ChecklistVisit = { ...visit, kind: 'submitting', pending: true };
   const retry = visit.retry ? bindEpisodeCommand(visit.retry, sender) : captured;
@@ -263,7 +272,10 @@ export async function submitChecklistVisit(
     retry,
   );
   if (!current()) {
-    return { visit: applyChecklistOutcome(submitting, { state: 'uncertain', command: result.command }), command: result.command };
+    return {
+      visit: applyChecklistOutcome(submitting, { state: 'uncertain', command: result.command }),
+      command: result.command,
+    };
   }
   return { visit: applyChecklistOutcome(submitting, result.outcome), command: result.command };
 }

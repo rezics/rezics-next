@@ -1,10 +1,5 @@
 import { recordBody, type EpisodeRecordResult } from './native';
-import {
-  mutationIntent,
-  type ChecklistCommand,
-  type ChecklistIntent,
-  type ChecklistOutcome,
-} from './contract';
+import { mutationIntent, type ChecklistCommand, type ChecklistIntent, type ChecklistOutcome } from './contract';
 
 export type EpisodeSender = (input: {
   sessionId: string;
@@ -44,7 +39,11 @@ export function bindEpisodeCommand(command: ChecklistCommand, sender: EpisodeSen
 export function intentOf(command: ChecklistCommand): ChecklistIntent {
   const body = command.operands.body;
   if ('clear' in body && body.clear === true) return { kind: 'clear' };
-  return { kind: 'patch', add: 'add' in body ? (body.add ?? []) : [], remove: 'remove' in body ? (body.remove ?? []) : [] };
+  return {
+    kind: 'patch',
+    add: 'add' in body ? (body.add ?? []) : [],
+    remove: 'remove' in body ? (body.remove ?? []) : [],
+  };
 }
 
 export function outcomeFromRecord(command: ChecklistCommand, result: EpisodeRecordResult): ChecklistOutcome {
@@ -58,7 +57,11 @@ export function outcomeFromRecord(command: ChecklistCommand, result: EpisodeReco
   if (result.kind === 'invalid_request' || result.kind === 'invalid_cursor') {
     return { state: 'invalid', command, kind: result.kind };
   }
-  return { state: 'unavailable', command, seam: result.seam ?? 'KernelClient.progressSessions({ sessionId }).$recordEpisodes.post' };
+  return {
+    state: 'unavailable',
+    command,
+    seam: result.seam ?? 'KernelClient.progressSessions({ sessionId }).$recordEpisodes.post',
+  };
 }
 
 export function uncertainOutcome(command: ChecklistCommand): ChecklistOutcome {
@@ -91,8 +94,7 @@ export async function submitEpisodeIntent(
   captured?: BoundEpisodeCommand,
 ): Promise<{ outcome: ChecklistOutcome; command: BoundEpisodeCommand }> {
   const command =
-    captured ??
-    bindEpisodeCommand(captureEpisodeCommand(credential, sessionId, revision, key, intent), sender);
+    captured ?? bindEpisodeCommand(captureEpisodeCommand(credential, sessionId, revision, key, intent), sender);
   if (!current()) return { outcome: uncertainOutcome(command), command };
   if (command.operands.revision !== revision) {
     return { outcome: { state: 'conflict', command, revision }, command };

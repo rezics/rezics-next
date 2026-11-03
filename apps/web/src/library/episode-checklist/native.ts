@@ -163,7 +163,10 @@ export type EpisodeRecordResult =
   | { ok: true; revision: number }
   | { ok: false; kind: ChecklistFailureKind; seam?: string };
 
-export function recordBody(revision: number, intent: ChecklistIntent): { revision: number; add?: string[]; remove?: string[] } | { revision: number; clear: true } {
+export function recordBody(
+  revision: number,
+  intent: ChecklistIntent,
+): { revision: number; add?: string[]; remove?: string[] } | { revision: number; clear: true } {
   if (intent.kind === 'clear') return { revision, clear: true };
   return {
     revision,

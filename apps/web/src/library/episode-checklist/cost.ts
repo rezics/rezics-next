@@ -1,9 +1,4 @@
-import {
-  EPISODE_INSPECT_CAP,
-  EPISODE_RETAINED_PAGE,
-  MEMBERSHIP_PAGE_CAP,
-  type ChecklistRow,
-} from './contract';
+import { EPISODE_INSPECT_CAP, EPISODE_RETAINED_PAGE, MEMBERSHIP_PAGE_CAP, type ChecklistRow } from './contract';
 
 /** One visit: work-parts subject + one association page plus one ≤20-ID native inspection. */
 export const CHECKLIST_VISIT_COMPONENTS = {
@@ -100,11 +95,7 @@ function countPoint(target: object, onCall: (name: string) => void, name: string
     apply(target, thisArg, args) {
       const label = name.split('.').pop() ?? name;
       if (counted.has(label)) onCall(name);
-      return wrap(
-        Reflect.apply(target as (...args: unknown[]) => unknown, thisArg, args),
-        onCall,
-        name,
-      );
+      return wrap(Reflect.apply(target as (...args: unknown[]) => unknown, thisArg, args), onCall, name);
     },
   });
 }

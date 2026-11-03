@@ -32,9 +32,7 @@ export type ChecklistRow = EpisodeCompletion & {
   source: 'membership' | 'retained' | 'inspect';
 };
 
-export type ChecklistIntent =
-  | { kind: 'patch'; add: string[]; remove: string[] }
-  | { kind: 'clear' };
+export type ChecklistIntent = { kind: 'patch'; add: string[]; remove: string[] } | { kind: 'clear' };
 
 export type ChecklistCommand = {
   sender: 'recordCanonicalEpisodes';
@@ -136,7 +134,11 @@ export function redactedRow(source: ChecklistRow['source'] = 'inspect'): Checkli
   };
 }
 
-export function projectRow(row: EpisodeCompletion, source: ChecklistRow['source'], label?: string | null): ChecklistRow {
+export function projectRow(
+  row: EpisodeCompletion,
+  source: ChecklistRow['source'],
+  label?: string | null,
+): ChecklistRow {
   if (row.membership === 'unavailable' || row.episodeSubjectId === null) {
     return redactedRow(source);
   }

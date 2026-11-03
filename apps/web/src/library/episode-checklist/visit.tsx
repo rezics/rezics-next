@@ -15,14 +15,25 @@ import {
   submitChecklistVisit,
   toggleRow,
 } from './controller';
-import { bindEpisodeCommand, outcomeFromRecord, retryOriginal, type BoundEpisodeCommand, type EpisodeSender } from './commands';
+import {
+  bindEpisodeCommand,
+  outcomeFromRecord,
+  retryOriginal,
+  type BoundEpisodeCommand,
+  type EpisodeSender,
+} from './commands';
 import { EpisodeChecklistEditor, EpisodeChecklistReadout, EpisodeChecklistReview } from './editor';
 import { EpisodeChecklistRecovery } from './states';
 import type { ChecklistRow } from './contract';
 
-export type ChecklistInspect = (ids: readonly string[]) => Promise<{ rows: ChecklistRow[]; revision: number } | { kind: 'unavailable' | 'retired' | 'denied' }>;
-export type ChecklistContinue = (cursor?: string) => Promise<
-  { rows: ChecklistRow[]; next: string | null; revision: number } | { kind: 'stale' | 'unavailable' | 'retired' | 'denied' }
+export type ChecklistInspect = (
+  ids: readonly string[],
+) => Promise<{ rows: ChecklistRow[]; revision: number } | { kind: 'unavailable' | 'retired' | 'denied' }>;
+export type ChecklistContinue = (
+  cursor?: string,
+) => Promise<
+  | { rows: ChecklistRow[]; next: string | null; revision: number }
+  | { kind: 'stale' | 'unavailable' | 'retired' | 'denied' }
 >;
 export type ChecklistLoad = () => Promise<ChecklistVisit>;
 
@@ -105,7 +116,15 @@ export function EpisodeChecklistVisit({
     if (!headers) return;
     const staged = clear ? stageChecklistClear(visit) : stageChecklistReview(visit);
     setVisit({ ...staged, kind: 'submitting' });
-    const result = await submitChecklistVisit(staged, headers, current, sender, crypto.randomUUID(), commands.current, clear);
+    const result = await submitChecklistVisit(
+      staged,
+      headers,
+      current,
+      sender,
+      crypto.randomUUID(),
+      commands.current,
+      clear,
+    );
     if (!current()) return;
     commands.current = result.command;
     setVisit(result.visit);
@@ -117,13 +136,21 @@ export function EpisodeChecklistVisit({
         if (!current()) return;
         if ('kind' in readback) {
           setVisit((currentVisit) => {
-            if (readback.kind === 'retired') return { ...currentVisit, kind: 'retired', rows: [], retainedNext: null, pending: false };
+            if (readback.kind === 'retired')
+              return { ...currentVisit, kind: 'retired', rows: [], retainedNext: null, pending: false };
             if (readback.kind === 'denied') return { ...currentVisit, kind: 'denied', pending: false };
-            return { ...currentVisit, kind: 'unavailable', seam: 'KernelClient.progressSessions({ sessionId }).episodes.get', pending: false };
+            return {
+              ...currentVisit,
+              kind: 'unavailable',
+              seam: 'KernelClient.progressSessions({ sessionId }).episodes.get',
+              pending: false,
+            };
           });
           return;
         }
-        setVisit((currentVisit) => applyReadback(currentVisit, readback.rows, readback.revision, currentVisit.retainedNext));
+        setVisit((currentVisit) =>
+          applyReadback(currentVisit, readback.rows, readback.revision, currentVisit.retainedNext),
+        );
       }
     }
   }

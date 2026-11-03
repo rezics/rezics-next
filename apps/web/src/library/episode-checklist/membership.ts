@@ -1,11 +1,6 @@
 import type { Release } from '@rezics/definitions';
 import type { PartRow, PartStream, WorkPartsRead } from '../../features/catalogue/work-parts';
-import {
-  CANONICAL_EPISODE_TYPE,
-  CANONICAL_ID,
-  MEMBERSHIP_PAGE_CAP,
-  type ChecklistRow,
-} from './contract';
+import { CANONICAL_EPISODE_TYPE, CANONICAL_ID, MEMBERSHIP_PAGE_CAP, type ChecklistRow } from './contract';
 
 type Definitions = Pick<Release, 'types' | 'properties'>;
 
@@ -51,7 +46,12 @@ function episodeIdFromRow(row: PartRow, stream: PartStream, release: Definitions
   }
   if (stream.direction === 'forward') {
     const summaryType = row.summary?.type;
-    if (row.summary?.id && summaryType && CANONICAL_ID.test(row.summary.id) && isCanonicalEpisodeType(release, summaryType)) {
+    if (
+      row.summary?.id &&
+      summaryType &&
+      CANONICAL_ID.test(row.summary.id) &&
+      isCanonicalEpisodeType(release, summaryType)
+    ) {
       return { id: row.summary.id, label: labelOf(row), ordinal: positionOf(row), type: summaryType };
     }
     for (const [id, related] of Object.entries(row.related ?? {})) {
@@ -72,7 +72,10 @@ function streamAdmitsEpisodes(stream: PartStream, rows: readonly PartRow[], rele
 
 /** Prefer inverse schema:isPartOf; otherwise the work-parts default stream. Do not scan remaining streams. */
 export function selectedMembershipStream(read: Extract<WorkPartsRead, { ok: true }>): PartStream | undefined {
-  return read.streams.find((stream) => stream.property === 'schema:isPartOf' && stream.direction === 'inverse') ?? read.stream;
+  return (
+    read.streams.find((stream) => stream.property === 'schema:isPartOf' && stream.direction === 'inverse') ??
+    read.stream
+  );
 }
 
 export function projectMembership(read: WorkPartsRead, release: Definitions): MembershipPage {

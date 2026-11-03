@@ -182,7 +182,10 @@ export async function continueRetainedEpisodes(
   sessionId: string,
   authorization: string,
   cursor?: string,
-): Promise<{ rows: ChecklistRow[]; next: string | null; revision: number } | { kind: 'stale' | 'unavailable' | 'retired' | 'denied' }> {
+): Promise<
+  | { rows: ChecklistRow[]; next: string | null; revision: number }
+  | { kind: 'stale' | 'unavailable' | 'retired' | 'denied' }
+> {
   const inspected = await inspectEpisodes(client, sessionId, authorization, {
     ...(cursor ? { cursor } : {}),
     limit: EPISODE_INSPECT_CAP,

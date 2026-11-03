@@ -68,13 +68,24 @@ function row(
   return { episodeSubjectId: id, completed, membership, ordinal, label: null, source: 'inspect' };
 }
 
-function completion(id: string | null, completed: boolean | null, membership: ChecklistRow['membership'], ordinal: string | null = null) {
+function completion(
+  id: string | null,
+  completed: boolean | null,
+  membership: ChecklistRow['membership'],
+  ordinal: string | null = null,
+) {
   return { episodeSubjectId: id, completed, membership, ordinal };
 }
 
 function adapterClient(
-  inspect: (options: { query: { ids?: string; cursor?: string; limit?: number }; headers: { authorization: string } }) => Promise<{ data?: unknown; status: number; error?: unknown }>,
-  record: (body: unknown, options: { headers: Record<string, string> }) => Promise<{ data?: unknown; status: number; error?: unknown }>,
+  inspect: (options: {
+    query: { ids?: string; cursor?: string; limit?: number };
+    headers: { authorization: string };
+  }) => Promise<{ data?: unknown; status: number; error?: unknown }>,
+  record: (
+    body: unknown,
+    options: { headers: Record<string, string> },
+  ) => Promise<{ data?: unknown; status: number; error?: unknown }>,
 ): KernelClient {
   return {
     progressSessions: Object.assign(
@@ -124,7 +135,12 @@ test('supplied-ID inspection preserves order and redacts unavailable rows', () =
   );
   expect(mutationIntent([episode1, episode1], [])).toBeNull();
   expect(mutationIntent([episode1], [episode1])).toBeNull();
-  expect(mutationIntent(Array.from({ length: 21 }, (_, i) => ep(i + 1)), [])).toBeNull();
+  expect(
+    mutationIntent(
+      Array.from({ length: 21 }, (_, i) => ep(i + 1)),
+      [],
+    ),
+  ).toBeNull();
 });
 
 test('work-parts inverse isPartOf admits episodes including specials; books stay unavailable', () => {
@@ -133,7 +149,12 @@ test('work-parts inverse isPartOf admits episodes including specials; books stay
     property: { id: 'schema:isPartOf', data_type: 'wikibase-item' as const },
     value: { type: 'value' as const, content: parentId },
     rank: 'normal' as const,
-    qualifiers: [{ property: { id: 'schema:position', data_type: 'string' as const }, value: { type: 'value' as const, content: position } }],
+    qualifiers: [
+      {
+        property: { id: 'schema:position', data_type: 'string' as const },
+        value: { type: 'value' as const, content: position },
+      },
+    ],
     references: [],
     rezics: { release: 'r', revision: 1 },
   });
@@ -148,12 +169,44 @@ test('work-parts inverse isPartOf admits episodes including specials; books stay
   const admitted = {
     ok: true as const,
     public: { subject: { id: parentId, type: 'schema:TVSeries', context: candidateContext } },
-    streams: [{ key: 'inverse:schema:isPartOf', property: 'schema:isPartOf', direction: 'inverse' as const, label: { text: 'Episodes', lang: 'en' }, positionEditable: false }],
-    stream: { key: 'inverse:schema:isPartOf', property: 'schema:isPartOf', direction: 'inverse' as const, label: { text: 'Episodes', lang: 'en' }, positionEditable: false },
+    streams: [
+      {
+        key: 'inverse:schema:isPartOf',
+        property: 'schema:isPartOf',
+        direction: 'inverse' as const,
+        label: { text: 'Episodes', lang: 'en' },
+        positionEditable: false,
+      },
+    ],
+    stream: {
+      key: 'inverse:schema:isPartOf',
+      property: 'schema:isPartOf',
+      direction: 'inverse' as const,
+      label: { text: 'Episodes', lang: 'en' },
+      positionEditable: false,
+    },
     rows: [
-      { holder: episode1, statementId: ep(11), statement: statement(ep(11), '1'), summary: summary(episode1, 'One', 'schema:Episode'), related: {} },
-      { holder: episode2, statementId: ep(12), statement: statement(ep(12), '2'), summary: summary(episode2, 'Two', 'schema:Episode'), related: {} },
-      { holder: special, statementId: ep(14), statement: statement(ep(14), '2'), summary: summary(special, 'Special', 'schema:Episode'), related: {} },
+      {
+        holder: episode1,
+        statementId: ep(11),
+        statement: statement(ep(11), '1'),
+        summary: summary(episode1, 'One', 'schema:Episode'),
+        related: {},
+      },
+      {
+        holder: episode2,
+        statementId: ep(12),
+        statement: statement(ep(12), '2'),
+        summary: summary(episode2, 'Two', 'schema:Episode'),
+        related: {},
+      },
+      {
+        holder: special,
+        statementId: ep(14),
+        statement: statement(ep(14), '2'),
+        summary: summary(special, 'Special', 'schema:Episode'),
+        related: {},
+      },
     ],
     labels: {},
     next: null,
@@ -169,8 +222,22 @@ test('work-parts inverse isPartOf admits episodes including specials; books stay
   ]);
   const books = {
     ...admitted,
-    streams: [{ key: 'inverse:wdt:P179', property: 'wdt:P179', direction: 'inverse' as const, label: { text: 'Volumes', lang: 'en' }, positionEditable: true }],
-    stream: { key: 'inverse:wdt:P179', property: 'wdt:P179', direction: 'inverse' as const, label: { text: 'Volumes', lang: 'en' }, positionEditable: true },
+    streams: [
+      {
+        key: 'inverse:wdt:P179',
+        property: 'wdt:P179',
+        direction: 'inverse' as const,
+        label: { text: 'Volumes', lang: 'en' },
+        positionEditable: true,
+      },
+    ],
+    stream: {
+      key: 'inverse:wdt:P179',
+      property: 'wdt:P179',
+      direction: 'inverse' as const,
+      label: { text: 'Volumes', lang: 'en' },
+      positionEditable: true,
+    },
     rows: [
       {
         holder: episode1,
@@ -205,7 +272,15 @@ test('exact replay keeps sender, credentials, key, body and JSON idempotency enc
   const sender = async () => {
     throw new Error('transport');
   };
-  const result = await submitEpisodeIntent(sessionId, 3, { kind: 'patch', add: [episode1], remove: [] }, credential, () => true, sender, key);
+  const result = await submitEpisodeIntent(
+    sessionId,
+    3,
+    { kind: 'patch', add: [episode1], remove: [] },
+    credential,
+    () => true,
+    sender,
+    key,
+  );
   expect(result.outcome.state).toBe('uncertain');
   if (result.outcome.state !== 'uncertain') throw new Error('expected uncertain');
   expect(result.outcome.command.credential).toBe(credential);
@@ -218,7 +293,10 @@ test('installed adapter inspects in supplied order, records with encoded key, an
   const seen: { url: string; headers: Headers }[] = [];
   const client = adapterClient(
     async (options) => {
-      seen.push({ url: `ids:${(options as { query: { ids?: string } }).query.ids}`, headers: new Headers((options as { headers: HeadersInit }).headers) });
+      seen.push({
+        url: `ids:${(options as { query: { ids?: string } }).query.ids}`,
+        headers: new Headers((options as { headers: HeadersInit }).headers),
+      });
       return {
         status: 200,
         data: {
@@ -236,7 +314,11 @@ test('installed adapter inspects in supplied order, records with encoded key, an
   );
   const inspected = await inspectEpisodes(client, sessionId, 'Bearer progress-owner', { ids: [episode1, episode2] });
   expect(inspected.ok).toBe(true);
-  const recorded = await recordEpisodes(client, sessionId, 'Bearer progress-owner', 'k', 3, { kind: 'patch', add: [episode3], remove: [] });
+  const recorded = await recordEpisodes(client, sessionId, 'Bearer progress-owner', 'k', 3, {
+    kind: 'patch',
+    add: [episode3],
+    remove: [],
+  });
   expect(recorded).toEqual({ ok: true, revision: 4 });
   expect(seen[1]?.headers.get('idempotency-key')).toBe(JSON.stringify('k'));
   expect(mapEpisodeStatus(400, { code: 'invalid_cursor' })).toBe('invalid_cursor');
@@ -310,7 +392,9 @@ test('two occurrences keep independent bindings; owner replacement retires priva
     3,
   );
   expect(envelope?.cursor).toBe('opaque');
-  expect(bindFromIndex({ viewer: null, requested: { subjectId: parentId, cursor: null }, locale: 'en' }, sessionId, 3)).toBeNull();
+  expect(
+    bindFromIndex({ viewer: null, requested: { subjectId: parentId, cursor: null }, locale: 'en' }, sessionId, 3),
+  ).toBeNull();
   const stale = replaceBinding(first, binding({ revision: 9 }));
   expect(stale.kind).toBe('stale');
   expect(stale.retainedNext).toBeNull();
@@ -318,21 +402,29 @@ test('two occurrences keep independent bindings; owner replacement retires priva
 
 test('sparse retained continuation stays bounded and a changed revision retires the cursor', async () => {
   let page = 0;
-  const client = adapterClient(async (options) => {
-    const query = (options as { query: { cursor?: string; ids?: string } }).query;
-    expect(query.ids).toBeUndefined();
-    page += 1;
-    if (query.cursor === 'stale') return { status: 409, error: { value: { code: 'stale_cursor' } } };
-    if (!query.cursor) return { status: 200, data: { revision: 3, episodes: [], next: 'sparse' } };
-    return { status: 200, data: { revision: 3, episodes: [completion(episode1, true, 'detached', null)], next: null } };
-  }, async () => ({ status: 503 }));
+  const client = adapterClient(
+    async (options) => {
+      const query = (options as { query: { cursor?: string; ids?: string } }).query;
+      expect(query.ids).toBeUndefined();
+      page += 1;
+      if (query.cursor === 'stale') return { status: 409, error: { value: { code: 'stale_cursor' } } };
+      if (!query.cursor) return { status: 200, data: { revision: 3, episodes: [], next: 'sparse' } };
+      return {
+        status: 200,
+        data: { revision: 3, episodes: [completion(episode1, true, 'detached', null)], next: null },
+      };
+    },
+    async () => ({ status: 503 }),
+  );
   const empty = await continueRetainedEpisodes(client, sessionId, 'Bearer progress-owner');
   expect(empty).toMatchObject({ rows: [], next: 'sparse', revision: 3 });
   const next = await continueRetainedEpisodes(client, sessionId, 'Bearer progress-owner', 'sparse');
   expect(next).toMatchObject({ revision: 3 });
   if ('kind' in next) throw new Error('expected page');
   expect(next.rows[0]?.membership).toBe('detached');
-  expect(await continueRetainedEpisodes(client, sessionId, 'Bearer progress-owner', 'stale')).toEqual({ kind: 'stale' });
+  expect(await continueRetainedEpisodes(client, sessionId, 'Bearer progress-owner', 'stale')).toEqual({
+    kind: 'stale',
+  });
   expect(page).toBe(3);
 });
 
@@ -360,15 +452,29 @@ function linksBody() {
       property: { id: 'schema:isPartOf', data_type: 'wikibase-item' },
       value: { type: 'value', content: parentId },
       rank: 'normal',
-      qualifiers: [{ property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: position } }],
+      qualifiers: [
+        { property: { id: 'schema:position', data_type: 'string' }, value: { type: 'value', content: position } },
+      ],
       references: [],
       rezics: { release: 'r', revision: 1 },
     },
     related: { [parentId]: { type: 'schema:TVSeries', labels: { en: 'Series' } } },
-    summary: { id, type: 'schema:Episode', types: ['schema:Episode'], label: { value: title, language: 'en' }, creativeWork: true, cover: null },
+    summary: {
+      id,
+      type: 'schema:Episode',
+      types: ['schema:Episode'],
+      label: { value: title, language: 'en' },
+      creativeWork: true,
+      cover: null,
+    },
   });
   return {
-    links: [item(episode1, 'One', '1'), item(episode2, 'Two', '2'), item(episode3, 'Three', '3'), item(special, 'Special', '2')],
+    links: [
+      item(episode1, 'One', '1'),
+      item(episode2, 'Two', '2'),
+      item(episode3, 'Three', '3'),
+      item(special, 'Special', '2'),
+    ],
     next: null,
     freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true },
   };
@@ -429,7 +535,11 @@ test('wrapping actions stay 44px', () => {
 });
 
 test('controller mount path: pending is not completion, and a replacement viewer cannot keep the prior command', () => {
-  const rows = [row(episode1, false, 'member', '1'), row(episode2, false, 'member', '2'), row(episode3, false, 'member', '3')];
+  const rows = [
+    row(episode1, false, 'member', '1'),
+    row(episode2, false, 'member', '2'),
+    row(episode3, false, 'member', '3'),
+  ];
   let visit = readyVisit(binding(), rows);
   visit = toggleRow(visit, episode1, false);
   visit = toggleRow(visit, episode3, false);
