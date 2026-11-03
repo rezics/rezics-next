@@ -97,10 +97,10 @@ export async function forwardPageGrowthFixture(db: GrowthDatabase) {
       }),
     );
     const nextSession = response.headers.get(SESSION_HEADER) ?? session;
-    session = nextSession;
+    if (nextSession) session = nextSession;
     const value = (await response.json()) as Record<string, any>;
     expect([200, 201], `${method} ${path}: ${response.status} ${JSON.stringify(value)}`).toContain(response.status);
-    return { value, session: nextSession };
+    return nextSession ? { value, session: nextSession } : { value };
   }
 
   async function create(label: string, type: string, statements: Record<string, ReturnType<typeof statement>[]> = {}) {
@@ -360,7 +360,8 @@ export async function forwardPageGrowthFixture(db: GrowthDatabase) {
       'GET',
       `/v1/subjects/${holder.id}/relations?${params.toString()}`,
     );
-    return { ...(value as ForwardPage), session: nextSession };
+    const page = value as ForwardPage;
+    return nextSession ? { ...page, session: nextSession } : page;
   }
 
   async function issuePublicCursors(): Promise<PublicCursors> {

@@ -215,7 +215,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         assertDisclosedPage(sentinel.page, scale);
         expect(sentinel.page.relations[0]?.label).toBe(disclosedLabel(0));
         expect(outboundExamined(sentinel.capture)).toBe(PAGE_SIZE + LOOKAHEAD);
-        charges.sentinel.push({
+        charges.sentinel!.push({
           scale,
           rows: sentinel.cost.rows,
           statements: sentinel.cost.statements,
@@ -225,7 +225,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         const reread = await captureCase(`${axis} rereads`, scale, () => fixture.forward());
         assertDisclosedPage(reread.page, scale);
         assertReread(reread.capture);
-        charges.reread.push({
+        charges.reread!.push({
           scale,
           rows: reread.cost.rows,
           statements: reread.cost.statements,
@@ -235,7 +235,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         const authority = await captureCase(`${axis} native authority`, scale, () => fixture.forward());
         assertDisclosedPage(authority.page, scale);
         assertAuthority(authority.cost, authority.capture);
-        charges.authority.push({
+        charges.authority!.push({
           scale,
           rows: authority.cost.rows,
           statements: authority.cost.statements,
@@ -252,7 +252,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         expect(rejected.page.relations.some((row) => row.target === fixture.denied.id)).toBe(false);
         expect(outboundExamined(rejected.capture)).toBeLessThanOrEqual(PAGE_SIZE + LOOKAHEAD);
         expect(outboundExamined(rejected.capture)).toBeGreaterThan(rejected.page.relations.length);
-        charges.rejected.push({
+        charges.rejected!.push({
           scale,
           rows: rejected.cost.rows,
           statements: rejected.cost.statements,
@@ -263,7 +263,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
           fixture.forward({ cursor: publicCursors.deep }),
         );
         assertContinuedPage(deep.page, scale);
-        charges.deep.push({
+        charges.deep!.push({
           scale,
           rows: deep.cost.rows,
           statements: deep.cost.statements,
@@ -278,7 +278,7 @@ test('mounted forward relation pages stay bounded with native disclosure as degr
         );
         assertEmptyPage(empty.page, scale);
         expect(outboundExamined(empty.capture)).toBeLessThanOrEqual(PAGE_SIZE + LOOKAHEAD);
-        charges.empty.push({
+        charges.empty!.push({
           scale,
           rows: empty.cost.rows,
           statements: empty.cost.statements,
