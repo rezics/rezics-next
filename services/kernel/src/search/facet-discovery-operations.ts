@@ -117,7 +117,7 @@ export function createFacetNativeOperations(
       access: config.access,
       clock: config.clock,
     }),
-    scopedFacets: config.scopedFacets,
+    ...(config.scopedFacets ? { scopedFacets: config.scopedFacets } : {}),
     subjects: config.subjects,
     search: config.search,
     clock: config.clock,
