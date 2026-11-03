@@ -2,8 +2,8 @@ import type { Actor } from '../request/access.ts';
 import { createHash } from 'node:crypto';
 import { ProblemError } from '../http/problem.ts';
 import { nativeProgressUnit, type LibraryProfileDescriptor, type LibraryProfilePin } from './profile.ts';
-import { parseProgressMeasureCreate, parseRecord, parseSessionCreate } from './progress.ts';
-import type { ProgressPresentation, ProgressSession, ProgressSessionCreate } from './progress-model.ts';
+import { parseProgressMeasureCreate, parseRecord, parseSessionCreate, type ProgressSessionCreate } from './progress.ts';
+import type { ProgressPresentation, ProgressSession } from './progress-model.ts';
 import type { createSessionCommands } from './sessions.ts';
 import { ProgressConflictError } from './sessions.ts';
 import { LibraryConflictError } from './entries.ts';
@@ -209,15 +209,18 @@ export async function reviewProgressAdoption(
     const source = sourceByField.get(selection.field)!;
     const descriptor = progressMeasureUnit(profile, source.unit);
     const numeric = source.state === 'value' || source.state === 'zero';
+    const nonNumericState = source.state === 'missing' || source.state === 'unknown' || source.state === 'invalid'
+      ? source.state
+      : 'invalid';
     let eligibility: ProgressAdoptionPlanMeasure['eligibility'] =
       selection.action === 'adopt' && !numeric
-        ? source.state
+        ? nonNumericState
         : descriptor === null
           ? 'unsupported'
           : 'ready';
     let reason: string | null = null;
     if (selection.action === 'adopt' && !numeric) {
-      eligibility = source.state;
+      eligibility = nonNumericState;
       reason = source.unit === null
         ? 'source-field-has-no-unit-mapping'
         : descriptor === null
