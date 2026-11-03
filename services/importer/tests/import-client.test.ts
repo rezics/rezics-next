@@ -45,9 +45,9 @@ test('import transport posts the documented classification read, put and clear s
     maxAttempts: 1,
   });
 
-  await expect(
-    transport.readSourceClassifications({ subjectId, associations: [association] }),
-  ).resolves.toEqual([{ state: 'unavailable', reason: 'not_observed' }]);
+  await expect(transport.readSourceClassifications({ subjectId, associations: [association] })).resolves.toEqual([
+    { state: 'unavailable', reason: 'not_observed' },
+  ]);
   await expect(
     transport.writeSourceClassification({
       subjectId,

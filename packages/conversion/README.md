@@ -10,17 +10,17 @@ or retract a previous candidate.
 
 The [package exports](package.json) are only these entry points:
 
-| Import                                    | Named exports                                                                                               |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Import                                    | Named exports                                                                                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `@rezics/conversion`                      | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError`, `projectSourceClassification` |
-| `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                 |
-| `@rezics/conversion/bangumi-vocabulary`   | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                   |
-| `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                          |
-| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision` and VNDB row types                                            |
-| `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                       |
-| `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                         |
-| `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                             |
-| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `CrossMediaEntityConversion`       |
+| `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                                                |
+| `@rezics/conversion/bangumi-vocabulary`   | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                                                  |
+| `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                                                         |
+| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision` and VNDB row types                                                                           |
+| `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                      |
+| `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                        |
+| `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                            |
+| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `CrossMediaEntityConversion`                                      |
 
 Each converter takes an input, an optional context, and optional registered
 converter options. The option is `converterRevision`; import the matching
@@ -56,14 +56,14 @@ native revisions. A missing revision is never fabricated.
 
 Context supplies trusted, real target bindings separately from the source body:
 
-| Context field        | Meaning                                                                                                                                                           |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `subjectId`          | Existing or actually created REZICS subject UUID. With no subject, converters that support bootstrap return a `create`; with one, they return `propose` commands. |
-| `resolvedReferences` | Source-native relation key to an actual resolved subject UUID. Unresolved relations remain unresolved.                                                            |
-| `mediaIds`           | Exact source URL to an actual available media UUID. No image statement is proposed without this mapping.                                                          |
-| `source`             | Trusted registration alias written to source envelopes and used in command keys. Set it from registration configuration, never from `record`.                     |
-| `sourceVocabulary`   | Optional normalized rows already traversed by the graph caller and explicit released identity bindings; it never discovers rows or creates identities.            |
-| `sourceClassification` | Optional admitted sanitized classification facts. Public VNDB dump licences stay unadmitted; this never identifies a native association.                       |
+| Context field          | Meaning                                                                                                                                                           |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subjectId`            | Existing or actually created REZICS subject UUID. With no subject, converters that support bootstrap return a `create`; with one, they return `propose` commands. |
+| `resolvedReferences`   | Source-native relation key to an actual resolved subject UUID. Unresolved relations remain unresolved.                                                            |
+| `mediaIds`             | Exact source URL to an actual available media UUID. No image statement is proposed without this mapping.                                                          |
+| `source`               | Trusted registration alias written to source envelopes and used in command keys. Set it from registration configuration, never from `record`.                     |
+| `sourceVocabulary`     | Optional normalized rows already traversed by the graph caller and explicit released identity bindings; it never discovers rows or creates identities.            |
+| `sourceClassification` | Optional admitted sanitized classification facts. Public VNDB dump licences stay unadmitted; this never identifies a native association.                          |
 
 The context shape is accepted by the converter functions, but its implementation
 type is internal to [`support.ts`](src/support.ts), not an exported package

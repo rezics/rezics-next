@@ -1506,11 +1506,7 @@ export class RunStore<Projection = BatchStatement[]> {
     );
     return row ? this.parseAggregate(row) : null;
   }
-  unresolvedAggregate(
-    run: Run,
-    recordKey: string,
-    family?: 'statistic' | 'classification',
-  ): AggregateOperation | null {
+  unresolvedAggregate(run: Run, recordKey: string, family?: 'statistic' | 'classification'): AggregateOperation | null {
     validateRun(run);
     keyId(recordKey);
     const familyClause =

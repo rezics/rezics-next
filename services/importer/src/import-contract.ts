@@ -101,12 +101,7 @@ export interface ImportTransport {
   ): Promise<{ observationDigest: string; state: 'cleared' }>;
 }
 
-export type {
-  ClassificationAssociation,
-  ClassificationClear,
-  ClassificationObservation,
-  SourceClassificationRead,
-};
+export type { ClassificationAssociation, ClassificationClear, ClassificationObservation, SourceClassificationRead };
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };
 

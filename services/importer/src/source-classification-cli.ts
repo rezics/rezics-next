@@ -106,7 +106,8 @@ export function parseClassificationArgs(argv: readonly string[]): Classification
       continue;
     }
     if (flag === '--help') throw new InputFailure();
-    if (!flags.has(flag) || values.has(flag)) throw new InputFailure('Unknown, obsolete or repeated classification flag.');
+    if (!flags.has(flag) || values.has(flag))
+      throw new InputFailure('Unknown, obsolete or repeated classification flag.');
     const value = argv[++index];
     if (value === undefined || value.length === 0 || value.startsWith('--'))
       throw new InputFailure(`Classification flag ${flag} requires one value.`);

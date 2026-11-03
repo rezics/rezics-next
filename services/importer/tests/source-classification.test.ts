@@ -137,8 +137,7 @@ async function classificationFixture(
   const sequence = { value: 0 };
   let lost = false;
   let facts: unknown = options.facts === undefined ? admittedFacts() : options.facts;
-  let bound: ClassificationAssociation | null =
-    options.association === undefined ? association : options.association;
+  let bound: ClassificationAssociation | null = options.association === undefined ? association : options.association;
   const metadata = sourceRecordMetadataFixture();
   const transport = {
     setSourceRecordMetadata: metadata.setSourceRecordMetadata,
@@ -302,12 +301,12 @@ test('changed payloads keep sealed intent; stale CAS is rejected; unadmitted lic
     const inspected = page.operations[0]!;
     const storedKey = [...f.stored.keys()][0]!;
     f.stored.set(storedKey, { ...f.stored.get(storedKey)!, digest: 'c'.repeat(64) });
-    expect(await f.importer.resolveClassification('vndb', inspected.operationId, inspected.reviewedHead!.digest)).toEqual(
-      {
-        status: 'conflict',
-        operationId: inspected.operationId,
-      },
-    );
+    expect(
+      await f.importer.resolveClassification('vndb', inspected.operationId, inspected.reviewedHead!.digest),
+    ).toEqual({
+      status: 'conflict',
+      operationId: inspected.operationId,
+    });
     const current = (await f.importer.pageClassificationConflicts('vndb')).operations[0]!;
     const resolved = await f.importer.resolveClassification('vndb', current.operationId, current.reviewedHead!.digest);
     expect(resolved.status).toBe('delivered');

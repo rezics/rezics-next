@@ -96,7 +96,9 @@ export class ClassificationRefusedError extends Error {
   }
 }
 
-export function classificationPayload(intended: IntendedClassification): ClassificationObservation | ClassificationClear {
+export function classificationPayload(
+  intended: IntendedClassification,
+): ClassificationObservation | ClassificationClear {
   if (intended.kind === 'clear') {
     return {
       sourceAlias: intended.sourceAlias,

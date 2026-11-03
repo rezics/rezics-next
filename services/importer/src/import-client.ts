@@ -714,38 +714,42 @@ export function createImportTransport(options: ImportTransportOptions) {
   ): Promise<unknown> {
     const bytes = JSON.stringify(snapshot(body, BODY_BYTES));
     ensure(bytes.length > 0 && Buffer.byteLength(bytes) <= BODY_BYTES);
-    const reply = await response(async () => {
-      try {
-        const fetched = await importFetch(new URL(path, origin), {
-          method: 'POST',
-          headers: {
-            accept: 'application/json',
-            'content-type': 'application/json',
-            ...(key === undefined ? {} : { 'idempotency-key': idempotencyKey(key) }),
-          },
-          body: bytes,
-          ...(signal === undefined ? {} : { signal }),
-        });
-        const text = await fetched.text();
-        let data: unknown;
-        if (text.length) {
-          try {
-            data = JSON.parse(text);
-          } catch {
-            data = undefined;
+    const reply = await response(
+      async () => {
+        try {
+          const fetched = await importFetch(new URL(path, origin), {
+            method: 'POST',
+            headers: {
+              accept: 'application/json',
+              'content-type': 'application/json',
+              ...(key === undefined ? {} : { 'idempotency-key': idempotencyKey(key) }),
+            },
+            body: bytes,
+            ...(signal === undefined ? {} : { signal }),
+          });
+          const text = await fetched.text();
+          let data: unknown;
+          if (text.length) {
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = undefined;
+            }
           }
+          return {
+            status: fetched.status,
+            data: fetched.ok ? data : undefined,
+            error: fetched.ok ? undefined : { value: data },
+            response: fetched,
+          };
+        } catch (error) {
+          if (error instanceof ImportTransportError) throw error;
+          throw new ImportTransportError();
         }
-        return {
-          status: fetched.status,
-          data: fetched.ok ? data : undefined,
-          error: fetched.ok ? undefined : { value: data },
-          response: fetched,
-        };
-      } catch (error) {
-        if (error instanceof ImportTransportError) throw error;
-        throw new ImportTransportError();
-      }
-    }, expected, signal);
+      },
+      expected,
+      signal,
+    );
     return reply.body;
   }
   function associationBody(association: unknown): ClassificationAssociation {
