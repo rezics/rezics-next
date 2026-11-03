@@ -59,6 +59,23 @@ holds no upload/page/selection/result state and performs zero archive reads or e
 
 ## Remaining visit
 
+Decision: prepare transport-neutral bounded visit custody while keeping raw upload unavailable until generated
+merge DTOs and immutable native review confirmation are delivered.
+
+`archive-entry-recovery/selection.ts` owns at most twenty deliberate entry, label or assignment choices;
+unsupported sections cannot enter that selection. `archive-entry-recovery/visit.ts` owns one upload identity,
+one projected page of at most one hundred rows, that selection, one confirmed operand and one result page.
+It copies and freezes JSON values, replaces pages, invalidates review on choice changes, preserves exact original
+uncertain operands and keeps acknowledged receipts during cancellation. Stale admission retains choices as context
+and requires a fresh review. Viewer, credential/CSRF epoch, source, route, replacement and deadline retire private
+callbacks. The mounted adapter must provide the current binding reader and retire the visit on unmount and session
+events; no private state is connected to the unavailable page yet.
+
+These modules define local custody rather than a handwritten HTTP client or a native review-version schema.
+The generated adapter must project bounded native pages without duplicating their rows in page context, carry the
+native exact review identity and original request credentials/keys, and enforce native admission and receipts.
+Local state tests do not establish artifact admission, native effects, response-byte bounds or mounted completion.
+
 After the native continuation, use only generated methods for raw upload, owner status, indexed preview/results,
 selected review/apply, cancel and expired-evidence pruning. Keep one upload, one current page, one bounded selection
 and one current result page in visit memory. No archive JSON decoder, full-page walk, per-row hydration, automatic
