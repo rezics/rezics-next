@@ -307,26 +307,28 @@ requests. `GET /v1/feedItems?stream=following&limit=20&kind=thread` can return:
 
 ```json
 {
-  "feedItems": [{
-    "id": "feed-event-id",
-    "source": "following",
-    "key": {"owner": "content", "kind": "thread", "route": 12, "id": "00000000-0000-7000-8000-000c00000000"},
-    "occurredAt": null,
-    "summary": {
-      "id": "00000000-0000-7000-8000-000c00000000",
-      "kind": "discussion",
-      "title": "A disclosed thread",
-      "createdAt": "2026-11-03T10:00:00.000Z",
-      "reactionTarget": {"targetKind": "thread", "targetId": "00000000-0000-7000-8000-000c00000000"},
-      "reactions": {"like": 3},
-      "viewerReaction": null
-    },
-    "destination": {"kind": "thread", "id": "00000000-0000-7000-8000-000c00000000", "title": "A disclosed thread"}
-  }],
+  "feedItems": [
+    {
+      "id": "feed-event-id",
+      "source": "following",
+      "key": { "owner": "content", "kind": "thread", "route": 12, "id": "00000000-0000-7000-8000-000c00000000" },
+      "occurredAt": null,
+      "summary": {
+        "id": "00000000-0000-7000-8000-000c00000000",
+        "kind": "discussion",
+        "title": "A disclosed thread",
+        "createdAt": "2026-11-03T10:00:00.000Z",
+        "reactionTarget": { "targetKind": "thread", "targetId": "00000000-0000-7000-8000-000c00000000" },
+        "reactions": { "like": 3 },
+        "viewerReaction": null
+      },
+      "destination": { "kind": "thread", "id": "00000000-0000-7000-8000-000c00000000", "title": "A disclosed thread" }
+    }
+  ],
   "next": null,
   "asOf": "2026-11-03T10:01:00.000Z",
-  "reactionsAsOf": {"epoch": 4, "position": "812"},
-  "sources": {"discovery": "not_requested", "following": "ready", "continue": "not_requested"}
+  "reactionsAsOf": { "epoch": 4, "position": "812" },
+  "sources": { "discovery": "not_requested", "following": "ready", "continue": "not_requested" }
 }
 ```
 
