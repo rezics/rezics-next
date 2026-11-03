@@ -50,9 +50,16 @@ an unknown command succeeded. Stale/conflict requires fresh native inspection be
 
 ## Cost
 
+Decision: every mounted browser admission performs a fresh read of the exact paired frontier; loader feedback
+is only a candidate for the same account and locale, and a credential/exposure episode retires pending results.
+The installed protocol remains unavailable, so these preparations return no private rows and make no Content reads.
+The address observer includes the full search and navigation in flight; locale, source and frontier replacement
+also retire inspection controls and delayed focus. Choosing a disclosed row carries its original pair into Next.
+
 - **Touches:** after generated binding, one prepared native page read per admission, explicit next/retry or return;
   one deliberately selected command and its separately supported exact readback. The current unavailable seam
-  makes zero Content reads. No polling, per-row reads, accumulation, sorting, searching or refill.
+  makes zero Content reads, with one mounted preparation per browser admission or explicit retry. No polling,
+  per-row reads, accumulation, sorting, searching or refill.
 - **Bound:** native raw page 20 plus at most one selected promotion, cursor 4096 characters, at most one selected
   editor/intent and no retained page history. Native identity/type/property bounds are 256 characters, label 2000,
   release 128, href 128 and digests 64. The producer caps serialized response bytes at 1,048,576. The installed generated

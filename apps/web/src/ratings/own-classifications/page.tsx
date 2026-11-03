@@ -1,9 +1,9 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { subjectHref } from '../../subject/subject-href';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
-import { classificationPair, indexOwnClassifications } from './inventory';
+import { classificationAddressKey, classificationPair, indexOwnClassifications } from './inventory';
 import type {
   ClassificationFrontier,
   OwnClassification,
@@ -34,11 +34,26 @@ export function OwnClassificationsWorkspace({
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const [selection, select] = useState<{ generation: number; key: string } | null>(null);
   const active = isCurrent();
-  const latest = useRef({ page, state, active, generation: 0 });
-  if (latest.current.page !== page || latest.current.state !== state || latest.current.active !== active)
-    latest.current = { page, state, active, generation: latest.current.generation + 1 };
+  const address = classificationAddressKey(frontier);
+  const latest = useRef({ page, state, active, locale, address, generation: 0 });
+  const mounted = useRef(true);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  if (
+    latest.current.page !== page ||
+    latest.current.state !== state ||
+    latest.current.active !== active ||
+    latest.current.locale !== locale ||
+    latest.current.address !== address
+  )
+    latest.current = { page, state, active, locale, address, generation: latest.current.generation + 1 };
   const generation = latest.current.generation;
-  const current = () => latest.current.generation === generation && latest.current.active && isCurrent();
+  const current = () =>
+    mounted.current && latest.current.generation === generation && latest.current.active && isCurrent();
   let admitted: OwnClassificationsPage | null = state === 'ready' && current() ? page : null;
   let index: ReturnType<typeof indexOwnClassifications> | null = null;
   if (admitted) {
@@ -81,7 +96,7 @@ export function OwnClassificationsWorkspace({
                 : m.own_classifications_sparse({}, options)}
             </p>
           ) : null}
-          <ol className="space-y-3" aria-label={m.own_classifications_title({}, options)}>
+          <ol key={generation} className="space-y-3" aria-label={m.own_classifications_title({}, options)}>
             {admitted.items.map((row) => {
               const pair = classificationPair(row);
               return (
@@ -156,9 +171,16 @@ export function OwnClassificationsWorkspace({
           ) : null}
           {admitted.next !== null ? (
             <Button
+              key={generation}
               className={control}
               onClick={() => {
-                if (current()) onNext({ cursor: admitted.next, selected: frontier.selected });
+                if (current())
+                  onNext({
+                    cursor: admitted.next,
+                    selected: selected
+                      ? { subjectId: selected.subjectId, associationId: selected.associationId }
+                      : frontier.selected,
+                  });
               }}
             >
               {m.own_classifications_next({}, options)}

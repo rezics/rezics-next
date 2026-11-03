@@ -577,6 +577,8 @@ Decision: disclosed Subject/Concept links use neutral localized slugs through th
 labels never enter browser URLs. Full current-origin binding, admitted withdrawal and uncertain-intent recovery
 remain required before this journey is complete; source, generated delivery and executed native outcomes are
 separate facts.
+Decision: mounted classification admission prepares the exact paired frontier afresh and retires late results on
+credential/exposure episodes; the unpublished Client seam still returns no rows or command authority.
 
 ### Shared navigation and subject purchase entry
 

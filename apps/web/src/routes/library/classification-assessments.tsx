@@ -1,20 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
 import { useHistoryCurrentOrigin } from '../../library/history-current-origin';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
-import {
-  readOwnClassificationsForViewer,
-  type OwnClassificationsRead,
-} from '../../ratings/own-classifications/actions';
+import { readOwnClassificationsForViewer } from '../../ratings/own-classifications/actions';
+import { useLibraryWorkspaceAdmission } from '../../library/library-workspace-admission';
+import { useClassificationAddress } from '../../ratings/own-classifications/address';
+import { UnavailableClassificationsReader } from '../../ratings/own-classifications/reader';
 import {
   classificationFrontier,
   classificationSearch,
   OWN_CLASSIFICATIONS_OPERATION,
 } from '../../ratings/own-classifications/inventory';
-import { OwnClassificationsWorkspace } from '../../ratings/own-classifications/page';
 
 const operations = [OWN_CLASSIFICATIONS_OPERATION] as const;
 export const Route = createFileRoute('/library/classification-assessments')({
@@ -33,42 +31,28 @@ function ClassificationAssessmentsRoute() {
   const initial = Route.useLoaderData();
   const search = Route.useSearch();
   const locale = getLocale();
-  const origin = useHistoryCurrentOrigin(JSON.stringify([search, locale]), operations, initial.subject);
+  const frontier = 'invalidAddress' in search ? null : classificationFrontier(search);
+  const address = useClassificationAddress(frontier, locale);
+  const admission = useLibraryWorkspaceAdmission(operations).value;
+  const origin = useHistoryCurrentOrigin(address.key, operations, initial.subject);
+  const state = !frontier
+    ? 'invalid-address'
+    : origin.session.state === 'signed-out'
+      ? 'signed-out'
+      : admission.rejected || (origin.authoritative && origin.retained[0] && !admission.allowed[0])
+        ? 'denied'
+        : null;
   // This mounted production boundary cannot admit rows while the generated operation is unavailable.
   return (
-    <UnavailableClassificationAssessments
-      key={origin.lifetime(0)}
+    <UnavailableClassificationsReader
+      key={JSON.stringify([origin.lifetime(0), origin.epoch(0)])}
       initial={initial}
+      frontier={frontier ?? { cursor: null, selected: null }}
       locale={locale}
-      isCurrent={() => origin.current(0)}
-    />
-  );
-}
-
-function UnavailableClassificationAssessments({
-  initial,
-  locale,
-  isCurrent,
-}: {
-  initial: OwnClassificationsRead;
-  locale: string;
-  isCurrent: () => boolean;
-}) {
-  const [read, update] = useState(initial);
-  const frontier = read.frontier ?? { cursor: null, selected: null };
-  return (
-    <OwnClassificationsWorkspace
-      state={read.state}
-      page={null}
-      frontier={frontier}
-      locale={locale}
-      isCurrent={isCurrent}
-      onRetry={async (original) => {
-        if (!isCurrent()) return;
-        const result = await readOwnClassificationsForViewer({ data: classificationSearch(original) });
-        if (isCurrent()) update(result);
-      }}
-      onNext={() => {}}
+      subject={origin.subject}
+      state={state}
+      isCurrent={() => address.isCurrent() && origin.current(0)}
+      read={(original) => readOwnClassificationsForViewer({ data: classificationSearch(original) })}
     />
   );
 }

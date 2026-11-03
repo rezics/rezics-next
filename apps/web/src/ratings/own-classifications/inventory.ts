@@ -43,9 +43,14 @@ export function classificationSearch(frontier: ClassificationFrontier) {
   };
 }
 
+export function classificationAddressKey(frontier: ClassificationFrontier | null): string {
+  return JSON.stringify(frontier ? classificationSearch(frontier) : null);
+}
+
 /** Page replacement only. Selected promotion and omission belong to Content; never refill or deduplicate. */
 export function indexOwnClassifications(page: OwnClassificationsPage, frontier: ClassificationFrontier) {
   if (
+    new TextEncoder().encode(JSON.stringify(page)).length > 1_048_576 ||
     page.items.length > (frontier.selected ? 21 : 20) ||
     (page.next !== null && (page.next.length === 0 || page.next.length > 4096)) ||
     (page.traversal === 'more') !== (page.next !== null)
@@ -62,9 +67,7 @@ export function indexOwnClassifications(page: OwnClassificationsPage, frontier: 
     if (result.has(key)) throw new Error('Duplicate original classification key');
     if (
       row.state === 'available' &&
-      (row.association.subjectId !== row.subjectId ||
-        row.association.associationId !== row.associationId ||
-        row.target.id !== row.association.targetId)
+      (row.association.subjectId !== row.subjectId || row.association.associationId !== row.associationId)
     )
       throw new Error('Mismatched original classification key');
     result.set(key, row);

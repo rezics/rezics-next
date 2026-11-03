@@ -65,3 +65,15 @@ test('withheld rows disclose only own-state and never promise withdrawal before 
   expect(classificationFrontier({ cursor: '' })).toBeNull();
   expect(classificationFrontier({ cursor: 'x'.repeat(4097) })).toBeNull();
 });
+
+test('current summary destinations preserve original association keys and the serialized response stays bounded', () => {
+  const row = classificationRow();
+  if (row.state !== 'available') throw new Error('Expected disclosed fixture');
+  const originalTarget = row.association.targetId;
+  row.target = { ...row.target, id: subjectId, label: 'Current destination' };
+  const page = classificationsPage([row]);
+  expect([...indexOwnClassifications(page, frontier).values()][0]?.associationId).toBe(row.associationId);
+  expect(row.association.targetId).toBe(originalTarget);
+  row.subject.label = '界'.repeat(350_000);
+  expect(() => indexOwnClassifications(page, frontier)).toThrow('Invalid classification frontier');
+});
