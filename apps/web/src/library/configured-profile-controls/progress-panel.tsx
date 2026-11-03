@@ -121,7 +121,7 @@ export function ConfiguredProgressPanel({
       if (progress.meaning === 'absent' && !('session' in progress)) {
         const start =
           startIntent.current ??
-          createGuardedCommand(startSender, credential, {
+          createGuardedCommand<ProgressStartInput, StartResult>(startSender, credential, {
             subjectId,
             mode: progress.measure.mode,
             unit: progress.measure.unit.id,
@@ -137,7 +137,7 @@ export function ConfiguredProgressPanel({
         }
         const record =
           recordIntent.current ??
-          createGuardedCommand(recordSender, credential, {
+          createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
             sessionId: started.id,
             revision: 0,
             amount: draft.trim(),
@@ -152,7 +152,7 @@ export function ConfiguredProgressPanel({
       if (!('session' in progress)) return;
       const record =
         recordIntent.current ??
-        createGuardedCommand(recordSender, credential, {
+        createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
           sessionId: progress.session.id,
           revision: progress.session.revision,
           amount: draft.trim(),
@@ -174,7 +174,7 @@ export function ConfiguredProgressPanel({
     try {
       const record =
         recordIntent.current ??
-        createGuardedCommand(recordSender, credential, {
+        createGuardedCommand<ProgressRecordInput, RecordResult>(recordSender, credential, {
           sessionId: progress.session.id,
           revision: progress.session.revision,
           clear: true,
