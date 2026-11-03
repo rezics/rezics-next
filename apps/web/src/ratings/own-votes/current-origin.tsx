@@ -24,7 +24,16 @@ export function ownVotesQuery(
 ) {
   return queryOptions({
     ...personalRead,
-    queryKey: ['own-votes', subject, OWN_VOTES_OPERATION, 'personal_library', cursor, locale, OWN_VOTES_SOURCE, originKey],
+    queryKey: [
+      'own-votes',
+      subject,
+      OWN_VOTES_OPERATION,
+      'personal_library',
+      cursor,
+      locale,
+      OWN_VOTES_SOURCE,
+      originKey,
+    ],
     queryFn: async ({ signal }) => {
       assertHistoryCurrent(current, signal);
       try {
@@ -78,11 +87,7 @@ export function useOwnVotesCurrentOrigin(
   const cursor = requestedCursor;
   const address = useHistoryAddress('/library/ratings', cursor ?? undefined, locale);
   const originAddress = invalidAddress ? `${address.key}:invalid` : address.key;
-  const origin = useHistoryCurrentOrigin(
-    originAddress,
-    operations,
-    initial.subject,
-  );
+  const origin = useHistoryCurrentOrigin(originAddress, operations, initial.subject);
   const admission = useLibraryWorkspaceAdmission(operations).value;
   const current = () => address.isCurrent() && origin.current(0);
   const options = ownVotesQuery(origin.subject ?? '', cursor, locale, origin.lifetime(0), current);
@@ -96,10 +101,7 @@ export function useOwnVotesCurrentOrigin(
         !!origin.subject &&
         origin.allowed[0] === true &&
         address.isCurrent(),
-      ...(origin.seed &&
-      !invalidAddress &&
-      origin.subject &&
-      matches(initial, origin.subject, cursor, locale)
+      ...(origin.seed && !invalidAddress && origin.subject && matches(initial, origin.subject, cursor, locale)
         ? { initialData: initial, initialDataUpdatedAt: Date.now() }
         : {}),
     },
@@ -114,19 +116,17 @@ export function useOwnVotesCurrentOrigin(
     if (invalidAddress) return 'invalid-cursor' as const;
     if (query.isError) return 'unavailable' as const;
     if (!isCurrent()) {
-      if (
-        isOwnVotesRead(data) &&
-        data.cursor === cursor &&
-        data.locale === locale &&
-        data.state === 'signed-out'
-      )
+      if (isOwnVotesRead(data) && data.cursor === cursor && data.locale === locale && data.state === 'signed-out')
         return 'signed-out' as const;
       if (
         isOwnVotesRead(data) &&
         data.cursor === cursor &&
         data.locale === locale &&
         data.subject === origin.subject &&
-        (data.state === 'denied' || data.state === 'preparing' || data.state === 'unavailable' || data.state === 'invalid-cursor')
+        (data.state === 'denied' ||
+          data.state === 'preparing' ||
+          data.state === 'unavailable' ||
+          data.state === 'invalid-cursor')
       )
         return data.state;
       if (origin.session.state === 'signed-out') return 'signed-out' as const;

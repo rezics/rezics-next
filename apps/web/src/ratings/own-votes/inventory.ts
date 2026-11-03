@@ -25,8 +25,7 @@ export function indexOwnVotes(page: OwnVotesPage): Map<string, OwnVoteEntry> {
 
 export function ownVotesCursor(value: unknown): { valid: true; cursor: string | null } | { valid: false } {
   if (value === undefined || value === null) return { valid: true, cursor: null };
-  if (typeof value !== 'string' || value.length === 0 || value.length > OWN_VOTES_CURSOR_LIMIT)
-    return { valid: false };
+  if (typeof value !== 'string' || value.length === 0 || value.length > OWN_VOTES_CURSOR_LIMIT) return { valid: false };
   return { valid: true, cursor: value };
 }
 

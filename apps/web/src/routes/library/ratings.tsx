@@ -27,10 +27,6 @@ function OwnRatingsRoute() {
   const address = ownVotesCursor(search.cursor);
   const invalid = search.invalidCursor === true || !address.valid;
   return (
-    <CurrentViewerOwnVotesPage
-      initial={initial}
-      cursor={invalid ? null : address.cursor}
-      invalidAddress={invalid}
-    />
+    <CurrentViewerOwnVotesPage initial={initial} cursor={invalid ? null : address.cursor} invalidAddress={invalid} />
   );
 }

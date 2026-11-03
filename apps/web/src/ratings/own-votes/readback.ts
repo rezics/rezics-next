@@ -15,10 +15,13 @@ export async function readOriginalOwnVote(
   after: 'PUT' | 'DELETE' | 'REVIEW',
 ): Promise<OwnVoteReadback> {
   try {
-    const result = await client.subjects({ id: targetId }).ratings({ questionId }).vote.get({
-      headers: { authorization },
-      fetch: { cache: 'no-store', redirect: 'manual' },
-    });
+    const result = await client
+      .subjects({ id: targetId })
+      .ratings({ questionId })
+      .vote.get({
+        headers: { authorization },
+        fetch: { cache: 'no-store', redirect: 'manual' },
+      });
     if (result.status === 404) return after === 'DELETE' ? { kind: 'cleared' } : { kind: 'missing' };
     if (result.status !== 200 || !result.data) return { kind: 'unavailable' };
     const { units, revision, at } = result.data;

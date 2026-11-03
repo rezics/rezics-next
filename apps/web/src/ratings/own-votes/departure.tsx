@@ -70,9 +70,7 @@ export function OwnVotesDeparture({
       {open && isCurrent() ? (
         <AlertDialogContent
           initialFocus={stay}
-          finalFocus={() =>
-            isCurrent() && returnFocus.current?.isConnected ? returnFocus.current : false
-          }
+          finalFocus={() => (isCurrent() && returnFocus.current?.isConnected ? returnFocus.current : false)}
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{m.library_my_ratings_departure_title()}</AlertDialogTitle>
@@ -85,9 +83,7 @@ export function OwnVotesDeparture({
               {m.library_my_ratings_stay()}
             </AlertDialogCancel>
             {!locked ? (
-              <AlertDialogAction onClick={() => choose(true)}>
-                {m.library_my_ratings_leave()}
-              </AlertDialogAction>
+              <AlertDialogAction onClick={() => choose(true)}>{m.library_my_ratings_leave()}</AlertDialogAction>
             ) : null}
           </AlertDialogFooter>
         </AlertDialogContent>

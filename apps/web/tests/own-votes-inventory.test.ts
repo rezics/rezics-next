@@ -1,21 +1,45 @@
 import { expect, test } from 'bun:test';
 import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/rating/own-votes-page.ts';
-import { indexOwnVotes, ownVotesCursor, removeOwnVote, replaceOwnVote, votePairKey } from '../src/ratings/own-votes/inventory';
+import {
+  indexOwnVotes,
+  ownVotesCursor,
+  removeOwnVote,
+  replaceOwnVote,
+  votePairKey,
+} from '../src/ratings/own-votes/inventory';
 
 const accountId = 'f6f6f6f6-f6f6-46f6-86f6-f6f6f6f6f6f6';
 const terminalId = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
 function entry(targetId: string, questionId: string, units = 0): OwnVoteEntry {
   const path = `/v1/subjects/${targetId}/ratings/${questionId}/vote`;
   return {
-    targetId, questionId,
-    subject: { id: terminalId, type: 'work', types: ['work'], label: { value: 'Same summary', language: 'en' }, creativeWork: true, cover: null },
+    targetId,
+    questionId,
+    subject: {
+      id: terminalId,
+      type: 'work',
+      types: ['work'],
+      label: { value: 'Same summary', language: 'en' },
+      creativeWork: true,
+      cover: null,
+    },
     subjectHref: '/v1/subjects/admitted',
-    question: { id: questionId, revision: 1, label: 'Question', grain: 'work', scale: { min: 0, max: 20, displayStep: 2 } },
+    question: {
+      id: questionId,
+      revision: 1,
+      label: 'Question',
+      grain: 'work',
+      scale: { min: 0, max: 20, displayStep: 2 },
+    },
     own: { units, revision: 1, at: '2026-10-01T00:00:00.000Z' },
     actions: { state: 'editable', put: path, clear: path, readback: path },
   };
 }
-const page = (votes: OwnVoteEntry[], next: string | null = null): OwnVotesPage => ({ viewer: { accountId }, votes, next });
+const page = (votes: OwnVoteEntry[], next: string | null = null): OwnVotesPage => ({
+  viewer: { accountId },
+  votes,
+  next,
+});
 
 test('bounded index keeps original pairs distinct when admitted summaries share one terminal identity', () => {
   for (const count of [1, 10, 20]) {

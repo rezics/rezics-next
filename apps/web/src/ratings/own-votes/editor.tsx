@@ -17,7 +17,16 @@ import { isAdmittedVoteAction } from './intent';
 
 export type OwnVoteFeedback =
   | { kind: 'saving' | 'clearing' | 'reviewing' }
-  | { kind: 'saved' | 'cleared' | 'rejected' | 'uncertain' | 'readback-unavailable' | 'review-missing' | 'review-failed' }
+  | {
+      kind:
+        | 'saved'
+        | 'cleared'
+        | 'rejected'
+        | 'uncertain'
+        | 'readback-unavailable'
+        | 'review-missing'
+        | 'review-failed';
+    }
   | { kind: 'review-current'; value: number }
   | { kind: 'review-pending'; value: number }
   | { kind: 'review-cleared' };
@@ -56,8 +65,10 @@ export function OwnVoteEditor({
   onReview: () => void;
 }) {
   const [confirmingClear, setConfirmingClear] = useState(false);
-  const editable = isAdmittedVoteAction(entry, entry.actions, 'PUT') && isAdmittedVoteAction(entry, entry.actions, 'GET');
-  const canClear = isAdmittedVoteAction(entry, entry.actions, 'DELETE') && isAdmittedVoteAction(entry, entry.actions, 'GET');
+  const editable =
+    isAdmittedVoteAction(entry, entry.actions, 'PUT') && isAdmittedVoteAction(entry, entry.actions, 'GET');
+  const canClear =
+    isAdmittedVoteAction(entry, entry.actions, 'DELETE') && isAdmittedVoteAction(entry, entry.actions, 'GET');
   const changedAt = ownVoteChangedAt(entry, locale);
   const parsedDraft = draft === '' ? Number.NaN : Number(draft);
   const validDraft =
@@ -77,7 +88,9 @@ export function OwnVoteEditor({
         <dl className="grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <dt className="font-medium">{m.library_my_ratings_original_key()}</dt>
-            <dd className="break-all">{entry.targetId} · {entry.questionId}</dd>
+            <dd className="break-all">
+              {entry.targetId} · {entry.questionId}
+            </dd>
           </div>
           <div>
             <dt className="font-medium">{m.library_my_ratings_value()}</dt>
@@ -90,7 +103,9 @@ export function OwnVoteEditor({
           {changedAt ? (
             <div>
               <dt className="font-medium">{m.library_my_ratings_changed()}</dt>
-              <dd><time dateTime={entry.own.at}>{changedAt}</time></dd>
+              <dd>
+                <time dateTime={entry.own.at}>{changedAt}</time>
+              </dd>
             </div>
           ) : null}
         </dl>
@@ -142,7 +157,12 @@ export function OwnVoteEditor({
             </Button>
           ) : null}
           {canClear ? (
-            <Button className="min-h-11" variant="outline" disabled={locked || busy} onClick={() => setConfirmingClear(true)}>
+            <Button
+              className="min-h-11"
+              variant="outline"
+              disabled={locked || busy}
+              onClick={() => setConfirmingClear(true)}
+            >
               {m.library_my_ratings_clear()}
             </Button>
           ) : null}
@@ -150,10 +170,15 @@ export function OwnVoteEditor({
       )}
 
       {feedback ? <Feedback feedback={feedback} locale={locale} /> : null}
-      {feedback?.kind === 'uncertain' || feedback?.kind === 'readback-unavailable' || feedback?.kind === 'review-failed' || feedback?.kind === 'review-missing' ? (
+      {feedback?.kind === 'uncertain' ||
+      feedback?.kind === 'readback-unavailable' ||
+      feedback?.kind === 'review-failed' ||
+      feedback?.kind === 'review-missing' ? (
         <div className="flex flex-wrap gap-2">
           {canRetry ? (
-            <Button className="min-h-11" disabled={busy} onClick={onRetry}>{m.library_my_ratings_retry_original()}</Button>
+            <Button className="min-h-11" disabled={busy} onClick={onRetry}>
+              {m.library_my_ratings_retry_original()}
+            </Button>
           ) : null}
           <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
             {m.library_my_ratings_review_original()}
@@ -161,7 +186,9 @@ export function OwnVoteEditor({
         </div>
       ) : feedback?.kind === 'review-pending' ? (
         <div className="flex flex-wrap gap-2">
-          <Button className="min-h-11" disabled={busy} onClick={onRetry}>{m.library_my_ratings_retry_original()}</Button>
+          <Button className="min-h-11" disabled={busy} onClick={onRetry}>
+            {m.library_my_ratings_retry_original()}
+          </Button>
           <Button className="min-h-11" variant="outline" disabled={busy} onClick={onReview}>
             {m.library_my_ratings_review_original()}
           </Button>
@@ -197,21 +224,37 @@ function Feedback({ feedback, locale }: { feedback: OwnVoteFeedback; locale: str
   const value = 'value' in feedback ? new Intl.NumberFormat(locale).format(feedback.value) : undefined;
   const message = (() => {
     switch (feedback.kind) {
-      case 'saving': return m.library_my_ratings_saving();
-      case 'clearing': return m.library_my_ratings_clearing();
-      case 'reviewing': return m.library_my_ratings_reviewing();
-      case 'saved': return m.library_my_ratings_saved();
+      case 'saving':
+        return m.library_my_ratings_saving();
+      case 'clearing':
+        return m.library_my_ratings_clearing();
+      case 'reviewing':
+        return m.library_my_ratings_reviewing();
+      case 'saved':
+        return m.library_my_ratings_saved();
       case 'cleared':
-      case 'review-cleared': return m.library_my_ratings_cleared();
-      case 'rejected': return m.library_my_ratings_rejected();
-      case 'uncertain': return m.library_my_ratings_uncertain_text();
-      case 'readback-unavailable': return m.library_my_ratings_readback_unavailable();
-      case 'review-missing': return m.library_my_ratings_review_missing();
-      case 'review-failed': return m.library_my_ratings_review_failed();
-      case 'review-current': return m.library_my_ratings_review_current({ value: value ?? '' });
-      case 'review-pending': return m.library_my_ratings_review_current({ value: value ?? '' });
+      case 'review-cleared':
+        return m.library_my_ratings_cleared();
+      case 'rejected':
+        return m.library_my_ratings_rejected();
+      case 'uncertain':
+        return m.library_my_ratings_uncertain_text();
+      case 'readback-unavailable':
+        return m.library_my_ratings_readback_unavailable();
+      case 'review-missing':
+        return m.library_my_ratings_review_missing();
+      case 'review-failed':
+        return m.library_my_ratings_review_failed();
+      case 'review-current':
+        return m.library_my_ratings_review_current({ value: value ?? '' });
+      case 'review-pending':
+        return m.library_my_ratings_review_current({ value: value ?? '' });
     }
   })();
-  const alert = feedback.kind === 'rejected' || feedback.kind === 'uncertain' || feedback.kind === 'readback-unavailable' || feedback.kind === 'review-failed';
+  const alert =
+    feedback.kind === 'rejected' ||
+    feedback.kind === 'uncertain' ||
+    feedback.kind === 'readback-unavailable' ||
+    feedback.kind === 'review-failed';
   return <p role={alert ? 'alert' : 'status'}>{message}</p>;
 }

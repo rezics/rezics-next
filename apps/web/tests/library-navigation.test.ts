@@ -19,7 +19,13 @@ test('My ratings has one signed-in Library navigation contribution in every loca
   const entries = libraryNavigation.filter((entry) => entry.id === 'library.own-ratings');
   expect(entries).toHaveLength(1);
   const entry = entries[0]!;
-  expect(entry).toMatchObject({ href: '/library/ratings', group: 'personal', match: 'exact', signedIn: true, operation: 'rating.own_votes_page' });
+  expect(entry).toMatchObject({
+    href: '/library/ratings',
+    group: 'personal',
+    match: 'exact',
+    signedIn: true,
+    operation: 'rating.own_votes_page',
+  });
   if (typeof entry.label !== 'function') throw new Error('My ratings label must follow the current locale');
   for (const locale of locales) expect(entry.label({ locale, pathname: '/library/ratings' })).toBeTruthy();
 });

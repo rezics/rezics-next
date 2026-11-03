@@ -2,7 +2,10 @@ import { createKernelClient, SESSION_HEADER } from '@rezics/client';
 import { Value } from 'typebox/value';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
-import { OwnVoteActionsSchema, OwnVotesPageSchema } from '../../../../../services/kernel/src/rating/own-votes-schemas.ts';
+import {
+  OwnVoteActionsSchema,
+  OwnVotesPageSchema,
+} from '../../../../../services/kernel/src/rating/own-votes-schemas.ts';
 import type { OwnVotesPage } from './types';
 import { requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
@@ -114,11 +117,7 @@ async function readPage(address: { cursor: string | null; valid: boolean }): Pro
     if (response.status === 400) return emptyRead('invalid-cursor', subject, address.cursor, locale);
     if (response.status !== 200) return emptyRead('unavailable', subject, address.cursor, locale);
     const value: unknown = await response.json();
-    if (
-      !isOwnVotesPage(value) ||
-      value.viewer.accountId !== subject ||
-      !ownVotesCursor(value.next).valid
-    )
+    if (!isOwnVotesPage(value) || value.viewer.accountId !== subject || !ownVotesCursor(value.next).valid)
       return emptyRead('unavailable', subject, address.cursor, locale);
     try {
       indexOwnVotes(value);
@@ -203,7 +202,10 @@ export const executeOwnVoteIntent = createServerFn({ method: 'POST' })
   .validator(commandInput)
   .handler(async ({ data }) => currentCommand(data));
 
-async function reviewCommand(input: { intent: OwnVoteIntent; after: 'PUT' | 'DELETE' | 'REVIEW' }): Promise<OwnVoteReadback> {
+async function reviewCommand(input: {
+  intent: OwnVoteIntent;
+  after: 'PUT' | 'DELETE' | 'REVIEW';
+}): Promise<OwnVoteReadback> {
   setResponseHeader('cache-control', 'private, no-store');
   const request = getRequest();
   const { env } = await import('cloudflare:workers');
@@ -223,13 +225,7 @@ async function reviewCommand(input: { intent: OwnVoteIntent; after: 'PUT' | 'DEL
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   if (!origin) return { kind: 'unavailable' };
   const { client } = createNativeTransport(origin, authorization);
-  return readOriginalOwnVote(
-    client,
-    authorization,
-    input.intent.targetId,
-    input.intent.questionId,
-    input.after,
-  );
+  return readOriginalOwnVote(client, authorization, input.intent.targetId, input.intent.questionId, input.after);
 }
 
 export const reviewOwnVoteIntent = createServerFn({ method: 'GET' })
@@ -238,8 +234,7 @@ export const reviewOwnVoteIntent = createServerFn({ method: 'GET' })
       throw new Error('Invalid rating review');
     const intent = parseOwnVoteIntent(value.intent);
     const after = value.after;
-    if (!intent || !isReadbackAction(after))
-      throw new Error('Invalid rating review');
+    if (!intent || !isReadbackAction(after)) throw new Error('Invalid rating review');
     return { intent, after };
   })
   .handler(async ({ data }) => reviewCommand(data));

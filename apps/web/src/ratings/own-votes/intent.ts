@@ -19,11 +19,7 @@ export function ownVotePath(targetId: string, questionId: string): string {
   return `/v1/subjects/${targetId}/ratings/${questionId}/vote`;
 }
 
-export function isAdmittedVoteAction(
-  entry: OwnVoteEntry,
-  action: unknown,
-  method: 'PUT' | 'DELETE' | 'GET',
-): boolean {
+export function isAdmittedVoteAction(entry: OwnVoteEntry, action: unknown, method: 'PUT' | 'DELETE' | 'GET'): boolean {
   if (!record(action)) return false;
   const expected = ownVotePath(entry.targetId, entry.questionId);
   if (method === 'PUT') return action.state === 'editable' && action.put === expected;
@@ -143,10 +139,7 @@ function parseActions(value: unknown): OwnVoteActions | null {
     if (typeof value.clear === 'string' && typeof value.readback === 'string')
       return { state: 'retired', reason: 'question_retired', clear: value.clear, readback: value.readback };
   }
-  if (
-    value.state === 'unavailable' &&
-    (value.reason === 'merged_source' || value.reason === 'identity_pending')
-  )
+  if (value.state === 'unavailable' && (value.reason === 'merged_source' || value.reason === 'identity_pending'))
     return { state: 'unavailable', reason: value.reason };
   return null;
 }

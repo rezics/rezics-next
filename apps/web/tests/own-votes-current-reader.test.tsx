@@ -11,7 +11,16 @@ test('private reader identity includes viewer, exposure lifetime, address, local
     ownVotesQuery('viewer-a', cursor, 'en', 'exposure-b', () => true),
     ownVotesQuery('viewer-a', cursor, 'en', 'exposure-a', () => false),
   ];
-  expect(new Set([first.queryKey, ...variants.map(({ queryKey }) => queryKey)].map((key) => JSON.stringify(key))).size).toBe(5);
+  expect(
+    new Set([first.queryKey, ...variants.map(({ queryKey }) => queryKey)].map((key) => JSON.stringify(key))).size,
+  ).toBe(5);
   expect(first.queryKey).toContain(cursor);
-  expect(first).toMatchObject({ gcTime: 0, staleTime: Infinity, retry: false, refetchOnMount: false, refetchOnWindowFocus: false, refetchOnReconnect: false });
+  expect(first).toMatchObject({
+    gcTime: 0,
+    staleTime: Infinity,
+    retry: false,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 });

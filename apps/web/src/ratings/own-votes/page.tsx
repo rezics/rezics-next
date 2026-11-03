@@ -89,7 +89,7 @@ export function OwnVotesWorkspace({
     }
   }, [page]);
   const indexedPageValid = !page || index.size === page.votes.length;
-  const activeEntry = selectedPair ? index.get(selectedPair) ?? null : null;
+  const activeEntry = selectedPair ? (index.get(selectedPair) ?? null) : null;
   const unresolved =
     feedback?.kind === 'uncertain' ||
     feedback?.kind === 'review-pending' ||
@@ -100,7 +100,9 @@ export function OwnVotesWorkspace({
   const selectedCurrent = () =>
     isCurrent() &&
     !!activeEntry &&
-    (!intent || (intent.pair === votePairKey(activeEntry) && intent.path === `/v1/subjects/${activeEntry.targetId}/ratings/${activeEntry.questionId}/vote`));
+    (!intent ||
+      (intent.pair === votePairKey(activeEntry) &&
+        intent.path === `/v1/subjects/${activeEntry.targetId}/ratings/${activeEntry.questionId}/vote`));
 
   function clearIntent() {
     attempt.current += 1;
@@ -248,29 +250,37 @@ export function OwnVotesWorkspace({
   const message = (() => {
     if (!indexedPageValid) return m.library_my_ratings_unavailable();
     switch (state) {
-      case 'signed-out': return m.library_my_ratings_signed_out();
-      case 'denied': return m.library_my_ratings_denied();
-      case 'preparing': return m.library_my_ratings_preparing();
-      case 'unavailable': return m.library_my_ratings_unavailable();
-      case 'invalid-cursor': return m.library_my_ratings_invalid_cursor();
-      case 'ready': return null;
+      case 'signed-out':
+        return m.library_my_ratings_signed_out();
+      case 'denied':
+        return m.library_my_ratings_denied();
+      case 'preparing':
+        return m.library_my_ratings_preparing();
+      case 'unavailable':
+        return m.library_my_ratings_unavailable();
+      case 'invalid-cursor':
+        return m.library_my_ratings_invalid_cursor();
+      case 'ready':
+        return null;
     }
   })();
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-      <PageHeading
-        ref={headingRef}
-        tabIndex={-1}
-      >
+      <PageHeading ref={headingRef} tabIndex={-1}>
         {m.library_my_ratings_heading()}
       </PageHeading>
       <p className="max-w-3xl text-muted-foreground">{m.library_my_ratings_description()}</p>
       {message ? (
-        <section className="space-y-3" role={state === 'unavailable' || state === 'invalid-cursor' ? 'alert' : 'status'}>
+        <section
+          className="space-y-3"
+          role={state === 'unavailable' || state === 'invalid-cursor' ? 'alert' : 'status'}
+        >
           <p>{message}</p>
           {state === 'unavailable' ? (
-            <Button className="min-h-11" onClick={() => void onRefresh()}>{m.library_my_ratings_retry_page()}</Button>
+            <Button className="min-h-11" onClick={() => void onRefresh()}>
+              {m.library_my_ratings_retry_page()}
+            </Button>
           ) : null}
           {state === 'invalid-cursor' ? (
             <Link className="inline-flex min-h-11 items-center underline" to="/library/ratings">
