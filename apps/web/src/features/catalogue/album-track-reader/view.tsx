@@ -130,6 +130,7 @@ export function AlbumTrackWindow({
     if (!initial) void read({ id, context });
     return () => {
       mounted.current = false;
+      inFlight.current = false;
       sequence.current++;
       origin.current = null;
     };
