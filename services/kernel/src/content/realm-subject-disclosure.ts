@@ -241,10 +241,17 @@ export async function prepareRealmSubjectDisclosure(
     const state = denied(error) ? 'withheld' : 'unknown';
     prepared.splice(0, prepared.length, ...request.candidates.map(() => ({ state } as RealmSubjectEvidence)));
   }
+  // A consumed handle cannot be used to renew evidence after its fixed deadline
+  // or under a mutated principal. This branch performs no additional native IO.
+  const expiredEvidence: readonly RealmSubjectEvidence[] = Object.freeze(
+    request.candidates.map(() => Object.freeze({ state: 'unknown' as const })),
+  );
   let finished: Promise<readonly RealmSubjectEvidence[]> | undefined;
   return Object.freeze({
     finish() {
       // Memoization limits final work; it does not turn evidence into a cache.
+      if (Date.now() >= context.deadline || principalSignature(context.actor) !== principal)
+        return Promise.resolve(expiredEvidence);
       return finished ??= finish();
     },
   });

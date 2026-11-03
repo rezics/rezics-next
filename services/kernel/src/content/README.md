@@ -27,7 +27,7 @@ link, kind or Realm placement. Only the census owner can establish coverage acro
 
 A batch contains 1–8 candidates, copied at entry, under one actual actor, fixed deadline and additive caller
 work root. Preparation observes current authority; one `finish` repeats it against the same signatures and
-rechecks the exact source. Calling finish again returns the same promise, not another round. Every home is
+rechecks the exact source. Calling finish again within its deadline returns the same promise; an expired or mutated-principal handle returns unknown without another round. Every home is
 released before another is checked out. There are two disclosure rounds (three thread snapshots and four board snapshots), at most 33 native post ancestors per
 source round, one current revision, one board, one Realm/Space binding, and one original terminal Subject.
 Only metadata is read: no bodies, history ranges, Realm board enumeration, refill, global generation or table
