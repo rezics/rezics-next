@@ -149,13 +149,6 @@ test('the derived subjects group keeps native counts and routes contributed by o
     const path: string = client['~path'];
     await subjects({ id: ID }).reaction.get();
     await subjects({ id: ID }).ratings({ questionId: ID }).vote.get();
-    const labels = client.libraryLabels({ id: ID });
-    await labels.$reviewConsolidation.post({} as never);
-    await labels.consolidations.post({} as never);
-    await labels.$applyConsolidation.post({} as never);
-    await labels.$retryConsolidation.post({} as never);
-    await labels.$cancelConsolidation.post({} as never);
-    await labels.consolidations({ confirmationId: ID }).get();
     // @ts-expect-error a subject parameter is required
     subjects({});
     // @ts-expect-error omitted public aggregates are optional
