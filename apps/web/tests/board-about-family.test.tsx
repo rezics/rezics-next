@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { createElement, type ReactNode } from 'react';
@@ -13,9 +13,11 @@ import realm from '../src/kernel/recorded/board-realm-realm.json';
 import globalBoard from '../src/kernel/recorded/board.json';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
-import { BoardCommunity, BoardCommunityStatus } from '../src/threads/board-community';
 import type { CommunityPresentation, RealmPresentationImage } from '../src/threads/board-community-source';
 import type { CommunityBoardPage } from '../src/threads/board-feed-data';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { BoardCommunity, BoardCommunityStatus } = await import('../src/threads/board-community');
 
 const require = createRequire(import.meta.url);
 const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState, type ComponentProps } from 'react';
 
@@ -28,6 +28,7 @@ for (const [key, value] of Object.entries(globals))
 const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { createKernelClient } = await import('@rezics/client');
+mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadBoardPageWithAuthors } = await import('../src/identity/page-loaders');
 const { createStoryRecordedKernelFetch } = await import('../src/kernel/fake');
 const { continuationBoardId, continuationCursor } = await import('../src/kernel/fake/board-continuation');

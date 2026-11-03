@@ -132,6 +132,7 @@ function ThreadCard({
             reply={{ href: `${href}${href.includes('#') ? '' : '#reply'}` }}
             overflow={<CopyDiscussionLink href={href} />}
           >
+            {signedIn ? null : <CopyDiscussionLink href={href} />}
             {pinControl}
             {lastActivityAt ? (
               <time

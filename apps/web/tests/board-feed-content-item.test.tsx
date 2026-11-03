@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -8,7 +8,9 @@ import { continuationBoardId, continuationCursor } from '../src/kernel/fake/boar
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 import { loadBoardPageWithAuthors } from '../src/identity/page-loaders';
-import { BoardCommunity } from '../src/threads/board-community';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { BoardCommunity } = await import('../src/threads/board-community');
 import type { BoardFeedThread, CommunityBoardPage } from '../src/threads/board-feed-data';
 import { threadLocation } from '../src/threads/thread-href';
 
@@ -120,7 +122,7 @@ test('Discussion rows use shared ContentItem headings and destinations while ret
   expect(missingMarkup).toContain(m.threads_untitled());
   expect(missingMarkup).toContain(m.thread_author_unknown());
   expect(missingMarkup).toContain(m.board_feed_opening_unavailable());
-  expect(missingMarkup).toContain(m.board_feed_open_thread());
+  expect(missingMarkup).toContain(m.feed_action_reply());
   expect(missingMarkup).not.toContain('Flight notes Watch the baobabs');
   expect(missingMarkup).not.toContain(m.board_feed_reactions({ count: 0 }));
   expect(missingMarkup).not.toContain(m.board_feed_replies({ count: 0 }));

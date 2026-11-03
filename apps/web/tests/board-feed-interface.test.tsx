@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement, Fragment } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -13,7 +13,9 @@ import {
 } from '../src/kernel/fake/board-continuation';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
-import { BoardFeed } from '../src/threads/board-feed';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { BoardFeed } = await import('../src/threads/board-feed');
 import type { BoardPinProducer, BoardPinReadResult, BoardPinSender } from '../src/threads/board-pins/contract';
 import type { BoardFeedThread, CommunityBoardPage } from '../src/threads/board-feed-data';
 import type { BoardSort } from '../src/threads/board-sort';
@@ -148,7 +150,8 @@ test('native order, exact large counts and exact date operands survive long supp
   expect(markup).toContain(displayName);
   expect(markup).toContain('data-slot="feed-action-bar"');
   expect(markup).toContain(m.feed_action_reply());
-  expect(markup).toContain('1234567890123');
+  expect(markup).toContain('1.2T');
+  expect(markup).toContain('Like 1.2T');
   expect(markup).toContain(`dateTime="${createdAt}"`);
   expect(markup).toContain(`dateTime="${lastActivityAt}"`);
   expect(markup).toContain(`title="${fullDateTime(createdAt, 'en')}"`);

@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -8,8 +8,10 @@ import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { continuationBoardId, continuationCursor } from '../src/kernel/fake/board-continuation';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
-import { BoardCommunityStatus } from '../src/threads/board-community';
-import { BoardFeed } from '../src/threads/board-feed';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { BoardCommunityStatus } = await import('../src/threads/board-community');
+const { BoardFeed } = await import('../src/threads/board-feed');
 import {
   authorsForCurrentReading,
   nativePinnedSection,
@@ -288,7 +290,11 @@ test('page projection stays O(P+L) at board populations 32, 256 and 2048', () =>
     expect(first.authorBatches).toBe(1);
     expect(empty.ordinaryIds).toEqual([]);
     expect(restarted.next).toBeNull();
-    expect(first.bytes).toBe(restarted.bytes);
+    expect(restarted.bytes).toBeLessThan(first.bytes);
+    expect(empty.bytes).toBeLessThan(restarted.bytes);
+    expect(
+      projectBoardReading({ pinnedThreads: pinned, threads: ordinary, next: first.next }).bytes,
+    ).toBe(first.bytes);
     retained.push(first.bytes);
     requests.push(1 + first.authorBatches);
     expect(first.pinnedIds.length + first.ordinaryIds.length).toBeLessThan(population);

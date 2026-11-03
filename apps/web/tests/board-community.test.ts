@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -9,7 +9,9 @@ import { continuationBoardId, continuationCursor } from '../src/kernel/fake/boar
 import realmBoard from '../src/kernel/recorded/board-realm.json';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
-import { BoardCommunity } from '../src/threads/board-community';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { BoardCommunity } = await import('../src/threads/board-community');
 import { boardThreadPreview, type CommunityBoardPage } from '../src/threads/board-feed-data';
 import type { BoardSort } from '../src/threads/board-sort';
 
@@ -70,8 +72,8 @@ test('the actual community feed continues an empty page, preserves every sort an
     expect(feed).toContain('data-slot="board-banner-fallback"');
     expect(feed).toContain('data-slot="avatar"');
     expect(feed).toContain('Flight notes Watch the baobabs');
-    expect(feed).toContain(m.board_feed_reactions({ count: 5 }));
-    expect(feed).toContain(m.board_feed_replies({ count: 7 }));
+    expect(feed).toContain('data-slot="feed-action-bar"');
+    expect(feed).toContain(m.feed_action_reply());
     expect(feed).not.toContain(m.threads_next_page());
     expect(feed).not.toContain(m.realm_join());
     expect(calls.filter((url) => url.pathname === '/v1/accounts')).toHaveLength(1);

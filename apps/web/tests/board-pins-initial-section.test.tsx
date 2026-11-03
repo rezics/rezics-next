@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
@@ -9,7 +9,9 @@ import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
 import { continuationBoardId, continuationCursor } from '../src/kernel/fake/board-continuation';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
-import { BoardFeed } from '../src/threads/board-feed';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { BoardFeed } = await import('../src/threads/board-feed');
 import {
   nativePinnedSection,
   ordinaryBoardThreads,

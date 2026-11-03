@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createElement } from 'react';
@@ -7,7 +7,8 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { createKernelClient } from '@rezics/client';
 import { fromPlainText } from '@rezics/document';
 import { loadBoardPageWithAuthors } from '../src/identity/page-loaders';
-import { BoardCommunity } from '../src/threads/board-community';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { BoardCommunity } = await import('../src/threads/board-community');
 import boardRecording from '../src/kernel/recorded/board.json';
 import threadRecording from '../src/kernel/recorded/board-threads.json';
 import accountsRecording from '../src/kernel/recorded/accounts.json';
@@ -25,9 +26,9 @@ test('board and thread titles use the shared page heading size, not the display 
   expect(board).toContain('<BoardCommunity');
   expect(community).toMatch(/<PageHeading\b[^>]*>\{title\}<\/PageHeading>/);
   expect(thread).toContain('{title ? <PageHeading>{title}</PageHeading> : null}');
-  expect(thread).toContain(
-    'renderHeader={(title, visiblePage) => <ThreadReadingHeader page={visiblePage} title={title} />}',
-  );
+  expect(thread).toContain('renderHeader={(title, visiblePage) => (');
+  expect(thread).toContain('<ThreadReadingHeader');
+  expect(thread).toContain('boardReadingHref(boardReturn)');
   for (const source of [board, thread, community]) expect(source).not.toMatch(/text-5xl|text-6xl/);
 });
 
@@ -109,7 +110,7 @@ test('each route has one initial page source; an explicit thread refresh preserv
 test('the Board feed keeps its continuation route-owned and performs no per-card HTTP', () => {
   expect(board).toContain('<BoardCommunity');
   expect(community).toContain('<BoardFeed');
-  expect(feed).toContain('search={{ cursor: page.next,');
+  expect(feed).toContain('search={{ cursor: ordinary.next,');
   expect(feed).not.toMatch(/\b(?:fetch|useQuery|useInfiniteQuery|kernelClient)\(/);
   expect(feed).not.toMatch(/divide-y|border-y/);
 });
