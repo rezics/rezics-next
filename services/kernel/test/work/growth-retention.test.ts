@@ -296,7 +296,7 @@ test('a short retention batch stays bounded as unrelated workflow history grows'
 test('a full retention batch stays bounded as unrelated workflow history grows', async () => {
   const runs: RunEvidence[] = [];
   const report = await checkGrowth(db, {
-    name: 'full workflow retention batch',
+    name: 'workflow retention batch',
     rule: 'series',
     scales,
     repetitions: 1,
@@ -323,7 +323,7 @@ test('a full retention batch stays bounded as unrelated workflow history grows',
     },
   });
   expectSelectorIndex(runs);
-  logEvidence('full workflow retention batch', report, runs);
+  logEvidence('workflow retention batch', report, runs);
   expect(report.samples[1]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[2]!.cost.rows).toBe(report.samples[0]!.cost.rows);
   expect(report.samples[0]!.cost.rows).toBeGreaterThan(0);
