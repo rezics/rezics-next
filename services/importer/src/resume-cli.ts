@@ -107,7 +107,8 @@ export function parseResumeArgs(argv: readonly string[]): ResumeCliConfig | 'hel
   if (!Array.isArray(argv) || argv.length > 64) throw new ResumeArgumentError();
   let totalBytes = 0;
   for (const argument of argv) {
-    if (typeof argument !== 'string' || argument.length > 4096 || argument.includes('\0')) throw new ResumeArgumentError();
+    if (typeof argument !== 'string' || argument.length > 4096 || argument.includes('\0'))
+      throw new ResumeArgumentError();
     totalBytes += Buffer.byteLength(argument);
     if (totalBytes > 16384) throw new ResumeArgumentError();
   }

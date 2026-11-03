@@ -172,9 +172,9 @@ test('absent, staging, busy, missing database and incompatible conversion never 
     try {
       expect(afterStaging.store.activeRun('wikidata')?.lease).toBe(lease);
       expect(afterStaging.store.source('wikidata').generation).toBeNull();
-      expect(afterStaging.store.key('wikidata', 'Q1', afterStaging.store.activeRun('wikidata')!).staged?.row.digest).toBe(
-        conversion.digest,
-      );
+      expect(
+        afterStaging.store.key('wikidata', 'Q1', afterStaging.store.activeRun('wikidata')!).staged?.row.digest,
+      ).toBe(conversion.digest);
     } finally {
       afterStaging.close();
     }
@@ -309,9 +309,9 @@ test('resume finishes a sealed generation without dump input and retains identit
       },
     });
     expect(['interrupted', 'bulk-failed']).toContain(again.status);
-    expect(resumePhases.some((phase) => phase === 'acquiring' || phase === 'materializing' || phase === 'staging')).toBe(
-      false,
-    );
+    expect(
+      resumePhases.some((phase) => phase === 'acquiring' || phase === 'materializing' || phase === 'staging'),
+    ).toBe(false);
     expect(importer.session.store.activeRun('wikidata')?.id).toBe(original.id);
     expect(
       importer.session.store.pagePending(importer.session.store.activeRun('wikidata')!, { limit: 8 })[0]!.bytes,
@@ -454,28 +454,31 @@ test('CLI resume of VNDB and Wikidata sealed work does not open the original dum
       before.close();
       lose = false;
       let inputPasses = 0;
-      const resumed = await runImportCli(['resume', ...argvImport.filter((part) => part !== '--dump' && part !== '-')], {
-        stdin: (async function* () {
-          throw new Error('stdin');
-        })(),
-        entries: (async function* () {
-          throw new Error('archive');
-        })(),
-        createImporter(options) {
-          return new Importer({ ...options, transport });
-        },
-        fetch: (async () => {
-          throw new Error('no auth');
-        }) as unknown as typeof fetch,
-        observer: {
-          onInputPass() {
-            inputPasses++;
+      const resumed = await runImportCli(
+        ['resume', ...argvImport.filter((part) => part !== '--dump' && part !== '-')],
+        {
+          stdin: (async function* () {
+            throw new Error('stdin');
+          })(),
+          entries: (async function* () {
+            throw new Error('archive');
+          })(),
+          createImporter(options) {
+            return new Importer({ ...options, transport });
           },
-          onVndbStore() {
-            throw new Error('resume must not materialize VNDB tables');
+          fetch: (async () => {
+            throw new Error('no auth');
+          }) as unknown as typeof fetch,
+          observer: {
+            onInputPass() {
+              inputPasses++;
+            },
+            onVndbStore() {
+              throw new Error('resume must not materialize VNDB tables');
+            },
           },
         },
-      });
+      );
       expect(inputPasses).toBe(0);
       expect(resumed.code, resumed.stderr).toBe(0);
       const after = new ImportSession(state);

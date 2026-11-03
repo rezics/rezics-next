@@ -1638,10 +1638,7 @@ export class Importer {
     }
   }
 
-  private compatible(
-    registration: SourceRegistration,
-    run: Run,
-  ): { ok: true } | { ok: false; reason: string } {
+  private compatible(registration: SourceRegistration, run: Run): { ok: true } | { ok: false; reason: string } {
     let after: string | undefined;
     for (;;) {
       const page = this.session.store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
@@ -1836,10 +1833,7 @@ export class Importer {
     );
   }
 
-  private async resumeSealed(
-    registration: SourceRegistration,
-    options: ResumeRunOptions,
-  ): Promise<ImportRunResult> {
+  private async resumeSealed(registration: SourceRegistration, options: ResumeRunOptions): Promise<ImportRunResult> {
     const result: ImportRunResult = {
       status: 'interrupted',
       skipped: 0,
@@ -1903,7 +1897,8 @@ export class Importer {
         } catch {
           return finish('invalid-dump', 'Importer state is damaged or unavailable.');
         }
-        if (!compatibility.ok) return finish('invalid-dump', `${compatibility.reason} The generation was not replaced.`);
+        if (!compatibility.ok)
+          return finish('invalid-dump', `${compatibility.reason} The generation was not replaced.`);
       }
       if (options.activateNetwork) await options.activateNetwork();
       const run = this.session.reopen(ownership);
@@ -1931,10 +1926,7 @@ export class Importer {
       });
     } catch (error) {
       if (error instanceof Interrupted) return finish('interrupted', error.message);
-      if (
-        error instanceof Error &&
-        (error.name === 'CredentialInputError' || error.name === 'ResumeActivationError')
-      )
+      if (error instanceof Error && (error.name === 'CredentialInputError' || error.name === 'ResumeActivationError'))
         throw error;
       if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
         return finish('observation-conflict', 'Source observation requires explicit operator resolution');

@@ -255,9 +255,9 @@ const REQUIRED_EXISTING_INDEXES = [
 /** Existing resume must not create missing run tables; a gap is damaged storage, not an empty source. */
 export function assertExistingRunSchema(database: Database): void {
   for (const table of RUN_TABLES) {
-    const found = database.query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?').get('table', table) as
-      | { found: number }
-      | null;
+    const found = database
+      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
+      .get('table', table) as { found: number } | null;
     if (!found) throw new Error(`Importer state schema is missing table ${table}.`);
     const columns = REQUIRED_EXISTING_COLUMNS[table];
     const actual = new Set(

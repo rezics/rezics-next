@@ -40,7 +40,8 @@ function sqliteBusy(error: unknown): boolean {
 
 function sqliteMalformed(error: unknown): boolean {
   return (
-    error instanceof Error && /not a database|unable to open database|database disk image is malformed/i.test(error.message)
+    error instanceof Error &&
+    /not a database|unable to open database|database disk image is malformed/i.test(error.message)
   );
 }
 
