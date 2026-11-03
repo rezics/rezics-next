@@ -40,12 +40,14 @@ export type ConceptBrowseRead =
 /** The adapter must use current, scheme-scoped SKOS broader reads and full-key indexed seeks. */
 export type ConceptBrowseSource = Readonly<{
   observe(): Promise<ConceptBrowseObservation>;
-  children(input: Readonly<{
-    binding: ConceptGraphBinding;
-    parent: string;
-    after: string | null;
-    limit: number;
-  }>): Promise<ConceptBrowseRead>;
+  children(
+    input: Readonly<{
+      binding: ConceptGraphBinding;
+      parent: string;
+      after: string | null;
+      limit: number;
+    }>,
+  ): Promise<ConceptBrowseRead>;
 }>;
 
 export type ConceptBrowseLimits = Readonly<{
@@ -110,7 +112,8 @@ export async function advanceConceptBrowse(
 ): Promise<ConceptBrowseResult> {
   if (!validLimits(limits) || state.version !== 1 || !validBinding(state.binding)) return { status: 'rejected' };
   const first = await source.observe();
-  if (first.status !== 'current') return first.status === 'preparing' ? { status: 'preparing', state, pages: 0, edges: 0 } : { status: first.status };
+  if (first.status !== 'current')
+    return first.status === 'preparing' ? { status: 'preparing', state, pages: 0, edges: 0 } : { status: first.status };
   if (!sameBinding(first.binding, state.binding)) return { status: 'restart' };
 
   const discovered = new Set(state.discovered);
@@ -129,7 +132,12 @@ export async function advanceConceptBrowse(
     });
     if (read.status !== 'current') {
       return read.status === 'preparing'
-        ? { status: 'preparing', state: { ...state, discovered: [...discovered], frontier: [current, ...frontier] }, pages, edges }
+        ? {
+            status: 'preparing',
+            state: { ...state, discovered: [...discovered], frontier: [current, ...frontier] },
+            pages,
+            edges,
+          }
         : { status: read.status };
     }
     const page = read.page;

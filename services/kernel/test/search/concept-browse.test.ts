@@ -41,7 +41,13 @@ test('descendant pages finish polyhierarchy and cycles without duplicate expansi
 
 test('a changed graph restarts and an unavailable branch never becomes an empty closure', async () => {
   const changed = sourceFor({}, { ...binding, graph: 'graph-b' });
-  expect(await advanceConceptBrowse(changed.source, startConceptBrowse(selection, binding)!, { pages: 1, edges: 1, pageSize: 1 })).toEqual({
+  expect(
+    await advanceConceptBrowse(changed.source, startConceptBrowse(selection, binding)!, {
+      pages: 1,
+      edges: 1,
+      pageSize: 1,
+    }),
+  ).toEqual({
     status: 'restart',
   });
   expect(changed.calls).toHaveLength(0);
@@ -50,7 +56,13 @@ test('a changed graph restarts and an unavailable branch never becomes an empty 
     observe: async () => ({ status: 'current', binding }),
     children: async () => ({ status: 'unavailable' }),
   };
-  expect(await advanceConceptBrowse(unavailable, startConceptBrowse(selection, binding)!, { pages: 1, edges: 1, pageSize: 1 })).toEqual({
+  expect(
+    await advanceConceptBrowse(unavailable, startConceptBrowse(selection, binding)!, {
+      pages: 1,
+      edges: 1,
+      pageSize: 1,
+    }),
+  ).toEqual({
     status: 'unavailable',
   });
 });
