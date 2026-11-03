@@ -10,7 +10,7 @@ import {
 } from '../../src/search/review-discovery.ts';
 
 function id(suffix: number): string {
-  return `00000000-0000-4000-8000-${suffix.toString(16).padStart(12, '0')}`;
+  return `00000000-0000-7000-8000-${suffix.toString(16).padStart(12, '0')}`;
 }
 
 function review(value: string, version: bigint): ReviewDiscoveryRecord {
