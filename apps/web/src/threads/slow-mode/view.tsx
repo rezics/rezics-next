@@ -86,7 +86,7 @@ export function SlowModeEligibility({ boardId, refusal }: { boardId: string; ref
         </>
       ) : null}
       {showInterval ? <p>{m.slow_mode_interval_label({ label: intervalLabel(policy.intervalSeconds) })}</p> : null}
-      <EligibilityCopy policy={policy} waitUntil={waitUntil} now={now} />
+      <EligibilityCopy {...(policy ? { policy } : {})} waitUntil={waitUntil} now={now} />
     </div>
   );
 }

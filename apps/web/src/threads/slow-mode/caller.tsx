@@ -77,7 +77,7 @@ export function useSlowModeVisit(boardId: string | undefined): SlowModeVisit | n
     session.csrfToken.length > 0;
   const visit = useMemo(() => {
     if (!ready || !boardId || !session?.subject || !session.csrfToken) return null;
-    const state = {
+    const state: SlowModeVisit & { retired: boolean; owner: string } = {
       controller: new AbortController(),
       retired: false,
       owner,

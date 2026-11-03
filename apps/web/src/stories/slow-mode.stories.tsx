@@ -34,7 +34,10 @@ type Story = StoryObj<typeof meta>;
 const draft = fromPlainText('A reply kept while the board enforces its posting interval.', 'blocks');
 const boardId = recorded.thread.boardId;
 
-function policy(intervalSeconds: SlowModePolicy['intervalSeconds'], nextEligibleAt: string | null = null): SlowModeRead {
+function policy(
+  intervalSeconds: SlowModePolicy['intervalSeconds'],
+  nextEligibleAt: string | null = null,
+): Extract<SlowModeRead, { kind: 'available' }> {
   return {
     kind: 'available',
     policy: { intervalSeconds, nextEligibleAt, canChange: true, exempt: false },
