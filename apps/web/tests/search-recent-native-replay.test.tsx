@@ -139,7 +139,7 @@ test('both mounted Recent interfaces expose the same scoped replay and prevent a
       links.slice(2).map((link) => link.getAttribute('href')),
     );
     for (const link of links) expect(request(link.href).text).toBe(text);
-    host.addEventListener('click', (event) => event.preventDefault(), { capture: true });
+    host.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });
     await act(async () => {
       links[0]!.click();
     });
