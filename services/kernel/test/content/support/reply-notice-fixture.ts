@@ -7,6 +7,7 @@ import { newId, routeOf } from '../../../src/route/route.ts';
 import type { CloudEvent, Envelope } from '../../../src/events/log.ts';
 import { standingFixture } from '../../access/standing-fixture.ts';
 import { openGrowthDatabase } from '../../support/growth.ts';
+import { testReceiptKeys } from '../../support/receipt-keys.ts';
 
 export async function replyNoticeFixture() {
   const db = await openGrowthDatabase();
@@ -49,7 +50,7 @@ export async function replyNoticeFixture() {
     access: accounts.access,
     routeKey: new Uint8Array(32).fill(17),
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(18)]]) },
-    receiptKeys: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
+    receiptKeys: testReceiptKeys(),
     writeRate: createWriteRateLimiter({ secret: 'reply-notice-fixture-secret-at-least-32-bytes' }),
   });
   const boardId = newId(0x4321);
