@@ -251,7 +251,7 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
       await Promise.all(workflowQueues.map(async (queue) => [queue.name, await queue.getWorkerConcurrency()] as const)),
     );
     const workflows = {
-      providerEventSessionId: providerHistory.session.id,
+      providerEventSessionId: providerHistory.id,
       seed: createPaymentGrowthWorkflowSeeder(client, enqueue),
       async setWorkersEnabled(enabled: boolean) {
         await Promise.all(
