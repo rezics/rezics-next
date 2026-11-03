@@ -12183,6 +12183,13 @@ CREATE INDEX search_fact_terms ON semantic.fact USING btree (route, subject_id, 
 
 
 --
+-- Name: search_selected_concept_broader; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX search_selected_concept_broader ON semantic.search_selected USING btree (property, (((body -> 'value'::text) ->> 'content'::text)) COLLATE "C", route, subject_id, slot_id, candidate_id) WHERE (active AND relation AND (((body -> 'value'::text) ->> 'type'::text) = 'value'::text));
+
+
+--
 -- Name: search_selected_page; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -12194,13 +12201,6 @@ CREATE INDEX search_selected_page ON semantic.search_selected USING btree (route
 --
 
 CREATE INDEX search_selected_value ON semantic.search_selected USING btree (route, subject_id, property, (((body -> 'value'::text) ->> 'content'::text)) COLLATE "C", slot_id, candidate_id) WHERE active;
-
-
---
--- Name: search_selected_concept_broader; Type: INDEX; Schema: semantic; Owner: -
---
-
-CREATE INDEX search_selected_concept_broader ON semantic.search_selected USING btree (property, (((body -> 'value'::text) ->> 'content'::text) COLLATE "C"), route, subject_id, slot_id, candidate_id) WHERE (active AND relation AND (((body -> 'value'::text) ->> 'type'::text) = 'value'::text));
 
 
 --

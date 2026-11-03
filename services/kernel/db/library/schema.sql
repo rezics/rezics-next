@@ -1824,6 +1824,9 @@ CREATE TABLE library.bangumi_upload_row (
     label_creations integer DEFAULT 0 NOT NULL,
     label_assignments integer DEFAULT 0 NOT NULL,
     CONSTRAINT bangumi_label_review_bytes CHECK (((labels IS NULL) OR (octet_length((labels)::text) <= 32768))),
+    CONSTRAINT bangumi_score_choice_bytes CHECK (((choice IS NULL) OR (octet_length((choice)::text) <= 8192))),
+    CONSTRAINT bangumi_score_outcome_bytes CHECK (((outcome IS NULL) OR (octet_length((outcome)::text) <= 16384))),
+    CONSTRAINT bangumi_score_review_bytes CHECK (((review IS NULL) OR (octet_length((review)::text) <= 71680))),
     CONSTRAINT bangumi_upload_row_evidence_check CHECK ((octet_length((evidence)::text) <= 32768)),
     CONSTRAINT bangumi_upload_row_label_assignments_check CHECK (((label_assignments >= 0) AND (label_assignments <= 16))),
     CONSTRAINT bangumi_upload_row_label_creations_check CHECK (((label_creations >= 0) AND (label_creations <= 16))),
@@ -7642,6 +7645,20 @@ CREATE INDEX progress_session_profile_pending ON library.progress_session USING 
 --
 
 CREATE INDEX progress_session_raw_source ON library.progress_session USING btree (route, account_id, subject_id, session_id);
+
+
+--
+-- Name: progress_session_reported_bucket_diary; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_reported_bucket_diary ON library.progress_session USING btree (route, account_id, journal_finish_year, COALESCE((journal_finish_month)::integer, 13), started_at DESC, session_id DESC) WHERE ((state = 'completed'::text) AND library.reported_finish_valid(journal_finish_year, (journal_finish_month)::integer, (journal_finish_day)::integer));
+
+
+--
+-- Name: progress_session_reported_year_diary; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_reported_year_diary ON library.progress_session USING btree (route, account_id, journal_finish_year, started_at DESC, session_id DESC) WHERE ((state = 'completed'::text) AND library.reported_finish_valid(journal_finish_year, (journal_finish_month)::integer, (journal_finish_day)::integer));
 
 
 --
