@@ -434,6 +434,7 @@ export async function readViewerFactsPage(
   questionId: string,
   deadline: number,
 ): Promise<ViewerFactsPage> {
+  if (!validAccount(actor)) throw new GrantDeniedError();
   const prepared = await prepareViewerFacts(dependencies, actor, rows, questionId, deadline);
   const page = await withConnection(dependencies.pool, async (connection) => {
     const client = deadlineClient(connection, deadline);

@@ -167,6 +167,15 @@ test('selected row and account changes withhold stale assembly, while unchanged 
     state: 'current',
     rows: [{ vote: { state: 'unavailable', reason: 'question' } }],
   });
+  const question = await staged(id);
+  await fixture.database.admin.query('UPDATE rating.question SET revision=revision+1 WHERE id=$1', [
+    STANDARD_QUESTION_ID,
+  ]);
+  try {
+    expect(await viewerFactsCurrent(deps(), owner, question, deadline())).toBe(false);
+  } finally {
+    await fixture.database.admin.query('UPDATE rating.question SET revision=1 WHERE id=$1', [STANDARD_QUESTION_ID]);
+  }
   const account = await staged(id);
   await fixture.database.admin.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE account_id=$1', [
     owner.accountId,
