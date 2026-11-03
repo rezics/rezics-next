@@ -16,6 +16,8 @@ Focused native files are `services/kernel/test/library/label-consolidation-revie
 Native outcomes cover evidence conflicts, source and target revision fences, selected movement, no duplicate target
 effects, capacity refusal, original receipt replay, cancellation, finite undo and cleanup. Native64/512/4096
 complete-caller growth remains deferred to integration; focused results do not establish that growth clause.
+The landing entry point is `test/library/label-consolidation.test.ts`, reusing the native outcome scenarios.
+Immutable Subject security-evidence binding and typed-client generation remain a continuation alongside growth.
 
 Personal consumption statistics now have the mounted owner-only
 `GET /v1/libraryConsumptionSummary` and typed `libraryConsumptionSummary.get()` caller.

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createPersonalLabelCommands } from '../../src/library/label-commands.ts';
 import { createLabelAssignmentCommands } from '../../src/library/label-assignment-commands.ts';
 import { ownedQueries } from '../../src/library/erasure-owned-queries.ts';
@@ -6,12 +6,26 @@ import { purgeExpiredLabelConsolidations } from '../../src/library/label-consoli
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
-let f: NativeProfileFixture;
+let f: NativeProfileFixture, shared: NativeProfileFixture;
 beforeAll(async () => {
-  f = await createProfileEntryFixture();
+  shared = await createProfileEntryFixture();
 }, 120_000);
+beforeEach(async () => {
+  const owner = await shared.identity([
+    'subject:read',
+    'library_entry:read',
+    'library_entry:list',
+    'library_entry:update',
+    'library_entry:delete',
+  ]);
+  f = {
+    ...shared,
+    owner,
+    send: (persona, ...args) => shared.send(persona === 'owner' ? owner.bearer : persona, ...args),
+  };
+});
 afterAll(async () => {
-  await f?.close();
+  await shared?.close();
 });
 
 const catalogue = () => createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
@@ -205,11 +219,15 @@ test('native assignment admission refuses full capacity and reclaims only a dele
   await catalogue().deleteLabel(f.owner.actor, deletedParent.id, deletedParent.revision, entryKey());
   const before = (
     await f.pool.query(
-      `SELECT revision,deleted_at::text AS deleted_at,purge_after::text AS purge_after,slot_no
-       FROM library.label_assignment WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4`,
+      `SELECT a.revision,a.slot_no,a.deleted_at::text AS child_deleted_at,
+         a.purge_after::text AS child_purge_after,
+         p.deleted_at::text AS deleted_at,p.purge_after::text AS purge_after
+       FROM library.label_assignment a JOIN library.personal_label p USING (route,account_id,label_id)
+       WHERE a.route=$1 AND a.account_id=$2 AND a.subject_id=$3 AND a.label_id=$4`,
       [routeOf(f.owner.actor.accountId), f.owner.actor.accountId, reclaimSubject, deletedParent.id],
     )
   ).rows[0];
+  expect(before).toMatchObject({ child_deleted_at: null, child_purge_after: null });
   const reclaimEvidence = await review(reclaimSource, reclaimTarget, [reclaimItem]);
   expect((reclaimEvidence.items[0] as any).outcome).toBe('movable');
   const reclaimConfirmation = await confirm(reclaimSource.id, reclaimEvidence);
@@ -318,6 +336,12 @@ test('original target replay, cancellation, finite undo, owner erasure and expir
     { subjectId: first.subjectId, assignmentId: first.assignmentId, revision: first.revision },
     source.revision,
     item.source_request_key,
+    {
+      labelId: target.id,
+      assignmentId: originalTarget.value.assignment.id,
+      revision: originalTarget.value.assignment.revision,
+      labelRevision: target.revision,
+    },
   );
   expect(replayedSource.value.revision).toBe(sourceBefore.revision);
   const sourceAfterReplay = (
