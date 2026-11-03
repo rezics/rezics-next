@@ -655,8 +655,7 @@ export async function readPublicFilterSourceDefinition(
   if (!row) throw new BindingError('definition_missing');
   if (row.route_digest !== routeDigest) throw new BindingError('configuration_changed');
   const bytes = Number(row.definition_bytes);
-  if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes)
-    throw new BindingError('binding_mismatch');
+  if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maxBytes) throw new BindingError('binding_mismatch');
   const release = await readRelease(db, row.release_digest);
   if (!release || !release.types[row.subject_type]) throw new BindingError('definition_missing');
   let capture: PublicSourceCaptureInput;

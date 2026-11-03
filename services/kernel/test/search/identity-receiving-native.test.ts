@@ -189,12 +189,7 @@ test('the fixed Search participant uses genuine native original receiving custod
   await expect(readPublicFilterSourceDefinition(randomUUID(), f.pool, routeDigest, 20_480)).rejects.toMatchObject({
     reason: 'definition_missing',
   });
-  const refuseMutation = async (
-    update: string,
-    values: unknown[],
-    restore: string,
-    restoreValues: unknown[],
-  ) => {
+  const refuseMutation = async (update: string, values: unknown[], restore: string, restoreValues: unknown[]) => {
     await f.admin.query(update, values);
     try {
       await expect(read()).rejects.toBeInstanceOf(PublicFilterSourceDefinitionError);

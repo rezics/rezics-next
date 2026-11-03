@@ -201,8 +201,7 @@ export function createSearchIdentityReceivingNative(
       }
       throw error;
     }
-    if (loaded.definition.meaning.digest !== releaseDigest)
-      work.fail('changed', 'Original Source release changed');
+    if (loaded.definition.meaning.digest !== releaseDigest) work.fail('changed', 'Original Source release changed');
     // Release loading and Source reads are additionally charged by the enclosing exact SQL inventory.
     return loaded.definition;
   }
