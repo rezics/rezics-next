@@ -36,6 +36,8 @@ for (const [key, value] of Object.entries({
   Node: window.Node,
   MutationObserver: window.MutationObserver,
   getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 }))
@@ -540,11 +542,11 @@ test('MAL confirmation requires privacy and timestamp checks on keyboard-sized c
   await click(m.library_mal_continue_confirm());
   expect(host.querySelector('[data-import-source-record="anime/9"]')).not.toBeNull();
   expect(button(m.library_mal_confirm())?.hasAttribute('disabled')).toBe(true);
-  const privacy = host.querySelector('#mal-source-privacy') as HTMLElement;
-  const timestamps = host.querySelector('#mal-source-timestamps') as HTMLElement;
-  expect(privacy.className).toContain('size-11');
-  expect(timestamps.className).toContain('size-11');
+  expect([...host.querySelectorAll('[data-slot="checkbox"]')].every((item) => item.className.includes('size-11'))).toBe(
+    true,
+  );
   expect(host.querySelector('label[for="mal-source-privacy"]')?.className).toContain('min-h-11');
+  expect(host.querySelector('label[for="mal-source-timestamps"]')?.className).toContain('min-h-11');
   await clickLabel(m.library_import_source_privacy_confirm());
   expect(button(m.library_mal_confirm())?.hasAttribute('disabled')).toBe(true);
   await clickLabel(m.library_import_source_timestamps_confirm());
