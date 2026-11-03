@@ -65,7 +65,7 @@ for (const differentClient of [false, true]) {
       await system.nativeAuth.internal.registerClient({
         clientId,
         firstParty: true,
-        scopes: system.auth.ordinaryScopes,
+        scopes: [...system.auth.ordinaryScopes],
       });
     const replacement = await system.auth.issue({
       accountId: author.accountId,
