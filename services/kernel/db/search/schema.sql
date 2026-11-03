@@ -1283,6 +1283,54 @@ CREATE TABLE search.recent_search_state (
 
 
 --
+-- Name: review_discovery_receiving; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.review_discovery_receiving (
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    generation bigint NOT NULL,
+    index_uuid text NOT NULL,
+    incarnation uuid NOT NULL,
+    meaning text NOT NULL,
+    partition_no integer NOT NULL,
+    acknowledged bigint DEFAULT 0 NOT NULL,
+    requested bigint DEFAULT 0 NOT NULL,
+    through bigint,
+    completed_cut bigint DEFAULT 0 NOT NULL,
+    native_position bigint,
+    status text DEFAULT 'preparing'::text NOT NULL,
+    pending boolean DEFAULT false NOT NULL,
+    claim uuid,
+    claim_until timestamp with time zone,
+    stage jsonb,
+    CONSTRAINT review_discovery_receiving_acknowledged_check CHECK ((acknowledged >= 0)),
+    CONSTRAINT review_discovery_receiving_check CHECK (((claim IS NULL) = (claim_until IS NULL))),
+    CONSTRAINT review_discovery_receiving_completed_cut_check CHECK ((completed_cut >= 0)),
+    CONSTRAINT review_discovery_receiving_native_position_check CHECK ((native_position >= 0)),
+    CONSTRAINT review_discovery_receiving_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095))),
+    CONSTRAINT review_discovery_receiving_requested_check CHECK ((requested >= 0)),
+    CONSTRAINT review_discovery_receiving_stage_check CHECK ((octet_length((stage)::text) <= 2097152)),
+    CONSTRAINT review_discovery_receiving_status_check CHECK ((status = ANY (ARRAY['preparing'::text, 'ready'::text, 'unavailable'::text]))),
+    CONSTRAINT review_discovery_receiving_through_check CHECK ((through >= acknowledged))
+);
+
+
+--
+-- Name: review_discovery_receiving_scan; Type: TABLE; Schema: search; Owner: -
+--
+
+CREATE TABLE search.review_discovery_receiving_scan (
+    prefix text NOT NULL COLLATE pg_catalog."C",
+    generation bigint NOT NULL,
+    index_uuid text NOT NULL,
+    incarnation uuid NOT NULL,
+    meaning text NOT NULL,
+    partition_no integer DEFAULT 0 NOT NULL,
+    CONSTRAINT review_discovery_receiving_scan_partition_no_check CHECK (((partition_no >= 0) AND (partition_no <= 4095)))
+);
+
+
+--
 -- Name: scope_preparation; Type: TABLE; Schema: search; Owner: -
 --
 
@@ -1778,6 +1826,22 @@ ALTER TABLE ONLY search.recent_search_state
 
 
 --
+-- Name: review_discovery_receiving review_discovery_receiving_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.review_discovery_receiving
+    ADD CONSTRAINT review_discovery_receiving_pkey PRIMARY KEY (prefix, generation, index_uuid, incarnation, meaning, partition_no);
+
+
+--
+-- Name: review_discovery_receiving_scan review_discovery_receiving_scan_pkey; Type: CONSTRAINT; Schema: search; Owner: -
+--
+
+ALTER TABLE ONLY search.review_discovery_receiving_scan
+    ADD CONSTRAINT review_discovery_receiving_scan_pkey PRIMARY KEY (prefix, generation, index_uuid, incarnation, meaning);
+
+
+--
 -- Name: scope_preparation_ordered scope_preparation_ordered_pkey; Type: CONSTRAINT; Schema: search; Owner: -
 --
 
@@ -2040,6 +2104,13 @@ CREATE INDEX recent_search_expiry ON search.recent_search USING btree (partition
 --
 
 CREATE INDEX recent_search_page ON search.recent_search USING btree (partition_no, route, account_id, last_used DESC, id DESC);
+
+
+--
+-- Name: review_discovery_receiving_pending; Type: INDEX; Schema: search; Owner: -
+--
+
+CREATE INDEX review_discovery_receiving_pending ON search.review_discovery_receiving USING btree (prefix, generation, index_uuid, incarnation, meaning, partition_no) WHERE pending;
 
 
 --

@@ -100,6 +100,8 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     return response.body.hits.hits.map((hit) => hit._source);
   }
   let runner: ReturnType<typeof startDiscoveryIndexing> | undefined;
+  const releases: (() => void)[] = [];
+  const pending: Promise<unknown>[] = [];
   try {
     const firstWake = await invalidate(opened, 'com.rezics.content.thread.created.v1');
     runner = startDiscoveryIndexing({ pool: fixture.pool, search, source, listing, prefix, routeKey,
@@ -139,6 +141,9 @@ test('default mixed supervisor applies current reviews and recovers exact journa
       ...nativeSource, async read(...args) { const value = await nativeSource.read(...args); reached.resolve(); await release.promise; return value; },
     } });
     const older = held.step(home);
+    releases.push(() => release.resolve());
+    pending.push(older);
+    void older.catch(() => {});
     await reached.promise;
     // Concurrent live claim does no refresh or acknowledgement.
     expect((await receiver().step(home)).acknowledged).toBe(removed.acknowledged);
@@ -171,6 +176,28 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     expect((await receiver().status(home)).acknowledged).toBe(page.through);
     expect((await nativeSource.hydrate(home, [id])).reviews).toMatchObject([{ excerpt: 'Final current body' }]);
 
+    // Current disclosure removes a concealed row even though the opening itself still exists.
+    const conceal = await revisePost(deps, author, { threadId: id, itemId: opened.value.itemId,
+      body: fromPlainText('Concealed opening') }, request());
+    await fixture.reader.query("UPDATE semantic.subject SET visibility='hidden',security_revision=security_revision+1 WHERE subject_id=$1 AND route=$2", [subject,routeOf(subject)]);
+    await invalidate(conceal, 'com.rezics.content.revision.created.v1');
+    await receiver().step(home);
+    expect(await visible()).toEqual([]);
+    await fixture.reader.query("UPDATE semantic.subject SET visibility='visible',security_revision=security_revision+1 WHERE subject_id=$1 AND route=$2", [subject,routeOf(subject)]);
+    // A source identity can also disappear before its retained original is dispatched.
+    const vanished = await revisePost(deps, author, { threadId: id, itemId: opened.value.itemId,
+      body: fromPlainText('Disappeared opening') }, request());
+    const saved = (await fixture.reader.query('DELETE FROM content.thread WHERE route=$1 AND thread_id=$2 RETURNING *', [routeOf(id),id])).rows[0]!;
+    await invalidate(vanished, 'com.rezics.content.revision.created.v1');
+    await receiver().step(home);
+    expect(await visible()).toEqual([]);
+    await fixture.reader.query('INSERT INTO content.thread SELECT (jsonb_populate_record(NULL::content.thread,$1::jsonb)).*', [JSON.stringify(saved)]);
+    const returned = await revisePost(deps, author, { threadId: id, itemId: opened.value.itemId,
+      body: fromPlainText('Returned opening') }, request());
+    await invalidate(returned, 'com.rezics.content.revision.created.v1');
+    const restoredFrontier = await receiver().step(home);
+    expect(await visible()).toMatchObject([{ descriptions: ['Returned opening'] }]);
+
     // A replacement allocation has independent zero coverage and the retired target refuses late work.
     await fixture.pool.query("UPDATE search.discovery_generation SET state='active' WHERE prefix=$1", [prefix]);
     await allocateDiscovery(fixture.pool, prefix, registry);
@@ -180,8 +207,10 @@ test('default mixed supervisor applies current reviews and recovers exact journa
     expect(await readReviewDiscoveryReceiving(fixture.pool, replacement, home)).toMatchObject({ acknowledged: 0n, status: 'preparing' });
     await fixture.pool.query("UPDATE search.discovery_generation SET state='retired' WHERE prefix=$1 AND generation=$2", [prefix, target.generation]);
     await expect(receiver().step(home)).rejects.toThrow('no longer writable');
-    expect((await receiver().status(home)).acknowledged).toBe(page.through);
+    expect((await receiver().status(home)).acknowledged).toBe(restoredFrontier.acknowledged);
   } finally {
+    for (const release of releases) release();
+    await Promise.allSettled(pending);
     await runner?.stop();
     for (const row of (await fixture.pool.query('SELECT generation FROM search.discovery_generation WHERE prefix=$1', [prefix])).rows)
       await native.request('DELETE', `/${discoveryIndexName(prefix, Number(row.generation))}`);
