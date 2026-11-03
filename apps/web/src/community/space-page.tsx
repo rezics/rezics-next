@@ -586,7 +586,12 @@ function SpaceHome({
         isCurrentSource={() => catalogueRevision.current === catalogueVersion}
       />
       {page.realm && !realmRemoved && readable ? (
-        <RealmShelf key={page.realm.id} realm={page.realm} frozen={frozen} transport={nativeShelfTransport} />
+        <RealmShelf
+          key={page.realm.id}
+          realm={page.realm}
+          frozen={frozen}
+          {...(nativeShelfTransport ? { transport: nativeShelfTransport } : {})}
+        />
       ) : null}
       {page.realm &&
       !realmRemoved &&

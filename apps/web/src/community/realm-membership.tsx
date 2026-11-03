@@ -60,7 +60,7 @@ export function RealmMembership({
         spaceId={spaceId}
         observation={nativeObservation}
         session={session}
-        subject={subject}
+        subject={subject ?? null}
         csrfToken={csrfToken}
       />
     );
@@ -154,7 +154,8 @@ function NativeMembership({
   async function submit() {
     if (!action || busy || !current() || session !== 'signed-in' || !subject || !csrfToken) return;
     const previous = attempt.current;
-    const command = previous?.action === action ? previous : { action, idempotencyKey: crypto.randomUUID() };
+    const command: { action: 'join' | 'leave'; idempotencyKey: string } =
+      previous?.action === action ? previous : { action, idempotencyKey: crypto.randomUUID() };
     attempt.current = command;
     setBusy(true);
     setResultState(null);

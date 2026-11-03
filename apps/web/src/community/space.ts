@@ -512,7 +512,7 @@ export async function loadSpacePageWithOrigin(
     languages: input.languages ?? ['en'],
     credentialMode,
     expectedSpaceHeadRevisionId: space.headRevisionId,
-    banner: extendedSpace.banner,
+    ...(extendedSpace.banner !== undefined ? { banner: extendedSpace.banner } : {}),
   });
   return { value: { ...page, realmCarrier: 'available' }, readerOrigin: prepared.readerOrigin };
 }
@@ -582,7 +582,7 @@ export async function locateRealmWithOrigin(
     credentialMode,
     expectedSpaceHeadRevisionId: space.headRevisionId,
     expectedRealmHeadRevisionId: realm.headRevisionId,
-    banner: extendedSpace.banner,
+    ...(extendedSpace.banner !== undefined ? { banner: extendedSpace.banner } : {}),
   });
   return {
     value: {
