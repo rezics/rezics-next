@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import type { FilterDocument } from '@rezics/filter';
+import type { SearchResourceScope } from '../advanced-scope';
 import { searchRetryAt } from '../search-recovery-retry';
 
 export type RequestedFacet = { property: string; size?: number; cursor?: string };
@@ -27,7 +28,7 @@ export type FacetPage = v.InferOutput<typeof page>;
 export type FacetState =
   | { status: 'ready'; page: FacetPage }
   | {
-      status: 'unavailable' | 'preparing' | 'refused' | 'restart';
+      status: 'unavailable' | 'preparing' | 'refused' | 'withheld' | 'invalid' | 'restart';
       code?: string;
       httpStatus?: number;
       retryAt?: number;
@@ -66,11 +67,15 @@ export async function readFacetPage(
       status:
         response.status === 409 && code === 'search_restart_required'
           ? 'restart'
-          : response.status === 403 || response.status === 404
-            ? 'refused'
-            : response.status === 202 || code === 'index_not_ready' || code === 'preparing'
-              ? 'preparing'
-              : 'unavailable',
+          : code === 'coverage_withheld'
+            ? 'withheld'
+            : response.status === 403 || response.status === 404
+              ? 'refused'
+              : response.status === 202 || code === 'index_not_ready' || code === 'preparing'
+                ? 'preparing'
+                : response.status === 400 || response.status === 422 || code === 'invalid_request'
+                  ? 'invalid'
+                  : 'unavailable',
       httpStatus: response.status,
       ...(retryAt !== undefined ? { retryAt } : {}),
       ...(code ? { code } : {}),
@@ -78,7 +83,7 @@ export async function readFacetPage(
     };
   const parsed = v.safeParse(page, response.data);
   if (!parsed.success || parsed.output.facets.length !== request.facets.length)
-    return { status: 'unavailable', code: 'invalid_facet_response' };
+    return { status: 'invalid', code: 'invalid_facet_response' };
   for (const [index, result] of parsed.output.facets.entries()) {
     const asked = request.facets[index]!;
     const size = asked.size ?? 10;
@@ -90,7 +95,7 @@ export async function readFacetPage(
         (result.next.length === 0 || result.next === asked.cursor || result.values.length !== size)) ||
       (asked.cursor && result.values.length === 0)
     )
-      return { status: 'unavailable', code: 'invalid_facet_response' };
+      return { status: 'invalid', code: 'invalid_facet_response' };
   }
   return { status: 'ready', page: parsed.output };
 }
@@ -103,6 +108,7 @@ export function refinementKey(context: {
   source: string;
   text: string;
   filter?: FilterDocument;
+  scope?: SearchResourceScope;
 }) {
-  return JSON.stringify(context);
+  return JSON.stringify({ ...context, scope: context.scope ?? null });
 }

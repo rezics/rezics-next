@@ -25,7 +25,7 @@ import { type FacetPage, type FacetState, type RequestedFacet } from './request'
 /** Native refusal, restart and Retry-After block every entry; expiry only admits an explicit recovery. */
 function admitFacetRead(state: FacetState | undefined, recovery: boolean, now = Date.now()): boolean {
   if (!state || state.status === 'ready') return true;
-  if (state.status === 'refused') return false;
+  if (state.status === 'refused' || state.status === 'withheld') return false;
   if (state.status === 'restart') return recovery;
   if (state.retryAt !== undefined && state.retryAt > now) return false;
   return recovery;
@@ -228,7 +228,9 @@ function RefinementInstance({
     !perPropertyState &&
     (busy ||
       state?.status === 'unavailable' ||
+      state?.status === 'invalid' ||
       state?.status === 'refused' ||
+      state?.status === 'withheld' ||
       state?.status === 'restart' ||
       state?.status === 'preparing');
 
@@ -360,11 +362,18 @@ function RefinementInstance({
           }));
         else setState(result);
       } else if (perPropertyState) {
+        if (result.status === 'restart') {
+          setPages([]);
+          setPropertyStates(Object.fromEntries(shownRef.current.map((property) => [property, result])));
+          settleFocus(focusId);
+          return;
+        }
         setPropertyStates((current) => ({
           ...current,
           ...Object.fromEntries(facets.map((facet) => [facet.property, result])),
         }));
       } else {
+        if (result.status === 'restart') setPages([]);
         setState(result);
       }
       settleFocus(focusId);
@@ -389,7 +398,7 @@ function RefinementInstance({
 
   function retryProperty(property: string, event: ReactMouseEvent<HTMLButtonElement>) {
     const current = propertyState(property);
-    if (!current || current.status === 'refused') return;
+    if (!current || current.status === 'refused' || current.status === 'withheld') return;
     const attempt = current.status === 'restart' ? undefined : propertyReads.current.get(property);
     if (current.status === 'restart') {
       continuations.current.reset(property);
@@ -529,7 +538,9 @@ function RefinementInstance({
                   ? m.refinement_restart({}, options)
                   : m.search_reader_facets_unavailable({}, options)}
           </p>
-          {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait({}, options)}</p>}
+          {waiting && state.status !== 'refused' && state.status !== 'withheld' && (
+            <p>{m.search_recovery_wait({}, options)}</p>
+          )}
           {state.status === 'restart' ? (
             <a
               ref={(node) => {
@@ -541,7 +552,7 @@ function RefinementInstance({
               {m.search_facet_retry({}, options)}
             </a>
           ) : (
-            state.status !== 'refused' && (
+            state.status !== 'refused' && state.status !== 'withheld' && (
               <Button
                 ref={(node) => {
                   recoveryAction.current = node;
@@ -945,8 +956,10 @@ function PropertyFacetStatus({
               ? m.refinement_restart({}, options)
               : m.search_reader_facets_unavailable({}, options)}
       </p>
-      {waiting && state.status !== 'refused' && <p>{m.search_recovery_wait({}, options)}</p>}
-      {state.status !== 'refused' && (
+      {waiting && state.status !== 'refused' && state.status !== 'withheld' && (
+        <p>{m.search_recovery_wait({}, options)}</p>
+      )}
+      {state.status !== 'refused' && state.status !== 'withheld' && (
         <Button ref={retryRef} type="button" variant="outline" size="sm" disabled={busy || waiting} onClick={onRetry}>
           {m.search_facet_retry({}, options)}
         </Button>

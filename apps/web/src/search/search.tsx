@@ -21,7 +21,8 @@ import { localizedLabel, ResultList } from './results.tsx';
 import { SearchSort } from './sort.tsx';
 import { discoveryRequest } from './search-request.ts';
 import { refinementProperties } from './refinement/model';
-import { facetRequest, readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
+import { readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
+import { scopedRefinementRequests } from './refinement/scoped-refinement';
 import { Refinement, type RefinementData } from './refinement/refinement';
 import { readRefinement } from './refinement/server';
 import { createRangeDraftState, updateRangeDraft, type RangeDraft } from './refinement/range-draft';
@@ -32,6 +33,7 @@ import {
   readSearchOutcome,
   searchPageForRecovery,
   searchRecoveryFromResponse,
+  searchUnavailablePage,
   type SearchRecoveryState,
 } from './search-recovery';
 import { SearchRecovery } from './search-recovery-view';
@@ -52,6 +54,8 @@ import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
 import { SearchRealmDiscovery } from './realm-discovery';
 import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-discovery-loader';
+import { readScopedSearchReader } from './search-reader';
+import { sessionCsrfToken } from '../session/query';
 import type { RealmDiscoveryState } from '../community/realm-discovery';
 import {
   conditionAdmission,
@@ -75,6 +79,7 @@ type SearchParams = {
   resourceScope?: SearchResourceScope | undefined;
   representation?: 'subjects-v1';
   kindCursor?: string;
+  reader?: string | undefined;
   facetValues: Record<string, string[]>;
   ranges?: Record<string, FilterRange>;
   condition?: FilterDocument | undefined;
@@ -174,6 +179,8 @@ function validateSearchInput(input: unknown): SearchParams {
   });
   if (input.resourceScope !== undefined && !isSearchResourceScope(input.resourceScope))
     throw new Error('Invalid search resource scope');
+  if (input.reader !== undefined && (typeof input.reader !== 'string' || input.reader.length > 256))
+    throw new Error('Invalid search reader');
   if (parsed.filter !== undefined && typeof parsed.filter !== 'string') throw new Error('Invalid search filter');
   const filterScope = typeof parsed.filter === 'string' ? parseSearchResourceScope(parsed.filter) : {};
   if (filterScope.invalidInput) throw new Error('Invalid search resource scope');
@@ -211,6 +218,7 @@ function validateSearchInput(input: unknown): SearchParams {
     languages: parsed.language,
     ...(filter !== undefined ? { filter } : {}),
     ...(resourceScope ? { resourceScope } : {}),
+    ...(typeof input.reader === 'string' ? { reader: input.reader } : {}),
     facetValues,
     ...(isRecord(input.ranges)
       ? {
@@ -249,12 +257,17 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
   .validator(validateSearchInput)
   .handler(async ({ data }) => {
     if (!data.kindCursor) throw new Error('Missing kind cursor');
+    const requestContext = getRequest();
+    const reader = data.resourceScope ? await readScopedSearchReader(requestContext) : undefined;
+    if (data.resourceScope && (!reader || data.reader !== reader.owner))
+      return { status: 'unavailable' as const, recovery: { status: 'session' as const } };
     let recovery: SearchRecoveryState | undefined;
     const state = await readDiscoveryKinds(
       discoveryRequest(requestParams(data), requestLanguages(data.locale)),
       data.kindCursor,
       async (body) => {
         const response = await kernelClient(data.locale).subjects.$search.post(body, {
+          ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
           fetch: { signal: getRequest().signal },
         });
         if (response.error || response.status !== 200) recovery = searchRecoveryFromResponse(response);
@@ -268,7 +281,12 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
 const readSearchWithLocale = createServerFn({ method: 'GET' })
   .validator(validateSearchInput)
   .handler(async ({ data }): Promise<SearchPageData> => {
-    const signal = getRequest().signal;
+    const requestContext = getRequest();
+    const signal = requestContext.signal;
+    const queryState = requestParams(data);
+    const reader = data.resourceScope ? await readScopedSearchReader(requestContext) : undefined;
+    if (data.resourceScope && (!reader || data.reader !== reader.owner))
+      return { ...searchUnavailablePage(queryState), recovery: { status: 'session' } };
     let release: Release | undefined;
     try {
       release = await readRelease();
@@ -278,24 +296,31 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
 
     const type = data.type;
     const knownType = release && allowedType(release, type) ? type : undefined;
-    const queryState = requestParams(data);
-    let body;
-    try {
-      body = discoveryRequest(queryState, requestLanguages(data.locale));
-    } catch {
-      body = undefined;
-    }
-    const filter = body?.filter;
-    const hasSearch = hasResultSearchIntent(queryState) || queryState.resourceScope !== undefined;
     const languages = data.languages ?? requestLanguages(data.locale);
     const years = release ? yearProperties(release, knownType) : [];
     const properties = release
       ? [...new Set([...(knownType ? factProperties(release, knownType) : []), ...years])].slice(0, 4)
       : [];
+    const roster = release ? refinementProperties(release, knownType ?? data.facetValues.type) : [];
+    const requestedFacets = roster
+      .slice(0, 8)
+      .filter((entry) => entry.mode === 'values' || entry.mode === 'types')
+      .map(({ property }) => ({ property, size: 10 }));
+    let refinementRequests: ReturnType<typeof scopedRefinementRequests> | undefined;
+    try {
+      refinementRequests = scopedRefinementRequests(queryState, requestLanguages(data.locale), requestedFacets);
+    } catch {
+      refinementRequests = undefined;
+    }
+    const body = refinementRequests?.search;
+    const hasSearch = hasResultSearchIntent(queryState) || queryState.resourceScope !== undefined;
     const sendSearch = async (
       request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0],
     ) => {
-      const response = await kernelClient(data.locale).subjects.$search.post(request, { fetch: { signal } });
+      const response = await kernelClient(data.locale).subjects.$search.post(request, {
+        ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+        fetch: { signal },
+      });
       return response;
     };
     const searchPromise = hasSearch
@@ -310,19 +335,18 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         })()
       : Promise.resolve(undefined);
 
-    const roster = release ? refinementProperties(release, knownType ?? data.facetValues.type) : [];
-    const requestedFacets = roster
-      .slice(0, 8)
-      .filter((entry) => entry.mode === 'values' || entry.mode === 'types')
-      .map(({ property }) => ({ property, size: 10 }));
+    const facetRead = refinementRequests?.facets;
     const facetsPromise: Promise<FacetState | undefined> =
-      body && requestedFacets.length
+      body && facetRead
         ? readFacetPage(
-            facetRequest({ ...(data.query ? { text: data.query } : {}), languages }, requestedFacets),
+            facetRead,
             (request) =>
               kernelClient(data.locale).subjects.$facets.post(
-                { ...request, ...(filter ? { filter } : {}) },
-                { fetch: { signal } },
+                request,
+                {
+                  ...(reader?.authorization ? { headers: { authorization: reader.authorization } } : {}),
+                  fetch: { signal },
+                },
               ),
           ).catch((error): FacetState => {
             if (signal.aborted) throw error;
@@ -367,16 +391,15 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
       ...(release
         ? {
             refinement: {
-              key: JSON.stringify([
-                refinementKey({
-                  principal: 'anonymous',
-                  languages,
-                  release: release.digest!,
-                  source: 'public-global',
-                  text: data.query,
-                }),
-                filter,
-              ]),
+              key: refinementKey({
+                principal: reader?.owner ?? 'anonymous',
+                languages,
+                release: release.digest!,
+                source: data.resourceScope ? `${data.resourceScope.kind}:${data.resourceScope.id}` : 'public-global',
+                text: data.query,
+                ...(body?.filter ? { filter: body.filter } : {}),
+                ...(data.resourceScope ? { scope: data.resourceScope } : {}),
+              }),
               properties: roster,
               ...(facetResult ? { initial: facetResult } : {}),
             },
@@ -889,8 +912,17 @@ export function SearchPage({
           hydrated={hydrated}
           load={async (kindCursor, signal) => {
             const response = await readKindsWithLocale({
-              data: { ...data.queryState!, facetValues: selectedFacets, locale, kindCursor },
+              data: {
+                ...data.queryState!,
+                facetValues: selectedFacets,
+                locale,
+                kindCursor,
+                ...(data.queryState?.resourceScope && session ? { reader: session } : {}),
+              },
               signal,
+              ...(data.queryState?.resourceScope
+                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
+                : {}),
             });
             if (
               !signal.aborted &&
@@ -950,6 +982,7 @@ export function SearchPage({
             ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
             ...(draft.languages ? { languages: draft.languages } : {}),
             ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
+            ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
             ...(data.ranges ? { ranges: data.ranges } : {}),
             ...(draft.condition ? { condition: draft.condition } : {}),
           }}
@@ -960,12 +993,14 @@ export function SearchPage({
               data: {
                 query,
                 locale,
+                ...(data.queryState?.resourceScope && session ? { reader: session } : {}),
                 conditions: {
                   ...(type ? { type } : {}),
                   facetValues: selectedFacets,
                   ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
                   ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
                   ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
+                  ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
                   ...(data.ranges ? { ranges: data.ranges } : {}),
                   ...(data.condition ? { condition: data.condition } : {}),
                 },

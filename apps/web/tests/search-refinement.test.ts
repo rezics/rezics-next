@@ -125,7 +125,7 @@ test('legacy previews and count metadata cannot establish terminal exhaustion; n
     { property: 'type', values: [], next: 'sampled-next' },
   ]) {
     expect((await readFacetPage(request, async () => ({ status: 200, data: { facets: [facet], as_of } }))).status).toBe(
-      'unavailable',
+      'invalid',
     );
   }
   expect(
@@ -141,7 +141,7 @@ test('legacy previews and count metadata cannot establish terminal exhaustion; n
     [404, 'not_found', 'refused'],
     [503, 'index_not_ready', 'preparing'],
     [409, 'search_restart_required', 'restart'],
-    [422, 'unsupported_query', 'unavailable'],
+    [422, 'unsupported_query', 'invalid'],
   ] as const) {
     const problem = { code };
     expect(await readFacetPage(request, async () => ({ status, error: problem }))).toEqual({

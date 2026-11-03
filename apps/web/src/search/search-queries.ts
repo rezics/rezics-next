@@ -1,19 +1,28 @@
 import { queryOptions } from '@tanstack/react-query';
-import { publicRead } from '../kernel/query';
+import { personalRead, publicRead } from '../kernel/query';
 import { readSearch, type SearchPageData } from './search.tsx';
 import type { SearchLoaderDeps } from './search-params';
 import { searchUnavailablePage } from './search-recovery';
 
-export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
+export function searchQueryOptions(locale: string, params: SearchLoaderDeps, reader?: string) {
+  const scoped = params.resourceScope !== undefined;
+  const source = params.resourceScope ? `${params.resourceScope.kind}:${params.resourceScope.id}` : 'public-global';
   return queryOptions({
-    ...publicRead,
+    ...(scoped ? personalRead : publicRead),
     staleTime: 0,
-    gcTime: 60_000,
+    gcTime: scoped ? 0 : 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,
-    queryKey: ['search', 'discovery-v1', 'anonymous', 'public-global', locale, params],
+    queryKey: [
+      'search',
+      'discovery-v1',
+      scoped ? (reader ?? 'unverified') : 'anonymous',
+      source,
+      locale,
+      params,
+    ],
     queryFn: async ({ signal, client, queryKey }) => {
       try {
         return await readSearch({
@@ -24,6 +33,8 @@ export function searchQueryOptions(locale: string, params: SearchLoaderDeps) {
             kinds: params.kinds,
             languages: params.languages,
             filter: params.filter,
+            ...(params.resourceScope ? { resourceScope: params.resourceScope } : {}),
+            ...(scoped && reader ? { reader } : {}),
             ...(params.ranges ? { ranges: params.ranges } : {}),
             ...(params.condition ? { condition: params.condition } : {}),
             ...(params.type ? { type: params.type } : {}),

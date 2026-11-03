@@ -5,6 +5,7 @@ import {
   type FilterRange,
   type FilterRelease,
 } from '@rezics/filter';
+import { searchFilterWithScope, type SearchResourceScope } from '../advanced-scope';
 
 export type RefinementRelease = FilterRelease & {
   digest?: string;
@@ -21,6 +22,7 @@ export type RefinementConditions = {
   kinds?: string[];
   languages?: string[];
   filter?: string;
+  resourceScope?: SearchResourceScope;
   type?: string;
   facetValues: Record<string, string[]>;
   ranges?: Record<string, FilterRange>;
@@ -91,7 +93,8 @@ export function refinementHref(
   if (sort) params.set('sort', sort);
   for (const kind of conditions.kinds ?? []) params.append('kinds', kind);
   for (const language of conditions.languages ?? []) params.append('language', language);
-  if (conditions.filter) params.set('filter', conditions.filter);
+  const filter = searchFilterWithScope(conditions.filter, conditions.resourceScope);
+  if (filter) params.set('filter', filter);
   if (conditions.condition) params.set('condition', JSON.stringify(conditions.condition));
   for (const [property, values] of Object.entries(conditions.facetValues))
     for (const value of values) params.append(`f.${property}`, value);

@@ -35,7 +35,7 @@ export const Route = createFileRoute('/search')({
   loader: ({ deps, context }) => {
     const params = deps;
     if (params.invalidInput) return { query: params.query, invalidInput: params.invalidInput };
-    // Private scoped reads stay unavailable until the installed session-bound reader owns their request and cache.
+    // Scoped reads start in the session-bound client query so private results never enter the public route cache.
     if (params.resourceScope) return { query: params.query };
     const locale = getLocale();
     return Promise.all([
@@ -103,19 +103,39 @@ function SearchRoute() {
 }
 
 function SearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
-  if (deps.resourceScope) return <ScopedSearchUnavailable deps={deps} locale={locale} />;
-  return <LoadedSearchResults deps={deps} locale={locale} />;
+  const reader = searchSessionOwner(useSession());
+  if (deps.resourceScope && reader === null)
+    return (
+      <SearchPage
+        query={deps.query}
+        data={{ ...searchUnavailablePage(deps), recovery: { status: 'session' } }}
+        locale={locale}
+        session={null}
+      />
+    );
+  return (
+    <LoadedSearchResults
+      deps={deps}
+      locale={locale}
+      {...(deps.resourceScope && reader ? { reader } : {})}
+      session={reader}
+    />
+  );
 }
 
-function ScopedSearchUnavailable({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
-  const session = searchSessionOwner(useSession());
-  return <SearchPage query={deps.query} data={searchUnavailablePage(deps)} locale={locale} session={session} />;
-}
-
-function LoadedSearchResults({ deps, locale }: { deps: ReturnType<typeof searchLoaderDeps>; locale: string }) {
-  const { data, retry } = useSearchQuery(locale, deps);
+function LoadedSearchResults({
+  deps,
+  locale,
+  reader,
+  session,
+}: {
+  deps: ReturnType<typeof searchLoaderDeps>;
+  locale: string;
+  reader?: string;
+  session: string | null;
+}) {
+  const { data, retry } = useSearchQuery(locale, deps, reader);
   const realms = useQuery({ ...realmDiscoveryQueryOptions(locale), enabled: isRealmDiscoverySearch(deps) });
-  const session = searchSessionOwner(useSession());
   return (
     <SearchPage
       query={deps.query}
