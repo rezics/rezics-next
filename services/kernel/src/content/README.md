@@ -712,6 +712,63 @@ The Search request bridge retains the complete frozen Boolean tree and canonical
 These native point witnesses do not supply a review locator, baseline, retained Source population,
 privacy-reduction routing or a feed selector. No incomplete witness page certifies nonmembership.
 
+## Conversation contribution source
+
+`createConversationActivityEffect(pool)` is installed by `registerContent` in the existing supervisor alongside
+board ranking. It reuses `read-source-activity.sql` and native publication/lifecycle events. The source keeps
+one episode per post in its thread's home, including the opening. An edit changes source progress but never
+the contribution time. Erasure, takedown and restoration replace native eligibility from current post/head
+state; delayed or duplicate events cannot restore an erased post. A purged post retires its retained episode.
+Publication provenance is checked against the exact native outbox envelope before writing.
+
+Decision: retain the earliest native public-publication time for each post, including across removal and
+restoration; keep this internal source explicitly unproven until current cohort disclosure and repair are installed.
+
+`readConversationActivitySources(pool, threadIds, deadline)` exports `ConversationActivitySource` and
+`ConversationContributionSource`. It accepts at most 100 raw keys, deduplicates them and groups them by
+represented home. Each home releases its read-only snapshot before the next starts. Each selected thread has
+one ordered prefix of at most 32 native-eligible publication episodes. The partial index excludes removed
+episodes, so finding the next retained contribution does not traverse removed posts or revision history.
+The source preserves microsecond timestamps and returns its partition anchor. `more` is conservative.
+
+These are trusted internal candidates, not installed Home/Search/Web activity DTOs. `coverage: 'unproven'`
+is mandatory, including for an empty prefix. No caller may treat its length as a reply count or return its
+timestamps without current disclosure. It does not establish thread/board/Realm/account/ancestry eligibility,
+does not establish completeness for pre-installation publications, and does not include a protected-only
+publication that has never had a native public-publication event. Existing hot/active/new ranking is unchanged.
+Current disclosed batch figures, bounded repair and Board/thread/Subject integration remain to be delivered.
+
+### Cost: contribution effect
+
+- Touches: one native thread home and its registered supervisor effect; no Access preparation, document bodies,
+  foreign checkouts or user receipts. The exact outbox position prefix proves the event. Each of at most 100
+  event-named posts has one post PK lookup, one same-home thread/post source lookup and one episode PK upsert;
+  a missing post uses one episode PK retirement instead of the source lookup/upsert. The command emits at most
+  one registered event containing at most 100 UUIDs. The supervisor still owns dispatch/checkpoint work.
+- Bound: local body statements are at most `1 + 3p`, for `p <= 100`; proof examines at most the envelope's
+  1,000 event slots, then each post examines at most one post, one thread, one post and one episode. Returned
+  metadata has no body/subject/media arrays. Add the existing `runCommand` gate, time, partition fence,
+  transaction control, record-source finalization, outbox write and supervisor/runner work; the complete
+  all-pool physical/byte ceiling is pending Performance review and is not claimed here. A duplicate that changes
+  neither watermark, time nor native state rolls back without a new event; malformed sources do not write.
+- Growth check: focused native lifecycle coverage is in `conversation-activity-native-source.test.ts`.
+  Independent 256/1024/4096 post-history, unrelated-thread and runner growth with strict native plans remains
+  required before this source can be used for a disclosed figure.
+
+### Cost: selected contribution prefixes
+
+- Touches: only represented Content homes, sequentially; no Access, account, Realm, control pool or document
+  hydration. Per home: begin, partition point, one lateral-prefix query, commit; failure adds rollback.
+- Bound: for `t <= 100` raw inputs and `h <= t` represented homes, at most `4h` normal statements, `h` partition
+  rows and `32t` episode rows through `(route, thread_id, contributed_at DESC, post_id DESC)` with the exact
+  partial-index predicate. Input is at most 100 route/UUID pairs; each returned row is two UUIDs, a boolean and
+  one 27-byte timestamp, plus its selected thread UUID. No unrelated keys or inactive episodes are requested.
+  Empty input performs no checkout; invalid/oversize input performs no SQL. Missing/moved homes throw the
+  shared unavailable error rather than returning an empty figure. This bound covers the internal source only.
+- Growth check: the focused native test covers an opening, replies, next remaining contribution, edit,
+  restoration, delayed publication, duplicate replay and deduplication. Strict EXPLAIN-prefix and three-scale
+  all-pool checks, current-disclosure work and externally usable byte ceilings remain deferred.
+
 ## Subject threads
 
 `GET /v1/subjects/{subjectId}/threads?place={id}&kind=discussion|review&limit=&cursor=` returns a subject's threads

@@ -19,6 +19,7 @@ import { R2Storage } from './r2-storage.ts';
 import { createContentWork } from './work.ts';
 import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts';
 import { registerFeedWork } from './feed-work.ts';
+import { createConversationActivityEffect } from './conversation-activity.ts';
 
 /** Standalone fixture/caller Access with the shared role catalogue. Default
  * production registration uses WorkContext's fully mounted authorization instead.
@@ -140,6 +141,7 @@ export const registerContent: WorkModule = {
       ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
     }).register(context);
     context.addEffects([
+      createConversationActivityEffect(context.pool),
       ...contentEffects(context.pool, context.client),
       ...contentNoticeEffects(context.pool, access),
     ]);
