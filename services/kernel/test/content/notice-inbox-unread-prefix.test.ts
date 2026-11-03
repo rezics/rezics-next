@@ -5,7 +5,7 @@ import { contentNoticeEffects } from '../../src/content/relays.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
 
-test('unread summary bounds growing same-recipient acknowledged and seen prefixes', async () => {
+test('unread summary skips growing acknowledged and seen prefixes before its candidate limit', async () => {
   const native = await replyNoticeFixture();
   try {
     const recipient = native.accounts.recipient;
@@ -55,8 +55,8 @@ test('unread summary bounds growing same-recipient acknowledged and seen prefixe
       expect(summary.status).toBe(200);
       expect(summary.value).toMatchObject({
         count: 1,
-        capped: size === 4096,
-        basis: size === 4096 ? 'current-visible-lower-bound' : 'current-visible-unread',
+        capped: false,
+        basis: 'current-visible-unread',
       });
     }
   } finally {

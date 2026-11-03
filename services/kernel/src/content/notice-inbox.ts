@@ -256,11 +256,12 @@ export async function countUnreadNotices(
                   n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id
            FROM content.notice AS n
            WHERE n.route=$1 AND n.recipient_id=$2 ${seek}
+             AND ${unacknowledgedSql()}
            ORDER BY n.created_at,n.notice_id LIMIT ${limit}
          )
          SELECT n.notice_id,n.kind,n.created_at,n.created_at_key,
                 n.source_id,n.actor_id,n.thread_id,n.post_id,n.decision_id,n.report_id,
-                ${unacknowledgedSql()} AS unread
+                true AS unread
          FROM raw_candidates AS n
          ORDER BY n.created_at,n.notice_id`,
         values,

@@ -50,6 +50,31 @@ async function seed(count: number) {
   return ids;
 }
 
+function textBody(text: string) {
+  return {
+    version: 'rezics-document-v1',
+    profile: 'text',
+    doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
+  };
+}
+
+function mentionBody(accountId: string) {
+  return {
+    version: 'rezics-document-v1',
+    profile: 'text',
+    doc: {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          attrs: { id: 'notice-mention' },
+          content: [{ type: 'mention', attrs: { accountId } }],
+        },
+      ],
+    },
+  };
+}
+
 test("the inbox lists only the viewer's notices newest first with an opaque cursor, and another account's inbox answers 404", async () => {
   const ids = await seed(3);
   const base = `/v1/accounts/${fixture.accountId}/notifications`;
@@ -378,6 +403,151 @@ test('a reporter keeps the current outcome action when the reported target is wi
       summary: 'your report was actioned',
       actions: { open: { kind: 'report_outcome', reportId: report.value!.reportId } },
     });
+    const exact = await driver.readReport(report.value!.reportId, people.reporter);
+    expect(exact.response.status).toBe(200);
+    expect(exact.value).toMatchObject({ id: report.value!.reportId, outcome: 'actioned' });
+  } finally {
+    await driver.close();
+  }
+}, 60_000);
+
+test('the final Inbox pass omits a revoked ordinary target but retains the reporter outcome and exact read', async () => {
+  const driver = await createContentNotificationDriver();
+  try {
+    const people = await driver.provision();
+    const thread = await driver.createThread(
+      { boardId: people.protectedBoardId, visibility: 'published', body: mentionBody(people.reporter.id) },
+      { actor: people.author, key: JSON.stringify('hydration-report-mention') },
+    );
+    expect(thread.response.status).toBe(201);
+    const report = await driver.report(
+      { kind: 'post', id: thread.value!.firstPost.id },
+      { actor: people.reporter, key: JSON.stringify('hydration-report') },
+    );
+    expect(report.response.status).toBe(201);
+    const dismissed = await driver.dismissReport(report.value!.reportId, 'No action is warranted', {
+      actor: people.moderator,
+      key: JSON.stringify('hydration-report-dismiss'),
+    });
+    expect(dismissed.response.ok).toBe(true);
+    await driver.effects('drain');
+
+    const inbox = await driver.inboxDuringActorHydration(
+      people.reporter.id,
+      people.reporter,
+      { limit: 20 },
+      () => driver.fixtures.realmMember(people.reporter, false),
+    );
+    expect(inbox.response.status).toBe(200);
+    const items = inbox.value!.items as unknown as Array<{
+      kind: string;
+      target: { reportId?: string };
+      currentTarget: { state: string };
+      summary: string;
+      actions: { open: unknown };
+    }>;
+    expect(items.filter((item) => item.kind === 'mention')).toHaveLength(0);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      target: { reportId: report.value!.reportId },
+      currentTarget: { state: 'withheld' },
+      summary: 'your report was dismissed',
+      actions: { open: { kind: 'report_outcome', reportId: report.value!.reportId } },
+    });
+    const exact = await driver.readReport(report.value!.reportId, people.reporter);
+    expect(exact.response.status).toBe(200);
+    expect(exact.value).toMatchObject({ id: report.value!.reportId, outcome: 'dismissed' });
+  } finally {
+    await driver.close();
+  }
+}, 60_000);
+
+test('actor erasure and a changed author decision are finished after actor hydration', async () => {
+  const driver = await createContentNotificationDriver();
+  try {
+    const people = await driver.provision();
+    const publicThread = await driver.createThread(
+      { boardId: people.publicBoardId, visibility: 'published', body: textBody('Readable reply source') },
+      { actor: people.author, key: JSON.stringify('hydration-public-source') },
+    );
+    expect(publicThread.response.status).toBe(201);
+    const reply = await driver.createPost(
+      {
+        threadId: publicThread.value!.id,
+        parentId: publicThread.value!.firstPost.id,
+        visibility: 'published',
+        body: textBody('Reply from an actor who will be erased'),
+      },
+      { actor: people.replier, key: JSON.stringify('hydration-reply') },
+    );
+    expect(reply.response.status).toBe(201);
+    const affected = await driver.createThread(
+      { boardId: people.publicBoardId, visibility: 'published', body: textBody('Decision source') },
+      { actor: people.author, key: JSON.stringify('hydration-decision-source') },
+    );
+    expect(affected.response.status).toBe(201);
+    expect(
+      (await driver.takedown({ kind: 'thread', id: affected.value!.id }, 'Decision statement', {
+        actor: people.moderator,
+        key: JSON.stringify('hydration-decision'),
+      })).response.ok,
+    ).toBe(true);
+    await driver.effects('drain');
+
+    const original = await driver.inbox(people.author.id, people.author, { limit: 20 });
+    expect(original.response.status).toBe(200);
+    const decisionNotice = original.value!.items.find((item) => item.kind === 'moderation_decision');
+    const decisionId = decisionNotice?.target.decisionId;
+    expect(decisionId).toEqual(expect.any(String));
+    const appeal = await driver.appeal(decisionId!, 'Please restore the post', {
+      actor: people.author,
+      key: JSON.stringify('hydration-appeal'),
+    });
+    expect(appeal.response.status).toBe(201);
+
+    let resolution: Awaited<ReturnType<typeof driver.resolveAppeal>> | undefined;
+    const current = await driver.inboxDuringActorHydration(
+      people.author.id,
+      people.author,
+      { limit: 20 },
+      async () => {
+        resolution = await driver.resolveAppeal(appeal.value!.id, 'reverse', 'The removal was mistaken', {
+          actor: people.moderator,
+          key: JSON.stringify('hydration-appeal-resolution'),
+        });
+        await driver.fixtures.accountState(people.replier, 'deleted');
+      },
+    );
+    expect(current.response.status).toBe(200);
+    expect(resolution?.response.status).toBe(200);
+    expect(resolution?.value).toMatchObject({ outcome: 'reverse' });
+    expect(current.value!.items).toHaveLength(2);
+    const items = current.value!.items as unknown as Array<{
+      kind: string;
+      target: { postId?: string; decisionId?: string };
+      currentActor: { state: string; displayName: string };
+      actions: { open: { kind: string; decisionId?: string } | null };
+    }>;
+    const replyNotice = items.find((item) => item.kind === 'reply')!;
+    expect(replyNotice).toMatchObject({
+      kind: 'reply',
+      target: { postId: reply.value!.id },
+      currentActor: { state: 'withheld', displayName: 'Former or unavailable account' },
+    });
+    expect(items.find((item) => item.target.decisionId === decisionId)).toMatchObject({
+      actions: { open: { kind: 'moderation_decision', decisionId } },
+    });
+    const exact = await driver.decision(decisionId!, people.author);
+    expect(exact.response.status).toBe(200);
+
+    await driver.effects('drain');
+    const resolvedInbox = await driver.inbox(people.author.id, people.author, { limit: 20 });
+    expect(resolvedInbox.response.status).toBe(200);
+    expect(
+      (resolvedInbox.value!.items as unknown as Array<{ summary: string; actions: { open: unknown } }>).find(
+        (item) => item.summary === 'your appeal restored the content',
+      ),
+    ).toMatchObject({ actions: { open: { kind: 'moderation_decision', decisionId } } });
   } finally {
     await driver.close();
   }

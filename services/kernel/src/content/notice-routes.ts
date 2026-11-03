@@ -118,7 +118,7 @@ const countResponse = t.Object({
   capped: t.Boolean(),
   basis: t.Union([t.Literal('current-visible-unread'), t.Literal('current-visible-lower-bound')]),
   witness: t.Object({ kind: t.Literal('current-disclosure'), at: t.String({ format: 'date-time' }) }),
-});
+}, { additionalProperties: false });
 const seenBody = strictContentSchema(t.Object({ through: t.String() }, { additionalProperties: false }));
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const listFailures = { ...failures, 400: problemSchema('invalid_request', 'invalid_cursor') };
@@ -144,7 +144,10 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(t.Object({ items: t.Array(item), next: t.Union([t.String(), t.Null()]) }), sessionHeader),
+          200: withHeaders(
+            t.Object({ items: t.Array(item), next: t.Union([t.String(), t.Null()]) }, { additionalProperties: false }),
+            sessionHeader,
+          ),
           ...listFailures,
         },
         detail: {

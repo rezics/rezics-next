@@ -713,8 +713,9 @@ its target context is withheld. Unreadable ordinary targets are omitted without 
 
 The page examines at most four times its limit (maximum 200) raw notice candidates. Sparse pages advance across the
 last candidate examined. A dependency failure returns an error without a cursor, so retry does not skip candidates.
-`GET .../count` applies the same current per-kind disclosure to unread candidates, examining at most 200 plus one row
-to detect truncation. It returns `{ count, capped, basis, witness }`; `count` is at most 100, `basis` is
+`GET .../count` rejects acknowledged rows before retaining at most 200 plus one unacknowledged candidate to detect
+truncation. The ordered index scan can examine more than 201 recipient rows when it passes an acknowledged prefix.
+It returns `{ count, capped, basis, witness }`; `count` is at most 100, `basis` is
 `current-visible-unread` when the candidate range was complete and `current-visible-lower-bound` when more raw
 candidates may remain. `capped` means the returned value is a lower bound because the candidate range or 100-visible
 cap was exceeded. The current-disclosure witness records the summary time. A failed source read is unavailable, never
@@ -739,6 +740,14 @@ Unavailable history is not recovered, inferred from UUIDs or reconstructed by sc
 migration changes existing rows; requests never backfill, scan history or rewrite a recipient range.
 Notices and completed thread-watch progress older than 180 days are deleted in bounded batches. Account deletion
 erases the account's watches, notices and seen state through Content's existing bounded recipient-erasure pages.
+
+Decision: after hydration, a changed ordinary source removes its notice; a still reporter-owned outcome keeps its exact action while its unavailable target is withheld.
+
+### Cost: current Inbox disclosure
+
+- Touches: one registered normal HTTP admission runs the list handler; its native reads are direct source-owner calls, with no additional notification producer or effect runner. The list seeks at most `C=min(4L,200)` recipient notice keys in one query and checks the current viewer before and after disclosure. The summary uses one read-only transaction with `BEGIN`, the seen-frontier read, an ordered materialized recipient-key query rejecting acknowledgements before `LIMIT 201`, and `COMMIT` (or `ROLLBACK` on failure); its index scan can examine more than 201 rows while passing acknowledged notices. Each bulk-seen and one-item acknowledgement command uses four local statements: `BEGIN`, exact owned-point `FOR SHARE`, frontier upsert or acknowledgement insert, and `COMMIT`. Every eligible decision or report notice dispatches its native owner reader before actor hydration and again afterward, including duplicate notices: 15 SQL statements per author-decision proof and 16–20 per reporter proof. Each post or board context reader performs its existing initial and final native rounds, then repeats those rounds against the same keys after actor hydration. Each round groups target, Board and Realm reads by their actual home partitions, reads at most 33 post ancestors per target, retains current head/revision and security joins, and prepares/evaluates fresh Access evidence outside the checked-out source transaction. Up to 50 distinct actors use two identity/profile rounds; at most 200 account queries and rows are dispatched, and the fetched public profile contains fields later dropped from the Inbox actor projection. Homes are released independently; this composition is not one cross-home snapshot.
+- Bound: `L<=50`, list candidates `C<=200`, summary retained candidates `<=201` (while the acknowledgement-filtered index scan can examine more), unique target references `<=200`, context chunks `<=100` per native home, post ancestry `<=33`, and actor identities `<=50`. An ordinary candidate is returned only when its post-hydration source context is current; a changed or denied ordinary source is omitted. Reporter-owned outcome facts remain independently readable with the exact report action when their target context is no longer available. No post bodies, report evidence, moderator statement or discarded profile field is serialized. The page contains at most `L` items; its UTF-8 size is the encoded serialized IDs, fixed summaries/actions, current actor fields and permitted titles. Intermediate context/profile materialized and retained bytes are distinct from those response bytes and are measured at the source owners' admitted field sizes.
+- Growth check: the original native Inbox acceptance must independently grow unrelated and selected identity, post, Board/Realm and authority histories at 256/1024/4096 with fixed keys, homes, admitted byte caps and page limits. Capture actual SQL/transaction controls, prepared and evaluated Access work, physical rows, source and profile bytes, retained and serialized UTF-8 bytes, foreign pools and registered runner phases for populated, empty, concealed, unavailable, cold and same-cursor retry paths; include strict resumed-prefix plans and exact author/report readback. The page limit is not a substitute for physical-plan evidence. This check remains controller work; no native growth result is claimed here.
 
 Notification costs are bounded independently of inbox or thread size:
 

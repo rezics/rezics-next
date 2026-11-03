@@ -147,6 +147,12 @@ export type KernelClient = Omit<GeneratedKernelClient, 'subjects' | 'libraryEntr
   libraryExports: LibraryExportsClient;
   subjects: KernelSubjectsClient;
 };
+type NoticeInboxClient = ReturnType<KernelClient['accounts']>['notifications'];
+type NoticeInboxRead = Awaited<ReturnType<NoticeInboxClient['get']>>;
+type UnreadNoticeRead = Awaited<ReturnType<NoticeInboxClient['count']['get']>>;
+export type NoticeInboxPage = NonNullable<NoticeInboxRead['data']>;
+export type NoticeInboxItem = NoticeInboxPage['items'][number];
+export type UnreadNoticeSummary = NonNullable<UnreadNoticeRead['data']>;
 export type KernelSubjectsClient = Omit<SubjectsClient, keyof Function> &
   ((...args: Parameters<SubjectsClient>) => SubjectPath & {
     'source-classifications': SourceClassificationsClient;

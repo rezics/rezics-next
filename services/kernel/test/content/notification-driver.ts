@@ -15,6 +15,7 @@ import type {
 } from '../../../../specs/content-notification-driver.ts';
 import { createNotificationEffectHost } from './support/notification-effect-host.ts';
 import { createNotificationFixture } from './support/notification-fixtures.ts';
+import { afterInboxActorProfile } from './support/notice-inbox-interleaving.ts';
 import type { GrowthDatabase } from '../support/growth.ts';
 
 const AUDIENCE = 'https://content.test';
@@ -115,8 +116,16 @@ function documentOf(value: unknown): unknown {
 }
 
 export type ContentNotificationGrowthDriver = ContentNotificationDriver & { growthDatabase: GrowthDatabase };
+export type ContentNotificationInterleavingDriver = ContentNotificationDriver & {
+  inboxDuringActorHydration(
+    accountId: string,
+    actor: Persona,
+    query: { limit?: number; cursor?: string } | undefined,
+    transition: () => Promise<void>,
+  ): Promise<ApiResult<Inbox>>;
+};
 
-export async function createContentNotificationDriver(): Promise<ContentNotificationDriver> {
+export async function createContentNotificationDriver(): Promise<ContentNotificationInterleavingDriver> {
   return (await buildContentNotificationDriver(false)).driver;
 }
 
@@ -130,7 +139,7 @@ export async function createContentNotificationGrowthDriver(): Promise<ContentNo
 }
 
 async function buildContentNotificationDriver(growth: boolean): Promise<{
-  driver: ContentNotificationDriver;
+  driver: ContentNotificationInterleavingDriver;
   growthDatabase?: GrowthDatabase;
 }> {
   const setup = await createNotificationFixture({ growth });
@@ -217,7 +226,27 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
     };
   }
 
-  const driver: ContentNotificationDriver = {
+  async function readInbox(
+    accountId: string,
+    actor: Persona,
+    query?: { limit?: number; cursor?: string },
+  ): Promise<ApiResult<Inbox>> {
+    const params = new URLSearchParams();
+    if (query?.limit !== undefined) params.set('limit', String(query.limit));
+    if (query?.cursor !== undefined) params.set('cursor', query.cursor);
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const result = await request('GET', `/v1/accounts/${accountId}/notifications${suffix}`, actor);
+    return resultMap(result, (body) => {
+      const raw = object(body, 'Inbox');
+      if (!Array.isArray(raw.items)) throw new TypeError('Inbox items are missing');
+      return {
+        items: raw.items.map(noticeOf),
+        next: nullableString(raw.next, 'inbox.next'),
+      } satisfies Inbox;
+    });
+  }
+
+  const driver: ContentNotificationInterleavingDriver = {
     async close() {
       if (closed) return;
       closed = true;
@@ -333,20 +362,11 @@ async function buildContentNotificationDriver(growth: boolean): Promise<{
         };
       });
     },
-    async inbox(accountId, actor, query) {
-      const params = new URLSearchParams();
-      if (query?.limit !== undefined) params.set('limit', String(query.limit));
-      if (query?.cursor !== undefined) params.set('cursor', query.cursor);
-      const suffix = params.size > 0 ? `?${params.toString()}` : '';
-      const result = await request('GET', `/v1/accounts/${accountId}/notifications${suffix}`, actor);
-      return resultMap(result, (body) => {
-        const raw = object(body, 'Inbox');
-        if (!Array.isArray(raw.items)) throw new TypeError('Inbox items are missing');
-        return {
-          items: raw.items.map(noticeOf),
-          next: nullableString(raw.next, 'inbox.next'),
-        } satisfies Inbox;
-      });
+    inbox: readInbox,
+    async inboxDuringActorHydration(accountId, actor, query, transition) {
+      return afterInboxActorProfile(setup.system.database.pool, transition, () =>
+        readInbox(accountId, actor, query),
+      );
     },
     async unread(accountId, actor) {
       const result = await request('GET', `/v1/accounts/${accountId}/notifications/count`, actor);
