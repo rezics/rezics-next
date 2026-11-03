@@ -161,11 +161,7 @@ export function migrate(url: string, root = directory): void {
   installDbosSchema(url, root);
   dbmate(
     url,
-    [
-      ...migrationDirectories(root).flatMap((path) => ['--migrations-dir', path]),
-      '--migration-lock',
-      'up',
-    ],
+    [...migrationDirectories(root).flatMap((path) => ['--migrations-dir', path]), '--migration-lock', 'up'],
     root,
   );
 }
