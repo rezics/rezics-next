@@ -46,7 +46,7 @@ export type RealmRatingQuery = {
 };
 export type RealmRatingHit = SearchHit & {
   ratingPhase: RatingPhase;
-  /** Same subject-home snapshot as the figure, including a proven absent figure. */
+  /** Figure-home snapshot, including proven absence; independent of canonical Subject-home positions. */
   position: bigint;
   threshold: 5 | 10;
   figure: PublicRatingFigure | null;
@@ -361,6 +361,9 @@ export async function readRealmRatingOrder(options: {
           });
           validateReadPageContext(page.context, context, query.populationId);
           if (!Array.isArray(page.hits) || page.hits.length > request.size - hits.length) throw notReady();
+          // Each seek proves one partition of the order. A valid scored tuple is
+          // still invalid evidence for the unscored complement.
+          if (page.hits.some((hit) => hit.ratingPhase !== 'unscored')) throw notReady();
           hits = [...hits, ...page.hits];
         }
         const positions = new Map<number, bigint>();

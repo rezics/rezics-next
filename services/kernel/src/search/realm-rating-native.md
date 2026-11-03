@@ -13,7 +13,9 @@ Content exports `createRealmRankOrderSource` / `RealmRankOrderSource` in
 has no complete Subject predicate capability. `proveFigures` supplies exact native
 figure eligibility probes, not a canonical unscored seek. These exports do not yet
 supply the complete order required here. The older scored-only `createRealmRankSource`
-and its API remain unchanged. The named `35-realm-rank-complete-order.md` is absent.
+and its API remain unchanged. Question/prior publication observations do not add
+canonical population/name seeks or complete predicate execution. The named
+`35-realm-rank-complete-order.md` is absent.
 
 Decision: retain typed unavailability for the selected Realm until Content supplies
 complete canonical predicate/order execution; never adapt the partial score/UUID seek.
@@ -26,7 +28,9 @@ because both are numbers. Private below-threshold figures cannot affect order or
 The complete Subject domain is independent of Realm membership, threads and Spaces.
 
 Search's complete-order consumer merges scored tuples as `score DESC, name_sort ASC`
-(missing names last), then canonical ID ascending. Unscored tuples use `name_sort ASC`
+(missing names last), then canonical ID ascending. An unscored seek returning a scored
+tuple rejects before disclosure, even if that tuple otherwise validates. Unscored tuples
+use `name_sort ASC`
 (missing last), then canonical ID ascending. Zero is a scored value. Figure and canonical
 Subject snapshots retain independent home positions; the consumer validates each source's
 snapshot without equating those positions.
@@ -54,4 +58,10 @@ The continuation must exercise the installed service with fixed request/page lim
 sparse rejection and currentness invalidation, recording native statements,
 examined/returned rows, seeks, actions and retained candidates. Separate per-step
 work from total resumable preparation/catch-up. Refusal and injected-source tests do not
-prove installed native order.
+prove installed native order. The canonical tie fixture exercises first, next and empty
+final consumer pages with Alpha on the smaller UUID. The separate scored-only descending
+UUID continuation assertion remains in `test/rating/realm-rank.test.ts`.
+
+Decision: keep each consumer seek restricted to its declared scored or unscored phase;
+bind complete native traversal through Content's existing factory once it supplies
+canonical predicate and unscored capabilities.

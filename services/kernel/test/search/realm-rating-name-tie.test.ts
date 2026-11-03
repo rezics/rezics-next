@@ -18,6 +18,17 @@ const context: RealmRatingContext = {
   realm: { authority: 'realm-read-1', revision: 'figures-1' },
   generation: 1,
   asOf: '2026-11-01T00:00:00.000Z',
+  questionIdentity: 'standard-question-1',
+  questionRevision: 1,
+  questionProvenance: 'provenance-1',
+  observation: 'observation-1',
+  priorGeneration: '17',
+  canonicalGeneration: 'canonical-1',
+  publicationGeneration: 'publication-1',
+  meaningDigest: null,
+  searchGeneration: 1,
+  priorActive: true,
+  priorUpdating: false,
 };
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
 const binding = {
@@ -26,12 +37,12 @@ const binding = {
   request: { sort: 'rating' },
 };
 
-test('Search preserves the producer name tie when UUID order points the other way', async () => {
+function fixture() {
   const source = createFakeSource();
-  const older = id(1);
-  const newer = id(2);
+  const zeta = id(2);
+  const alpha = id(1);
   source.put({
-    id: older,
+    id: zeta,
     type: 'schema:Book',
     visibility: 'visible',
     redirect: null,
@@ -42,7 +53,7 @@ test('Search preserves the producer name tie when UUID order points the other wa
     statements: [],
   });
   source.put({
-    id: newer,
+    id: alpha,
     type: 'schema:Book',
     visibility: 'visible',
     redirect: null,
@@ -64,7 +75,7 @@ test('Search preserves the producer name tie when UUID order points the other wa
   };
   const hits: RealmRatingHit[] = [
     {
-      id: newer,
+      id: alpha,
       index: 'native-realm',
       partition: 10,
       securityRevision: 1,
@@ -75,7 +86,7 @@ test('Search preserves the producer name tie when UUID order points the other wa
       figure: {
         questionId: STANDARD_QUESTION_ID,
         populationId,
-        subjectId: newer,
+        subjectId: alpha,
         count: 5,
         mean: 5,
         score: 8,
@@ -83,10 +94,10 @@ test('Search preserves the producer name tie when UUID order points the other wa
         revision: '3',
         asOf: context.asOf,
       },
-      sort: [8, 'Alpha', newer],
+      sort: [8, 'Alpha', alpha],
     },
     {
-      id: older,
+      id: zeta,
       index: 'native-realm',
       partition: 10,
       securityRevision: 1,
@@ -97,7 +108,7 @@ test('Search preserves the producer name tie when UUID order points the other wa
       figure: {
         questionId: STANDARD_QUESTION_ID,
         populationId,
-        subjectId: older,
+        subjectId: zeta,
         count: 5,
         mean: 5,
         score: 8,
@@ -105,34 +116,65 @@ test('Search preserves the producer name tie when UUID order points the other wa
         revision: '3',
         asOf: context.asOf,
       },
-      sort: [8, 'Zeta', older],
+      sort: [8, 'Zeta', zeta],
     },
   ];
   const ratings: RealmRatingSource = {
     async observe() {
       return structuredClone(context);
     },
-    async read(_input, _observed, request) {
+    async readScoredFrontiers(_input, _observed, request) {
       const start = request.after ? hits.findIndex((hit) => hit.id === request.after!.at(-1)) + 1 : 0;
       const snapshot = await source.read(10, []);
       return {
         context: structuredClone(context),
-        hits: hits.slice(start, start + request.size).map((hit) => ({ ...hit, position: snapshot.position })),
+        partitions: [
+          {
+            partition: 10,
+            hits: hits.slice(start, start + request.size).map((hit) => ({ ...hit, position: snapshot.position })),
+          },
+        ],
       };
+    },
+    async readUnscored() {
+      return { context: structuredClone(context), hits: [] };
     },
   };
 
-  const page = await readRealmRatingOrder({
-    ratings,
-    source,
-    query,
-    cursors: ring,
-    binding,
-    limit: 2,
-    now: 1000,
-  });
-  expect(older.localeCompare(newer)).toBeLessThan(0);
-  expect(page.subjects.map(({ id: subjectId }) => subjectId)).toEqual([newer, older]);
-  expect(page.next).toBeNull();
-  await page.finalize();
+  const run = (cursor?: string) =>
+    readRealmRatingOrder({
+      ratings,
+      source,
+      query,
+      cursors: ring,
+      binding,
+      limit: 1,
+      now: 1000,
+      ...(cursor ? { cursor } : {}),
+    });
+  return { run, ratings, hits, alpha, zeta };
+}
+
+test('canonical name ties oppose legacy descending UUID order across first, next and final pages', async () => {
+  const f = fixture();
+  expect(f.alpha.localeCompare(f.zeta)).toBeLessThan(0);
+  const first = await f.run();
+  expect(first.subjects.map(({ id }) => id)).toEqual([f.alpha]);
+  expect(first.next).toBeString();
+  await first.finalize();
+  const next = await f.run(first.next!);
+  expect(next.subjects.map(({ id }) => id)).toEqual([f.zeta]);
+  expect(next.next).toBeString();
+  await next.finalize();
+  const final = await f.run(next.next!);
+  expect(final.subjects).toEqual([]);
+  expect(final.next).toBeNull();
+  await final.finalize();
+});
+
+test('an unscored seek cannot disclose a scored tuple from a different partition of the order', async () => {
+  const f = fixture();
+  f.ratings.readScoredFrontiers = async () => ({ context: structuredClone(context), partitions: [] });
+  f.ratings.readUnscored = async () => ({ context: structuredClone(context), hits: f.hits });
+  await expect(f.run()).rejects.toMatchObject({ code: 'index_not_ready' });
 });
