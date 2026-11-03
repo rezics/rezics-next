@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CreatorSale, CreatorSalesData } from './creator-sales';
 
 /** The admitted page already validates unique sale identities and the twenty-row bound. */
@@ -25,6 +25,14 @@ export function useCreatorSaleReading(
   );
   const opener = useRef<HTMLElement | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const mounted = useRef(true);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      opener.current = null;
+    };
+  }, []);
   const live = useRef<{ source: object; selection: Selection | null; isCurrent: () => boolean }>({
     source: reading.source,
     selection: null,
@@ -34,7 +42,7 @@ export function useCreatorSaleReading(
   if (live.current.source !== reading.source) opener.current = null;
   live.current = { source: reading.source, selection: selected, isCurrent };
   if (selection && !selected) setSelection(null);
-  const sourceIsCurrent = () => live.current.source === reading.source && live.current.isCurrent();
+  const sourceIsCurrent = () => mounted.current && live.current.source === reading.source && live.current.isCurrent();
   const selectionIsCurrent = () => sourceIsCurrent() && !!selected && live.current.selection?.lease === selected.lease;
   const close = () => {
     if (!selectionIsCurrent()) return;
