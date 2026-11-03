@@ -108,6 +108,7 @@ test('shared native Context changes drain sparse retained identities, survive re
     .rejects.toThrow('simulated frontier acknowledgement crash');
   // A fresh invocation has no in-memory page state; the committed wake is reused.
   expect(await drainSpaceDiscoveryFrontier(pool, await openSpaceDiscoveryFrontier(pool, scope) as typeof key, 1)).toBe('draining');
+  await call('POST', `/v1/contexts/${context.id}:restore`, {});
   const last = owners[2];
   // Move a dependency across the captured cut. Both actual Realm changes retain
   // native direct wakes; an old scope cannot replace their current truth.
@@ -123,7 +124,6 @@ test('shared native Context changes drain sparse retained identities, survive re
   expect(progress.state).toBe('settled');
   expect(progress.cursor).toBe(progress.cut!);
   expect(BigInt(progress.examined)).toBe(2n);
-  await call('POST', `/v1/contexts/${context.id}:restore`, {});
   await relay.run(native); // reordered old removal, after current restoration
   expect(await drainSpaceDiscoveryFrontier(pool, key, 1)).toBe('settled');
   for (const o of owners) {
