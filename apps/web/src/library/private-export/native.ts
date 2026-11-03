@@ -12,7 +12,6 @@ import {
   SUBJECT_ID,
   quotedIdempotencyKey,
   type ExportCommand,
-  type ExportCoverage,
   type ExportFailure,
   type ExportFailureKind,
   type ExportJson,
