@@ -436,6 +436,14 @@ export function createSearchService({
 }) {
   const release =
     releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
+  const realmRelease = releaseOverride
+    ? async (expected?: string) => {
+        const current = await releaseOverride();
+        if (!current) return null;
+        const digest = kindDigest(current);
+        return expected !== undefined && expected !== digest ? null : { digest, release: current };
+      }
+    : undefined;
   if (!Number.isSafeInteger(facetSample) || facetSample < 1)
     throw new RangeError('facetSample must be a positive safe integer');
   let templates: Promise<void> | undefined;
@@ -707,9 +715,7 @@ export function createSearchService({
             .join(' ');
           const searchBasis = scope!.realm.searchBasis(preparedRealm.scope, {
             ...(request.text === undefined ? {} : { text: request.text }),
-            ...(compiledText
-              ? { textQuery: compiledText.query, textBoost: textBoost! }
-              : {}),
+            ...(compiledText ? { textQuery: compiledText.query, textBoost: textBoost! } : {}),
             generation,
             indexUuid,
           });
@@ -718,11 +724,8 @@ export function createSearchService({
             request: bindSearchScopeCursorRequest(bindingRequest, searchBasis),
             principal,
           };
-          let cursor:
-            | Awaited<ReturnType<typeof decodeSearchCursor>>
-            | undefined = request.cursor === undefined
-            ? undefined
-            : await decodeSearchCursor(cursors, binding, request.cursor, now);
+          let cursor: Awaited<ReturnType<typeof decodeSearchCursor>> | undefined =
+            request.cursor === undefined ? undefined : await decodeSearchCursor(cursors, binding, request.cursor, now);
           if (cursor && !cursor.ok) {
             if (cursor.reason === 'expired') throw new ProblemError('search_restart_required');
             invalid('/cursor', 'invalid_format');
@@ -741,9 +744,7 @@ export function createSearchService({
             scope!.realm.searchPage(preparedRealm.scope, {
               basis: searchBasis,
               ...(request.text === undefined ? {} : { text: request.text }),
-              ...(compiledText
-                ? { textQuery: compiledText.query, textBoost: textBoost! }
-                : {}),
+              ...(compiledText ? { textQuery: compiledText.query, textBoost: textBoost! } : {}),
               generation,
               indexUuid,
               after,
@@ -797,7 +798,11 @@ export function createSearchService({
           )
             throw new ProblemError('search_restart_required');
           const final = await sourceRequest(() =>
-            scope!.realm.evaluate(preparedRealm.scope, shown.map((subject) => subject.id), scopeWork!.remaining()),
+            scope!.realm.evaluate(
+              preparedRealm.scope,
+              shown.map((subject) => subject.id),
+              scopeWork!.remaining(),
+            ),
           );
           scopeWork.native(final.work);
           if (
@@ -1570,6 +1575,7 @@ export function createSearchService({
     source,
     release,
     clock,
+    ...(realmRelease ? { realmRelease } : {}),
     ...(realmSubjects ? { realmSubjects } : {}),
     ...(realmSubjectCapabilities ? { realmSubjectCapabilities } : {}),
   });

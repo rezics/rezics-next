@@ -236,6 +236,7 @@ export function createSearchScopeSource({
   prefix,
   source: _source,
   release,
+  realmRelease,
   evidence,
   realmSubjects,
   realmSubjectCapabilities,
@@ -246,6 +247,7 @@ export function createSearchScopeSource({
   prefix: string;
   source: SubjectSource;
   release?: () => Promise<FilterRelease | null>;
+  realmRelease?: (digest?: string) => Promise<Readonly<{ digest: string; release: FilterRelease }> | null>;
   evidence?: LeafOptions;
   realmSubjects?: RealmSubjectSource;
   realmSubjectCapabilities?: RealmSubjectCapabilities;
@@ -433,7 +435,7 @@ export function createSearchScopeSource({
     ...(evidence ? { reader: evidence } : {}),
     ...(realmSubjects ? { source: realmSubjects } : {}),
     ...(realmSubjectCapabilities ? { capabilities: realmSubjectCapabilities } : {}),
-    release: (digest) => readSearchScopeRelease(pool, digest),
+    release: realmRelease ?? ((digest) => readSearchScopeRelease(pool, digest)),
   });
   function realmSearchBasis(
     prepared: PreparedRealmScope,
@@ -500,7 +502,11 @@ export function createSearchScopeSource({
           : {}),
         work: engineWork(work),
       });
-      work.consume({ ...zeroScopeWork(), nativeRows: result.hits.length, bytes: Buffer.byteLength(JSON.stringify(result.hits)) });
+      work.consume({
+        ...zeroScopeWork(),
+        nativeRows: result.hits.length,
+        bytes: Buffer.byteLength(JSON.stringify(result.hits)),
+      });
       if (new Set(result.hits.map((hit) => hit.id)).size !== result.hits.length) unavailable();
       for (const hit of result.hits) validateScopeOrderedHit('name', hit, index);
       return result.hits;
@@ -652,7 +658,11 @@ export function createSearchScopeSource({
           )
             unavailable();
         }
-        const evaluation = await realm.evaluate(prepared, textHits.map((hit) => hit.id), work.remaining());
+        const evaluation = await realm.evaluate(
+          prepared,
+          textHits.map((hit) => hit.id),
+          work.remaining(),
+        );
         work.native(evaluation.work);
         if (
           evaluation.basis !== prepared.basis ||
