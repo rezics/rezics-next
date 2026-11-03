@@ -74,12 +74,7 @@ export async function claimReviewGrowthFixture() {
     const reviewer = system.actors.moderator;
     const control = system.actors.other;
     const reviewPath = `/v1/realms/${realm.realmId}/claimRequests`;
-    async function reviewCall<T>(
-      method: 'GET' | 'POST',
-      query: string,
-      status: number,
-      bearer: string,
-    ): Promise<T> {
+    async function reviewCall<T>(method: 'GET' | 'POST', query: string, status: number, bearer: string): Promise<T> {
       // Use the fixture's native Kernel, which carries its trusted command clock,
       // with the same production Access and registered erasure runtime as the driver.
       const response = await system.kernel.handle(
@@ -141,12 +136,7 @@ export async function claimReviewGrowthFixture() {
       submit: () => reviewCall<RealmClaimRequest>('POST', '', 202, claimant.bearer),
       list(limit = 1, cursor?: string, actor: 'reviewer' | 'control' | 'claimant' = 'reviewer') {
         const query = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
-        return reviewCall<RealmClaimReviewPage>(
-          'GET',
-          `?${query}`,
-          200,
-          { reviewer, control, claimant }[actor].bearer,
-        );
+        return reviewCall<RealmClaimReviewPage>('GET', `?${query}`, 200, { reviewer, control, claimant }[actor].bearer);
       },
       async rejectedList(code: string, actor: 'reviewer' | 'control' | 'claimant', limit = 1, cursor?: string) {
         const query = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
