@@ -222,3 +222,7 @@ export function createKernelClient(origin: string, options: KernelClientOptions 
   };
   return treaty<ClientApp>(origin, config).v1 as unknown as KernelClient;
 }
+
+export type QuestionLabelInput = Routes['rating-questions'][':questionId']['label']['put']['body'];
+export type QuestionLabelResult = Routes['rating-questions'][':questionId']['label']['put']['response'][200];
+export type QuestionLabelHistoryQuery = Routes['rating-questions'][':questionId']['labels']['get']['query'];

@@ -4,6 +4,7 @@ import type { Account, Method } from '../../../../specs/community-driver.ts';
 import { validateQuestionLabel } from '../../src/rating/question-label.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import publicIdentityPage from '../../src/access/public-identity-page.sql';
+import labelPage from '../../src/rating/question-label-page.sql';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
@@ -99,6 +100,14 @@ test('native curator captions preserve measurement, exact wording, bounded histo
     expect(typeof first.next).toBe('string');
     const continuation = `${history}?limit=1&cursor=${encodeURIComponent(first.next)}`;
     expect((await call('GET', continuation, fixture.owner)).status).toBe(400);
+    const replacement = await system.auth.issue({
+      accountId: fixture.member.id,
+      clientId: system.auth.websiteClient.id,
+      scopes: system.auth.ordinaryScopes,
+    });
+    const replacementActor = { id: fixture.member.id, bearer: replacement.bearer };
+    expect((await call('GET', continuation, replacementActor)).status).toBe(400);
+    expect((await json(await call('GET', `${history}?limit=1`, replacementActor))).labels).toEqual(first.labels);
     expect(
       (await call('GET', `${history}?limit=2&cursor=${encodeURIComponent(first.next)}`, fixture.member)).status,
     ).toBe(400);
@@ -262,6 +271,23 @@ test.serial(
         displayName: null,
       });
 
+      await json(await call('PATCH', `/v1/accounts/${author.accountId}`, authorActor, { displayName: 'Exact author' }));
+      const exactObserver = observeSql(system.database.pool);
+      const exactBarrier = exactObserver.hold({ statement: publicIdentityPage.sql }, 'after');
+      const exactRead = call('GET', `/v1/rating-questions/${created.id}/labels/2`, fixture.owner);
+      try {
+        await exactBarrier.entered;
+        await json(await call('PATCH', `/v1/accounts/${author.accountId}`, authorActor, { displayName: null }));
+        exactBarrier.release();
+        expect(await json(await exactRead)).toMatchObject({
+          label: 'Corrected by author',
+          author: { id: author.accountId, state: 'active', displayName: null },
+        });
+      } finally {
+        exactBarrier.release();
+        await exactObserver.close();
+      }
+
       const erasureObserver = observeSql(system.database.pool);
       const erasureBarrier = erasureObserver.hold({ statement: publicIdentityPage.sql, occurrence: 2 }, 'after');
       const erasedRead = call('GET', history, fixture.owner);
@@ -290,6 +316,50 @@ test.serial(
         expect(await json(await call('GET', history, fixture.owner))).toEqual(expected);
       } finally {
         await retryObserver.close();
+      }
+
+      const first = await json(await call('GET', history.replace('limit=20', 'limit=1'), fixture.owner));
+      const continuation = `${history.replace('limit=20', 'limit=1')}&cursor=${encodeURIComponent(first.next)}`;
+      const expectedPage = await json(await call('GET', continuation, fixture.owner));
+      const sourceObserver = observeSql(system.database.pool);
+      sourceObserver.armFault({
+        match: { statement: labelPage.sql, occurrence: 2 },
+        boundary: 'before',
+        error: new Error('Caption source unavailable'),
+      });
+      try {
+        expect((await call('GET', continuation, fixture.owner)).status).toBe(503);
+        expect(await json(await call('GET', continuation, fixture.owner))).toEqual(expectedPage);
+      } finally {
+        await sourceObserver.close();
+      }
+
+      const home = partitionOf(routeOf(created.id)!);
+      const {
+        rows: [partition],
+      } = await system.database.pool.query<{ epoch: number }>(
+        'SELECT epoch FROM core.partition WHERE partition_no=$1',
+        [home],
+      );
+      const epochObserver = observeSql(system.database.pool);
+      const epochBarrier = epochObserver.hold({ statement: labelPage.sql, occurrence: 2 }, 'after');
+      const movingRead = call('GET', continuation, fixture.owner);
+      try {
+        await epochBarrier.entered;
+        await system.database.pool.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [home]);
+        epochBarrier.release();
+        expect((await movingRead).status).toBe(409);
+        expect((await call('GET', continuation, fixture.owner)).status).toBe(409);
+        const restarted = await json(await call('GET', history.replace('limit=20', 'limit=1'), fixture.owner));
+        expect(restarted.labels[0].labelRevision).toBe(1);
+        expect(restarted.next).not.toBe(first.next);
+      } finally {
+        epochBarrier.release();
+        await epochObserver.close();
+        await system.database.pool.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [
+          home,
+          partition!.epoch,
+        ]);
       }
     } finally {
       await driver.close();
