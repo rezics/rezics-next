@@ -114,6 +114,8 @@ supplied captured edition route/ID only when present.
   stored amount/position unchanged, with no invented percentage, total, rescaling or unit conversion. Require an
   actual 44px phone/coarse-pointer target for the standalone Next anchor without changing its cursor. Do not
   repeat completed index work; detail/helper/profile, native, Labels and buyer list/detail remain separate owners.
+  Index rows show the supplied version title, or Unavailable when that identity is withheld, and the localized started
+  datetime in ContentItem metadata; a null version choice is omitted.
 - **Auth transfer — receive delivered hierarchy.** Entry forms already lead and the general walkthrough follows
   in an accessible disclosure. Keep local-file, untrusted-file, approval, responsibility and unknown-outcome
   warnings beside their actions. This source-present repair creates no new writer or native/browser proof.

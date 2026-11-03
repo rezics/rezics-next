@@ -3977,6 +3977,7 @@
   "library_progress_version": "版本參照（選填）",
   "library_progress_version_scope": "選填。此參照不代表已確認它是同一條目的另一版本，也不代表內容相同。",
   "library_progress_no_version": "未選擇版本參照",
+  "library_progress_started": "開始時間",
   "library_progress_new_session": "開始另一個進度工作階段",
   "library_progress_new_session_scope": "新的工作階段從空白開始，保留先前的工作階段及歷程。多個工作階段可以同時進行。放棄是獨立操作，之後開始新的工作階段失敗也不會撤銷放棄。",
   "library_progress_unavailable": "進度暫時無法使用。請重新載入並確認最新工作階段後再試。",

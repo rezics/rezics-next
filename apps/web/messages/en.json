@@ -4170,6 +4170,7 @@
   "library_progress_version": "Version reference (optional)",
   "library_progress_version_scope": "Optional. This reference does not verify that it is an edition of this item or has the same content.",
   "library_progress_no_version": "No version reference selected",
+  "library_progress_started": "Started",
   "library_progress_new_session": "Start another session",
   "library_progress_new_session_scope": "A new session starts empty and keeps earlier sessions and their history. Several sessions may stay active. Abandoning one is separate; a failed start does not undo it.",
   "library_progress_unavailable": "Progress is unavailable. Reload to check the latest session before trying again.",

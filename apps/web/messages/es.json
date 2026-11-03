@@ -3977,6 +3977,7 @@
   "library_progress_version": "Referencia de versión (opcional)",
   "library_progress_version_scope": "Opcional. Esta referencia no verifica que sea una edición de este elemento ni que tenga el mismo contenido.",
   "library_progress_no_version": "No se ha seleccionado ninguna referencia de versión",
+  "library_progress_started": "Iniciado",
   "library_progress_new_session": "Iniciar otra sesión",
   "library_progress_new_session_scope": "Una sesión nueva comienza vacía y conserva las sesiones anteriores y su historial. Puede haber varias sesiones activas. Abandonar una es una acción independiente; un inicio fallido no la deshace.",
   "library_progress_unavailable": "El progreso no está disponible. Recarga para comprobar la sesión más reciente antes de intentarlo de nuevo.",

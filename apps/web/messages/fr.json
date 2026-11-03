@@ -3977,6 +3977,7 @@
   "library_progress_version": "Référence de version (facultative)",
   "library_progress_version_scope": "Facultatif. Cette référence ne confirme ni qu’il s’agit d’une édition de cet élément, ni que le contenu est identique.",
   "library_progress_no_version": "Aucune référence de version sélectionnée",
+  "library_progress_started": "Commencé",
   "library_progress_new_session": "Commencer une autre session",
   "library_progress_new_session_scope": "Une nouvelle session commence vide et conserve les sessions précédentes et leur historique. Plusieurs sessions peuvent rester actives. L’abandon est une action distincte ; un démarrage échoué ne l’annule pas.",
   "library_progress_unavailable": "La progression est indisponible. Rechargez pour vérifier la dernière session avant de réessayer.",

@@ -3977,6 +3977,7 @@
   "library_progress_version": "버전 참조 (선택 사항)",
   "library_progress_version_scope": "선택 사항입니다. 이 참조가 같은 항목의 다른 판본이거나 내용이 동일한지는 확인되지 않습니다.",
   "library_progress_no_version": "선택한 버전 참조 없음",
+  "library_progress_started": "시작 시각",
   "library_progress_new_session": "다른 세션 시작",
   "library_progress_new_session_scope": "새 세션은 빈 상태로 시작하며 이전 세션과 기록은 보존됩니다. 여러 세션을 동시에 진행할 수 있습니다. 중단은 별도 작업이며, 이후 시작에 실패해도 중단이 취소되지는 않습니다.",
   "library_progress_unavailable": "진행 상황을 이용할 수 없습니다. 다시 시도하기 전에 새로고침하여 최신 세션을 확인하세요.",

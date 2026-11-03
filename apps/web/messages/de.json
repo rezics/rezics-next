@@ -3977,6 +3977,7 @@
   "library_progress_version": "Versionsverweis (optional)",
   "library_progress_version_scope": "Optional. Dieser Verweis bestätigt weder, dass es sich um eine Ausgabe dieses Eintrags handelt, noch dass der Inhalt übereinstimmt.",
   "library_progress_no_version": "Kein Versionsverweis ausgewählt",
+  "library_progress_started": "Begonnen",
   "library_progress_new_session": "Weitere Sitzung beginnen",
   "library_progress_new_session_scope": "Eine neue Sitzung beginnt leer. Frühere Sitzungen und ihr Verlauf bleiben erhalten. Mehrere Sitzungen können aktiv bleiben. Das Abbrechen ist eine separate Aktion; ein fehlgeschlagener Start macht sie nicht rückgängig.",
   "library_progress_unavailable": "Der Fortschritt ist nicht verfügbar. Lade die aktuelle Sitzung neu, bevor du es erneut versuchst.",

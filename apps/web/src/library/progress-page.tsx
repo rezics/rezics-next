@@ -13,6 +13,7 @@ import { progressIndexSubjects } from './progress-subjects';
 import { ProgressPicker, pickerSubject, type ProgressPickerSubject } from './progress-picker';
 import { ProgressRow } from '@rezics/ui/progress-row';
 import { ContentItem } from '@rezics/ui/content-item';
+import { MetaLine } from '@rezics/ui/meta-line';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Link, useRouter } from '@tanstack/react-router';
@@ -42,6 +43,7 @@ import { getLocale } from '../paraglide/runtime.js';
 import { subjectHref } from '../subject/subject-href';
 import { PageHeading } from '../shell/page-heading';
 import { csrfHeaders } from '../threads/composer';
+import { fullDateTime } from '../threads/byline';
 import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../threads/authoring-departure';
 import type {
   ProgressFailure,
@@ -67,7 +69,7 @@ import {
   type CurrentViewerProgressIndex,
 } from './progress-server';
 import { rowRatio, SubjectCover } from './subject-row';
-import { displayLibraryTitle } from './title';
+import { displayLibraryTitle, LibraryTitle } from './title';
 
 const modeChoices: { value: ProgressMode; label: () => string }[] = [
   { value: 'scalar_amount', label: () => m.library_progress_mode_amount() },
@@ -740,6 +742,28 @@ function SelectedProgressSubject({ subject }: { subject: ProgressPickerSubject |
   );
 }
 
+function sessionIdentityMetadata(session: ProgressIndex['sessions'][number]) {
+  const locale = getLocale();
+  return (
+    <MetaLine
+      items={[
+        session.subject?.typeLabel,
+        session.versionSubjectId ? (
+          session.versionSubject ? (
+            <LibraryTitle label={session.versionSubject.label} locale={locale} />
+          ) : (
+            m.library_subject_unavailable()
+          )
+        ) : null,
+        <>
+          {m.library_progress_started()}:{' '}
+          <time dateTime={session.startedAt}>{fullDateTime(session.startedAt, locale)}</time>
+        </>,
+      ]}
+    />
+  );
+}
+
 function SessionRow({
   session: initial,
   ratio,
@@ -1012,7 +1036,7 @@ function SessionRow({
           <SubjectCover subject={session.subject} ratio={ratio} size="fill" />
         </div>
       }
-      metadata={session.subject?.typeLabel}
+      metadata={sessionIdentityMetadata(session)}
       state={<span className="text-sm text-muted-foreground">{stateLabel(session.state)}</span>}
       preview={
         <div className="space-y-2">

@@ -3977,6 +3977,7 @@
   "library_progress_version": "版本引用（可选）",
   "library_progress_version_scope": "可选。此引用不代表已确认它是同一条目的另一版本，也不代表内容相同。",
   "library_progress_no_version": "未选择版本引用",
+  "library_progress_started": "开始时间",
   "library_progress_new_session": "开始另一个进度会话",
   "library_progress_new_session_scope": "新会话从空白开始，保留之前的会话及其历史。多个会话可以同时进行。放弃会话是单独的操作，之后开始新会话失败也不会撤销放弃。",
   "library_progress_unavailable": "进度暂时不可用。请重新加载并确认最新会话后再试。",

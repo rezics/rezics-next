@@ -3977,6 +3977,7 @@
   "library_progress_version": "バージョンの参照先（任意）",
   "library_progress_version_scope": "任意です。この参照先が同じ作品の別版であることや、内容が同じであることは確認されません。",
   "library_progress_no_version": "バージョンの参照先は未選択です",
+  "library_progress_started": "開始日時",
   "library_progress_new_session": "別のセッションを開始",
   "library_progress_new_session_scope": "新しいセッションは空の状態で始まり、以前のセッションと履歴は保持されます。複数のセッションを同時に進められます。中断は別の操作であり、その後の開始に失敗しても取り消されません。",
   "library_progress_unavailable": "進捗を利用できません。再試行する前に、再読み込みして最新のセッションを確認してください。",
