@@ -713,9 +713,9 @@ denied or unavailable evidence never means an empty or unscored population. HTTP
 to the provider; a standalone native composition owns equivalent authority, never a grant inferred from an account ID.
 
 The separate native adapter validates population, standard question, prior epoch, disclosure threshold, figure
-revision, strict tuples and matching subject-home snapshot positions. Both phases and the sealed continuation
+revision, strict tuples and matching subject-home snapshot positions. Both phases
 use the same eligible-epoch conjunction as Global: a proven stale/missing score or known null prior belongs
-to unscored, while failed or denied evidence fails the response. Both phases and continuation
+to unscored, while failed or denied evidence fails the response. Both phases and the sealed continuation
 bind the authority and population revision within the existing eight-value cursor envelope and expiry limits;
 changes restart. Authority is checked again after hydration and final response work, including empty results.
 Realm ordering adds no public fields, totals or shared caches. Returned hit figures remain Global; the HTTP
