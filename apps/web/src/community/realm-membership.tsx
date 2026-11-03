@@ -19,7 +19,7 @@ import {
   type RealmLeaveRecoveryState,
 } from './realm-leave-recovery';
 import { RealmLeaveRecovery, type RealmLeaveCheck } from './realm-leave-recovery.tsx';
-import type { NativeRealmHomePage } from './realm-home-native';
+import type { NativeRealmHomeObservation } from './realm-home-native';
 import { useSpacePageLifetime } from './space-page-lifetime';
 
 type MembershipOperation = {
@@ -49,7 +49,7 @@ export function RealmMembership({
   spaceId?: string;
   memberLabel?: string;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
-  nativeObservation?: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
+  nativeObservation?: NativeRealmHomeObservation;
 }) {
   const { state: session, csrfToken, subject } = useSession();
   if (nativeObservation)
@@ -117,7 +117,7 @@ function NativeMembership({
   realmId: string;
   returnTo: string;
   spaceId?: string;
-  observation: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
+  observation: NativeRealmHomeObservation;
   session: ReturnType<typeof useSession>['state'];
   subject: string | null;
   csrfToken: string | null;
@@ -132,7 +132,7 @@ function NativeMembership({
   const [resultState, setResultState] = useState<'refused' | 'unavailable' | null>(null);
   const attempt = useRef<{ action: 'join' | 'leave'; idempotencyKey: string } | null>(null);
   const current = () => currentObservation.current === source && (!lifetime || lifetime.current());
-  const action = source.actions.leave === 'admitted' ? 'leave' : source.actions.join === 'admitted' ? 'join' : null;
+  const action = source.actions.leave === 'admitted' ? 'leave' : source.actions.join === 'offered' ? 'join' : null;
   const signIn = source.viewer.state === 'anonymous' && source.actions.join === 'sign-in';
   const message = (() => {
     if (source.viewer.state === 'banned' || source.actions.participate === 'banned') return m.realm_banned();

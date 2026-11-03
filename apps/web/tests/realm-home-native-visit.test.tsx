@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import type { NativeRealmHomeOperations, NativeRealmHomePage } from '../src/community/realm-home-native';
 import type { SpacePageData } from '../src/community/space';
-import type { KernelClient } from '@rezics/client';
+import { createKernelClient, type KernelClient } from '@rezics/client';
 import type { SpacePageAdmission } from '../src/community/space-page-lifetime';
 import * as start from '../.storybook/react-start';
 import { available, image } from '../src/kernel/fake/community';
@@ -44,7 +44,12 @@ const { m } = await import('../src/paraglide/messages.js');
 const { setLocale, locales } = await import('../src/paraglide/runtime.js');
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const input = { realmId: id(1), spaceId: id(2), languages: ['en'], credentialMode: 'session' as const };
-function fixture(count = 1): NativeRealmHomePage {
+type FixtureViewer = 'anonymous' | 'none' | 'member';
+function fixture(
+  count = 1,
+  viewer: FixtureViewer = 'none',
+  options: { participation?: 'allowed' | 'denied'; manage?: boolean; orphaned?: boolean } = {},
+): NativeRealmHomePage {
   const metadata = {
     state: 'active' as const,
     headRevisionId: id(4),
@@ -54,23 +59,70 @@ function fixture(count = 1): NativeRealmHomePage {
     revisionCreatedAt: '2026-10-01T00:00:00Z',
     author: id(5),
   };
+  const orphaned = options.orphaned === true;
+  const realm: NativeRealmHomePage['realm'] = {
+    ...metadata,
+    realmId: id(1),
+    spaceId: id(2),
+    contextId: id(3),
+    boardSchemeId: null,
+    visibility: 'public',
+    title: 'Native Realm',
+    summary: '',
+    ownershipState: orphaned ? 'orphaned' : 'owned',
+    orphanedAt: orphaned ? '2026-09-01T00:00:00Z' : null,
+    claimEligibleAt: orphaned ? '2026-09-02T00:00:00Z' : null,
+    governanceReadOnly: orphaned,
+    votes: {},
+    presentation: { avatarMediaId: null, bannerMediaId: null, rules: null },
+  };
+  const currentViewer: NativeRealmHomePage['viewer'] =
+    viewer === 'anonymous'
+      ? { state: 'anonymous' }
+      : {
+          readability: 'allowed',
+          membership:
+            viewer === 'member'
+              ? { state: 'member', since: '2026-10-01T00:00:00Z', reservationId: id(6), transactionId: id(7) }
+              : { state: 'none', since: null, reservationId: null, transactionId: null },
+          participation: options.participation ?? 'allowed',
+        };
+  const actions: NativeRealmHomePage['actions'] =
+    viewer === 'anonymous'
+      ? { state: 'sign-in' }
+      : {
+          state: 'current',
+          enter: {
+            state: 'available',
+            method: 'GET',
+            path: `/v1/realms/${id(1)}`,
+            body: null,
+            expectedStatus: 200,
+          },
+          manage: orphaned
+            ? { state: 'prohibited', reason: 'governance_read_only' }
+            : options.manage
+              ? {
+                  state: 'available',
+                  method: 'GET',
+                  path: `/v1/realms/${id(1)}/settings`,
+                  body: null,
+                  expectedStatus: 200,
+                }
+              : { state: 'prohibited', reason: 'not_authorized' },
+          leave:
+            viewer === 'member'
+              ? {
+                  state: 'available',
+                  method: 'DELETE',
+                  path: `/v1/realms/${id(1)}/membership`,
+                  body: null,
+                  expectedStatus: 202,
+                }
+              : { state: 'prohibited', reason: 'not_member' },
+        };
   return {
-    realm: {
-      ...metadata,
-      realmId: id(1),
-      spaceId: id(2),
-      contextId: id(3),
-      boardSchemeId: null,
-      visibility: 'public',
-      title: 'Native Realm',
-      summary: '',
-      ownershipState: 'owned',
-      orphanedAt: null,
-      claimEligibleAt: null,
-      governanceReadOnly: false,
-      votes: {},
-      presentation: { avatarMediaId: null, bannerMediaId: null, rules: null },
-    },
+    realm,
     space: { ...metadata, spaceId: id(2), realmId: id(1), address: 'realm', title: 'Carrying Space', summary: '' },
     presentation: {
       realmId: id(1),
@@ -97,14 +149,8 @@ function fixture(count = 1): NativeRealmHomePage {
       })),
       next: 'publications-one',
     },
-    viewer: { state: 'unavailable' },
-    actions: {
-      participate: 'unavailable',
-      join: 'unavailable',
-      leave: 'unavailable',
-      claim: 'unavailable',
-      manage: 'unavailable',
-    },
+    viewer: currentViewer,
+    actions,
   };
 }
 const calls: string[] = [];
@@ -157,7 +203,7 @@ test('default Space reads bind the composed home after address resolution and pr
         get: async ({ query }: { query: { languages: string[] } }) => {
           calls.push(`home:${query.languages.join(',')}`);
           return homeStatus === 200
-            ? { status: 200, data: fixture() }
+            ? { status: 200, data: fixture(1, 'anonymous') }
             : { status: homeStatus, error: { status: homeStatus } };
         },
       },
@@ -173,7 +219,7 @@ test('default Space reads bind the composed home after address resolution and pr
   );
   expect(calls).toEqual(['address', 'space', 'home:en,ja']);
   expect(loaded.value.realmCarrier).toBe('available');
-  expect(loaded.value.realm?.nativeObservation?.viewer.state).toBe('unavailable');
+  expect(loaded.value.realm?.nativeObservation?.viewer.state).toBe('anonymous');
 
   homeStatus = 404;
   expect(
@@ -185,40 +231,52 @@ test('default Space reads bind the composed home after address resolution and pr
   ).toBe('unavailable');
 });
 
-test('Client operation seam binds home, raw shelf cursors and selected languages to one prepared reader', async () => {
-  const requests: unknown[] = [];
-  const client = {
-    realms: ({ realmId }: { realmId: string }) => ({
-      home: {
-        get: async (input: unknown) => (requests.push(['home', realmId, input]), { status: 200, data: fixture() }),
-      },
-      boardShelf: {
-        get: async (input: unknown) => (
-          requests.push(['boardShelf', realmId, input]),
-          { status: 200, data: { items: [], next: null } }
-        ),
-      },
-      publicationShelf: {
-        get: async (input: unknown) => (
-          requests.push(['publicationShelf', realmId, input]),
-          { status: 200, data: { items: [], next: null } }
-        ),
-      },
-    }),
-  } as unknown as KernelClient;
+test('installed KernelClient binds home and independent raw shelves to one prepared reader', async () => {
+  const requests: { method: string; path: string; languages: string[]; cursor: string | null; authorization: string | null }[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(request.url);
+      requests.push({
+        method: request.method,
+        path: url.pathname,
+        languages: url.searchParams.getAll('languages'),
+        cursor: url.searchParams.get('cursor'),
+        authorization: request.headers.get('authorization'),
+      });
+      return Response.json(
+        url.pathname.endsWith('/home') ? fixture(1, 'anonymous') : { items: [], next: null },
+      );
+    },
+  });
   const bound = bindNativeRealmHomeOperations(client, { headers: { authorization: 'Bearer prepared' } });
-  await bound.home({ realmId: id(1), languages: ['zh-Hant', 'en'] });
+  const home = await bound.home({ realmId: id(1), languages: ['zh-Hant', 'en'] });
   await bound.boardShelf({ realmId: id(1), cursor: 'boards-raw' });
   await bound.publicationShelf({ realmId: id(1), languages: ['ja'], cursor: 'publications-raw' });
   expect(requests).toEqual([
-    ['home', id(1), { query: { languages: ['zh-Hant', 'en'] }, headers: { authorization: 'Bearer prepared' } }],
-    ['boardShelf', id(1), { query: { cursor: 'boards-raw' }, headers: { authorization: 'Bearer prepared' } }],
-    [
-      'publicationShelf',
-      id(1),
-      { query: { languages: ['ja'], cursor: 'publications-raw' }, headers: { authorization: 'Bearer prepared' } },
-    ],
+    {
+      method: 'GET',
+      path: `/v1/realms/${id(1)}/home`,
+      languages: ['zh-Hant', 'en'],
+      cursor: null,
+      authorization: 'Bearer prepared',
+    },
+    {
+      method: 'GET',
+      path: `/v1/realms/${id(1)}/boardShelf`,
+      languages: [],
+      cursor: 'boards-raw',
+      authorization: 'Bearer prepared',
+    },
+    {
+      method: 'GET',
+      path: `/v1/realms/${id(1)}/publicationShelf`,
+      languages: ['ja'],
+      cursor: 'publications-raw',
+      authorization: 'Bearer prepared',
+    },
   ]);
+  expect(home.data).toMatchObject({ viewer: { state: 'anonymous' }, actions: { state: 'sign-in' } });
 });
 const Frame = createContext<ReactNode>(null);
 const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
@@ -286,7 +344,7 @@ afterAll(async () => {
   }
 });
 
-test('one native page renders 0/1/6/12 works and unavailable standing without per-cover or personal reads', async () => {
+test('one typed native page renders 0/1/6/12 works and explicit nonmember advice without per-cover reads', async () => {
   for (const count of [0, 1, 6, 12]) {
     native = fixture(count);
     native.publications.next = null;
@@ -294,10 +352,9 @@ test('one native page renders 0/1/6/12 works and unavailable standing without pe
     await paint(await readNativeRealmHome(operations, input));
     expect(calls.splice(0)).toEqual(['home']);
     expect(host.textContent).toContain('Native Realm');
-    expect(host.textContent).toContain(m.realm_membership_unavailable());
+    expect(host.textContent).toContain(m.realm_join());
     expect(host.querySelectorAll('a[href*="?realm="]')).toHaveLength(count);
     expect(host.textContent).not.toContain(m.community_manage());
-    expect(host.textContent).not.toContain(m.realm_join());
     if (!count) expect(host.textContent).toContain(m.realm_published_empty());
   }
 });
@@ -329,8 +386,8 @@ test('native sparse continuation retries the same board cursor and leaves public
   expect(calls.at(-1)).toBe('publications:publications-one');
 });
 
-test('presentation replacement and credential or reader retirement discard pending rows and private presentation', async () => {
-  for (const replacement of ['presentation', 'credential', 'reader', 'locale']) {
+test('presentation replacement and credential, account or reader retirement discard pending rows and private presentation', async () => {
+  for (const replacement of ['presentation', 'credential', 'account', 'reader', 'locale']) {
     native = fixture();
     native.presentation.description = native.realm.summary = 'Original presentation';
     const page = await readNativeRealmHome(operations, input);
@@ -350,6 +407,7 @@ test('presentation replacement and credential or reader retirement discard pendi
       await paint(await readNativeRealmHome(operations, input));
     } else {
       if (replacement === 'credential') session = { ...session, csrfToken: 'two' };
+      if (replacement === 'account') session = { ...session, subject: 'replacement-reader' };
       if (replacement === 'locale') setLocale('ja', { reload: false });
       await paint(page, replacement === 'reader' ? { ...operations } : operations);
     }
@@ -388,9 +446,7 @@ test('anonymous advice remains localized and a missing or replaced carrier never
   for (const locale of locales) {
     setLocale(locale, { reload: false });
     session = { state: 'signed-out', subject: '', csrfToken: '' };
-    native = fixture(0);
-    native.viewer.state = 'anonymous';
-    native.actions = { participate: 'sign-in', join: 'sign-in', leave: 'sign-in', claim: 'sign-in', manage: 'sign-in' };
+    native = fixture(0, 'anonymous');
     await paint(await readNativeRealmHome(operations, input));
     expect(host.textContent).toContain(m.realm_sign_in_to_join());
     expect(host.querySelector('a[href*="auth/sign-in"]')?.className).toContain('min-h-11');
@@ -403,45 +459,24 @@ test('anonymous advice remains localized and a missing or replaced carrier never
   ).rejects.toBeDefined();
 });
 
-test('member actions render only from admitted native advice and denied, banned and orphaned viewers stay distinct', async () => {
-  native = fixture(0);
-  native.viewer = { state: 'member', membership: 'member' };
-  native.actions = {
-    participate: 'admitted',
-    join: 'unavailable',
-    leave: 'admitted',
-    claim: 'unavailable',
-    manage: 'admitted',
-  };
+test('member actions use current native advice while denied participation and orphaned authority stay distinct', async () => {
+  native = fixture(0, 'member', { manage: true });
   await paint(await readNativeRealmHome(operations, input));
   expect(host.textContent).toContain(m.realm_state_member());
   expect(host.textContent).toContain(m.realm_leave());
   expect(host.textContent).toContain(m.community_manage());
   expect(host.textContent).not.toContain(m.realm_join());
 
-  for (const state of ['denied', 'banned', 'orphaned'] as const) {
-    native = fixture(0);
-    native.viewer = { state };
-    native.actions = {
-      participate: state,
-      join: state,
-      leave: state,
-      claim: state,
-      manage: state,
-    };
-    await paint(await readNativeRealmHome(operations, input));
-    const message =
-      state === 'denied'
-        ? m.realm_native_access_denied()
-        : state === 'banned'
-          ? m.realm_banned()
-          : m.realm_claim_orphaned();
-    expect(host.textContent).toContain(message);
-    expect(host.textContent).not.toContain(m.realm_join());
-    expect(host.textContent).not.toContain(m.realm_leave());
-    expect(host.textContent).not.toContain(m.community_manage());
-    expect(host.querySelector(`[data-member-state="${state}"]`)).not.toBeNull();
-  }
+  native = fixture(0, 'none', { participation: 'denied' });
+  await paint(await readNativeRealmHome(operations, input));
+  expect(host.textContent).toContain(m.realm_native_access_denied());
+  expect(host.textContent).not.toContain(m.realm_join());
+  expect(host.textContent).not.toContain(m.realm_leave());
+
+  native = fixture(0, 'none', { orphaned: true });
+  const orphaned = await readNativeRealmHome(operations, input);
+  expect(orphaned.realm?.continuity?.governanceReadOnly).toBe(true);
+  expect(orphaned.realm?.nativeObservation?.actions.manage).toBe('orphaned');
 });
 
 test('route admission retires native media and pending shelves on nested source replacement', async () => {

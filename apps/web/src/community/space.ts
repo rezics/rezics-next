@@ -13,6 +13,7 @@ import {
   bindNativeRealmHomeOperations,
   nativeRealmHomeShelves,
   presentNativeRealmHome,
+  type NativeRealmHomeObservation,
   type NativeRealmHomePage,
 } from './realm-home-native';
 
@@ -65,7 +66,7 @@ export type RealmHome = {
   /** Null when signed out. */
   viewer: { state: MemberState; idempotencyKey: string } | null;
   /** The mounted home supplies viewer standing and action advice from the same native observation. */
-  nativeObservation?: Pick<NativeRealmHomePage, 'viewer' | 'actions'>;
+  nativeObservation?: NativeRealmHomeObservation;
   /** Original native heads and selected presentation, retained through route serialization. */
   nativeSource?: {
     realm: Pick<NativeRealmHomePage['realm'], 'headRevisionId' | 'presentation'>;

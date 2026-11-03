@@ -282,6 +282,9 @@ another authority. The Space address is read freshly at finalization; it remains
 Decision: Realm home returns the native `enter`, `manage` and `leave` advice unchanged; the separate membership
 commands retain their own authorization and receipt rules.
 
+Decision: Community Web offers Join to a current signed-in nonmember with allowed participation as a separate
+membership command; that command still performs its own authorization and receipt checks.
+
 A signed-in response carries the native `viewer` fields: readability, exact current membership episode (or none),
 and participation. Its `actions` is the producer's current `enter`, `manage` and `leave` advice. `enter` names the
 mounted Realm GET. An owner member retains the specific `owner_invariant_observation_unavailable` leave advice
@@ -298,11 +301,13 @@ episode, participation or action source returns `transaction_retry_exhausted` fo
 
 The installed producer signature is `createRealmHomeReader(deps: RealmHomeDependencies)`, where
 `RealmHomeDependencies` extends `RealmDependencies` with `tokens: KeyRing`; it returns the closed
-`RealmHomePageSchema` DTO, mounted at `GET /v1/realms/:realmId/home`. The full-input OpenAPI generator includes
-that operation. KernelClient declarations remain uninstalled because the supported declaration generator exits
-on existing Kernel compiler diagnostics; Web can adopt this envelope and its native board and publication cursors
-after those generated declarations are available. This server delivery does not claim a rendered Web pass or
-change its presentation, lifetime or mutation ownership. No second frontend or Search dependency is introduced.
+`RealmHomePageSchema` DTO, mounted at `GET /v1/realms/:realmId/home`. The full-input OpenAPI contract includes that
+operation. The checked-in KernelClient declaration still lacks the mounted `home`, `boardShelf` and
+`publicationShelf` methods, so the existing Community Web receiver uses a narrow local DTO and route seam until the
+shared declaration is delivered. This seam does not establish installed consumer typing. Join remains a command
+offer, and Realm claims still use their separate current claim reader; neither path executes from home advice. The
+receiver preserves its existing presentation, lifetime and mutation ownership without adding another frontend or
+Search dependency.
 
 ### Cost
 
@@ -362,9 +367,11 @@ change its presentation, lifetime or mutation ownership. No second frontend or S
   native batches but does not claim constant examined work from small emitted output.
 - **Growth check:** Focused mounted scenarios cover the initial empty/populated envelope, twenty-board and
   twelve-publication limits, independent ordinary cursor continuation, unknown count, anonymous sign-in, empty
-  nonmember and current member advice, owner leave unavailability, exact join receipt
-  readback, leave/rejoin, role revocation, Realm and containing-Space change during summary hydration, exact
-  publication replacement and dependency retry.
+  nonmember and current member advice, owner leave unavailability, exact join retry around native readback with one
+  stored effect, leave/rejoin, role revocation, Realm and containing-Space change during summary hydration, exact
+  publication replacement and dependency retry. `apps/web/tests/realm-home-native-visit.test.tsx` covers the current
+  DTO projection, independent cursors and retained anonymous/member/concealed/unavailable flow across source,
+  credential, account and reader replacement.
   No native growth evidence has been reached here. Controller admission must independently grow unrelated
   Realm/Space/board/publication/Subject/authority rows at256/1024/4096 while fixing raw limits, selected keys, homes
   and admitted bytes; independently grow publication and membership/ban histories and unrelated Semantic labels,

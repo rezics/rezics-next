@@ -265,7 +265,15 @@ test('native home carries membership and current entry, management, and leave ad
     path: `/v1/realms/${target.realmId}/membership`,
     key: joinKey,
   };
-  expect((await driver.request(join)).status).toBe(202);
+  // Discard the first result as an uncertain response. Home observes the committed
+  // native membership but does not repair or issue the membership command.
+  await driver.request(join);
+  await driver.settle();
+  const readback = await home(target.realmId, people.member);
+  expect(readback.viewer).toMatchObject({ readability: 'allowed', membership: { state: 'member' } });
+  expect((await driver.commandEvidence(people.member, joinKey)).receipts).toHaveLength(1);
+
+  // Retry the exact original command and key after readback.
   expect((await driver.request(join)).status).toBe(202);
   const evidence = await driver.commandEvidence(people.member, joinKey);
   expect(evidence.receipts).toHaveLength(1);

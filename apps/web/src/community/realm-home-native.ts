@@ -11,8 +11,7 @@ type Space = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['spaces']>['
 type Result<T> = { status: number; data?: T | null; error?: unknown };
 type Window<T> = { items: readonly T[]; next: string | null };
 
-/** The mounted producer's current protocol, pending its generated Client declaration.
- * It deliberately cannot represent member standing or permitted commands yet. */
+/** Local view of the documented mounted DTO while the shared client route declaration is pending. */
 export type NativeRealmHomePage = {
   realm: Realm;
   space: Space;
@@ -21,12 +20,38 @@ export type NativeRealmHomePage = {
   publications: NativeRealmPublicationPage;
   viewer:
     | { state: 'anonymous' }
+    | {
+        readability: 'allowed';
+        membership:
+          | { state: 'member'; since: string; reservationId: string; transactionId: string }
+          | { state: 'none'; since: null; reservationId: null; transactionId: null };
+        participation: 'allowed' | 'denied';
+      };
+  actions:
+    | { state: 'sign-in' }
+    | {
+        state: 'current';
+        enter: NativeRealmHomeAction;
+        manage: NativeRealmHomeAction;
+        leave: NativeRealmHomeAction;
+      };
+};
+type NativeRealmHomeAction =
+  | { state: 'available'; method: 'GET' | 'DELETE'; path: string; body: null; expectedStatus: 200 | 202 }
+  | {
+      state: 'prohibited';
+      reason: 'not_authorized' | 'not_member' | 'signed_out' | 'governance_read_only';
+    }
+  | { state: 'unavailable'; reason: 'owner_invariant_observation_unavailable' };
+export type NativeRealmHomeObservation = {
+  viewer:
+    | { state: 'anonymous' }
     | { state: 'member'; membership: 'none' | 'pending' | 'member' }
     | { state: 'denied' | 'banned' | 'orphaned' | 'unavailable' };
   actions: Readonly<
     Record<
       'participate' | 'join' | 'leave' | 'claim' | 'manage',
-      'sign-in' | 'admitted' | 'denied' | 'banned' | 'orphaned' | 'unavailable'
+      'sign-in' | 'offered' | 'admitted' | 'denied' | 'banned' | 'orphaned' | 'unavailable'
     >
   >;
 };
@@ -49,7 +74,6 @@ export type NativeRealmPublicationPage = Window<{
   };
 }>;
 
-/** Prepared operations belong to one reader. No legacy get, membership, Subject or refill operation is admitted. */
 export type NativeRealmHomeOperations = {
   home(input: { realmId: string; languages: string[] }): Promise<Result<NativeRealmHomePage>>;
   boardShelf(input: { realmId: string; cursor?: string }): Promise<Result<NativeRealmBoardPage>>;
@@ -78,11 +102,12 @@ type NativeRealmHomeRoute = {
   };
 };
 
-/** The mounted endpoints exist on Kernel; this narrow seam bridges them until Client generation lands. */
+/** Prepared operations belong to one reader and retain the documented response types. */
 export function bindNativeRealmHomeOperations(
   client: KernelClient,
   auth: Record<string, never> | { headers: { authorization: string } },
 ): NativeRealmHomeOperations {
+  // The checked-in KernelClient declaration has not yet acquired these mounted routes.
   const route = (realmId: string) => client.realms({ realmId }) as unknown as NativeRealmHomeRoute;
   return {
     home: ({ realmId, languages }) => route(realmId).home.get({ query: { languages }, ...auth }),
@@ -120,6 +145,62 @@ function publications(page: NativeRealmPublicationPage, realmId: string): Publis
   }));
 }
 
+type CurrentRealmHomeActions = Extract<NativeRealmHomePage['actions'], { state: 'current' }>;
+type NativeAdviceState = NativeRealmHomeObservation['actions']['leave'];
+
+function actionState(advice: CurrentRealmHomeActions['leave']): NativeAdviceState {
+  if (advice.state === 'available') return 'admitted';
+  if (advice.state === 'unavailable') return 'unavailable';
+  if (advice.reason === 'signed_out') return 'sign-in';
+  if (advice.reason === 'governance_read_only') return 'orphaned';
+  return 'denied';
+}
+
+function availableActionMatches(
+  advice: CurrentRealmHomeActions['enter'],
+  method: 'GET' | 'DELETE',
+  path: string,
+  expectedStatus: 200 | 202,
+) {
+  return (
+    advice.state !== 'available' ||
+    (advice.method === method &&
+      advice.path === path &&
+      advice.body === null &&
+      advice.expectedStatus === expectedStatus)
+  );
+}
+
+function nativeObservation(page: NativeRealmHomePage): NativeRealmHomeObservation {
+  if (page.viewer.state === 'anonymous') {
+    if (page.actions.state !== 'sign-in') throw new Error('Realm home viewer changed');
+    return {
+      viewer: { state: 'anonymous' },
+      actions: { participate: 'sign-in', join: 'sign-in', leave: 'sign-in', claim: 'sign-in', manage: 'sign-in' },
+    };
+  }
+  if (page.actions.state !== 'current') throw new Error('Realm home viewer changed');
+  const { enter, manage, leave } = page.actions;
+  if (
+    !availableActionMatches(enter, 'GET', `/v1/realms/${page.realm.realmId}`, 200) ||
+    !availableActionMatches(manage, 'GET', `/v1/realms/${page.realm.realmId}/settings`, 200) ||
+    !availableActionMatches(leave, 'DELETE', `/v1/realms/${page.realm.realmId}/membership`, 202)
+  )
+    throw new Error('Realm home action source changed');
+  const member = page.viewer.membership.state === 'member';
+  const participate = page.viewer.participation === 'allowed' ? 'admitted' : 'denied';
+  return {
+    viewer: { state: 'member', membership: member ? 'member' : 'none' },
+    actions: {
+      participate,
+      join: member ? 'unavailable' : participate === 'admitted' ? 'offered' : 'denied',
+      leave: actionState(leave),
+      claim: page.realm.ownershipState === 'orphaned' ? 'admitted' : 'unavailable',
+      manage: actionState(manage),
+    },
+  };
+}
+
 /** Validates the single composed observation before mapping its native shelves and viewer advice. */
 export function presentNativeRealmHome(
   page: NativeRealmHomePage,
@@ -133,6 +214,7 @@ export function presentNativeRealmHome(
     banner?: CoverSummary | null;
   },
 ): SpacePageData {
+  const observation = nativeObservation(page);
   const continuity = realmClaimSnapshot(page.realm);
   const selected = page.realm.presentation;
   if (
@@ -153,11 +235,7 @@ export function presentNativeRealmHome(
       page.space.headRevisionId !== input.expectedSpaceHeadRevisionId) ||
     (input.expectedRealmHeadRevisionId !== undefined &&
       page.realm.headRevisionId !== input.expectedRealmHeadRevisionId) ||
-    !['anonymous', 'member', 'denied', 'banned', 'orphaned', 'unavailable'].includes(page.viewer.state) ||
-    (['participate', 'join', 'leave', 'claim', 'manage'] as const).some(
-      (action) =>
-        !['sign-in', 'admitted', 'denied', 'banned', 'orphaned', 'unavailable'].includes(page.actions[action]),
-    )
+    !['anonymous', 'member'].includes(observation.viewer.state)
   )
     throw new Error('Realm home source changed');
   for (const [image, mediaId] of [
@@ -196,7 +274,7 @@ export function presentNativeRealmHome(
       publicationNext: page.publications.next,
       credentialMode: input.credentialMode,
       viewer: null,
-      nativeObservation: { viewer: page.viewer, actions: page.actions },
+      nativeObservation: observation,
       nativeSource: {
         realm: { headRevisionId: page.realm.headRevisionId, presentation: selected },
         space: { headRevisionId: page.space.headRevisionId },
