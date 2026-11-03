@@ -42,11 +42,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Install grouped discovery on POST /v1/subjects:search with separate viewer-bound encrypted group and child continuations; active release, physical generation, disclosure, redirects, dates, credits and order changes retire both."
-    - "Complete native grouping streams return current matching work groups and individual ungroupable releases, apply the whole admitted filter and spoiler policy, and preserve hidden-link confidentiality."
-    - "Mount contextual work/release cards on /search/releases with independent expansion and continuations; filters, ordered languages, sort, spoilers, reload and back navigation preserve meaning across eight locales and accessible response-grounded states."
-    - "Measure native 1x/4x/16x first, next, final and empty pages, every all-pool seek, high-fanout preparation/resume and invalidation."
-    - "Inspect the installed page through the running app, Storybook or screenshots against the earlier-app bar, including keyboard use and repair states."
+    - 'Install grouped discovery on POST /v1/subjects:search with separate viewer-bound encrypted group and child continuations; active release, physical generation, disclosure, redirects, dates, credits and order changes retire both.'
+    - 'Complete native grouping streams return current matching work groups and individual ungroupable releases, apply the whole admitted filter and spoiler policy, and preserve hidden-link confidentiality.'
+    - 'Mount contextual work/release cards on /search/releases with independent expansion and continuations; filters, ordered languages, sort, spoilers, reload and back navigation preserve meaning across eight locales and accessible response-grounded states.'
+    - 'Measure native 1x/4x/16x first, next, final and empty pages, every all-pool seek, high-fanout preparation/resume and invalidation.'
+    - 'Inspect the installed page through the running app, Storybook or screenshots against the earlier-app bar, including keyboard use and repair states.'
   workerOwned: true
 estimate:
   lines: 1250
