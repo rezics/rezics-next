@@ -67,9 +67,7 @@ function RouteBoundEditor({ data, retired = false }: { data: CreatorEditorPageDa
     readyEdition && selected !== readyEdition.editionId
       ? { ...data, editor: { kind: 'choose-edition' as const } }
       : data;
-  return (
-    <CreatorOfferEditor data={bound} locale={getLocale()} guard={retired ? retiredGuard : localEditingGuard} />
-  );
+  return <CreatorOfferEditor data={bound} locale={getLocale()} guard={retired ? retiredGuard : localEditingGuard} />;
 }
 
 function SuppliedEditor({
