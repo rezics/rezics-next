@@ -13,6 +13,7 @@ import { composeWork } from '../../src/work/registry.ts';
 import { commerceWorkModule } from '../../src/commerce/work-module.ts';
 import { checkGrowth, type GrowthDatabase, type GrowthReport } from '../support/growth.ts';
 import { nativeAnchorFixture, type NativeAnchorFixture } from './support/checkout-anchor.ts';
+import { observeProviderBytes, type ProviderByteObserver } from './support/provider-byte-observation.ts';
 
 const scales = [1, 8, 64] as const;
 const axes = ['unrelated orders', 'provider events', 'receipts', 'DBOS workflow history'] as const;
@@ -159,6 +160,7 @@ async function growAxis(
 
 async function checkAxis(
   fixture: NativeAnchorFixture,
+  provider: ProviderByteObserver,
   anchor: Order,
   axis: GrowthAxis,
   operationName: string,
@@ -167,17 +169,49 @@ async function checkAxis(
   hooks: { prepare?: () => Promise<void>; warmup?: () => Promise<void> } = {},
 ): Promise<GrowthReport> {
   const prefix = `${operationName.replaceAll(' ', '-')}-${axis.replaceAll(' ', '-')}-${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const expectsProvider = operationName === 'order reconciliation';
+  const observations: unknown[] = [];
+  const observe = async (db: GrowthDatabase, scale: number, repetition: number, phase: string, run: Operation) => {
+    const measured = await provider.run(
+      { operationId: `${prefix}:${repetition}`, scale, repetition },
+      expectsProvider,
+      () => run(db, scale, repetition),
+    );
+    const { observation } = measured;
+    observations.push({ phase, ...observation, workflowId: expectsProvider ? measured.value : undefined });
+    expect(observation.status).toBe(expectsProvider ? 'measured' : 'no-provider-calls');
+    if (expectsProvider) {
+      expect(observation.totals!.providerSends).toBeGreaterThan(0);
+      expect(observation.totals!.providerRequestBytes).toBeGreaterThan(0);
+      expect(observation.totals!.providerResponseBytes).toBeGreaterThan(0);
+    } else expect(observation.totals).toBeNull();
+    return measured;
+  };
   const report = await checkGrowth(fixture.db, {
     name: `Commerce ${operationName} / unrelated ${axis}`,
     scales,
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     grow: (db, scale, previous) => growAxis(db, anchor, axis, prefix, principalId, previous, scale),
-    operation,
+    // The existing counted series compares retained repetitions, alongside unchanged native counters.
+    ...(expectsProvider
+      ? {
+          counted: {
+            read: (value: unknown) => (value as Awaited<ReturnType<typeof observe>>).observation.totals!,
+            bounds: {
+              providerSends: 'constant' as const,
+              providerRequestBytes: 'constant' as const,
+              providerResponseBytes: 'constant' as const,
+            },
+          },
+        }
+      : {}),
+    operation: (db, scale, repetition) => observe(db, scale, repetition, 'measurement candidate', operation),
     ...(hooks.prepare === undefined ? {} : { prepare: hooks.prepare }),
-    ...(hooks.warmup === undefined ? {} : { warmup: hooks.warmup }),
+    warmup: (db, scale, repetition) => observe(db, scale, repetition, 'warmup', hooks.warmup ?? operation),
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
+  console.log(JSON.stringify({ axis, operationName, providerObservations: observations, report }));
   return report;
 }
 
@@ -187,6 +221,7 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
   const client = await createWorkClient(db.url, db.pool);
   const enqueue = createCommerceWork(client);
   let runtime: Awaited<ReturnType<typeof composeWork>> | undefined;
+  const provider = observeProviderBytes(`http://127.0.0.1:${fixture.fake.port}`);
   try {
     const anchor = await fixture.checkout(true, false);
     fixture.fake.pay(anchor.checkoutSessionId!);
@@ -218,7 +253,8 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
       await client.retrieveWorkflow(id).getResult();
       return id;
     };
-    for (const axis of axes) await checkAxis(fixture, anchor, axis, 'order reconciliation', buyerId, reconcile);
+    for (const axis of axes)
+      await checkAxis(fixture, provider, anchor, axis, 'order reconciliation', buyerId, reconcile);
 
     await runtime.shutdown();
     runtime = undefined;
@@ -226,7 +262,7 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
     let settlementSequence = 0;
     const settle: Operation = async () =>
       fixture.commands.applyCheckoutSnapshot(snapshot, `payment-path-settlement-${settlementSequence++}`);
-    for (const axis of axes) await checkAxis(fixture, anchor, axis, 'payment settlement', buyerId, settle);
+    for (const axis of axes) await checkAxis(fixture, provider, anchor, axis, 'payment settlement', buyerId, settle);
 
     let revisionSequence = 0;
     const reviseOffer: Operation = async () =>
@@ -236,7 +272,8 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
         { unitAmountMinor: 1300 },
         `payment-path-offer-revision-${revisionSequence++}`,
       );
-    for (const axis of axes) await checkAxis(fixture, anchor, axis, 'offer price revision', sellerId, reviseOffer);
+    for (const axis of axes)
+      await checkAxis(fixture, provider, anchor, axis, 'offer price revision', sellerId, reviseOffer);
 
     const secret = 'whsec_payment_path_growth';
     const timestamp = Math.floor(Date.now() / 1000);
@@ -297,7 +334,7 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
       return response.status;
     };
     for (const axis of axes) {
-      await checkAxis(fixture, anchor, axis, 'signed webhook ingest', buyerId, deliver, {
+      await checkAxis(fixture, provider, anchor, axis, 'signed webhook ingest', buyerId, deliver, {
         prepare: async () => {
           await client.deleteWorkflows([`stripe:${eventId}`], false);
         },
@@ -310,6 +347,7 @@ test('signed webhook, reconciliation, settlement and offer revision stay bounded
   } finally {
     await runtime?.shutdown();
     await client.close();
+    provider.close();
     await fixture.close();
   }
 }, 600_000);

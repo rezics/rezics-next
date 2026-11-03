@@ -3,6 +3,7 @@ import { createServer, type ServerResponse, type IncomingHttpHeaders } from 'nod
 import { StripeUnavailableError, type CheckoutRequest } from '../../src/commerce/model.ts';
 import { createStripePort, type StripePortConfig } from '../../src/commerce/stripe.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
+import { observeProviderBytes } from './support/provider-byte-observation.ts';
 
 const BODY = 256 * 1024;
 const clock = () => new Date('2026-10-25T12:00:00Z');
@@ -19,7 +20,7 @@ const request: CheckoutRequest = {
 };
 const cleanups: (() => void)[] = [];
 afterEach(() => {
-  for (const cleanup of cleanups.splice(0)) cleanup();
+  for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 });
 const locator = {
   id: 'cs_transport',
@@ -54,6 +55,8 @@ async function fixture(
   });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No fixture address');
+  const provider = observeProviderBytes(`http://127.0.0.1:${address.port}`);
+  cleanups.push(() => provider.close());
   const config = {
     apiKey: 'sk_test_private_transport',
     managedPayments: true,
@@ -65,7 +68,7 @@ async function fixture(
     clock,
     ...options,
   };
-  return { port: createStripePort(config), config, requests, sends: () => sends, closed: () => closed };
+  return { port: createStripePort(config), config, requests, provider, sends: () => sends, closed: () => closed };
 }
 function json(res: ServerResponse, value: unknown) {
   res.setHeader('content-type', 'application/json');
@@ -156,6 +159,12 @@ test('pre-send cancellation, input inspection and synchronous SDK setup failures
   );
   expect(recovered.every((result) => result.sessionId === 'cs_transport')).toBe(true);
   expect(f.sends()).toBe(8);
+  const missing = await f.provider.run({ operationId: 'cancelled-before-send' }, true, () =>
+    unavailable(createStripePort({ ...f.config, signal: controller.signal }).readCheckoutLocator('cs_transport')),
+  );
+  expect(missing.observation.status).toBe('missing-physical-measurement');
+  expect(missing.observation.totals).toBeNull();
+  expect(missing.observation.sends).toEqual([]);
 });
 
 test('official SDK accepts exactly the response byte limit and rejects one extra streamed byte', async () => {
@@ -169,7 +178,11 @@ test('official SDK accepts exactly the response byte limit and rejects one extra
     written += Buffer.byteLength(bytes);
     res.end(bytes);
   });
-  expect(await f.port.readCheckoutLocator('cs_transport')).toMatchObject({ sessionId: 'cs_transport' });
+  const measured = await f.provider.run({ operationId: 'exact-response-limit' }, true, () =>
+    f.port.readCheckoutLocator('cs_transport'),
+  );
+  expect(measured.value).toMatchObject({ sessionId: 'cs_transport' });
+  expect(measured.observation.totals?.providerResponseBytes).toBe(BODY);
   expect(written).toBe(BODY);
   length++;
   await unavailable(f.port.readCheckoutLocator('cs_transport'));
@@ -211,7 +224,12 @@ test('chunked overflow cancels the physical stream, stops production and permits
     },
     { timeoutMs: 1000 },
   );
-  await unavailable(f.port.readCheckoutLocator('cs_transport'));
+  const measured = await f.provider.run({ operationId: 'stream-overflow' }, true, () =>
+    unavailable(f.port.readCheckoutLocator('cs_transport')),
+  );
+  expect(measured.observation.sends[0]!.outcome).toBe('cancelled');
+  expect(measured.observation.totals?.providerResponseBytes).toBeGreaterThan(BODY);
+  console.log(JSON.stringify({ providerObservation: measured.observation }));
   await eventually(() => f.closed() === 1);
   const stopped = produced;
   await Bun.sleep(25);
@@ -253,13 +271,44 @@ test('SDK transient retries consume actual sends and the original create idempot
     },
     { timeoutMs: 1800, maxNetworkRetries: 2 },
   );
-  expect((await f.port.createCheckoutSession(request, 'order:transport-order')).id).toBe('cs_transport');
+  const measured = await f.provider.run({ operationId: 'order:transport-order' }, true, () =>
+    f.port.createCheckoutSession(request, 'order:transport-order'),
+  );
+  expect(measured.value.id).toBe('cs_transport');
+  expect(measured.observation.status).toBe('measured');
+  expect(
+    measured.observation.sends.map(({ operationId, attempt, status, outcome }) => ({
+      operationId,
+      attempt,
+      status,
+      outcome,
+    })),
+  ).toEqual([
+    { operationId: 'order:transport-order', attempt: 1, status: 503, outcome: 'complete' },
+    { operationId: 'order:transport-order', attempt: 2, status: 200, outcome: 'complete' },
+  ]);
+  expect(measured.observation.sends[0]!.requestBytes).toBe(measured.observation.sends[1]!.requestBytes);
+  expect(measured.observation.totals?.providerSends).toBe(2);
+  expect(measured.observation.totals?.providerResponseBytes).toBe(
+    Buffer.byteLength('{"error":{"type":"api_error"}}') +
+      Buffer.byteLength(
+        JSON.stringify({
+          id: 'cs_transport',
+          url: 'https://checkout.example.test/session',
+          expires_at: request.expiresAt,
+        }),
+      ),
+  );
+  console.log(JSON.stringify({ providerObservation: measured.observation }));
   expect(f.sends()).toBe(2);
   expect(f.requests.map((request) => request.headers['idempotency-key'])).toEqual([
     'order:transport-order',
     'order:transport-order',
   ]);
   expect(f.requests[0]!.body).toBe(f.requests[1]!.body);
+  expect(measured.observation.sends[0]!.requestBytes).toBe(
+    Buffer.byteLength('/v1/checkout/sessions' + f.requests[0]!.body),
+  );
   const params = new URLSearchParams(f.requests[0]!.body);
   expect(params.get('managed_payments[enabled]')).toBe('true');
   expect(params.get('line_items[0][price_data][unit_amount]')).toBe('1200');
@@ -272,7 +321,16 @@ test('closed connections cannot escape the operation deadline even with SDK retr
     },
     { timeoutMs: 80 },
   );
-  await unavailable(f.port.readCheckoutLocator('cs_transport'));
+  const measured = await f.provider.run({ operationId: 'closed-connection' }, true, () =>
+    unavailable(f.port.readCheckoutLocator('cs_transport')),
+  );
+  expect(measured.observation.sends).toMatchObject([
+    { operationId: 'closed-connection', attempt: 1, outcome: 'failed', responseBytes: null },
+  ]);
+  expect(measured.observation.sends[0]!.requestBytes).toBeGreaterThan(0);
+  expect(measured.observation.status).toBe('missing-physical-measurement');
+  expect(measured.observation.totals).toBeNull();
+  console.log(JSON.stringify({ providerObservation: measured.observation }));
   await Bun.sleep(600);
   expect(f.sends()).toBe(1);
 });
@@ -397,6 +455,7 @@ test('100 refunds, 10 disputes and 256 transactions pass; excess and nonadvancin
 
 test('unrelated provider history grows while selected reads, physical sends and response sizes stay fixed', async () => {
   const f = await paidProxy(() => {});
+  let baseline: unknown;
   let previous = 0;
   for (const scale of [1, 4, 16]) {
     for (let i = previous; i < scale; i++) {
@@ -407,10 +466,26 @@ test('unrelated provider history grows while selected reads, physical sends and 
     }
     previous = scale;
     const start = f.sends();
-    expect((await f.port.readCheckout(f.session.id)).transactions).toHaveLength(1);
+    const full = await f.provider.run({ operationId: 'selected-full-read', scale, repetition: 0 }, true, () =>
+      f.port.readCheckout(f.session.id),
+    );
+    expect(full.value.transactions).toHaveLength(1);
     expect(f.sends() - start).toBe(3);
-    expect((await f.port.readCheckoutLocator(f.session.id)).paymentIntentId).toMatch(/^pi_/);
+    const locator = await f.provider.run({ operationId: 'selected-locator-read', scale, repetition: 0 }, true, () =>
+      f.port.readCheckoutLocator(f.session.id),
+    );
+    expect(locator.value.paymentIntentId).toMatch(/^pi_/);
     expect(f.sends() - start).toBe(4);
+    for (const { observation } of [full, locator]) {
+      expect(observation.status).toBe('measured');
+      expect(observation.totals!.providerRequestBytes).toBeGreaterThan(0);
+      expect(observation.totals!.providerResponseBytes).toBeGreaterThan(0);
+      expect(observation.sends.every((send) => send.outcome === 'complete')).toBe(true);
+      console.log(JSON.stringify({ providerObservation: observation }));
+    }
+    const totals = [full.observation.totals, locator.observation.totals];
+    baseline ??= totals;
+    expect(totals).toEqual(baseline);
   }
 });
 
@@ -423,7 +498,13 @@ test('retry response bytes share the single-call budget rather than reset per se
     },
     { timeoutMs: 1800, maxNetworkRetries: 2 },
   );
-  await unavailable(f.port.readCheckoutLocator('cs_transport'));
+  const measured = await f.provider.run({ operationId: 'retry-byte-budget' }, true, () =>
+    unavailable(f.port.readCheckoutLocator('cs_transport')),
+  );
+  expect(measured.observation.totals?.providerSends).toBe(2);
+  expect(measured.observation.totals?.providerResponseBytes).toBe(BODY + 2);
+  expect(measured.observation.sends.map(({ attempt }) => attempt)).toEqual([1, 2]);
+  console.log(JSON.stringify({ providerObservation: measured.observation }));
   expect(f.sends()).toBe(2);
 });
 
@@ -512,6 +593,18 @@ test('transient retry exhaustion sends exactly three times and cannot become an 
     },
     { timeoutMs: 1800, maxNetworkRetries: 2 },
   );
-  await unavailable(f.port.findCheckoutSession('pi_transport'));
+  const measured = await f.provider.run({ operationId: 'exhausted-session-lookup' }, true, () =>
+    unavailable(f.port.findCheckoutSession('pi_transport')),
+  );
+  expect(measured.observation.totals?.providerSends).toBe(3);
+  expect(measured.observation.totals?.providerResponseBytes).toBe(
+    3 * Buffer.byteLength('{"error":{"type":"api_error","message":"sk_test_private_transport"}}'),
+  );
+  expect(measured.observation.sends.map(({ attempt, status }) => ({ attempt, status }))).toEqual([
+    { attempt: 1, status: 503 },
+    { attempt: 2, status: 503 },
+    { attempt: 3, status: 503 },
+  ]);
+  console.log(JSON.stringify({ providerObservation: measured.observation }));
   expect(f.sends()).toBe(3);
 });
