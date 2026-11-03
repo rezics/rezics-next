@@ -31,9 +31,9 @@ waiting: []
 acceptance:
   tests:
     - "Connect the bounded traversal seam to Semantic's current indexed relation and configuration readers and the runtime release observation. Mount the hierarchy API and service caller; stale graph, release, scheme membership, principal, or request changes restart or retire work before negative evidence is used."
-    - "Extend the universal typed condition algebra and current matcher for exact concepts and optional descendants, include/exclude, Boolean composition, current disclosure, and spoiler-qualified same-statement witnesses. Complete descendant sets must use the existing worker and retained-plan lifecycle, with finite memory/frontier limits and no in:64 truncation."
-    - "Install /search/concepts with scheme selection, breadcrumbs, bounded parent/child pages, editable include/exclude selections, child toggles, spoiler threshold, URL/back navigation, and useful first/next/final result pages in all eight locales. Invalid, unavailable, preparing, loading, empty, restart, and stale output states are repairable and visible."
-    - "Run the native hierarchy and classified-subject growth acceptance at 1x, 4x, and 16x, including sparse positives, current rejects, preparation resume, mutations, and first/next/final pages. Record touched-pool work against the documented bound; missing execution stays unmeasured."
+    - 'Extend the universal typed condition algebra and current matcher for exact concepts and optional descendants, include/exclude, Boolean composition, current disclosure, and spoiler-qualified same-statement witnesses. Complete descendant sets must use the existing worker and retained-plan lifecycle, with finite memory/frontier limits and no in:64 truncation.'
+    - 'Install /search/concepts with scheme selection, breadcrumbs, bounded parent/child pages, editable include/exclude selections, child toggles, spoiler threshold, URL/back navigation, and useful first/next/final result pages in all eight locales. Invalid, unavailable, preparing, loading, empty, restart, and stale output states are repairable and visible.'
+    - 'Run the native hierarchy and classified-subject growth acceptance at 1x, 4x, and 16x, including sparse positives, current rejects, preparation resume, mutations, and first/next/final pages. Record touched-pool work against the documented bound; missing execution stays unmeasured.'
   workerOwned: true
 estimate:
   lines: 2200
