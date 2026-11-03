@@ -49,7 +49,9 @@ export type AdmittedWriting = Readonly<{
 }>;
 export type LocalWritingFile = Pick<File, 'name' | 'size' | 'text'>;
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
-const fail = (code: PortableErrorCode): never => { throw new PortableWritingError(code); };
+const fail = (code: PortableErrorCode): never => {
+  throw new PortableWritingError(code);
+};
 
 /** Extensions determine the explicitly requested codec, never publication or media authority. */
 export function writingFormat(name: string): WritingFormat {
@@ -99,7 +101,7 @@ function portableProjection(snapshot: DocumentSnapshot): { body: DocumentSnapsho
     if (attachment || component) {
       if (attachment) repairs.attachments++;
       else repairs.components++;
-      const label = attachment ? node.attrs?.alt ?? node.attrs?.caption : node.attrs?.fallback;
+      const label = attachment ? (node.attrs?.alt ?? node.attrs?.caption) : node.attrs?.fallback;
       const text = typeof label === 'string' ? label : '';
       if (node.type === 'extensionInline') return { type: 'text', text: text || ' ' };
       return {
@@ -119,7 +121,10 @@ function portableProjection(snapshot: DocumentSnapshot): { body: DocumentSnapsho
       ...(marks ? { marks } : {}),
     };
   };
-  return { body: normalizeDocument({ version: documentVersion, profile: 'blocks', doc: visit(snapshot.doc) }), repairs };
+  return {
+    body: normalizeDocument({ version: documentVersion, profile: 'blocks', doc: visit(snapshot.doc) }),
+    repairs,
+  };
 }
 
 /** One codec admission per file. Unsupported nodes/attributes are refused as a whole, never silently dropped. */
@@ -130,9 +135,17 @@ export function admitWriting(source: string, format: WritingFormat): AdmittedWri
   let nodes: number;
   if (format === 'json') {
     let value: unknown;
-    try { value = JSON.parse(source); } catch { return fail('json'); }
+    try {
+      value = JSON.parse(source);
+    } catch {
+      return fail('json');
+    }
     nodes = inspect(value);
-    try { body = parseDocument(value); } catch { return fail('document'); }
+    try {
+      body = parseDocument(value);
+    } catch {
+      return fail('document');
+    }
   } else {
     if (format === 'text') {
       // Each line needs at least a paragraph shell and an ID. Refuse certain expansion before allocating it.
@@ -145,7 +158,9 @@ export function admitWriting(source: string, format: WritingFormat): AdmittedWri
     if (format === 'markdown' && /(?:>!){65}/u.test(source)) fail('depth');
     try {
       body = format === 'markdown' ? fromMarkdown(source, 'blocks') : fromPlainText(source, 'blocks');
-    } catch { return fail('document'); }
+    } catch {
+      return fail('document');
+    }
     nodes = inspect(body);
   }
   const projected = portableProjection(body);
@@ -162,12 +177,18 @@ export type WritingDownload = Readonly<{
 }>;
 export function exportWriting(body: DocumentSnapshot, kind: 'json' | 'text'): WritingDownload {
   inspect(body);
-  try { parseDocument(body); } catch { return fail('recovery'); }
+  try {
+    parseDocument(body);
+  } catch {
+    return fail('recovery');
+  }
   const projected = portableProjection(body);
   let content: string;
   try {
     content = kind === 'json' ? serializeDocument(projected.body) : documentText(projected.body);
-  } catch { return fail('recovery'); }
+  } catch {
+    return fail('recovery');
+  }
   if (bytes(content) > portableWritingLimits.snapshotBytes) fail('expanded');
   return {
     content,
@@ -183,9 +204,11 @@ export function exportRawWriting(raw: DocumentNode): WritingDownload {
   inspect(raw);
   const visit = (node: DocumentNode): Record<string, unknown> => ({
     type: node.type,
-    ...(typeof node.text === 'string' ? { text: node.text } :
-      typeof (node.attrs?.alt ?? node.attrs?.caption ?? node.attrs?.fallback) === 'string'
-        ? { text: node.attrs?.alt ?? node.attrs?.caption ?? node.attrs?.fallback } : {}),
+    ...(typeof node.text === 'string'
+      ? { text: node.text }
+      : typeof (node.attrs?.alt ?? node.attrs?.caption ?? node.attrs?.fallback) === 'string'
+        ? { text: node.attrs?.alt ?? node.attrs?.caption ?? node.attrs?.fallback }
+        : {}),
     ...(node.content ? { content: node.content.map(visit) } : {}),
     ...(node.marks ? { marks: node.marks.map((mark) => ({ type: mark.type })) } : {}),
   });
@@ -226,7 +249,13 @@ export type WritingBrowser = {
   copy: (text: string) => Promise<void>;
 };
 const initialState = (): WritingTransferState => ({
-  open: false, reading: false, preview: null, error: null, download: null, downloaded: false, copied: false,
+  open: false,
+  reading: false,
+  preview: null,
+  error: null,
+  download: null,
+  downloaded: false,
+  copied: false,
 });
 
 /** Current-visit file custody only. No storage, fetch, retry loop, command or publication owner. */
@@ -236,13 +265,18 @@ export class PortableWriting {
   private generation = 0;
   private objectURL: string | null = null;
   private retired = false;
-  constructor(private source: WritingSource, private browser: WritingBrowser) {
+  constructor(
+    private source: WritingSource,
+    private browser: WritingBrowser,
+  ) {
     source.signal.addEventListener('abort', this.retire, { once: true });
     if (source.signal.aborted) this.retire();
   }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
   snapshot = () => this.state;
   private emit(next: Partial<WritingTransferState>) {
@@ -292,8 +326,7 @@ export class PortableWriting {
   changed = () => {
     if (!this.current()) return;
     this.generation++;
-    if (this.state.preview || this.state.reading)
-      this.emit({ preview: null, reading: false, error: 'changed' });
+    if (this.state.preview || this.state.reading) this.emit({ preview: null, reading: false, error: 'changed' });
     if (this.state.download) {
       this.revoke();
       this.emit({ download: null, downloaded: false, copied: false });
@@ -305,28 +338,51 @@ export class PortableWriting {
     if (!file) return;
     const generation = ++this.generation;
     this.revoke();
-    this.emit({ open: true, reading: false, preview: null, error: null, download: null, downloaded: false, copied: false });
-    if (!this.source.replaceable()) { this.emit({ error: 'busy' }); return; }
+    this.emit({
+      open: true,
+      reading: false,
+      preview: null,
+      error: null,
+      download: null,
+      downloaded: false,
+      copied: false,
+    });
+    if (!this.source.replaceable()) {
+      this.emit({ error: 'busy' });
+      return;
+    }
     const revision = this.source.revision();
     let format: WritingFormat;
     try {
       if (!Number.isFinite(file.size) || file.size < 0 || file.size > portableWritingLimits.fileBytes) fail('size');
       format = writingFormat(file.name);
-    } catch (error) { this.emit({ error: this.errorCode(error) }); return; }
+    } catch (error) {
+      this.emit({ error: this.errorCode(error) });
+      return;
+    }
     this.emit({ reading: true });
     let text: string;
-    try { text = await file.text(); }
-    catch {
+    try {
+      text = await file.text();
+    } catch {
       if (this.current() && generation === this.generation) this.emit({ reading: false, error: 'read' });
       return;
     }
     if (!this.current() || generation !== this.generation) return;
-    if (revision !== this.source.revision()) { this.emit({ reading: false, error: 'changed' }); return; }
-    if (!this.source.replaceable()) { this.emit({ reading: false, error: 'busy' }); return; }
+    if (revision !== this.source.revision()) {
+      this.emit({ reading: false, error: 'changed' });
+      return;
+    }
+    if (!this.source.replaceable()) {
+      this.emit({ reading: false, error: 'busy' });
+      return;
+    }
     try {
       const admitted = admitWriting(text, format);
       this.emit({ reading: false, preview: { ...admitted, revision } });
-    } catch (error) { this.emit({ reading: false, error: this.errorCode(error) }); }
+    } catch (error) {
+      this.emit({ reading: false, error: this.errorCode(error) });
+    }
   }
   confirm = () => {
     if (!this.current()) return;
@@ -336,7 +392,10 @@ export class PortableWriting {
       this.emit({ preview: null, error: 'changed' });
       return;
     }
-    if (!this.source.replaceable()) { this.emit({ preview: null, error: 'busy' }); return; }
+    if (!this.source.replaceable()) {
+      this.emit({ preview: null, error: 'busy' });
+      return;
+    }
     this.generation++;
     this.emit({ preview: null, error: null });
     this.source.replace(preview.body);
@@ -362,7 +421,9 @@ export class PortableWriting {
         this.revoke();
         this.emit({ error: 'download' });
       }
-    } catch (error) { this.emit({ error: this.errorCode(error) }); }
+    } catch (error) {
+      this.emit({ error: this.errorCode(error) });
+    }
   };
   copy = async () => {
     if (!this.current() || !this.state.download) return;

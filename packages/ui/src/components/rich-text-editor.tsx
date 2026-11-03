@@ -249,8 +249,28 @@ export function RichTextEditor({
   }, [value]);
   const controlledKey = snapshotKey(normalizedValue);
   const editable = !disabled && !readOnly;
-  const latest = useRef({ onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload, onSnapshotPending, onSnapshotError });
-  latest.current = { onChange, onBlur, onFocus, onSave, onKeyDown, onUploadState, upload, onSnapshotPending, onSnapshotError };
+  const latest = useRef({
+    onChange,
+    onBlur,
+    onFocus,
+    onSave,
+    onKeyDown,
+    onUploadState,
+    upload,
+    onSnapshotPending,
+    onSnapshotError,
+  });
+  latest.current = {
+    onChange,
+    onBlur,
+    onFocus,
+    onSave,
+    onKeyDown,
+    onUploadState,
+    upload,
+    onSnapshotPending,
+    onSnapshotError,
+  };
 
   const controlled = useRef({ key: controlledKey, profile: value.profile });
   const emittedKey = useRef<string | null>(null);

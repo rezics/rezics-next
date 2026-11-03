@@ -31,15 +31,23 @@ export function PortableWritingPreview({
 }) {
   const id = useId();
   const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { heading.current?.focus(); }, [preview]);
-  const format = preview.format === 'json'
-    ? m.thread_portable_format_json()
-    : preview.format === 'markdown'
-      ? m.thread_portable_format_markdown()
-      : m.thread_portable_format_text();
+  useEffect(() => {
+    heading.current?.focus();
+  }, [preview]);
+  const format =
+    preview.format === 'json'
+      ? m.thread_portable_format_json()
+      : preview.format === 'markdown'
+        ? m.thread_portable_format_markdown()
+        : m.thread_portable_format_text();
   return (
     <section aria-labelledby={id} className="min-w-0 space-y-3 rounded-xl border p-4" data-private-writing>
-      <h3 id={id} ref={heading} tabIndex={-1} className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <h3
+        id={id}
+        ref={heading}
+        tabIndex={-1}
+        className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         {m.thread_portable_preview()}
       </h3>
       <p className="text-sm text-muted-foreground">{m.thread_portable_format({ format, bytes: preview.inputBytes })}</p>

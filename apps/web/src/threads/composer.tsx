@@ -667,29 +667,38 @@ function PostComposerContent<T, Context = undefined>({
     lifetime,
   );
 
-  const writing = usePortableWriting({
-    current: () => lifetime.current(),
-    signal: lifetime.controller.signal,
-    revision: () => writingRevision.current,
-    replaceable: () => lifetime.current() && canSubmit && !submittingRef.current &&
-      !replyIntent.current.unresolved && pendingRef.current === 0 && snapshotPhaseRef.current !== 'pending',
-    snapshot: () => ({ body: bodyRef.current, phase: snapshotPhaseRef.current, raw: rawEditorWork.current }),
-    replace: (next) => {
-      if (!lifetime.current() || submittingRef.current || replyIntent.current.unresolved || pendingRef.current > 0) return;
-      const nextKey = crypto.randomUUID();
-      replyIntent.current.reset(nextKey);
-      setIdempotencyKey(nextKey);
-      updateBody(next);
-      setFailure(null);
-      setUploadNotice(null);
+  const writing = usePortableWriting(
+    {
+      current: () => lifetime.current(),
+      signal: lifetime.controller.signal,
+      revision: () => writingRevision.current,
+      replaceable: () =>
+        lifetime.current() &&
+        canSubmit &&
+        !submittingRef.current &&
+        !replyIntent.current.unresolved &&
+        pendingRef.current === 0 &&
+        snapshotPhaseRef.current !== 'pending',
+      snapshot: () => ({ body: bodyRef.current, phase: snapshotPhaseRef.current, raw: rawEditorWork.current }),
+      replace: (next) => {
+        if (!lifetime.current() || submittingRef.current || replyIntent.current.unresolved || pendingRef.current > 0)
+          return;
+        const nextKey = crypto.randomUUID();
+        replyIntent.current.reset(nextKey);
+        setIdempotencyKey(nextKey);
+        updateBody(next);
+        setFailure(null);
+        setUploadNotice(null);
+      },
+      focus: () => {
+        if (!lifetime.current()) return;
+        editorHost.current
+          ?.querySelector<HTMLElement>('.ProseMirror[contenteditable="true"], [role="textbox"][contenteditable="true"]')
+          ?.focus();
+      },
     },
-    focus: () => {
-      if (!lifetime.current()) return;
-      editorHost.current?.querySelector<HTMLElement>(
-        '.ProseMirror[contenteditable="true"], [role="textbox"][contenteditable="true"]',
-      )?.focus();
-    },
-  }, session?.state === 'signed-in' && canSubmit);
+    session?.state === 'signed-in' && canSubmit,
+  );
 
   function invalidateWriting() {
     writingRevision.current++;
@@ -1093,7 +1102,10 @@ function PostComposerContent<T, Context = undefined>({
               id="thread-title"
               className="h-11 min-w-0 max-w-full border-border bg-background px-3"
               value={title}
-              onChange={(event) => { invalidateWriting(); setTitle(event.currentTarget.value); }}
+              onChange={(event) => {
+                invalidateWriting();
+                setTitle(event.currentTarget.value);
+              }}
               autoComplete="off"
             />
           </div>
@@ -1131,24 +1143,29 @@ function PostComposerContent<T, Context = undefined>({
             className={`thread-post-editor ${editorSize}${plainEditorVisible ? ' thread-editor-pending' : ''}`}
             actions={
               <>
-              {writing ? <PortableWritingToolbar transfer={writing} /> : null}
-              <Button
-                type="submit"
-                form={formId}
-                className={`${authoringActionClassName} max-w-[min(24rem,50cqi)] disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100`}
-                disabled={!ready || submitting || pendingUploads > 0}
-              >
-                {m.thread_write_send()}
-              </Button>
+                {writing ? <PortableWritingToolbar transfer={writing} /> : null}
+                <Button
+                  type="submit"
+                  form={formId}
+                  className={`${authoringActionClassName} max-w-[min(24rem,50cqi)] disabled:bg-primary disabled:text-primary-foreground disabled:opacity-100`}
+                  disabled={!ready || submitting || pendingUploads > 0}
+                >
+                  {m.thread_write_send()}
+                </Button>
               </>
             }
             {...(upload ? { upload, onUploadState: handleUploadState } : {})}
           />
         </div>
       </div>
-      {writing ? <PortableWritingControls transfer={writing} signal={lifetime.controller.signal}
-        disabled={submitting || replyIntent.current.unresolved || pendingUploads > 0 || snapshotPhase === 'pending'}
-        phase={snapshotPhase} /> : null}
+      {writing ? (
+        <PortableWritingControls
+          transfer={writing}
+          signal={lifetime.controller.signal}
+          disabled={submitting || replyIntent.current.unresolved || pendingUploads > 0 || snapshotPhase === 'pending'}
+          phase={snapshotPhase}
+        />
+      ) : null}
       {foreignPendingRef.current > 0 ? (
         <p
           className="min-w-0 text-sm text-muted-foreground [overflow-wrap:anywhere]"
