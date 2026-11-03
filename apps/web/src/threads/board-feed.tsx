@@ -15,10 +15,10 @@ import {
   BoardPinPageStatus,
   BoardPinThreadControls,
   boardPinVisitKey,
-  unavailableBoardPinProducer,
   useBoardPinPage,
   useBoardPinVisit,
 } from './board-pins/controller';
+import { unavailableBoardPinProducer } from './board-pins/contract';
 import type {
   BoardPinProducer,
   BoardPinReadResult,
@@ -233,17 +233,17 @@ function BoardFeedVisit({
         <ul className="space-y-2">
           {page.threads.map((thread) => {
             const row =
-              thread.availability === 'available' && pins.state === 'ready'
+              thread.availability === 'available' && pins.state.state === 'ready'
                 ? pins.state.byThreadId.get(thread.id)
                 : undefined;
             const rowStatus = pins.rowStatuses[thread.id];
             const pinControl = row || rowStatus ? (
               <BoardPinThreadControls
                 discussionTitle={thread.title ?? m.threads_untitled()}
-                row={row}
+                {...(row === undefined ? {} : { row })}
                 management={pins.state.state === 'ready' ? pins.state.management : null}
                 sender={pins.sender}
-                status={rowStatus}
+                {...(rowStatus === undefined ? {} : { status: rowStatus })}
                 onChange={(action) => pins.start(thread.id, action)}
                 onRetry={() => pins.retry(thread.id)}
                 onRefresh={pins.refresh}
