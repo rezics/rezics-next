@@ -1146,9 +1146,7 @@ async function runGrowthCheck(
         const catalogCaptures = aggregate?.databases ?? [{ name: 'application', capture: measured.capture }];
         const runBackends = [
           ...new Set(
-            (measuredCapture.statementBackends ?? []).filter(
-              (backend): backend is number => backend !== undefined,
-            ),
+            (measuredCapture.statementBackends ?? []).filter((backend): backend is number => backend !== undefined),
           ),
         ];
         const coldBackends = runBackends.filter((backend) => !seenBackends.has(backend));

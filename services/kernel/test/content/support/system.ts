@@ -74,9 +74,7 @@ export interface ContentSystem {
   };
   readonly access: Access;
   /** Construct a fresh production verifier/cache for a cold native read sample. */
-  readonly createFreshAccess: (
-    observeJwks?: (request: Request, response: Response) => Promise<void>,
-  ) => Access;
+  readonly createFreshAccess: (observeJwks?: (request: Request, response: Response) => Promise<void>) => Access;
   /** Mount the same native routes, rate stage and fixture policy on a captured application pool. */
   readonly createKernelForPool: (pool: Pool, access: Access) => Kernel;
   /** Catalogue derived from the routes mounted on this real Kernel. */

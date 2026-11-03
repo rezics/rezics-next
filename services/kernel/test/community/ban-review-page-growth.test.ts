@@ -12,10 +12,7 @@ import {
   type Population,
 } from '../support/growth.ts';
 import { createCommunityDriver, closeCommunityDrivers, communityFixtureRuntime } from './community-driver.ts';
-import {
-  aggregateBanReviewPageCapture,
-  banReviewPageWireCounts,
-} from './support/ban-review-page-capture.ts';
+import { aggregateBanReviewPageCapture, banReviewPageWireCounts } from './support/ban-review-page-capture.ts';
 
 function serializedRequestBytes(request: Request): number {
   const url = new URL(request.url);
@@ -86,11 +83,7 @@ test('mounted current bans keep exact current-key and Accounts paths as independ
     const db = growth,
       authDb = authGrowth,
       route = routeOf(realm.realmId)!;
-    async function readCaptured(
-      actor: Account = f.owner,
-      suffix = '',
-      selectedAccountId = targets[1]!,
-    ) {
+    async function readCaptured(actor: Account = f.owner, suffix = '', selectedAccountId = targets[1]!) {
       const network = { jwksRequestBytes: 0, jwksResponseBytes: 0 };
       const selectedAccess = system.createFreshAccess((request, response) =>
         recordJwksBytes(network, request, response),
@@ -238,11 +231,7 @@ test('mounted current bans keep exact current-key and Accounts paths as independ
     // A deep page and an exact outside-page selection remain independent at the
     // largest retained scale. Native command readback changes the current episode.
     const first = await read();
-    const deep = await readCaptured(
-      f.owner,
-      `&cursor=${encodeURIComponent(first.next!)}`,
-      targets[0]!,
-    );
+    const deep = await readCaptured(f.owner, `&cursor=${encodeURIComponent(first.next!)}`, targets[0]!);
     expect(deep.page).toMatchObject({
       items: [{ accountId: selected }],
       next: null,
