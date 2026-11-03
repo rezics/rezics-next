@@ -590,7 +590,7 @@ test('mixed versions, captures and section totals refuse the final artifact', as
       ...good.sectionTotals,
       vndbEvidence: { rows: 0, recordBytes: 0 },
       anilistEvidence: {
-        rows: 2,
+        rows: good.sectionTotals.vndbEvidence.rows + good.sectionTotals.anilistEvidence.rows,
         recordBytes: good.sectionTotals.vndbEvidence.recordBytes + good.sectionTotals.anilistEvidence.recordBytes,
       },
     },
@@ -637,7 +637,7 @@ test('V4 requires its exact inventory and coverage; V3 cannot append providers a
   const final = producer.pages.at(-1)!.manifest!;
   if (final.version !== 4) throw new Error('Expected the published V4 producer');
   expect(Object.keys(final.sectionTotals)).toEqual([...EXPORT_SECTIONS_V4]);
-  for (const section of EXPORT_SECTIONS_V4.slice(17)) expect(final.sectionTotals[section].rows).toBe(1);
+  expect(EXPORT_SECTIONS_V4.slice(17).map((section) => final.sectionTotals[section].rows)).toEqual([1, 2, 1, 1]);
   const installed: LibraryExportStatus = producer.status;
   expect(isExportStatus(installed)).toBe(true);
   for (const status of [
