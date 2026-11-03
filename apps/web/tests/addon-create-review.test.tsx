@@ -201,8 +201,9 @@ test('add-on creator reviews the exact item, repairs nested diagnostics, and ret
     await act(async () => user.click(within(withdrawn).getByRole('button', { name: m.recipe_remove_field() })));
     await act(async () => user.click(within(withdrawn).getByRole('button', { name: m.recipe_remove_field() })));
     expect(withdrawn.isConnected).toBe(false);
-    expect(sameId).not.toBe(decodeURIComponent(link.getAttribute('href')!.slice(1)));
-    expect(host.querySelector(`#${CSS.escape(decodeURIComponent(link.getAttribute('href')!.slice(1)))}`)).toBeNull();
+    const repaired = decodeURIComponent(link.getAttribute('href')!.slice(1));
+    expect(sameId).not.toBe(repaired);
+    expect(window.document.getElementById(repaired)).toBeNull();
     await confirm();
     await waitFor(() => expect(commands).toHaveLength(2));
     const item = commands[1]!.item as GameItem;
