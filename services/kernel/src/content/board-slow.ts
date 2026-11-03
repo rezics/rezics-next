@@ -427,7 +427,7 @@ async function prepareTargetTicket(
   pool: Pool,
   reference: PermitReference,
   deadline: number,
-): Promise<'reserved' | 'committed' | 'replayed' | null> {
+): Promise<TicketState | null> {
   return serializable(pool, deadline, async (client) => {
     const result = await client.query<{ state: TicketState }>(
       `INSERT INTO content.board_slow_ticket

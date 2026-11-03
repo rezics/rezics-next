@@ -124,7 +124,7 @@ test('uncertain commit replays its receipt and missed finalization is recovered 
   expect((await setSlowMode(0)).status).toBe(200);
   const observer = observeSql(f.pool);
   try {
-    const template = await post(threads[0]!, key());
+    const template = await post(threads[0]!.id, key());
     expect(template.status).toBe(201);
     const ticketClaim = observer.records.find(({ statement }) =>
       statement.includes("UPDATE content.board_slow_ticket SET state='committed'"),
@@ -133,7 +133,7 @@ test('uncertain commit replays its receipt and missed finalization is recovered 
 
     const requestKey = key();
     const barrier = observer.hold({ statement: ticketClaim!.statement }, 'after');
-    const pending = post(threads[1]!, requestKey);
+    const pending = post(threads[1]!.id, requestKey);
     await barrier.entered;
     observer.armFault({
       match: { statement: 'COMMIT' },
@@ -144,9 +144,9 @@ test('uncertain commit replays its receipt and missed finalization is recovered 
     const uncertain = await pending;
     expect([500, 503]).toContain(uncertain.status);
 
-    const replay = await post(threads[1]!, requestKey);
+    const replay = await post(threads[1]!.id, requestKey);
     expect(replay.status).toBe(201);
-    const replayAgain = await post(threads[1]!, requestKey);
+    const replayAgain = await post(threads[1]!.id, requestKey);
     expect(replayAgain.status).toBe(201);
     expect(replayAgain.value.post.id).toBe(replay.value.post.id);
 
@@ -159,7 +159,7 @@ test('uncertain commit replays its receipt and missed finalization is recovered 
       boundary: 'before',
       error: new Error('simulated finalization outage'),
     });
-    const committed = await post(threads[0]!, key());
+    const committed = await post(threads[0]!.id, key());
     expect(committed.status).toBe(201);
 
     await f.pool.query(
