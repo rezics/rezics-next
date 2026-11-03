@@ -96,9 +96,12 @@ independent rather than making shared files or unfinished producer delivery into
 - **Review and Space discovery.** Add native review and Space hits through the same consumers. A review keeps its
   native thread identity and reviewed-Subject context; an exact Space destination keeps native address/lifecycle
   meaning. A Realm-backed Space does not become a second Realm hit.
-- **Moderator workbench.** Compose existing board and catalogue queues, decisions and appeals behind one navigation
-  entry. Select one authorized queue at a time, with its own filters, cursor, evidence and native resolution actions.
-  This adds no aggregate case search or platform-wide appeal adjudication.
+- **Moderator workbench.** `/moderation/workbench` is the one signed-in navigation entry. Choose one currently
+  permitted Realm board from the paged membership Realm list and that Realm's board directory, or the Global
+  catalogue. Submitted reports, pending appeals and resolved cases are exclusive native queues with their own
+  cursor; a board moderator is not given catalogue authority. Rows carry a stable report or appeal ID into the
+  existing review routes. Resolution forms stay on those pages. Catalogue has no appeal list. There is no
+  aggregate case search or platform-wide adjudication.
 
 Consumer seams carry only native disclosed summaries, operation availability, revision/continuation and outcomes
 needed by that slice. Bind the generated owner API when available; otherwise keep the small boundary explicit and
