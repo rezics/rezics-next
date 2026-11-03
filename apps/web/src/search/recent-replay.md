@@ -11,10 +11,10 @@ Library uses the existing viewer-self presence predicate; it is not a `SearchRes
 Everything metadata reads supply its name and availability for both page reads and history writes. Denied,
 retired or unavailable native metadata retains the reference without an action; no browser label supplies authority.
 
-Producer mismatch: `searchRequiresCurrentReader` currently inspects only `resourceScope` and `ratingPopulation`,
-so an ordinary `owner.presence` filter reaches the installed Search BFF without its session-bound reader.
-Recent encoding and admission preserve the predicate, but successful Library execution requires the Search owner
-to bind that ordinary private filter through its existing reader boundary. This remains unmeasured.
+Search selects its installed session-bound reader for ordinary viewer-self owner predicates, including Library's
+`owner.presence`. The complete authored predicate and the current credential travel through the existing Search
+request boundary; its personal query lifetime retires pending publication on reader replacement or abort.
+Native execution and three-scale growth remain unmeasured until the installed journey runs.
 
 Recent's native schema admits 256 UTF-16 units of text, eight language tags of at most 35 units, 100 account rows and
 20 rows per page. Local history retains 32 entries. Destination evidence is capped at 8192 URL units before decoding;
