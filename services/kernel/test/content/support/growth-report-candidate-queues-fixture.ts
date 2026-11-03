@@ -11,7 +11,11 @@ import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../../
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
 import { seedReportGrowth, type ReportGrowthRow } from './report-growth.ts';
-import { createReactionRelayBase, type CallResult, type ReactionRelayBase } from '../reaction-relay-convergence-fixture.ts';
+import {
+  createReactionRelayBase,
+  type CallResult,
+  type ReactionRelayBase,
+} from '../reaction-relay-convergence-fixture.ts';
 
 export type QueueTargetKind = 'board' | 'thread' | 'post';
 
@@ -280,7 +284,12 @@ export async function createGrowthReportCandidateQueuesFixture() {
       },
       beginTrace(): QueueTrace {
         if (activeTrace) throw new Error('A board report queue trace is already active');
-        activeTrace = { candidatePageQueries: 0, rawCandidateReferences: 0, reportSourceRows: 0, finalAuthorityRevoked: false };
+        activeTrace = {
+          candidatePageQueries: 0,
+          rawCandidateReferences: 0,
+          reportSourceRows: 0,
+          finalAuthorityRevoked: false,
+        };
         return activeTrace;
       },
       endTrace(): QueueTrace {
@@ -347,11 +356,7 @@ export async function createGrowthReportCandidateQueuesFixture() {
   }
 }
 
-async function startRegisteredContentRunner(
-  base: ReactionRelayBase,
-  pool: Pool,
-  databaseUrl: string,
-) {
+async function startRegisteredContentRunner(base: ReactionRelayBase, pool: Pool, databaseUrl: string) {
   const client = await createWorkClient(databaseUrl, pool);
   const registered: Effect[] = [];
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
@@ -412,7 +417,8 @@ async function startRegisteredContentRunner(
 
 function queryText(value: unknown): string {
   if (typeof value === 'string') return value;
-  if (typeof value === 'object' && value !== null && 'text' in value && typeof value.text === 'string') return value.text;
+  if (typeof value === 'object' && value !== null && 'text' in value && typeof value.text === 'string')
+    return value.text;
   return '';
 }
 

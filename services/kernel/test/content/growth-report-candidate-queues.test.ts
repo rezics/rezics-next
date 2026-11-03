@@ -53,9 +53,7 @@ async function readPage(path: string, bearer?: string) {
 
 function expectPageTrace(trace: QueueTrace, expected: { candidateReads: number; finalRevoked?: boolean }): void {
   expect(trace.candidatePageQueries).toBe(expected.candidateReads);
-  expect(trace.rawCandidateReferences).toBeLessThanOrEqual(
-    expected.candidateReads === 0 ? 0 : fixture.pageLimit + 1,
-  );
+  expect(trace.rawCandidateReferences).toBeLessThanOrEqual(expected.candidateReads === 0 ? 0 : fixture.pageLimit + 1);
   expect(trace.reportSourceRows).toBeLessThanOrEqual(fixture.pageLimit);
   expect(trace.finalAuthorityRevoked).toBe(expected.finalRevoked ?? false);
 }
@@ -95,12 +93,7 @@ test('board selected report pages stay bounded across unrelated candidate and re
   selected.push(await fixture.createReport('post', fixture.postId, `queue evidence ${randomUUID()}`, at(1)));
   selected.push(await fixture.createReport('board', fixture.boardId, `queue evidence ${randomUUID()}`, at(2)));
   selected.push(await fixture.createReport('thread', fixture.threadId, `queue evidence ${randomUUID()}`, at(3)));
-  const resolved = await fixture.createReport(
-    'post',
-    fixture.postId,
-    `queue evidence ${randomUUID()}`,
-    at(4),
-  );
+  const resolved = await fixture.createReport('post', fixture.postId, `queue evidence ${randomUUID()}`, at(4));
   selected.push(resolved);
   selected.push(await fixture.createReport('post', fixture.postId, `queue evidence ${randomUUID()}`, at(5)));
   selected.push(await fixture.createReport('thread', fixture.threadId, `queue evidence ${randomUUID()}`, at(6)));
@@ -186,9 +179,7 @@ test('board selected report pages stay bounded across unrelated candidate and re
   );
   expect(pendingThreadIds).toHaveLength(2);
 
-  const invalidSelection = await fixture.callQueue(
-    pagePath('status=pending', firstCursor),
-  );
+  const invalidSelection = await fixture.callQueue(pagePath('status=pending', firstCursor));
   expect(invalidSelection.response.status).toBe(400);
   const invalidOrder = await fixture.callQueue(pagePath('order=oldest', firstCursor));
   expect(invalidOrder.response.status).toBe(400);
@@ -204,15 +195,21 @@ test('board selected report pages stay bounded across unrelated candidate and re
   const invalidCredential = await fixture.callQueue(pagePath('', firstCursor), limitedCredential.bearer);
   expect(invalidCredential.response.status).toBe(400);
 
-  const foreignPage = await fixture.callQueue(`/v1/boards/${fixture.foreign.boardId}/reports?limit=${fixture.pageLimit}`);
+  const foreignPage = await fixture.callQueue(
+    `/v1/boards/${fixture.foreign.boardId}/reports?limit=${fixture.pageLimit}`,
+  );
   expect(foreignPage.response.status).toBe(200);
   expect(reports(foreignPage.value).map((entry) => entry.id)).toContain(fixture.foreignReport.id);
 
   const replayed = selected[0]!;
   await fixture.replay(replayed.id);
-  expect(fixture.runnerCaptures.some((item) => item.reportId === replayed.id && item.phase === 'projection')).toBe(true);
+  expect(fixture.runnerCaptures.some((item) => item.reportId === replayed.id && item.phase === 'projection')).toBe(
+    true,
+  );
   expect(fixture.runnerCaptures.some((item) => item.reportId === replayed.id && item.phase === 'replay')).toBe(true);
-  console.info(JSON.stringify({ name: 'Board report candidate setup and registered replay', captures: fixture.runnerCaptures }));
+  console.info(
+    JSON.stringify({ name: 'Board report candidate setup and registered replay', captures: fixture.runnerCaptures }),
+  );
 
   const branches: QueueBranch[] = [
     {
@@ -221,7 +218,9 @@ test('board selected report pages stay bounded across unrelated candidate and re
       before: () => fixture.ensureBoardPermission(),
       verify: (result: Awaited<ReturnType<typeof fixture.callQueue>>, trace: QueueTrace) => {
         expectPageTrace(trace, { candidateReads: 1 });
-        expect(reports(result.value).map((entry) => entry.id)).toEqual(reports(firstSetup.value).map((entry) => entry.id));
+        expect(reports(result.value).map((entry) => entry.id)).toEqual(
+          reports(firstSetup.value).map((entry) => entry.id),
+        );
         expect(reports(result.value)).toHaveLength(fixture.pageLimit);
         expect(reports(result.value).every((entry) => entry.evidence)).toBe(true);
         expect(next(result.value)).toBeString();
@@ -233,7 +232,9 @@ test('board selected report pages stay bounded across unrelated candidate and re
       before: () => fixture.ensureBoardPermission(),
       verify: (result: Awaited<ReturnType<typeof fixture.callQueue>>, trace: QueueTrace) => {
         expectPageTrace(trace, { candidateReads: 1 });
-        expect(reports(result.value).map((entry) => entry.id)).toEqual(reports(deepSetup.value).map((entry) => entry.id));
+        expect(reports(result.value).map((entry) => entry.id)).toEqual(
+          reports(deepSetup.value).map((entry) => entry.id),
+        );
         expect(reports(result.value)).toHaveLength(fixture.pageLimit);
         expect(next(result.value)).toBeString();
       },
@@ -245,7 +246,10 @@ test('board selected report pages stay bounded across unrelated candidate and re
       verify: (result: Awaited<ReturnType<typeof fixture.callQueue>>, trace: QueueTrace) => {
         expectPageTrace(trace, { candidateReads: 1 });
         expect(reports(result.value).map((entry) => entry.id)).toEqual([resolved.id]);
-        expect(reports(result.value)[0]).toMatchObject({ target: { kind: 'post', id: fixture.postId }, outcome: 'dismissed' });
+        expect(reports(result.value)[0]).toMatchObject({
+          target: { kind: 'post', id: fixture.postId },
+          outcome: 'dismissed',
+        });
       },
     },
     {
