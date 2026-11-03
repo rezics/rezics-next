@@ -233,8 +233,7 @@ export function presentNativeRealmHome(
     page.presentation.description !== page.realm.summary ||
     (input.expectedSpaceHeadRevisionId !== undefined &&
       page.space.headRevisionId !== input.expectedSpaceHeadRevisionId) ||
-    (input.expectedRealmHeadRevisionId !== undefined &&
-      page.realm.headRevisionId !== input.expectedRealmHeadRevisionId)
+    (input.expectedRealmHeadRevisionId !== undefined && page.realm.headRevisionId !== input.expectedRealmHeadRevisionId)
   )
     throw new Error('Realm home source changed');
   for (const [image, mediaId] of [

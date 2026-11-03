@@ -232,7 +232,13 @@ test('default Space reads bind the composed home after address resolution and pr
 });
 
 test('installed KernelClient binds home and independent raw shelves to one prepared reader', async () => {
-  const requests: { method: string; path: string; languages: string[]; cursor: string | null; authorization: string | null }[] = [];
+  const requests: {
+    method: string;
+    path: string;
+    languages: string[];
+    cursor: string | null;
+    authorization: string | null;
+  }[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const request = input instanceof Request ? input : new Request(input, init);
@@ -244,9 +250,7 @@ test('installed KernelClient binds home and independent raw shelves to one prepa
         cursor: url.searchParams.get('cursor'),
         authorization: request.headers.get('authorization'),
       });
-      return Response.json(
-        url.pathname.endsWith('/home') ? fixture(1, 'anonymous') : { items: [], next: null },
-      );
+      return Response.json(url.pathname.endsWith('/home') ? fixture(1, 'anonymous') : { items: [], next: null });
     },
   });
   const bound = bindNativeRealmHomeOperations(client, { headers: { authorization: 'Bearer prepared' } });
