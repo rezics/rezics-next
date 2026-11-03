@@ -98,10 +98,7 @@ export type RunOptions = Readonly<{
 }>;
 
 export type { ConversionDiagnosticPhase, SanitizedConversionDiagnostic } from './conversion-diagnostics.ts';
-export type {
-  OpenLibraryDumpSetAdmission,
-  OpenLibraryDumpSetMember,
-} from './open-library-dump-set.ts';
+export type { OpenLibraryDumpSetAdmission, OpenLibraryDumpSetMember } from './open-library-dump-set.ts';
 export type { OpenLibraryDumpFamily } from './dumps.ts';
 
 export type RunStatus =

@@ -103,11 +103,11 @@ test('UTF-8 split chunks inside a member still decode and reverse member order k
   try {
     const works = `${row(workSource)}\n`;
     const editions = `${row(editionSource)}\n`;
-    const manifest = await writeSet(
-      root,
-      { authors: `${row(author)}\n`, works, editions },
-      ['edition', 'work', 'author'],
-    );
+    const manifest = await writeSet(root, { authors: `${row(author)}\n`, works, editions }, [
+      'edition',
+      'work',
+      'author',
+    ]);
     const { records } = await drain(root, manifest);
     expect(records.map((record) => record.key)).toEqual(['/books/OL900000002M', '/works/OL900000001W']);
   } finally {

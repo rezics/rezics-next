@@ -30,10 +30,7 @@ async function account(root: string) {
   return path;
 }
 
-async function manifest(
-  root: string,
-  files: { authors?: string; works?: string; editions?: string } = {},
-) {
+async function manifest(root: string, files: { authors?: string; works?: string; editions?: string } = {}) {
   await writeFile(join(root, 'authors.txt'), files.authors ?? row(author), { mode: 0o600 });
   await writeFile(join(root, 'works.txt'), files.works ?? row(workSource), { mode: 0o600 });
   await writeFile(join(root, 'editions.txt'), files.editions ?? row(editionSource), { mode: 0o600 });

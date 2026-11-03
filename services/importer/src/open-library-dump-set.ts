@@ -65,7 +65,16 @@ function parseString(text: string, start: number): { value: string; index: numbe
     if (char === '\\') {
       const next = text[++index];
       if (next === undefined) fail('manifest');
-      const escapes: Record<string, string> = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+      const escapes: Record<string, string> = {
+        '"': '"',
+        '\\': '\\',
+        '/': '/',
+        b: '\b',
+        f: '\f',
+        n: '\n',
+        r: '\r',
+        t: '\t',
+      };
       if (next === 'u') {
         const hex = text.slice(index + 1, index + 5);
         if (!/^[0-9a-fA-F]{4}$/.test(hex)) fail('manifest');
@@ -263,7 +272,8 @@ export async function admitOpenLibraryDumpSet(
     const entry = document.members[index];
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) fail('manifest', index);
     const memberKeys = ownKeys(entry);
-    if (memberKeys.length !== 2 || !memberKeys.includes('family') || !memberKeys.includes('path')) fail('manifest', index);
+    if (memberKeys.length !== 2 || !memberKeys.includes('family') || !memberKeys.includes('path'))
+      fail('manifest', index);
     const family = Reflect.get(entry, 'family');
     const path = Reflect.get(entry, 'path');
     if (!isFamily(family)) fail('family', index);

@@ -109,7 +109,8 @@ export function readOpenLibraryDumpSet(
             }
           } catch (error) {
             if (error instanceof OpenLibraryDumpSetError) throw error;
-            if (options.signal.aborted) throw options.signal.reason ?? new DOMException('Import interrupted', 'AbortError');
+            if (options.signal.aborted)
+              throw options.signal.reason ?? new DOMException('Import interrupted', 'AbortError');
             failMember(member.index, 'framing');
           }
           hash.update(lengthPrefix(memberBytes));

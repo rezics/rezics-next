@@ -302,24 +302,28 @@ export async function runOpenLibraryDumpSetJourney() {
 
     const interruptManifest = await writeManifest('interrupt', ['author', 'work', 'edition'], {
       author: tsv(author),
-      work: [ { ...workSource, revision: 8, title: 'Interrupted atlas' }, changedWork, extraWorks[1]!, extraWorks[2]! ]
+      work: [{ ...workSource, revision: 8, title: 'Interrupted atlas' }, changedWork, extraWorks[1]!, extraWorks[2]!]
         .map(tsv)
         .join(''),
       edition: tsv(editionSource),
     });
     const interrupted = await invoke(own, interruptManifest, { losePropose: true });
     expect([1, 130]).toContain(interrupted.code);
-    const pendingBefore = local((db) =>
-      db
-        .query('SELECT key,bytes FROM binding_journal WHERE acknowledgement IS NULL')
-        .all() as { key: string; bytes: string }[],
+    const pendingBefore = local(
+      (db) =>
+        db.query('SELECT key,bytes FROM binding_journal WHERE acknowledgement IS NULL').all() as {
+          key: string;
+          bytes: string;
+        }[],
     );
     const recovered = await invoke(own, interruptManifest);
     expect(recovered.code).toBe(0);
-    const pendingAfter = local((db) =>
-      db
-        .query('SELECT key,bytes FROM binding_journal WHERE acknowledgement IS NULL')
-        .all() as { key: string; bytes: string }[],
+    const pendingAfter = local(
+      (db) =>
+        db.query('SELECT key,bytes FROM binding_journal WHERE acknowledgement IS NULL').all() as {
+          key: string;
+          bytes: string;
+        }[],
     );
     expect(pendingAfter.length).toBeLessThanOrEqual(pendingBefore.length);
 

@@ -156,7 +156,9 @@ for (const [name, prepare] of rejections) {
     const root = await directory();
     try {
       await prepare(root);
-      await expect(admitOpenLibraryDumpSet(join(root, 'manifest.json'))).rejects.toBeInstanceOf(OpenLibraryDumpSetError);
+      await expect(admitOpenLibraryDumpSet(join(root, 'manifest.json'))).rejects.toBeInstanceOf(
+        OpenLibraryDumpSetError,
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
