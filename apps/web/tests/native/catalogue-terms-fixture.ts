@@ -1,4 +1,5 @@
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
@@ -33,6 +34,23 @@ export async function startCatalogueTermsFixture(): Promise<CatalogueTermsFixtur
     const release = (await active.json()) as { digest?: string };
     if (release.digest !== bundledDigest) throw new Error('Native stack is not using the bundled definition release');
     if (!bundledRelease.types['schema:Book']) throw new Error('Bundled definition release has no schema:Book');
+    const alice = await stack.authPersona('alice');
+    const grant = await stack.kernel(
+      '/v1/grants',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+        body: JSON.stringify({
+          resource: { route: 0, id: GLOBAL_CONTEXT },
+          subject: { kind: 'account', id: alice.accountId },
+          actions: ['statement:propose'],
+          valid: '(,)',
+        }),
+      },
+      'governor',
+    );
+    if (grant.status !== 201 && grant.status !== 409)
+      throw new Error(`Granting statement:propose to Alice: HTTP ${grant.status} ${await grant.text()}`);
 
     return {
       stack,
@@ -66,7 +84,7 @@ async function createSubject(stack: NativeWebStack, label: string): Promise<Cata
     },
     'editor',
   );
-  if (!created.ok) throw new Error(`Subject creation failed: ${created.status} ${await created.text()}`);
+  if (created.status !== 201) throw new Error(`Subject creation failed: ${created.status} ${await created.text()}`);
   const result = (await created.json()) as Created;
   const id = result.subject?.id;
   if (typeof id !== 'string') throw new Error('Subject creation returned no id');

@@ -182,7 +182,7 @@ describe('native catalogue terms', () => {
     await page.getByText(corrected.labels.ja, { exact: true }).waitFor({ state: 'visible' });
     await page.getByText(corrected.descriptions.ja, { exact: true }).waitFor({ state: 'visible' });
     await page.getByText(corrected.aliases.ja[0]!, { exact: true }).waitFor({ state: 'visible' });
-    const detail = await stack.kernel(`/v1/subjects/${corrected.id}/revisions/${current.subject.revision}`, {}, 'alice');
+    const detail = await stack.kernel(`/v1/subjects/${corrected.id}/revisions/${current.subject.revision}`);
     expect(detail.status).toBe(200);
     expect(((await detail.json()) as { change?: { kind?: string } }).change?.kind).toBe('terms');
 
