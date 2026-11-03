@@ -389,12 +389,33 @@ export function createVndbImport(config: Config) {
       return { uploadId: id, state: cancel ? 'cancelled' : 'deleted' };
     });
   }
+  /** Addressed retained evidence for the separate, explicitly consented label journey.
+   * Keep matching and private read authority with this source owner. */
+  async function retainedRow(actor: Actor, id: string, ordinal: number) {
+    await authorized(actor);
+    const account = owner(actor);
+    const result = await withReadTransaction(pool, (client) =>
+      client.query<{ row: VndbRow; decision: Decision | null; state: Upload['state']; expires_at: Date }>(
+        `SELECT rows->$4::integer AS row,decisions->$5::text AS decision,state,expires_at
+         FROM library.vndb_import WHERE route=$1 AND account_id=$2 AND upload_id=$3`,
+        [requireRoute(account.accountId), account.accountId, id, ordinal, String(ordinal)],
+      ),
+    );
+    const retained = result.rows[0];
+    if (!retained?.row || retained.expires_at.getTime() <= Date.now()) throw new LibraryNotFoundError();
+    const matching = await match(actor, retained.row);
+    const target = retained.decision?.targetId ? await current(actor, retained.decision.targetId) : null;
+    await authorized(actor);
+    return { ...retained, matching, target };
+  }
   return {
     preview,
     page,
     review,
     apply,
     remove,
+    retainedRow,
+    authorized,
     source: async (actor: Actor, id: string) => ({ xml: (await load(actor, id)).xml }),
   };
 }

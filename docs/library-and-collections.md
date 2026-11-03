@@ -598,3 +598,10 @@ relationships. They preserve noncontiguous holes, specials and rereads without c
 unit tokens. Catalogue order/membership/visibility changes never rewrite these rows; bounded owner reads redact
 concealed identities, and correction/clear survives missing current catalogue support. Native session/profile,
 receipt, revision and terminal fences apply. Web's existing canonical checklist consumes that exact contract.
+
+## Reviewed VNDB private labels
+
+[Explicit VNDB label adoption](library-import-label-adoption.md) adds bounded owner-selected mappings and
+canonical Subject review to the existing VNDB provider flow. Native commands create only explicitly named private
+labels and add assignments. Source removal/expiry clears consent/results without removing adopted native effects;
+terminal erasure uses the existing source and native label coordinators. Ordinary VNDB import creates no labels.

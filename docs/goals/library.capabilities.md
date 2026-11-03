@@ -577,3 +577,10 @@ Episode Subjects and admitted direct parent relationships; generic progress reta
 withdrawal/visibility changes, correction/clear, current revisions, owner isolation and stable retry identity.
 Focused native scenarios: `services/kernel/test/library/episode-progress.test.ts`. Broader frozen integration
 acceptance remains controller-owned; source presence is not an acceptance result.
+
+## Explicit VNDB private label adoption
+
+[The adoption contract](../library-import-label-adoption.md) installs owner-private map/review/page/apply/retry/cancel
+methods on the existing VNDB flow, indexed finite consent/items, native creation/assignment receipts and source
+cascade cleanup. Focused source and erasure cases accompany the implementation. Web303 integration and executed
+native64/512/4096 whole-caller growth measurements remain controller work; derived bounds alone do not close them.

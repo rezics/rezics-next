@@ -155,8 +155,21 @@ test('default native worker removes private sessions/history, labels, archives, 
     rows: [{ row: 0, version: reviewKey, fields: ['tags'] }],
   });
   expect(adoption.outcomes[0].labels[0].status).toBe('accepted');
+  const vndb = await f.json(as, 'POST', '/v1/libraryImports/vndb:preview', 200, {
+    xml: '<vndb-export version="1.0"><vns><vn id="v9999999999999999"><label label="erase consent"/></vn></vns></vndb-export>',
+  });
+  const vndbReview = await f.json(as, 'POST', `/v1/libraryImports/vndb/${vndb.uploadId}:review`, 200, {
+    ordinal: 0, action: 'retain', targetId: subjectId,
+  });
+  await f.json(as, 'POST', `/v1/libraryImports/vndb/${vndb.uploadId}/labels:review`, 200, {
+    rows: [{ ordinal: 0, reviewId: vndbReview.reviewId }],
+    mappings: [{ source: 'erase consent', target: { name: 'Erased consent only' } }],
+  });
   for (const table of [
     'list_import_mal',
+    'vndb_import',
+    'vndb_label_adoption',
+    'vndb_label_adoption_item',
     'entry_deleted',
     'personal_label',
     'collection_pins',
@@ -181,11 +194,15 @@ test('default native worker removes private sessions/history, labels, archives, 
   expect((await retire()).status).toBe(401); // Terminal authority precedes the original receipt.
   expect((await f.request(as, 'POST', `/v1/progressSessions/${session.id}:reopen`, { revision: 3 })).status).toBe(401);
   expect((await f.request(as, 'GET', `/v1/progressSessions/${session.id}`)).status).toBe(401);
+  expect((await f.request(as, 'GET', `/v1/libraryImports/vndb/${vndb.uploadId}/labels`)).status).toBe(401);
   await f.start();
   const results = await terminal(as.accountId);
   expect(results.reduce((sum, result) => sum + result.owned.removed, 0)).toBeGreaterThan(10);
   for (const table of [
     'list_import_mal',
+    'vndb_import',
+    'vndb_label_adoption',
+    'vndb_label_adoption_item',
     'entry_deleted',
     'personal_label',
     'collection_pins',
