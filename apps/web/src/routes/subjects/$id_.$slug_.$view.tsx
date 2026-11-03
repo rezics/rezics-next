@@ -261,7 +261,7 @@ function SubjectViewRoute() {
       }
       locale={locale}
       messages={subjectPageMessages()}
-      verification={verification}
+      {...(verification ? { verification } : {})}
       reader={reader}
       {...(type.label ? { typeLabel: type.label } : {})}
       {...(type.ratio ? { ratio: type.ratio } : {})}
