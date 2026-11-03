@@ -125,12 +125,13 @@ export async function applyReportEffect(pool: Pool, event: CloudEvent): Promise<
     if (!(error instanceof AlreadyProjected)) throw error;
   }
   // Also runs after exact-target replay: a crash between the two partition writes is repairable.
-  if (report.targetKind === 'subject') {
+  if (['subject', 'space', 'realm'].includes(report.targetKind)) {
     await runCommand(pool, { partition: partitionOf(0), deadline }, async (tx) => {
       const added = await catalogueUpsert.run(tx, {
         report_route: reportRoute,
         report_id: data.reportId,
         subject_id: report.targetId,
+        target_kind: report.targetKind,
         created_at: report.createdAt,
       });
       if (!added) return noEffect(null);

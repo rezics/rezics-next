@@ -1004,6 +1004,8 @@ CREATE TABLE content.catalogue_report_candidate (
     report_id uuid NOT NULL,
     subject_id uuid NOT NULL,
     created_at timestamp with time zone NOT NULL,
+    target_kind text DEFAULT 'subject'::text NOT NULL,
+    CONSTRAINT catalogue_report_candidate_target_kind_check CHECK ((target_kind = ANY (ARRAY['subject'::text, 'space'::text, 'realm'::text]))),
     CONSTRAINT catalogue_report_candidate_check CHECK ((report_route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT catalogue_report_candidate_report_route_check CHECK (((report_route >= 0) AND (report_route <= 65535))),
     CONSTRAINT catalogue_report_candidate_route_check CHECK ((route = 0))
@@ -1893,7 +1895,9 @@ CREATE TABLE content.report (
     reporter_erased boolean DEFAULT false NOT NULL,
     CONSTRAINT report_check CHECK ((route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT report_check1 CHECK (((octet_length(reason) + COALESCE(octet_length(evidence), 0)) <= 2097152)),
-    CONSTRAINT report_check2 CHECK (((revision_id IS NULL) OR (target_kind <> ALL (ARRAY['board'::text, 'subject'::text])))),
+    target_witness jsonb,
+    CONSTRAINT report_witness_bytes CHECK (((target_witness IS NULL) OR (octet_length((target_witness)::text) <= 16384))),
+    CONSTRAINT report_check2 CHECK (((revision_id IS NULL) OR (target_kind = ANY (ARRAY['thread'::text, 'post'::text])))),
     CONSTRAINT report_evidence_check CHECK ((char_length(evidence) <= 4096)),
     CONSTRAINT report_outcome_shape CHECK ((((outcome IS NULL) AND (resolved_at IS NULL) AND (resolved_by IS NULL) AND (decision_id IS NULL)) OR ((outcome IS NOT NULL) AND (outcome = ANY (ARRAY['actioned'::text, 'dismissed'::text])) AND (resolved_at IS NOT NULL) AND (((outcome = 'actioned'::text) AND (((target_kind = 'subject'::text) AND (decision_id IS NULL)) OR ((target_kind <> 'subject'::text) AND (decision_id IS NOT NULL)))) OR ((outcome = 'dismissed'::text) AND (decision_id IS NULL) AND (resolved_by IS NOT NULL)))))),
     CONSTRAINT report_reason_check CHECK ((reason = ANY (ARRAY['off_topic'::text, 'inappropriate'::text, 'spam'::text, 'illegal'::text, 'other'::text]))),
@@ -1901,7 +1905,7 @@ CREATE TABLE content.report (
     CONSTRAINT report_reporter_erased_shape CHECK (((NOT reporter_erased) OR ((reporter_account_id IS NULL) AND (evidence IS NULL)))),
     CONSTRAINT report_required_evidence CHECK ((reporter_erased OR (reason <> ALL (ARRAY['illegal'::text, 'other'::text])) OR ((evidence IS NOT NULL) AND (char_length(evidence) > 0)))),
     CONSTRAINT report_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT report_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text, 'subject'::text])))
+    CONSTRAINT report_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text, 'subject'::text, 'space'::text, 'realm'::text])))
 );
 
 
@@ -1964,7 +1968,7 @@ CREATE TABLE content.report_target (
     CONSTRAINT report_target_check1 CHECK ((report_route = ((get_byte(uuid_send(report_id), 10) * 256) + get_byte(uuid_send(report_id), 11)))),
     CONSTRAINT report_target_report_route_check CHECK (((report_route >= 0) AND (report_route <= 65535))),
     CONSTRAINT report_target_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT report_target_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text, 'subject'::text])))
+    CONSTRAINT report_target_target_kind_check CHECK ((target_kind = ANY (ARRAY['board'::text, 'thread'::text, 'post'::text, 'subject'::text, 'space'::text, 'realm'::text])))
 );
 
 
@@ -2986,6 +2990,8 @@ CREATE INDEX board_thread_rank_refresh_idx ON content.board_thread USING btree (
 --
 -- Name: catalogue_report_candidate_page_idx; Type: INDEX; Schema: content; Owner: -
 --
+
+CREATE INDEX catalogue_report_candidate_kind_page_idx ON content.catalogue_report_candidate USING btree (route, target_kind, created_at DESC, report_id DESC) INCLUDE (report_route, subject_id);
 
 CREATE INDEX catalogue_report_candidate_page_idx ON content.catalogue_report_candidate USING btree (route, created_at DESC, report_id DESC) INCLUDE (report_route, subject_id);
 

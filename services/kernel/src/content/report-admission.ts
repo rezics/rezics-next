@@ -1,3 +1,4 @@
+import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -73,6 +74,7 @@ export async function requireReportInspection(
   dependencies: ReportDependencies,
   targetId: string,
   context: { actor: Actor; deadline: number },
+  nativeKind?: 'space' | 'realm',
 ): Promise<void> {
   const route = routeOf(targetId);
   if (route === null || context.actor.kind !== 'account') throw new ProblemError('not_found');
@@ -83,13 +85,16 @@ export async function requireReportInspection(
     { route, id: targetId },
     { pool: dependencies.pool, deadline: context.deadline },
   );
+  const nativeTarget = nativeKind ? { kind: nativeKind, id: targetId } : undefined;
+  const readable = nativeTarget ? await communityReportReadCheck(dependencies, nativeTarget, context) : null;
   await within(context.deadline, () =>
     withConnection(dependencies.pool, async (connection) => {
       const client = deadlineClient(connection, context.deadline);
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         const partition = await readPartition(client, partitionOf(route));
-        if (!partition || partition.writeState === 'moved' || !(await check(client)))
+        if (!partition || partition.writeState === 'moved' || !(await check(client)) ||
+          (nativeTarget && (!(await communityReportTargetFacts(client, nativeTarget)) || !(await readable!(client)))))
           throw new ProblemError('not_found');
         await client.query('COMMIT');
       } catch (error) {

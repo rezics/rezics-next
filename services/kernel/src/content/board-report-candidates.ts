@@ -6,7 +6,7 @@ import thread from './read-report-thread.sql';
 
 /** Native point reads only, on the target route. Queue membership never grants authority. */
 export async function reportBoardPlacement(client: AccessClient, target: ReportTarget): Promise<string | null> {
-  if (target.kind === 'subject') return null;
+  if (!['board', 'thread', 'post'].includes(target.kind)) return null;
   if (target.kind === 'board') return target.id;
   const route = routeOf(target.id);
   if (route === null) return null;

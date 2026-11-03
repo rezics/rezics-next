@@ -1,3 +1,4 @@
+import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -121,6 +122,10 @@ export async function dismissReport(deps: ReportDependencies, actor: Actor, id: 
   if (!reference) throw new ReportUnavailableError();
   const route = routeOf(id)!;
   const targetRoute = routeOf(reference.target_id)!;
+  const nativeTarget = reference.target_kind === 'space' || reference.target_kind === 'realm'
+    ? { kind: reference.target_kind, id: reference.target_id } as const : null;
+  const nativeRead = nativeTarget
+    ? await communityReportReadCheck(deps, nativeTarget, { actor, deadline: context.deadline }) : null;
   const authorization = resourceAuthorization({
     access: deps.access,
     actor,
@@ -132,7 +137,8 @@ export async function dismissReport(deps: ReportDependencies, actor: Actor, id: 
             resource: { route: targetRoute, id: reference.target_id },
             async validate(client) {
               const partition = await readPartition(client, partitionOf(targetRoute));
-              return !!partition && partition.writeState !== 'moved';
+              return !!partition && partition.writeState !== 'moved' &&
+                (!nativeTarget || (!!(await communityReportTargetFacts(client, nativeTarget)) && await nativeRead!(client)));
             },
           },
     context: { pool: deps.pool, partition: partitionOf(route), deadline: context.deadline },
@@ -310,6 +316,7 @@ export function createReportOutcomeEffect(pool: Pool): Effect {
           });
         return;
       }
+      if (target.kind === 'space' || target.kind === 'realm') return;
       const chosen = await atPartition(pool, route, false, (client) =>
         decision.run(client, {
           route,

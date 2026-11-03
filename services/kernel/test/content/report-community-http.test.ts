@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
 import { createReportEffect } from '../../src/content/report-effect.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { createNativeContentSystemWithWriteRateOverrides, type NativeContentSystem } from './support/native-system.ts';
@@ -84,9 +84,9 @@ test('Space and Realm reports retain receipts and dismissed outcomes through the
     expect((await call(moderator, 'POST', `${path}:dismiss`, undefined, dismissKey)).status).toBe(200);
     expect((await call(moderator, 'POST', `${path}:dismiss`, undefined, dismissKey)).status).toBe(200);
     expect((await call(reporter, 'GET', path)).body.report).toMatchObject({ target: resource, evidence: input.evidence, outcome: 'dismissed' });
-    await seedResourceDenial(system.database.pool, routeOf(id)!, id, moderator.actor.accountId, 'moderation:takedown');
+    await seedResourceDenial(system.database.pool, routeOf(id)!, id, moderator.actor.accountId, ['moderation:takedown']);
     expect((await call(moderator, 'POST', `${path}:dismiss`, undefined, dismissKey)).status).toBe(404);
-    await seedResourceDenial(system.database.pool, routeOf(id)!, id, reporter.actor.accountId, `${kind}:read`);
+    await seedResourceDenial(system.database.pool, routeOf(id)!, id, reporter.actor.accountId, [`${kind}:read`]);
     const retained = await call(reporter, 'GET', path);
     expect(retained.status).toBe(200);
     expect(retained.body.report).toMatchObject({ targetAvailability: 'unavailable', outcome: 'dismissed', evidence: input.evidence });
@@ -99,7 +99,7 @@ test('a protected Realm is indistinguishable from an unknown Realm to a non-memb
   const reporter = system.actors.author;
   await seedGovernanceAuthority(system.database.pool, routeOf(id)!, id, reporter.actor.accountId, ['report:create']);
   const concealed = await call(reporter, 'POST', '/v1/reports', { target: { kind: 'realm', id }, reason: 'spam' });
-  const missing = await call(reporter, 'POST', '/v1/reports', { target: { kind: 'realm', id: crypto.randomUUID().replace(/^(.{14})./, '$18') }, reason: 'spam' });
+  const missing = await call(reporter, 'POST', '/v1/reports', { target: { kind: 'realm', id: newId(routeOf(id)!) }, reason: 'spam' });
   expect(concealed.status).toBe(404);
   expect(missing.status).toBe(404);
 });
