@@ -128,6 +128,63 @@ retry retain their existing per-event bounds. Physical/native/main convergence c
 `test/community/space-discovery.test.ts` covers actual native edit/gate/removal/restoration delivery, reordering,
 duplicate delivery and one actual source-fence scope obligation.
 
+## Realm home publication shelf
+
+Decision: `GET /v1/realms/:realmId/publicationShelf` exposes the fixed twelve-item native summary continuation;
+the initial Realm-home envelope will reuse its reader, and Web retains every interface and consumer integration.
+
+`createRealmHomePublicationReader` in `realm-home-publications.ts` composes one ordinary publication raw window
+with Semantic's actual `readSubjectSummaryObservation`. Each item keeps its exact `publication` alongside its
+current `summary`, including the native language choice and cover reference. It accepts `cursor` and optional
+`languages` (at most sixteen preferences), never a client-selected page size. It returns `{items,next}`;
+`next` is the unchanged publication cursor bound to this Realm, viewer, raw limit12 and native placement epoch.
+It also accepts ordinary publication cursors issued with that same limit. It reads no boards and cannot advance
+their shelf. Existing publication commands, list/point reads and their revision decision inputs remain available.
+Responses use `Cache-Control: private, no-store`; neither an account's cursor nor its disclosure can be shared.
+
+Publication selects once and releases its connection before Semantic runs. `preparePublicationPage` retains the
+original Realm/Space lifecycle/head binding and the exact selected publication heads. Its final `current()`
+reprepares native Realm and Subject decisions outside the origin connection and checks those exact keys and the
+original container binding. A replacement publication of the same Subject invalidates the earlier selection.
+Semantic retains independent native `(partition,epoch,position)` components for every home actually read: release,
+Subjects, representative editions, media and source fences. Its final check compares each component in its native
+domain and rechecks disclosure. Components are neither combined into a global version nor compared across homes.
+Changed evidence produces a retryable failure with the caller's original cursor; it cannot certify stale text/media.
+
+Concealed/missing Subjects are omitted with the raw frontier retained, without refill or an unavailable-row count.
+Failed hydration propagates its native failure rather than a successful empty page. An absent active Semantic
+release is failed preparation for this composed shelf. A genuinely empty raw window needs no Semantic read.
+Shelf exhaustion never certifies the complete Realm population. The existing Web reader still issues per-cover
+Subject calls until its owner binds this mounted transport; this shelf alone is not the complete Realm-home journey.
+
+### Cost
+
+- **Touches:** One publication raw seek of at most13 heads, up to12 initial exact head/disclosure reads, and one
+  released container observation; finalization prepares fresh native Realm/Subject Access checks, reads up to12
+  exact heads and rechecks the original container. Semantic deduplicates selected identities, groups each native
+  batch by home, and uses its existing maximum three representative-plan attempts. Each attempt resolves the active
+  release, exact Subject/current labels, image/original-language slots, representative-edition selection, native
+  media references and source fences. Preparation executes before snapshots. Final Semantic equality reads native
+  metadata for only participating homes and rechecks admitted Subject/edition disclosure. All these operations use
+  the supplied Kernel pool, including Access preparation/verification and partition dispatch; there is no HTTP or
+  additional membership, ban, member-count, board or presentation reader in this shelf. Native executor/Access
+  retries retain their own controls and the original deadline. Empty selection skips Semantic; denial conceals;
+  missing preparation, failed dependencies and changed sources propagate failure without another raw selection.
+- **Bound:** Twelve limits selected keys, not examined rows or bytes. Publication seeks use
+  `(route,realm_id,published_at,subject_id)` and exact heads `(route,realm_id,subject_id)`; Semantic uses its native
+  per-home requested full keys and slot/source protocols. Source-specific histories, label-language aggregation,
+  representative selection, media variants/credit and nested Access work retain their producer bounds. In
+  particular the current summary port aggregates every current label language for each selected Subject: no fixed
+  response/source byte or retained-memory ceiling follows from twelve keys. Source strings, JSON escaping,
+  materialized rows, maps and serialization copies must be included before certifying the full home bound.
+  The Semantic owner extension needed for that certification is a bounded current display-label/reference read
+  with admitted UTF-8 payload/dependency limits, preserving the existing language choice and cover fields.
+- **Growth check:** Focused shelf scenarios cover actual mounted native empty/populated reads, raw continuation,
+  disclosure, exact-head replacement, changed source witnesses and dependency failure/retry. Physical-prefix
+  evidence, all participating pool/runner costs at256/1024/4096, independent history/label/media growth and nested
+  Performance review remain required for the complete home. No measured constant-work or byte ceiling is claimed
+  by a small emitted page. Compare the real batch calls with Web's current one-Subject-request-per-cover pattern.
+
 ## Public Space discovery source
 
 `spaceDiscoverySource({pool,access,clock?}, {deadline}?)` in `space-discovery.ts` exports Community's internal

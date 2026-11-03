@@ -55,6 +55,13 @@ export type PublicationHead = Readonly<{
 }>;
 export type PublicationPage = Readonly<{ items: readonly PublicationHead[]; next: string | null }>;
 export type PublicationQuery = Readonly<{ cursor?: string; limit?: number }>;
+/** Trusted composition handle. The raw window and its cursor are selected once;
+ * current() checks those exact heads without selecting another window.
+ */
+export type PublicationSelection = Readonly<{
+  page: PublicationPage;
+  current: () => Promise<boolean>;
+}>;
 
 const PAGE = { default: 20, max: 100 } as const;
 const LIST = 'community.publication.list';
@@ -378,6 +385,20 @@ export async function listPublications(
   context: PublicationReadContext,
   query: PublicationQuery = {},
 ): Promise<PublicationPage | null> {
+  const selection = await preparePublicationPage(deps, realmId, context, query);
+  return selection && (await selection.current()) ? selection.page : null;
+}
+
+/** Release the origin connection before a consumer hydrates selected Subjects.
+ * The consumer must call current() after hydration and withhold the entire
+ * observation when it fails. A replacement head cannot reuse the old summary.
+ */
+export async function preparePublicationPage(
+  deps: PublicationDependencies,
+  realmId: string,
+  context: PublicationReadContext,
+  query: PublicationQuery = {},
+): Promise<PublicationSelection | null> {
   const route = routeOf(realmId);
   if (route === null || !open(context.deadline)) return null;
   const limit = query.limit === undefined ? PAGE.default : query.limit;
@@ -450,15 +471,27 @@ export async function listPublications(
     return { items, next };
   });
   if (!result) return null;
-  return withConnection(deps.pool, async (client) => {
-    const bounded = deadlineClient(client, context.deadline);
-    // At most the fixed page limit of exact publication-head keys; never a history scan.
-    for (const item of result.items) {
-      const head = await readHead.run(bounded, { route, realm: realmId, subject: item.subjectId });
-      if (head?.publicationId !== item.publicationId) return null;
-    }
-    const at = await mintReadTime(bounded, deps.clock);
-    if (!(await realmCheck(bounded, at)) || !(await revalidateContainerBinding(bounded, before, at))) return null;
-    return result;
-  });
+  return {
+    page: result,
+    async current() {
+      // Preparation can address other homes. Never perform it while holding
+      // the publication connection, including with a one-connection pool.
+      const finalRealm = await prepareRealm(deps, context.actor, realmId, context.deadline);
+      if (!finalRealm) return false;
+      const finalSubjects = new Map<string, AccessCheck>();
+      for (const item of result.items)
+        finalSubjects.set(item.subjectId, await prepareSubject(deps, context.actor, item.subjectId, context.deadline));
+      return withConnection(deps.pool, async (client) => {
+        const bounded = deadlineClient(client, context.deadline);
+        const at = await mintReadTime(bounded, deps.clock);
+        // Exact selected keys, never a second page or a publication-history scan.
+        for (const item of result.items) {
+          const head = await readHead.run(bounded, { route, realm: realmId, subject: item.subjectId });
+          if (head?.publicationId !== item.publicationId || !(await finalSubjects.get(item.subjectId)!(bounded, at)))
+            return false;
+        }
+        return (await finalRealm(bounded, at)) && (await revalidateContainerBinding(bounded, before, at));
+      });
+    },
+  };
 }
