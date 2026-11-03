@@ -5,6 +5,7 @@ import {
   createConversationActivityEffect,
   repairConversationActivityPage,
   readConversationActivitySources,
+  toConversationActivityReplyCount,
 } from '../../src/content/conversation-activity.ts';
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import {
@@ -62,7 +63,11 @@ test.serial(
       expect(full[0]!.contributedAt).toBe(plus(world.start, 2));
       expect(full[2]!.opening).toBe(true);
       expect(full.slice(0, 2).every(({ opening }) => !opening)).toBe(true);
-      expect((await activity.select([thread.id], Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect((await activity.select([thread.id], Date.now() + 30_000))[0]).toMatchObject({
+        status: 'current',
+        replyCount: { kind: 'exact', value: 2 },
+        lastContributionAt: plus(world.start, 2),
+      });
       const populated = await current();
       expect(populated).toMatchObject({
         status: 'current',
@@ -80,7 +85,7 @@ test.serial(
       );
       await runtime.consume(edited.envelopes);
       expect((await source()).contributions).toEqual(full);
-      expect((await activity.select([thread.id], Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect((await activity.select([thread.id], Date.now() + 30_000))[0]!.status).toBe('current');
       expect((await current()).lastContributionAt).toBe(plus(world.start, 2));
 
       const erased = await world.capture(partition, async () => {
@@ -92,8 +97,12 @@ test.serial(
       });
       await runtime.consume(erased.envelopes);
       expect((await source()).contributions.map(({ postId }) => postId)).toEqual([first.value.post.id, thread.postId]);
-      expect((await activity.confirm(populated, Date.now() + 30_000)).status).toBe('withheld');
-      expect((await activity.select([thread.id], Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect((await activity.confirm(populated, Date.now() + 30_000))[0]!.status).toBe('withheld');
+      expect((await activity.select([thread.id], Date.now() + 30_000))[0]).toMatchObject({
+        status: 'current',
+        replyCount: { kind: 'exact', value: 1 },
+        lastContributionAt: plus(world.start, 1),
+      });
       expect(await current()).toMatchObject({
         status: 'current',
         replyCount: { kind: 'exact', value: 1 },
@@ -134,3 +143,8 @@ test.serial(
   },
   600_000,
 );
+
+test('conversation reply count distinguishes exact zero from the disclosed lower bound', () => {
+  expect(toConversationActivityReplyCount(0n)).toEqual({ kind: 'exact', value: 0 });
+  expect(toConversationActivityReplyCount(10_001n)).toEqual({ kind: 'lower-bound', value: 10_000 });
+});

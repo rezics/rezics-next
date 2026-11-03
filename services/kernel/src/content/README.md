@@ -1391,43 +1391,147 @@ one ordered prefix of at most 32 native-eligible publication episodes. The parti
 episodes, so finding the next retained contribution does not traverse removed posts or revision history.
 The source preserves microsecond timestamps and returns its partition anchor. `more` is conservative.
 
-These are trusted internal candidates, not installed Home/Search/Web activity DTOs. `coverage: 'unproven'`
-is mandatory, including for an empty prefix. No caller may treat its length as a reply count or return its
-timestamps without current disclosure. It does not establish thread/board/Realm/account/ancestry eligibility,
-does not establish completeness for pre-installation publications, and does not include a protected-only
-publication that has never had a native public-publication event. Existing hot/active/new ranking is unchanged.
-Current disclosed batch figures, bounded repair and Board/thread/Subject integration remain to be delivered.
+These remain trusted internal candidates, not a count or a disclosed timestamp. `coverage: 'unproven'` is
+mandatory, including for an empty prefix. No caller may treat the prefix length as a reply count or return its
+timestamps without the installed current batch and the consumer's current disclosure checks. Existing
+hot/active/new ranking is unchanged.
 
-### Cost: contribution effect
+## Installed conversation activity batch
 
-- Touches: one native thread home and its registered supervisor effect; no Access preparation, document bodies,
-  foreign checkouts or user receipts. The exact outbox position prefix proves the event. Each of at most 100
-  event-named posts has one post PK lookup, one same-home thread/post source lookup and one episode PK upsert;
-  a missing post uses one episode PK retirement instead of the source lookup/upsert. The command emits at most
-  one registered event containing at most 100 UUIDs. The supervisor still owns dispatch/checkpoint work.
-- Bound: local body statements are at most `1 + 3p`, for `p <= 100`; proof examines at most the envelope's
-  1,000 event slots, then each post examines at most one post, one thread, one post, one head and one episode. Returned
-  metadata has no body/subject/media arrays. Add the existing `runCommand` gate, time, partition fence,
-  transaction control, record-source finalization, outbox write and supervisor/runner work; the complete
-  all-pool physical/byte ceiling is pending Performance review and is not claimed here. A duplicate that changes
-  neither watermark, time nor native state rolls back without a new event; malformed sources do not write.
-- Growth check: focused native lifecycle coverage is in `conversation-activity-native-source.test.ts`.
-  Independent 256/1024/4096 post-history, unrelated-thread and runner growth with strict native plans remains
-  required before this source can be used for a disclosed figure.
+`createConversationActivityBatch(pool)` exports a bounded producer capability:
 
-### Cost: selected contribution prefixes
+```ts
+select(threadIds: readonly string[], deadline: number): Promise<readonly ConversationActivitySelection[]>;
+confirm(selected: readonly ConversationActivitySelection[], deadline: number): Promise<readonly ConversationActivitySelection[]>;
+```
 
-- Touches: only represented Content homes, sequentially; no Access, account, Realm, control pool or document
-  hydration. Per home: begin, partition point, one lateral-prefix query, commit; failure adds rollback.
-- Bound: for `t <= 100` raw inputs and `h <= t` represented homes, at most `4h` normal statements, `h` partition
-  rows and `32t` episode rows through `(route, thread_id, contributed_at DESC, post_id DESC)` with the exact
-  partial-index predicate. Input is at most 100 route/UUID pairs; each returned row is two UUIDs, a boolean and
-  one 27-byte timestamp. The final grouped order sorts at most `32t` selected rows. No unrelated keys or inactive episodes are requested.
-  Empty input performs no checkout; invalid/oversize input performs no SQL. Missing/moved homes throw the
-  shared unavailable error rather than returning an empty figure. This bound covers the internal source only.
-- Growth check: the focused native test covers an opening, replies, next remaining contribution, edit,
-  restoration, delayed publication, duplicate replay and deduplication. Strict EXPLAIN-prefix and three-scale
-  all-pool checks, current-disclosure work and externally usable byte ceilings remain deferred.
+Both methods accept at most 100 raw keys, deduplicate them, group by represented Content partition, and release
+each read-only snapshot before the next home starts. The `ConversationActivitySelection` union is either
+`{threadId,status:'current',cohort:'public',replyCount,lastContributionAt,witness}` or a typed withholding
+with reason `missing`, `coverage`, `unsupported-cohort` or `stale`. `ConversationActivityReplyCount` distinguishes
+`{kind:'exact',value}` from `{kind:'lower-bound',value}`. Exact zero is a real zero and retains the opening's
+publication time; unavailable authority has no count or time.
+
+The installed cohort includes only current, available, public posts in an available, public thread on a public
+board. The opening post supplies the thread's starting contribution time but is not included in `replyCount`.
+The latest included post is selected by its original native publication time; revisions never advance it.
+The `public` cohort is producer coverage, not a viewer entitlement. A board's `realmId` is part of the witness,
+but this producer does not decide Realm membership, account state or current page disclosure. Protected and
+viewer-specific cohorts are withheld. Consumers must not render a producer result directly.
+
+`ConversationActivityWitness` carries the selected thread and board ids, their native security revisions, the
+Realm id, board and coverage generations, the source invalidation head `{epoch,position,eventSeq}`, and the
+partition `AnchoredPosition`. `eventSeq: 1000` is the repair cut after every event at that partition position;
+real envelope events have lower values. The consumer protocol is: bind `select` to the already bounded native page keys;
+hydrate labels/actions through the existing owner; call `confirm` after hydration; then reobserve that owner's
+thread, place, Realm, account and disclosure witnesses before returning any card. Compare the captured native
+thread/board/Realm witnesses and current consumer observations. A changed, denied, failed or viewer-specific
+observation withholds the figure and follows that page owner's existing retry/error behavior. `confirm` proves
+only that native activity coverage and its native witnesses stayed current; it cannot certify Access or disclosure.
+
+The effect remains the sole producer and is installed by `registerContent` in the existing supervisor. Its
+admission transaction validates the exact source outbox envelope. A post-local publication, erase, restoration
+or takedown replaces that episode's current eligibility and adjusts an already-current opening summary by the
+old/new inclusion delta. Removing its latest contribution runs the public live-episode index with `LIMIT 1` to
+find the next current contribution. If the opening summary is not current or the transition lacks time proof,
+the producer retires it for repair. An edit changes episode source progress but does not invalidate or advance
+the contribution time. A board or thread moderation event advances its invalidation frontier; it does not
+create a second count authority. Duplicate or older source tuples cannot move a frontier backwards. The opening
+episode row stores the currently covered reply count and latest contribution; neither is inferred from prefix length.
+
+`repairConversationActivityPage(pool, partition, deadline)` advances one committed native page. It either walks
+the fixed route span with a raw `(route,thread_id)` cursor and cut, applies one pending board invalidation page,
+or resumes one dirty thread's `(created_at,post_id)` page through the public-post partial index. Each post's
+earliest persisted contribution time is retained, or is reconstructed from its indexed native publication
+envelope. History repair is resumable; routine removal of the latest post uses the single-row descending-prefix
+lookup described above. The page updates no revision body or unavailable/hidden post history.
+Missing publication provenance retires current coverage instead of guessing. Source enumeration completion
+and visible convergence are separate return fields. `createContentWork` registers this page in the default
+maintenance runner once per minute for each configured partition.
+
+Decision: expose exact public reply counts through 10,000 and return a lower bound of 10,000 above that while retaining the exact maintained source count.
+
+Handoff to Thread, Board, Subject, Home and Search: bind `createConversationActivityBatch(pool)` at the selected
+native page boundary and retain the consumer's assembly and receiving ownership. The existing page owners must
+perform the final current-disclosure protocol above. A producer response does not populate a page until that
+consumer wiring lands. Example outcomes are:
+
+```ts
+{ threadId, status: 'current', cohort: 'public', replyCount: { kind: 'exact', value: 0 }, lastContributionAt: openingAt, witness }
+{ threadId, status: 'current', cohort: 'public', replyCount: { kind: 'lower-bound', value: 10_000 }, lastContributionAt, witness }
+{ threadId, status: 'withheld', reason: 'coverage' }
+{ threadId, status: 'withheld', reason: 'stale' }
+```
+
+A failed source/home read rejects the bounded operation and uses that page's existing retry path; it never becomes
+an empty page or exact zero. No Web page assembler, Home/Search query or Board/Subject presentation was changed
+in this producer task. The source candidate API remains available to existing internal callers.
+
+### Cost: source-effect admission
+
+- Touches: one source Content partition, its exact outbox position, up to 100 event-named post/episode keys,
+  and their distinct opening summaries; a board-target event touches one board-frontier key. No Access, foreign
+  checkout, document body or user receipt is added. The invoking command and supervisor retain their own work.
+- Bound: admission first proves one exact outbox envelope, which examines at most 1,000 event slots. A post
+  event has at most 100 targets; each target performs one bounded source/episode/publication lookup and one
+  monotonic episode upsert. Up to 100 removed targets may each read an opening summary; each distinct thread
+  then reads its opening summary and board generation, may perform one `LIMIT 1` public live-prefix lookup,
+  and updates one opening summary. Thus the local body-query ceiling is `1 + 3p + 5q`, with `p <= 100`
+  targets and `q <= p` affected threads, before the original command's partition, Access/control, receipt,
+  transaction, outbox and runner work. A board event is one proof plus one board PK upsert; a thread event is
+  one proof plus the bounded opening reset/seed. The same-home episode writes preserve source tuple order.
+- Growth check: the focused native lifecycle outcome verifies publication deltas, removal of the latest reply,
+  restoration, edit time retention, exact replay and the next remaining contribution. Three-scale native
+  physical plans and all-pool runner growth are deferred to controller acceptance.
+
+### Cost: asynchronous episode projection
+
+- Touches: one Content home, the exact source outbox envelope, and at most 100 event-named post/episode keys.
+  It uses the existing native command path and same-home post/thread/head lookups. It adds no foreign checkout,
+  document body, Access preparation or receipt.
+- Bound: one source proof plus at most three body statements per target (post PK, current source join, episode
+  upsert); a purged post uses an episode PK retirement instead of the source join/upsert. Event payloads cap
+  targets at 100 UUIDs, and proof examines no more than the envelope's 1,000 slots. The existing projector
+  command's partition, source, transaction, outbox and worker/runner work remains additional.
+- Growth check: the native outcome covers late, duplicate and reverse delivery. Three-scale native physical
+  plans and all-pool runner work are deferred to controller acceptance.
+
+### Cost: selected batch and native confirmation
+
+- Touches: only represented Content homes, sequentially, with one batch of at most 100 raw `(route,thread_id)`
+  keys per home. Each read sees the partition anchor, thread, board, opening summary and board frontier; it does
+  not run Access, Realm, account, label, media or page hydration.
+- Bound: `select` executes begin, one partition lookup, one indexed batch query and commit per represented home
+  (`4h`, `h <= 100`; rollback replaces commit on failure), returning at most 100 metadata rows. `confirm` runs
+  one further selection for the current subset and compares bounded witnesses in memory. The query probes at
+  most one thread PK, board PK, opening partial-unique key and board-frontier PK per input key; JSON input and
+  output are fixed to 100 UUID keys and small metadata DTOs. Disclosure, Access and current page re-observation
+  belong to the receiving consumer and are not counted as producer work.
+- Growth check: the focused native test verifies exact zero, populated count/time, withheld invalidation and
+  stale confirmation. Three-scale selected-history and all-pool disclosure/page work checks are deferred.
+
+### Cost: resumable coverage repair page
+
+- Touches: one configured partition and at most one raw source page, board-invalidation page, or thread post page.
+  A page uses at most 101 source keys to decide whether 100 are left; thread repair resolves one thread's current
+  post/head/thread/board data and the indexed earliest publication envelope. It writes at most 100 episode rows
+  and one opening summary/frontier. It reads no revision body and joins no foreign home.
+- Bound: every page has four common body statements: partition read, repair-frontier insert/lock, and pending-board
+  lookup. The source branch adds one 101-thread query, an opening insert and initialization update (at most 100
+  rows each), and one cursor update: at most eight body statements. The board branch adds one 101-thread query,
+  the same two opening seed statements, one at-most-100 opening reset and one board cursor update: at most nine.
+  The thread branch adds one repair-cursor read, one or two dirty-opening reads, one cursor update, one 101-post
+  query, at most 100 episode upserts, one board-generation lookup and one opening-summary update: at most twelve
+  body statements. Each ordered post page uses the partial index excluding unavailable, erased and non-public
+  posts; its lateral publication lookup uses the partial outbox index and examines at most one matching source
+  row per returned post. `BEGIN`, `COMMIT`/`ROLLBACK`, deadline control and index maintenance add transaction
+  costs. The default DBOS workflow calls one bounded step per configured partition per minute, in batches of
+  eight; its retry attempts and runner/checkpoint work are additional. Missing timestamp proof leaves the opening
+  unrecoverable; it does not publish a partial count. `sourceComplete` records enumeration only, not whether
+  each public opening row is current.
+- Growth check: focused native repair outcome runs through opening, two replies, removal of the newest reply,
+  restoration and edit retention. Three-scale post-history, unrelated-thread, board-frontier and all-pool runner
+  plans remain deferred to controller acceptance.
 
 ## Subject threads
 

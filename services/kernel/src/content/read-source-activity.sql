@@ -1,4 +1,10 @@
 SELECT thread.board_id, thread.first_post_id,
+       thread.visibility AS thread_visibility,
+       thread.availability AS thread_availability,
+       thread.security_revision::text AS thread_security_revision,
+       board.visibility AS board_visibility,
+       board.security_revision::text AS board_security_revision,
+       board.realm_id,
        post.post_id, post.author_account_id,
        post.security_revision::text AS security_revision,
        post.visibility AS post_visibility,
@@ -7,6 +13,8 @@ SELECT thread.board_id, thread.first_post_id,
        to_char(thread.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
        to_char(post.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS item_created_at
 FROM content.thread AS thread
+LEFT JOIN content.board AS board
+  ON board.route = thread.route AND board.board_id = thread.board_id
 LEFT JOIN content.post AS post
   ON post.route = thread.route AND post.thread_id = thread.thread_id AND post.post_id = :post_id::uuid
 LEFT JOIN content.revision AS head

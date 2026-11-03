@@ -31,6 +31,7 @@ import { CONTENT_EVENTS } from './events.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
+import { repairConversationActivityPage } from './conversation-activity-repair.ts';
 import { createErasureJob } from './erasure-job.ts';
 import { createReactionCountEffect } from './reaction-projection.ts';
 import { createPartyLocatorEffect } from './party-locator.ts';
@@ -71,11 +72,13 @@ import {
 export const CONTENT_OPERATION_PROGRESS = 'content.authorErasure.progress';
 export const CONTENT_COLLECTION_SCHEDULE = 'content.collection.hourly';
 export const CONTENT_BOARD_RANK_SCHEDULE = 'content.board-rank.every-10-minutes';
+export const CONTENT_CONVERSATION_ACTIVITY_REPAIR_SCHEDULE = 'content.conversation-activity.repair.each-minute';
 export const CONTENT_NOTICE_RETENTION_SCHEDULE = 'content.notice-retention.hourly';
 export const BOARD_SLOW_RECOVERY_SCHEDULE = 'content.board-slow.recovery.each-minute';
 export const BOARD_SLOW_RETENTION_SCHEDULE = 'content.board-slow.retention.daily';
 const PARTITION_WORKFLOW = 'content.collect.partition';
 const BOARD_RANK_WORKFLOW = 'content.board-rank.refresh';
+const CONVERSATION_ACTIVITY_REPAIR_WORKFLOW = 'content.conversation-activity.repair';
 const NOTICE_RETENTION_WORKFLOW = 'content.notice-retention';
 const NOTICE_RETENTION_PARTITION_WORKFLOW = 'content.notice-retention.partition';
 const BOARD_SLOW_RECOVERY_WORKFLOW = 'content.board-slow.recovery';
@@ -407,6 +410,17 @@ async function registerWork(
       name: BOARD_RANK_WORKFLOW,
     },
   );
+  const conversationActivityRepairPage = DBOS.registerStep(
+    async (partition: number) => repairConversationActivityPage(context.pool, partition, Date.now() + 30_000),
+    { name: 'content.conversation-activity.repair.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY)
+        await Promise.all(partitions.slice(offset, offset + PARTITION_CONCURRENCY).map(conversationActivityRepairPage));
+    },
+    { name: CONVERSATION_ACTIVITY_REPAIR_WORKFLOW },
+  );
   const noticeRetentionCutoff = DBOS.registerStep(
     async () => new Date(context.clock().getTime() - NOTICE_RETENTION_MS).toISOString(),
     { name: 'content.notice-retention.cutoff', ...retry },
@@ -504,6 +518,14 @@ async function registerWork(
       workflowName: BOARD_RANK_WORKFLOW,
       schedule: '*/10 * * * *',
       queueName: CONTENT_QUEUES.collect,
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: CONTENT_CONVERSATION_ACTIVITY_REPAIR_SCHEDULE,
+      workflowName: CONVERSATION_ACTIVITY_REPAIR_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
       cronTimezone: 'UTC',
       automaticBackfill: false,
     },
