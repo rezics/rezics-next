@@ -10,6 +10,20 @@ type Dependencies = {
     tokens: KeyRing;
     clock: KernelClock;
 };
+export declare const progressPresentationSchema: import("typebox").TUnsafe<Readonly<{
+    meaning: 'known' | 'unknown' | 'unavailable';
+    unitLabel?: string;
+    unitLabelLanguage?: string;
+    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+    dimension?: string;
+    structure: 'unverified';
+    recording: Readonly<{
+        state: 'supported';
+        inputRules: import("./progress-model.ts").ProgressInputRules;
+    } | {
+        state: 'unsupported' | 'unavailable';
+    }>;
+}>>;
 export declare const sessionSchema: import("typebox").TObject<{
     id: import("typebox").TString;
     subjectId: import("typebox").TString;
@@ -25,27 +39,26 @@ export declare const sessionSchema: import("typebox").TObject<{
     revision: import("typebox").TInteger;
     startedAt: import("typebox").TString;
     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
-    measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TUnsafe<{
-        unit: string;
-        amount: string | null;
-        total: string | null;
-        presentation?: import("./progress-model.ts").ProgressPresentation;
+    measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+        unit: import("typebox").TString;
+        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+        presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+            meaning: 'known' | 'unknown' | 'unavailable';
+            unitLabel?: string;
+            unitLabelLanguage?: string;
+            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+            dimension?: string;
+            structure: 'unverified';
+            recording: Readonly<{
+                state: 'supported';
+                inputRules: import("./progress-model.ts").ProgressInputRules;
+            } | {
+                state: 'unsupported' | 'unavailable';
+            }>;
+        }>>>;
     }>>>;
 }>;
-export declare const progressPresentationSchema: import("typebox").TUnsafe<Readonly<{
-    meaning: 'known' | 'unknown' | 'unavailable';
-    unitLabel?: string;
-    unitLabelLanguage?: string;
-    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
-    dimension?: string;
-    structure: 'unverified';
-    recording: Readonly<{
-        state: 'supported';
-        inputRules: import("./progress-model.ts").ProgressInputRules;
-    } | {
-        state: 'unsupported' | 'unavailable';
-    }>;
-}>>;
 /** HTTP transport for private progress sessions and their public published snapshots. */
 export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
     typebox: {};
@@ -5211,7 +5224,10 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                     mode: "completed_units" | "cursor_position" | "scalar_amount";
                     unit: string;
                     total?: string | null;
-                    additionalMeasures?: { unit: string; total?: string | null; }[];
+                    additionalMeasures?: {
+                        unit: string;
+                        total?: string | null;
+                    }[];
                 };
                 params: {};
                 query: unknown;
@@ -5235,7 +5251,25 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
-                            measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
+                            measures?: {
+                                unit: import("./progress.ts").ProgressUnit;
+                                total: string | null;
+                                amount: string | null;
+                                presentation?: Readonly<{
+                                    meaning: 'known' | 'unknown' | 'unavailable';
+                                    unitLabel?: string;
+                                    unitLabelLanguage?: string;
+                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    dimension?: string;
+                                    structure: 'unverified';
+                                    recording: Readonly<{
+                                        state: 'supported';
+                                        inputRules: import("./progress-model.ts").ProgressInputRules;
+                                    } | {
+                                        state: 'unsupported' | 'unavailable';
+                                    }>;
+                                }>;
+                            }[];
                         };
                     };
                     201: {
@@ -5254,7 +5288,25 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
-                            measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
+                            measures?: {
+                                unit: string;
+                                amount: string | null;
+                                total: string | null;
+                                presentation?: Readonly<{
+                                    meaning: 'known' | 'unknown' | 'unavailable';
+                                    unitLabel?: string;
+                                    unitLabelLanguage?: string;
+                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    dimension?: string;
+                                    structure: 'unverified';
+                                    recording: Readonly<{
+                                        state: 'supported';
+                                        inputRules: import("./progress-model.ts").ProgressInputRules;
+                                    } | {
+                                        state: 'unsupported' | 'unavailable';
+                                    }>;
+                                }>;
+                            }[];
                         };
                     };
                     400: Response | {
@@ -5438,7 +5490,25 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
-                            measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
+                            measures?: {
+                                unit: string;
+                                amount: string | null;
+                                total: string | null;
+                                presentation?: Readonly<{
+                                    meaning: 'known' | 'unknown' | 'unavailable';
+                                    unitLabel?: string;
+                                    unitLabelLanguage?: string;
+                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    dimension?: string;
+                                    structure: 'unverified';
+                                    recording: Readonly<{
+                                        state: 'supported';
+                                        inputRules: import("./progress-model.ts").ProgressInputRules;
+                                    } | {
+                                        state: 'unsupported' | 'unavailable';
+                                    }>;
+                                }>;
+                            }[];
                         }[];
                         next: string | null;
                     };
@@ -5639,7 +5709,25 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                 revision: number;
                                 startedAt: string;
                                 completedAt: string | null;
-                                measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
+                                measures?: {
+                                    unit: string;
+                                    amount: string | null;
+                                    total: string | null;
+                                    presentation?: Readonly<{
+                                        meaning: 'known' | 'unknown' | 'unavailable';
+                                        unitLabel?: string;
+                                        unitLabelLanguage?: string;
+                                        unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                        dimension?: string;
+                                        structure: 'unverified';
+                                        recording: Readonly<{
+                                            state: 'supported';
+                                            inputRules: import("./progress-model.ts").ProgressInputRules;
+                                        } | {
+                                            state: 'unsupported' | 'unavailable';
+                                        }>;
+                                    }>;
+                                }[];
                                 presentation?: Readonly<{
                                     meaning: 'known' | 'unknown' | 'unavailable';
                                     unitLabel?: string;
@@ -5772,7 +5860,25 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
-                                    measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
+                                    measures?: {
+                                        unit: string;
+                                        amount: string | null;
+                                        total: string | null;
+                                        presentation?: Readonly<{
+                                            meaning: 'known' | 'unknown' | 'unavailable';
+                                            unitLabel?: string;
+                                            unitLabelLanguage?: string;
+                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            dimension?: string;
+                                            structure: 'unverified';
+                                            recording: Readonly<{
+                                                state: 'supported';
+                                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                                            } | {
+                                                state: 'unsupported' | 'unavailable';
+                                            }>;
+                                        }>;
+                                    }[];
                                 };
                             };
                             400: Response | {
@@ -5892,7 +5998,25 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
-                                    measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
+                                    measures?: {
+                                        unit: string;
+                                        amount: string | null;
+                                        total: string | null;
+                                        presentation?: Readonly<{
+                                            meaning: 'known' | 'unknown' | 'unavailable';
+                                            unitLabel?: string;
+                                            unitLabelLanguage?: string;
+                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            dimension?: string;
+                                            structure: 'unverified';
+                                            recording: Readonly<{
+                                                state: 'supported';
+                                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                                            } | {
+                                                state: 'unsupported' | 'unavailable';
+                                            }>;
+                                        }>;
+                                    }[];
                                 };
                             };
                             400: Response | {
@@ -6012,7 +6136,25 @@ export declare function progressRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                     startedAt: string;
                                     completedAt: string | null;
-                                    measures?: { unit: string; amount: string | null; total: string | null; presentation?: import("./progress-model.ts").ProgressPresentation }[];
+                                    measures?: {
+                                        unit: string;
+                                        amount: string | null;
+                                        total: string | null;
+                                        presentation?: Readonly<{
+                                            meaning: 'known' | 'unknown' | 'unavailable';
+                                            unitLabel?: string;
+                                            unitLabelLanguage?: string;
+                                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                            dimension?: string;
+                                            structure: 'unverified';
+                                            recording: Readonly<{
+                                                state: 'supported';
+                                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                                            } | {
+                                                state: 'unsupported' | 'unavailable';
+                                            }>;
+                                        }>;
+                                    }[];
                                 };
                             };
                             400: Response | {

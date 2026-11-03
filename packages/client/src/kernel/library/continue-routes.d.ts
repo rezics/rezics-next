@@ -24,6 +24,25 @@ export declare const continuePageSchema: import("typebox").TObject<{
             revision: import("typebox").TInteger;
             startedAt: import("typebox").TString;
             completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                unit: import("typebox").TString;
+                amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+                    meaning: 'known' | 'unknown' | 'unavailable';
+                    unitLabel?: string;
+                    unitLabelLanguage?: string;
+                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                    dimension?: string;
+                    structure: 'unverified';
+                    recording: Readonly<{
+                        state: 'supported';
+                        inputRules: import("./progress-model.ts").ProgressInputRules;
+                    } | {
+                        state: 'unsupported' | 'unavailable';
+                    }>;
+                }>>>;
+            }>>>;
         }>, import("typebox").TNull]>;
         subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
             id: import("typebox").TString;
@@ -5276,6 +5295,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     revision: import("typebox").TInteger;
                     startedAt: import("typebox").TString;
                     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        unit: import("typebox").TString;
+                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+                            meaning: 'known' | 'unknown' | 'unavailable';
+                            unitLabel?: string;
+                            unitLabelLanguage?: string;
+                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                            dimension?: string;
+                            structure: 'unverified';
+                            recording: Readonly<{
+                                state: 'supported';
+                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                            } | {
+                                state: 'unsupported' | 'unavailable';
+                            }>;
+                        }>>>;
+                    }>>>;
                 }>, import("typebox").TNull]>;
                 subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
@@ -5425,6 +5463,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     revision: number;
                     startedAt: string;
                     completedAt: string | null;
+                    measures?: {
+                        unit: string;
+                        amount: string | null;
+                        total: string | null;
+                        presentation?: Readonly<{
+                            meaning: 'known' | 'unknown' | 'unavailable';
+                            unitLabel?: string;
+                            unitLabelLanguage?: string;
+                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                            dimension?: string;
+                            structure: 'unverified';
+                            recording: Readonly<{
+                                state: 'supported';
+                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                            } | {
+                                state: 'unsupported' | 'unavailable';
+                            }>;
+                        }>;
+                    }[];
                 } | null;
                 subject?: {
                     id: string;
@@ -5542,6 +5599,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     revision: number;
                     startedAt: string;
                     completedAt: string | null;
+                    measures?: {
+                        unit: string;
+                        amount: string | null;
+                        total: string | null;
+                        presentation?: Readonly<{
+                            meaning: 'known' | 'unknown' | 'unavailable';
+                            unitLabel?: string;
+                            unitLabelLanguage?: string;
+                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                            dimension?: string;
+                            structure: 'unverified';
+                            recording: Readonly<{
+                                state: 'supported';
+                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                            } | {
+                                state: 'unsupported' | 'unavailable';
+                            }>;
+                        }>;
+                    }[];
                 } | null;
                 subject?: {
                     id: string;
@@ -5667,6 +5743,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         revision: import("typebox").TInteger;
                         startedAt: import("typebox").TString;
                         completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                            unit: import("typebox").TString;
+                            amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                            presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+                                meaning: 'known' | 'unknown' | 'unavailable';
+                                unitLabel?: string;
+                                unitLabelLanguage?: string;
+                                unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                dimension?: string;
+                                structure: 'unverified';
+                                recording: Readonly<{
+                                    state: 'supported';
+                                    inputRules: import("./progress-model.ts").ProgressInputRules;
+                                } | {
+                                    state: 'unsupported' | 'unavailable';
+                                }>;
+                            }>>>;
+                        }>>>;
                     }>, import("typebox").TNull]>;
                     subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                         id: import("typebox").TString;
@@ -5870,6 +5965,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         revision: number;
                         startedAt: string;
                         completedAt: string | null;
+                        measures?: {
+                            unit: string;
+                            amount: string | null;
+                            total: string | null;
+                            presentation?: Readonly<{
+                                meaning: 'known' | 'unknown' | 'unavailable';
+                                unitLabel?: string;
+                                unitLabelLanguage?: string;
+                                unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                dimension?: string;
+                                structure: 'unverified';
+                                recording: Readonly<{
+                                    state: 'supported';
+                                    inputRules: import("./progress-model.ts").ProgressInputRules;
+                                } | {
+                                    state: 'unsupported' | 'unavailable';
+                                }>;
+                            }>;
+                        }[];
                     } | null;
                     subject?: {
                         id: string;
@@ -5987,6 +6101,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                         revision: number;
                         startedAt: string;
                         completedAt: string | null;
+                        measures?: {
+                            unit: string;
+                            amount: string | null;
+                            total: string | null;
+                            presentation?: Readonly<{
+                                meaning: 'known' | 'unknown' | 'unavailable';
+                                unitLabel?: string;
+                                unitLabelLanguage?: string;
+                                unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                dimension?: string;
+                                structure: 'unverified';
+                                recording: Readonly<{
+                                    state: 'supported';
+                                    inputRules: import("./progress-model.ts").ProgressInputRules;
+                                } | {
+                                    state: 'unsupported' | 'unavailable';
+                                }>;
+                            }>;
+                        }[];
                     } | null;
                     subject?: {
                         id: string;
@@ -6114,6 +6247,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                             revision: number;
                             startedAt: string;
                             completedAt: string | null;
+                            measures?: {
+                                unit: string;
+                                amount: string | null;
+                                total: string | null;
+                                presentation?: Readonly<{
+                                    meaning: 'known' | 'unknown' | 'unavailable';
+                                    unitLabel?: string;
+                                    unitLabelLanguage?: string;
+                                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                                    dimension?: string;
+                                    structure: 'unverified';
+                                    recording: Readonly<{
+                                        state: 'supported';
+                                        inputRules: import("./progress-model.ts").ProgressInputRules;
+                                    } | {
+                                        state: 'unsupported' | 'unavailable';
+                                    }>;
+                                }>;
+                            }[];
                         } | null;
                         subject?: {
                             id: string;
@@ -6255,6 +6407,25 @@ export declare function continueRoutes(app: ReturnType<typeof definitionRoutes>,
                     revision: import("typebox").TInteger;
                     startedAt: import("typebox").TString;
                     completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                        unit: import("typebox").TString;
+                        amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                        presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+                            meaning: 'known' | 'unknown' | 'unavailable';
+                            unitLabel?: string;
+                            unitLabelLanguage?: string;
+                            unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                            dimension?: string;
+                            structure: 'unverified';
+                            recording: Readonly<{
+                                state: 'supported';
+                                inputRules: import("./progress-model.ts").ProgressInputRules;
+                            } | {
+                                state: 'unsupported' | 'unavailable';
+                            }>;
+                        }>>>;
+                    }>>>;
                 }>, import("typebox").TNull]>;
                 subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;

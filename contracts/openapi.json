@@ -84394,6 +84394,157 @@
                                           "null"
                                         ]
                                       },
+                                      "measures": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "amount": {
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "presentation": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "dimension": {
+                                                  "type": "string"
+                                                },
+                                                "meaning": {
+                                                  "enum": [
+                                                    "known",
+                                                    "unknown",
+                                                    "unavailable"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "recording": {
+                                                  "anyOf": [
+                                                    {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "inputRules": {
+                                                          "additionalProperties": false,
+                                                          "properties": {
+                                                            "max": {
+                                                              "type": "string"
+                                                            },
+                                                            "min": {
+                                                              "type": "string"
+                                                            },
+                                                            "step": {
+                                                              "type": "string"
+                                                            },
+                                                            "total": {
+                                                              "enum": [
+                                                                "optional",
+                                                                "required",
+                                                                "forbidden"
+                                                              ],
+                                                              "type": "string"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "step",
+                                                            "total"
+                                                          ],
+                                                          "type": "object"
+                                                        },
+                                                        "state": {
+                                                          "const": "supported",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "state",
+                                                        "inputRules"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    {
+                                                      "additionalProperties": false,
+                                                      "properties": {
+                                                        "state": {
+                                                          "enum": [
+                                                            "unsupported",
+                                                            "unavailable"
+                                                          ],
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "state"
+                                                      ],
+                                                      "type": "object"
+                                                    }
+                                                  ]
+                                                },
+                                                "structure": {
+                                                  "const": "unverified",
+                                                  "type": "string"
+                                                },
+                                                "unitCountForms": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "few": {
+                                                      "type": "string"
+                                                    },
+                                                    "many": {
+                                                      "type": "string"
+                                                    },
+                                                    "one": {
+                                                      "type": "string"
+                                                    },
+                                                    "other": {
+                                                      "type": "string"
+                                                    },
+                                                    "two": {
+                                                      "type": "string"
+                                                    },
+                                                    "zero": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "other"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "unitLabel": {
+                                                  "type": "string"
+                                                },
+                                                "unitLabelLanguage": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "meaning",
+                                                "structure",
+                                                "recording"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "total": {
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "unit": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "unit",
+                                            "amount",
+                                            "total"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 8,
+                                        "minItems": 2,
+                                        "type": "array"
+                                      },
                                       "mode": {
                                         "enum": [
                                           "scalar_amount",
@@ -95150,6 +95301,157 @@
                                   "string",
                                   "null"
                                 ]
+                              },
+                              "measures": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "amount": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "presentation": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "dimension": {
+                                          "type": "string"
+                                        },
+                                        "meaning": {
+                                          "enum": [
+                                            "known",
+                                            "unknown",
+                                            "unavailable"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "recording": {
+                                          "anyOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "inputRules": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "max": {
+                                                      "type": "string"
+                                                    },
+                                                    "min": {
+                                                      "type": "string"
+                                                    },
+                                                    "step": {
+                                                      "type": "string"
+                                                    },
+                                                    "total": {
+                                                      "enum": [
+                                                        "optional",
+                                                        "required",
+                                                        "forbidden"
+                                                      ],
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "step",
+                                                    "total"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "state": {
+                                                  "const": "supported",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state",
+                                                "inputRules"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "state": {
+                                                  "enum": [
+                                                    "unsupported",
+                                                    "unavailable"
+                                                  ],
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "state"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
+                                        },
+                                        "structure": {
+                                          "const": "unverified",
+                                          "type": "string"
+                                        },
+                                        "unitCountForms": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "few": {
+                                              "type": "string"
+                                            },
+                                            "many": {
+                                              "type": "string"
+                                            },
+                                            "one": {
+                                              "type": "string"
+                                            },
+                                            "other": {
+                                              "type": "string"
+                                            },
+                                            "two": {
+                                              "type": "string"
+                                            },
+                                            "zero": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "other"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "unitLabel": {
+                                          "type": "string"
+                                        },
+                                        "unitLabelLanguage": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "meaning",
+                                        "structure",
+                                        "recording"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "total": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "unit": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "unit",
+                                    "amount",
+                                    "total"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 8,
+                                "minItems": 2,
+                                "type": "array"
                               },
                               "mode": {
                                 "enum": [
@@ -157180,6 +157482,157 @@
                               "null"
                             ]
                           },
+                          "measures": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "amount": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "presentation": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "dimension": {
+                                      "type": "string"
+                                    },
+                                    "meaning": {
+                                      "enum": [
+                                        "known",
+                                        "unknown",
+                                        "unavailable"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "recording": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "inputRules": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "max": {
+                                                  "type": "string"
+                                                },
+                                                "min": {
+                                                  "type": "string"
+                                                },
+                                                "step": {
+                                                  "type": "string"
+                                                },
+                                                "total": {
+                                                  "enum": [
+                                                    "optional",
+                                                    "required",
+                                                    "forbidden"
+                                                  ],
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "step",
+                                                "total"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "state": {
+                                              "const": "supported",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "inputRules"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "state": {
+                                              "enum": [
+                                                "unsupported",
+                                                "unavailable"
+                                              ],
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "structure": {
+                                      "const": "unverified",
+                                      "type": "string"
+                                    },
+                                    "unitCountForms": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "few": {
+                                          "type": "string"
+                                        },
+                                        "many": {
+                                          "type": "string"
+                                        },
+                                        "one": {
+                                          "type": "string"
+                                        },
+                                        "other": {
+                                          "type": "string"
+                                        },
+                                        "two": {
+                                          "type": "string"
+                                        },
+                                        "zero": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "other"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "unitLabel": {
+                                      "type": "string"
+                                    },
+                                    "unitLabelLanguage": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "meaning",
+                                    "structure",
+                                    "recording"
+                                  ],
+                                  "type": "object"
+                                },
+                                "total": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "unit": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "unit",
+                                "amount",
+                                "total"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 8,
+                            "minItems": 2,
+                            "type": "array"
+                          },
                           "mode": {
                             "enum": [
                               "scalar_amount",
@@ -158271,6 +158724,30 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "additionalMeasures": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "total": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "unit": {
+                          "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "unit"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 7,
+                    "minItems": 1,
+                    "type": "array"
+                  },
                   "mode": {
                     "enum": [
                       "scalar_amount",
@@ -158346,6 +158823,157 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "measures": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "presentation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "dimension": {
+                                    "type": "string"
+                                  },
+                                  "meaning": {
+                                    "enum": [
+                                      "known",
+                                      "unknown",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "recording": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "inputRules": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "max": {
+                                                "type": "string"
+                                              },
+                                              "min": {
+                                                "type": "string"
+                                              },
+                                              "step": {
+                                                "type": "string"
+                                              },
+                                              "total": {
+                                                "enum": [
+                                                  "optional",
+                                                  "required",
+                                                  "forbidden"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "step",
+                                              "total"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "supported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "inputRules"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "enum": [
+                                              "unsupported",
+                                              "unavailable"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "structure": {
+                                    "const": "unverified",
+                                    "type": "string"
+                                  },
+                                  "unitCountForms": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "few": {
+                                        "type": "string"
+                                      },
+                                      "many": {
+                                        "type": "string"
+                                      },
+                                      "one": {
+                                        "type": "string"
+                                      },
+                                      "other": {
+                                        "type": "string"
+                                      },
+                                      "two": {
+                                        "type": "string"
+                                      },
+                                      "zero": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "other"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "unitLabel": {
+                                    "type": "string"
+                                  },
+                                  "unitLabelLanguage": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "meaning",
+                                  "structure",
+                                  "recording"
+                                ],
+                                "type": "object"
+                              },
+                              "total": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "amount",
+                              "total"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "minItems": 2,
+                          "type": "array"
                         },
                         "mode": {
                           "enum": [
@@ -159080,6 +159708,157 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "measures": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "presentation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "dimension": {
+                                    "type": "string"
+                                  },
+                                  "meaning": {
+                                    "enum": [
+                                      "known",
+                                      "unknown",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "recording": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "inputRules": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "max": {
+                                                "type": "string"
+                                              },
+                                              "min": {
+                                                "type": "string"
+                                              },
+                                              "step": {
+                                                "type": "string"
+                                              },
+                                              "total": {
+                                                "enum": [
+                                                  "optional",
+                                                  "required",
+                                                  "forbidden"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "step",
+                                              "total"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "supported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "inputRules"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "enum": [
+                                              "unsupported",
+                                              "unavailable"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "structure": {
+                                    "const": "unverified",
+                                    "type": "string"
+                                  },
+                                  "unitCountForms": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "few": {
+                                        "type": "string"
+                                      },
+                                      "many": {
+                                        "type": "string"
+                                      },
+                                      "one": {
+                                        "type": "string"
+                                      },
+                                      "other": {
+                                        "type": "string"
+                                      },
+                                      "two": {
+                                        "type": "string"
+                                      },
+                                      "zero": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "other"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "unitLabel": {
+                                    "type": "string"
+                                  },
+                                  "unitLabelLanguage": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "meaning",
+                                  "structure",
+                                  "recording"
+                                ],
+                                "type": "object"
+                              },
+                              "total": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "amount",
+                              "total"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "minItems": 2,
+                          "type": "array"
                         },
                         "mode": {
                           "enum": [
@@ -160274,11 +161053,44 @@
                               {
                                 "additionalProperties": false,
                                 "properties": {
+                                  "clear": {
+                                    "const": true,
+                                    "type": "boolean"
+                                  },
+                                  "measureId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "measureId",
+                                  "clear"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
                                   "amount": {
                                     "type": "string"
                                   }
                                 },
                                 "required": [
+                                  "amount"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "amount": {
+                                    "type": "string"
+                                  },
+                                  "measureId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "measureId",
                                   "amount"
                                 ],
                                 "type": "object"
@@ -161331,6 +162143,157 @@
                             "null"
                           ]
                         },
+                        "measures": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "presentation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "dimension": {
+                                    "type": "string"
+                                  },
+                                  "meaning": {
+                                    "enum": [
+                                      "known",
+                                      "unknown",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "recording": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "inputRules": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "max": {
+                                                "type": "string"
+                                              },
+                                              "min": {
+                                                "type": "string"
+                                              },
+                                              "step": {
+                                                "type": "string"
+                                              },
+                                              "total": {
+                                                "enum": [
+                                                  "optional",
+                                                  "required",
+                                                  "forbidden"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "step",
+                                              "total"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "supported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "inputRules"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "enum": [
+                                              "unsupported",
+                                              "unavailable"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "structure": {
+                                    "const": "unverified",
+                                    "type": "string"
+                                  },
+                                  "unitCountForms": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "few": {
+                                        "type": "string"
+                                      },
+                                      "many": {
+                                        "type": "string"
+                                      },
+                                      "one": {
+                                        "type": "string"
+                                      },
+                                      "other": {
+                                        "type": "string"
+                                      },
+                                      "two": {
+                                        "type": "string"
+                                      },
+                                      "zero": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "other"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "unitLabel": {
+                                    "type": "string"
+                                  },
+                                  "unitLabelLanguage": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "meaning",
+                                  "structure",
+                                  "recording"
+                                ],
+                                "type": "object"
+                              },
+                              "total": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "amount",
+                              "total"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "minItems": 2,
+                          "type": "array"
+                        },
                         "mode": {
                           "enum": [
                             "scalar_amount",
@@ -162148,6 +163111,157 @@
                             "null"
                           ]
                         },
+                        "measures": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "presentation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "dimension": {
+                                    "type": "string"
+                                  },
+                                  "meaning": {
+                                    "enum": [
+                                      "known",
+                                      "unknown",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "recording": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "inputRules": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "max": {
+                                                "type": "string"
+                                              },
+                                              "min": {
+                                                "type": "string"
+                                              },
+                                              "step": {
+                                                "type": "string"
+                                              },
+                                              "total": {
+                                                "enum": [
+                                                  "optional",
+                                                  "required",
+                                                  "forbidden"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "step",
+                                              "total"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "supported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "inputRules"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "enum": [
+                                              "unsupported",
+                                              "unavailable"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "structure": {
+                                    "const": "unverified",
+                                    "type": "string"
+                                  },
+                                  "unitCountForms": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "few": {
+                                        "type": "string"
+                                      },
+                                      "many": {
+                                        "type": "string"
+                                      },
+                                      "one": {
+                                        "type": "string"
+                                      },
+                                      "other": {
+                                        "type": "string"
+                                      },
+                                      "two": {
+                                        "type": "string"
+                                      },
+                                      "zero": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "other"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "unitLabel": {
+                                    "type": "string"
+                                  },
+                                  "unitLabelLanguage": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "meaning",
+                                  "structure",
+                                  "recording"
+                                ],
+                                "type": "object"
+                              },
+                              "total": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "amount",
+                              "total"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "minItems": 2,
+                          "type": "array"
+                        },
                         "mode": {
                           "enum": [
                             "scalar_amount",
@@ -162930,6 +164044,10 @@
                   "locator": {
                     "type": "string"
                   },
+                  "measureId": {
+                    "pattern": "^[a-z][a-z0-9_.-]{0,63}(?![\\s\\S])",
+                    "type": "string"
+                  },
                   "position": {
                     "type": "string"
                   },
@@ -162991,6 +164109,157 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "measures": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "amount": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "presentation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "dimension": {
+                                    "type": "string"
+                                  },
+                                  "meaning": {
+                                    "enum": [
+                                      "known",
+                                      "unknown",
+                                      "unavailable"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "recording": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "inputRules": {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "max": {
+                                                "type": "string"
+                                              },
+                                              "min": {
+                                                "type": "string"
+                                              },
+                                              "step": {
+                                                "type": "string"
+                                              },
+                                              "total": {
+                                                "enum": [
+                                                  "optional",
+                                                  "required",
+                                                  "forbidden"
+                                                ],
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "step",
+                                              "total"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          "state": {
+                                            "const": "supported",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state",
+                                          "inputRules"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "state": {
+                                            "enum": [
+                                              "unsupported",
+                                              "unavailable"
+                                            ],
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "state"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "structure": {
+                                    "const": "unverified",
+                                    "type": "string"
+                                  },
+                                  "unitCountForms": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "few": {
+                                        "type": "string"
+                                      },
+                                      "many": {
+                                        "type": "string"
+                                      },
+                                      "one": {
+                                        "type": "string"
+                                      },
+                                      "other": {
+                                        "type": "string"
+                                      },
+                                      "two": {
+                                        "type": "string"
+                                      },
+                                      "zero": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "other"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "unitLabel": {
+                                    "type": "string"
+                                  },
+                                  "unitLabelLanguage": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "meaning",
+                                  "structure",
+                                  "recording"
+                                ],
+                                "type": "object"
+                              },
+                              "total": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "unit",
+                              "amount",
+                              "total"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 8,
+                          "minItems": 2,
+                          "type": "array"
                         },
                         "mode": {
                           "enum": [

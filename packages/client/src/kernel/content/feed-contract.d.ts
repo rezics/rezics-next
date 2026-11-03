@@ -155,6 +155,25 @@ export declare const FeedItemSchema: import("typebox").TUnion<[import("typebox")
             revision: import("typebox").TInteger;
             startedAt: import("typebox").TString;
             completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                unit: import("typebox").TString;
+                amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+                    meaning: 'known' | 'unknown' | 'unavailable';
+                    unitLabel?: string;
+                    unitLabelLanguage?: string;
+                    unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                    dimension?: string;
+                    structure: 'unverified';
+                    recording: Readonly<{
+                        state: 'supported';
+                        inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                    } | {
+                        state: 'unsupported' | 'unavailable';
+                    }>;
+                }>>>;
+            }>>>;
         }>, import("typebox").TNull]>;
         subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
             id: import("typebox").TString;
@@ -434,6 +453,25 @@ export declare const FeedPageSchema: import("typebox").TObject<{
                 revision: import("typebox").TInteger;
                 startedAt: import("typebox").TString;
                 completedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                measures: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                    unit: import("typebox").TString;
+                    amount: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    total: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+                    presentation: import("typebox").TOptional<import("typebox").TUnsafe<Readonly<{
+                        meaning: 'known' | 'unknown' | 'unavailable';
+                        unitLabel?: string;
+                        unitLabelLanguage?: string;
+                        unitCountForms?: Readonly<import("@rezics/definitions").LibraryCountForms>;
+                        dimension?: string;
+                        structure: 'unverified';
+                        recording: Readonly<{
+                            state: 'supported';
+                            inputRules: import("../library/progress-model.ts").ProgressInputRules;
+                        } | {
+                            state: 'unsupported' | 'unavailable';
+                        }>;
+                    }>>>;
+                }>>>;
             }>, import("typebox").TNull]>;
             subject: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                 id: import("typebox").TString;

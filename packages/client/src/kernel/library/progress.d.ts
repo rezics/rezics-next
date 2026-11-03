@@ -17,7 +17,10 @@ export type ProgressSessionCreate = {
     total: string | null;
     additionalMeasures?: ProgressMeasureCreate[];
 };
-export type ProgressMeasureCreate = { unit: ProgressUnit; total: string | null };
+export type ProgressMeasureCreate = {
+    unit: ProgressUnit;
+    total: string | null;
+};
 export type ScalarRecord = {
     amount: string;
 };
@@ -71,8 +74,8 @@ export type ProgressRecordContext = {
 };
 /** Validate one new session. `total` belongs only to `scalar_amount` and is null when unknown. */
 export declare function parseSessionCreate(input: unknown, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressSessionCreate>;
-/** Validate one additional scalar measure admitted with a session. */
-export declare function parseProgressMeasureCreate(input: unknown): ProgressOutcome<ProgressMeasureCreate>;
+/** Validate an additional independent scalar unit using the same profile decimal and total rules. */
+export declare function parseProgressMeasureCreate(input: unknown, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressMeasureCreate>;
 /**
  * Validate one record for `mode`. Only an active session records.
  * Legacy percent amounts stay within 0 to 100; profiled amounts use only declared bounds.

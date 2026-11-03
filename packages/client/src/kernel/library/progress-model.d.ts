@@ -30,9 +30,19 @@ export type ProgressSession = Omit<ProgressSessionRow, 'route' | 'mode' | 'unit'
     measures?: ProgressScalarMeasure[];
 };
 /** A scalar value keeps its exact profile unit, total and nullable amount. */
-export type ProgressScalarMeasure = { unit: ProgressUnit; total: string | null; amount: string | null };
-export type ProgressMeasureDraft = { unit: ProgressUnit; total: string | null };
-export type ProgressMeasurePresentation = { unit: ProgressUnit; presentation: ProgressPresentation };
+export type ProgressScalarMeasure = {
+    unit: ProgressUnit;
+    total: string | null;
+    amount: string | null;
+};
+export type ProgressMeasureDraft = {
+    unit: ProgressUnit;
+    total: string | null;
+};
+export type ProgressMeasurePresentation = {
+    unit: ProgressUnit;
+    presentation: ProgressPresentation;
+};
 export type ProgressSessionDraft = {
     id: string;
     accountId: string;
