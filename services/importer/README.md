@@ -448,7 +448,8 @@ bun services/importer/src/cli.ts --source wikidata --dump /srv/imports/wikidata.
 
 `--checkpoint-staging` and `--resume-staging` admit one uncompressed Bangumi regular file, one Open Library or Wikidata
 regular file (plain, gzip, or Wikidata zstd), or one Open Library dump-set manifest. VNDB archives and stdin stay
-non-resumable. Version 1 checkpoints remain one uncompressed file. Version 2 binds the ordered member family,
+non-resumable. Checkpointed compressed capture still records and checks the source-exact API destination before any
+capture or resume mutation. Version 1 checkpoints remain one uncompressed file. Version 2 binds the ordered member family,
 compression, byte length and SHA-256 of every original file, the admitted manifest version, codec, whole-set
 `--decode-budget` (default 256 GiB) and the existing source/converter configuration. Paths, inode, size and mtime are
 not that identity. A failed hash creates no capture and does not contact Auth or the API. Resume re-hashes every

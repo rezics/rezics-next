@@ -32,7 +32,12 @@ function wikidataDump() {
   return encoder.encode(`[\n${records.map((record) => JSON.stringify(record)).join(',\n')}\n]\n`);
 }
 
-function tsv(record: { type: { key: string }; key: string; revision: number; last_modified?: { value: string } }) {
+function tsv(
+  record: { type: { key: string }; key: string; revision: number; last_modified?: { value: string } } & Record<
+    string,
+    unknown
+  >,
+) {
   const date = record.last_modified?.value ?? '2025-01-01T00:00:00Z';
   return `${[record.type.key, record.key, record.revision, date, JSON.stringify(record)].join('\t')}\n`;
 }
