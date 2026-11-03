@@ -6510,5 +6510,7 @@
   "revision_history_open_exact": "Abrir la revisión exacta en una pestaña nueva",
   "revision_history_new_tab": "Abre la revisión exacta en una pestaña nueva",
   "revision_history_erased_explanation": "El documento de esta revisión se ha eliminado. Solo se muestran los metadatos y la procedencia recibidos. El texto de otra revisión no puede sustituirlo.",
-  "revision_history_added": "Se añadieron {count} revisiones recibidas al historial cargado."
+  "revision_history_added": "Se añadieron {count} revisiones recibidas al historial cargado.",
+  "revision_history_body_unavailable": "Documento no disponible",
+  "revision_history_unavailable_explanation": "El documento de esta revisión no está disponible para este lector. Solo se muestran los metadatos y la procedencia recibidos. No se recupera texto de otra revisión."
 }

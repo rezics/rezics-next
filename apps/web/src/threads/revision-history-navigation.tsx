@@ -16,13 +16,13 @@ type RevisionHistoryNavigationProps = {
   subjects: HistoryPage['subjects'];
   reviewVotes: HistoryPage['reviewVotes'];
   now: string;
-  viewerId?: string;
+  viewerId?: string | undefined;
   review: boolean;
   active: boolean;
   hasMore: boolean;
   /** The existing disclosure, rather than a matching identity tuple, admits local callbacks. */
   isCurrent: () => boolean;
-  boundaryRevisionId?: string | null;
+  boundaryRevisionId?: string | null | undefined;
 };
 
 const navigationAction =

@@ -175,7 +175,12 @@ export function RevisionSummaryRow({
       data-history-summary=""
       data-history-selected={expanded ? '' : undefined}
     >
-      <article aria-labelledby={headingId} className="min-w-0 space-y-3 [overflow-wrap:anywhere]">
+      <ContentItemFrame
+        as="article"
+        data-slot="content-item-frame"
+        aria-labelledby={headingId}
+        className="min-w-0 space-y-3 [overflow-wrap:anywhere]"
+      >
         <header className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-1">
           <div className="min-w-0 flex-1 space-y-1">
             <ContentItemHeading
@@ -228,7 +233,13 @@ export function RevisionSummaryRow({
           </Button>
         </header>
         <ul id={availabilityId} className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <li>{bodyAvailable ? m.revision_history_body_available() : m.revision_history_body_erased()}</li>
+          <li>
+            {bodyAvailable
+              ? m.revision_history_body_available()
+              : summary.availability === 'erased'
+                ? m.revision_history_body_erased()
+                : m.revision_history_body_unavailable()}
+          </li>
           {summary.licence ? (
             <li>
               {m.thread_history_licence()}: {summary.licence}
@@ -273,7 +284,9 @@ export function RevisionSummaryRow({
             </div>
             {!bodyAvailable ? (
               <p role="note" className="text-sm text-muted-foreground">
-                {m.revision_history_erased_explanation()}
+                {summary.availability === 'erased'
+                  ? m.revision_history_erased_explanation()
+                  : m.revision_history_unavailable_explanation()}
               </p>
             ) : null}
             <RevisionInspector
@@ -295,7 +308,7 @@ export function RevisionSummaryRow({
             </footer>
           </section>
         ) : null}
-      </article>
+      </ContentItemFrame>
     </li>
   );
 }

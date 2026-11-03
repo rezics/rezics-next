@@ -18,7 +18,10 @@ function suppliedEntries(count: number, long: boolean, removed: boolean): Histor
       licence: long ? `LicenseRef-${'a-very-long-admitted-licence-name-'.repeat(12)}` : revision.licence,
     };
     return {
-      revision: removed && index === 1 ? { ...metadata, availability: 'erased', body: null } : metadata,
+      revision:
+        removed && index === 1
+          ? { ...metadata, availability: 'erased', body: null, sha256: null, removed: true }
+          : metadata,
       documentMedia: { kind: 'unavailable' },
     };
   });
@@ -48,6 +51,7 @@ function PreparedHistory({
       displayName: long ? 'Prepared multilingual author / 著者 / 작가 / '.repeat(18) : 'Prepared history author',
       handle: 'prepared-history-author',
       state: 'active',
+      kind: 'actor',
     },
   };
   const hasMore = !added && (continuation || partialFailure);

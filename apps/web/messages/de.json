@@ -6510,5 +6510,7 @@
   "revision_history_open_exact": "Exakte Revision in neuem Tab öffnen",
   "revision_history_new_tab": "Öffnet die exakte Revision in einem neuen Tab",
   "revision_history_erased_explanation": "Das Dokument dieser Revision wurde entfernt. Nur gelieferte Metadaten und Herkunft werden angezeigt. Andere Revisionen können den Text nicht ersetzen.",
-  "revision_history_added": "{count} gelieferte Revisionen zum geladenen Verlauf hinzugefügt."
+  "revision_history_added": "{count} gelieferte Revisionen zum geladenen Verlauf hinzugefügt.",
+  "revision_history_body_unavailable": "Dokument nicht verfügbar",
+  "revision_history_unavailable_explanation": "Das Dokument dieser Revision ist für diesen Leser nicht verfügbar. Nur gelieferte Metadaten und Herkunft werden angezeigt. Texte werden nicht aus anderen Revisionen wiederhergestellt."
 }

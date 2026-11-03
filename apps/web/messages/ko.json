@@ -6510,5 +6510,7 @@
   "revision_history_open_exact": "정확한 수정본을 새 탭에서 열기",
   "revision_history_new_tab": "정확한 수정본을 새 탭에서 엽니다",
   "revision_history_erased_explanation": "이 수정본의 문서는 삭제되었습니다. 반환된 메타데이터와 출처만 표시합니다. 다른 수정본의 글로 대체하지 않습니다.",
-  "revision_history_added": "반환된 수정본 {count}개를 불러온 기록에 추가했습니다."
+  "revision_history_added": "반환된 수정본 {count}개를 불러온 기록에 추가했습니다.",
+  "revision_history_body_unavailable": "문서 열람 불가",
+  "revision_history_unavailable_explanation": "현재 독자는 이 수정본의 문서를 볼 수 없습니다. 반환된 메타데이터와 출처만 표시하며 다른 수정본에서 글을 복원하지 않습니다."
 }

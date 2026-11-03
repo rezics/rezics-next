@@ -6510,5 +6510,7 @@
   "revision_history_open_exact": "改訂の固定アドレスを新しいタブで開く",
   "revision_history_new_tab": "改訂の固定アドレスを新しいタブで開きます",
   "revision_history_erased_explanation": "この改訂の文書は削除されました。返されたメタデータと出典情報のみ表示します。他の改訂の文章で置き換えません。",
-  "revision_history_added": "返された {count} 件の改訂を読み込んだ履歴に追加しました。"
+  "revision_history_added": "返された {count} 件の改訂を読み込んだ履歴に追加しました。",
+  "revision_history_body_unavailable": "文書を閲覧できません",
+  "revision_history_unavailable_explanation": "この改訂の文書は現在の読者には表示できません。返されたメタデータと出典情報のみ表示し、他の改訂から文章を復元しません。"
 }

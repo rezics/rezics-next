@@ -185,7 +185,10 @@ test('1/10/100 supplied revisions project once per row without touching bodies, 
 test('loaded-only keyboard navigation, removed documents, continuation and close/reopen retain honest disclosure and focus', async () => {
   const view = mount();
   const rows = entries(10);
-  rows[1] = { ...rows[1]!, revision: { ...rows[1]!.revision, availability: 'erased', body: null } };
+  rows[1] = {
+    ...rows[1]!,
+    revision: { ...rows[1]!.revision, availability: 'erased', body: null, sha256: null, removed: true },
+  };
   try {
     await view.render(navigation(rows));
     const first = button(view.host, m.revision_history_inspect({ number: '1' }));

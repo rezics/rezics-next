@@ -6510,5 +6510,7 @@
   "revision_history_open_exact": "Ouvrir la révision exacte dans un nouvel onglet",
   "revision_history_new_tab": "Ouvre la révision exacte dans un nouvel onglet",
   "revision_history_erased_explanation": "Le document de cette révision a été supprimé. Seules les métadonnées et la provenance reçues sont affichées. Le texte d’une autre révision ne peut pas le remplacer.",
-  "revision_history_added": "{count} révisions reçues ajoutées à l’historique chargé."
+  "revision_history_added": "{count} révisions reçues ajoutées à l’historique chargé.",
+  "revision_history_body_unavailable": "Document indisponible",
+  "revision_history_unavailable_explanation": "Le document de cette révision n’est pas accessible à ce lecteur. Seules les métadonnées et la provenance reçues sont affichées. Aucun texte n’est récupéré d’une autre révision."
 }

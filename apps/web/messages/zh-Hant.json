@@ -6510,5 +6510,7 @@
   "revision_history_open_exact": "在新分頁開啟精確修訂",
   "revision_history_new_tab": "在新分頁開啟精確修訂",
   "revision_history_erased_explanation": "此修訂的文件已移除。僅顯示傳回的中繼資料與來源資料，不會以其他修訂的文字替代。",
-  "revision_history_added": "已將傳回的 {count} 個修訂加入已載入歷史。"
+  "revision_history_added": "已將傳回的 {count} 個修訂加入已載入歷史。",
+  "revision_history_body_unavailable": "文件無法取得",
+  "revision_history_unavailable_explanation": "目前讀者無法取得此修訂的文件。僅顯示傳回的中繼資料與來源資料，不會從其他修訂還原文字。"
 }
