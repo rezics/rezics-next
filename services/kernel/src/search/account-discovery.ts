@@ -704,6 +704,7 @@ export function createDiscoveryProjection(options: {
       const doc = reviewDiscoveryDocument(refresh.partition, refresh.nativePosition, {
         id: row.id,
         route,
+        sourceVersion: row.sourceVersion,
         openingRevisionId: row.revisionId,
         title: row.title,
         text: row.excerpt ?? '',
