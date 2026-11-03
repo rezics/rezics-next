@@ -4,6 +4,7 @@ import {
   type Report,
   type ReportReadInput,
   type ReportReadState,
+  type ReportTargetValue,
   type ReportedRevision,
   type ResolvedReportTarget,
 } from '../reports-read';
@@ -71,7 +72,7 @@ export function workbenchCaseQueueHref(input: ReportReadInput): string {
 }
 
 export type WorkbenchCaseResult =
-  | { state: 'ready'; report: Report; target: ResolvedReportTarget | undefined; revision: unknown | null }
+  | { state: 'ready'; report: Report; target: ResolvedReportTarget | undefined; revision: ReportTargetValue | null }
   | { state: 'empty' | 'unavailable' }
   | { state: Exclude<ReportReadState, 'ready'> };
 

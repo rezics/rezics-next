@@ -137,8 +137,8 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
       <WorkbenchCaseStatus
         state={result.state}
         queueHref={queueHref}
-        onRetry={props.onRetry}
-        onRestart={props.onRestart}
+        {...(props.onRetry ? { onRetry: props.onRetry } : {})}
+        {...(props.onRestart ? { onRestart: props.onRestart } : {})}
       />
     );
 
