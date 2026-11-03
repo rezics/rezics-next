@@ -25,7 +25,6 @@ export type UnresolvedResourceType = Readonly<{
   missingRoles: readonly string[];
   unmountedActions: readonly string[];
 }>;
-const installed = new WeakMap<Access, ResolvedResourceRoles>();
 // Function declarations stay callable during circular Access composition; module
 // consts remain uninitialized while http/request loads this file.
 function isRoleIdentifier(value: string): boolean {
@@ -33,6 +32,12 @@ function isRoleIdentifier(value: string): boolean {
 }
 function isActionName(value: string): boolean {
   return /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/.test(value);
+}
+function resourceRoleInstalled(): WeakMap<Access, ResolvedResourceRoles> {
+  const holder = resourceRoleInstalled as typeof resourceRoleInstalled & {
+    map?: WeakMap<Access, ResolvedResourceRoles>;
+  };
+  return (holder.map ??= new WeakMap());
 }
 // Role compilation uses mounted names and creation declarations only. Anonymous
 // admission remains owned by the full ActionCatalogue in the Access evaluator.
@@ -186,13 +191,13 @@ export function assertDeclaredResourceTypes(
 
 export function installResourceRoleCatalogue(access: Access, catalogue: ResolvedResourceRoles): void {
   const root = accessRoot(access);
-  const previous = installed.get(root)?.declaredTypes;
+  const previous = resourceRoleInstalled().get(root)?.declaredTypes;
   if (catalogue.declaredTypes !== undefined || previous === undefined) {
-    installed.set(root, catalogue);
+    resourceRoleInstalled().set(root, catalogue);
     return;
   }
-  installed.set(root, { roles: catalogue.roles, types: catalogue.types, declaredTypes: previous });
+  resourceRoleInstalled().set(root, { roles: catalogue.roles, types: catalogue.types, declaredTypes: previous });
 }
 export function resourceRoleCatalogue(access: Access): ResolvedResourceRoles | undefined {
-  return installed.get(accessRoot(access));
+  return resourceRoleInstalled().get(accessRoot(access));
 }
