@@ -87,8 +87,8 @@ identity/capacity/authority requirements. Replay never consumes a later restored
 Use `evidence.sourceLabel.id` and `evidence.targetLabel.id` to reopen the existing native
 `GET /v1/libraryLabelAssignments?labelId={id}` readers (or their existing FULL views). Web's existing Labels
 interface owns this one flow: explicit selection, review, selection capture, explicit confirmation, one-item retry,
-partial results/cancel, and reopening both labels. Client declarations and the Library schema snapshot still require regeneration before integration. No Web component
-or competing label editor is installed here.
+partial results/cancel, and reopening both labels. The native migration and Library schema snapshot include the retained composition. Client declarations still require
+regeneration before integration. No Web component or competing label editor is installed here.
 Unselected facts, query operands, import evidence and public snapshots retain their native meanings. These methods
 grant no Entry state, Session, follow, licence or publication.
 
