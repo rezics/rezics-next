@@ -30,6 +30,7 @@ import { accountViewerActionResource } from '../access/account-viewer-actions.ts
 import { collectionViewerActionResource } from '../library/collection-reads.ts';
 import { realmViewerActionResource } from '../community/realm.ts';
 import { spaceViewerActionResource } from '../community/space.ts';
+import { followingSpaceTargets } from '../community/following-space-targets.ts';
 import { accessRoutes } from '../access/routes.ts';
 import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
@@ -655,6 +656,21 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+    followingSpaceTargets: (actor, ids, deadline) => {
+      if (!viewerResources || !viewerBindings) throw new ProblemError('dependency_unavailable');
+      return followingSpaceTargets(
+        {
+          pool: dependencies.pool,
+          access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+          resources: viewerResources,
+          bindings: viewerBindings,
+          clock,
+        },
+        actor,
+        ids,
+        deadline,
+      );
+    },
     ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
     shelves: () => {
       const access = resolveAccess({ actions: actionCatalogue(personal), realmRoleReader });

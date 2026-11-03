@@ -39,6 +39,7 @@ const scopes = [
   'published_log:read',
   'subject:read',
   'space:create',
+  'space:manage',
   'space:read',
   'exposure:open',
 ];
@@ -50,7 +51,13 @@ const actor: AccountActor = {
   requestedBy: null,
   authnEpoch: 1,
 };
-function request(method: string, path: string, body?: unknown, as: Persona = 'owner') {
+function request(
+  method: string,
+  path: string,
+  body?: unknown,
+  as: Persona = 'owner',
+  extraHeaders: Record<string, string> = {},
+) {
   return app.handle(
     new Request(`https://kernel.test${path}`, {
       method,
@@ -58,6 +65,7 @@ function request(method: string, path: string, body?: unknown, as: Persona = 'ow
         ...(as === 'anonymous' ? {} : { authorization: `Bearer ${credentials.get(as)!}` }),
         ...(method === 'GET' ? {} : { 'idempotency-key': JSON.stringify(randomUUID()) }),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...extraHeaders,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
@@ -496,11 +504,14 @@ test('Space follow summaries use the readable current Space name and conceal den
   const space = (await json(await request('POST', '/v1/spaces', { title: 'Named Space' }), 201)).space;
   await json(await request('PUT', `/v1/follows/${space.spaceId}`));
   const path = viewPath(`/v1/follows/${space.spaceId}`, 'FULL');
-  expect((await json(await request('GET', path))).follow.target).toEqual({
+  const full = await json(await request('GET', path));
+  expect(full.follow.target).toEqual({
     id: space.spaceId,
     type: 'space',
     label: 'Named Space',
   });
+  expect(full.follow.destination).toEqual({ kind: 'unavailable' });
+  expect(full.follow.actions).toEqual({ status: 'unavailable' });
   await db.admin.query(
     `INSERT INTO access.resource_denial
     (route, resource_id, subject_id, subject_role, action, reason, valid, transaction_id)
@@ -509,7 +520,53 @@ test('Space follow summaries use the readable current Space name and conceal den
   );
   const hidden = await json(await request('GET', path));
   expect(hidden.follow.target).toBeNull();
+  expect(hidden.follow.destination).toEqual({ kind: 'unavailable' });
+  expect(hidden.follow.actions).toEqual({ status: 'unavailable' });
   expect(JSON.stringify(hidden)).not.toContain('Named Space');
+});
+
+test('FULL Following opens mixed destinations and refreshes a changed Space address', async () => {
+  const followed = await fixture();
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+    VALUES (0,$1,$2,'space:create','(,)'::tstzrange,$3)`,
+    [GLOBAL_CONTEXT, accounts.owner, randomUUID()],
+  );
+  const space = (await json(await request('POST', '/v1/spaces', { title: 'Following home' }), 201)).space;
+  await json(await request('PUT', `/v1/follows/${space.spaceId}`));
+  const firstAddress = `following-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  const first = await json(
+    await request('PUT', `/v1/spaces/${space.spaceId}/address`, { address: firstAddress }, 'owner', {
+      'if-match': JSON.stringify(space.headRevisionId),
+    }),
+  );
+  const secondAddress = `following-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+  await json(
+    await request('PUT', `/v1/spaces/${space.spaceId}/address`, { address: secondAddress }, 'owner', {
+      'if-match': JSON.stringify(first.space.headRevisionId),
+    }),
+  );
+
+  const response = await request('GET', '/v1/follows?view=FULL&limit=100');
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  const page = await json(response);
+  const subjectRow = page.follows.find((row: { targetId: string }) => row.targetId === followed.subjectId);
+  const collectionRow = page.follows.find((row: { targetId: string }) => row.targetId === followed.collection.id);
+  const spaceRow = page.follows.find((row: { targetId: string }) => row.targetId === space.spaceId);
+  expect(subjectRow.target).toEqual(summary(followed.subjectId));
+  expect(collectionRow.target).toEqual({ id: followed.collection.id, type: 'collection', label: 'Books' });
+  expect(spaceRow).toMatchObject({
+    target: { id: space.spaceId, type: 'space', label: 'Following home' },
+    destination: { kind: 'space', spaceId: space.spaceId, address: secondAddress },
+    actions: {
+      status: 'available',
+      resourceType: 'community.space',
+      resourceId: space.spaceId,
+      viewerActions: expect.arrayContaining([
+        expect.objectContaining({ action: 'space:read', operations: expect.any(Array) }),
+      ]),
+    },
+  });
 });
 
 test('FULL members preserve private Collection access and interoperate with BASIC cursors', async () => {

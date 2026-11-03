@@ -4,6 +4,11 @@ import { deadlineClient } from '../access/authenticate.ts';
 import { attachCollectionListFacts } from './collection-list-facts.ts';
 import type { Pool } from 'pg';
 import type { TObject, TProperties } from 'typebox';
+import type {
+  FollowingSpaceActions,
+  FollowingSpaceDestination,
+  FollowingSpaceProjection,
+} from './following-space-contract.ts';
 import { readAccount, readPublicAccount } from '../access/account-data.ts';
 import type { KernelClock } from '../clock.ts';
 import { readSpace } from '../community/space.ts';
@@ -60,7 +65,10 @@ type Embedding<T> = T extends readonly (infer R)[]
         (T extends { versionSubjectId: string | null } ? { versionSubject?: Summary | null } : object) &
         (T extends { curatorAccountId: string } ? { curator?: AccountSummary | null } : object) &
         (T extends { accountId: string } ? { account?: AccountSummary | null } : object) &
-        (T extends { targetId: string } ? { target?: Summary | null } : object)
+        (T extends { targetId: string } ? { target?: Summary | null } : object) &
+        (T extends { targetId: string; targetType: string }
+          ? { destination?: FollowingSpaceDestination; actions?: FollowingSpaceActions }
+          : object)
     : T;
 
 /** A request owns its caches and four workers; failures settle before releasing the request. */
@@ -190,6 +198,14 @@ export async function fullView<T>(
   actor: Actor,
   view: string | undefined,
   body: T,
+  options: Readonly<{
+    deadline?: number;
+    followingSpaces?: (
+      actor: Actor,
+      ids: readonly string[],
+      deadline: number,
+    ) => Promise<ReadonlyMap<string, FollowingSpaceProjection>>;
+  }> = {},
 ): Promise<Embedding<T>> {
   if (view !== 'FULL') return body as Embedding<T>;
   const reader = new ViewReader(deps, actor);
@@ -199,15 +215,20 @@ export async function fullView<T>(
   const subjectIds = new Set<string>(),
     accountIds = new Set<string>();
   const targets = new Map<string, string>();
+  const spaceTargetIds = new Set<string>();
   for (const row of rows) {
     if (typeof row.subjectId === 'string') subjectIds.add(row.subjectId);
     if (typeof row.versionSubjectId === 'string') subjectIds.add(row.versionSubjectId);
     for (const key of ['curatorAccountId', 'accountId']) if (typeof row[key] === 'string') accountIds.add(row[key]);
     if (typeof row.targetId === 'string' && typeof row.targetType === 'string') {
       if (row.targetType === 'subject') subjectIds.add(row.targetId);
+      else if (row.targetType === 'space' && options.followingSpaces) spaceTargetIds.add(row.targetId);
       else targets.set(row.targetId, row.targetType);
     }
   }
+  const followingSpaces = options.followingSpaces
+    ? await options.followingSpaces(actor, [...spaceTargetIds], options.deadline ?? deadlineFor(WORK_STEP_DEADLINE_MS))
+    : new Map<string, FollowingSpaceProjection>();
   await bounded([...subjectIds], async (id) => {
     reader.subjects.set(id, await reader.subject(id));
   });
@@ -217,18 +238,39 @@ export async function fullView<T>(
   await bounded([...targets], async ([id, type]) => {
     reader.targets.set(id, await reader.target(id, type));
   });
-  const enrich = (row: Record<string, unknown>) => ({
-    ...row,
-    ...(typeof row.subjectId === 'string' ? { subject: reader.subjects.get(row.subjectId) ?? null } : {}),
-    ...(typeof row.versionSubjectId === 'string'
-      ? { versionSubject: reader.subjects.get(row.versionSubjectId) ?? null }
-      : {}),
-    ...(typeof row.curatorAccountId === 'string' ? { curator: reader.accounts.get(row.curatorAccountId) ?? null } : {}),
-    ...(typeof row.accountId === 'string' ? { account: reader.accounts.get(row.accountId) ?? null } : {}),
-    ...(typeof row.targetId === 'string'
-      ? { target: (row.targetType === 'subject' ? reader.subjects : reader.targets).get(row.targetId) ?? null }
-      : {}),
-  });
+  const enrich = (row: Record<string, unknown>) => {
+    const spaceProjection =
+      typeof row.targetId === 'string' && row.targetType === 'space' && options.followingSpaces
+        ? followingSpaces.get(row.targetId)
+        : undefined;
+    return {
+      ...row,
+      ...(typeof row.subjectId === 'string' ? { subject: reader.subjects.get(row.subjectId) ?? null } : {}),
+      ...(typeof row.versionSubjectId === 'string'
+        ? { versionSubject: reader.subjects.get(row.versionSubjectId) ?? null }
+        : {}),
+      ...(typeof row.curatorAccountId === 'string'
+        ? { curator: reader.accounts.get(row.curatorAccountId) ?? null }
+        : {}),
+      ...(typeof row.accountId === 'string' ? { account: reader.accounts.get(row.accountId) ?? null } : {}),
+      ...(typeof row.targetId === 'string'
+        ? {
+            target:
+              row.targetType === 'subject'
+                ? reader.subjects.get(row.targetId) ?? null
+                : options.followingSpaces && row.targetType === 'space'
+                  ? spaceProjection?.target ?? null
+                  : reader.targets.get(row.targetId) ?? null,
+          }
+        : {}),
+      ...(options.followingSpaces && typeof row.targetId === 'string' && row.targetType === 'space'
+        ? {
+            destination: spaceProjection?.destination ?? { kind: 'unavailable' as const },
+            actions: spaceProjection?.actions ?? { status: 'unavailable' as const },
+          }
+        : {}),
+    };
+  };
   return Object.fromEntries(
     Object.entries(body as Record<string, unknown>).map(([key, value]) => [
       key,

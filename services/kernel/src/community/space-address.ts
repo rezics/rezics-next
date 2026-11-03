@@ -23,6 +23,7 @@ import {
   type SpaceContext,
 } from './space.ts';
 import readAddress from './space-address-read.sql';
+import readActiveAddresses from './space-address-batch-active.sql';
 import reserveAddress from './space-address-pending.sql';
 import activateAddress from './space-address-activate.sql';
 import redirectAddress from './space-address-reserve.sql';
@@ -132,6 +133,25 @@ export async function readSpaceAddress(client: AccessClient, address: string): P
   const row = await readAddress.run(client, { route: addressRoute(normalized), address: normalized });
   if (!row) return null;
   return { spaceId: row.spaceId, state: row.state };
+}
+
+/** Batch-check active address anchors before the final Space home read. */
+export async function readActiveSpaceAddressClaims(
+  client: AccessClient,
+  targets: readonly Readonly<{ spaceId: string; address: string }>[],
+): Promise<ReadonlySet<string>> {
+  if (!targets.length) return new Set();
+  const normalized = targets.map(({ spaceId, address }) => ({ spaceId, address: normalizeAddress(address) }));
+  const rows = await readActiveAddresses.run(client, {
+    routes: normalized.map(({ address }) => addressRoute(address)),
+    addresses: normalized.map(({ address }) => address),
+    space_ids: normalized.map(({ spaceId }) => spaceId),
+  });
+  const valid = new Set<string>();
+  for (const row of rows)
+    if (row.requested_space_id === row.claimed_space_id)
+      valid.add(JSON.stringify([row.requested_space_id, row.address]));
+  return valid;
 }
 
 /** Change the active address through separately receipted address and Space partitions. */

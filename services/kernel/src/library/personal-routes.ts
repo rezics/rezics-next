@@ -43,6 +43,7 @@ import {
 } from './entry-personal-model.ts';
 import type { Follow, FollowPageCursor } from './follow-model.ts';
 import { createFollowCommands } from './follows.ts';
+import type { FollowingSpaceProjection } from './following-space-contract.ts';
 import { admitShelfRead } from './shelf-admission.ts';
 import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import { ShelfContractNotImplementedError, type ShelfEntry, type ShelfReads } from './shelf-contract.ts';
@@ -85,6 +86,11 @@ type Dependencies = {
   shelves?: () => ShelfReads;
   shelfTypeDigest?: ShelfTypeDigest;
   typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
+  followingSpaceTargets?: (
+    actor: Actor,
+    ids: readonly string[],
+    deadline: number,
+  ) => Promise<ReadonlyMap<string, FollowingSpaceProjection>>;
 };
 const closed = { additionalProperties: false } as const;
 const id = t.String();
@@ -389,6 +395,28 @@ const correctionPageSchema = t.Object(
 const correctionPageResponse = t.Object({ review: correctionPageSchema }, closed);
 const copyResponse = t.Object({ copy: copySchema }, closed);
 const followResponse = t.Object({ follow: followSchema }, closed);
+const followDestinationSchema = t.Union([
+  t.Object({ kind: t.Literal('space'), spaceId: id, address: t.String() }, closed),
+  t.Object({ kind: t.Literal('realm'), realmId: id }, closed),
+  t.Object({ kind: t.Literal('unavailable') }, closed),
+]);
+const followActionsSchema = t.Union([
+  t.Object(
+    {
+      status: t.Literal('available'),
+      resourceType: t.Union([t.Literal('community.space'), t.Literal('community.realm')]),
+      resourceId: id,
+      viewerActions: t.Array(t.Object({ action: t.String(), operations: t.Array(t.String()) }, closed)),
+    },
+    closed,
+  ),
+  t.Object({ status: t.Literal('unavailable') }, closed),
+]);
+const fullFollowFields = {
+  ...targetFields,
+  destination: t.Optional(followDestinationSchema),
+  actions: t.Optional(followActionsSchema),
+};
 const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
 const failures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
@@ -1378,7 +1406,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         response: { 200: followResponse, ...failures },
         detail: personalDetail('follow.put', 'follow:create'),
       },
-      async ({ actor, params, headers, admission, job, session }) => {
+      async ({ actor, params, headers, admission, job, session, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
@@ -1396,7 +1425,8 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         response: { 200: followResponse, ...failures },
         detail: personalDetail('follow.delete', 'follow:delete'),
       },
-      async ({ actor, params, headers, admission, job, session }) => {
+      async ({ actor, params, headers, admission, job, session, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
@@ -1411,16 +1441,26 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object(viewQuery, closed),
         params: t.Object({ targetId: id }),
-        response: { 200: t.Object({ follow: embedded(followSchema, targetFields) }, closed), ...failures },
+        response: { 200: t.Object({ follow: embedded(followSchema, fullFollowFields) }, closed), ...failures },
         detail: detail('follow.get', 'follow:read'),
       },
-      async ({ actor, params, query, admission, job }) => {
+      async ({ actor, params, query, admission, job, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
         point(actor, params.targetId, 'follow:read');
         const follow = await admission.run('normal', job, () =>
           command(() => follows().readFollow(actor, params.targetId), 'not_found'),
         );
         if (!follow) throw new ProblemError('not_found');
-        return fullView(config(), actor, query.view, { follow: followView(follow) });
+        return fullView(
+          config(),
+          actor,
+          query.view,
+          { follow: followView(follow) },
+          {
+            deadline: job.deadline,
+            ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
+          },
+        );
       },
     )
     .get(
@@ -1428,12 +1468,13 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         query: t.Object(pageQuery, closed),
         response: {
-          200: t.Object({ follows: t.Array(embedded(followSchema, targetFields)), next: nullable }, closed),
+          200: t.Object({ follows: t.Array(embedded(followSchema, fullFollowFields)), next: nullable }, closed),
           ...failures,
         },
         detail: detail('follow.list', 'follow:list'),
       },
-      async ({ actor, query, admission, job }) => {
+      async ({ actor, query, admission, job, set }) => {
+        set.headers['Cache-Control'] = 'private, no-store';
         const owner = account(actor);
         if (!owner.scopes.includes('follow:list')) throw new ProblemError('forbidden');
         return admission.run('normal', job, () =>
@@ -1477,6 +1518,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
                       after: [last.updatedAt, last.targetId],
                     })
                   : null,
+            }, {
+              deadline: job.deadline,
+              ...(dependencies.followingSpaceTargets ? { followingSpaces: dependencies.followingSpaceTargets } : {}),
             });
           }),
         );

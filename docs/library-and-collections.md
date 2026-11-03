@@ -368,6 +368,22 @@ The destinations are **Library**, **Following** and **History**. Library contain
 Liked, pinned Collections and All Collections. Desktop uses a short pinned sidebar; phone uses a Collection selector
 and a few pins. State is a tile chip in profile wording and a filter; state Collections may be pinned, never compulsory
 navigation tabs. Following holds subjects, Collections and Spaces, with no following feed or public follower totals.
+
+Decision: Native `GET /v1/follows?view=FULL` retains Subject and Collection summaries, and resolves Spaces only through a current active address or a current readable Realm; stale non-null addresses never fall back, UUIDs are never fabricated as Realm IDs or paths, unavailable targets have unavailable destination/actions, viewer actions are current for the caller and destination, following implies no membership or permission, pages batch at most 100 rows, and outgoing follow responses are `private, no-store`.
+
+For a page of `P <= 100`, the existing outgoing reader selects at most 100 follow rows and preserves its signed
+`(updatedAt,targetId)` cursor. If `S <= P` rows are Spaces, a full projection adds one routed batch of those `S` exact
+Space identities/heads and at most one released batch of the `D` non-null address claims. It creates `S + R <= 2P`
+viewer-action references for `R` Realm fallback rows, packed into at most two calls of 100 with each fallback Space/Realm pair in
+one call. Each call retains the generic producer's current caller/scope/action preparation, mounted exposure lookup,
+per-resource batched native read, exact Access decisions, read-only repeatable-read transaction, commit or rollback,
+connection cleanup and operational-time release. The final Space and Realm head/lifecycle/address checks run inside
+that transaction; address claims are checked on their separate anchor first and that connection is released before
+the final home transaction. Missing and denied rows count in the same batches and serialize as unavailable. The page
+does no network calls, writes, command receipts or lock acquisition; failure is an error, never an empty success.
+Response bytes are bounded by 100 follow rows, labels up to the Space title limit, addresses up to 64 characters and
+the finite mounted action/operation catalogue. Existing Subject and Collection FULL readers retain their current
+four-worker behavior. Native acceptance and measured cost remain deferred to integration.
 Decision: A definitively rejected Follow command can be replaced only after explicit own-edge/current-list review or explicit preparation of an independently permitted removal; an unavailable review retains the rejection, and an uncertain command always retains its original identity.
 Personal directory cursors remain opaque and keep their current BFF limits: 4,096 characters for All Collections and
 2,048 for Following. Empty, non-string, and over-limit addresses retain the request URL and offer a first-page restart

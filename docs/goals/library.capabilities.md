@@ -379,14 +379,17 @@ evidence entry points only; none ran in this inventory.
 
 ### 5. Following, private counts, History and public disclosure
 
-**Done-when:** Following, private owner counts and History use their existing owner boundaries. Public discovery
-contains no private Library facts; publication is explicit, never inferred from payment, import mappings or personal
-edits.
+**Done-when:** Following opens readable Subject, Collection and Space destinations from native FULL rows and exposes
+only current destination actions; unavailable, stale or inaccessible Space targets stay unavailable. Private owner
+counts and History use their existing owner boundaries. Public discovery contains no private Library facts;
+publication is explicit, never inferred from payment, import mappings or personal edits.
 
 **User job and fixtures:** A person follows/unfollows explicitly, reads only authorized private counts, and publishes
-a log only through the explicit owner action. Public search, lists, Collections and snapshots expose no private
-states, labels, sessions, copies, counts or profile values. The private count reader uses the actual Collection,
-Space or account-management authority and the outgoing follower's own identity.
+a log only through the explicit owner action. The single Following page retains Subject and Collection behavior,
+resolves Space address or Realm navigation through Community, and returns caller-current viewer actions without
+implying membership. Public search, lists, Collections and snapshots expose no private states, labels, sessions,
+copies, counts or profile values. The private count reader uses the actual Collection, Space or account-management
+authority and the outgoing follower's own identity.
 
 **Native acceptance entries:** specs/library-outcomes.test.ts:626 (explicit unfollow survives entry transitions),
 :819 (Collection follow remains private), :847 (owner data is concealed from other and anonymous), :884 (public
@@ -403,6 +406,11 @@ public responses FTS public counts sitemaps or notifications.”
 suspended, missing-scope and concealed target. Preserve 401 for anonymous, 401 invalid_credentials for a suspended
 bearer, 403 for missing scope, concealed 404 and unavailable 503. Unavailable is never zero. Public discovery and
 private history authorization are separate authorities.
+
+**Installed native Following producer:** `services/kernel/test/library/full-views.test.ts` covers a mixed page with
+Subject, Collection and address-backed Space destinations, a changed Space address, caller-current action operands,
+unavailable unsupported targets and concealed inaccessible targets. This focused evidence does not replace frozen
+native acceptance or its bounded-growth review.
 
 **Owned routes and story exports:** /library/following uses library-following.stories.tsx#SignedIn, #Empty,
 #HiddenTarget, #UnfollowFailure, #Unavailable and #Error; following-controls.stories.tsx#FollowAndRemove,

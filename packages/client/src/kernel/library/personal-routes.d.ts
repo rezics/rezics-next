@@ -5,6 +5,24 @@ import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ShelfTypeDigest } from './shelf-type-keys.ts';
 import { type ShelfReads } from './shelf-contract.ts';
+import type { FollowingSpaceProjection } from './following-space-contract.ts';
+type FollowingSpaceDestinationSchema = import("typebox").TUnion<[
+    import("typebox").TObject<{ kind: import("typebox").TLiteral<"space">; spaceId: import("typebox").TString; address: import("typebox").TString }>,
+    import("typebox").TObject<{ kind: import("typebox").TLiteral<"realm">; realmId: import("typebox").TString }>,
+    import("typebox").TObject<{ kind: import("typebox").TLiteral<"unavailable"> }>
+]>;
+type FollowingSpaceActionsSchema = import("typebox").TUnion<[
+    import("typebox").TObject<{
+        status: import("typebox").TLiteral<"available">;
+        resourceType: import("typebox").TUnion<[import("typebox").TLiteral<"community.space">, import("typebox").TLiteral<"community.realm">]>;
+        resourceId: import("typebox").TString;
+        viewerActions: import("typebox").TArray<import("typebox").TObject<{
+            action: import("typebox").TString;
+            operations: import("typebox").TArray<import("typebox").TString>;
+        }>>;
+    }>,
+    import("typebox").TObject<{ status: import("typebox").TLiteral<"unavailable"> }>
+]>;
 type Dependencies = {
     routeKey: Uint8Array;
     pool: Pool;
@@ -12,6 +30,7 @@ type Dependencies = {
     access: () => Access;
     clock?: KernelClock;
     shelves?: () => ShelfReads;
+    followingSpaceTargets?: (actor: import("../request/access.ts").Actor, ids: readonly string[], deadline: number) => Promise<ReadonlyMap<string, FollowingSpaceProjection>>;
     shelfTypeDigest?: ShelfTypeDigest;
     typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
 };
@@ -7344,6 +7363,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     type: string;
                                     label: string;
                                 } | null;
+                                destination?: import("./following-space-contract.ts").FollowingSpaceDestination;
+                                actions?: import("./following-space-contract.ts").FollowingSpaceActions;
                                 targetId: string;
                                 targetType: "collection" | "space" | "subject";
                                 state: "following" | "unfollowed";
@@ -7568,6 +7589,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
             } & {
+                destination: import("typebox").TOptional<FollowingSpaceDestinationSchema>;
+                actions: import("typebox").TOptional<FollowingSpaceActionsSchema>;
                 target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;
@@ -7752,6 +7775,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     type: string;
                     label: string;
                 } | null;
+                destination?: import("./following-space-contract.ts").FollowingSpaceDestination;
+                actions?: import("./following-space-contract.ts").FollowingSpaceActions;
                 targetId: string;
                 targetType: "collection" | "space" | "subject";
                 state: "following" | "unfollowed";
@@ -7881,6 +7906,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     type: string;
                     label: string;
                 } | null;
+                destination?: import("./following-space-contract.ts").FollowingSpaceDestination;
+                actions?: import("./following-space-contract.ts").FollowingSpaceActions;
                 targetId: string;
                 targetType: "collection" | "space" | "subject";
                 state: "following" | "unfollowed";
@@ -8003,6 +8030,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                     reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                     updatedAt: import("typebox").TString;
                 } & {
+                    destination: import("typebox").TOptional<FollowingSpaceDestinationSchema>;
+                    actions: import("typebox").TOptional<FollowingSpaceActionsSchema>;
                     target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                         id: import("typebox").TString;
                         type: import("typebox").TString;
@@ -8117,6 +8146,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             label: string;
             type: string;
         }) | null;
+        destination?: import("./following-space-contract.ts").FollowingSpaceDestination;
+        actions?: import("./following-space-contract.ts").FollowingSpaceActions;
     })[];
     next: string | null;
 } & object>, {
@@ -8232,6 +8263,8 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 reason: import("typebox").TUnion<[import("typebox").TLiteral<"explicit">, import("typebox").TLiteral<"library">, import("typebox").TLiteral<"membership">]>;
                 updatedAt: import("typebox").TString;
             } & {
+                destination: import("typebox").TOptional<FollowingSpaceDestinationSchema>;
+                actions: import("typebox").TOptional<FollowingSpaceActionsSchema>;
                 target: import("typebox").TOptional<import("typebox").TUnion<[import("typebox").TObject<{
                     id: import("typebox").TString;
                     type: import("typebox").TString;

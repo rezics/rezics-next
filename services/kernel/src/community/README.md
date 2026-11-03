@@ -1225,6 +1225,27 @@ facts or Context grants. Subject links retain their canonical Global destination
 the actual [Semantic Realm-page binding](../../../../docs/subject-pages.md#realm-context) is delivered. A Realm query
 parameter or a raw Context override is not a substitute for that binding.
 
+## Following Space destinations
+
+Commerce's native FULL follow producer calls Community's bounded Space target batch for the selected Space UUIDs.
+One page selects at most 100 current Space heads and their exact revisions in one routed batch. Addressed rows resolve
+all exact active address claims in one released address-anchor batch, then the final viewer-action transaction
+rechecks the Space head, lifecycle version and address. A non-null address without its exact active claim is stale
+and never falls back to a Realm. With a null address, the batch may select the current active Realm carried by that
+Space; the final transaction rechecks both exact heads, both lifecycle versions and the carried host before returning
+Realm actions. A fallback row checks `community.space` and `community.realm` together in that transaction, so Space
+read authority is still required for the followed target. The existing Community viewer-action resources supply
+only currently admitted operations for the selected destination. Missing, inaccessible, changed and unsupported
+targets produce explicit unavailable destination and action values. Following does not grant Realm membership or
+permission.
+
+For a page of `P <= 100` rows, `D` rows have non-null addresses and `R` rows use a Realm fallback. Assembly reads one
+Space/head batch, at most one active-claim batch, and at most two viewer-action batches of at most 100 references;
+each Realm fallback contributes its Space and Realm reference to the same batch. Each batch retains the mounted
+resource/action catalogue limits, authority preparation, gate lookup, final repeatable-read transaction, response
+serialization and cleanup. Thus nested Community work is bounded by the page, not by one network or database
+authority request per row. Existing Subject and Collection FULL readers remain unchanged.
+
 ## Sitemap feeds
 
 `GET /v1/sitemap/realms` returns `{ id, lastModified, canonicalDestination }`. A live, PUBLIC,
