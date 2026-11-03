@@ -42,29 +42,47 @@ export async function readReviewDiscoveryChanges(
   limit: number = REVIEW_DISCOVERY_CHANGE_LIMIT,
   through?: bigint,
 ): Promise<ReviewDiscoveryChangePage> {
-  if (!Number.isInteger(partition) || partition < 0 || partition > 4095 || typeof after !== 'bigint' || after < 0n ||
-      !Number.isInteger(limit) || limit < 1 || limit > REVIEW_DISCOVERY_CHANGE_LIMIT ||
-      (through !== undefined && (typeof through !== 'bigint' || through < after)))
+  if (
+    !Number.isInteger(partition) ||
+    partition < 0 ||
+    partition > 4095 ||
+    typeof after !== 'bigint' ||
+    after < 0n ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > REVIEW_DISCOVERY_CHANGE_LIMIT ||
+    (through !== undefined && (typeof through !== 'bigint' || through < after))
+  )
     throw new RangeError('Invalid review discovery change frontier');
-  return withReadTransaction(pool, async (client) => {
-    const native = await readPartition(client, partition);
-    if (!native || native.writeState !== 'active') throw new CommandUnavailableError('fenced', partition);
-    const head = (await client.query<{ position: string }>(
-      `SELECT position::text FROM content.review_discovery_frontier WHERE route=$1`, [partition * 16],
-    )).rows[0];
-    const current = BigInt(head?.position ?? '0');
-    const cut = through ?? current;
-    if (cut > current || after > cut) throw new RangeError('Review discovery change frontier is ahead of source');
-    const rows = (await client.query<{ id: string; position: string; origin: ReviewDiscoveryOrigin }>(
-      `SELECT thread_id AS id,position::text,origin FROM content.review_discovery_change
+  return withReadTransaction(
+    pool,
+    async (client) => {
+      const native = await readPartition(client, partition);
+      if (!native || native.writeState !== 'active') throw new CommandUnavailableError('fenced', partition);
+      const head = (
+        await client.query<{ position: string }>(
+          `SELECT position::text FROM content.review_discovery_frontier WHERE route=$1`,
+          [partition * 16],
+        )
+      ).rows[0];
+      const current = BigInt(head?.position ?? '0');
+      const cut = through ?? current;
+      if (cut > current || after > cut) throw new RangeError('Review discovery change frontier is ahead of source');
+      const rows = (
+        await client.query<{ id: string; position: string; origin: ReviewDiscoveryOrigin }>(
+          `SELECT thread_id AS id,position::text,origin FROM content.review_discovery_change
        WHERE partition_no=$1 AND position>$2::bigint AND position<=$3::bigint
-       ORDER BY position LIMIT $4`, [partition, after.toString(), cut.toString(), limit + 1],
-    )).rows;
-    const changes = rows.slice(0, limit).map((row) => ({ ...row, position: BigInt(row.position) }));
-    const more = rows.length > limit;
-    const progressed = more ? changes.at(-1)!.position : cut;
-    return { partition, through: cut, after: progressed, next: more ? progressed : null, changes };
-  }, Date.now() + 30_000);
+       ORDER BY position LIMIT $4`,
+          [partition, after.toString(), cut.toString(), limit + 1],
+        )
+      ).rows;
+      const changes = rows.slice(0, limit).map((row) => ({ ...row, position: BigInt(row.position) }));
+      const more = rows.length > limit;
+      const progressed = more ? changes.at(-1)!.position : cut;
+      return { partition, through: cut, after: progressed, next: more ? progressed : null, changes };
+    },
+    Date.now() + 30_000,
+  );
 }
 
 /** Search's refresh linkage: every examined identity has an explicit current upsert or
@@ -78,6 +96,13 @@ export async function refreshReviewDiscoveryChanges(
   if (ids.length > REVIEW_DISCOVERY_CHANGE_LIMIT) throw new RangeError('Review discovery refresh exceeds batch bound');
   const snapshot = await source.read(page.partition, ids);
   const present = new Set(snapshot.reviews.map((review) => review.id));
-  return { partition: page.partition, after: page.after, through: page.through, next: page.next,
-    nativePosition: snapshot.position, reviews: snapshot.reviews, removed: ids.filter((id) => !present.has(id)) };
+  return {
+    partition: page.partition,
+    after: page.after,
+    through: page.through,
+    next: page.next,
+    nativePosition: snapshot.position,
+    reviews: snapshot.reviews,
+    removed: ids.filter((id) => !present.has(id)),
+  };
 }

@@ -146,6 +146,21 @@ const fixtures = {
     contributing: true,
     change: 1,
   },
+  'com.rezics.content.review-discovery.opened.v1': { route: 1232, id: threadId },
+  'com.rezics.content.review-discovery.progress.v1': { route: 1232, id: threadId, version: '2', complete: true },
+  'com.rezics.content.review-discovery.changed.v1': {
+    partition: 77,
+    through: '1',
+    ids: [threadId],
+    origin: {
+      partition: 77,
+      epoch: 1,
+      position: '100',
+      eventIndex: 0,
+      id: itemId,
+      type: 'com.rezics.content.thread.created.v1',
+    },
+  },
   'com.rezics.content.realm-discovery.prepared.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
   'com.rezics.content.realm-discovery.outcome.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
 } satisfies { [T in ContentEventType]: ContentEventData<T> };

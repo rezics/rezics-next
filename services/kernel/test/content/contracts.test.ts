@@ -405,6 +405,7 @@ function publishedModels(): void {
       model.RevisionInput,
       Readonly<{
         threadId: string;
+        title?: string;
         visibility?: 'published' | 'draft';
         itemId: string;
         body: unknown;
