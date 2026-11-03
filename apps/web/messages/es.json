@@ -7325,7 +7325,7 @@
   "character_person_pagination": "Páginas de resultados",
   "character_person_page_empty": "No hay resultados en esta página. Continúa para ver más.",
   "character_person_invalid": "Revisa los valores e inténtalo de nuevo.",
-  "character_person_role_requires_work": "Selecciona al menos una obra para filtrar por rol."
+  "character_person_role_requires_work": "Selecciona al menos una obra para filtrar por rol.",
   "library_my_ratings_nav": "Mis valoraciones",
   "library_my_ratings_heading": "Mis valoraciones",
   "library_my_ratings_description": "Tus respuestas privadas conservan el Subject y la pregunta originales. Esta página no muestra cifras públicas ni pertenencia a la biblioteca.",

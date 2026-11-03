@@ -7325,7 +7325,7 @@
   "character_person_pagination": "結果頁",
   "character_person_page_empty": "本頁沒有結果。繼續查看後續結果。",
   "character_person_invalid": "請檢查輸入內容後重試。",
-  "character_person_role_requires_work": "依角色篩選時，請至少選擇一部作品。"
+  "character_person_role_requires_work": "依角色篩選時，請至少選擇一部作品。",
   "library_my_ratings_nav": "我的評分",
   "library_my_ratings_heading": "我的評分",
   "library_my_ratings_description": "你的私人回答會保留原始主題與問題。本頁不顯示公開統計或收藏庫成員資料。",

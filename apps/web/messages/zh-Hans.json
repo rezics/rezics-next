@@ -7325,7 +7325,7 @@
   "character_person_pagination": "结果页",
   "character_person_page_empty": "本页没有结果。继续查看后续结果。",
   "character_person_invalid": "请检查输入并重试。",
-  "character_person_role_requires_work": "按角色筛选时，请至少选择一部作品。"
+  "character_person_role_requires_work": "按角色筛选时，请至少选择一部作品。",
   "library_my_ratings_nav": "我的评分",
   "library_my_ratings_heading": "我的评分",
   "library_my_ratings_description": "你的私人回答会保留原始主题与问题。本页不显示公开统计或收藏库成员资料。",

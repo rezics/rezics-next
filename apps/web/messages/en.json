@@ -7375,7 +7375,7 @@
   "character_person_pagination": "Result pages",
   "character_person_page_empty": "No results on this page. Continue to see more.",
   "character_person_invalid": "Check the values and try again.",
-  "character_person_role_requires_work": "Select at least one work to filter by role."
+  "character_person_role_requires_work": "Select at least one work to filter by role.",
   "library_my_ratings_nav": "My ratings",
   "library_my_ratings_heading": "My ratings",
   "library_my_ratings_description": "Your private answers, kept with the original Subject and question. This page does not show public figures or Library membership.",

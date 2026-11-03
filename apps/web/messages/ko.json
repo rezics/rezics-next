@@ -7325,7 +7325,7 @@
   "character_person_pagination": "결과 페이지",
   "character_person_page_empty": "이 페이지에는 결과가 없습니다. 계속해서 다음 페이지를 확인하세요.",
   "character_person_invalid": "입력값을 확인하고 다시 시도하세요.",
-  "character_person_role_requires_work": "역할로 필터링하려면 작품을 하나 이상 선택하세요."
+  "character_person_role_requires_work": "역할로 필터링하려면 작품을 하나 이상 선택하세요.",
   "library_my_ratings_nav": "내 평가",
   "library_my_ratings_heading": "내 평가",
   "library_my_ratings_description": "내 답변을 원래 Subject와 질문에 연결해 표시합니다. 공개 통계나 Library 등록 정보는 표시하지 않습니다.",

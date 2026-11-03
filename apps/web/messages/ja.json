@@ -7325,7 +7325,7 @@
   "character_person_pagination": "検索結果ページ",
   "character_person_page_empty": "このページに結果はありません。続けて次のページを表示できます。",
   "character_person_invalid": "入力内容を確認して、もう一度お試しください。",
-  "character_person_role_requires_work": "役割で絞り込むには、作品を1つ以上選択してください。"
+  "character_person_role_requires_work": "役割で絞り込むには、作品を1つ以上選択してください。",
   "library_my_ratings_nav": "自分の評価",
   "library_my_ratings_heading": "自分の評価",
   "library_my_ratings_description": "自分の回答を、元の Subject と質問に結び付けて表示します。公開統計やライブラリへの登録状況は表示しません。",
