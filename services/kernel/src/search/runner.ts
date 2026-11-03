@@ -351,9 +351,15 @@ export function startDiscoveryIndexing(options: {
       if (!relays.has(target.generation)) {
         incarnations.set(target.generation, binding);
         const projection = createDiscoveryProjection({ ...options, target, registry });
-        if (options.reviewSource) receivers.set(target.generation, createReviewDiscoveryReceiving({
-          ...options, projection, source: options.reviewSource,
-        }));
+        if (options.reviewSource)
+          receivers.set(
+            target.generation,
+            createReviewDiscoveryReceiving({
+              ...options,
+              projection,
+              source: options.reviewSource,
+            }),
+          );
         relays.set(
           target.generation,
           startRelays(
@@ -370,7 +376,7 @@ export function startDiscoveryIndexing(options: {
     }
     // One finite current-review page per live target, sharing this supervisor's lifecycle and transport.
     for (const target of generations) {
-      if (target.uuid && !['allocated','retiring','retired','quarantined'].includes(target.state))
+      if (target.uuid && !['allocated', 'retiring', 'retired', 'quarantined'].includes(target.state))
         await receivers.get(target.generation)?.next();
     }
     for (const target of generations.filter((row) => row.state === 'retiring')) {
