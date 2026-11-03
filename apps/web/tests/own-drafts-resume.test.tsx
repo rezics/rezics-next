@@ -34,6 +34,10 @@ test('explicit selection reads one exact current draft; stale or concealed revis
   stale = true;
   expect(await readSelectedOwnDraft(reader, identity, entry, new AbortController().signal)).toBe('stale');
   expect(calls).toHaveLength(2);
+  const retired = new AbortController();
+  retired.abort();
+  expect(await readSelectedOwnDraft(reader, identity, entry, retired.signal)).toBe('unavailable');
+  expect(calls).toHaveLength(2);
 });
 
 test('mounted inventory bounds selected reads and retires bodies, advice and late effects with their owner', async () => {
@@ -46,6 +50,14 @@ test('mounted inventory bounds selected reads and retires bodies, advice and lat
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    HTMLFormElement: window.HTMLFormElement,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = Object.fromEntries(

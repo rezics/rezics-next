@@ -16,7 +16,8 @@ The installed Content routes and schemas are present in `services/kernel`, and t
 wire page and exact action paths. The checked-in `@rezics/client` declaration does not yet include the generated
 `own_drafts.list` and `own_drafts.resume` methods. The Web component therefore does not construct native URLs as
 fetch destinations. Signed-in `/drafts` route and navigation binding, composer resume, save/publish/erase commands,
-readback, browser-local recovery choice, and their mounted tests remain in the continuation brief.
+readback, browser-local recovery choice, and their mounted tests remain in
+`.temp/continuation/own-drafts-journey.md`.
 
 ## Cost
 
@@ -30,3 +31,6 @@ readback, browser-local recovery choice, and their mounted tests remain in the c
   identity/cursor keying. Mounted `own-drafts-resume.test.tsx` checks 1/10/20-row pages, one explicitly selected body,
   sparse replacement, focus restoration and late-response retirement. `own-drafts-commands.test.tsx` pins exact
   account/resource/revision action advice, including malformed and absolute paths. Native 256/1024/4096 history and partition growth remain Content acceptance.
+
+Decision: a concealed or changed selected head discards the retained inventory metadata and action advice; retrying
+or restarting the inventory is explicit.

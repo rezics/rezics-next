@@ -89,6 +89,7 @@ function BoundOwnDraftsPage({
   const selectionGeneration = useRef(0);
   const controlId = useId();
   const selectionHeading = useRef<HTMLHeadingElement>(null);
+  const inventoryHeading = useRef<HTMLHeadingElement>(null);
   const returnFocus = useRef<{ key: string; id: string } | null>(null);
   const [cursor, setCursor] = useState<{ key: string; value: string | null }>({ key: identityKey, value: null });
   const currentCursor = cursor.key === identityKey ? cursor.value : null;
@@ -160,7 +161,7 @@ function BoundOwnDraftsPage({
     const pending = returnFocus.current;
     if (!selection && pending?.key === identityKey) {
       returnFocus.current = null;
-      document.getElementById(pending.id)?.focus();
+      (document.getElementById(pending.id) ?? inventoryHeading.current)?.focus();
     }
   }, [identityKey, selection]);
 
@@ -246,7 +247,9 @@ function BoundOwnDraftsPage({
   if (!active) {
     return (
       <main className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6">
-        <h1 className="text-2xl font-semibold">{m.own_drafts_title({}, { locale })}</h1>
+        <h1 ref={inventoryHeading} tabIndex={-1} className="text-2xl font-semibold">
+          {m.own_drafts_title({}, { locale })}
+        </h1>
         <p role="status">{m.own_drafts_sign_in({}, { locale })}</p>
       </main>
     );
@@ -346,7 +349,9 @@ function BoundOwnDraftsPage({
 
   return (
     <main className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6" aria-busy={!page || page.state === 'loading'}>
-      <h1 className="text-2xl font-semibold">{m.own_drafts_title({}, { locale })}</h1>
+      <h1 ref={inventoryHeading} tabIndex={-1} className="text-2xl font-semibold">
+        {m.own_drafts_title({}, { locale })}
+      </h1>
       {!page || page.state === 'loading' ? <p role="status">{m.own_drafts_loading({}, { locale })}</p> : null}
       {page?.state === 'denied' ? <p role="status">{m.own_drafts_denied({}, { locale })}</p> : null}
       {page?.state === 'unavailable' ? (

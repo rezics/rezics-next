@@ -138,8 +138,10 @@ export async function readSelectedOwnDraft(
   entry: OwnDraftEntry,
   signal: AbortSignal,
 ): Promise<OwnDraftSelection | OwnDraftReadFailure> {
+  if (signal.aborted) return 'unavailable';
   if (!admittedOwnDraftAction(entry, identity.accountId, 'resume')) return 'concealed';
   const result = await reader.resume({ accountId: identity.accountId, id: entry.id, threadId: entry.threadId }, signal);
+  if (signal.aborted) return 'unavailable';
   if (typeof result === 'string') return result;
   if (result.post.id !== entry.id || result.post.threadId !== entry.threadId) return 'concealed';
   if (result.post.body === null || result.revision !== entry.revisionId) return 'stale';
