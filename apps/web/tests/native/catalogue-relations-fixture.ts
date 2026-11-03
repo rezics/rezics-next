@@ -122,12 +122,24 @@ export async function readPublicStatements(
   stack: NativeWebStack,
   id: string,
   property: string,
-): Promise<{ id: string; value: unknown; qualifiers: { property: { id: string }; value: unknown }[] }[]> {
+): Promise<
+  {
+    id: string;
+    value: unknown;
+    qualifiers: { property: { id: string }; value: unknown }[];
+    references?: { parts: { property: { id: string }; value: unknown }[] }[];
+  }[]
+> {
   const body = await json<{
     subject: {
       statements?: Record<
         string,
-        { id: string; value: unknown; qualifiers: { property: { id: string }; value: unknown }[] }[]
+        {
+          id: string;
+          value: unknown;
+          qualifiers: { property: { id: string }; value: unknown }[];
+          references?: { parts: { property: { id: string }; value: unknown }[] }[];
+        }[]
       >;
     };
   }>(await stack.kernel(`/v1/subjects/${id}`), 200, `GET /v1/subjects/${id}`);

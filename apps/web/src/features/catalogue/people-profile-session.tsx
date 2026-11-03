@@ -11,13 +11,21 @@ import { loadPeopleProfile, createCataloguePeopleProfile } from './people-profil
 import { PeopleProfileEditor } from './people-profile-view';
 import type { PeopleAddress } from './people-profile';
 
-function PeopleProfileSessionLive({ id, work, locale }: PeopleAddress & { locale: string }) {
+function PeopleProfileSessionLive({
+  id,
+  work,
+  locale,
+  creditHandoffToken,
+}: PeopleAddress & { locale: string; creditHandoffToken?: string }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   return (
     <PeopleProfileEditor
       {...(id ? { id } : {})}
       {...(work !== undefined ? { work } : {})}
+      {...(creditHandoffToken ? { creditHandoffToken } : {})}
+      handoffReader={editorWork.reader}
+      handoffReaderLive={editorWork.live}
       locale={locale}
       session={state}
       transport={{

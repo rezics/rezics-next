@@ -50,7 +50,13 @@ const readEditorPage = createServerFn({ method: 'GET', strict: false })
 
 export const Route = createFileRoute('/subjects/$id_/$slug_/relation-edit')({
   staticData: { publicCache: false },
-  validateSearch: (search: Record<string, unknown>) => ({ realm: validatePageRealm(search.realm) }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    realm: validatePageRealm(search.realm),
+    creditHandoff:
+      typeof search.creditHandoff === 'string' && /^[0-9a-f-]{36}$/i.test(search.creditHandoff)
+        ? search.creditHandoff
+        : undefined,
+  }),
   loaderDeps: ({ search }) => ({ realm: search.realm }),
   loader: ({ params, deps, location }) =>
     readEditorPage({
@@ -67,6 +73,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relation-edit')({
 });
 function RelationEditRoute() {
   const { page, frame, supported } = Route.useLoaderData();
+  const { creditHandoff } = Route.useSearch();
   return (
     <article className="mx-auto w-full max-w-4xl space-y-8">
       <SubjectFrame
@@ -79,7 +86,12 @@ function RelationEditRoute() {
         view="overview"
       />
       {supported ? (
-        <RelationEditorSession key={frame.id} id={frame.id} locale={getLocale()} />
+        <RelationEditorSession
+          key={`${frame.id}:${creditHandoff ?? ''}`}
+          id={frame.id}
+          locale={getLocale()}
+          {...(creditHandoff ? { creditHandoffToken: creditHandoff } : {})}
+        />
       ) : (
         <p>{m.relation_context()}</p>
       )}

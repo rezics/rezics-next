@@ -12,10 +12,21 @@ export const Route = createFileRoute('/catalogue/people')({
         : typeof input.work === 'string' && input.work.length <= 128
           ? input.work
           : '',
+    creditHandoff:
+      typeof input.creditHandoff === 'string' && /^[0-9a-f-]{36}$/i.test(input.creditHandoff)
+        ? input.creditHandoff
+        : undefined,
   }),
   head: () => ({ meta: [{ title: m.people_profile_title() }, { name: 'robots', content: 'noindex, nofollow' }] }),
   component: () => {
-    const { work } = Route.useSearch();
-    return <PeopleProfileSession {...(work !== undefined ? { work } : {})} locale={getLocale()} />;
+    const { work, creditHandoff } = Route.useSearch();
+    return (
+      <PeopleProfileSession
+        key={`${work ?? ''}:${creditHandoff ?? ''}`}
+        {...(work !== undefined ? { work } : {})}
+        {...(creditHandoff ? { creditHandoffToken: creditHandoff } : {})}
+        locale={getLocale()}
+      />
+    );
   },
 });

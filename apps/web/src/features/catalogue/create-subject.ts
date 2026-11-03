@@ -31,7 +31,9 @@ export type CreateFailure = {
   errors?: Pick<Violation, 'pointer' | 'code'>[];
   refreshDefinitions?: boolean;
 };
-export type CreatedReader = { state: 'ready'; href: string } | { state: 'concealed' | 'unavailable' };
+export type CreatedReader =
+  | { state: 'ready'; href: string; identity?: { id: string; type: string; label: string } }
+  | { state: 'concealed' | 'unavailable' };
 export type CreateResult = CreateFailure | { ok: true; id: string; reader: CreatedReader };
 export type CreateTransport = {
   definitions?: (refresh?: boolean) => Promise<CreateDefinitions>;

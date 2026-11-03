@@ -19,6 +19,11 @@ export async function readCreatedSubject(client: KernelClient, id: string, local
     return {
       state: 'ready',
       href: subjectHref({ id, label: pickText(result.data.subject.labels, locale).text }, locale).href,
+      identity: {
+        id: result.data.subject.id,
+        type: result.data.subject.type,
+        label: pickText(result.data.subject.labels, locale).text,
+      },
     };
   } catch {
     return { state: 'unavailable' };

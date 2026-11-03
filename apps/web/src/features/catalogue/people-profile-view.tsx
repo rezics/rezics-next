@@ -7,6 +7,7 @@ import { Input } from '@rezics/ui/shadcn/input';
 import { ContentItemFrame, ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
+import { candidateContext } from '../../subject/candidates';
 import type { CandidateTransport } from '../../subject/candidate-review';
 import { ViewHeading, ViewHeadingActions } from '../pages/view-heading';
 import { CreateSubjectForm } from './create-subject-form';
@@ -15,7 +16,7 @@ import { EditorFailure, ScalarControl } from './statement-editor-view';
 import type { StatementInput } from './statement-editor';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
-import type { CreateFailure } from './create-subject';
+import type { CreateFailure, CreateResult } from './create-subject';
 import { presentStatementViolations, type PresentedViolation } from './statement-validation-presentation';
 import type { Violation } from '@rezics/definitions/validate';
 import {
@@ -25,8 +26,19 @@ import {
   type PeopleRead,
   type PeopleTransport,
 } from './people-profile';
+import {
+  beginCreditTargetReturn,
+  creditIdentityTypes,
+  discardCreditTargetHandoff,
+  readCreditTargetHandoff,
+  recordCreatedCreditIdentity,
+  type CreditIdentityType,
+  type CreditTargetHandoff,
+  type CreatedCreditIdentity,
+} from './credit-target-handoff';
 
 type Current = Extract<PeopleRead, { ok: true }>;
+type Created = Extract<CreateResult, { ok: true }>;
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 type CorrectionReloadIntent = { opener: HTMLButtonElement; scope: string; completed: boolean };
 
@@ -35,6 +47,29 @@ const peopleActionTarget =
 const peopleLinkTarget =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
 const peopleInputTarget = 'h-11 md:pointer-fine:h-8';
+
+function admittedCreditProfileTypes(read: Current, handoff: CreditTargetHandoff) {
+  const property = read.release.properties[handoff.propertyId];
+  const targets = property?.targets ?? [];
+  if (
+    property?.relation?.group !== 'credit' ||
+    JSON.stringify([...targets].sort()) !== JSON.stringify([...handoff.targets].sort())
+  )
+    return [];
+  return read.profiles.filter(
+    (profile) =>
+      creditIdentityTypes.includes(profile.id as CreditIdentityType) &&
+      handoff.admittedTypes.includes(profile.id as CreditIdentityType) &&
+      targets.includes(profile.id),
+  );
+}
+
+function createdIdentity(result: Created): CreatedCreditIdentity | undefined {
+  const identity = result.reader.state === 'ready' ? result.reader.identity : undefined;
+  if (!identity || !creditIdentityTypes.includes(identity.type as CreditIdentityType)) return undefined;
+  return identity as CreatedCreditIdentity;
+}
+
 const peopleProfileSurface = [
   'min-w-0 w-full [overflow-wrap:anywhere]',
   '[&>article>header>p:first-of-type_a]:inline-flex',
@@ -326,6 +361,9 @@ function PeopleCreate({
   transport,
   onNavigate,
   headingRef,
+  handoff,
+  onCreated,
+  onReturnToCreditDraft,
 }: {
   read: Current;
   current: boolean;
@@ -338,12 +376,25 @@ function PeopleCreate({
   transport: PeopleTransport;
   onNavigate: (href: string) => void;
   headingRef: Ref<HTMLHeadingElement>;
+  handoff?: CreditTargetHandoff;
+  onCreated?: (result: Created) => void;
+  onReturnToCreditDraft?: (identity: CreatedCreditIdentity) => void;
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const [drafts, setDrafts] = useState<Record<string, Record<string, StatementInput>>>({});
   const [failure, setFailure] = useState<CreateFailure>();
-  const [created, setCreated] = useState<string>();
+  const [created, setCreated] = useState<Created>();
+  const admittedProfiles = handoff ? admittedCreditProfileTypes(read, handoff) : read.profiles;
+  const returnedIdentity = created && createdIdentity(created);
+  const canReturnToCreditDraft =
+    !!handoff &&
+    handoff.phase === 'ready' &&
+    !!returnedIdentity &&
+    handoff.createdId === created?.id &&
+    handoff.identity?.id === returnedIdentity.id &&
+    handoff.admittedTypes.includes(returnedIdentity.type) &&
+    admittedProfiles.some((profile) => profile.id === returnedIdentity.type);
   const scope = useId();
   const rowIds = useRef(new Map<string, string>());
   const fieldsets = useRef(new Map<string, HTMLFieldSetElement>());
@@ -499,13 +550,16 @@ function PeopleCreate({
       {current && <ProfileIntro read={read} locale={locale} />}
       {created && (
         <p role="status">
-          {m.people_profile_created_id({}, o)} <code className="break-all">{created}</code>
+          {m.people_profile_created_id({}, o)} <code className="break-all">{created.id}</code>
         </p>
       )}
       <CreateSubjectForm
         locale={locale}
         session={session}
-        onCreated={(result) => setCreated(result.id)}
+        onCreated={(result) => {
+          setCreated(result);
+          onCreated?.(result);
+        }}
         onNavigate={work ? () => {} : onNavigate}
         transport={{
           definitions: async (refresh) => {
@@ -530,7 +584,7 @@ function PeopleCreate({
             ready: current,
             pending: recovering,
             failure: recovery,
-            types: read.profiles,
+            types: admittedProfiles,
           },
           href: `/${locale}/catalogue/people${work ? `?work=${encodeURIComponent(work)}` : ''}`,
           labelLanguage: (type) => read.profiles.find((profile) => profile.id === type)?.lang ?? undefined,
@@ -704,6 +758,16 @@ function PeopleCreate({
           },
         }}
       />
+      {canReturnToCreditDraft && returnedIdentity && (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!lifetime.active()}
+          onClick={() => onReturnToCreditDraft?.(returnedIdentity)}
+        >
+          {m.people_profile_return_to_credit({}, o)}
+        </Button>
+      )}
     </section>
   );
 }
@@ -721,6 +785,9 @@ function PeopleProfileEditorLive({
   review,
   relations,
   onNavigate,
+  creditHandoffToken,
+  handoffReader = '',
+  handoffReaderLive = () => false,
 }: {
   id?: string;
   work?: string;
@@ -731,10 +798,39 @@ function PeopleProfileEditorLive({
   review: (property: string, session?: string) => CandidateTransport;
   relations?: ReactNode;
   onNavigate: (href: string) => void;
+  creditHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
 }) {
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const client = useQueryClient();
+  const [creditHandoff, setCreditHandoff] = useState<CreditTargetHandoff>();
+  const returningToCreditDraft = useRef(false);
+  useEffect(() => {
+    if (!creditHandoffToken) {
+      setCreditHandoff(undefined);
+      return;
+    }
+    returningToCreditDraft.current = false;
+    const handoff = readCreditTargetHandoff(creditHandoffToken);
+    if (
+      !handoff ||
+      handoff.phase !== 'creating' ||
+      handoff.workId !== work ||
+      handoff.reader !== handoffReader ||
+      handoff.context !== candidateContext ||
+      !handoffReaderLive()
+    ) {
+      discardCreditTargetHandoff(creditHandoffToken);
+      setCreditHandoff(undefined);
+      return;
+    }
+    setCreditHandoff(handoff);
+    return () => {
+      if (!returningToCreditDraft.current) discardCreditTargetHandoff(creditHandoffToken);
+    };
+  }, [creditHandoffToken, handoffReader, handoffReaderLive, work]);
   const retryHeading = useRef<HTMLHeadingElement>(null);
   const retryButton = useRef<HTMLButtonElement>(null);
   const correctionRetryButton = useRef<HTMLButtonElement>(null);
@@ -771,6 +867,46 @@ function PeopleProfileEditorLive({
     if (!id && next.ok && (next.public || (anchored && next.work?.subject.id !== expectedWork)))
       return { ok: false, reason: 'stale' };
     return next;
+  }
+  function recordCreditHandoffCreated(result: Created) {
+    const handoff = creditHandoff;
+    if (!handoff || !lifetime.active() || !handoffReaderLive()) return;
+    const next = recordCreatedCreditIdentity(
+      handoff.token,
+      handoff.workId,
+      handoff.reader,
+      result.id,
+      createdIdentity(result),
+    );
+    if (!next) {
+      discardCreditTargetHandoff(handoff.token);
+      setCreditHandoff(undefined);
+      return;
+    }
+    setCreditHandoff(next);
+  }
+  function returnToCreditDraft(identity: CreatedCreditIdentity) {
+    const handoff = creditHandoff;
+    const workSubject = retained.current?.work?.subject;
+    if (
+      !handoff ||
+      !workSubject ||
+      workSubject.id !== handoff.workId ||
+      handoff.reader !== handoffReader ||
+      handoff.identity?.id !== identity.id ||
+      !handoff.admittedTypes.includes(identity.type) ||
+      !lifetime.active() ||
+      !handoffReaderLive() ||
+      !beginCreditTargetReturn(handoff.token, handoff.workId, handoffReader)
+    ) {
+      if (handoff) discardCreditTargetHandoff(handoff.token);
+      setCreditHandoff(undefined);
+      return;
+    }
+    returningToCreditDraft.current = true;
+    const workLabel = definitionText(workSubject.labels, locale).text;
+    const href = `${subjectHref({ id: workSubject.id, label: workLabel }, locale).href}/relation-edit?creditHandoff=${encodeURIComponent(handoff.token)}`;
+    window.location.assign(href);
   }
   const query = useQuery({
     queryKey: [...['people-profile', id ?? 'new', work ?? '', locale], lifetime.generation],
@@ -955,6 +1091,9 @@ function PeopleProfileEditorLive({
         session={session}
         transport={transport}
         onNavigate={onNavigate}
+        {...(creditHandoff ? { handoff: creditHandoff } : {})}
+        onCreated={recordCreditHandoffCreated}
+        onReturnToCreditDraft={returnToCreditDraft}
         headingRef={retryHeading}
       />
     );

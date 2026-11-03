@@ -21,6 +21,13 @@ import { DefinitionGuideLink } from './definition-guide-view';
 import { subjectHref } from '../../subject/subject-href';
 import { candidateContext, type Candidate, type CandidateFailure } from '../../subject/candidates';
 import {
+  createCreditTargetHandoff,
+  creditIdentityTypes,
+  discardCreditTargetHandoff,
+  type CreditTargetHandoff,
+  type CreatedCreditIdentity,
+} from './credit-target-handoff';
+import {
   relationDraft,
   relationSlotMatches,
   validRelationSlot,
@@ -100,6 +107,10 @@ function RelationEditorLive({
   composition,
   embedded = false,
   navigation,
+  creditTargetHandoff,
+  handoffReader,
+  handoffReaderLive,
+  onCreditTargetHandoffConsumed,
 }: {
   id: string;
   locale: string;
@@ -114,6 +125,10 @@ function RelationEditorLive({
   embedded?: boolean;
   /** A containing profile can compose the existing dirty/pending state into one decision. */
   navigation?: (state: Parameters<typeof RelationEditorNavigation>[0]) => ReactNode;
+  creditTargetHandoff?: CreditTargetHandoff;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
+  onCreditTargetHandoffConsumed?: (token: string) => void;
   /** A composition correction keeps every non-order qualifier and native slot key intact. */
   composition?: {
     statement: RelationDraft;
@@ -199,6 +214,8 @@ function RelationEditorLive({
   const [proposedId, setProposedId] = useState<string>();
   const [ownConsent, setOwnConsent] = useState(false);
   const [consentEntry, setConsentEntry] = useState<ConsentAddress>();
+  const [createdCreditIdentity, setCreatedCreditIdentity] = useState<CreatedCreditIdentity>();
+  const restoredHandoff = useRef<string>();
   const nativeSession = useRef<string | undefined>(undefined);
   if (!nativeSession.current && composition?.session) nativeSession.current = composition.session;
   const request = useRef<RelationProposal | RelationConfirmation | undefined>(undefined);
@@ -258,6 +275,54 @@ function RelationEditorLive({
   };
   const current = read?.ok ? read : undefined;
   const field = current?.fields.find((field) => field.id === draft.property.id);
+  useEffect(() => {
+    const handoff = creditTargetHandoff;
+    const identity = handoff?.identity;
+    if (!handoff || !identity || restoredHandoff.current === handoff.token) return;
+    if (!visible || !current?.descriptor || !mount.active()) return;
+    const admittedField = current.fields.find((item) => item.id === handoff.propertyId);
+    const sameTargets =
+      !!admittedField &&
+      JSON.stringify([...admittedField.targets].sort()) === JSON.stringify([...handoff.targets].sort());
+    const valid =
+      handoff.workId === id &&
+      handoff.reader === handoffReader &&
+      handoffReaderLive?.() === true &&
+      handoff.context === candidateContext &&
+      handoff.releaseDigest === current.descriptor.releaseDigest &&
+      current.public.subject.id === id &&
+      admittedField?.group === 'credit' &&
+      sameTargets &&
+      handoff.draft.property.id === admittedField.id &&
+      handoff.draft.qualifiers.every((snak) =>
+        admittedField.qualifiers.some(
+          (definition) => definition.id === snak.property.id && definition.datatype === snak.property.data_type,
+        ),
+      ) &&
+      handoff.admittedTypes.includes(identity.type) &&
+      admittedField.targets.includes(identity.type) &&
+      identity.id === handoff.createdId;
+    restoredHandoff.current = handoff.token;
+    if (!valid || !editable()) {
+      discardCreditTargetHandoff(handoff.token);
+      onCreditTargetHandoffConsumed?.(handoff.token);
+      return;
+    }
+    edit(structuredClone(handoff.draft));
+    setCitation(handoff.citation);
+    setCreatedCreditIdentity(identity);
+  }, [
+    creditTargetHandoff,
+    current,
+    edit,
+    editable,
+    handoffReader,
+    handoffReaderLive,
+    id,
+    mount,
+    onCreditTargetHandoffConsumed,
+    visible,
+  ]);
   const qualifierAvailable = (definition: RelationQualifier) =>
     ['string', 'external-id', 'url', 'wikibase-item'].includes(definition.datatype) &&
     draft.qualifiers.length < 16 &&
@@ -611,6 +676,65 @@ function RelationEditorLive({
   function edit(next: RelationDraft) {
     if (!editable()) return;
     applyEdit(next);
+  }
+  function createMissingCreditTarget() {
+    if (
+      !editable() ||
+      !visible ||
+      draft.value.type !== 'somevalue' ||
+      field?.group !== 'credit' ||
+      !current?.descriptor ||
+      !handoffReader ||
+      !handoffReaderLive?.()
+    )
+      return;
+    const admittedTypes = creditIdentityTypes.filter((type) => field.targets.includes(type));
+    if (!admittedTypes.length) return;
+    const handoff = createCreditTargetHandoff({
+      workId: id,
+      reader: handoffReader,
+      context: candidateContext,
+      releaseDigest: current.descriptor.releaseDigest,
+      propertyId: field.id,
+      targets: [...field.targets],
+      admittedTypes,
+      draft: structuredClone(draft),
+      citation,
+    });
+    if (!handoff) return;
+    const query = new URLSearchParams({ work: id, creditHandoff: handoff.token });
+    window.location.assign(`/${locale}/catalogue/people?${query.toString()}`);
+  }
+  function chooseCreatedCreditIdentity() {
+    const identity = createdCreditIdentity;
+    const handoff = creditTargetHandoff;
+    if (
+      !identity ||
+      !handoff ||
+      !editable() ||
+      !visible ||
+      !handoffReaderLive?.() ||
+      handoff.reader !== handoffReader ||
+      handoff.workId !== id ||
+      handoff.propertyId !== field?.id ||
+      handoff.createdId !== identity.id ||
+      !handoff.admittedTypes.includes(identity.type) ||
+      !field?.targets.includes(identity.type) ||
+      draft.value.type !== 'somevalue'
+    )
+      return;
+    picked.current[identity.id] = {
+      id: identity.id,
+      title: identity.label,
+      types: [identity.type],
+      typeLabel: identity.type,
+      year: null,
+      cover: null,
+    };
+    edit({ ...draft, value: { type: 'value', content: identity.id } });
+    discardCreditTargetHandoff(handoff.token);
+    setCreatedCreditIdentity(undefined);
+    onCreditTargetHandoffConsumed?.(handoff.token);
   }
   function applyEdit(next: RelationDraft) {
     if (draftDecisionRef.current) {
@@ -1141,6 +1265,38 @@ function RelationEditorLive({
                               });
                             }}
                           />
+                          {createdCreditIdentity && draft.value.type === 'somevalue' && (
+                            <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+                              <p>
+                                {createdCreditIdentity.label} · {createdCreditIdentity.type} ·{' '}
+                                <code className="break-all">{createdCreditIdentity.id}</code>
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                disabled={!editable() || !handoffReaderLive?.()}
+                                onClick={chooseCreatedCreditIdentity}
+                              >
+                                {m.relation_use_created_target({ label: createdCreditIdentity.label }, options)}
+                              </Button>
+                            </div>
+                          )}
+                          {!createdCreditIdentity &&
+                            draft.value.type === 'somevalue' &&
+                            field?.group === 'credit' &&
+                            !!current?.descriptor &&
+                            !!handoffReader &&
+                            !!handoffReaderLive?.() &&
+                            creditIdentityTypes.some((type) => field.targets.includes(type)) && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                disabled={!editable()}
+                                onClick={createMissingCreditTarget}
+                              >
+                                {m.relation_create_credit_target({}, options)}
+                              </Button>
+                            )}
                         </Field>
                         {draft.value.type === 'somevalue' && (
                           <p className="text-sm">{m.relation_unresolved({}, options)}</p>
