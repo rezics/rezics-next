@@ -11,6 +11,7 @@ async function mounted(
     host: HTMLElement;
     render: (node: ReactNode) => Promise<void>;
     enter: (input: HTMLInputElement, value: string) => Promise<void>;
+    choose: (select: HTMLSelectElement, value: string) => Promise<void>;
   }) => Promise<void>,
 ) {
   const require = createRequire(import.meta.url);
@@ -42,6 +43,12 @@ async function mounted(
         await act(async () => {
           Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
           input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        });
+      },
+      choose: async (select, value) => {
+        await act(async () => {
+          select.value = value;
+          select.dispatchEvent(new window.Event('change', { bubbles: true }));
         });
       },
     });
@@ -110,13 +117,15 @@ async function classified() {
 }
 
 test('Add-on classifications review the changed set, copy evidence, repair a nested part, and return independent native outcomes', async () => {
-  await mounted(async ({ host, render, enter }) => {
+  await mounted(async ({ host, render, enter, choose }) => {
     const { statementInput } = await import('../src/features/catalogue/statement-editor');
     const { addonBase } = await import('../src/features/catalogue/addon-profile');
     const { AddonClassifications, m, fixture, read, addonPlatformId, addonProfileId, addonWorkId, statement } =
       await classified();
+    const platformId = '00000000-0000-4000-8000-00000000a111';
+    const siblingId = '00000000-0000-4000-8000-00000000a107';
     read.public.subject.statements[platform] = [
-      statement(platform, '00000000-0000-4000-8000-00000000a111', addonPlatformId, {
+      statement(platform, platformId, addonPlatformId, {
         qualifiers: [
           { property: { id: 'schema:inLanguage', data_type: 'string' }, value: { type: 'value', content: 'ja' } },
         ],
@@ -130,11 +139,13 @@ test('Add-on classifications review the changed set, copy evidence, repair a nes
           },
         ],
       }),
+      statement(platform, '00000000-0000-4000-8000-00000000a113', siblingId, { references: [] }),
     ];
     read.public.subject.statements[genre] = [
       statement(genre, '00000000-0000-4000-8000-00000000a112', genreId, { references: [] }),
     ];
     read.public.related[genreId] = { type: 'skos:Concept', labels: { en: 'Expansion genre' } };
+    read.public.related[siblingId] = { type: 'skos:Concept', labels: { en: 'Handheld platform' } };
     const membership = structuredClone(read.public.subject.statements[addonBase]);
     const commands: FactCommand[] = [];
     const native = fixture.props.facts(addonProfileId);
@@ -173,6 +184,7 @@ test('Add-on classifications review the changed set, copy evidence, repair a nes
     expect(host.textContent).toContain(m.addon_classification_independent());
     expect(host.textContent).toContain(addonPlatformId);
     expect(host.textContent).not.toContain(addonWorkId);
+    await choose(field(host, platform).querySelector<HTMLSelectElement>('select')!, platformId);
     await act(async () => button(field(host, platform), m.facts_edit_field()).click());
     await enter(field(host, platform).querySelector<HTMLInputElement>('input[type="url"]')!, `${evidence}/edited`);
     await act(async () => button(field(host, genre), m.facts_edit_field()).click());
