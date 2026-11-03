@@ -20,7 +20,7 @@ export type PublishedLog = {
     id: string;
     accountId: string;
     subjectId: string;
-    sessionState: ProgressState;
+    sessionState: Exclude<ProgressState, 'retired'>;
     startedAt: string;
     completedAt: string | null;
     note: string | null;
