@@ -5,7 +5,7 @@ import { checkSubjectInput } from '@rezics/definitions/validate';
 import type { SessionEnv } from '../../session/client';
 import { createTypes, type InitialSubject } from './create-subject';
 import { createSubjectRecord } from './create-subject-request';
-import { episodeMembershipAdmission, screenSeriesId } from './screen-episode-membership';
+import { episodeMembershipAdmission, screenSeriesId } from './screen-episode-membership.ts';
 import { creationStatement, editableScalar, type StatementInput } from './statement-editor';
 import { catalogueEntries } from './catalogue-entry';
 import {

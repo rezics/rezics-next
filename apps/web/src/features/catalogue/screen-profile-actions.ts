@@ -6,7 +6,7 @@ import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { createScreenProfile, readScreenProfile, type ScreenAddress, type ScreenCommand } from './screen-profile';
-import { screenSeriesId } from './screen-episode-membership';
+import { screenSeriesId } from './screen-episode-membership.ts';
 import { checkSubjectStructure } from '@rezics/definitions/validate';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

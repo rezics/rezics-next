@@ -34,7 +34,7 @@ import {
   membershipCreateStatement,
   type EpisodeJourney,
   type MembershipDraft,
-} from './screen-episode-membership';
+} from './screen-episode-membership.ts';
 import { SubjectTermsEntry } from './subject-terms-entry';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
