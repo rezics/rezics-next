@@ -41,7 +41,7 @@ const options: DiscoveryRegistryOptions = {
               id, kind: 'collection' as const, destination: `/collections/${id}` as const,
               title: 'Collection', description: null, visibility: 'public' as const, revision: 1,
               membershipKind: 'dynamic' as const, outputGeneration: '1',
-              presentationKind: 'list' as const, presentationKindSource: 'default' as const,
+              presentationKind: 'list', presentationKindSource: 'owner' as const,
               cover: null, coverSource: 'none' as const,
             },
           }]));
