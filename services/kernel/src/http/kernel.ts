@@ -10,6 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { zoneRoutes } from '../zones/http.ts';
 import { zoneViewerActionResource } from '../zones/viewer-actions.ts';
 import type { Elysia } from 'elysia';
+import { ProblemError } from './problem.ts';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { accessActionCatalogue, assertInternalActionDeclarations, createAccess } from '../access/index.ts';
@@ -21,6 +22,7 @@ import {
   viewerActionBindingActions,
   viewerActionsRoutes,
   type ViewerActionResources,
+  type ViewerActionResource,
   type ViewerActionBindings,
 } from '../access/viewer-actions.ts';
 import { contextViewerActionResource, subjectViewerActionResources } from '../semantic/viewer-actions.ts';
@@ -91,8 +93,33 @@ import {
 import { createSubjectPageFeed, type SubjectPageFeed } from '../semantic/subject-page-feed.ts';
 import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
-import { actionCatalogue } from './request.ts';
+import { actionCatalogue, type MountedRoute } from './request.ts';
 import { declareKernelWriteRates } from './write-rate-routes.ts';
+
+function compileGuestSecurity(routes: readonly MountedRoute[]) {
+  const result = new Map<string, 'anonymous' | 'authenticated' | 'unknown'>();
+  for (const route of routes) {
+    const detail = route.hooks?.detail as Record<string, unknown> | undefined;
+    if (!detail || typeof detail.operationId !== 'string') continue;
+    const security = detail.security;
+    const classification = !Array.isArray(security)
+      ? 'unknown'
+      : security.some(
+            (requirement) =>
+              typeof requirement === 'object' &&
+              requirement !== null &&
+              !Array.isArray(requirement) &&
+              Object.keys(requirement).length === 0,
+          )
+        ? 'anonymous'
+        : security.length > 0
+          ? 'authenticated'
+          : 'unknown';
+    const prior = result.get(detail.operationId);
+    result.set(detail.operationId, prior === undefined || prior === classification ? classification : 'unknown');
+  }
+  return result;
+}
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
@@ -520,6 +547,9 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
   let contentAccess: Access | undefined;
   let realmParticipation: RealmParticipationCheck | undefined;
+  let viewerResources: Map<string, ViewerActionResource> | undefined;
+  let viewerBindings: ViewerActionBindings | undefined;
+  let viewerGuestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'> | undefined;
   let content: ReturnType<typeof contentRoutes>;
   const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
     realmParticipation ??= createRealmParticipationCheck({
@@ -540,6 +570,16 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
+    viewerActionRuntime: () => {
+      if (!viewerResources || !viewerBindings || !viewerGuestSecurity) throw new ProblemError('dependency_unavailable');
+      return {
+        access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+        resources: viewerResources,
+        bindings: viewerBindings,
+        guestSecurity: viewerGuestSecurity,
+        clock,
+      };
+    },
     realmParticipation: checkRealmParticipation,
     get access() {
       if (!contentAccess)
@@ -735,7 +775,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
   });
-  const viewerResources = new Map([
+  const mountedViewerResources = new Map<string, ViewerActionResource>([
     ...subjectViewerActionResources,
     ...contentViewerActionResources,
     ['semantic.context', contextViewerActionResource],
@@ -746,21 +786,25 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     ['semantic.zone', zoneViewerActionResource],
   ]);
   for (const [type, resource] of dependencies.viewerActionResources ?? []) {
-    if (viewerResources.has(type)) throw new Error(`${type}: duplicate viewer actions registration`);
-    viewerResources.set(type, resource);
+    if (mountedViewerResources.has(type)) throw new Error(`${type}: duplicate viewer actions registration`);
+    mountedViewerResources.set(type, resource);
   }
+  viewerResources = mountedViewerResources;
   for (const module of dependencies.modules ?? []) module(zones as unknown as ReturnType<typeof createApp>);
-  let viewerBindings: ViewerActionBindings;
   viewerActionsRoutes(zones as unknown as ReturnType<typeof createApp>, {
     pool: dependencies.pool,
     clock,
-    resources: viewerResources,
+    resources: mountedViewerResources,
     access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
-    bindings: () => viewerBindings,
+    bindings: () => {
+      if (!viewerBindings) throw new ProblemError('dependency_unavailable');
+      return viewerBindings;
+    },
   });
   declareKernelWriteRates(zones);
   viewerBindings = compileViewerActionBindings(zones.routes);
-  for (const [type, resource] of viewerResources) {
+  viewerGuestSecurity = compileGuestSecurity(zones.routes);
+  for (const [type, resource] of mountedViewerResources) {
     const actions = new Set([
       resource.readAction,
       ...(viewerBindings.get(type) ?? []).flatMap(viewerActionBindingActions),
