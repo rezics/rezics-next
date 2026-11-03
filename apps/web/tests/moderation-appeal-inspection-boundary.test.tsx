@@ -1,8 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
-import { dirname } from 'node:path';
-import { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -16,33 +12,8 @@ mock.module('../src/threads/authoring-departure', () => ({
   AuthoringDepartureBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
   useAuthoringDeparture: () => ({ release() {} }),
 }));
-const { readModerationAppealPage } = await import('../src/moderation/appeals-read');
-const { readWorkbenchPage, prepareWorkbenchRead } = await import('../src/moderation/workbench-queue/read');
-const { WorkbenchPage } = await import('../src/moderation/workbench-queue/page');
-const { workbenchSearch } = await import('../src/moderation/workbench-queue/scope');
+const { readModerationAppealPage, admitAppealInspection } = await import('../src/moderation/appeals-read');
 const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
-);
-const browser = new Window({ url: 'https://site.test/en/moderation/workbench' });
-const globals = {
-  window: browser,
-  document: browser.document,
-  navigator: browser.navigator,
-  HTMLElement: browser.HTMLElement,
-  Element: browser.Element,
-  Node: browser.Node,
-  IS_REACT_ACT_ENVIRONMENT: true,
-};
-const saved = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
-for (const [key, value] of Object.entries(globals))
-  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-afterAll(async () => {
-  await browser.happyDOM.close();
-  for (const [key, descriptor] of saved)
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-});
 const session = { state: 'signed-in', subject: 'viewer', csrfToken: 'csrf' };
 const origin = { subject: session.subject, csrfFingerprint: await privateReaderFingerprint(session.csrfToken) };
 const source = { partition: 0, epoch: 1, position: '12' };
@@ -85,8 +56,8 @@ test('1/10/20 installed rows cross the adapter and panel without identity or tar
       'Bearer viewer',
       'viewer',
     );
-    expect(inspect.state).toBe('unavailable'); // Incomplete pages cannot masquerade as exact inspection.
-    expect(calls).toHaveLength(2);
+    expect(inspect.unavailableReason).toBe('native-appeal-inspect');
+    expect(calls).toHaveLength(1);
     const markup = renderToStaticMarkup(
       createElement(WorkbenchAppeal, {
         appealId: row.id,
@@ -143,144 +114,49 @@ test('inspect binds the private read identity and uncertain delivery keeps its o
   await expect(intent.send(command)).rejects.toThrow('unavailable');
 });
 
-test('installed exact requests mount populated, empty, sparse, concealed, unavailable and resolved selections without scanning', async () => {
+test('composed inspection seam admits only current actor/session, exact outcome, token and covered source', () => {
   const selected = {
     ...row,
     source,
-    appellantIdentity: { state: 'available', kind: 'actor', handle: 'reader', displayName: 'Reader', automated: false },
-    targetContext: {
-      state: 'available',
-      destination: { kind: 'thread', id: 'current-thread', boardId: 'current-board' },
-    },
+    resolution: null,
     resolutionCommand: {
-      operationId: 'moderation_appeal.resolve',
-      method: 'POST',
+      operationId: 'moderation_appeal.resolve' as const,
+      method: 'POST' as const,
       path: '/v1/moderation-appeals/appeal:resolve',
     },
-    resolution: null,
   };
-  for (const state of ['populated', 'empty', 'sparse', 'concealed', 'unavailable', 'resolved', 'retry']) {
-    const search = workbenchSearch({ queue: 'appeals', board: 'board', case: 'appeal', cursor: 'captured' });
-    const calls: string[] = [];
-    const client = createKernelClient('https://kernel.test', {
-      fetch: async (input, init) => {
-        const request = new Request(input, init);
-        const url = new URL(request.url);
-        calls.push(url.pathname + url.search);
-        expect(request.headers.get('authorization')).toBe(authorization);
-        expect(request.cache).toBe('no-store');
-        if (state === 'retry' && calls.length === 1)
-          return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
-        return Response.json(
-          {
-            appeals: state === 'populated' ? [selected] : [],
-            next: state === 'sparse' ? 'sparse-next' : null,
-            provenance,
-            ...(state === 'empty'
-              ? {}
-              : {
-                  selectedAppeal: {
-                    ...selected,
-                    ...(state === 'concealed' || state === 'unavailable'
-                      ? { appellantIdentity: { state }, targetContext: { state } }
-                      : {}),
-                    ...(state === 'resolved'
-                      ? { resolution: { outcome: 'upheld', statement: 'Reviewed.', resolvedAt: row.createdAt } }
-                      : {}),
-                  },
-                }),
-          },
-          { headers: { 'rezics-session-token': 'opaque-native-session' } },
-        );
-      },
-    });
-    const read = () => readWorkbenchPage(client, search, authorization, origin);
-    const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    cache.setQueryData(['session'], session);
-    const page = await prepareWorkbenchRead(cache, search, read, new AbortController().signal);
-    const host = document.createElement('main');
-    document.body.append(host);
-    const root = createRoot(host);
-    try {
-      await act(async () =>
-        root.render(
-          <QueryClientProvider client={cache}>
-            <WorkbenchPage page={page} search={search} onSearch={() => {}} read={read} />
-          </QueryClientProvider>,
-        ),
-      );
-      if (state === 'retry')
-        await act(async () =>
-          [...host.querySelectorAll('button')]
-            .find((button) => button.textContent === m.moderation_queue_retry())!
-            .click(),
-        );
-      expect(calls).toHaveLength(state === 'retry' ? 2 : 1);
-      expect(calls.every((call) => call === '/v1/boards/board/appeals?limit=20&cursor=captured&inspect=appeal')).toBe(
-        true,
-      );
-      expect(host.querySelector('a')?.getAttribute('href')).toContain('cursor=captured');
-      expect(host.querySelector('a')?.getAttribute('href')).toContain('board=board');
-      expect(host.textContent).not.toContain('private-account');
-      expect(host.textContent).not.toContain('opaque-native-session');
-      if (state === 'empty') expect(host.textContent).toContain(m.moderation_workbench_appeal_unavailable());
-      else {
-        expect(host.textContent).toContain('Original decision.');
-        expect(host.textContent).toContain('Restore this.');
-        expect(host.textContent).toContain(
-          state === 'resolved' ? 'Reviewed.' : m.moderation_appeal_resolution_pending(),
-        );
-        if (state === 'populated') expect(host.textContent).toContain('Reader · @reader');
-        if (state === 'concealed') expect(host.textContent).toContain(m.moderation_appeal_context_concealed());
-        if (state === 'unavailable') expect(host.textContent).toContain(m.moderation_target_unavailable());
-      }
-    } finally {
-      await act(async () => root.unmount());
-      host.remove();
-      cache.clear();
-    }
-  }
-});
-
-test('exact selection rejects mismatched actor, missing native session, missing outcome and uncovered source', async () => {
-  for (const defect of ['none', 'actor', 'session', 'epoch', 'client', 'outcome', 'source', 'id']) {
-    const client = createKernelClient('https://kernel.test', {
-      fetch: async () =>
-        Response.json(
-          {
-            appeals: [],
-            next: null,
-            provenance: {
-              ...provenance,
-              actorId: defect === 'actor' ? 'other' : 'viewer',
-              session: { clientId: defect === 'client' ? 'other' : 'web', authnEpoch: defect === 'epoch' ? 2 : 1 },
-            },
-            selectedAppeal: {
-              ...row,
-              id: defect === 'id' ? 'other' : row.id,
-              source: { ...source, position: defect === 'source' ? '13' : '12' },
-              ...(defect === 'outcome' ? {} : { resolution: null }),
-              resolutionCommand: {
-                operationId: 'moderation_appeal.resolve',
-                method: 'POST',
-                path: '/v1/moderation-appeals/appeal:resolve',
-              },
-            },
-          },
-          { headers: defect === 'session' ? {} : { 'rezics-session-token': 'opaque-native-session' } },
-        ),
-    });
-    const page = await readModerationAppealPage(
-      client,
-      { boardId: 'board', threadId: 'thread', inspect: 'appeal', cursor: 'captured' },
+  const page = { appeals: [], next: 'sparse-next', selectedAppeal: selected, provenance };
+  expect(admitAppealInspection(page, row.id, authorization, 'viewer', origin, 'opaque-native-session')).toMatchObject({
+    nativeSession: 'opaque-native-session',
+    selectedAppeal: { id: row.id, resolution: null },
+    next: 'sparse-next',
+  });
+  const resolved = {
+    ...selected,
+    resolution: { outcome: 'upheld' as const, statement: 'Reviewed.', resolvedAt: row.createdAt },
+  };
+  expect(
+    admitAppealInspection(
+      { ...page, selectedAppeal: resolved },
+      row.id,
       authorization,
       'viewer',
       origin,
-    );
-    expect(page.state).toBe(defect === 'none' ? 'ready' : 'unavailable');
-    expect(page.selectedAppeal?.id).toBe(defect === 'none' ? 'appeal' : undefined);
-    expect(page.appeals).toEqual([]);
-  }
+      'opaque-native-session',
+    ).selectedAppeal,
+  ).toBe(resolved);
+  for (const invalid of [
+    { ...page, provenance: { ...provenance, actorId: 'other' } },
+    { ...page, provenance: { ...provenance, session: { clientId: 'other', authnEpoch: 1 } } },
+    { ...page, provenance: { ...provenance, session: { clientId: 'web', authnEpoch: 2 } } },
+    { ...page, selectedAppeal: { ...selected, id: 'other' } },
+    { ...page, selectedAppeal: { ...selected, source: { ...source, position: '13' } } },
+    { ...page, selectedAppeal: { ...row, source, resolutionCommand: selected.resolutionCommand } },
+  ])
+    expect(() =>
+      admitAppealInspection(invalid, row.id, authorization, 'viewer', origin, 'opaque-native-session'),
+    ).toThrow();
+  expect(() => admitAppealInspection(page, row.id, authorization, 'viewer', origin, null)).toThrow();
 });
 
 test('native same-intent retry echoes original opaque session and operands; advice cannot override native denial', async () => {

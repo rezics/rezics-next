@@ -63,34 +63,38 @@ recovery control or admitted workbench boundary. Pointer input, moved focus, dep
 that handoff. Refresh is explicit and remains disabled until the original resolution settles; uncertain recovery
 continues to use only the original frozen command and sender.
 
-## Generated binding
+## Remaining generated binding
 
-The report case page and typed return builder remain bound to their existing clients. Board and thread Appeals GET
-use the installed generated `inspect` query with the captured scope, cursor and limit 20. A response admits the exact
-selection only when its ID matches, its pending/resolved field is explicit, its actor and native session client/epoch match the credential used by that successful read and the prepared private
-reader, and its source partition/epoch and position are covered by the final native page provenance. A malformed or
-missing selection, provenance or native session header is unavailable, even when a pending row has the same ID.
-The browser's prepared reader independently checks the current session fingerprint and retires on replacement.
-Native provenance is an observation, not command permission; `canResolve` remains advice.
+The installed generated board/thread Appeals GET still declares only `cursor`, `limit`, `appeals` and `next`.
+The integrated Content producer declares the composed `inspect` request, but its declaration publication cannot
+currently complete against the base compiler errors. Production inspection therefore retains the named
+`native-appeal-inspect` unavailable seam and performs no native request. Pending rows never substitute for inspection.
+The producer contract is in `services/kernel/src/content/appeal-routes.ts` and its final observation semantics are in
+`services/kernel/src/content/appeals.ts`.
 
-Decision: regenerate declarations from the integrated Content producer and carry the opaque native response session
-header only on the admitted private read and frozen resolution command; never decode it or reconstruct it from
-provenance. The generated command sends that original token unchanged. A current resolved observation cannot settle
-an uncertain command or replace its sender, CSRF headers, key, outcome or statement. A changed `canResolve` hint does
-not prevent that original explicit retry; native authorization and idempotency still decide its result.
+The local composed inspection admission seam checks the selected ID, explicit pending/resolved field, source
+partition/epoch and position against final page provenance, and actor/client/authentication epoch against the same
+credential used by the successful native read and the prepared private reader. It requires the opaque native response
+session header. The browser's prepared reader independently checks its current session fingerprint and retires on
+replacement. Native provenance is an observation, not command permission; `canResolve` remains advice.
 
-The private read keeps one page and one exact selection; it does not read current target bodies or hydrate identities.
-Its only identity presentation is the producer's disclosed display name and handle. Concealed and unavailable target
-context retain the operational appeal and the explicit pending or resolved outcome. The case guide uses Content's
-schema and examples in `services/kernel/src/content/appeal-routes.ts` and final observation semantics in
-`services/kernel/src/content/appeals.ts`; no new native DTO or endpoint is authored by Web.
+Decision: carry the opaque native response session token only on an admitted private read and its original frozen
+resolution command; never decode it, render it or reconstruct it from provenance. The command adapter sends that
+original token unchanged. A current resolved observation cannot settle an uncertain command or replace its sender,
+CSRF headers, key, outcome or statement. A changed `canResolve` hint does not prevent that original explicit retry;
+native authorization and idempotency still decide its result.
+
+The selected consumer can carry the opaque token through its existing private reader. Connecting the composed
+admission seam to generated board/thread requests and mounted native producer cases remains continuation work.
+No new native DTO or endpoint is authored by Web.
 
 ## Cost
 
-- **Touches:** one board or thread Appeals GET per explicit pending or selected read; no Account, Media or current-target reads. Each
-  explicit selected retry repeats the identical generated read without scanning or refilling. Resolution uses the existing command owner. Pending or
-  uncertain resolution blocks refresh and retry reads. The response session token stays opaque and follows only the
-  original frozen resolution command.
+- **Touches:** one board or thread Appeals GET per explicit pending read; no Account, Media or current-target
+  reads. Unsupported production inspection performs zero native calls. When the generated operation is installed,
+  each explicit selected retry must repeat its identical captured read without scanning or refilling. The resolution
+  adapter echoes the original opaque native session token unchanged, with the original key and operands. Pending or
+  uncertain resolution blocks refresh and retry reads.
 - **Bound:** one page of at most 20, one optional exact selection, the native continuation and one original command.
   Recovery retains one current projection, one in-flight read and one focus handoff, without a page history.
   An empty page with `next` stays sparse. A missing selection is unavailable even when the page contains its ID.

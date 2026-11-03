@@ -280,6 +280,7 @@ function nativeSource(client: KernelClient, authorization: string, origin: Priva
       if (page.state !== 'ready')
         throw new WorkbenchReadFailure(
           page.state === 'closed' ? 'denied' : page.state === 'stale' ? 'stale' : 'unavailable',
+          page.unavailableReason,
         );
       return page;
     },

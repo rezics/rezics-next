@@ -13,12 +13,40 @@ import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './a
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
 export const MODERATION_APPEALS_PAGE_SIZE = 20;
-export type AppealAppellantIdentity = NativeAppealPage['appeals'][number]['appellantIdentity'];
-export type AppealTargetContext = NativeAppealPage['appeals'][number]['targetContext'];
-export type AppealResolutionSnapshot = NonNullable<NonNullable<NativeAppealPage['selectedAppeal']>['resolution']>;
-export type AppealSource = NativeAppealPage['provenance']['source'];
-export type AppealProvenance = NativeAppealPage['provenance'];
-export type AppealResolutionCommand = NativeAppealPage['appeals'][number]['resolutionCommand'];
+export type AppealAppellantIdentity =
+  | {
+      state: 'available';
+      kind: 'actor' | 'organization';
+      handle: string | null;
+      displayName: string | null;
+      automated: boolean;
+    }
+  | { state: 'deleted' }
+  | { state: 'concealed' }
+  | { state: 'unavailable' };
+export type AppealTargetContext =
+  | {
+      state: 'available';
+      destination: { kind: 'board'; id: string } | { kind: 'thread'; id: string; boardId: string };
+    }
+  | { state: 'concealed' }
+  | { state: 'unavailable' };
+export type AppealResolutionSnapshot = {
+  outcome: 'upheld' | 'reversed';
+  statement: string;
+  resolvedAt: string;
+};
+export type AppealSource = { partition: number; epoch: number; position: string };
+export type AppealProvenance = {
+  actorId: string;
+  session: { clientId: string; authnEpoch: number };
+  source: AppealSource;
+};
+export type AppealResolutionCommand = {
+  operationId: 'moderation_appeal.resolve';
+  method: 'POST';
+  path: string;
+};
 export type Appeal = {
   id: string;
   decisionId: string;
@@ -176,7 +204,11 @@ function appealResult(result: {
   return boundedAppealPage(result.data);
 }
 
-/** The generated request returns one bounded pending page and one independent exact selection. */
+/**
+ * The installed client declares only pending pages. Exact inspection must not silently
+ * degrade into page search or an undeclared request. Bind the generated inspect reader
+ * here when Content installs its composed response and examples.
+ */
 export async function readModerationAppealPage(
   client: KernelClient,
   input: AppealReadInput,
@@ -190,22 +222,36 @@ export async function readModerationAppealPage(
     readerOrigin: readerOrigin ?? null,
     generation: crypto.randomUUID(),
   };
+  if (input.inspect)
+    return {
+      ...identity,
+      appeals: [],
+      targets: [],
+      next: null,
+      state: 'unavailable',
+      unavailableReason: 'native-appeal-inspect',
+    };
   try {
     const headers = auth(authorization);
-    const query = {
-      limit: MODERATION_APPEALS_PAGE_SIZE,
-      ...(input.cursor ? { cursor: input.cursor } : {}),
-      inspect: input.inspect,
-    };
-    const result = input.threadId
-      ? await client.threads({ id: input.threadId }).appeals.get({ ...headers, query })
-      : await client.boards({ id: input.boardId }).appeals.get({ ...headers, query });
-    const page = appealResult(result);
-    if (input.inspect) {
-      const nativeSession = new Headers(result.headers).get(SESSION_HEADER);
-      validateAppealInspection(page, input.inspect, authorization, viewerId, readerOrigin, nativeSession);
-      return { ...page, nativeSession: nativeSession!, targets: [], ...identity, state: 'ready' };
-    }
+    const page = await readModerationAppeals(
+      {
+        boardAppeals: async (id, cursor) =>
+          appealResult(
+            await client.boards({ id }).appeals.get({
+              ...headers,
+              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+            }),
+          ),
+        threadAppeals: async (id, cursor) =>
+          appealResult(
+            await client.threads({ id }).appeals.get({
+              ...headers,
+              query: { limit: MODERATION_APPEALS_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
+            }),
+          ),
+      },
+      input,
+    );
     return { ...page, targets: [], ...identity, state: 'ready' };
   } catch (error) {
     return {
@@ -218,7 +264,7 @@ export async function readModerationAppealPage(
   }
 }
 
-/** Final native page observation must cover every retained row and the exact selection. */
+/** Composed producer seam: final page provenance must cover every retained row and exact selection. */
 function validSource(source: AppealSource | undefined): source is AppealSource {
   return (
     !!source &&
@@ -232,7 +278,7 @@ function validSource(source: AppealSource | undefined): source is AppealSource {
   );
 }
 
-function validateAppealInspection(
+export function admitAppealInspection(
   page: AppealPage,
   inspect: string,
   authorization: string,
@@ -286,4 +332,5 @@ function validateAppealInspection(
     )
       throw new AppealReadFailure('unavailable');
   }
+  return { ...page, nativeSession: nativeSession! };
 }
