@@ -12,8 +12,9 @@ import {
   type FilterRelease,
   type SpoilerThreshold,
 } from '@rezics/filter';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
@@ -53,6 +54,20 @@ import {
   subjectGenerations,
   subjectIndexName,
 } from './indices.ts';
+import type { CalendarPhysicalIdentity } from './release-search-calendar.ts';
+import {
+  RELEASE_GROUPING_LIMITS,
+  ReleaseGroupingRestartRequired,
+  ReleaseGroupingUnavailable,
+  type ReleaseGroupingBasis,
+  type ReleaseGroupingRequest,
+} from './release-search-grouping.ts';
+import {
+  readReleaseSearchChildren,
+  readReleaseSearchGroups,
+  type ReleaseSearchGroupsResult,
+} from './release-search-source.ts';
+import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
 import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
@@ -68,6 +83,7 @@ import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import { ScopeWork, scopeAllowance } from './scope-execution.ts';
 import type { ScopeBasis } from './scope-source.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
+import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
 import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
 import { collectUsefulPage } from './useful-page.ts';
 import { readPublicSearchPage, type DefaultPublicFilterRuntime } from './public-runtime.ts';
@@ -105,6 +121,11 @@ export type SearchRequest = {
   descriptions?: boolean;
   languages?: string[];
   properties?: string[];
+};
+
+export type GroupedReleaseSearchRequest = SearchRequest & {
+  work?: string;
+  childCursor?: string;
 };
 
 type SearchFilterDocument = FilterDocument | DiscoveryFilterDocument;
@@ -438,7 +459,7 @@ export function createSearchService({
   pool: Pool;
   client: OpenSearch;
   prefix: string;
-  source: SubjectSource;
+  source: SubjectSource & Partial<{ canonicalNames: SubjectCanonicalNames }>;
   ratings?: PublicRatingSource;
   realmSubjects?: RealmSubjectSource;
   realmRatings?: RealmRatingSource;
@@ -637,7 +658,261 @@ export function createSearchService({
     return admitted;
   }
 
+  async function groupedReleaseSearch(
+    principal: 'anonymous' | `account:${string}`,
+    submitted: GroupedReleaseSearchRequest,
+    now = clock().getTime(),
+    active?: { digest: string; head?: number; release: FilterRelease } | null,
+    readContext?: PublicSearchReadContext,
+  ) {
+    const child = submitted.work !== undefined;
+    const childCursor = submitted.childCursor;
+    if ((childCursor !== undefined && !child) || (child && submitted.cursor !== undefined))
+      invalid(child ? '/cursor' : '/work', 'invalid_format');
+    if (childCursor !== undefined && (typeof childCursor !== 'string' || !childCursor))
+      invalid('/childCursor', 'invalid_format');
+    if (submitted.sort !== undefined && submitted.sort !== 'name' && submitted.sort !== 'relevance')
+      unsupported('/sort');
+    if (submitted.filter === undefined) unsupported('/filter');
+
+    const request = ownSubjectRequest({ ...submitted, sort: submitted.sort ?? 'name' });
+    const { text, filter, sort, hitOptions, spoilerThreshold } = validate(request);
+    if (sort !== 'name' && sort !== 'relevance') unsupported('/sort');
+    if (!filter || containsRealmPredicate(filter) || containsOwnerPredicate(filter)) unsupported('/filter');
+
+    const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
+    const current = native?.release ?? (releaseOverride ? await release() : undefined);
+    if (!current || (publicFilters && !native)) throw indexNotReady();
+    const releaseDigest = native?.digest ?? kindDigest(current);
+    const releaseHead = native?.head;
+    const admitted = await admitQuery(text, filter, current, false, spoilerThreshold ?? 0);
+    if (!admitted || containsRealmPredicate(admitted) || containsOwnerPredicate(admitted)) unsupported('/filter');
+    if (hitOptions.properties) admitProperties(hitOptions.properties, current);
+    if (!source.canonicalNames) throw indexNotReady();
+
+    const generation = await indexRequest(aliasGeneration);
+    const sortFormat = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+    if (sortFormat !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+    const precise = containsCalendarRange(admitted);
+    const calendarFormat = precise ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation)) : null;
+    if (precise && calendarFormat !== 1) throw indexNotReady();
+    const index = subjectIndexName(prefix, generation);
+    const indexUuid = await indexRequest(() => discoveryIndexUuid(client, index));
+    const physical: CalendarPhysicalIdentity = { generation, indexUuid, incarnation: indexUuid };
+
+    const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
+    const compiledFilter = compileFilter(admitted as FilterDocument, {
+      prefix: 'f',
+      relationOverflow: true,
+      ...(calendarFormat === null ? {} : { calendarFormat }),
+    });
+    const overflowProperties = [
+      ...new Set(compiledFilter.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
+    ];
+    const relationProperties = overflowProperties.filter((property) => relationFacetProperty(current, property));
+    const nativePlan: SearchPlan = {
+      ...(compiledText
+        ? {
+            query: compiledText.query,
+            boost: compiledText.leaves
+              .filter((leaf) => !leaf.negated)
+              .map((leaf) => leaf.value)
+              .join(' '),
+          }
+        : {}),
+      filter: compiledFilter.query,
+      ...(overflowProperties.length ? { overflowProperties } : {}),
+      sort,
+      generation,
+      size: RELEASE_GROUPING_LIMITS.children,
+    };
+    const groupingRequest = {
+      releaseDigest,
+      filter: admitted as FilterDocument,
+      ...(submitted.text === undefined ? {} : { text: submitted.text }),
+      sort,
+      languages: hitOptions.languages ?? ['en'],
+      spoilerThreshold: (spoilerThreshold ?? 0) as SpoilerThreshold,
+      ...(hitOptions.properties ? { properties: hitOptions.properties } : {}),
+      groupLimit: RELEASE_GROUPING_LIMITS.groups,
+      childLimit: RELEASE_GROUPING_LIMITS.children,
+      previewLimit: RELEASE_GROUPING_LIMITS.preview,
+    } as const;
+    const deadline = readContext?.deadline ?? Date.now() + 10_000;
+    const reservations = new Map<string, ReleaseSearchCandidateReservation>();
+    const reserve = (value: ReleaseSearchCandidateReservation) => {
+      const fields = [
+        value.observations,
+        value.ownerReads,
+        value.nameSeeks,
+        value.keys,
+        value.sourceReads,
+        value.completeWorkLinkReads,
+        value.completeWorkLinkOperations,
+        value.authorityObservations,
+        value.searchReads,
+      ];
+      if (
+        !value.pool ||
+        fields.some((field) => !Number.isSafeInteger(field) || field < 0) ||
+        value.observations + value.authorityObservations > 4096 ||
+        value.nameSeeks > 4096
+      )
+        throw new ReleaseGroupingUnavailable();
+      const prior = reservations.get(value.pool);
+      const total = {
+        pool: value.pool,
+        observations: (prior?.observations ?? 0) + value.observations,
+        ownerReads: (prior?.ownerReads ?? 0) + value.ownerReads,
+        nameSeeks: (prior?.nameSeeks ?? 0) + value.nameSeeks,
+        keys: (prior?.keys ?? 0) + value.keys,
+        sourceReads: (prior?.sourceReads ?? 0) + value.sourceReads,
+        completeWorkLinkReads: (prior?.completeWorkLinkReads ?? 0) + value.completeWorkLinkReads,
+        completeWorkLinkOperations:
+          (prior?.completeWorkLinkOperations ?? 0) + value.completeWorkLinkOperations,
+        authorityObservations: (prior?.authorityObservations ?? 0) + value.authorityObservations,
+        searchReads: (prior?.searchReads ?? 0) + value.searchReads,
+      };
+      if (
+        Object.values(total).some((field) => typeof field === 'number' && !Number.isSafeInteger(field)) ||
+        total.nameSeeks > RELEASE_GROUPING_LIMITS.seeks * 4096
+      )
+        throw new ReleaseGroupingUnavailable();
+      reservations.set(value.pool, total);
+    };
+    const assertPhysical = async () => {
+      const latestGeneration = await indexRequest(freshAliasGeneration);
+      const latestUuid = await indexRequest(() => discoveryIndexUuid(client, subjectIndexName(prefix, latestGeneration)));
+      if (latestGeneration !== generation || latestUuid !== indexUuid)
+        throw new ReleaseGroupingRestartRequired();
+    };
+    const assertRelease = async () => {
+      if (releaseOverride) {
+        const latest = await sourceRequest(release);
+        if (!latest || kindDigest(latest) !== releaseDigest) throw new ReleaseGroupingRestartRequired();
+        return;
+      }
+      const latest = await sourceRequest(() => activeRelease(pool));
+      if (latest?.digest !== releaseDigest || (releaseHead !== undefined && latest.head !== releaseHead))
+        throw new ReleaseGroupingRestartRequired();
+    };
+    const observeBasis = async (): Promise<ReleaseGroupingBasis> => {
+      await assertRelease();
+      await assertPhysical();
+      const population = await sourceRequest(() => source.canonicalNames!.observe({ deadline }));
+      const ready = await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation));
+      if (precise && ready !== 1) throw new ReleaseGroupingRestartRequired();
+      await assertRelease();
+      await assertPhysical();
+      const epochValue = canonicalize({
+        releaseDigest,
+        releaseHead: releaseHead ?? null,
+        physical,
+        population,
+        calendarReady: ready === 1,
+      });
+      if (epochValue === undefined) throw new ReleaseGroupingUnavailable();
+      return {
+        releaseDigest,
+        physical,
+        epoch: createHash('sha256').update(epochValue).digest('hex'),
+        calendarReadyFor: ready === 1 ? physical : null,
+      };
+    };
+    const relationRelease = async () => {
+      await assertRelease();
+      return { digest: releaseDigest, head: releaseHead ?? 0, release: current };
+    };
+    const currentMatches = async (
+      _request: ReleaseGroupingRequest,
+      keys: readonly { id: string; partition: number; securityRevision: number }[],
+    ) => {
+      if (!keys.length) return new Set<string>();
+      reserve({
+        pool: 'semantic',
+        observations: 0,
+        ownerReads: 0,
+        nameSeeks: 0,
+        keys: keys.length,
+        sourceReads: keys.length,
+        completeWorkLinkReads: 0,
+        completeWorkLinkOperations: 0,
+        authorityObservations: 0,
+        searchReads: 0,
+      });
+      const hits = keys.map((key) => ({ ...key, matched: [] as string[] }));
+      const checked = await sourceRequest(() =>
+        checkHits(source, hits, new Map(), {
+          filter: admitted,
+          relationProperties,
+          spoilerThreshold: spoilerThreshold ?? 0,
+          observeRelationRelease: relationRelease,
+        }),
+      );
+      if (checked.relationRejected) throw new ReleaseGroupingRestartRequired();
+      return new Set(checked.passed.map(({ hit }) => hit.id));
+    };
+    try {
+      const page = child
+        ? await readReleaseSearchChildren({
+            pool,
+            source,
+            cursors,
+            principal,
+            release: current,
+            request: groupingRequest,
+            nativePlan,
+            generation,
+            prefix,
+            client,
+            relationProperties,
+            observeBasis,
+            deadline,
+            observeRelationRelease: relationRelease,
+            now,
+            runSource: sourceRequest,
+            runSearch: indexRequest,
+            reserve,
+            currentMatches,
+            work: submitted.work!,
+            ...(childCursor === undefined ? {} : { cursor: childCursor }),
+          })
+        : await readReleaseSearchGroups({
+            pool,
+            source,
+            cursors,
+            principal,
+            release: current,
+            request: groupingRequest,
+            nativePlan,
+            generation,
+            prefix,
+            client,
+            relationProperties,
+            observeBasis,
+            deadline,
+            observeRelationRelease: relationRelease,
+            now,
+            runSource: sourceRequest,
+            runSearch: indexRequest,
+            reserve,
+            currentMatches,
+            ...(submitted.cursor === undefined ? {} : { cursor: submitted.cursor }),
+          });
+      await assertRelease();
+      await assertPhysical();
+      return { ...page, as_of: await asOf(generation) };
+    } catch (error) {
+      if (error instanceof ReleaseSearchCursorInvalid)
+        invalid(child ? '/childCursor' : '/cursor', 'invalid_format');
+      if (error instanceof ReleaseGroupingRestartRequired) throw new ProblemError('search_restart_required');
+      if (error instanceof ReleaseGroupingUnavailable) throw indexNotReady();
+      throw error;
+    }
+  }
+
   const service = {
+    releaseGroups: groupedReleaseSearch,
     async search(
       principal: 'anonymous' | `account:${string}`,
       request: SearchRequest,

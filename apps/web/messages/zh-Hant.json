@@ -7659,6 +7659,7 @@
   "release_search_pagination": "發行版本分頁",
   "release_search_continue": "下一頁發行版本",
   "release_search_page_empty": "本頁沒有符合條件的發行版本。請繼續搜尋下一頁。",
+  "release_search_related_releases": "相關發行版本",
   "realm_review_inspect_original": "檢查原始請求",
   "realm_review_inspected_approved": "原始請求已記錄為已核准。請另行復原命令回執。",
   "realm_review_inspected_pending": "原始請求仍在等待處理。此檢查不會授予擁有權。",

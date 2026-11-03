@@ -192,9 +192,14 @@ test('complete work-link reads distinguish absence from concealed targets withou
   const missing = (await ok('/v1/subjects', { type: 'schema:Book', labels: { en: 'Unlinked edition' } }, 201))
     .subject as Record<string, any>;
 
-  const current = await source.readCompleteWorkLinks(subjectPartition(edition.id), [edition.id, missing.id]);
+  const reservations: { operations: number; keys: number }[] = [];
+  const current = await source.readCompleteWorkLinks(subjectPartition(edition.id), [edition.id, missing.id], {
+    reserve: (reservation) => reservations.push(reservation),
+  });
   expect(current.get(edition.id)).toEqual({ complete: true, values: [{ kind: 'work', id: work.id }] });
   expect(current.get(missing.id)).toEqual({ complete: true, values: [] });
+  expect(reservations.reduce((total, reservation) => total + reservation.operations, 0)).toBeGreaterThan(0);
+  expect(reservations.reduce((total, reservation) => total + reservation.keys, 0)).toBeGreaterThan(0);
 
   await ok(`/v1/subjects/${work.id}:hide`, { reason: 'private target' });
   const concealed = await source.readCompleteWorkLinks(subjectPartition(edition.id), [edition.id]);

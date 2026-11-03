@@ -195,6 +195,74 @@ test('children seek independently through rejected names and bind progress to th
     );
 });
 
+test('relevance follows native release order and emits a linked work only once', async () => {
+  const f = await fixture();
+  const repeated = f.id(6);
+  f.subjects[6]!.type = 'edition';
+  f.links.set(repeated, { complete: true, values: [{ kind: 'work', id: f.id(0) }] });
+  const ids = [f.id(1), repeated, f.id(4), f.id(2), f.id(3), f.id(5)];
+  const relevance = async (_request: ReleaseGroupingRequest, after: string | null, size: number) => {
+    const offset = after === null ? 0 : Number(after);
+    const selected = ids.slice(offset, offset + size);
+    const keys = selected.map((id, index) => ({
+      id,
+      pool: 'pool-0',
+      partition: 0,
+      name: null,
+      securityRevision: 0,
+      after: String(offset + index + 1),
+    }));
+    return { keys, after: String(offset + selected.length), exhausted: selected.length === 0 };
+  };
+  const streams = createReleaseSearchCandidateStreams({ ...f, relevance });
+  const result: { kind: string; id: string }[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < 8; page++) {
+    const next = await streams.groups({ ...request, sort: 'relevance' }, after, 2);
+    result.push(...next.keys);
+    after = next.after;
+    if (next.exhausted) break;
+  }
+  expect(result).toEqual([
+    { kind: 'work', id: f.id(0) },
+    { kind: 'work', id: f.id(4) },
+    { kind: 'release', id: f.id(4) },
+    { kind: 'work', id: f.id(2) },
+    { kind: 'release', id: f.id(2) },
+    { kind: 'work', id: f.id(3) },
+    { kind: 'release', id: f.id(3) },
+    { kind: 'work', id: f.id(5) },
+    { kind: 'release', id: f.id(5) },
+  ]);
+});
+
+test('a stale native filter candidate cannot claim a work before its first current match', async () => {
+  const f = await fixture();
+  f.subjects[6]!.type = 'edition';
+  f.links.set(f.id(6), { complete: true, values: [{ kind: 'work', id: f.id(0) }] });
+  const ids = [f.id(1), f.id(6)];
+  const relevance = async (_request: ReleaseGroupingRequest, after: string | null, size: number) => {
+    const offset = after === null ? 0 : Number(after);
+    const selected = ids.slice(offset, offset + size);
+    const keys = selected.map((id, index) => ({
+      id,
+      pool: 'pool-0',
+      partition: 0,
+      name: null,
+      securityRevision: 0,
+      after: String(offset + index + 1),
+    }));
+    return { keys, after: String(offset + selected.length), exhausted: selected.length === 0 };
+  };
+  const streams = createReleaseSearchCandidateStreams({
+    ...f,
+    relevance,
+    currentMatches: async (_request, keys) => new Set(keys.filter(({ id }) => id === f.id(6)).map(({ id }) => id)),
+  });
+  const page = await streams.groups({ ...request, sort: 'relevance' }, null, 2);
+  expect(page.keys).toEqual([{ kind: 'work', id: f.id(0) }]);
+});
+
 test('full authority retires both streams on resume and during complete link reads, beyond name cuts', async () => {
   for (const concurrent of [false, true]) {
     const f = await fixture();

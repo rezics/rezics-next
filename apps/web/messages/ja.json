@@ -7659,6 +7659,7 @@
   "release_search_pagination": "リリースのページ",
   "release_search_continue": "次のリリース",
   "release_search_page_empty": "このページには条件に合うリリースがありません。次のページで検索を続けてください。",
+  "release_search_related_releases": "関連するリリース",
   "realm_review_inspect_original": "元の申請を確認",
   "realm_review_inspected_approved": "元の申請は承認済みとして記録されています。コマンドの受領記録は別の操作で復元してください。",
   "realm_review_inspected_pending": "元の申請は保留中です。この確認で所有権は付与されません。",

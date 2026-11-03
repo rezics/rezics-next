@@ -7659,6 +7659,7 @@
   "release_search_pagination": "Páginas de ediciones",
   "release_search_continue": "Siguientes ediciones",
   "release_search_page_empty": "No hay ediciones que coincidan en esta página. Continúa buscando en la siguiente.",
+  "release_search_related_releases": "Ediciones relacionadas",
   "realm_review_inspect_original": "Inspeccionar solicitud original",
   "realm_review_inspected_approved": "La solicitud original figura como aprobada. Recupera por separado el recibo del comando.",
   "realm_review_inspected_pending": "La solicitud original sigue pendiente. Esta observación no concede propiedad.",

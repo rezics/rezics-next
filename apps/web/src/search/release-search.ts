@@ -10,7 +10,21 @@ import {
   type ReleaseSearchControls,
   type ReleaseSearchCriteria,
 } from '@rezics/filter';
-import type { DiscoveryRequest } from './discovery';
+
+export type ReleaseSearchRequest = {
+  representation: 'release-groups-v1';
+  text?: string;
+  filter: FilterDocument;
+  sort: 'name' | 'relevance';
+  languages: string[];
+  spoilerThreshold: 0 | 1 | 2;
+  descriptions: true;
+  limit: number;
+  cursor?: string;
+  properties?: string[];
+  work?: string;
+  childCursor?: string;
+};
 
 export type ReleaseSearchForm = {
   subtype: string;
@@ -206,8 +220,8 @@ export function parseReleaseSearch(
   return { form, search, controls, invalid };
 }
 
-/** One admitted universal request. Display languages never become release-language operands. */
-export function releaseSearchRequest(search: ReleaseSearch, release: FilterRelease): DiscoveryRequest {
+/** One grouped request. Display languages never become release-language operands. */
+export function releaseSearchRequest(search: ReleaseSearch, release: FilterRelease): ReleaseSearchRequest {
   const operands = buildReleaseSearchFilter(release, search.subtype, search.criteria);
   const filter = admitFilter(search.condition ? { and: [operands, search.condition] } : operands, release);
   const controls = admittedReleaseSearchControls(release, search.subtype)!;
@@ -217,7 +231,7 @@ export function releaseSearchRequest(search: ReleaseSearch, release: FilterRelea
     ...controls.producers.map((producer) => producer.property),
   ].slice(0, 4);
   return {
-    representation: 'discovery-v1',
+    representation: 'release-groups-v1',
     filter,
     sort: search.sort,
     languages: search.languages,
