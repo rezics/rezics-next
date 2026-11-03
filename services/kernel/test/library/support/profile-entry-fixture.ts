@@ -258,12 +258,12 @@ export async function createProfileEntryFixture(
       key: entryKey(),
     });
 
-    async function send(
+    async function sendWithHeaders(
       persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
       method: string,
       path: string,
       body?: unknown,
-      key = entryKey(),
+      extraHeaders: HeadersInit = {},
     ) {
       await drainSubjectLinks();
       const bearer =
@@ -276,17 +276,26 @@ export async function createProfileEntryFixture(
               : persona === 'anonymous'
                 ? null
                 : persona;
+      const headers = new Headers(extraHeaders);
+      if (bearer) headers.set('authorization', `Bearer ${bearer}`);
+      if (!headers.has('idempotency-key')) headers.set('idempotency-key', JSON.stringify(entryKey()));
+      if (body !== undefined && !headers.has('content-type')) headers.set('content-type', 'application/json');
       return kernel.handle(
         new Request(`http://kernel.test${path}`, {
           method,
-          headers: {
-            ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
-            'idempotency-key': `"${key}"`,
-            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-          },
+          headers,
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         }),
       );
+    }
+    async function send(
+      persona: 'owner' | 'other' | 'steward' | 'anonymous' | string,
+      method: string,
+      path: string,
+      body?: unknown,
+      key = entryKey(),
+    ) {
+      return sendWithHeaders(persona, method, path, body, { 'idempotency-key': JSON.stringify(key) });
     }
     async function readHead(): Promise<{ digest: string; head: number } | null> {
       const response = await send('anonymous', 'GET', '/v1/definitions/active');
@@ -415,6 +424,7 @@ export async function createProfileEntryFixture(
       replacementDigest,
       identity,
       send,
+      sendWithHeaders,
       createSubject,
       publish,
       activate,

@@ -1,6 +1,7 @@
 import { suspendAccount } from '../../support/native-suspension-driver.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAuthService } from '@rezics/auth';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import type { CommerceDriver, Inspection, Persona, StripeCreate } from '../../../../../specs/commerce-driver.ts';
@@ -16,6 +17,7 @@ import { createStripePort } from '../../../src/commerce/stripe.ts';
 import * as store from '../../../src/commerce/store.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
@@ -25,6 +27,7 @@ import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { capture, costOf, openGrowthDatabase, withoutCatalogStatements } from '../../support/growth.ts';
 import { workerTestEnv } from '../../support/worker-env.ts';
 import { startFakeStripe } from './fake-stripe.ts';
+import { createNativeEditionFixture, type NativeEditionFixture } from './native-edition-fixture.ts';
 import { trustedAccessPorts } from '../../support/trusted-access.ts';
 import { seedUnrelatedOrders as seedOrderFixtures } from './seed-unrelated-orders.ts';
 
@@ -92,6 +95,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   const databaseUrl = url.toString();
   const db = await openGrowthDatabase(databaseUrl);
   db.pool.options.max = 1;
+  await bootstrapRelease(db.admin, bundledRelease);
   const authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
   authPool.on('error', () => {});
   authPool.on('connect', (client) => client.on('error', () => {}));
@@ -274,18 +278,43 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
   });
   let sellerAuthority: Promise<void> | undefined;
+  let editionFixture: Promise<NativeEditionFixture> | undefined;
+  async function contentRequest(
+    method: 'DELETE' | 'GET' | 'POST' | 'PUT',
+    path: string,
+    body?: unknown,
+    headers: Readonly<Record<string, string>> = {},
+  ) {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set('authorization', `Bearer ${tokens.get(seller.id)!}`);
+    if (body !== undefined && !requestHeaders.has('content-type')) requestHeaders.set('content-type', 'application/json');
+    if (!requestHeaders.has('idempotency-key')) requestHeaders.set('idempotency-key', JSON.stringify(Bun.randomUUIDv7()));
+    return app.handle(
+      new Request(`http://kernel.test${path}`, {
+        method,
+        headers: requestHeaders,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  }
   async function authorizeSeller() {
     const context = { pool: db.pool, deadline: Date.now() + 30_000 };
-    await createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' }).create(
-      { ...context, actor: await grantAccess.authenticate(tokens.get(governor.id)!, context) },
-      {
-        resource: PLATFORM_RESOURCE,
-        subject: { kind: 'account', id: seller.id },
-        actions: ['offer:create'],
-        valid: '(,)',
-        key: 'commerce-fixture-seller',
-      },
-    );
+    const actor = await grantAccess.authenticate(tokens.get(governor.id)!, context);
+    const grants = createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' });
+    await grants.create({ ...context, actor }, {
+      resource: PLATFORM_RESOURCE,
+      subject: { kind: 'account', id: seller.id },
+      actions: ['offer:create', 'subject:create'],
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    });
+    await grants.create({ ...context, actor }, {
+      resource: GLOBAL_CONTEXT,
+      subject: { kind: 'account', id: seller.id },
+      actions: ['subject:create', 'board:create'],
+      valid: '(,)',
+      key: Bun.randomUUIDv7(),
+    });
   }
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let workerFailure: string | undefined;
@@ -451,11 +480,18 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
     async provisionOffer(input = {}) {
       await (sellerAuthority ??= authorizeSeller());
+      const publisher = await (editionFixture ??= createNativeEditionFixture(contentRequest));
+      const edition = await publisher.publish({
+        title: 'Commerce outcome book',
+        subjectTitle: 'Commerce outcome book',
+        body: 'Commerce outcome edition bytes',
+      });
       return (
         await commands().createOffer(
           await actor(seller.id),
           {
-            targetSubjectId: newId(0x7700),
+            targetSubjectId: edition.targetSubjectId,
+            contentEditionId: edition.contentEditionId,
             title: 'Commerce outcome book',
             currency: 'usd',
             unitAmountMinor: input.unitAmountMinor ?? 1200,

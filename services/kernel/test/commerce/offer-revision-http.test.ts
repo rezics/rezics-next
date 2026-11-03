@@ -17,6 +17,7 @@ import {
 } from '../library/support/profile-entry-fixture.ts';
 import { accountToken } from '../support/admitted-access.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
+import { createNativeEditionFixture } from './support/native-edition-fixture.ts';
 
 let f: NativeProfileFixture;
 let fake: ReturnType<typeof startFakeStripe>;
@@ -58,7 +59,17 @@ async function problem(response: Response, status: number, code: ProblemCode | '
 }
 
 test('seller price revision through HTTP binds target intent preserves captured purchases and reauthorizes replay', async () => {
-  const scopes = ['offer:create', 'offer:manage', 'offer:read', 'subject:read'];
+  const scopes = [
+    'offer:create',
+    'offer:manage',
+    'offer:read',
+    'subject:read',
+    'subject:create',
+    'board:create',
+    'thread:create',
+    'post:revise',
+    'edition:sell',
+  ];
   const seller = await f.identity(scopes);
   const bob = await f.identity(scopes);
   const buyer = await f.identity(['order:create', 'order:read', 'entitlement:read']);
@@ -69,7 +80,7 @@ test('seller price revision through HTTP binds target intent preserves captured 
       {
         resource: { route: 0, id: GLOBAL_CONTEXT },
         subject: { kind: 'account', id: person.actor.accountId },
-        actions: ['offer:create'],
+        actions: ['offer:create', 'board:create', 'subject:create'],
         valid: '(,)',
         key: entryKey(),
       },
@@ -79,23 +90,55 @@ test('seller price revision through HTTP binds target intent preserves captured 
     expect((await f.send('steward', 'POST', `/v1/platform/exposure/${group}:open`)).status).toBe(200);
   }
   const commands = createCommerceCommands({ pool: f.pool, access: f.access });
-  const targetSubjectId = await f.createSubject('game');
+  const publisher = (bearer: string) =>
+    createNativeEditionFixture((method, path, body, headers) => f.sendWithHeaders(bearer, method, path, body, headers));
+  const sellerPublisher = await publisher(seller.bearer);
+  const sellerEdition = await sellerPublisher.publish({
+    title: 'Captured price edition',
+    subjectTitle: 'Captured price',
+    body: 'Captured price edition bytes',
+  });
+  const secondSellerEdition = await sellerPublisher.publish({
+    title: 'Second owned edition',
+    subjectTitle: 'Second owned source',
+    body: 'Second seller edition bytes',
+  });
+  const bobEdition = await (await publisher(bob.bearer)).publish({
+    title: 'Bob owned edition',
+    subjectTitle: 'Bob owned source',
+    body: 'Bob edition bytes',
+  });
+  const targetSubjectId = sellerEdition.targetSubjectId;
   const input = {
     targetSubjectId,
+    contentEditionId: sellerEdition.contentEditionId,
     title: 'Captured price',
     currency: 'usd',
     unitAmountMinor: 1200,
     taxCode: 'txcd_10302000',
   };
   const a = await commands.createOffer(seller.actor, input, entryKey());
-  // Native offers admit unresolved subject references; this independently pins
-  // the mutation view's explicit nullable summary without changing disclosure.
+  // Each fresh fixed-edition sale keeps its own published source and captured target.
   const b = await commands.createOffer(
     seller.actor,
-    { ...input, targetSubjectId: f.unknownSubject(), title: 'Second owned offer' },
+    {
+      ...input,
+      targetSubjectId: secondSellerEdition.targetSubjectId,
+      contentEditionId: secondSellerEdition.contentEditionId,
+      title: 'Second owned offer',
+    },
     entryKey(),
   );
-  const foreign = await commands.createOffer(bob.actor, { ...input, title: 'Bob owns this' }, entryKey());
+  const foreign = await commands.createOffer(
+    bob.actor,
+    {
+      ...input,
+      targetSubjectId: bobEdition.targetSubjectId,
+      contentEditionId: bobEdition.contentEditionId,
+      title: 'Bob owns this',
+    },
+    entryKey(),
+  );
   expect(a.partition).toBe(b.partition);
   expect(routeOf(a.value.id)).toBe(routeOf(b.value.id));
   expect(a.value.creatorAccountId).toBe(seller.actor.accountId);

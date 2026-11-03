@@ -3,6 +3,7 @@ import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootst
 import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { startFakeStripe } from '../../../../services/kernel/test/commerce/support/fake-stripe.ts';
+import { createNativeEditionFixture } from '../../../../services/kernel/test/commerce/support/native-edition-fixture.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
 
@@ -108,20 +109,25 @@ export async function startNativePurchasesFixture(): Promise<NativePurchasesFixt
       );
       await expectStatus(response, 201, `Grant ${actions.join(', ')}`);
     };
-    await grant(alice.accountId, { route: 0, id: GLOBAL_CONTEXT }, ['subject:create']);
+    await grant(alice.accountId, { route: 0, id: GLOBAL_CONTEXT }, ['subject:create', 'board:create']);
     await grant(alice.accountId, { route: PLATFORM_RESOURCE.route, id: PLATFORM_RESOURCE.id }, ['offer:create']);
 
-    const subjectResponse = await stack.kernel(
-      '/v1/subjects',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey() },
-        body: JSON.stringify({ type: 'schema:Book', labels: { en: subjectTitle } }),
-      },
-      'alice',
+    const publisher = await createNativeEditionFixture((method, path, body, headers = {}) =>
+      stack!.kernel(
+        path,
+        {
+          method,
+          headers: { ...headers, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+        'alice',
+      ),
     );
-    await expectStatus(subjectResponse, 201, 'Create the bundled Book subject');
-    const subject = ((await subjectResponse.json()) as { subject: { id: string } }).subject;
+    const edition = await publisher.publish({
+      title: offerTitle,
+      subjectTitle,
+      body: 'Native purchase edition bytes',
+    });
 
     const offerResponse = await stack.kernel(
       '/v1/offers',
@@ -129,7 +135,8 @@ export async function startNativePurchasesFixture(): Promise<NativePurchasesFixt
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey() },
         body: JSON.stringify({
-          targetSubjectId: subject.id,
+          targetSubjectId: edition.targetSubjectId,
+          contentEditionId: edition.contentEditionId,
           title: offerTitle,
           currency: 'usd',
           unitAmountMinor: 1200,
@@ -170,7 +177,13 @@ export async function startNativePurchasesFixture(): Promise<NativePurchasesFixt
       stack,
       auth,
       stripe,
-      offer: { id: offer.id, title: offerTitle, subjectId: subject.id, subjectTitle, unitAmountMinor: 1200 },
+      offer: {
+        id: offer.id,
+        title: offerTitle,
+        subjectId: edition.targetSubjectId,
+        subjectTitle,
+        unitAmountMinor: 1200,
+      },
       paidOrderId: undefined,
       paidEntitlementId: undefined,
       failedOrderId: undefined,
