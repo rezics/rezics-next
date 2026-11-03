@@ -1064,11 +1064,11 @@ function admitConstructed(
         for (const index of spoilerIndices) {
           const selected = qualifiers[index]!.in.filter((value) => allowed.includes(value as (typeof allowed)[number]));
           if (!selected.length) {
-            const pointer = appendPointer(
+            const qualifierPointer = appendPointer(
               appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
               'in',
             );
-            reject(pointer, source, 'invalid_format', 'invalid_request');
+            reject(qualifierPointer, source, 'invalid_format', 'invalid_request');
           }
           qualifiers[index] = { ...qualifiers[index]!, in: selected };
         }
