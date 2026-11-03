@@ -133,8 +133,7 @@ export function parseReleaseSearch(
   if (!validTags(languages)) fail('language');
   const releaseLanguages = tags(form.releaseLanguage);
   if (form.releaseLanguage && !validTags(releaseLanguages)) fail('releaseLanguage');
-  if (!['name', 'relevance'].includes(form.sort) || (form.sort === 'relevance' && !form.q.trim()))
-    fail('sort');
+  if (!['name', 'relevance'].includes(form.sort) || (form.sort === 'relevance' && !form.q.trim())) fail('sort');
   if (!['0', '1', '2'].includes(form.threshold)) fail('threshold');
 
   const criteria: ReleaseSearchCriteria = {};
