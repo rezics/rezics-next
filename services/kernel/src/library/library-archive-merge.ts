@@ -103,6 +103,8 @@ export type ArchiveMergeReviewInput =
       fields: { startDate?: ArchiveFieldChoice; finishDate?: ArchiveFieldChoice };
     };
 
+export type ArchiveMergeSelection = { ordinal: number; reviewRevision: number };
+
 export type ArchiveFieldChoice = 'preserve' | 'set' | 'clear';
 
 type Action = 'library_entry:read' | 'library_entry:update';
@@ -497,6 +499,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           evidence: decodeRecord(item),
           status: item.status,
           review: item.review,
+          reviewRevision: item.review_revision,
         })),
         next: hasMore ? visible.at(-1)!.ordinal : null,
       };
@@ -1005,7 +1008,7 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
           [route, accountId, id, item.ordinal, item.expectedRevision, item.status, canonicalize(item.review)],
         );
         if (!result.rows[0]) throw conflict();
-        saved.push({ ordinal: item.ordinal, status: item.status });
+        saved.push({ ordinal: item.ordinal, status: item.status, reviewRevision: result.rows[0].review_revision });
       }
       return { uploadId: id, reviewed: saved };
     });
@@ -1148,11 +1151,14 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
     return null;
   }
 
-  async function beginEffect(actor: Actor, id: string, ordinal: number, signal?: AbortSignal) {
+  async function beginEffect(actor: Actor, id: string, selected: ArchiveMergeSelection, signal?: AbortSignal) {
+    const { ordinal, reviewRevision } = selected;
     return operation(actor, 'library_entry:update', signal, async (tx, route, accountId, now) => {
       const upload = await readUpload(tx, route, accountId, id, true);
       requireLive(upload, now);
       const item = await readItem(tx, route, accountId, id, ordinal, true);
+      // Check before replay: an old receipt never confirms a replacement review.
+      if (item.review_revision !== reviewRevision) throw conflict();
       if (item.status === 'acknowledged')
         return { mode: 'done' as const, section: item.section, status: item.status, result: item.result };
       if (item.status === 'applying') {
@@ -1457,20 +1463,36 @@ export function createLibraryArchiveMerge(deps: LibraryArchiveMergeDependencies)
     });
   }
 
-  async function apply(actor: Actor, id: string, ordinals: readonly number[], signal?: AbortSignal) {
+  async function apply(actor: Actor, id: string, selected: readonly ArchiveMergeSelection[], signal?: AbortSignal) {
     if (
-      ordinals.length < 1 ||
-      ordinals.length > LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems ||
-      new Set(ordinals).size !== ordinals.length ||
-      ordinals.some(
-        (ordinal) => !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records,
+      selected.length < 1 ||
+      selected.length > LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems ||
+      new Set(selected.map((item) => item.ordinal)).size !== selected.length ||
+      selected.some(
+        ({ ordinal, reviewRevision }) =>
+          !Number.isInteger(ordinal) || ordinal < 0 || ordinal >= LIBRARY_ARCHIVE_MERGE_LIMITS.records ||
+          !Number.isSafeInteger(reviewRevision) || reviewRevision < 1,
       )
     )
       throw new ProblemError('invalid_request');
+    // Validate the entire confirmation before starting any native command. The owner/upload
+    // lock serializes this check with review and cancellation; beginEffect repeats the revision
+    // check after releasing it so concurrent refreshes cannot substitute new operands.
+    await operation(actor, 'library_entry:update', signal, async (tx, route, accountId, now) => {
+      const upload = await readUpload(tx, route, accountId, id, true);
+      requireLive(upload, now);
+      for (const { ordinal, reviewRevision } of selected) {
+        const item = await readItem(tx, route, accountId, id, ordinal);
+        if (item.review_revision !== reviewRevision || item.review === null) throw conflict();
+        if (upload.cancelled_at !== null && item.status !== 'acknowledged' && item.status !== 'applying')
+          throw conflict();
+      }
+    });
     const applied: { ordinal: number; status: string; result: Record<string, unknown> | null }[] = [];
-    for (const ordinal of ordinals) {
+    for (const selection of selected) {
+      const { ordinal } = selection;
       signal?.throwIfAborted();
-      const start = await beginEffect(actor, id, ordinal, signal);
+      const start = await beginEffect(actor, id, selection, signal);
       if (start.mode === 'done') {
         applied.push({
           ordinal,

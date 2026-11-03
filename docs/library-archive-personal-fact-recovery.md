@@ -40,7 +40,9 @@ native journal command rechecks owner authority and that binding. Imported consu
 start/completion timestamps, progress history, or native command audit time.
 
 Outcomes are per item: `accepted`, `unchanged`, `stale`, `unsupported`, or `failed`. A changed target, incarnation,
-revision, profile, or review epoch cannot reuse an earlier confirmation or native receipt. Item keys retain the
+revision, profile, or review epoch cannot reuse an earlier confirmation or native receipt. Preview/review expose `reviewRevision`; apply requires `{items:[{ordinal,reviewRevision}]}` and checks the
+whole selection before effects (409 for any replaced review, including a mixed batch). A second revision check
+precedes each native execution or receipt replay. Accepted items cannot be reviewed again. Item keys retain the
 original upload/ordinal/review-revision identity. Stored review JSON is canonicalized so JSONB key order does not
 change a binding. Lost acknowledgements replay through the native receipt and return the original field outcomes.
 Partial application is retained across cancellation and evidence expiry.
@@ -70,5 +72,5 @@ missing targets, per-item replay, cancellation, expiry pruning, foreign-owner de
 checks Session progress and command timestamps remain separate from imported dates. Focused tests and workspace
 typechecks are worker checks; frozen acceptance and composed native growth measurements run after integration.
 
-After landing, Commerce receives the exact installed review/apply methods and field outcomes. Web323 remains the
+After landing, Commerce receives the exact installed review/apply methods and field outcomes. The canonical archive consumer8bb remains the
 single coordinated archive consumer; no second restoration interface is introduced.

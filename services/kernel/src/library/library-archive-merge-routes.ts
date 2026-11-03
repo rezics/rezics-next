@@ -50,6 +50,7 @@ const pageQuery = t.Object(
   closed,
 );
 const ordinal = t.Integer({ minimum: 0, maximum: LIBRARY_ARCHIVE_MERGE_LIMITS.records - 1 });
+const reviewRevision = t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER });
 const fieldChoice = t.Union([t.Literal('preserve'), t.Literal('set'), t.Literal('clear')]);
 const reviewItem = t.Union([
   t.Object(
@@ -151,6 +152,9 @@ export function libraryArchiveMergeRoutes(
       '/v1/libraryArchiveMerges',
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: text }),
+        // Ingress preserves raw bytes for strict decoding; this schema declares the wire
+        // envelope for generated clients. Raw-mode validation belongs to the decoder.
+        body: t.Object({ manifest: t.Record(text, t.Unknown()), records: t.Array(t.Record(text, t.Unknown())) }, closed),
         response: { 200: statusSchema, ...failures },
         detail: {
           ...detail('library_archive_merge.upload', 'library_entry:update', true),
@@ -212,6 +216,7 @@ export function libraryArchiveMergeRoutes(
                   evidence: object,
                   status: text,
                   review: t.Union([object, t.Null()]),
+                  reviewRevision: t.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }),
                 }),
                 { maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.page },
               ),
@@ -239,7 +244,7 @@ export function libraryArchiveMergeRoutes(
           closed,
         ),
         response: {
-          200: t.Object({ uploadId: id, reviewed: t.Array(t.Object({ ordinal, status: text }, closed)) }, closed),
+          200: t.Object({ uploadId: id, reviewed: t.Array(t.Object({ ordinal, status: text, reviewRevision }, closed)) }, closed),
           ...failures,
         },
         detail: detail('library_archive_merge.review', 'library_entry:update', true),
@@ -256,7 +261,7 @@ export function libraryArchiveMergeRoutes(
       {
         params: t.Object({ id }, closed),
         body: t.Object(
-          { ordinals: t.Array(ordinal, { minItems: 1, maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems }) },
+          { items: t.Array(t.Object({ ordinal, reviewRevision }, closed), { minItems: 1, maxItems: LIBRARY_ARCHIVE_MERGE_LIMITS.applyItems }) },
           closed,
         ),
         response: {
@@ -273,7 +278,7 @@ export function libraryArchiveMergeRoutes(
       },
       async ({ actor, params, body, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
-        return admission.run('normal', job, () => service().apply(actor, params.id, body.ordinals, job.signal));
+        return admission.run('normal', job, () => service().apply(actor, params.id, body.items, job.signal));
       },
     )
     .get(
