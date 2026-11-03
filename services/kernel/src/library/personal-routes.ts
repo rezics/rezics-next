@@ -160,6 +160,14 @@ const personalPrivacyValue = t.Union([
   t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_PRIVACY_VALUE_BYTES })) }, closed),
   t.Object({ status: t.Literal('known'), meaning: t.Union([t.Literal('private'), t.Literal('source_visible')]) }, closed),
 ]);
+const personalTimestampPrecision = t.Union([
+  t.Literal('year'),
+  t.Literal('month'),
+  t.Literal('day'),
+  t.Literal('minute'),
+  t.Literal('second'),
+  t.Literal('fraction'),
+]);
 const personalTimestampValue = t.Union([
   t.Object({ status: t.Literal('absent') }, closed),
   t.Object({ status: t.Literal('unknown'), sourceValue: t.Optional(t.String({ minLength: 1, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH })) }, closed),
@@ -189,7 +197,7 @@ const personalObservationSchema = t.Object(
       t.Object({ status: t.Literal('cleared') }, closed),
       t.Object({
         status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
-        precision: t.Union(['year', 'month', 'day', 'minute', 'second', 'fraction'].map((item) => t.Literal(item))),
+        precision: personalTimestampPrecision,
         zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
       }, closed),
     ]),
@@ -199,7 +207,7 @@ const personalObservationSchema = t.Object(
       t.Object({ status: t.Literal('cleared') }, closed),
       t.Object({
         status: t.Literal('known'), value: t.String({ minLength: 4, maxLength: MAX_SOURCE_TIMESTAMP_LENGTH }),
-        precision: t.Union(['year', 'month', 'day', 'minute', 'second', 'fraction'].map((item) => t.Literal(item))),
+        precision: personalTimestampPrecision,
         zone: t.Union([t.Literal('utc'), t.Literal('offset'), t.Literal('unknown')]),
       }, closed),
     ]),
