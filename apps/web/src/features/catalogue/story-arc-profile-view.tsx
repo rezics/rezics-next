@@ -352,7 +352,7 @@ function StoryArcProfileLive({
                 session={session}
                 transport={transport}
                 release={privateRead.release}
-                work={work}
+                {...(work ? { work } : {})}
                 href={address}
                 onCreated={setCreated}
                 navigation={({ dirty, pending, confirmed }) => (

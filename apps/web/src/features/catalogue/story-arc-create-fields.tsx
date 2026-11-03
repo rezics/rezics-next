@@ -69,7 +69,7 @@ export function StoryArcCreateFields({
   const [property, setProperty] = useState('');
   const [reuse, setReuse] = useState<ReuseState | null>(null);
   const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number }>();
-  const previousRelease = useRef<string>();
+  const previousRelease = useRef<string | undefined>(undefined);
   const digest = releaseDigest(release);
 
   useEffect(() => {

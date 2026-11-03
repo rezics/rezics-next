@@ -26,10 +26,11 @@ export function StoryArcCreateReview({
 }) {
   const o = { locale: locale as never };
   const context: StatementFieldsRead = { release, source: null, public: { related: {}, subject: { type: storyArcType } } };
-  const terms = [
+  const aliases = Object.entries(item.aliases ?? {}) as [string, string[]][];
+  const terms: { kind: string; language: string; value: string }[] = [
     ...Object.entries(item.labels).map(([language, value]) => ({ kind: m.catalogue_create_label({}, o), language, value })),
     ...Object.entries(item.descriptions ?? {}).map(([language, value]) => ({ kind: m.catalogue_create_description({}, o), language, value })),
-    ...Object.entries(item.aliases ?? {}).flatMap(([language, values]) =>
+    ...aliases.flatMap(([language, values]) =>
       values.map((value) => ({ kind: m.catalogue_create_aliases({}, o), language, value })),
     ),
   ];

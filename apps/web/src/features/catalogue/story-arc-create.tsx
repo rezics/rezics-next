@@ -87,6 +87,7 @@ export function StoryArcCreate({
   const profileMetadata = {
     ready: admitted,
     pending: !active.ready,
+    failure: <p>{m.catalogue_create_unavailable({}, o)}</p>,
     types: metadataTypes,
   };
 
@@ -137,7 +138,9 @@ export function StoryArcCreate({
             release={active.release}
             locale={locale}
             stale={stale}
-            identity={store.identity(item as StoryArcInitialItem)}
+            {...(store.identity(item as StoryArcInitialItem)
+              ? { identity: store.identity(item as StoryArcInitialItem)! }
+              : {})}
             onOpen={jump}
           />
         ),
@@ -151,7 +154,7 @@ export function StoryArcCreate({
               canEdit={canEdit}
               store={store}
               errors={errors}
-              identity={store.prepared()}
+              {...(store.prepared() ? { identity: store.prepared()! } : {})}
               invalidate={invalidateReview}
             />
           ) : null;
