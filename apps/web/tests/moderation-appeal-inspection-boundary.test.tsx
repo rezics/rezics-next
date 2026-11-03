@@ -243,7 +243,7 @@ test('installed exact requests mount populated, empty, sparse, concealed, unavai
 });
 
 test('exact selection rejects mismatched actor, missing native session, missing outcome and uncovered source', async () => {
-  for (const defect of ['actor', 'session', 'epoch', 'client', 'outcome', 'source', 'id']) {
+  for (const defect of ['none', 'actor', 'session', 'epoch', 'client', 'outcome', 'source', 'id']) {
     const client = createKernelClient('https://kernel.test', {
       fetch: async () =>
         Response.json(
@@ -273,12 +273,12 @@ test('exact selection rejects mismatched actor, missing native session, missing 
     const page = await readModerationAppealPage(
       client,
       { boardId: 'board', threadId: 'thread', inspect: 'appeal', cursor: 'captured' },
-      'Bearer viewer',
+      authorization,
       'viewer',
       origin,
     );
-    expect(page.state).toBe('unavailable');
-    expect(page.selectedAppeal).toBeUndefined();
+    expect(page.state).toBe(defect === 'none' ? 'ready' : 'unavailable');
+    expect(page.selectedAppeal?.id).toBe(defect === 'none' ? 'appeal' : undefined);
     expect(page.appeals).toEqual([]);
   }
 });

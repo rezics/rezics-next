@@ -242,7 +242,7 @@ function validateAppealInspection(
 ) {
   // Comparison only: the successful native operation authenticates this same credential.
   // The opaque native session token is never decoded or used as authorization.
-  const credential = decodeJwt(authorization.replace(/^Bearer /, ''));
+  const credential = decodeJwt(authorization.replace(/^Bearer /i, ''));
   const provenance = page.provenance;
   const selected = page.selectedAppeal;
   if (
@@ -250,6 +250,8 @@ function validateAppealInspection(
     origin.subject !== viewerId ||
     !origin.csrfFingerprint ||
     !nativeSession ||
+    nativeSession.length > 65536 ||
+    /[\r\n]/.test(nativeSession) ||
     !provenance ||
     provenance.actorId !== viewerId ||
     credential.sub !== viewerId ||
