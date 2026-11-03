@@ -52,7 +52,12 @@ function git(cwd: string, ...args: string[]): string {
 }
 export function isAncestor(cwd: string, commit: string, head: string, policy = defaultPolicy.merge): boolean {
   const args = ['merge-base', '--is-ancestor', commit, head];
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.gitBufferBytes, timeout: policy.commandTimeoutMs });
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+  });
   if (result.status === 0) return true;
   if (result.status === 1) return false;
   const cause =
@@ -62,15 +67,23 @@ export function isAncestor(cwd: string, commit: string, head: string, policy = d
   throw new Error(`git ${args.join(' ')} failed: ${cause}`);
 }
 /** Git's trailer parser excludes matching text in the subject or ordinary message body. */
-export function workspaceCommits(cwd: string, base: string, head = 'HEAD', policy = defaultPolicy.merge): Map<string, string[]> {
+export function workspaceCommits(
+  cwd: string,
+  base: string,
+  head = 'HEAD',
+  policy = defaultPolicy.merge,
+): Map<string, string[]> {
   const byTask = new Map<string, string[]>();
   const log = policyGit(
     cwd,
-    ['log',
-    '--reverse',
-    '--no-merges',
-    '--format=%H%x09%(trailers:key=Goal-Task,valueonly,separator=%x09)',
-    `${base}..${head}`], policy,
+    [
+      'log',
+      '--reverse',
+      '--no-merges',
+      '--format=%H%x09%(trailers:key=Goal-Task,valueonly,separator=%x09)',
+      `${base}..${head}`,
+    ],
+    policy,
   );
   for (const line of log.split('\n')) {
     const [commit, ...tasks] = line.split('\t');
@@ -87,7 +100,11 @@ export function taskChangedPaths(task: Task, head = 'HEAD', policy = defaultPoli
   return [
     ...new Set(
       taskCommits(task, head, policy).flatMap((commit) =>
-        policyGit(task.worktree, ['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', commit], policy)
+        policyGit(
+          task.worktree,
+          ['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', '-z', commit],
+          policy,
+        )
           .split('\0')
           .filter(Boolean),
       ),
@@ -97,7 +114,9 @@ export function taskChangedPaths(task: Task, head = 'HEAD', policy = defaultPoli
 
 /** Workers edit and commit directly. The module lease only guards idle dev merges against worker launch. */
 export class WorkspaceController {
-  private git(cwd: string, ...args: string[]): string { return policyGit(cwd, args, this.settings.policy?.merge); }
+  private git(cwd: string, ...args: string[]): string {
+    return policyGit(cwd, args, this.settings.policy?.merge);
+  }
 
   constructor(
     readonly settings: Pick<
@@ -199,7 +218,11 @@ export class WorkspaceController {
       .tasks()
       .filter((task) => task.workspace?.module === module && !['cancelled', 'merged'].includes(task.state))) {
       const own = commits.get(task.id) ?? [];
-      if (!own.length || !own.every((commit) => isAncestor(workspace.worktree, commit, dev, this.settings.policy?.merge))) continue;
+      if (
+        !own.length ||
+        !own.every((commit) => isAncestor(workspace.worktree, commit, dev, this.settings.policy?.merge))
+      )
+        continue;
       // A stopped worker may have been integrated by a peer's earlier landing. Do not rewrite its terminal
       // attempt or move an already recorded integration to an unrelated, later dev head.
       if (

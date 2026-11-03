@@ -118,7 +118,12 @@ export function newOwnerConflictHandoff(
 
 /** Explicit per-command rerere configuration keeps all owned worktrees on one common-dir cache. */
 export function ownerConflictGitConfig(cwd: string, policy = defaultPolicy.merge): string[] {
-  const common = spawnSync('git', ['rev-parse', '--git-common-dir'], { cwd, encoding: 'utf8', timeout: policy.commandTimeoutMs, maxBuffer: policy.gitBufferBytes });
+  const common = spawnSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: policy.commandTimeoutMs,
+    maxBuffer: policy.gitBufferBytes,
+  });
   if (common.status !== 0)
     throw new Error(common.stderr?.trim() || common.error?.message || 'Cannot locate Git common directory');
   const rrCache = resolve(cwd, common.stdout.trim(), 'rr-cache');
@@ -174,7 +179,11 @@ export function ownerConflictGit(cwd: string, ...args: string[]): OwnerConflictG
   return policyOwnerConflictGit(cwd, args);
 }
 
-export function policyOwnerConflictGit(cwd: string, args: string[], policy = defaultPolicy.merge): OwnerConflictGitResult {
+export function policyOwnerConflictGit(
+  cwd: string,
+  args: string[],
+  policy = defaultPolicy.merge,
+): OwnerConflictGitResult {
   const result = spawnSync('git', [...ownerConflictGitConfig(cwd, policy), ...args], {
     cwd,
     encoding: 'utf8',

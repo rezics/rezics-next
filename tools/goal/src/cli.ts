@@ -73,7 +73,8 @@ export async function run(
         await installService({ mainCheckout: settings.mainCheckout, localConfig: settingsFile() });
         return await reportServices('status', undefined, undefined, settings.policy?.service);
       }
-      if (args[0] === 'status' || args[0] === 'restart' || args[0] === 'logs') return await reportServices(args[0], undefined, undefined, loadSettings().policy?.service);
+      if (args[0] === 'status' || args[0] === 'restart' || args[0] === 'logs')
+        return await reportServices(args[0], undefined, undefined, loadSettings().policy?.service);
       throw new Error('usage: goal service install|status|restart|logs');
     } catch (error) {
       console.error(String(error));

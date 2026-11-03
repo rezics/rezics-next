@@ -258,11 +258,7 @@ export function recordToolBlockerFailure(
     .immediate();
 
   if (incident) {
-    ensureIncidentRetries(
-      store,
-      incident,
-      new Date(Date.parse(incident.openedAt) - policy.windowMs).toISOString(),
-    );
+    ensureIncidentRetries(store, incident, new Date(Date.parse(incident.openedAt) - policy.windowMs).toISOString());
     if (!incident.noticeDelivered) {
       try {
         incident = deliverIncident(store, inbox, settings, incident) ?? incident;
@@ -330,7 +326,8 @@ export function resolveToolIncidentsAfterAttempt(
   task: Task,
   attempt: Attempt,
 ): ToolIncident[] {
-  const fingerprint = attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree, store.policy.worker) : null;
+  const fingerprint =
+    attempt.failureKind === 'tool' ? blockerFingerprint(attempt, task.worktree, store.policy.worker) : null;
   const resolved: ToolIncident[] = [];
   for (const incident of listOpenToolIncidents(store)) {
     if (

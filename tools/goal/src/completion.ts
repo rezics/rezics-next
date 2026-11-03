@@ -61,7 +61,11 @@ export function completionChecker(options: CompletionOptions): (goal: string) =>
       mkdirSync(options.worktreeRoot, { recursive: true });
       git(options.mainCheckout, 'worktree', 'add', '--detach', tree, base);
       added = true;
-      const gated = await (options.runGate ?? gateRunner(undefined, undefined, undefined, undefined, policy.merge))(condition.gate, tree, evidencePath);
+      const gated = await (options.runGate ?? gateRunner(undefined, undefined, undefined, undefined, policy.merge))(
+        condition.gate,
+        tree,
+        evidencePath,
+      );
       if (!gated.passed)
         return fail(
           `Main gate failed${gated.timedOut ? ' (timed out)' : ''}: ${gated.output.slice(0, policy.completion.diagnosticCharacters).replace(/[\r\n]+/g, ' ')}`,
@@ -79,9 +83,13 @@ export function completionChecker(options: CompletionOptions): (goal: string) =>
           if (command[0] !== 'bun' || command[1] !== 'test')
             return fail(`Capability acceptance command must be a native bun test command: ${command.join(' ')}`);
           const registered = [...command, '--reporter=junit', '--reporter-outfile=.temp/goal-capability-results.xml'];
-          const outcome = await (options.runGate ?? gateRunner(undefined, undefined, undefined, undefined, policy.merge))(registered, tree, evidencePath);
+          const outcome = await (
+            options.runGate ?? gateRunner(undefined, undefined, undefined, undefined, policy.merge)
+          )(registered, tree, evidencePath);
           if (!outcome.passed)
-            return fail(`Capability acceptance failed: ${outcome.output.slice(0, policy.completion.diagnosticCharacters).replace(/[\r\n]+/g, ' ')}`);
+            return fail(
+              `Capability acceptance failed: ${outcome.output.slice(0, policy.completion.diagnosticCharacters).replace(/[\r\n]+/g, ' ')}`,
+            );
           let report: string;
           try {
             report = readFileSync(join(tree, '.temp/goal-capability-results.xml'), 'utf8');

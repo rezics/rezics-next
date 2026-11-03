@@ -153,7 +153,11 @@ async function socketReady(path: string, timeoutMs: number): Promise<boolean> {
 }
 
 /** A CLI can request activation; only systemd owns the host's lifetime and restart policy. */
-export async function ensureServiceHost(socket: string, run = serviceCommand, policy = defaultPolicy.service): Promise<void> {
+export async function ensureServiceHost(
+  socket: string,
+  run = serviceCommand,
+  policy = defaultPolicy.service,
+): Promise<void> {
   if (await socketReady(socket, policy.socketTimeoutMs)) return;
   await checked(['systemctl', '--user', 'start', HOST_UNIT], run);
   if (!(await socketReady(socket, policy.socketTimeoutMs)))

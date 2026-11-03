@@ -96,7 +96,11 @@ export function noProgressTwice(store: WorkerStore, task: Task, ref: AttemptRef)
 }
 
 /** A tool blocker's identity: its first line with its worktree and volatile numbers, hashes and identifiers removed. */
-export function blockerFingerprint(attempt: Pick<Attempt, 'blocker' | 'result'>, worktree?: string | null, policy = defaultPolicy.worker): string {
+export function blockerFingerprint(
+  attempt: Pick<Attempt, 'blocker' | 'result'>,
+  worktree?: string | null,
+  policy = defaultPolicy.worker,
+): string {
   const line = (attempt.blocker || attempt.result || '').split(/\r?\n/, 1)[0] ?? '';
   const withoutWorktree = worktree
     ? line.replace(

@@ -226,7 +226,12 @@ function reportFrozenFormatError(error: string | undefined): void {
 }
 
 export function git(cwd: string, args: string[], policy = defaultPolicy.merge): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.gitBufferBytes, timeout: policy.commandTimeoutMs });
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+  });
   if (result.status !== 0) {
     const detail = result.stderr?.trim() || result.error?.message || `git exited ${result.status}`;
     throw new Error(`git ${args[0]}: ${detail}`);
@@ -315,7 +320,11 @@ export class WorkerTasks {
       return git(this.settings.mainCheckout, ['rev-parse', '--verify', reference], this.settings.policy?.merge);
     } catch {
       if (!createFromMain) throw new Error(`stabilize branch ${branch} does not exist`);
-      const main = git(this.settings.mainCheckout, ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`], this.settings.policy?.merge);
+      const main = git(
+        this.settings.mainCheckout,
+        ['rev-parse', '--verify', `refs/heads/${this.settings.mainBranch}`],
+        this.settings.policy?.merge,
+      );
       try {
         git(this.settings.mainCheckout, ['branch', '--', branch, main], this.settings.policy?.merge);
       } catch (error) {
@@ -373,11 +382,16 @@ export class WorkerTasks {
     // An attempt that stopped inside a conflicted rebase or merge leaves HEAD detached or half merged. The retry
     // rebases from the branch tip again and hands the worker the conflicted files, so the old operation is dropped.
     if (task.workspace) return;
-    const gitPath = (name: string) => resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge));
+    const gitPath = (name: string) =>
+      resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge));
     // A git process killed under load leaves its index lock behind. The attempt has ended and this retry holds the
     // task's lease, so a lock a minute old belongs to nobody.
     const lock = gitPath('index.lock');
-    if (existsSync(lock) && Date.now() - statSync(lock).mtimeMs > (this.settings.policy ?? defaultPolicy).worker.worktreeLockAgeMs) rmSync(lock, { force: true });
+    if (
+      existsSync(lock) &&
+      Date.now() - statSync(lock).mtimeMs > (this.settings.policy ?? defaultPolicy).worker.worktreeLockAgeMs
+    )
+      rmSync(lock, { force: true });
     for (const [state, operation] of [
       ['rebase-merge', 'rebase'],
       ['rebase-apply', 'rebase'],
@@ -411,10 +425,20 @@ export class WorkerTasks {
     if (task.brief.kind === 'verification') return false;
     if (task.workspace) return false;
     for (const state of ['rebase-merge', 'rebase-apply', 'MERGE_HEAD'])
-      if (existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state], this.settings.policy?.merge)))) return false;
-    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge)) return false;
+      if (
+        existsSync(
+          resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', state], this.settings.policy?.merge)),
+        )
+      )
+        return false;
+    if (!git(task.worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge))
+      return false;
     git(task.worktree, ['add', '-A'], this.settings.policy?.merge);
-    git(task.worktree, ['commit', '-m', `chore: commit work left uncommitted by attempt ${attempt}`], this.settings.policy?.merge);
+    git(
+      task.worktree,
+      ['commit', '-m', `chore: commit work left uncommitted by attempt ${attempt}`],
+      this.settings.policy?.merge,
+    );
     return true;
   }
   private validateBrief(
@@ -524,12 +548,18 @@ export class WorkerTasks {
         briefText: brief.markdown,
         branch,
         worktree,
-        createWorktree: () => git(this.settings.mainCheckout, ['worktree', 'add', '-b', branch, worktree, base], this.settings.policy?.merge),
+        createWorktree: () =>
+          git(
+            this.settings.mainCheckout,
+            ['worktree', 'add', '-b', branch, worktree, base],
+            this.settings.policy?.merge,
+          ),
         ...(brief.kind !== 'verification'
           ? { installDependencies: () => installWorktreeDependencies(worktree, this.settings) }
           : {}),
         freezeFiles: () => commitFrozenFiles(worktree, files, this.settings.formatCommand),
-        removeWorktree: () => git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree], this.settings.policy?.merge),
+        removeWorktree: () =>
+          git(this.settings.mainCheckout, ['worktree', 'remove', '--force', worktree], this.settings.policy?.merge),
         deleteBranch: () => git(this.settings.mainCheckout, ['branch', '-D', branch], this.settings.policy?.merge),
       });
       const created = this.store.createTask(brief, { branch, worktree, briefPath, base }, taskClass, id);
@@ -1264,7 +1294,9 @@ export class WorkerTasks {
     this.ensureWorktree(task);
     this.commitRetryLeftovers(task, task.currentAttempt);
     const integration = this.taskBaseHead(task.brief);
-    const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`], this.settings.policy?.merge));
+    const commits = Number(
+      git(task.worktree, ['rev-list', '--count', `${task.base}..HEAD`], this.settings.policy?.merge),
+    );
     const branch = git(task.worktree, ['branch', '--show-current'], this.settings.policy?.merge);
     if (branch !== task.branch)
       throw new Error(`held task worktree is on ${branch || 'detached HEAD'}, expected ${task.branch}`);
@@ -1288,7 +1320,11 @@ export class WorkerTasks {
           this.settings.policy?.brief,
         );
       } catch (error) {
-        const conflicts = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge)
+        const conflicts = git(
+          task.worktree,
+          ['diff', '--name-only', '--diff-filter=U', '-z'],
+          this.settings.policy?.merge,
+        )
           .split('\0')
           .filter(Boolean);
         if (!conflicts.length) throw error;
@@ -1377,7 +1413,12 @@ export class WorkerTasks {
           'Proof source is read-only; only an unreserved clean retained empty-report branch can prepare a fresh capture',
         );
       const worktree = join(this.settings.worktreeRoot, `${task.id}-proof-${captured}`);
-      if (!existsSync(worktree)) git(this.settings.mainCheckout, ['worktree', 'add', '--detach', worktree, captured], this.settings.policy?.merge);
+      if (!existsSync(worktree))
+        git(
+          this.settings.mainCheckout,
+          ['worktree', 'add', '--detach', worktree, captured],
+          this.settings.policy?.merge,
+        );
       if (
         git(worktree, ['rev-parse', 'HEAD'], this.settings.policy?.merge) !== captured ||
         git(worktree, ['status', '--porcelain', '--untracked-files=all'], this.settings.policy?.merge)
@@ -1875,7 +1916,9 @@ export class WorkerTasks {
         mkdirSync(dirname(rebaseLog), { recursive: true });
         let files: string[] = [];
         if (task.base !== integration) {
-          const commits = Number(git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`], this.settings.policy?.merge));
+          const commits = Number(
+            git(task.worktree, ['rev-list', '--count', `${task.base}..${tip}`], this.settings.policy?.merge),
+          );
           if (commits > 0) {
             try {
               // Integration derived files such as bun.lock are regenerated by rebaseOnto before the retry starts.
@@ -1889,7 +1932,9 @@ export class WorkerTasks {
                 this.settings.policy?.brief,
               );
             } catch (error) {
-              files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge).split('\0').filter(Boolean);
+              files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge)
+                .split('\0')
+                .filter(Boolean);
               if (!files.length) throw error;
             }
           } else git(task.worktree, ['reset', '--hard', integration], this.settings.policy?.merge);
@@ -1898,16 +1943,24 @@ export class WorkerTasks {
           current.base = integration;
         });
         if (options.escalation === 'rebase-conflict') {
-          const controllerHead = git(task.worktree, ['rev-parse', `${task.branch}^{commit}`], this.settings.policy?.merge);
+          const controllerHead = git(
+            task.worktree,
+            ['rev-parse', `${task.branch}^{commit}`],
+            this.settings.policy?.merge,
+          );
           this.store.event(next, 'worker-source-baseline', { workerCommit, controllerHead });
         }
         // Name conflicted files only while a rebase is really in progress here; otherwise the prompt sent the worker to
         // continue a rebase that did not exist (the retry's own rebase onto its base had applied cleanly).
         const rebasing = ['rebase-merge', 'rebase-apply'].some((name) =>
-          existsSync(resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge))),
+          existsSync(
+            resolve(task.worktree, git(task.worktree, ['rev-parse', '--git-path', name], this.settings.policy?.merge)),
+          ),
         );
         if (!files.length)
-          files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge).split('\0').filter(Boolean);
+          files = git(task.worktree, ['diff', '--name-only', '--diff-filter=U', '-z'], this.settings.policy?.merge)
+            .split('\0')
+            .filter(Boolean);
         if (!files.length && options.escalation === 'rebase-conflict' && rebasing) files = options.conflictFiles ?? [];
         if (!files.length && !rebasing) {
           setupStep = 'installing worktree dependencies';
@@ -1970,7 +2023,10 @@ export class WorkerTasks {
             managerId: this.store.task(taskId).brief.manager,
             taskId,
             kind: 'environment' as const,
-            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(0, (this.settings.policy ?? defaultPolicy).worker.summaryCharacters),
+            summary: `environment: retry setup failed during ${setupStep}: ${detail}`.slice(
+              0,
+              (this.settings.policy ?? defaultPolicy).worker.summaryCharacters,
+            ),
           };
           new SqliteManagerInbox(
             this.store.db,

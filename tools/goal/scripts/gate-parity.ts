@@ -9,7 +9,7 @@ import { JSON5 } from 'bun';
 import { CHECK_COMPATIBILITY_CONTRACT } from '../src/check-compatibility.ts';
 import { runBoundedProcess, type BoundedProcessResult } from '../src/lifecycle-fixture.ts';
 
-export type ParityOptions = { inputRoot: string; scriptsRoot: string; policy?: ControlPolicy };
+export type ParityOptions = { inputRoot: string; scriptsRoot: string; policy?: ControlPolicy | undefined };
 type Identity = { root: string; commit: string; tree: string; status: string };
 export type ParityCommand = {
   id: string;
@@ -277,7 +277,9 @@ function planGateParityWithPolicy(options: ParityOptions): ParityPlan {
 }
 
 /** Explicit postintegration execution of delivered producer evidence, with unavailable boundaries retained. */
-export async function driveGateParity(options: ParityOptions & { execute?: boolean; report?: (plan: ParityPlan) => void }): Promise<ParityResult> {
+export async function driveGateParity(
+  options: ParityOptions & { execute?: boolean; report?: (plan: ParityPlan) => void },
+): Promise<ParityResult> {
   return withScriptPolicy(options.policy ?? scriptPolicy(), () => driveGateParityWithPolicy(options));
 }
 
@@ -330,14 +332,22 @@ async function driveGateParityWithPolicy(
       const clone = await run(argv, scratch, scriptPolicy().gateParity.cloneTimeoutMs);
       if (clone.status !== 0 || clone.timedOut || clone.error)
         throw new Error(`Parity clone failed: ${clone.error ?? clone.stderr}`);
-      const checkout = await run(['git', 'checkout', '--detach', snapshot.commit], roots[name], scriptPolicy().gateParity.checkoutTimeoutMs);
+      const checkout = await run(
+        ['git', 'checkout', '--detach', snapshot.commit],
+        roots[name],
+        scriptPolicy().gateParity.checkoutTimeoutMs,
+      );
       if (checkout.status !== 0 || checkout.timedOut || checkout.error)
         throw new Error(`Parity checkout failed: ${checkout.error ?? checkout.stderr}`);
     }
     const runtime = join(roots.scripts, CHECK_COMPATIBILITY_CONTRACT.workerCheck.bun.lookup);
     for (const root of Object.values(roots)) {
       if (!source(root, 'package.json')) continue;
-      const install = await run([process.execPath, 'install', '--frozen-lockfile'], root, scriptPolicy().gateParity.installTimeoutMs);
+      const install = await run(
+        [process.execPath, 'install', '--frozen-lockfile'],
+        root,
+        scriptPolicy().gateParity.installTimeoutMs,
+      );
       if (install.status !== 0 || install.timedOut || install.error)
         throw new Error(`Parity dependency preparation failed: ${install.error ?? install.stderr}`);
     }

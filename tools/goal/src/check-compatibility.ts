@@ -350,7 +350,8 @@ function commandResultCheck(
   result: RunResult,
   ok: boolean,
   detail: string,
-  evidence: Record<string, unknown> = {}, policy = defaultPolicy.nativeCommands
+  evidence: Record<string, unknown> = {},
+  policy = defaultPolicy.nativeCommands,
 ): void {
   pushCheck(checks, field, command, ok, detail, { ...displayResult(result, policy), ...evidence });
 }
@@ -404,7 +405,8 @@ function startWorkerCheck(
   exitCode: number,
   contract: CheckCompatibilityContract,
   waitForRelease: boolean,
-  pinnedRuntime = false, policy = defaultPolicy.nativeCommands
+  pinnedRuntime = false,
+  policy = defaultPolicy.nativeCommands,
 ): { id?: string; childArgv: string[]; recordArgv: string[]; gatePath?: string } {
   const gatePath = waitForRelease ? join(scratchRoot, 'release-child') : undefined;
   if (gatePath) rmSync(gatePath, { force: true });
@@ -446,7 +448,8 @@ function startWorkerCheck(
     result.status === 0 && validId
       ? 'The actual worker-check start form returned a UUID.'
       : `Expected a successful start command to print a UUID; received exit ${String(result.status)}.`,
-    { id: id ?? null, idIsUuid: validId }, policy
+    { id: id ?? null, idIsUuid: validId },
+    policy,
   );
   return {
     ...(validId ? { id } : {}),
@@ -461,7 +464,8 @@ function checkWorkerCheckLifecycle(
   scriptsRoot: string,
   scratchRoot: string,
   contract: CheckCompatibilityContract,
-  pinnedRuntime = false, policy = defaultPolicy.nativeCommands
+  pinnedRuntime = false,
+  policy = defaultPolicy.nativeCommands,
 ): void {
   const workerScript = resolve(scriptsRoot, contract.workerCheck.script);
   if (!commandExists(workerScript)) {
@@ -530,7 +534,8 @@ function checkWorkerCheckLifecycle(
     pendingWaitOk
       ? 'The foreground wait form completed the still-running check successfully.'
       : 'The foreground wait form did not report the successful result and log path.',
-    { id: pending.id }, policy
+    { id: pending.id },
+    policy,
   );
   addRecordChecks(
     checks,
@@ -568,7 +573,8 @@ function checkWorkerCheckLifecycle(
     failureWaitOk
       ? 'The foreground wait form preserved a failing child exit status.'
       : 'The foreground wait form did not report the failing result and log path.',
-    { id: failure.id }, policy
+    { id: failure.id },
+    policy,
   );
   addRecordChecks(
     checks,
@@ -872,7 +878,8 @@ function checkRemoteOptions(
   checks: CompatibilityCheck[],
   scriptsRoot: string,
   scratchRoot: string,
-  contract: CheckCompatibilityContract, policy = defaultPolicy.nativeCommands
+  contract: CheckCompatibilityContract,
+  policy = defaultPolicy.nativeCommands,
 ): void {
   const remoteScript = resolve(scriptsRoot, contract.remoteCheck.script);
   if (!commandExists(remoteScript)) {
@@ -922,7 +929,8 @@ function checkRemoteOptions(
       ok
         ? `${option.flag} parsed successfully; the empty-host fixture stopped before check-host admission.`
         : `${option.flag} did not reach the empty-host boundary without admitting a command.`,
-      { environment: contract.remoteCheck.requiredEnvironment, parseReachedHosts, commandWasNotAdmitted: notAdmitted }, policy
+      { environment: contract.remoteCheck.requiredEnvironment, parseReachedHosts, commandWasNotAdmitted: notAdmitted },
+      policy,
     );
     rmSync(marker, { force: true });
   }
@@ -947,7 +955,10 @@ function report(
 }
 
 /** Check a scripts checkout using real worker-check and remote-check child processes. */
-export function checkScriptCompatibility(scriptsRoot: string, policy = defaultPolicy.nativeCommands): CompatibilityReport {
+export function checkScriptCompatibility(
+  scriptsRoot: string,
+  policy = defaultPolicy.nativeCommands,
+): CompatibilityReport {
   const root = resolve(scriptsRoot);
   const checks: CompatibilityCheck[] = [];
   if (!existsSync(root) || !statSync(root).isDirectory()) {

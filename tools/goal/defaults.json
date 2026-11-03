@@ -6,34 +6,14 @@
   "silenceMs": 2400000,
   "affectedTests": [
     {
-      "paths": [
-        "services/kernel/**"
-      ],
-      "command": [
-        "env",
-        "KERNEL_CHECK_AFFECTED_MAX=60",
-        "bun",
-        "run",
-        "--cwd",
-        "services/kernel",
-        "check"
-      ]
+      "paths": ["services/kernel/**"],
+      "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
     }
   ],
   "verifierChecks": [
     {
-      "paths": [
-        "services/kernel/**"
-      ],
-      "command": [
-        "env",
-        "KERNEL_CHECK_AFFECTED_MAX=60",
-        "bun",
-        "run",
-        "--cwd",
-        "services/kernel",
-        "check"
-      ]
+      "paths": ["services/kernel/**"],
+      "command": ["env", "KERNEL_CHECK_AFFECTED_MAX=60", "bun", "run", "--cwd", "services/kernel", "check"]
     },
     {
       "paths": [
@@ -46,37 +26,18 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": [
-        "bun",
-        "scripts/workspace-imports.ts"
-      ]
+      "command": ["bun", "scripts/workspace-imports.ts"]
     },
     {
-      "paths": [
-        "apps/web/**",
-        "packages/ui/**",
-        "packages/document/**"
-      ],
-      "command": [
-        "bun",
-        "test",
-        "apps/web/tests/library-page-smoke.test.ts"
-      ]
+      "paths": ["apps/web/**", "packages/ui/**", "packages/document/**"],
+      "command": ["bun", "test", "apps/web/tests/library-page-smoke.test.ts"]
     },
     {
-      "paths": [
-        "apps/web/scripts/**"
-      ],
-      "command": [
-        "bun",
-        "test",
-        "apps/web/scripts/remote-browser.test.ts"
-      ]
+      "paths": ["apps/web/scripts/**"],
+      "command": ["bun", "test", "apps/web/scripts/remote-browser.test.ts"]
     },
     {
-      "paths": [
-        "packages/client/src/kernel/**"
-      ],
+      "paths": ["packages/client/src/kernel/**"],
       "command": [
         "sh",
         "-c",
@@ -85,10 +46,7 @@
     }
   ],
   "siblingTests": {
-    "command": [
-      "bun",
-      "test"
-    ]
+    "command": ["bun", "test"]
   },
   "integrationChecks": [
     {
@@ -102,10 +60,7 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": [
-        "bun",
-        "install"
-      ]
+      "command": ["bun", "install"]
     },
     {
       "paths": [
@@ -118,10 +73,7 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": [
-        "bun",
-        "scripts/typecheck.ts"
-      ]
+      "command": ["bun", "scripts/typecheck.ts"]
     },
     {
       "paths": [
@@ -134,27 +86,14 @@
         "bun.lock",
         "tsconfig*.json"
       ],
-      "command": [
-        "bun",
-        "scripts/workspace-imports.ts"
-      ]
+      "command": ["bun", "scripts/workspace-imports.ts"]
     },
     {
-      "paths": [
-        "apps/web/**",
-        "packages/ui/**",
-        "packages/document/**"
-      ],
-      "command": [
-        "bun",
-        "test",
-        "apps/web/tests/library-page-smoke.test.ts"
-      ]
+      "paths": ["apps/web/**", "packages/ui/**", "packages/document/**"],
+      "command": ["bun", "test", "apps/web/tests/library-page-smoke.test.ts"]
     },
     {
-      "paths": [
-        "packages/client/src/kernel/**"
-      ],
+      "paths": ["packages/client/src/kernel/**"],
       "command": [
         "sh",
         "-c",
@@ -166,55 +105,27 @@
     {
       "path": "bun.lock",
       "stage": "integration",
-      "command": [
-        "bun",
-        "install"
-      ]
+      "command": ["bun", "install"]
     },
     {
       "path": "services/kernel/db/*/schema.sql",
       "stage": "integration",
-      "command": [
-        "bun",
-        "run",
-        "--cwd",
-        "services/kernel",
-        "derived",
-        "schema"
-      ]
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived", "schema"]
     },
     {
       "path": "packages/client/src/kernel/**",
       "stage": "promotion",
-      "command": [
-        "bun",
-        "run",
-        "--cwd",
-        "services/kernel",
-        "derived"
-      ],
-      "inputs": [
-        "services/kernel/**"
-      ]
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived"],
+      "inputs": ["services/kernel/**"]
     },
     {
       "path": "contracts/openapi.json",
       "stage": "promotion",
-      "command": [
-        "bun",
-        "run",
-        "--cwd",
-        "services/kernel",
-        "derived"
-      ],
-      "inputs": [
-        "services/kernel/**"
-      ]
+      "command": ["bun", "run", "--cwd", "services/kernel", "derived"],
+      "inputs": ["services/kernel/**"]
     }
   ],
-  "jsonMessageConflicts": [
-    "apps/web/messages/*.json"
-  ],
+  "jsonMessageConflicts": ["apps/web/messages/*.json"],
   "integration": {
     "batchSize": 4,
     "devLandingChecks": true,
@@ -245,13 +156,8 @@
     "toolOutputTokens": 4000,
     "backgroundTerminalMaxTimeoutMs": 7200000
   },
-  "launchSmokePaths": [
-    "tools/goal/**"
-  ],
-  "gate": [
-    "bun",
-    "scripts/gate.ts"
-  ],
+  "launchSmokePaths": ["tools/goal/**"],
+  "gate": ["bun", "scripts/gate.ts"],
   "promotionParallelism": 4,
   "flow": {
     "efficiencyBelow": 0.4,
@@ -299,20 +205,10 @@
       "orphanStartGraceMultiplier": 2,
       "sweepYieldItems": 8,
       "retryIntentLeadMs": 1000,
-      "toolRetryBackoffMs": [
-        120000,
-        600000,
-        1800000
-      ],
+      "toolRetryBackoffMs": [120000, 600000, 1800000],
       "toolRetryWindowMs": 3600000,
       "toolRetryEventRows": 5000,
-      "settlementBackoffMs": [
-        500,
-        1000,
-        2000,
-        4000,
-        8000
-      ],
+      "settlementBackoffMs": [500, 1000, 2000, 4000, 8000],
       "logTailBytes": 262144,
       "diagnosticCharacters": 4000,
       "summaryCharacters": 1000,

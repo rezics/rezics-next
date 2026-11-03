@@ -113,7 +113,8 @@ function singleLine(value: unknown, limit: number): string {
 
 function checkCommand(value: Record<string, unknown>, policy = defaultPolicy.worker): string {
   const argv = value.argv;
-  if (Array.isArray(argv) && argv.every((part) => typeof part === 'string')) return JSON.stringify(argv).slice(0, policy.checkCommandCharacters);
+  if (Array.isArray(argv) && argv.every((part) => typeof part === 'string'))
+    return JSON.stringify(argv).slice(0, policy.checkCommandCharacters);
   if (typeof value.command === 'string') return singleLine(value.command, policy.checkCommandCharacters);
   return 'unknown (terminal record did not include argv)';
 }
@@ -126,7 +127,9 @@ function ownedTerminalLogPath(
 ): { path: string; original: string } | { path: null; original: string; reason: string } {
   const raw = value.log ?? value.logPath ?? value.log_path;
   const original =
-    typeof raw === 'string' ? singleLine(raw, policy.summaryCharacters) : 'unknown (terminal record did not include a log path)';
+    typeof raw === 'string'
+      ? singleLine(raw, policy.summaryCharacters)
+      : 'unknown (terminal record did not include a log path)';
   const unknown = (reason: string) => ({ path: null, original, reason });
   if (!CHECK_UUID.test(id)) return unknown('check id is not a bare UUID');
   if (value.id !== id) return unknown('terminal record identity does not match the owned check UUID');
@@ -178,7 +181,13 @@ function ownedTerminalLogPath(
   return { path, original };
 }
 
-function terminalCheckFailureEvidence(task: Task, id: string, value: Record<string, unknown>, status: unknown, policy = defaultPolicy.worker): string {
+function terminalCheckFailureEvidence(
+  task: Task,
+  id: string,
+  value: Record<string, unknown>,
+  status: unknown,
+  policy = defaultPolicy.worker,
+): string {
   const command = checkCommand(value, policy);
   const exitValue =
     value.exitStatus ?? value.exit_status ?? value.exitCode ?? value.exit_code ?? value.exit ?? value.code;
@@ -306,7 +315,9 @@ export class WorkerJob implements GateOutcomeSink {
         this.inbox.deliver({
           managerId: this.tasks.settings.integration.supermanager,
           kind: 'environment',
-          summary: `Control-plane background work failed: ${String(error)}`.replace(/[\r\n]+/g, ' ').slice(0, this.policy.worker.summaryCharacters),
+          summary: `Control-plane background work failed: ${String(error)}`
+            .replace(/[\r\n]+/g, ' ')
+            .slice(0, this.policy.worker.summaryCharacters),
         });
       } catch {
         // The error stays with drain() when the inbox is unavailable.
@@ -375,7 +386,8 @@ export class WorkerJob implements GateOutcomeSink {
       }
       if (intent.options.escalation === 'repeated-assertion' && !intent.options.consulted) {
         try {
-          const evidencePath = intent.options.evidence ?? evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
+          const evidencePath =
+            intent.options.evidence ?? evidenceBundle(task, store.attempt(ref), undefined, store.policy.evidence);
           const answer = await this.consultation(this.tasks, ref, evidencePath);
           intent = store.updateRetryIntent(ref, (value) => {
             value.options.consultation = answer;
@@ -1004,7 +1016,10 @@ export class WorkerJob implements GateOutcomeSink {
             this.tasks.settings.policy?.process,
           );
       } catch (cleanupError) {
-        detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(0, this.policy.worker.diagnosticCharacters);
+        detail = `${detail}; process cleanup failed: ${String(cleanupError)}`.slice(
+          0,
+          this.policy.worker.diagnosticCharacters,
+        );
         // Unknown custody is an operational condition, not an exit or a free worker slot.
         store.updateAttempt(ref, (value) => {
           value.driver = null;
@@ -1015,7 +1030,10 @@ export class WorkerJob implements GateOutcomeSink {
             managerId: task.brief.manager,
             taskId: task.id,
             kind: 'environment' as const,
-            summary: `environment: process cleanup unconfirmed: ${detail}`.slice(0, this.policy.worker.summaryCharacters),
+            summary: `environment: process cleanup unconfirmed: ${detail}`.slice(
+              0,
+              this.policy.worker.summaryCharacters,
+            ),
           };
           store.event(ref, 'process-cleanup-unconfirmed', { detail });
           store.event(ref, 'manager-event', event);
@@ -1033,7 +1051,10 @@ export class WorkerJob implements GateOutcomeSink {
           ...(logStartOffset !== undefined ? { logStartOffset } : {}),
         });
       } catch (measurementError) {
-        detail = `${detail}; run log measurement failed: ${String(measurementError)}`.slice(0, this.policy.worker.diagnosticCharacters);
+        detail = `${detail}; run log measurement failed: ${String(measurementError)}`.slice(
+          0,
+          this.policy.worker.diagnosticCharacters,
+        );
         measurement = readMeasurement(
           { ...ended, startedAt: endedAt },
           {
@@ -1047,7 +1068,10 @@ export class WorkerJob implements GateOutcomeSink {
       try {
         if (pool) after = this.tasks.reader(pool);
       } catch (readingError) {
-        detail = `${detail}; pool reading failed: ${String(readingError)}`.slice(0, this.policy.worker.diagnosticCharacters);
+        detail = `${detail}; pool reading failed: ${String(readingError)}`.slice(
+          0,
+          this.policy.worker.diagnosticCharacters,
+        );
       }
       store.write(ref, () => {
         const attempt = store.updateAttempt(ref, (value) => {
@@ -1307,7 +1331,8 @@ export class WorkerJob implements GateOutcomeSink {
             const failure =
               attempt.failure ??
               firstFailure(
-                `Landing for task ${task.id} attempt ${ref.attempt} was lost: no pending landing entry or live train owner remains.`, this.policy.merge
+                `Landing for task ${task.id} attempt ${ref.attempt} was lost: no pending landing entry or live train owner remains.`,
+                this.policy.merge,
               );
             const evidence = evidenceBundle(task, attempt, failure, store.policy.evidence);
             const event = {
@@ -1767,7 +1792,8 @@ export class WorkerJob implements GateOutcomeSink {
           const silence = attempt.result.startsWith('stalled: no output for ');
           const fingerprint = blockerFingerprint(attempt, task.worktree, store.policy.worker);
           const repeated =
-            previous?.failureKind === 'tool' && blockerFingerprint(previous, task.worktree, store.policy.worker) === fingerprint;
+            previous?.failureKind === 'tool' &&
+            blockerFingerprint(previous, task.worktree, store.policy.worker) === fingerprint;
           const unrerun =
             !devProductBrief(task.brief) &&
             previous?.failureKind === 'tool' &&
@@ -1810,7 +1836,8 @@ export class WorkerJob implements GateOutcomeSink {
                       : idle
                         ? `No new commit in two consecutive attempts: ${firstLine}`
                         : `Repeated tool failure: ${firstLine}`,
-                    evidencePath, this.policy.worker
+                    evidencePath,
+                    this.policy.worker,
                   );
             store.event(ref, 'manager-event', event);
             this.inbox.deliver(event);
@@ -2058,7 +2085,8 @@ export class WorkerJob implements GateOutcomeSink {
           const event = stopEvent(
             task,
             `No new commit in two consecutive attempts: rebase conflict in ${files.join(', ') || 'unknown files'}`,
-            evidencePath, this.policy.worker
+            evidencePath,
+            this.policy.worker,
           );
           store.event(outcome, 'manager-event', event);
           this.inbox.deliver(event);
@@ -2201,7 +2229,8 @@ export class WorkerJob implements GateOutcomeSink {
               repeated
                 ? `Repeated landing failure: ${failure}`
                 : `No new commit in two consecutive attempts: ${failure}`,
-              evidencePath, this.policy.worker
+              evidencePath,
+              this.policy.worker,
             );
             store.event(outcome, 'manager-event', event);
             this.inbox.deliver(event);

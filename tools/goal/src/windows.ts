@@ -1,7 +1,13 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { spawnSync } from 'node:child_process';
 
-export type WindowSettings = { policy?: ControlPolicy['windows'] | undefined; socket: string; session: string; tmuxCommand?: string; termspacesCommand?: string };
+export type WindowSettings = {
+  policy?: ControlPolicy['windows'] | undefined;
+  socket: string;
+  session: string;
+  tmuxCommand?: string;
+  termspacesCommand?: string;
+};
 export type WindowRunner = (executable: string, argv: string[]) => string;
 const run = (executable: string, argv: string[], policy = defaultPolicy.windows): string => {
   const result = spawnSync(executable, argv, { encoding: 'utf8', timeout: policy.commandTimeoutMs });

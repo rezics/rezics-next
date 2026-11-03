@@ -1101,7 +1101,7 @@ async function runRealSmoke(
       throw new Error('inner lifecycle suite exited without complete passing evidence');
     const { gateParityScenario } = await import('../src/lifecycle-scenarios.ts');
     const parity = await gateParityScenario({
-    policy: settings.policy,
+      policy: startupPolicy,
       root,
       ...(options.scriptsRoot ? { scriptsRoot: options.scriptsRoot } : {}),
       execute: options.parity === 'execute',

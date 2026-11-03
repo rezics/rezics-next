@@ -14,7 +14,12 @@ export function withScriptPolicy<T>(policy: ControlPolicy, run: () => T): T {
 /** Read only policy here; the release's config smoke still validates the complete candidate configuration. */
 export function readScriptPolicy(main: string, env = process.env): ControlPolicy {
   const file = resolve(process.cwd(), env.GOAL_LOCAL_CONFIG ?? join(main, '.temp/goal/local.json'));
-  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', file], { cwd: main, encoding: 'utf8', timeout: defaultPolicy.nativeCommands.commandTimeoutMs, maxBuffer: defaultPolicy.nativeCommands.commandBufferBytes });
+  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', file], {
+    cwd: main,
+    encoding: 'utf8',
+    timeout: defaultPolicy.nativeCommands.commandTimeoutMs,
+    maxBuffer: defaultPolicy.nativeCommands.commandBufferBytes,
+  });
   if (tracked.status === 0) throw new Error('local settings must be untracked');
   if (tracked.error) throw tracked.error;
   const local = readLocalFile(file);

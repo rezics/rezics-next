@@ -234,9 +234,11 @@ except Exception as error:
     sys.exit(1)
 `;
 
-function sshProbe(policy: ControlPolicy['hostRoute']): string { return `printf 'REZICS_SSH_CONNECTION=%s\\n' "$SSH_CONNECTION"
+function sshProbe(policy: ControlPolicy['hostRoute']): string {
+  return `printf 'REZICS_SSH_CONNECTION=%s\\n' "$SSH_CONNECTION"
 printf 'REZICS_PROBE_TIME=%s\\n' "$(date +%s)"
-journalctl --no-pager -o json --since '-${policy.journalAgeSeconds % 60 === 0 ? `${policy.journalAgeSeconds / 60} minutes` : `${policy.journalAgeSeconds} seconds`}' -u ssh.service -u sshd.service`; }
+journalctl --no-pager -o json --since '-${policy.journalAgeSeconds % 60 === 0 ? `${policy.journalAgeSeconds / 60} minutes` : `${policy.journalAgeSeconds} seconds`}' -u ssh.service -u sshd.service`;
+}
 
 function peerEvidence(output: string, expected: string, policy: ControlPolicy['hostRoute']): string {
   const lines = output.trim().split('\n');

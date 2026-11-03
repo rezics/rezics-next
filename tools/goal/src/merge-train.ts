@@ -419,7 +419,13 @@ export async function runAffectedTest(
   let environmentUnverified = false;
   for (let retry = 0; retry < policy.integration.affectedTransportAttempts; retry++) {
     appendFileSync(logPath, `$ ${command.join(' ')} (cwd: ${cwd})\n`);
-    const result = await processGroupRunner(undefined, undefined, env, false, policy.merge)(command, cwd, logPath, options);
+    const result = await processGroupRunner(
+      undefined,
+      undefined,
+      env,
+      false,
+      policy.merge,
+    )(command, cwd, logPath, options);
     output = result.output;
     passed = result.passed;
     environmentUnverified = checkEnvironmentFailed(output);
@@ -838,7 +844,13 @@ function controlPlaneBriefHash(markdown: string): string {
 }
 
 function isAncestor(cwd: string, ancestor: string, descendant: string, policy = defaultPolicy.merge): boolean {
-  return spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd, timeout: policy.commandTimeoutMs, maxBuffer: policy.gitBufferBytes }).status === 0;
+  return (
+    spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
+      cwd,
+      timeout: policy.commandTimeoutMs,
+      maxBuffer: policy.gitBufferBytes,
+    }).status === 0
+  );
 }
 
 export function changedPathsBetween(cwd: string, base: string, head: string): string[] {
@@ -1406,7 +1418,9 @@ function pushDevInBackground(checkout: string, stateDirectory: string, branch: s
 }
 
 export class MergeTrain {
-  private git(cwd: string, ...args: string[]): string { return policyGit(cwd, args, this.options.policy?.merge); }
+  private git(cwd: string, ...args: string[]): string {
+    return policyGit(cwd, args, this.options.policy?.merge);
+  }
 
   private readonly workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
@@ -1429,7 +1443,13 @@ export class MergeTrain {
     const run =
       this.options.runTypecheck ??
       this.options.runGate ??
-      processGroupRunner(this.options.integration?.gateTimeoutMs, this.options.stateDirectory, process.env, undefined, this.options.policy?.merge);
+      processGroupRunner(
+        this.options.integration?.gateTimeoutMs,
+        this.options.stateDirectory,
+        process.env,
+        undefined,
+        this.options.policy?.merge,
+      );
     for (let attempt = 0; attempt < (this.options.policy ?? defaultPolicy).integration.typecheckAttempts; attempt++) {
       appendFileSync(logPath, `$ ${command.join(' ')} (required root typecheck on ${candidate}, dev ${base})\n`);
       let result: GateResult;
@@ -1810,7 +1830,8 @@ export class MergeTrain {
           if (!worked) {
             result.stage = 'rebase';
             result.firstFailure = firstFailure(
-              'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing', this.options.policy?.merge
+              'No committed changes beyond the base and the frozen acceptance files: commit the work before finishing',
+              this.options.policy?.merge,
             );
             appendFileSync(logPath, `${result.firstFailure.assertion}\n`);
             localOutcomes.set(entry.id, result);
@@ -1880,8 +1901,17 @@ export class MergeTrain {
           result.stage = 'scope';
           result.changedFiles = changedFiles(trainTree, previous, this.options.policy?.merge);
           result.diffLines = diffLineCount(trainTree, previous, undefined, this.options.policy?.merge);
-          result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles, this.options.policy?.merge);
-          result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles, this.options.policy?.merge);
+          result.nonGeneratedChangedFiles = nonGeneratedFiles(
+            trainTree,
+            result.changedFiles,
+            this.options.policy?.merge,
+          );
+          result.nonGeneratedDiffLines = diffLineCount(
+            trainTree,
+            previous,
+            result.nonGeneratedChangedFiles,
+            this.options.policy?.merge,
+          );
           try {
             this.checkScope(
               result.changedFiles.filter(
@@ -1914,7 +1944,8 @@ export class MergeTrain {
             if (formatted.status !== 0) {
               result.stage = 'setup';
               result.firstFailure = firstFailure(
-                `Formatter failed: ${output || formatted.error?.message || 'command failed'}`, this.options.policy?.merge
+                `Formatter failed: ${output || formatted.error?.message || 'command failed'}`,
+                this.options.policy?.merge,
               );
               localOutcomes.set(entry.id, result);
               resetTo(trainTree, previous);
@@ -1926,8 +1957,17 @@ export class MergeTrain {
             }
             result.changedFiles = changedFiles(trainTree, previous, this.options.policy?.merge);
             result.diffLines = diffLineCount(trainTree, previous, undefined, this.options.policy?.merge);
-            result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles, this.options.policy?.merge);
-            result.nonGeneratedDiffLines = diffLineCount(trainTree, previous, result.nonGeneratedChangedFiles, this.options.policy?.merge);
+            result.nonGeneratedChangedFiles = nonGeneratedFiles(
+              trainTree,
+              result.changedFiles,
+              this.options.policy?.merge,
+            );
+            result.nonGeneratedDiffLines = diffLineCount(
+              trainTree,
+              previous,
+              result.nonGeneratedChangedFiles,
+              this.options.policy?.merge,
+            );
             try {
               this.checkScope(
                 result.changedFiles.filter(
@@ -2509,7 +2549,9 @@ export class MergeTrain {
       if (!workspace || !sharedStore || !sharedTasks.length) return;
       const named = failingTestFiles(failed.firstFailure?.excerpt ?? '');
       const matched = named.length
-        ? sharedTasks.filter((task) => taskChangedPaths(task, sharedSource, this.options.policy?.merge).some((path) => named.includes(path)))
+        ? sharedTasks.filter((task) =>
+            taskChangedPaths(task, sharedSource, this.options.policy?.merge).some((path) => named.includes(path)),
+          )
         : [];
       const responsible = owners ?? (matched.length ? matched : sharedTasks);
       this.workspaceFailures.set(
@@ -2530,8 +2572,24 @@ export class MergeTrain {
     const runOwnedAffected = (command: readonly string[], cwd: string, log: string, env: NodeJS.ProcessEnv) =>
       runAffectedTest(command, cwd, log, env, custody ? { signal: custody.signal } : undefined, o.policy);
     const runGate = custody
-      ? custody.run(o.runGate ?? gateRunner((o.policy ?? defaultPolicy).integration.checkTimeoutMs, undefined, undefined, undefined, this.options.policy?.merge))
-      : (o.runGate ?? gateRunner((o.policy ?? defaultPolicy).integration.checkTimeoutMs, undefined, undefined, undefined, this.options.policy?.merge));
+      ? custody.run(
+          o.runGate ??
+            gateRunner(
+              (o.policy ?? defaultPolicy).integration.checkTimeoutMs,
+              undefined,
+              undefined,
+              undefined,
+              this.options.policy?.merge,
+            ),
+        )
+      : (o.runGate ??
+        gateRunner(
+          (o.policy ?? defaultPolicy).integration.checkTimeoutMs,
+          undefined,
+          undefined,
+          undefined,
+          this.options.policy?.merge,
+        ));
     const target = () => this.git(o.mainCheckout, 'rev-parse', targetRef);
     const refreshManagerLanding = () => {
       if (request.managerLanding) return;
@@ -2567,7 +2625,8 @@ export class MergeTrain {
         if (!release || release.mainCommit !== entry.candidate || !this.controlPlaneRecordPublished(release)) {
           result.stage = 'merge';
           result.firstFailure = firstFailure(
-            `Control-plane candidate ${entry.candidate} is on ${mainBranch} without complete verified propagation; refusing to report the landing complete`, this.options.policy?.merge
+            `Control-plane candidate ${entry.candidate} is on ${mainBranch} without complete verified propagation; refusing to report the landing complete`,
+            this.options.policy?.merge,
           );
           appendFileSync(logPath, `${result.firstFailure.assertion}\n`);
           return true;
@@ -2622,7 +2681,12 @@ export class MergeTrain {
           await workspace.withLaunch(recorded.workspace!.module, () => workspace.syncIdle(recorded.workspace!.module));
           return finish();
         }
-        const attribution = workspaceCommits(task.worktree, workspace.workspace(recorded.workspace!.module).base, tip, this.options.policy?.merge);
+        const attribution = workspaceCommits(
+          task.worktree,
+          workspace.workspace(recorded.workspace!.module).base,
+          tip,
+          this.options.policy?.merge,
+        );
         sharedTasks = sharedStore
           .tasks()
           .filter(
@@ -2696,7 +2760,9 @@ export class MergeTrain {
           if (workerOnlyFrozenChanges.length) result.conflictedFiles = canonicalConflictPaths(workerOnlyFrozenChanges);
           if (workspace) {
             const owners = sharedTasks.filter((task) =>
-              taskChangedPaths(task, tip, this.options.policy?.merge).some((path) => changedFrozenAtSource.includes(path)),
+              taskChangedPaths(task, tip, this.options.policy?.merge).some((path) =>
+                changedFrozenAtSource.includes(path),
+              ),
             );
             attributeFailure(result, owners.length ? owners : undefined);
           }
@@ -2794,7 +2860,10 @@ export class MergeTrain {
             if (afterProblem) return refuse(afterProblem);
             if (!checked.passed) {
               result.stage = 'gate';
-              result.firstFailure = firstFailure(checked.output || 'Retained-source acceptance did not pass', this.options.policy?.merge);
+              result.firstFailure = firstFailure(
+                checked.output || 'Retained-source acceptance did not pass',
+                this.options.policy?.merge,
+              );
               result.failedCommand = [...request.gate];
               result.timedOut = checked.timedOut;
               result.hostMs = Date.now() - started;
@@ -2870,7 +2939,12 @@ export class MergeTrain {
         result.changedFiles = changedFiles(trainTree, base, this.options.policy?.merge);
         result.diffLines = diffLineCount(trainTree, base, undefined, this.options.policy?.merge);
         result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles, this.options.policy?.merge);
-        result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles, this.options.policy?.merge);
+        result.nonGeneratedDiffLines = diffLineCount(
+          trainTree,
+          base,
+          result.nonGeneratedChangedFiles,
+          this.options.policy?.merge,
+        );
         const scopeCheckedFiles = result.changedFiles.filter(
           (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
         );
@@ -2916,11 +2990,9 @@ export class MergeTrain {
             stage = 'setup';
             const argv = [...formatCommand, ...formatFiles];
             if (custody) {
-              const formatted = await custody.run(processGroupRunner(undefined, o.stateDirectory, undefined, undefined, this.options.policy?.merge))(
-                argv,
-                trainTree,
-                logPath,
-              );
+              const formatted = await custody.run(
+                processGroupRunner(undefined, o.stateDirectory, undefined, undefined, this.options.policy?.merge),
+              )(argv, trainTree, logPath);
               appendFileSync(logPath, `$ ${argv.join(' ')} (cwd: ${trainTree})\n`);
               if (!formatted.passed) throw new Error(`Formatter failed: ${formatted.output || 'command failed'}`);
             } else {
@@ -2937,8 +3009,17 @@ export class MergeTrain {
             stage = 'scope';
             result.changedFiles = changedFiles(trainTree, base, this.options.policy?.merge);
             result.diffLines = diffLineCount(trainTree, base, undefined, this.options.policy?.merge);
-            result.nonGeneratedChangedFiles = nonGeneratedFiles(trainTree, result.changedFiles, this.options.policy?.merge);
-            result.nonGeneratedDiffLines = diffLineCount(trainTree, base, result.nonGeneratedChangedFiles, this.options.policy?.merge);
+            result.nonGeneratedChangedFiles = nonGeneratedFiles(
+              trainTree,
+              result.changedFiles,
+              this.options.policy?.merge,
+            );
+            result.nonGeneratedDiffLines = diffLineCount(
+              trainTree,
+              base,
+              result.nonGeneratedChangedFiles,
+              this.options.policy?.merge,
+            );
             const formattedScopeCheckedFiles = result.changedFiles.filter(
               (path) => !derivedForPath(path, derivedFiles, (this.options.policy ?? defaultPolicy).brief).length,
             );
@@ -2982,7 +3063,9 @@ export class MergeTrain {
             appendFileSync(logPath, `\nRequired root typecheck failed:\n${output}\n`);
             if (workspace) {
               const owners = sharedTasks.filter((task) =>
-                taskChangedPaths(task, tip, this.options.policy?.merge).some((path) => compilerOutputMatchesPath(output, trainTree, path)),
+                taskChangedPaths(task, tip, this.options.policy?.merge).some((path) =>
+                  compilerOutputMatchesPath(output, trainTree, path),
+                ),
               );
               attributeFailure(result, owners.length ? owners : undefined);
             }
@@ -3317,7 +3400,9 @@ export class MergeTrain {
               o.fence.assertCurrent(request);
               if (target() !== base) continue;
               result.failsOnMain =
-                !baseline.passed && firstFailure(baseline.output, this.options.policy?.merge).fingerprint === result.firstFailure.fingerprint;
+                !baseline.passed &&
+                firstFailure(baseline.output, this.options.policy?.merge).fingerprint ===
+                  result.firstFailure.fingerprint;
               if (result.failsOnMain)
                 appendFileSync(
                   logPath,
@@ -3339,7 +3424,9 @@ export class MergeTrain {
           request,
           base,
           candidate,
-          workspace ? taskCommits(sharedStore!.task(request.taskId), tip, this.options.policy?.merge) : integrationCommits,
+          workspace
+            ? taskCommits(sharedStore!.task(request.taskId), tip, this.options.policy?.merge)
+            : integrationCommits,
         );
         o.queue.candidate(entry.id, candidate);
         let preparedControlPlaneRelease: PreparedControlPlaneRelease | undefined;
@@ -4410,7 +4497,10 @@ export class MergeTrain {
       for (const failure of failures)
         for (const index of failure.indices) {
           const member = previous.manifest.members[index];
-          if (!member || !isAncestor(o.mainCheckout, member.acceptedCommit, failure.candidate, this.options.policy?.merge))
+          if (
+            !member ||
+            !isAncestor(o.mainCheckout, member.acceptedCommit, failure.candidate, this.options.policy?.merge)
+          )
             throw new Error('Retained failure candidate does not contain its actual accepted sources');
         }
       const priorMembers = previous.manifest.members;
@@ -4575,7 +4665,9 @@ export class MergeTrain {
             );
           const fork = this.git(o.mainCheckout, 'merge-base', store.task(member.taskId).base, member.acceptedCommit);
           if (
-            failures.some((failure) => isAncestor(o.mainCheckout, member.acceptedCommit, failure.candidate, this.options.policy?.merge)) ||
+            failures.some((failure) =>
+              isAncestor(o.mainCheckout, member.acceptedCommit, failure.candidate, this.options.policy?.merge),
+            ) ||
             !changedPathsBetween(o.mainCheckout, fork, member.acceptedCommit).includes(changed.path) ||
             failures.some(
               (failure) =>
@@ -4805,7 +4897,8 @@ export class MergeTrain {
           entry.request.managerLanding?.managerId !== actor.id ||
           entry.request.managerLanding.acceptedCommit !== member.acceptedCommit ||
           (entry.request.workerCommit && entry.request.workerCommit !== member.acceptedCommit) ||
-          this.git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !== member.acceptedCommit ||
+          this.git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !==
+            member.acceptedCommit ||
           (!recovery &&
             (entry.outcome || entry.delivered || entry.candidate || task.integratedCommit || task.mergedCommit))
         )
@@ -5261,7 +5354,9 @@ export class MergeTrain {
           allowNoDeltaOn: this.git(o.mainCheckout, 'rev-parse', `refs/heads/${o.mainBranch ?? 'main'}^{commit}`),
         });
         // Even recovery must never attribute an old release to a newer source on the same attempt.
-        if (this.git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !== member.acceptedCommit)
+        if (
+          this.git(o.mainCheckout, 'rev-parse', `refs/heads/${entry.request.branch}^{commit}`) !== member.acceptedCommit
+        )
           throw new Error(`Accepted source moved for ${member.taskId}`);
         if (!recovery && (entry.outcome || entry.delivered))
           throw new Error(`Landing outcome for ${member.taskId} is already immutable`);
@@ -5854,7 +5949,13 @@ export class MergeTrain {
     const runner =
       o.runControlPlaneGate ??
       o.runGate ??
-      gateRunner((o.policy ?? defaultPolicy).controlPlane.checkTimeoutMs, o.stateDirectory, undefined, undefined, this.options.policy?.merge);
+      gateRunner(
+        (o.policy ?? defaultPolicy).controlPlane.checkTimeoutMs,
+        o.stateDirectory,
+        undefined,
+        undefined,
+        this.options.policy?.merge,
+      );
     const run = custody ? custody.run(runner) : runner;
     const integrity = (cwd: string, head: string, phase: string) =>
       assertCandidateIntegrity(cwd, head, phase, logPath, o.runCandidateGit, o.policy?.integration);
@@ -5879,7 +5980,13 @@ export class MergeTrain {
         logPath,
         o.runControlPlaneGate ??
           o.runGate ??
-          gateRunner((o.policy ?? defaultPolicy).controlPlane.negativeProbeTimeoutMs, o.stateDirectory, undefined, undefined, this.options.policy?.merge),
+          gateRunner(
+            (o.policy ?? defaultPolicy).controlPlane.negativeProbeTimeoutMs,
+            o.stateDirectory,
+            undefined,
+            undefined,
+            this.options.policy?.merge,
+          ),
       );
       integrity(tree, candidate, 'negative-only bisection probe');
       if (!probe.passed && !probe.timedOut) return finish({ ...probe, negativeOnly: true });
@@ -5928,7 +6035,15 @@ export class MergeTrain {
     }
     appendFileSync(logPath, '\nComplete real-boundary lifecycle suite on control-plane candidate\n');
     const smokeCommand = ['bun', 'tools/goal/scripts/launch-smoke.ts', '--expected-dev-script-tree', snapshot.devHead];
-    const smokeRunner = o.runLaunchSmoke ?? gateRunner((o.policy ?? defaultPolicy).controlPlane.launchSmokeTimeoutMs, undefined, undefined, undefined, this.options.policy?.merge);
+    const smokeRunner =
+      o.runLaunchSmoke ??
+      gateRunner(
+        (o.policy ?? defaultPolicy).controlPlane.launchSmokeTimeoutMs,
+        undefined,
+        undefined,
+        undefined,
+        this.options.policy?.merge,
+      );
     const smoke = await runIntegrationChecks(
       [smokeCommand],
       tree,
@@ -6054,7 +6169,8 @@ export class MergeTrain {
     targetHead: string,
     logPath: string,
   ): { commit?: string; conflicts?: string[]; cause?: string } {
-    if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead, this.options.policy?.merge)) return { commit: targetHead };
+    if (isAncestor(this.options.mainCheckout, sourceCommit, targetHead, this.options.policy?.merge))
+      return { commit: targetHead };
     const tree = resolve(this.options.worktreeRoot, `control-plane-merge-${randomUUID()}`);
     mkdirSync(resolve(this.options.worktreeRoot), { recursive: true });
     try {

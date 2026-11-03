@@ -40,7 +40,6 @@ type CandidateSnapshot = {
   untracked: string[];
 };
 
-
 function git(cwd: string, args: readonly string[]): GitResult {
   const result = spawnSync('git', [...args], {
     cwd,
@@ -64,7 +63,8 @@ function gitText(cwd: string, ...args: string[]): string {
 }
 
 function gitDetails(result: GitResult): string {
-  const bounded = (value: string) => JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, scriptPolicy().candidateProbe.gitDetailCharacters));
+  const bounded = (value: string) =>
+    JSON.stringify(value.replace(/[\r\n\t]+/g, ' ').slice(0, scriptPolicy().candidateProbe.gitDetailCharacters));
   return [
     `exit=${result.status === null ? 'null' : result.status}`,
     `signal=${result.signal ?? 'none'}`,
@@ -91,7 +91,9 @@ function statusPaths(result: GitResult): string[] {
 function boundedPaths(values: readonly string[]): string[] {
   return [
     ...values.slice(0, scriptPolicy().candidateProbe.paths),
-    ...(values.length > scriptPolicy().candidateProbe.paths ? [`… ${values.length - scriptPolicy().candidateProbe.paths} omitted`] : []),
+    ...(values.length > scriptPolicy().candidateProbe.paths
+      ? [`… ${values.length - scriptPolicy().candidateProbe.paths} omitted`]
+      : []),
   ];
 }
 
@@ -352,7 +354,13 @@ async function compareSuiteFailures(
         continue;
       }
       const runner = instrumentedGate(
-        gateRunner(scriptPolicy().controlPlane.checkTimeoutMs, baselineState, undefined, undefined, scriptPolicy().merge),
+        gateRunner(
+          scriptPolicy().controlPlane.checkTimeoutMs,
+          baselineState,
+          undefined,
+          undefined,
+          scriptPolicy().merge,
+        ),
         base,
         evidencePath,
         `base test ${failure.file}`,
@@ -388,7 +396,10 @@ async function compareSuiteFailures(
   }
 }
 
-export async function runCandidateCleanlinessProbe(root = resolve(import.meta.dir, '../../..'), policy?: ControlPolicy): Promise<void> {
+export async function runCandidateCleanlinessProbe(
+  root = resolve(import.meta.dir, '../../..'),
+  policy?: ControlPolicy,
+): Promise<void> {
   const sourceSettings = loadSettings({ cwd: resolve(root), env: safeEnvironment() });
   return withScriptPolicy(policy ?? sourceSettings.policy ?? defaultPolicy, () => runCandidateProbe(root));
 }
@@ -546,7 +557,13 @@ async function runCandidateProbe(root: string): Promise<void> {
     });
 
     const smokeRunner = instrumentedGate(
-      gateRunner(scriptPolicy().controlPlane.launchSmokeTimeoutMs, isolatedState, undefined, undefined, scriptPolicy().merge),
+      gateRunner(
+        scriptPolicy().controlPlane.launchSmokeTimeoutMs,
+        isolatedState,
+        undefined,
+        undefined,
+        scriptPolicy().merge,
+      ),
       expected,
       evidencePath,
       'real launch smoke on candidate',

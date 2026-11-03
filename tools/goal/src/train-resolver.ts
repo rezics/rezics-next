@@ -235,8 +235,12 @@ type Pass = {
 
 /** Train work has its own durable budget and process identity. It never touches worker sessions or attempts. */
 export class TrainResolver {
-  private git(cwd: string, ...args: string[]): string { return policyGit(cwd, args, this.store.policy.merge); }
-  private ownerGit(cwd: string, ...args: string[]) { return policyOwnerConflictGit(cwd, args, this.store.policy.merge); }
+  private git(cwd: string, ...args: string[]): string {
+    return policyGit(cwd, args, this.store.policy.merge);
+  }
+  private ownerGit(cwd: string, ...args: string[]) {
+    return policyOwnerConflictGit(cwd, args, this.store.policy.merge);
+  }
 
   constructor(
     readonly store: WorkerStore,
@@ -284,7 +288,8 @@ export class TrainResolver {
     if (merged.status !== 0 && !paths.length && !rerereFiles.length)
       throw new TrainResolverInfrastructureError(merged.stderr.trim() || 'Cannot compose accepted source');
     if (!paths.length && !rerereFiles.length) {
-      if (this.ownerGit(tree, 'rev-parse', '--verify', 'MERGE_HEAD').status === 0) this.git(tree, 'commit', '--no-edit');
+      if (this.ownerGit(tree, 'rev-parse', '--verify', 'MERGE_HEAD').status === 0)
+        this.git(tree, 'commit', '--no-edit');
       return;
     }
     const allPaths = ownerConflictFiles([...paths, ...rerereFiles]);
@@ -383,7 +388,8 @@ export class TrainResolver {
         if (!ok) return conflict;
       }
       this.current(request, conflict, true);
-      if (unresolved(tree, this.store.policy.merge).length) throw new Error('Unresolved Git paths remain after train resolution');
+      if (unresolved(tree, this.store.policy.merge).length)
+        throw new Error('Unresolved Git paths remain after train resolution');
       this.git(tree, 'rerere');
       this.git(tree, 'commit', '--no-edit');
       conflict.resolvedCommit = this.git(tree, 'rev-parse', 'HEAD');
@@ -562,7 +568,8 @@ export class TrainResolver {
       ) {
         this.current(request, conflict);
         this.git(tree, 'reset', '--hard', receipt.commit);
-        if (snapshot(tree, paths, this.store.policy.merge) !== before) throw new Error('Replayed repair changed outside conflicted files');
+        if (snapshot(tree, paths, this.store.policy.merge) !== before)
+          throw new Error('Replayed repair changed outside conflicted files');
         conflict.resolvedCommit = receipt.commit;
         return true;
       }
@@ -657,7 +664,10 @@ os.execvp('timeout',['timeout','--signal=TERM','--kill-after=${this.store.policy
       const code = await Promise.race([
         exited,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('Train resolver timed out')), this.store.policy.trainResolver.timeoutMs);
+          timer = setTimeout(
+            () => reject(new Error('Train resolver timed out')),
+            this.store.policy.trainResolver.timeoutMs,
+          );
         }),
       ]);
       await terminateProcessGroup(

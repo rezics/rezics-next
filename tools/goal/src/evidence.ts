@@ -6,7 +6,12 @@ import type { FirstFailure } from './contracts.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 
 function git(cwd: string, args: string[], policy: ControlPolicy['evidence']): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.gitBufferBytes, timeout: policy.commandTimeoutMs });
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+  });
   if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || 'Cannot capture evidence');
   return result.stdout.trim();
 }
@@ -43,9 +48,14 @@ function hypothesis(attempt: Attempt, policy: ControlPolicy['evidence']): string
   return null;
 }
 
-function worktreeStatus(task: Task, policy: ControlPolicy['evidence']): { summary: string; changedPaths: string[]; stat: string } {
+function worktreeStatus(
+  task: Task,
+  policy: ControlPolicy['evidence'],
+): { summary: string; changedPaths: string[]; stat: string } {
   const status = git(task.worktree, ['status', '--porcelain=v1', '--untracked-files=normal'], policy);
-  const changed = git(task.worktree, ['diff', '--name-only', '-z', task.base, '--'], policy).split('\0').filter(Boolean);
+  const changed = git(task.worktree, ['diff', '--name-only', '-z', task.base, '--'], policy)
+    .split('\0')
+    .filter(Boolean);
   const untracked = git(task.worktree, ['ls-files', '--others', '--exclude-standard', '-z'], policy)
     .split('\0')
     .filter(Boolean);
@@ -76,7 +86,10 @@ function buildManifest(
 ): string {
   const approaches = attempt.approaches
     .slice(-policy.approaches)
-    .map((item) => `- ${oneLine(item.approach, policy.approachCharacters)} — ${oneLine(item.result, policy.approachResultCharacters)}`);
+    .map(
+      (item) =>
+        `- ${oneLine(item.approach, policy.approachCharacters)} — ${oneLine(item.result, policy.approachResultCharacters)}`,
+    );
   const output = failure?.excerpt ?? attempt.blocker ?? attempt.result ?? '';
   const exactAssertion = output
     .split(/\r?\n/)
@@ -86,7 +99,9 @@ function buildManifest(
   const command = attempt.failureCommand?.length ? attempt.failureCommand : task.brief.acceptance.command;
   const pathList = allPaths.map((path) => JSON.stringify(path)).join('\n');
   const visiblePaths =
-    pathList.length > policy.pathCharacters ? `${pathList.slice(0, Math.min(policy.visiblePathCharacters, policy.pathCharacters))}\n[complete path list is in diff.patch]` : pathList || '(none)';
+    pathList.length > policy.pathCharacters
+      ? `${pathList.slice(0, Math.min(policy.visiblePathCharacters, policy.pathCharacters))}\n[complete path list is in diff.patch]`
+      : pathList || '(none)';
   const manifest = [
     '# Retry manifest',
     '',
@@ -102,7 +117,9 @@ function buildManifest(
     failureOutput(output, policy) || '(no output captured)',
     '',
     'Diff stat:',
-    status.stat.length > policy.statCharacters ? `${status.stat.slice(0, policy.statCharacters - 1)}…` : status.stat || '(no tracked diff stat)',
+    status.stat.length > policy.statCharacters
+      ? `${status.stat.slice(0, policy.statCharacters - 1)}…`
+      : status.stat || '(no tracked diff stat)',
     'Changed paths:',
     visiblePaths,
     '',
@@ -119,11 +136,19 @@ function buildManifest(
   // The detailed artifacts remain on disk; trim only the prompt copy when an unusually large path or status list
   // would otherwise push this handoff beyond its approximate two-thousand-token budget.
   const suffix = '\n\n[manifest shortened; full evidence is in the paths above]\n';
-  return (manifest.slice(0, Math.max(0, policy.manifestCharacters - suffix.length)) + suffix).slice(0, policy.manifestCharacters);
+  return (manifest.slice(0, Math.max(0, policy.manifestCharacters - suffix.length)) + suffix).slice(
+    0,
+    policy.manifestCharacters,
+  );
 }
 
 /** No session text enters the evidence directory. All consultation input is assembled here. */
-export function evidenceBundle(task: Task, attempt: Attempt, failure: FirstFailure | null = attempt.failure, policy = defaultPolicy.evidence): string {
+export function evidenceBundle(
+  task: Task,
+  attempt: Attempt,
+  failure: FirstFailure | null = attempt.failure,
+  policy = defaultPolicy.evidence,
+): string {
   const directory = attempt.evidencePath;
   const base = git(task.worktree, ['rev-parse', task.base], policy);
   const head = git(task.worktree, ['rev-parse', 'HEAD'], policy);

@@ -34,7 +34,12 @@ export function git(cwd: string, ...args: string[]): string {
 
 /** A caller-bound Git helper; the variadic compatibility helper retains package defaults. */
 export function policyGit(cwd: string, args: string[], policy = defaultPolicy.merge): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: policy.gitBufferBytes, timeout: policy.commandTimeoutMs });
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    maxBuffer: policy.gitBufferBytes,
+    timeout: policy.commandTimeoutMs,
+  });
   if (result.status !== 0) throw new Error(result.stderr?.trim() || result.error?.message || `git ${args[0]} failed`);
   return result.stdout.trim();
 }
@@ -115,7 +120,10 @@ function compilerContainerCleanup(pid: number, policy: ControlPolicy['merge']): 
   if (containers.length > 1)
     return `Compiler database cleanup could not be proven for PID ${pid}: expected one owned container, found ${containers.join(', ')}`;
   if (containers.length) {
-    const removed = spawnSync('docker', ['rm', '-f', '-v', containers[0]!], { encoding: 'utf8', timeout: policy.cleanupCommandTimeoutMs });
+    const removed = spawnSync('docker', ['rm', '-f', '-v', containers[0]!], {
+      encoding: 'utf8',
+      timeout: policy.cleanupCommandTimeoutMs,
+    });
     if (removed.error || removed.status !== 0)
       return `Compiler database cleanup failed for PID ${pid}: ${describeFailure(removed)}`;
     listed = query();
@@ -150,7 +158,9 @@ export function processGroupRunner(
       const cleanupComplete = new Promise<void>((done) => (finishCleanup = done));
       const child = spawn(argv[0]!, argv.slice(1), {
         cwd,
-        env: sanitizeEnvironment ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy)) : parent,
+        env: sanitizeEnvironment
+          ? gateEnvironment(parent, stateDirectory ?? gateStateDirectory(cwd, parent, policy))
+          : parent,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -180,11 +190,13 @@ export function processGroupRunner(
           if (!groupAlive()) return true;
           signalGroup('SIGTERM');
           const deadline = Date.now() + graceMs;
-          while (groupAlive() && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
+          while (groupAlive() && Date.now() < deadline)
+            await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
           if (groupAlive()) {
             signalGroup('SIGKILL');
             const killDeadline = Date.now() + policy.killGraceMs;
-            while (groupAlive() && Date.now() < killDeadline) await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
+            while (groupAlive() && Date.now() < killDeadline)
+              await new Promise((resolve) => setTimeout(resolve, policy.pollMs));
           }
           return !groupAlive();
         })();
@@ -305,7 +317,13 @@ export function gateRunner(
     environment = {};
   }
   const env = environment as NodeJS.ProcessEnv;
-  const run = processGroupRunner(timeoutMs ?? policy.gateTimeoutMs, stateDirectory, { ...process.env, ...env }, true, policy);
+  const run = processGroupRunner(
+    timeoutMs ?? policy.gateTimeoutMs,
+    stateDirectory,
+    { ...process.env, ...env },
+    true,
+    policy,
+  );
   return async (argv, cwd, logPath, options = {}) => {
     options.signal?.throwIfAborted();
     let key: ReturnType<typeof checkResultKey> | undefined;
@@ -406,14 +424,19 @@ export function firstFailure(output: string, policy = defaultPolicy.merge): Firs
       /error|assert|expect|received|actual|fail|panic|not ok/i.test(line) &&
       !/^\s*\d+ (?:pass|fail)|^\s*(?:test suites|test files|tests|snapshots|duration|time|ran \d)/i.test(line),
   );
-  const head = [...new Set(failing.map((line) => line.trim()))].slice(0, policy.failureLines).join('\n').slice(0, Math.min(policy.failureHeadCharacters, policy.failureCharacters));
+  const head = [...new Set(failing.map((line) => line.trim()))]
+    .slice(0, policy.failureLines)
+    .join('\n')
+    .slice(0, Math.min(policy.failureHeadCharacters, policy.failureCharacters));
   const separator = '\n...\n';
   const tailCharacters = Math.max(0, policy.failureCharacters - head.length - separator.length);
   const tail = tailCharacters ? output.slice(-tailCharacters) : '';
   return {
     fingerprint: createHash('sha256').update(assertion).digest('hex'),
     assertion,
-    excerpt: head ? `${head}${separator}${tail}`.slice(0, policy.failureCharacters) : output.slice(-policy.failureCharacters),
+    excerpt: head
+      ? `${head}${separator}${tail}`.slice(0, policy.failureCharacters)
+      : output.slice(-policy.failureCharacters),
   };
 }
 
@@ -447,7 +470,12 @@ export function nonGeneratedFiles(cwd: string, files: readonly string[], policy 
   return files.filter((file) => !generated.has(file));
 }
 
-export function diffLineCount(cwd: string, base: string, files?: readonly string[], policy = defaultPolicy.merge): number {
+export function diffLineCount(
+  cwd: string,
+  base: string,
+  files?: readonly string[],
+  policy = defaultPolicy.merge,
+): number {
   const args = ['diff', '--numstat', base, 'HEAD'];
   if (files) {
     args.push('--', ...files);
