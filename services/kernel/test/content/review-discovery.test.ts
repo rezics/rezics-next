@@ -19,7 +19,7 @@ import { REVIEW_DISCOVERY_OPENED, type ReviewDiscoveryWork } from '../../src/con
 import { observeSql } from './support/sql-observer.ts';
 import { erasePost, takedown } from '../../src/content/moderation.ts';
 import { createReviewDiscoverySource } from '../../src/content/review-discovery.ts';
-import { routeOf, newId, partitionOf } from '../../src/route/route.ts';
+import { anchorRoute, routeOf, newId, partitionOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 
 const fixture = await standingFixture();
@@ -31,6 +31,13 @@ const request = () => ({
   deadline: Date.now() + 30_000,
   requestId: Bun.randomUUIDv7(),
 });
+function requestAt(route: number) {
+  for (;;) {
+    const idempotencyKey = Bun.randomUUIDv7();
+    if (anchorRoute(routeKey, idempotencyKey) === route)
+      return { ...request(), idempotencyKey };
+  }
+}
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 
 async function original(
@@ -144,6 +151,7 @@ test('public review discovery refreshes the same thread and omits protected or r
   expect((await refreshReviewDiscoveryChanges(source, changePage)).reviews[0]?.id).toBe(published.value.threadId);
   const first = await source.read(partition, [published.value.threadId]);
   expect(first.reviews.map((item) => item.id)).toEqual([published.value.threadId]);
+  expect(first.reviews[0]!.sourceVersion).toMatch(/^rv1_[A-Za-z0-9_-]{43}$/u);
   expect(first.reviews[0]).toMatchObject({
     subjectId,
     title: 'A public review title',
@@ -221,10 +229,12 @@ test('public review discovery refreshes the same thread and omits protected or r
 
   await invalidate(revised, 'com.rezics.content.revision.created.v1');
   const revisionPage = await readReviewDiscoveryChanges(fixture.pool, partition, changePage.after);
-  expect((await refreshReviewDiscoveryChanges(source, revisionPage)).reviews[0]).toMatchObject({
+  const revisedReview = (await refreshReviewDiscoveryChanges(source, revisionPage)).reviews[0]!;
+  expect(revisedReview).toMatchObject({
     title: 'A revised review title',
     excerpt: 'Revised review excerpt.',
   });
+  expect(revisedReview.sourceVersion).not.toBe(first.reviews[0]!.sourceVersion);
   await fixture.grant(author.accountId, 'post:erase', {
     route: routeOf(published.value.itemId)!,
     id: published.value.itemId,
@@ -253,6 +263,9 @@ test('public review discovery refreshes the same thread and omits protected or r
   // The old withdrawal arrives after restoration; current hydration still wins.
   await effect.run(deletion.event);
   expect((await refreshReviewDiscoveryChanges(source, withdrawn)).removed).toEqual([]);
+  expect((await source.read(partition, [published.value.threadId])).reviews[0]?.sourceVersion).toBe(
+    restoredReview.sourceVersion,
+  );
   const erased = await erasePost(
     { pool: fixture.pool, access: fixture.access, routeKey },
     author,
@@ -272,6 +285,78 @@ test('public review discovery refreshes the same thread and omits protected or r
   await expect(
     effect.run({ ...admitted.event, data: { ...(admitted.event.data as object), title: 'Forged' } }),
   ).rejects.toThrow();
+});
+
+test('coherent review pages restart when a hidden lower key becomes eligible or a dependency changes during hydration', async () => {
+  const author = (await fixture.context()).actor;
+  const board = (
+    await fixture.reader.query("SELECT route,board_id FROM content.board WHERE realm_id IS NULL AND purpose='reviews'")
+  ).rows[0]!;
+  await fixture.grant(author.accountId, 'thread:create', { route: board.route, id: board.board_id });
+  const deps = { pool: fixture.pool, access: fixture.access, routeKey };
+  const create = (subject: string, title: string, route: number) =>
+    createThread(
+      deps,
+      author,
+      {
+        kind: 'review',
+        title,
+        body: fromPlainText(title),
+        licence: 'MIT',
+        subjectIds: [subject],
+        boardId: board.board_id,
+        visibility: 'published',
+      },
+      requestAt(route),
+    );
+  const partition = 0x63a;
+  const hiddenSubject = newId(0x6b40);
+  const visibleSubject = newId(0x6b41);
+  await fixture.reader.query(
+    `INSERT INTO semantic.subject(route,subject_id,type,recorded_transaction_id,visibility,security_revision)
+     VALUES ($1,$2,'schema:Book',$2,'hidden',1),($3,$4,'schema:Book',$4,'visible',1)`,
+    [routeOf(hiddenSubject), hiddenSubject, routeOf(visibleSubject), visibleSubject],
+  );
+  const hidden = await create(hiddenSubject, 'Hidden lower review', partition * 16 + 1);
+  const visible = await create(visibleSubject, 'Visible middle review', partition * 16 + 2);
+  const later = await create(visibleSubject, 'Visible upper review', partition * 16 + 3);
+  for (const outcome of [hidden, visible, later]) await invalidate(outcome, 'com.rezics.content.thread.created.v1');
+
+  const source = createReviewDiscoverySource({ ...deps, tokens }, () => ({
+    actor: { kind: 'anonymous' },
+    deadline: Date.now() + 30_000,
+  }));
+  const empty = await source.pageWithCut!(0xfff, null, 1);
+  expect(empty).toMatchObject({ state: 'ready', reviews: [], next: null });
+  const first = await source.pageWithCut!(partition, null, 1);
+  expect(first).toMatchObject({ state: 'ready', reviews: [{ id: visible.value.threadId }] });
+  if (first.state !== 'ready' || first.next === null) throw new Error('Expected a signed review continuation');
+
+  const opened = await subjectGate(hiddenSubject, 'visible');
+  await invalidate(opened, 'com.rezics.subject.revised.v1');
+  const stale = await source.pageWithCut!(partition, first.next, 1);
+  expect(stale).toMatchObject({ state: 'changed', missing: 'population-cut', reviews: [], next: null });
+  const restarted = await source.pageWithCut!(partition, null, 1);
+  expect(restarted).toMatchObject({ state: 'ready', reviews: [{ id: hidden.value.threadId }] });
+
+  const probe = observeSql(fixture.pool);
+  await source.pageWithCut!(partition, null, 1);
+  const candidateStatement = probe.records.find(
+    ({ statement }) =>
+      statement.includes("WHERE t.kind = 'review'") &&
+      statement.includes('ORDER BY t.route, t.thread_id LIMIT $5'),
+  )!.statement;
+  await probe.close();
+  const raceObserver = observeSql(fixture.pool);
+  const barrier = raceObserver.hold({ statement: candidateStatement, boundary: 'after' });
+  const pendingPage = source.pageWithCut!(partition, null, 1);
+  await barrier.entered;
+  const closed = await subjectGate(hiddenSubject, 'hidden');
+  barrier.release();
+  const raced = await pendingPage;
+  expect(raced).toMatchObject({ state: 'changed', missing: 'eligibility-dependency', reviews: [], next: null });
+  await raceObserver.close();
+  await invalidate(closed, 'com.rezics.subject.revised.v1');
 });
 
 test('durable cross-partition gate pages retain disappearance, fixed catch-up cuts and retryable dispatch', async () => {
