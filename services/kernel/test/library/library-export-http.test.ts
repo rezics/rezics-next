@@ -475,6 +475,88 @@ test('native owner export streams independent persisted facts, preserves dates, 
     'other',
   ).then(json);
   expect(noteMembers.members.map((member: { note: string | null }) => member.note)).toEqual([null, null]);
+
+  let boundaryNow = otherNow;
+  let boundaryUploadId = '';
+  let boundaryExpiry = '';
+  let boundaryConfirmation = { reviewId: '', digest: '' };
+  let loseBoundaryAcknowledgement = false;
+  let boundaryService: ReturnType<typeof createLibraryArchiveCollectionRecovery>;
+  boundaryService = createLibraryArchiveCollectionRecovery({
+    pool: db.pool,
+    access: recoveryAccess,
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
+    routeKey,
+    clock: () => new Date(boundaryNow),
+    afterNativeEffect: async (kind) => {
+      if (kind !== 'member' || !loseBoundaryAcknowledgement) return;
+      loseBoundaryAcknowledgement = false;
+      boundaryNow = Date.parse(boundaryExpiry) + 1;
+      expect((await boundaryService.status(otherActor, boundaryUploadId)).state).toBe('expired');
+      const lease = await sql`SELECT lease_until::text AS lease,expires_at::text AS expiry
+        FROM library.collection_archive_recovery WHERE route=${route} AND account_id=${other}
+          AND upload_id=${boundaryUploadId}`;
+      expect(Date.parse(lease.rows[0]!.lease)).toBeLessThanOrEqual(Date.parse(lease.rows[0]!.expiry));
+      expect((await boundaryService.apply(otherActor, boundaryUploadId, boundaryConfirmation)).state).toBe('expired');
+      throw new Error('lost acknowledgement at Collection expiry boundary');
+    },
+  });
+  const boundaryUpload = await boundaryService.create(
+    otherActor,
+    archiveForOther(archiveRecords),
+    randomUUID(),
+  );
+  boundaryUploadId = boundaryUpload.uploadId;
+  boundaryExpiry = boundaryUpload.expiresAt;
+  const boundaryPreview = await boundaryService.previewCollection(otherActor, boundaryUploadId, collection, {
+    limit: 50,
+  });
+  const boundaryReview = await boundaryService.review(
+    otherActor,
+    boundaryUploadId,
+    {
+      collectionId: collection,
+      selectedOccurrenceIds: boundaryPreview.occurrences.map((item) => item.sourceOccurrenceId),
+      mappings: sourceMapping,
+    },
+    randomUUID(),
+  );
+  boundaryConfirmation = boundaryReview.confirmation!;
+  const beforeBoundaryCollections = new Set(
+    (
+      await sql`SELECT collection_id::text FROM library.collection
+        WHERE route=${route} AND curator_account_id=${other} AND title='Weekend'`
+    ).rows.map((row) => row.collection_id),
+  );
+  boundaryNow = Date.parse(boundaryExpiry) - 60_000;
+  loseBoundaryAcknowledgement = true;
+  await expect(boundaryService.apply(otherActor, boundaryUploadId, boundaryConfirmation)).rejects.toThrow(
+    'lost acknowledgement at Collection expiry boundary',
+  );
+  const afterBoundaryCollections = await sql`SELECT collection_id::text AS id FROM library.collection
+    WHERE route=${route} AND curator_account_id=${other} AND title='Weekend'`;
+  const boundaryCollectionId = afterBoundaryCollections.rows
+    .map((row) => row.id)
+    .find((id) => !beforeBoundaryCollections.has(id));
+  expect(boundaryCollectionId).toBeString();
+  const boundaryMembers = await sql`SELECT member_id::text AS id,note FROM library.collection_member
+    WHERE route=${route} AND collection_id=${boundaryCollectionId} AND deletion_id IS NULL`;
+  expect(boundaryMembers.rows).toHaveLength(1);
+  expect(boundaryMembers.rows[0]!.note).toBeNull();
+  expect(
+    (
+      await sql`SELECT 1 FROM library.collection_archive_recovery_record
+        WHERE route=${route} AND account_id=${other} AND upload_id=${boundaryUploadId}`
+    ).rowCount,
+  ).toBe(0);
+  await boundaryService.create(otherActor, archiveForOther(archiveRecords), randomUUID());
+  expect(
+    (
+      await sql`SELECT 1 FROM library.collection_archive_recovery
+        WHERE route=${route} AND account_id=${other} AND upload_id=${boundaryUploadId}`
+    ).rowCount,
+  ).toBe(0);
+
   otherNow = Date.parse(noteUpload.expiresAt) + 1;
   expect((await otherService.status(otherActor, noteUpload.uploadId)).state).toBe('expired');
   expect(
@@ -622,6 +704,8 @@ test('cancellation, changed revisions, expiry and terminal deletion never yield 
     `/v1/libraryExports/${terminal.exportId}/pages?cursor=${encodeURIComponent(terminal.first)}`,
   );
   expect([401, 403]).toContain(response.status);
+  const terminalRecovery = await request('GET', `/v1/libraryArchiveCollectionRecoveries/${recoveryUploadId}`);
+  expect([401, 403]).toContain(terminalRecovery.status);
   await purge(db.pool, { accountId: owner, kind: 'library_export', parent: null, after: null, ordinal: 0, segment: 0 });
   expect((await sql`SELECT 1 FROM library.library_export WHERE route=${route} AND account_id=${owner}`).rowCount).toBe(
     0,

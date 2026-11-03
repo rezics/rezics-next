@@ -602,9 +602,13 @@ The library schema snapshot is refreshed from the actual migrated database; reta
 the existing producer after the unchanged Community compiler errors are resolved; see the [transport continuation](../../.temp/continuation/collection-presentation-client.md).
 Native64/512/4096 and browser/full-kernel acceptance remains unexecuted by this change.
 Only one curated Collection is supported; recovery preserves duplicate occurrences, valid archived ordinal order,
-and distinct empty/cleared/missing note outcomes while creating fresh private native IDs. Dynamic and built-in
-Collections, grants, saved rules and public output remain unsupported. Broad native64/512/4096 growth acceptance and
-the adjacent Web recovery interface remain deferred to integration; Web323 still owns export UI.
+and distinct empty/cleared/missing note outcomes while creating fresh private native IDs. The 24-hour expiry is an
+absolute admission cut: a live lease cannot admit another native step, while one already-admitted effect retains its
+exact key and operands until the original native receipt is reconciled. Expiry redacts private review evidence and
+cleans at most 100 indexed child/root rows per invocation; accepted native Collections and their member facts remain
+independent. Dynamic and built-in Collections, grants, saved rules and public output remain unsupported. Broad
+native64/512/4096 growth acceptance and the adjacent Web recovery interface remain deferred to integration; Web323
+still owns export UI.
 
 [Personal archive review and merge](../library-archive-merge.md) shares the installed V1/V2 producer vocabulary and
 bounds. The bounded decoder checks completed artifacts; private consumer methods page evidence and coverage,
