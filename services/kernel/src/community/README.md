@@ -288,19 +288,38 @@ changes fail retryably without returning earlier descriptions or covers. Connect
 another authority. The Space address is read freshly at finalization; it remains distinct from Realm identity.
 `Cache-Control: private, no-store` applies to the initial page and both continuations, including failures.
 
-The viewer state is currently `anonymous` or `unavailable`; advice is `sign-in` for anonymous readers and
-`unavailable` for authenticated readers. These are intermediate states, not completed membership/ban/participation
-or join/leave/claim/manage admission. The native viewer/action producer must supply its actual factory, closed types,
-mounted permission advice and exact final leave-holder/lifecycle/precondition observations before this page can
-return current standing or admitted actions. Public Realm JSON equality cannot replace that protocol. Existing
-mutation routes continue to authorize their own requests. Web keeps RealmHomeHeader, RealmShelf and SpacePage;
-its existing reader still makes individual Subject requests until that owner adopts the generated home transport.
-No second frontend or Search dependency is introduced.
+Decision: Realm home returns the native `enter`, `manage` and `leave` advice unchanged; the separate membership
+commands retain their own authorization and receipt rules.
+
+A signed-in response carries the native `viewer` fields: readability, exact current membership episode (or none),
+and participation. Its `actions` is the producer's current `enter`, `manage` and `leave` advice. `enter` names the
+mounted Realm GET. An owner member retains the specific `owner_invariant_observation_unavailable` leave advice
+until Accounts supplies its read-only last-holder seam. Anonymous readers retain `{state: 'anonymous'}` and
+`{state: 'sign-in'}`. Concealed home remains 404; failed dependencies retain their native problems. The original
+viewer observation is finished after presentation, shelves and ordinary context hydrate. Realm/Space binding,
+membership episode, participation or advice changes retry the exact original request; no refreshed boolean or
+public JSON comparison replaces the native source observation.
+
+Connected outcomes are distinct: an empty home has empty shelves and a signed-in `membership.state: 'none'`; a
+populated member home carries its `since`, reservation and publication transaction with current actions; a concealed
+home is 404; dependency failure keeps its native unavailable problem; and changed Realm, containing-Space, membership
+episode, participation or action source returns `transaction_retry_exhausted` for the exact input to be retried.
+
+The installed producer signature is `createRealmHomeReader({pool,access,routeKey,tokens,clock?})`; its closed
+response is `RealmHomePageSchema`, mounted at `GET /v1/realms/:realmId/home`. The generated KernelClient exposes
+that mounted operation and the public `RealmHomePage` type. The existing Web Realm-home receiver can adopt this
+envelope and continue using the native board and publication cursors. This server delivery does not claim a
+rendered Web pass or change its presentation, lifetime or mutation ownership. No second frontend or Search
+dependency is introduced.
 
 ### Cost
 
 - **Touches:** Initial home reads Realm identity/Access, mints a released native time and reads one exact container
-  binding. Board selection freshly prepares Realm read, then dispatches BEGIN/SET LOCAL, partition metadata,
+  binding. The viewer performs its initial Realm read and two separated native rounds (observation and finish).
+  Each round prepares four Realm/Space Access checks outside a released REPEATABLE READ transaction, then reads
+  partition metadata, one exact Realm settings head and container binding, and at most one selected membership;
+  owner-role keys are read only for a permitted member leave. Participation is checked after each round on a released
+  connection. Board selection freshly prepares Realm read, then dispatches BEGIN/SET LOCAL, partition metadata,
   Realm decision, one raw seek of at most21 board identities and COMMIT (or rollback). Initial and final board
   hydration each prepare the ordinary board/Realm decision bundle outside their snapshots, then dispatch BEGIN,
   one partition metadata batch, full-key board and containing-Realm batches, native disclosure/authority work and
@@ -322,13 +341,17 @@ No second frontend or Search dependency is introduced.
   publication continuation keeps its original shelf-only path. Empty/denied/stale/failure paths charge all work
   reached before stopping, including retries, controls and cleanup; no failure is counted as a zero result. These
   calls use the supplied Kernel pool and each dependency's actual authority/executor preparations and participating
-  homes; sharing a pool does not combine their native source tuples. The missing viewer producer's costs are not
-  guessed or included as zero. Native executor attempts, Access/catalogue/ban/membership preparation and deadline
-  controls remain nested producer terms requiring review, not a fitted per-item allowance.
+  homes; sharing a pool does not combine their native source tuples. The installed viewer producer contributes its
+  actual initial Realm read, two released source rounds, membership and conditional owner-role reads, two
+  participation checks, and final advice comparison. Native executor attempts, Access/catalogue/ban/membership
+  preparation and deadline controls remain nested producer terms requiring review, not a fitted per-item allowance.
 - **Bound:** Board raw SQL is driven by `(route,realm_id,board_id < cursor)` with descending board identity and
   LIMIT21; exact board batches use `(route,board_id)` LATERAL LIMIT1 and containing-Realm full keys. Membership
   presentation uses `(route,realm_id,account_id)` with open/current validity and LIMIT1; history examined beneath
-  that predicate remains an independent source term until physical-prefix plans are reached. Publication uses its
+  that predicate remains an independent source term until physical-prefix plans are reached. The viewer performs
+  at most one exact `(route,realm_id,account_id)` membership lookup per round and reads owner-role keys only after
+  leave permission succeeds; its envelope contains at most one membership episode and three native action entries.
+  Publication uses its
   existing raw `(route,realm_id,published_at,subject_id)` and exact head keys. A page's selected keys do not bound
   examined membership/ban, label languages, selected compact statement histories or expanded adoption/candidates.
   Let R/S be admitted Realm/Space source bytes, B the selected board bytes, P exact publication-head bytes, L all
@@ -347,7 +370,9 @@ No second frontend or Search dependency is introduced.
   native batches but does not claim constant examined work from small emitted output.
 - **Growth check:** Focused mounted scenarios exercise the initial empty/populated envelope, twenty-board and
   twelve-publication limits, independent ordinary cursor continuation, unknown count, unavailable viewer advice,
-  protected disclosure, exact publication replacement, Realm change during summary hydration and dependency retry.
+  anonymous sign-in, empty nonmember and current member advice, owner leave unavailability, exact join receipt
+  readback, leave/rejoin, role revocation, Realm and containing-Space change during summary hydration, exact
+  publication replacement and dependency retry.
   No native growth evidence has been reached here. Controller admission must independently grow unrelated
   Realm/Space/board/publication/Subject/authority rows at256/1024/4096 while fixing raw limits, selected keys, homes
   and admitted bytes; independently grow publication and membership/ban histories and unrelated Semantic labels,

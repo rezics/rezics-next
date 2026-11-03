@@ -3,10 +3,11 @@ import type { Account, CommunityDriver, Fixture } from '../../../../specs/commun
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { createRealmHomeBoardObservationReader } from '../../src/content/realm-board-home.ts';
 import { createRealmHomePublicationObservationReader } from '../../src/community/realm-home-publications.ts';
-import type { realmHomeResponse } from '../../src/community/realm-home.ts';
+import { createRealmHomeReader, type realmHomeResponse } from '../../src/community/realm-home.ts';
 import boardWindow from '../../src/content/board-realm-page.sql';
 import summaries from '../../src/semantic/summaries-read.sql';
 import memberCount from '../../src/community/member-count-read.sql';
+import { routeOf } from '../../src/route/route.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver } from './community-driver.ts';
 
@@ -80,7 +81,7 @@ async function subject(type: string, label: string, statements?: unknown) {
   ).subject.id;
 }
 
-test('mounted empty home keeps carrier, identity, optional states and unavailable viewer decisions distinct', async () => {
+test('mounted empty home keeps carrier, identity, optional states, and anonymous sign-in distinct', async () => {
   const target = await realm();
   const initial = await home(target.realmId);
   expect(initial.realm.title).toBe('Home identity');
@@ -94,10 +95,17 @@ test('mounted empty home keeps carrier, identity, optional states and unavailabl
   expect(initial.boards).toEqual({ items: [], next: null });
   expect(initial.publications).toEqual({ items: [], next: null });
   expect(initial.viewer).toEqual({ state: 'anonymous' });
-  expect(Object.values(initial.actions)).toEqual(Array(5).fill('sign-in'));
+  expect(initial.actions).toEqual({ state: 'sign-in' });
   const signedIn = await home(target.realmId, people.owner);
-  expect(signedIn.viewer).toEqual({ state: 'unavailable' });
-  expect(Object.values(signedIn.actions)).toEqual(Array(5).fill('unavailable'));
+  expect('readability' in signedIn.viewer).toBe(true);
+  expect(signedIn.actions.state).toBe('current');
+  if (signedIn.actions.state !== 'current') throw new Error('Native action advice is unavailable');
+  expect(signedIn.actions.enter).toMatchObject({
+    state: 'available',
+    method: 'GET',
+    path: `/v1/realms/${target.realmId}`,
+    expectedStatus: 200,
+  });
   const fault = observeSql(runtime.system.database.pool);
   try {
     fault.armFault({
@@ -231,4 +239,237 @@ test('retained observations reject late publication replacement and required hyd
     await barrierObserver.close();
   }
   expect((await home(target.realmId)).realm.summary).toBe('New description');
+});
+
+test('native home carries membership and current entry, management, and leave advice', async () => {
+  const target = await realm();
+  const empty = await home(target.realmId, people.outsider);
+  expect(empty.boards.items).toEqual([]);
+  expect(empty.publications.items).toEqual([]);
+  if (!('readability' in empty.viewer) || empty.actions.state !== 'current')
+    throw new Error('Public signed-in viewer was not observed');
+  expect(empty.viewer.membership).toEqual({
+    state: 'none',
+    since: null,
+    reservationId: null,
+    transactionId: null,
+  });
+  expect(empty.actions.enter).toMatchObject({ state: 'available', method: 'GET' });
+  expect(empty.actions.leave).toEqual({ state: 'prohibited', reason: 'not_member' });
+  expect(empty.actions.manage).toEqual({ state: 'prohibited', reason: 'not_authorized' });
+
+  const joinKey = key();
+  const join = {
+    actor: people.member,
+    method: 'POST' as const,
+    path: `/v1/realms/${target.realmId}/membership`,
+    key: joinKey,
+  };
+  expect((await driver.request(join)).status).toBe(202);
+  expect((await driver.request(join)).status).toBe(202);
+  const evidence = await driver.commandEvidence(people.member, joinKey);
+  expect(evidence.receipts).toHaveLength(1);
+  expect(evidence.lastAttempt).toEqual({ authorized: true, receiptRead: true, storedResponseReturned: true });
+  await driver.settle();
+
+  const member = await home(target.realmId, people.member);
+  if (!('readability' in member.viewer) || member.actions.state !== 'current')
+    throw new Error('Member viewer was not observed');
+  expect(member.viewer.membership.state).toBe('member');
+  expect(member.actions.leave).toMatchObject({
+    state: 'available',
+    method: 'DELETE',
+    path: `/v1/realms/${target.realmId}/membership`,
+    expectedStatus: 202,
+  });
+  expect(member.actions.manage).toEqual({ state: 'prohibited', reason: 'not_authorized' });
+
+  const left = await driver.request({
+    actor: people.member,
+    method: 'DELETE',
+    path: `/v1/realms/${target.realmId}/membership`,
+  });
+  expect(left.status).toBe(202);
+  await driver.settle();
+  const returned = await home(target.realmId, people.member);
+  if (!('readability' in returned.viewer) || returned.actions.state !== 'current')
+    throw new Error('Returned member viewer was not observed');
+  expect(returned.viewer.membership.state).toBe('none');
+  expect(returned.actions.leave).toEqual({ state: 'prohibited', reason: 'not_member' });
+
+  expect(
+    (
+      await driver.request({
+        actor: people.owner,
+        method: 'POST',
+        path: `/v1/realms/${target.realmId}/membership`,
+        key: key(),
+      })
+    ).status,
+  ).toBe(202);
+  await driver.settle();
+  const owner = await home(target.realmId, people.owner);
+  if (!('readability' in owner.viewer) || owner.actions.state !== 'current')
+    throw new Error('Owner viewer was not observed');
+  expect(owner.viewer.membership.state).toBe('member');
+  expect(owner.actions.leave).toEqual({
+    state: 'unavailable',
+    reason: 'owner_invariant_observation_unavailable',
+  });
+  expect(owner.actions.manage).toMatchObject({ state: 'available', method: 'GET' });
+  expect(
+    (
+      await driver.request({
+        actor: people.owner,
+        method: 'DELETE',
+        path: `/v1/realms/${target.realmId}/membership`,
+      })
+    ).status,
+  ).toBe(409);
+
+  const protectedTarget = await realm('protected');
+  expect((await driver.grantModerator(protectedTarget.realmId, people.moderator)).status).toBe(201);
+  const protectedModerator = await home(protectedTarget.realmId, people.moderator);
+  expect(protectedModerator.realm.visibility).toBe('protected');
+  if (!('readability' in protectedModerator.viewer) || protectedModerator.actions.state !== 'current')
+    throw new Error('Protected moderator viewer was not observed');
+  expect(protectedModerator.viewer.membership.state).toBe('none');
+  expect(protectedModerator.actions.manage).toMatchObject({ state: 'available', method: 'GET' });
+});
+
+test('home retries on leave/rejoin, containing-Space change, and role revocation during hydration', async () => {
+  const target = await realm();
+  const subjectId = await subject('schema:Book', 'Home race label');
+  await command(`/v1/realms/${target.realmId}/publications`, { subjectId });
+  await driver.settle();
+
+  const joinMember = async () => {
+    const response = await driver.request({
+      actor: people.member,
+      method: 'POST',
+      path: `/v1/realms/${target.realmId}/membership`,
+      key: key(),
+    });
+    expect(response.status).toBe(202);
+    await driver.settle();
+  };
+  const leaveMember = async () => {
+    const response = await driver.request({
+      actor: people.member,
+      method: 'DELETE',
+      path: `/v1/realms/${target.realmId}/membership`,
+    });
+    expect(response.status).toBe(202);
+    await driver.settle();
+  };
+  await joinMember();
+
+  const membershipObserver = observeSql(runtime.system.database.pool);
+  const membershipBarrier = membershipObserver.hold({ statement: summaries.sql }, 'after');
+  const memberPage = read(`/v1/realms/${target.realmId}/home`, people.member);
+  try {
+    await membershipBarrier.entered;
+    await leaveMember();
+    await joinMember();
+    membershipBarrier.release();
+    const stale = await memberPage;
+    expect(stale.status).toBe(503);
+    expect((await stale.json()).code).toBe('transaction_retry_exhausted');
+  } finally {
+    membershipBarrier.release();
+    await memberPage;
+    await membershipObserver.close();
+  }
+  expect((await home(target.realmId, people.member)).viewer).toMatchObject({
+    readability: 'allowed',
+    membership: { state: 'member' },
+  });
+
+  const spaceObserver = observeSql(runtime.system.database.pool);
+  const spaceBarrier = spaceObserver.hold({ statement: summaries.sql }, 'after');
+  const pendingSpace = read(`/v1/realms/${target.realmId}/home`, people.member);
+  try {
+    await spaceBarrier.entered;
+    const response = await read(`/v1/spaces/${target.spaceId}`, people.owner);
+    const { space } = (await response.json()) as { space: { headRevisionId: string } };
+    await command(`/v1/spaces/${target.spaceId}`, { summary: 'Changed carrier' }, 'PATCH', space.headRevisionId);
+    spaceBarrier.release();
+    const stale = await pendingSpace;
+    expect(stale.status).toBe(503);
+    expect((await stale.json()).code).toBe('transaction_retry_exhausted');
+  } finally {
+    spaceBarrier.release();
+    await pendingSpace;
+    await spaceObserver.close();
+  }
+  expect((await home(target.realmId, people.member)).space.summary).toBe('Changed carrier');
+
+  expect((await driver.grantModerator(target.realmId, people.moderator)).status).toBe(201);
+  const beforeRole = await home(target.realmId, people.moderator);
+  if (beforeRole.actions.state !== 'current' || beforeRole.actions.manage.state !== 'available')
+    throw new Error('Moderation advice was not current before revocation');
+  const managePath = beforeRole.actions.manage.path;
+  const roleObserver = observeSql(runtime.system.database.pool);
+  const roleBarrier = roleObserver.hold({ statement: summaries.sql }, 'after');
+  const pendingRole = read(`/v1/realms/${target.realmId}/home`, people.moderator);
+  try {
+    await roleBarrier.entered;
+    const revoked = await driver.request({
+      actor: people.owner,
+      method: 'POST',
+      path: '/v1/roleGrants:revoke',
+      body: {
+        resource: { route: routeOf(target.realmId)!, id: target.realmId },
+        subject: { kind: 'account', id: people.moderator.id },
+        role: 'community.realm.moderator',
+        valid: '(,)',
+      },
+      key: key(),
+    });
+    expect(revoked.status).toBe(200);
+    roleBarrier.release();
+    const stale = await pendingRole;
+    expect(stale.status).toBe(503);
+    expect((await stale.json()).code).toBe('transaction_retry_exhausted');
+  } finally {
+    roleBarrier.release();
+    await pendingRole;
+    await roleObserver.close();
+  }
+  const currentRole = await home(target.realmId, people.moderator);
+  if (currentRole.actions.state !== 'current') throw new Error('Native action advice is unavailable');
+  expect(currentRole.actions.manage).toEqual({ state: 'prohibited', reason: 'not_authorized' });
+  expect((await driver.request({ actor: people.moderator, method: 'GET', path: managePath })).status).toBe(403);
+
+  const actorObserver = observeSql(runtime.system.database.pool);
+  const actorBarrier = actorObserver.hold({ statement: summaries.sql }, 'after');
+  const mutableContext = context();
+  const pendingActor = createRealmHomeReader(deps())(target.realmId, mutableContext);
+  try {
+    await actorBarrier.entered;
+    mutableContext.actor = { kind: 'anonymous' };
+    actorBarrier.release();
+    await expect(pendingActor).rejects.toThrow();
+  } finally {
+    actorBarrier.release();
+    await pendingActor.catch(() => undefined);
+    await actorObserver.close();
+  }
+});
+
+test('home keeps banned concealment and suspended-account authentication failures', async () => {
+  const target = await realm();
+  const banned = await driver.request({
+    actor: people.owner,
+    method: 'PUT',
+    path: `/v1/realms/${target.realmId}/bans/${people.outsider.id}`,
+    key: key(),
+    body: { reason: 'Home reader ban' },
+  });
+  expect(banned.status).toBe(200);
+  await driver.settle();
+  expect((await read(`/v1/realms/${target.realmId}/home`, people.outsider)).status).toBe(404);
+
+  expect((await driver.suspend(people.member)).status).toBe(200);
+  expect((await read(`/v1/realms/${target.realmId}/home`, people.member)).status).toBe(401);
 });

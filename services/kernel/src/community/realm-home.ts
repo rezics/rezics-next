@@ -22,8 +22,9 @@ import {
 import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
 import { readRealm, type RealmDependencies, type RealmView } from './realm.ts';
 import { readSpace, spaceReadEligibility, type Space } from './space.ts';
+import { createRealmViewerObservation, type RealmViewerObservation } from './own-realms-viewer.ts';
 import { readRealmHomePresentation } from './realm-home-presentation.ts';
-import { RealmSchema, SpaceSchema } from './schemas.ts';
+import { realmViewerActionsSchema, RealmSchema, SpaceSchema } from './schemas.ts';
 import {
   createRealmHomePublicationObservationReader,
   RealmHomePublicationPageSchema,
@@ -37,18 +38,46 @@ export type RealmHomeQuery = Readonly<{ languages?: readonly string[] }>;
 // The presentation producer's join projection predates the viewer observation
 // protocol. It cannot certify current standing or mounted command preconditions.
 export type RealmHomePresentation = Omit<CommunityPresentation, 'join'>;
-export type RealmHomeAdvice = 'sign-in' | 'unavailable';
+export type RealmHomeViewer = { state: 'anonymous' } | RealmViewerObservation['current']['viewer'];
+export type RealmHomeActions = { state: 'sign-in' } | RealmViewerObservation['current']['actions'];
 export type RealmHomePage = Readonly<{
   realm: RealmView;
   space: Space;
   presentation: RealmHomePresentation;
   boards: RealmHomeBoardPage;
   publications: RealmHomePublicationPage;
-  viewer: Readonly<{ state: 'anonymous' | 'unavailable' }>;
-  actions: Readonly<Record<'participate' | 'join' | 'leave' | 'claim' | 'manage', RealmHomeAdvice>>;
+  viewer: RealmHomeViewer;
+  actions: RealmHomeActions;
 }>;
 const closed = { additionalProperties: false } as const;
-const advice = t.Union([t.Literal('sign-in'), t.Literal('unavailable')]);
+const homeMembership = t.Union([
+  t.Object(
+    {
+      state: t.Literal('member'),
+      since: t.String({ format: 'date-time' }),
+      reservationId: t.String({ format: 'uuid' }),
+      transactionId: t.String({ format: 'uuid' }),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      state: t.Literal('none'),
+      since: t.Null(),
+      reservationId: t.Null(),
+      transactionId: t.Null(),
+    },
+    closed,
+  ),
+]);
+const currentViewer = t.Object(
+  {
+    readability: t.Literal('allowed'),
+    membership: homeMembership,
+    participation: t.Union([t.Literal('allowed'), t.Literal('denied')]),
+  },
+  closed,
+);
 export const RealmHomeQuerySchema = t.Pick(RealmHomePublicationQuerySchema, ['languages'], closed);
 export const RealmHomePresentationSchema = t.Omit(CommunityPresentationSchema, ['join'], closed);
 export const RealmHomePageSchema = t.Object(
@@ -58,8 +87,8 @@ export const RealmHomePageSchema = t.Object(
     presentation: RealmHomePresentationSchema,
     boards: RealmHomeBoardPageSchema,
     publications: RealmHomePublicationPageSchema,
-    viewer: t.Object({ state: t.Union([t.Literal('anonymous'), t.Literal('unavailable')]) }, closed),
-    actions: t.Object({ participate: advice, join: advice, leave: advice, claim: advice, manage: advice }, closed),
+    viewer: t.Union([t.Object({ state: t.Literal('anonymous') }, closed), currentViewer]),
+    actions: t.Union([t.Object({ state: t.Literal('sign-in') }, closed), realmViewerActionsSchema]),
   },
   closed,
 );
@@ -81,6 +110,7 @@ async function observeContainer(deps: RealmHomeDependencies, realmId: string, co
   if (before.realmHead !== realm.headRevisionId || before.spaceId !== realm.spaceId)
     throw new AccessUnavailableError('contention');
   return {
+    binding: before,
     async current(): Promise<Readonly<{ realm: RealmView; space: Space }> | null> {
       requireAccessDeadline(context.deadline);
       const currentRealm = await readRealm(deps, context.actor, realmId, context);
@@ -119,30 +149,54 @@ async function observeContainer(deps: RealmHomeDependencies, realmId: string, co
 export function createRealmHomeReader(deps: RealmHomeDependencies) {
   const boards = createRealmHomeBoardObservationReader(deps);
   const publications = createRealmHomePublicationObservationReader(deps);
+  const observeViewer = createRealmViewerObservation(deps);
   return async (realmId: string, context: ReadContext, query: RealmHomeQuery = {}): Promise<RealmHomePage | null> => {
-    requireAccessDeadline(context.deadline);
-    const container = await observeContainer(deps, realmId, context);
+    const actor = context.actor;
+    const boundContext: ReadContext = { ...context, actor };
+    const boundQuery: RealmHomeQuery =
+      query.languages === undefined ? {} : { languages: Object.freeze([...query.languages]) };
+    requireAccessDeadline(boundContext.deadline);
+    const container = await observeContainer(deps, realmId, boundContext);
     if (!container) return null;
-    const selectedBoards = await boards(realmId, context);
-    const selectedPublications = await publications(realmId, context, query);
+    const viewer = await observeViewer({ actor, realmId, deadline: boundContext.deadline });
+    if (!viewer) return null;
+    const selectedBoards = await boards(realmId, boundContext);
+    const selectedPublications = await publications(realmId, boundContext, boundQuery);
     if (!selectedPublications) return null;
-    const presentation = await readRealmHomePresentation(deps, realmId, context);
+    const presentation = await readRealmHomePresentation(deps, realmId, boundContext);
     if (!presentation) throw new AccessUnavailableError('contention');
     if (!(await selectedBoards.current()) || !(await selectedPublications.current()))
       throw new AccessUnavailableError('contention');
+    const finalViewer = await viewer.finish();
+    if (!finalViewer) return null;
     const identity = await container.current();
     if (!identity) return null;
-    requireAccessDeadline(context.deadline);
+    if (
+      finalViewer.source.realmId !== container.binding.realmId ||
+      finalViewer.source.headRevisionId !== container.binding.realmHead ||
+      finalViewer.source.lifecycleVersion !== container.binding.realmVersion ||
+      finalViewer.source.spaceId !== container.binding.spaceId ||
+      finalViewer.source.spaceHeadRevisionId !== container.binding.spaceHead ||
+      finalViewer.source.spaceLifecycleVersion !== container.binding.spaceVersion ||
+      finalViewer.source.contextId !== container.binding.contextId ||
+      finalViewer.source.realmId !== identity.realm.realmId ||
+      finalViewer.source.headRevisionId !== identity.realm.headRevisionId ||
+      finalViewer.source.spaceId !== identity.space.spaceId ||
+      finalViewer.source.spaceHeadRevisionId !== identity.space.headRevisionId ||
+      finalViewer.source.contextId !== identity.realm.contextId
+    )
+      throw new AccessUnavailableError('contention');
+    if (context.actor !== actor) throw new ProblemError('authentication_required');
+    requireAccessDeadline(boundContext.deadline);
     const { join: _join, ...currentPresentation } = presentation;
-    const anonymous = context.actor.kind === 'anonymous';
-    const action = anonymous ? 'sign-in' : 'unavailable';
+    const anonymous = actor.kind === 'anonymous';
     return {
       ...identity,
       presentation: currentPresentation,
       boards: selectedBoards.page,
       publications: selectedPublications.page,
-      viewer: { state: anonymous ? 'anonymous' : 'unavailable' },
-      actions: { participate: action, join: action, leave: action, claim: action, manage: action },
+      viewer: anonymous ? { state: 'anonymous' } : finalViewer.viewer,
+      actions: anonymous ? { state: 'sign-in' } : finalViewer.actions,
     };
   };
 }

@@ -158,6 +158,11 @@ export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
 
+type RealmHomeCall = ReturnType<ReturnType<GeneratedKernelClient['realms']>['home']['get']>;
+export type RealmHomePage = NonNullable<Awaited<RealmHomeCall>['data']>;
+export type RealmHomeViewer = RealmHomePage['viewer'];
+export type RealmHomeActions = RealmHomePage['actions'];
+
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
 export type KernelClientOptions = {
