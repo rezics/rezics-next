@@ -131,8 +131,7 @@ export function PostReferenceView({
     if (!destination || !position.isCurrent()) return;
     const attempt = ++copyAttempt.current;
     setCopyState('pending');
-    const isLive = () =>
-      copyAttempt.current === attempt && selectedRef.current === destination && position.isCurrent();
+    const isLive = () => copyAttempt.current === attempt && selectedRef.current === destination && position.isCurrent();
     let clipboard: Clipboard | undefined;
     try {
       clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
@@ -199,7 +198,13 @@ export function PostReferenceView({
             >
               {m.post_references_follow({}, options)}
             </a>
-            <Button type="button" variant="outline" className={control} onClick={() => void copyDestination()} disabled={copyState === 'pending'}>
+            <Button
+              type="button"
+              variant="outline"
+              className={control}
+              onClick={() => void copyDestination()}
+              disabled={copyState === 'pending'}
+            >
               {copyState === 'pending'
                 ? m.post_references_copy_pending({}, options)
                 : m.post_references_copy({}, options)}

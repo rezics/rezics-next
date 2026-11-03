@@ -56,10 +56,7 @@ test('one disclosure-aware projection bounds authored occurrences and preserves 
         {
           type: 'text',
           text: hidden,
-          marks: [
-            { type: 'link', attrs: { href: hiddenHref, title: 'Hidden title' } },
-            { type: 'spoiler' },
-          ],
+          marks: [{ type: 'link', attrs: { href: hiddenHref, title: 'Hidden title' } }, { type: 'spoiler' }],
         },
       ],
     },

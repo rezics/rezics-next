@@ -101,7 +101,17 @@ function ReadingVisit({
         className={`post-reading-document ${className ?? ''}`}
       />
     ),
-    [props.document, props.mentions, props.labels, props.renderImage, locale, attributes, linkAttributes, disclosure, className],
+    [
+      props.document,
+      props.mentions,
+      props.labels,
+      props.renderImage,
+      locale,
+      attributes,
+      linkAttributes,
+      disclosure,
+      className,
+    ],
   );
   return (
     <div

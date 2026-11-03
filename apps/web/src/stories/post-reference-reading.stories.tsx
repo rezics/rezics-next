@@ -106,7 +106,9 @@ async function openFirstReference(canvasElement: HTMLElement) {
   await userEvent.click(canvas.getByRole('button', { name: m.post_references_title() }));
   const navigation = await page.findByRole('navigation', { name: m.post_references_title() });
   await expect(navigation).not.toHaveTextContent('hidden source label');
-  await userEvent.click(within(navigation).getByRole('button', { name: m.post_references_entry({ number: 1, label: 'same label' }) }));
+  await userEvent.click(
+    within(navigation).getByRole('button', { name: m.post_references_entry({ number: 1, label: 'same label' }) }),
+  );
   return { canvas, page };
 }
 
@@ -119,7 +121,9 @@ async function readingVisit({ canvasElement }: { canvasElement: HTMLElement }) {
     'href',
     'https://sources.example/first?edition=one#section',
   );
-  const sourceId = canvasElement.querySelector('[data-slot="post-reading-body"] a[href="https://sources.example/first?edition=one#section"]')?.id;
+  const sourceId = canvasElement.querySelector(
+    '[data-slot="post-reading-body"] a[href="https://sources.example/first?edition=one#section"]',
+  )?.id;
   await userEvent.click(within(detail).getByRole('button', { name: m.post_references_return() }));
   await waitFor(() => expect(canvasElement.ownerDocument.activeElement).toHaveAttribute('id', sourceId));
   await expect(canvas).toHaveTextContent('The source body remains complete and selectable.');
