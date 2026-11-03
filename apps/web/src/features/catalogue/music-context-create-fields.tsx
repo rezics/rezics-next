@@ -164,6 +164,7 @@ export function MusicContextCreateFields({
                       publish(rowsRef.current.facts.map((entry) => (entry === row ? { ...entry, statement } : entry)));
                     }}
                     stablePartAddresses
+                    localDraft
                     targetAdmitted={(property, target) =>
                       (release.properties[property]?.targets ?? []).some((base) => typeExtends(release, target, base))
                     }

@@ -157,6 +157,7 @@ export function GameStatementFields({
   focusReference,
   stablePartAddresses,
   targetAdmitted,
+  localDraft,
 }: {
   id?: string;
   feedback?: StatementFeedback | undefined;
@@ -172,6 +173,7 @@ export function GameStatementFields({
   focusReference?: { index: number; nonce: number } | undefined;
   stablePartAddresses?: boolean | undefined;
   targetAdmitted?: ((property: string, type: string) => boolean) | undefined;
+  localDraft?: boolean | undefined;
 }) {
   const change = (next: StatementInput) => {
     if (!editAllowed || editAllowed()) onChange(next);
@@ -211,6 +213,7 @@ export function GameStatementFields({
       current={context}
       locale={locale}
       change={change}
+      localDraft={localDraft}
       valueControl={valueControl ?? control(statement, (value) => change({ ...statement, value }))}
       partControl={control}
       {...(stablePartAddresses ? { stablePartAddresses: true } : {})}
