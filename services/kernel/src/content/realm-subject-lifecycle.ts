@@ -7,7 +7,7 @@ import { SEMANTIC_EVENTS, SUBJECT_MERGED, SUBJECT_REVISED } from '../semantic/ev
 import { COMMUNITY_EVENTS } from '../community/events.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readOutboxEvent } from './read-outbox-event-index.sql';
+import readOutboxEvent from './read-outbox-event-index.sql';
 import {
   createRealmSubjectCandidates,
   REALM_SUBJECT_RAW_LIMIT,
@@ -61,6 +61,9 @@ const communitySourceTypes = [
 ] as const;
 const identitySourceTypes = [SUBJECT_MERGED, SUBJECT_REVISED] as const;
 export const REALM_SUBJECT_LIFECYCLE_EFFECT = 'content_realm_subject_lifecycle';
+export const REALM_SUBJECT_IDENTITY_WORKFLOW = 'content.realmSubject.identity';
+export const REALM_SUBJECT_CENSUS_WORKFLOW = 'content.realmSubject.census';
+export const REALM_SUBJECT_CENSUS_SCHEDULE = 'content.realmSubject.census.minute';
 export const REALM_SUBJECT_CENSUS_PAGE = 32;
 export const REALM_SUBJECT_IDENTITY_PAGE = REALM_SUBJECT_RAW_LIMIT;
 const maxPosition = 9_223_372_036_854_775_807n;
@@ -87,7 +90,12 @@ export type RealmSubjectSweepCursor = Readonly<{
 }>;
 export type RealmSubjectSweepPage = Readonly<{ state: 'more' | 'retry' | 'complete'; next: RealmSubjectSweepCursor }>;
 
-type Source = CandidateVersion & Readonly<{ partition: number; eventId: string; eventIndex: number }>;
+type Source = CandidateVersion & Readonly<{
+  partition: number;
+  eventId: string;
+  eventIndex: number;
+  transactionId: string;
+}>;
 type ThreadState = Readonly<{
   realm: string | null;
   thread: string;
@@ -178,9 +186,17 @@ async function sourceAnchor(pool: Pool, event: CloudEvent, nativeId: string, dea
       `SELECT transaction_id FROM core.receipt WHERE partition_no=$1 AND epoch=$2 AND position=$3`,
       [partition, epoch, position.toString()],
     );
-    if (receipt.rows.length !== 1 || !receipt.rows[0]?.transaction_id)
+    const transactionId = receipt.rows[0]?.transaction_id;
+    if (receipt.rows.length !== 1 || !transactionId)
       throw new TypeError('Realm Subject event has no original transaction receipt');
-    return { partition, epoch, position: position.toString(), eventId: event.id, eventIndex: row.event_seq };
+    return {
+      partition,
+      epoch,
+      position: position.toString(),
+      eventId: event.id,
+      eventIndex: row.event_seq,
+      transactionId,
+    };
   });
 }
 
@@ -190,17 +206,15 @@ function currentThreadEvent(event: CloudEvent): boolean {
   );
 }
 
-function threadIdFor(event: CloudEvent, data: Record<string, unknown>): string | null {
-  if ([threadCreated, postCreated, postPublished, revisionCreated].includes(event.type as never)) {
-    if (event.type === postCreated && data.itemId !== data.threadId) return null;
-    return String(data.threadId);
-  }
-  if (event.type === takedown || event.type === restored) {
-    if (data.targetKind === 'board') return null;
-    if (data.targetKind === 'thread') return String(data.targetId);
-    return null;
-  }
-  if (event.type === postRestored || event.type === postErased) return null;
+async function threadIdFor(pool: Pool, event: CloudEvent, data: Record<string, unknown>, deadline: number): Promise<string | null> {
+  if ([threadCreated, postCreated, postPublished, revisionCreated].includes(event.type as never)) return String(data.threadId);
+  if ((event.type === takedown || event.type === restored) && data.targetKind === 'thread') return String(data.targetId);
+  const post = event.type === postRestored || event.type === postErased
+    ? data.postId
+    : (event.type === takedown || event.type === restored) && data.targetKind === 'post'
+      ? data.targetId
+      : null;
+  if (typeof post === 'string') return postThread(pool, post, deadline);
   return null;
 }
 
@@ -319,6 +333,14 @@ function identityKey(work: RealmSubjectIdentityWork) {
   return `${work.partition}:${work.epoch}:${work.position}:${work.eventId}`;
 }
 
+export function realmSubjectIdentityWorkflowId(
+  work: RealmSubjectIdentityWork,
+  after: RealmSubjectIdentityPage['after'] = null,
+): string {
+  const cursor = after ? `${after.route}:${after.realm}:${after.thread}` : 'start';
+  return `content.realmSubject.identity:${identityKey(work)}:${work.original}:${cursor}`;
+}
+
 /** Bounded live producer, captured-cut runner and current ancestor observation adapter. */
 export function createRealmSubjectLifecycle(input: {
   pool: Pool;
@@ -358,14 +380,18 @@ export function createRealmSubjectLifecycle(input: {
   }
 
   async function refreshThread(event: CloudEvent, data: Record<string, unknown>, source: Source, deadline: number) {
-    const thread = threadIdFor(event, data);
+    const thread = await threadIdFor(pool, event, data, deadline);
     if (!thread) return;
-    if (event.type === postRestored || event.type === postErased) return;
     const native = await readThreadState(pool, thread, deadline);
     if (!native?.realm) return;
-    if (event.type === threadCreated || event.type === postCreated || event.type === revisionCreated)
+    if ([threadCreated, postCreated, postPublished, revisionCreated].includes(event.type as never)) {
       await verifyRevisionAnchor(pool, thread, String(data.revisionId), source.transactionId, deadline);
-    const previous = event.type === revisionCreated && Array.isArray(data.previousSubjectIds)
+      if (data.itemId !== native.opening) return;
+    }
+    if ((event.type === postRestored || event.type === postErased) && data.postId !== native.opening) return;
+    if ((event.type === takedown || event.type === restored) && data.targetKind === 'post' && data.targetId !== native.opening)
+      return;
+    const previous = event.type === revisionCreated && data.itemId === native.opening && Array.isArray(data.previousSubjectIds)
       ? (data.previousSubjectIds as string[])
       : [];
     const originals = uniqueIds([...native.subjects, ...previous]);
@@ -373,15 +399,15 @@ export function createRealmSubjectLifecycle(input: {
     if (!(await candidates.fence(native.realm, thread, source, deadline))) return;
     for (const part of chunks(originals, 100)) {
       const mappings = await readIdentityMappings(pool, part);
-      const byId = new Map(mappings.map((mapping) => [mapping.original, mapping]));
-      for (const original of part) {
-        const mapping = byId.get(original);
-        const mapped = mapping?.state === 'mapped';
+      for (const [index, original] of part.entries()) {
+        const mapping = mappings[index];
+        const terminal = mapping?.state === 'mapped' ? mapping.terminal : null;
+        const identityEpoch = mapping?.state === 'mapped' ? mapping.epoch.toString() : null;
         const candidate: RealmSubjectCandidate = {
           realm: native.realm,
           original,
-          terminal: mapped ? mapping.terminal : null,
-          identityEpoch: mapped ? mapping.epoch.toString() : null,
+          terminal,
+          identityEpoch,
           thread,
           opening: native.opening,
           revision: native.revision,
@@ -434,7 +460,8 @@ export function createRealmSubjectLifecycle(input: {
       return { state: 'done', after: null };
     }
     const mapping = (await readIdentityMappings(pool, [work.original]))[0];
-    const mapped = mapping?.state === 'mapped';
+    const terminal = mapping?.state === 'mapped' ? mapping.terminal : null;
+    const identityEpoch = mapping?.state === 'mapped' ? mapping.epoch.toString() : null;
     for (const row of rows.rows) {
       const threadRoute = realmSubjectRoute(row.thread);
       const version = await realmSubjectHome(pool, threadRoute, deadline, false, async (_client, current) => current);
@@ -442,8 +469,8 @@ export function createRealmSubjectLifecycle(input: {
       await candidates.write(
         {
           ...row,
-          terminal: mapped ? mapping.terminal : null,
-          identityEpoch: mapped ? mapping.epoch.toString() : null,
+          terminal,
+          identityEpoch,
         },
         version,
         'live',
@@ -464,22 +491,22 @@ export function createRealmSubjectLifecycle(input: {
   }
 
   async function sweepCursor(deadline: number): Promise<RealmSubjectSweepCursor> {
-    return realmSubjectHome(pool, 0, deadline, true, async (client) => {
+    const row = await realmSubjectHome(pool, 0, deadline, true, async (client) => {
       await client.query(`INSERT INTO content.realm_subject_sweep_state(singleton) VALUES(true) ON CONFLICT DO NOTHING`);
-      const row = (
+      return (
         await client.query<{ generation: string; next_route: number; complete: boolean }>(
           `SELECT generation::text,next_route,complete FROM content.realm_subject_sweep_state WHERE singleton=true`,
         )
       ).rows[0]!;
-      const state = row.complete ? null : await census.observe(row.next_route, deadline);
-      return {
-        generation: row.generation,
-        route: row.next_route,
-        complete: row.complete,
-        after: state?.after ?? null,
-        ordinal: state?.ordinal ?? 0,
-      };
     });
+    const state = row.complete ? null : await census.observe(row.next_route, deadline);
+    return {
+      generation: row.generation,
+      route: row.next_route,
+      complete: row.complete,
+      after: state?.after ?? null,
+      ordinal: state?.ordinal ?? 0,
+    };
   }
 
   async function sweep(route: number, limit = REALM_SUBJECT_CENSUS_PAGE, deadline = Date.now() + 30_000): Promise<RealmSubjectSweepPage> {
