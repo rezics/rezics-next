@@ -63,11 +63,7 @@ export type SpaceDiscoveryAdapter = Readonly<{
   source: Readonly<{
     read(partition: number, ids: readonly string[]): Promise<SpaceDiscoverySnapshot>;
     count(partition: number): Promise<Readonly<{ partition: number; position: bigint; count: number }>>;
-    page(
-      partition: number,
-      after: NativeSpaceDiscoveryKey | null,
-      limit: number,
-    ): Promise<SpaceDiscoveryPage>;
+    page(partition: number, after: NativeSpaceDiscoveryKey | null, limit: number): Promise<SpaceDiscoveryPage>;
   }>;
   hydrate(
     ids: readonly string[],
@@ -141,11 +137,7 @@ function indexedSpace(value: unknown, partition: number): IndexedSpace {
   };
 }
 
-function snapshot(
-  value: unknown,
-  partition: number,
-  requested?: ReadonlySet<string>,
-): SpaceDiscoverySnapshot {
+function snapshot(value: unknown, partition: number, requested?: ReadonlySet<string>): SpaceDiscoverySnapshot {
   assertPartition(partition);
   if (
     !record(value) ||
@@ -285,9 +277,15 @@ export function createSpaceDiscoveryAdapter(
       assertPartition(partition);
       if (!Array.isArray(ids) || ids.length > MAX_BATCH)
         throw new RangeError('Space discovery accepts at most 100 keys');
-      const keys = requestedKeys(ids.map((id) => ({ route: routeOf(id) ?? -1, id })), partition);
+      const keys = requestedKeys(
+        ids.map((id) => ({ route: routeOf(id) ?? -1, id })),
+        partition,
+      );
       const requested = new Set(keys.map(({ id }) => id));
-      const result = await native.read(partition, keys.map(({ id }) => id));
+      const result = await native.read(
+        partition,
+        keys.map(({ id }) => id),
+      );
       return snapshot(result, partition, requested);
     },
     async count(partition: number) {
@@ -322,7 +320,8 @@ export function createSpaceDiscoveryAdapter(
       if (!Array.isArray(ids) || ids.length > MAX_BATCH)
         throw new RangeError('Space discovery accepts at most 100 hydration keys');
       const keys = [...new Set(ids)].map((id) => {
-        if (typeof id !== 'string' || routeOf(id) === null) throw new TypeError('Invalid Space discovery hydration key');
+        if (typeof id !== 'string' || routeOf(id) === null)
+          throw new TypeError('Invalid Space discovery hydration key');
         return id;
       });
       return validateSummaryMap(await hydrateCurrent(keys, context), new Set(keys));
@@ -332,7 +331,10 @@ export function createSpaceDiscoveryAdapter(
       const admitted = await source.page(partition, after, limit);
       const keys = admitted.spaces.map(({ id }) => ({ route: routeOf(id)!, id }));
       const current = keys.length
-        ? await source.read(partition, keys.map(({ id }) => id))
+        ? await source.read(
+            partition,
+            keys.map(({ id }) => id),
+          )
         : { partition, position: admitted.position, spaces: [] };
       if (current.position < admitted.position)
         throw new TypeError('Current Space discovery observation precedes its page position');

@@ -1,31 +1,28 @@
 ---
 {
-  "goal": "search",
-  "manager": "search",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/search/discovery.ts",
-    "services/kernel/src/search/discovery-hydration.ts",
-    "services/kernel/src/search/account-discovery.ts",
-    "services/kernel/test/search/second-scope-spaces.test.ts"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "acceptance": {
-    "tests": [
-      "The mixed native registry binds the Content Space adapter as a ready owner slot; missing or invalid native coverage remains typed readiness and never becomes an empty population.",
-      "The shared generation and projection path consumes complete bounded Space pages and current authorized summaries, preserving Space identity, keyset positions, and lifecycle lag semantics."
-    ]
-  },
-  "estimate": {
-    "lines": 500,
-    "files": 4
-  }
+  'goal': 'search',
+  'manager': 'search',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/search/discovery.ts',
+      'services/kernel/src/search/discovery-hydration.ts',
+      'services/kernel/src/search/account-discovery.ts',
+      'services/kernel/test/search/second-scope-spaces.test.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'acceptance':
+    {
+      'tests':
+        [
+          'The mixed native registry binds the Content Space adapter as a ready owner slot; missing or invalid native coverage remains typed readiness and never becomes an empty population.',
+          'The shared generation and projection path consumes complete bounded Space pages and current authorized summaries, preserving Space identity, keyset positions, and lifecycle lag semantics.',
+        ],
+    },
+  'estimate': { 'lines': 500, 'files': 4 },
 }
 ---
 
