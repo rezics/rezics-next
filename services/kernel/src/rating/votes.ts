@@ -209,7 +209,13 @@ export function createVoteCommands(config: Dependencies) {
           // Current question provenance is checked again on each native attempt,
           // before ownAccountPrepared permits receipt disclosure or execution.
           prepare: async (attempt) => {
-            const current = await readVisibleRatingQuestion(config, actor, question.id, commandAttemptDeadline(attempt), false);
+            const current = await readVisibleRatingQuestion(
+              config,
+              actor,
+              question.id,
+              commandAttemptDeadline(attempt),
+              false,
+            );
             if (!current) throw new RatingQuestionNotFoundError();
           },
         },

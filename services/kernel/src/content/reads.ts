@@ -1269,7 +1269,8 @@ async function disclose(
   // snapshot, including when the pool has only one connection. Bytes and keys
   // leave this function only after both authorities have passed their final check.
   if (disclosed.value && !(await boardObservation!.recheck())) return { ...disclosed, value: null };
-  if (disclosed.value) disclosed = { ...disclosed, value: await readableCitation(dependencies, context, disclosed.value) };
+  if (disclosed.value)
+    disclosed = { ...disclosed, value: await readableCitation(dependencies, context, disclosed.value) };
   return disclosed;
 }
 
@@ -1277,7 +1278,9 @@ async function disclose(
  * its snapshots. An unreadable question suppresses the citation, preserving the
  * ordinary post and its own disclosure checks; unavailable authority propagates. */
 async function readableCitation<T extends PostEntry | ThreadView>(
-  dependencies: ContentReadDependencies, context: ReadContext, value: T,
+  dependencies: ContentReadDependencies,
+  context: ReadContext,
+  value: T,
 ): Promise<T> {
   const post = 'firstPost' in value ? value.firstPost : value;
   const citation = 'voteCitation' in post ? post.voteCitation : null;

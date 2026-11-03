@@ -170,8 +170,10 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           closed,
         ),
         response: { 200: RatingAggregateResponseSchema, ...aggregateFailures },
-        detail: { ...publicReadDetail('rating.aggregate_get', 'subject:read'),
-          'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'] },
+        detail: {
+          ...publicReadDetail('rating.aggregate_get', 'subject:read'),
+          'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'],
+        },
       },
       async ({ actor, params, query, admission, job }) => {
         const populations = Array.isArray(query.population) ? query.population : [query.population];
@@ -209,8 +211,10 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
         params: t.Object({ id }, closed),
         query: t.Object({ question: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed),
         response: { 200: RatingPopulationPageResponseSchema, ...aggregateFailures },
-        detail: { ...publicReadDetail('rating.populations_get', 'subject:read'),
-          'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'] },
+        detail: {
+          ...publicReadDetail('rating.populations_get', 'subject:read'),
+          'x-resource-types': ['semantic.subject', 'community.realm', 'semantic.context'],
+        },
       },
       async ({ actor, params, query, admission, job }) => {
         requireRoutableIds(params.id, query.question);
@@ -335,26 +339,36 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
     .post(
       '/v1/realms/:realmId/rating-questions',
       {
-        params: t.Object({ realmId: id }, closed), headers,
+        params: t.Object({ realmId: id }, closed),
+        headers,
         body: RatingQuestionCreateInputSchema,
         response: {
           201: withHeaders(RatingQuestionResponseSchema, { [SESSION_HEADER]: t.Optional(t.String()) }),
           ...failures,
         },
         detail: {
-          operationId: 'rating.question_create', 'x-action': 'realm:manage',
-          'x-exposure': 'public', 'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate, security: bearer,
+          operationId: 'rating.question_create',
+          'x-action': 'realm:manage',
+          'x-exposure': 'public',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
+          security: bearer,
         },
       },
       async ({ actor, params, body, headers, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         requireRoutableIds(params.realmId);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const outcome = await admission.run('normal', job, () => command(() =>
-          createRealmRatingQuestion(config(), actor, { ...body, realmId: params.realmId },
-            { idempotencyKey: key, deadline: job.deadline }),
-        ));
+        const outcome = await admission.run('normal', job, () =>
+          command(() =>
+            createRealmRatingQuestion(
+              config(),
+              actor,
+              { ...body, realmId: params.realmId },
+              { idempotencyKey: key, deadline: job.deadline },
+            ),
+          ),
+        );
         session.record({ partition: outcome.partition, epoch: outcome.epoch, position: outcome.position });
         set.status = 201;
         return outcome.value;
@@ -371,8 +385,10 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
               throw new ProblemError('invalid_request');
         },
         response: { 200: RatingQuestionDirectoryResponseSchema, ...aggregateFailures },
-        detail: { ...publicReadDetail('rating.question_list', 'definitions:read'),
-          'x-resource-types': ['community.realm', 'semantic.context'] },
+        detail: {
+          ...publicReadDetail('rating.question_list', 'definitions:read'),
+          'x-resource-types': ['community.realm', 'semantic.context'],
+        },
       },
       async ({ actor, query, admission, job }) => {
         return admission.run('normal', job, async () => {
@@ -382,8 +398,11 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
             actor.kind === 'anonymous' ? actor : { ...actor, scopes: [...new Set(actor.scopes)].sort() };
           const binding: CursorBinding = {
             operation: 'rating.question-directory',
-            parameters: { limit, authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
-              ...(query.realm === undefined ? {} : { realm: query.realm }) },
+            parameters: {
+              limit,
+              authority: createHash('sha256').update(JSON.stringify(authority)).digest('hex'),
+              ...(query.realm === undefined ? {} : { realm: query.realm }),
+            },
           };
           let after: string | null = null;
           if (query.cursor !== undefined) {
@@ -403,8 +422,12 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
               throw new ProblemError('invalid_cursor');
             after = decoded.after[0];
           }
-          const page = await readSelectedQuestionDirectory(config(), actor,
-            { after, limit, ...(query.realm === undefined ? {} : { realmId: query.realm }) }, job.deadline);
+          const page = await readSelectedQuestionDirectory(
+            config(),
+            actor,
+            { after, limit, ...(query.realm === undefined ? {} : { realmId: query.realm }) },
+            job.deadline,
+          );
           return {
             ratingQuestions: page.ratingQuestions,
             next:
@@ -425,13 +448,16 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       {
         params: t.Object({ questionId: id }, closed),
         response: { 200: RatingQuestionResponseSchema, ...failures },
-        detail: { ...publicReadDetail('rating.question_get', 'definitions:read'),
-          'x-resource-types': ['community.realm', 'semantic.context'] },
+        detail: {
+          ...publicReadDetail('rating.question_get', 'definitions:read'),
+          'x-resource-types': ['community.realm', 'semantic.context'],
+        },
       },
       async ({ actor, params, admission, job }) => {
         requireRoutableIds(params.questionId);
         const question = await admission.run('normal', job, () =>
-          readVisibleRatingQuestion(config(), actor, params.questionId, job.deadline));
+          readVisibleRatingQuestion(config(), actor, params.questionId, job.deadline),
+        );
         if (!question) throw new ProblemError('not_found');
         return ratingQuestionView(question);
       },

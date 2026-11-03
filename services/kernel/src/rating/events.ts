@@ -54,8 +54,12 @@ export type RatingIdentityPageEvent = Static<typeof identityPage>;
 
 export const RATING_EVENTS = {
   'com.rezics.rating.question.created.v1': Type.Object(
-    { questionId: Type.String({ pattern: UUID }), realmId: Type.String({ pattern: UUID }),
-      ownerId: Type.String({ pattern: UUID }), revision: Type.Literal(1) },
+    {
+      questionId: Type.String({ pattern: UUID }),
+      realmId: Type.String({ pattern: UUID }),
+      ownerId: Type.String({ pattern: UUID }),
+      revision: Type.Literal(1),
+    },
     { additionalProperties: false },
   ),
   [RATING_IDENTITY_PAGE]: identityPage,

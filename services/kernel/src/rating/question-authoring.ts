@@ -41,11 +41,17 @@ export function validateQuestionDefinition(input: RealmQuestionInput): void {
     throw new QuestionDefinitionInvalidError('grain');
   const scale = input.scale;
   if (
-    !scale || !Number.isSafeInteger(scale.min) || !Number.isSafeInteger(scale.max) ||
-    !Number.isSafeInteger(scale.displayStep) || scale.min < 0 || scale.max > 20 ||
-    scale.max <= scale.min || scale.displayStep < 1 ||
+    !scale ||
+    !Number.isSafeInteger(scale.min) ||
+    !Number.isSafeInteger(scale.max) ||
+    !Number.isSafeInteger(scale.displayStep) ||
+    scale.min < 0 ||
+    scale.max > 20 ||
+    scale.max <= scale.min ||
+    scale.displayStep < 1 ||
     (scale.max - scale.min) % scale.displayStep !== 0
-  ) throw new QuestionDefinitionInvalidError('scale');
+  )
+    throw new QuestionDefinitionInvalidError('scale');
 }
 
 /** One Realm-home command, receipt and event. The current native manage decision
@@ -60,14 +66,19 @@ export async function createRealmRatingQuestion(
   validateQuestionDefinition(input);
   // Copy the complete definition so mutation cannot change the digest or body during preparation.
   const body = {
-    realmId: input.realmId, meaning: input.meaning, label: input.label, grain: input.grain,
+    realmId: input.realmId,
+    meaning: input.meaning,
+    label: input.label,
+    grain: input.grain,
     scale: { min: input.scale.min, max: input.scale.max, displayStep: input.scale.displayStep },
   };
   const route = routeOf(body.realmId)!;
   const identity = principalCommandIdentity(actor);
   const kind = 'rating.question.create';
   const authorization = resourceAuthorization({
-    access: deps.access, actor, action: 'realm:manage',
+    access: deps.access,
+    actor,
+    action: 'realm:manage',
     anchor: {
       resource: { route, id: body.realmId },
       async validate(client, time) {
@@ -76,25 +87,53 @@ export async function createRealmRatingQuestion(
     },
     context: { pool: deps.pool, deadline: context.deadline, partition: partitionOf(route) },
   });
-  return runCommand(deps.pool, {
-    ...identity, partition: partitionOf(route), deadline: context.deadline, clock: deps.clock,
-    receipt: {
-      kind, key: context.idempotencyKey,
-      digest: createHash('sha256').update(canonicalize([identity, kind, body])!).digest(),
+  return runCommand(
+    deps.pool,
+    {
+      ...identity,
+      partition: partitionOf(route),
+      deadline: context.deadline,
+      clock: deps.clock,
+      receipt: {
+        kind,
+        key: context.idempotencyKey,
+        digest: createHash('sha256')
+          .update(canonicalize([identity, kind, body])!)
+          .digest(),
+      },
+      authorization,
     },
-    authorization,
-  }, async (tx) => {
-    const id = newId(route);
-    await insert.run(tx, {
-      id, owner_id: actor.accountId, realm_id: body.realmId, meaning: body.meaning,
-      label: body.label, grain: body.grain, minimum_units: body.scale.min,
-      maximum_units: body.scale.max, step_units: body.scale.displayStep,
-    });
-    return {
-      value: { id, realmId: body.realmId, meaning: body.meaning, revision: 1,
-        label: body.label, grain: body.grain, scale: body.scale },
-      events: [{ type: QUESTION_CREATED, subject: id,
-        data: { questionId: id, realmId: body.realmId, ownerId: actor.accountId, revision: 1 } }],
-    };
-  });
+    async (tx) => {
+      const id = newId(route);
+      await insert.run(tx, {
+        id,
+        owner_id: actor.accountId,
+        realm_id: body.realmId,
+        meaning: body.meaning,
+        label: body.label,
+        grain: body.grain,
+        minimum_units: body.scale.min,
+        maximum_units: body.scale.max,
+        step_units: body.scale.displayStep,
+      });
+      return {
+        value: {
+          id,
+          realmId: body.realmId,
+          meaning: body.meaning,
+          revision: 1,
+          label: body.label,
+          grain: body.grain,
+          scale: body.scale,
+        },
+        events: [
+          {
+            type: QUESTION_CREATED,
+            subject: id,
+            data: { questionId: id, realmId: body.realmId, ownerId: actor.accountId, revision: 1 },
+          },
+        ],
+      };
+    },
+  );
 }

@@ -31,28 +31,42 @@ export type RatingQuestionView = {
 /** Keep the legacy wire shape exact. Realm definitions add explicit provenance and
  * meaning; ownerId is the authoring account and is never used as a Realm selector. */
 export function ratingQuestionView(row: {
-  id: string; revision: number; label: string; grain: string;
-  minimumUnits: number; maximumUnits: number; stepUnits: number;
-  realmId?: string | null; meaning?: string | null;
+  id: string;
+  revision: number;
+  label: string;
+  grain: string;
+  minimumUnits: number;
+  maximumUnits: number;
+  stepUnits: number;
+  realmId?: string | null;
+  meaning?: string | null;
 }): RatingQuestionView {
   const grain = row.grain;
   if (grain !== 'work' && grain !== 'release' && grain !== 'episode' && grain !== 'character')
     throw new Error('Unknown rating question grain');
   return {
-    id: row.id, revision: row.revision, label: row.label, grain,
+    id: row.id,
+    revision: row.revision,
+    label: row.label,
+    grain,
     scale: { min: row.minimumUnits, max: row.maximumUnits, displayStep: row.stepUnits },
     ...(row.realmId == null ? {} : { realmId: row.realmId, meaning: row.meaning! }),
   };
 }
 
 /** Existing Global definitions authority, with no held connection during preparation. */
-export async function requireGlobalQuestionRead(
-  deps: Dependencies, actor: Actor, deadline: number,
-): Promise<void> {
-  const check = await accessCheck(deps.access, actor, 'definitions:read', {
-    route: GLOBAL_CONTEXT.route, id: GLOBAL_CONTEXT.id,
-    eligibility: globalReadEligibility('definitions:read'),
-  }, { pool: deps.pool, deadline });
+export async function requireGlobalQuestionRead(deps: Dependencies, actor: Actor, deadline: number): Promise<void> {
+  const check = await accessCheck(
+    deps.access,
+    actor,
+    'definitions:read',
+    {
+      route: GLOBAL_CONTEXT.route,
+      id: GLOBAL_CONTEXT.id,
+      eligibility: globalReadEligibility('definitions:read'),
+    },
+    { pool: deps.pool, deadline },
+  );
   await withConnection(deps.pool, async (client) => {
     if (!(await check(deadlineClient(client, deadline)))) throw new ProblemError('not_found');
   });
@@ -61,7 +75,10 @@ export async function requireGlobalQuestionRead(
 /** Native Realm readability includes protected grants, host state and current bans.
  * Failure/unavailability propagates; it must never become an empty selection. */
 export async function requireRealmQuestionRead(
-  deps: Dependencies, actor: Actor, realmId: string, deadline: number,
+  deps: Dependencies,
+  actor: Actor,
+  realmId: string,
+  deadline: number,
 ): Promise<void> {
   requireAccessDeadline(deadline);
   if (routeOf(realmId) === null || realmId === GLOBAL_CONTEXT.id) throw new ProblemError('not_found');
@@ -74,7 +91,10 @@ export async function requireRealmQuestionRead(
  * The metadata connection is released before Access prepares any native evidence.
  * No row, label or grain crosses the boundary until its provenance is readable. */
 export async function readVisibleRatingQuestion(
-  deps: Dependencies, actor: Actor, questionId: string, deadline: number,
+  deps: Dependencies,
+  actor: Actor,
+  questionId: string,
+  deadline: number,
   globalAuthority = true,
 ): Promise<QuestionMetadata | null> {
   const route = routeOf(questionId);
@@ -100,11 +120,13 @@ export async function readRatingQuestionDirectory(
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 20)
     throw new RangeError('Invalid rating question page limit');
   const parameters = {
-    after_id: input.after ?? '00000000-0000-0000-0000-000000000000', limit: input.limit,
+    after_id: input.after ?? '00000000-0000-0000-0000-000000000000',
+    limit: input.limit,
   };
-  const rows = input.realmId === undefined
-    ? await directory.run(client, parameters)
-    : await realmDirectory.run(client, { ...parameters, realm_id: input.realmId });
+  const rows =
+    input.realmId === undefined
+      ? await directory.run(client, parameters)
+      : await realmDirectory.run(client, { ...parameters, realm_id: input.realmId });
   const consumed = rows.slice(0, input.limit);
   return {
     ratingQuestions: consumed.map(ratingQuestionView),
@@ -117,13 +139,15 @@ export async function readRatingQuestionDirectory(
  * Every Realm page has at most 21 raw rows, 20 metadata views and two native Realm
  * reads, with all checkouts released between metadata and authority observations. */
 export async function readSelectedQuestionDirectory(
-  deps: Dependencies, actor: Actor,
+  deps: Dependencies,
+  actor: Actor,
   input: { after: string | null; limit: number; realmId?: string },
   deadline: number,
 ) {
-  const authorize = () => input.realmId === undefined
-    ? requireGlobalQuestionRead(deps, actor, deadline)
-    : requireRealmQuestionRead(deps, actor, input.realmId, deadline);
+  const authorize = () =>
+    input.realmId === undefined
+      ? requireGlobalQuestionRead(deps, actor, deadline)
+      : requireRealmQuestionRead(deps, actor, input.realmId, deadline);
   await authorize();
   const page = await withReadTransaction(deps.pool, async (client) => {
     const bounded = deadlineClient(client, deadline);
