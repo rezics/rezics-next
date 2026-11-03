@@ -695,12 +695,30 @@ alias-window and home-certificate remedies in evidence reports are superseded by
 
 ## Global rating order
 
-The first public rating sort is limited to the public aggregate for the Global population and standard question.
-[Scope](../../../../docs/scope.md) includes Realm rating sorts in the adopted second scope; private Realm figures
-never enter the public Search index. Rating's [protected Realm rank source](../rating/README.md#protected-realm-rank-source)
-provides native partition-local standard-question candidate pages through `createRealmRankSource`; Search owns
-query/filter integration. [Rating](../rating/README.md) owns the score formula, disclosure thresholds and privacy rules.
+Omitting `population` selects the public aggregate for the Global population and standard question.
+Selected Realm rating order admits `population: {realm: ContextId}` for `sort: "rating"` only; all Realm
+ordering, including public Realms, stays native. Private Realm figures never enter the public Search index.
+[Rating](../rating/README.md) owns the score formula, disclosure thresholds and privacy rules.
 Search uses the published score and does not recompute or reinterpret that policy.
+
+`RealmRatingSource` in [realm-rating-order.ts](realm-rating-order.ts) is the minimal native Content seam.
+Its `observe` checks current Context read/ban authority for the bound principal, standard question and same-population
+frozen prior. Its authority identity changes on relevant access transitions; its revision covers the complete
+canonical population, native figure revisions, prior eligibility history and predicate meaning. `read` must seek
+the complete text/filter predicate in scored-descending then unscored order with the existing name/ID ties,
+using equivalent catalogue analysis or complete bounded retained evaluation. A returned page cannot establish
+its own population or rank. At most three native seeks and the existing candidate ceilings apply; exhausted
+allowances return readiness. No owner ordering/authority implementation is installed by default: missing,
+denied or unavailable evidence never means an empty or unscored population.
+
+The separate native adapter validates population, standard question, prior epoch, disclosure threshold, figure
+revision, strict tuples and matching subject-home snapshot positions. Both phases and the sealed continuation
+bind the authority and population revision within the existing eight-value cursor envelope and expiry limits;
+changes restart. Authority is checked again after hydration and final response work, including empty results.
+Realm ordering adds no public fields, totals or shared caches. Returned hit figures remain Global; the HTTP
+response is private/no-store. Mixed-kind discovery and kind-page continuations do not admit this selector.
+`normalizePublicRatingFigure` retains its Global-only contract. The compact outcome suite is
+`test/search/second-scope-realm-rating.test.ts`; injected native evidence does not claim production readiness.
 
 The rating source is the current public figure for a subject, read with that subject from the same anchor partition
 and the same repeatable-read `core.partition.position`. A missing figure means unscored only after a complete,
@@ -901,7 +919,7 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
   and sorting is bounded batch data rather than history.
 - Growth check: [test/growth-events.test.ts](../../test/growth-events.test.ts): “Batch log stays within its bound as
   H grows”; “Full batch log reads only the batch's outbox rows at every partition history” uses histories `[32, 256,
-  2048]`.
+2048]`.
 
 ### Checkpoint snapshot and advance
 
@@ -1058,7 +1076,7 @@ Relay discovery, freshness, reconciliation and retirement use cross-partition SQ
 ### Listing counts
 
 - Touches: `subjectListingSource(pool).read(partition, ids)` runs `listing-counts.sql` once, selecting `subject_id,
-  public_collection_count` from `library.subject_listing` by primary key `(route, subject_id)` for the ids in that
+public_collection_count` from `library.subject_listing` by primary key `(route, subject_id)` for the ids in that
   partition. An id without a row is absent. Grow N and the number of Collections, fixing b.
 - Bound: One statement per call: primary-key lookups of at most b rows, constant in N stored subjects and in the
   number of Collections. The document gains one integer field, `public_collection_count`, and no field per
