@@ -3,7 +3,7 @@ import type { Account, CommunityDriver, Fixture, Method, Realm, Space } from '..
 import type { BanReviewPage } from '../../src/community/ban-review-page-schemas.ts';
 import pageWindow from '../../src/community/ban-review-page-window.sql';
 import identities from '../../src/access/public-identity-page.sql';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { routeOf } from '../../src/route/route.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
 import { createCommunityDriver, closeCommunityDrivers, communityFixtureRuntime } from './community-driver.ts';
@@ -117,7 +117,10 @@ test.serial(
   '20/21 and 100/101 raw boundaries, exact selection outside the page and same-input continuation',
   async () => {
     const r = await realm();
-    const ids = Array.from({ length: 101 }, () => newId(routeOf(fixture.member.id)!)).sort();
+    const { system } = communityFixtureRuntime();
+    const ids: string[] = [];
+    for (let i = 0; i < 101; i++) ids.push((await accountDeletionRuntime(system).person()).accountId);
+    ids.sort();
     for (const id of ids) await json(await ban(r, id));
     const first = await json<BanReviewPage>(await callRead(r));
     expect(first.items.map((item) => item.accountId)).toEqual(ids.slice(0, 20));
