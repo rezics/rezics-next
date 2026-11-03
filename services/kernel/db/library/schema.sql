@@ -1670,7 +1670,13 @@ CREATE TABLE library.bangumi_upload_row (
     review jsonb,
     choice jsonb,
     outcome jsonb,
+    labels jsonb,
+    label_creations integer DEFAULT 0 NOT NULL,
+    label_assignments integer DEFAULT 0 NOT NULL,
+    CONSTRAINT bangumi_label_review_bytes CHECK (((labels IS NULL) OR (octet_length((labels)::text) <= 32768))),
     CONSTRAINT bangumi_upload_row_evidence_check CHECK ((octet_length((evidence)::text) <= 32768)),
+    CONSTRAINT bangumi_upload_row_label_assignments_check CHECK (((label_assignments >= 0) AND (label_assignments <= 16))),
+    CONSTRAINT bangumi_upload_row_label_creations_check CHECK (((label_creations >= 0) AND (label_creations <= 16))),
     CONSTRAINT bangumi_upload_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 99)))
 );
 
@@ -2708,6 +2714,35 @@ CREATE TABLE library.entry_deleted (
     CONSTRAINT entry_deleted_revision_step CHECK ((deleted_revision = (revision + 1))),
     CONSTRAINT entry_deleted_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT entry_deleted_type_observation_check CHECK ((((type_id IS NULL) AND (type_source_id IS NULL) AND (type_source_partition IS NULL) AND (type_source_epoch IS NULL) AND (type_source_position IS NULL)) OR ((type_id IS NOT NULL) AND (type_source_id IS NOT NULL) AND (type_source_partition IS NOT NULL) AND (type_source_epoch IS NOT NULL) AND (type_source_position IS NOT NULL) AND ((type_source_partition >= 0) AND (type_source_partition <= 4095)) AND (type_source_epoch >= 1) AND (type_source_position >= 0) AND (type_source_partition = (((get_byte(uuid_send(type_source_id), 10) * 256) + get_byte(uuid_send(type_source_id), 11)) >> 4)))))
+);
+
+
+--
+-- Name: entry_state_change; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.entry_state_change (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    incarnation_id uuid NOT NULL,
+    prior_revision integer,
+    revision integer NOT NULL,
+    before_state text,
+    before_profile_pin jsonb,
+    after_state text NOT NULL,
+    after_profile_pin jsonb,
+    command_id uuid NOT NULL,
+    command_kind text NOT NULL,
+    changed_at timestamp with time zone NOT NULL,
+    coverage_complete boolean NOT NULL,
+    CONSTRAINT entry_state_change_after_profile_pin_check CHECK (((after_profile_pin IS NULL) OR library.library_profile_pin_valid(after_profile_pin))),
+    CONSTRAINT entry_state_change_before_profile_pin_check CHECK (((before_profile_pin IS NULL) OR library.library_profile_pin_valid(before_profile_pin))),
+    CONSTRAINT entry_state_change_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT entry_state_change_check1 CHECK ((((prior_revision IS NULL) AND (revision = 1) AND (before_state IS NULL) AND (before_profile_pin IS NULL)) OR ((prior_revision IS NOT NULL) AND (prior_revision >= 1) AND (revision = (prior_revision + 1)) AND (before_state IS NOT NULL)))),
+    CONSTRAINT entry_state_change_command_kind_check CHECK ((command_kind = ANY (ARRAY['library.entry.put'::text, 'library.entry.state.restore'::text]))),
+    CONSTRAINT entry_state_change_revision_check CHECK (((revision >= 1) AND (revision <= 2147483644))),
+    CONSTRAINT entry_state_change_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
 
@@ -4848,6 +4883,14 @@ ALTER TABLE ONLY library.entry
 
 
 --
+-- Name: entry_state_change entry_state_change_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.entry_state_change
+    ADD CONSTRAINT entry_state_change_pkey PRIMARY KEY (route, account_id, subject_id, incarnation_id, revision);
+
+
+--
 -- Name: entry entry_state_check; Type: CHECK CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -6035,6 +6078,20 @@ CREATE INDEX entry_shelf_finished_state_type ON library.entry USING btree (route
 --
 
 CREATE INDEX entry_shelf_finished_type ON library.entry USING btree (route, account_id, type_id, finished_at DESC NULLS LAST, subject_id);
+
+
+--
+-- Name: entry_state_change_account_subject; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_state_change_account_subject ON library.entry_state_change USING btree (route, account_id, subject_id, incarnation_id, revision DESC);
+
+
+--
+-- Name: entry_state_change_subject_retention; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX entry_state_change_subject_retention ON library.entry_state_change USING btree (route, account_id, subject_id, changed_at DESC, incarnation_id, revision DESC);
 
 
 --
