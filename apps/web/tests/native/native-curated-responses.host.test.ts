@@ -43,7 +43,11 @@ function rowById(values: readonly Record<string, unknown>[], id: string) {
   return found!;
 }
 
-function allRows(manifest: NativeCuratedResponseManifest, first: NativeCuratedResponseScenario, second: NativeCuratedResponseScenario) {
+function allRows(
+  manifest: NativeCuratedResponseManifest,
+  first: NativeCuratedResponseScenario,
+  second: NativeCuratedResponseScenario,
+) {
   return [...rows(manifest.outcomes[first], first), ...rows(manifest.outcomes[second], second)];
 }
 
@@ -68,9 +72,12 @@ function expectRawResponses(manifest: NativeCuratedResponseManifest) {
     expect(route.path, name).toBe(outcome.response.path);
     expect(route.persona, name).toBe(outcome.response.persona);
     expect(route.availability, name).toBe(outcome.availability);
-    expect(Object.keys(outcome.response.headers).every((header) =>
-      (nativeCuratedResponseHeaderAllowlist as readonly string[]).includes(header),
-    ), `${name} headers`).toBe(true);
+    expect(
+      Object.keys(outcome.response.headers).every((header) =>
+        (nativeCuratedResponseHeaderAllowlist as readonly string[]).includes(header),
+      ),
+      `${name} headers`,
+    ).toBe(true);
     const parsed = outcome.response.bodyText.length === 0 ? null : JSON.parse(outcome.response.bodyText);
     expect(outcome.response.body, `${name} body was enriched or normalized`).toEqual(parsed);
   }
@@ -104,11 +111,10 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(manifest.ids.firstSubjectId).not.toBe(manifest.ids.firstOccurrenceId);
     expect(manifest.ids.firstSubjectId).not.toBe(manifest.ids.duplicateOccurrenceId);
     expect(manifest.ids.otherSubjectId).not.toBe(manifest.ids.otherOccurrenceId);
-    expect(new Set([
-      manifest.ids.firstOccurrenceId,
-      manifest.ids.duplicateOccurrenceId,
-      manifest.ids.otherOccurrenceId,
-    ]).size).toBe(3);
+    expect(
+      new Set([manifest.ids.firstOccurrenceId, manifest.ids.duplicateOccurrenceId, manifest.ids.otherOccurrenceId])
+        .size,
+    ).toBe(3);
 
     const firstCreated = member(manifest.outcomes.memberFirstCreate, 'First occurrence create');
     const duplicateCreated = member(manifest.outcomes.memberDuplicateCreate, 'Duplicate occurrence create');
@@ -117,7 +123,10 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(manifest.outcomes.memberDuplicateCreate.response.status).toBe(201);
     expect(manifest.outcomes.memberOtherCreate.response.status).toBe(201);
     expect(firstCreated).toMatchObject({ id: manifest.ids.firstOccurrenceId, subjectId: manifest.ids.firstSubjectId });
-    expect(duplicateCreated).toMatchObject({ id: manifest.ids.duplicateOccurrenceId, subjectId: manifest.ids.firstSubjectId });
+    expect(duplicateCreated).toMatchObject({
+      id: manifest.ids.duplicateOccurrenceId,
+      subjectId: manifest.ids.firstSubjectId,
+    });
     expect(otherCreated).toMatchObject({ id: manifest.ids.otherOccurrenceId, subjectId: manifest.ids.otherSubjectId });
     expect(firstCreated.note).toBe('First occurrence note');
     expect(duplicateCreated.note).toBe('Duplicate occurrence note');
@@ -146,10 +155,12 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(initialRows.map((row) => row.id)).toContain(manifest.ids.otherOccurrenceId);
     expect(initialRows.map((row) => row.note)).toContain('First occurrence note');
     expect(initialRows.map((row) => row.note)).toContain('Duplicate occurrence note');
-    expect(new URLSearchParams(manifest.outcomes.ownerMembersInitialPage2.command.path.split('?')[1]).get('cursor')).toBe(
-      manifest.observations.initialPageCursor,
-    );
-    expect(manifest.outcomes.ownerMembersInitialPage1.response.body).toMatchObject({ next: manifest.observations.initialPageCursor });
+    expect(
+      new URLSearchParams(manifest.outcomes.ownerMembersInitialPage2.command.path.split('?')[1]).get('cursor'),
+    ).toBe(manifest.observations.initialPageCursor);
+    expect(manifest.outcomes.ownerMembersInitialPage1.response.body).toMatchObject({
+      next: manifest.observations.initialPageCursor,
+    });
     expect(manifest.outcomes.ownerMembersInitialPage2.response.body).toMatchObject({ next: null });
     for (const name of ['ownerMembersInitialPage1', 'ownerMembersInitialPage2'] as const) {
       expect(manifest.outcomes[name].command.path).toContain('view=FULL');
@@ -169,7 +180,7 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(metadataReplay.command.inputBodyText).toBe(metadataEdit.command.inputBodyText);
     expect(metadataReplay.response.body).toEqual(metadataEdit.response.body);
     expect(metadataEdit.command.observedRevision).toBe(
-      (collection(manifest.outcomes.collectionOwnerReadAfterCreate, 'Collection before CAS').revision as number),
+      collection(manifest.outcomes.collectionOwnerReadAfterCreate, 'Collection before CAS').revision as number,
     );
     expect(staleEdit.response.status).toBe(409);
     expect(staleReplay.response.status).toBe(409);
@@ -210,9 +221,9 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(manifest.outcomes.ownerMembersAfterEditPage1.response.body).toMatchObject({
       next: manifest.observations.afterEditPageCursor,
     });
-    expect(new URLSearchParams(manifest.outcomes.ownerMembersAfterEditPage2.command.path.split('?')[1]).get('cursor')).toBe(
-      manifest.observations.afterEditPageCursor,
-    );
+    expect(
+      new URLSearchParams(manifest.outcomes.ownerMembersAfterEditPage2.command.path.split('?')[1]).get('cursor'),
+    ).toBe(manifest.observations.afterEditPageCursor);
 
     const move = manifest.outcomes.memberMove;
     const moveReplay = manifest.outcomes.memberMoveReplay;
@@ -229,15 +240,20 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
       addedAt: duplicateCreated.addedAt,
     });
     const movedRows = allRows(manifest, 'ownerMembersAfterMovePage1', 'ownerMembersAfterMovePage2');
-    const expectedMovedOrder = [manifest.ids.duplicateOccurrenceId, ...manifest.observations.initialOrder.filter((id) => id !== manifest.ids.duplicateOccurrenceId)];
+    const expectedMovedOrder = [
+      manifest.ids.duplicateOccurrenceId,
+      ...manifest.observations.initialOrder.filter((id) => id !== manifest.ids.duplicateOccurrenceId),
+    ];
     expect(manifest.observations.orderAfterMove).toEqual(expectedMovedOrder);
     expect(movedRows.map((row) => row.id)).toEqual(manifest.observations.orderAfterMove);
-    expect(new Map(editedRows.map((row) => [row.id, { subjectId: row.subjectId, note: row.note, addedAt: row.addedAt }]))).toEqual(
+    expect(
+      new Map(editedRows.map((row) => [row.id, { subjectId: row.subjectId, note: row.note, addedAt: row.addedAt }])),
+    ).toEqual(
       new Map(movedRows.map((row) => [row.id, { subjectId: row.subjectId, note: row.note, addedAt: row.addedAt }])),
     );
-    expect(new URLSearchParams(manifest.outcomes.ownerMembersAfterMovePage2.command.path.split('?')[1]).get('cursor')).toBe(
-      manifest.observations.afterMovePageCursor,
-    );
+    expect(
+      new URLSearchParams(manifest.outcomes.ownerMembersAfterMovePage2.command.path.split('?')[1]).get('cursor'),
+    ).toBe(manifest.observations.afterMovePageCursor);
 
     for (const [visibility, roles] of Object.entries(nativeCuratedAccessExports) as [
       keyof typeof nativeCuratedAccessExports,
@@ -263,8 +279,12 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(privateOther.response.status).toBe(404);
     expect(privateAnonymous.response.status).toBe(404);
     expect(withoutRequestId(privateOther.response.body)).toEqual(withoutRequestId(privateAnonymous.response.body));
-    expect(bodyObject(manifest.outcomes.privateOtherMembers, 'Private other member read')).not.toHaveProperty('members');
-    expect(bodyObject(manifest.outcomes.privateAnonymousMembers, 'Private anonymous member read')).not.toHaveProperty('members');
+    expect(bodyObject(manifest.outcomes.privateOtherMembers, 'Private other member read')).not.toHaveProperty(
+      'members',
+    );
+    expect(bodyObject(manifest.outcomes.privateAnonymousMembers, 'Private anonymous member read')).not.toHaveProperty(
+      'members',
+    );
     expect(manifest.outcomes.privateOtherMembers.response.status).toBe(404);
     expect(manifest.outcomes.privateAnonymousMembers.response.status).toBe(404);
     const privateOwnerRows = rows(manifest.outcomes.privateOwnerMembers, 'Private owner member read');
@@ -294,13 +314,18 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(publicOwnerRows.map((row) => row.id)).toEqual(manifest.observations.orderAfterMove);
     expect(publicOwnerRows.map((row) => row.subjectId)).toContain(manifest.ids.otherSubjectId);
     for (const role of ['other', 'anonymous'] as const) {
-      const publicRows = rows(manifest.outcomes[nativeCuratedAccessExports.public[role].members], `Public ${role} member read`);
+      const publicRows = rows(
+        manifest.outcomes[nativeCuratedAccessExports.public[role].members],
+        `Public ${role} member read`,
+      );
       expect(publicRows.map((row) => row.subjectId)).not.toContain(manifest.ids.otherSubjectId);
       expect(publicRows.map((row) => row.id)).toEqual(
         publicOwnerRows.filter((row) => row.subjectId !== manifest.ids.otherSubjectId).map((row) => row.id),
       );
     }
-    expect(collection(manifest.outcomes.privateFinalOwnerCollection, 'Private owner before removal').visibility).toBe('private');
+    expect(collection(manifest.outcomes.privateFinalOwnerCollection, 'Private owner before removal').visibility).toBe(
+      'private',
+    );
     const finalOwnerRows = rows(manifest.outcomes.privateFinalOwnerMembers, 'Private owner before removal');
     expect(finalOwnerRows.map((row) => row.id)).toEqual(manifest.observations.orderAfterMove);
 
@@ -351,7 +376,9 @@ test('native curated response exports bind raw occurrence facts, visibility, CAS
     expect(selectedPublication.response.status).toBe(503);
     expect(selectedPublication.response.body).toMatchObject({ code: 'dependency_unavailable' });
     expect(selectedPublication.response.body).not.toHaveProperty('publication');
-    expect(selectedPublication.command.path).toBe(`/v1/collections/${manifest.ids.dynamicCollectionId}:publishSelected`);
+    expect(selectedPublication.command.path).toBe(
+      `/v1/collections/${manifest.ids.dynamicCollectionId}:publishSelected`,
+    );
     expect(selectedPublication.command.persona).toBe('alice');
 
     const responseCommands = manifest.sequence.filter((step) => step.kind === 'response');

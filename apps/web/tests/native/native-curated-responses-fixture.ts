@@ -82,10 +82,16 @@ export const nativeCuratedAccessExports = {
     other: { collection: 'publicOtherCollection', members: 'publicOtherMembers' },
     anonymous: { collection: 'publicAnonymousCollection', members: 'publicAnonymousMembers' },
   },
-} as const satisfies Record<NativeCuratedVisibility, Record<NativeCuratedAccessRole, {
-  collection: NativeCuratedResponseScenario;
-  members: NativeCuratedResponseScenario;
-}>>;
+} as const satisfies Record<
+  NativeCuratedVisibility,
+  Record<
+    NativeCuratedAccessRole,
+    {
+      collection: NativeCuratedResponseScenario;
+      members: NativeCuratedResponseScenario;
+    }
+  >
+>;
 
 export type NativeCuratedCommand = Readonly<{
   kind: 'http';
@@ -258,11 +264,23 @@ async function captureIdentity() {
   };
 }
 
-function unavailableBinding(response: NativeCuratedResponseFact): 'dependency_unavailable' | 'native_preparing' | undefined {
-  if (response.status === 503 && response.body !== null && typeof response.body === 'object' && 'code' in response.body) {
+function unavailableBinding(
+  response: NativeCuratedResponseFact,
+): 'dependency_unavailable' | 'native_preparing' | undefined {
+  if (
+    response.status === 503 &&
+    response.body !== null &&
+    typeof response.body === 'object' &&
+    'code' in response.body
+  ) {
     if ((response.body as { code?: unknown }).code === 'dependency_unavailable') return 'dependency_unavailable';
   }
-  if (response.status === 202 && response.body !== null && typeof response.body === 'object' && 'preparing' in response.body) {
+  if (
+    response.status === 202 &&
+    response.body !== null &&
+    typeof response.body === 'object' &&
+    'preparing' in response.body
+  ) {
     if ((response.body as { preparing?: unknown }).preparing === true) return 'native_preparing';
   }
   return undefined;
@@ -274,9 +292,7 @@ export async function startNativeCuratedResponsesFixture(): Promise<NativeCurate
   try {
     const owner = await fixture.stack.authPersona('alice');
     const other = await fixture.stack.authPersona('bob');
-    const sequence: NativeCuratedSequenceStep[] = [
-      { kind: 'fixture', name: 'startNativeCuratedCollectionsFixture' },
-    ];
+    const sequence: NativeCuratedSequenceStep[] = [{ kind: 'fixture', name: 'startNativeCuratedCollectionsFixture' }];
     const outcomes = {} as Record<NativeCuratedResponseScenario, NativeCuratedResponseOutcome>;
     const routeMap: NativeCuratedRouteMapEntry[] = [];
 
@@ -354,13 +370,7 @@ export async function startNativeCuratedResponsesFixture(): Promise<NativeCurate
     ): Promise<NativeCuratedResponseOutcome> {
       const query = new URLSearchParams({ limit: String(limit), view: 'FULL' });
       if (cursor !== undefined) query.set('cursor', cursor);
-      return capture(
-        name,
-        state,
-        'GET',
-        `${collectionPath(collectionId)}/members?${query.toString()}`,
-        persona,
-      );
+      return capture(name, state, 'GET', `${collectionPath(collectionId)}/members?${query.toString()}`, persona);
     }
 
     async function readCollection(
@@ -419,8 +429,13 @@ export async function startNativeCuratedResponsesFixture(): Promise<NativeCurate
       { title: collectionTitle, visibility: 'private' },
       createKey,
     );
-    if (created.response.status !== 201) throw new Error(`Private curated Collection create failed: ${created.response.bodyText}`);
-    const collectionId = stringField(nestedObject(created.response.body, 'collection', 'Collection create'), 'id', 'Collection create');
+    if (created.response.status !== 201)
+      throw new Error(`Private curated Collection create failed: ${created.response.bodyText}`);
+    const collectionId = stringField(
+      nestedObject(created.response.body, 'collection', 'Collection create'),
+      'id',
+      'Collection create',
+    );
 
     async function addMember(
       name: 'memberFirstCreate' | 'memberDuplicateCreate' | 'memberOtherCreate',
@@ -448,13 +463,21 @@ export async function startNativeCuratedResponsesFixture(): Promise<NativeCurate
     ] as const) {
       if (outcome.response.status !== 201) throw new Error(`Adding ${name} failed: ${outcome.response.bodyText}`);
     }
-    const firstOccurrenceId = stringField(nestedObject(firstAdded.response.body, 'member', 'First member create'), 'id', 'First member create');
+    const firstOccurrenceId = stringField(
+      nestedObject(firstAdded.response.body, 'member', 'First member create'),
+      'id',
+      'First member create',
+    );
     const duplicateOccurrenceId = stringField(
       nestedObject(duplicateAdded.response.body, 'member', 'Duplicate member create'),
       'id',
       'Duplicate member create',
     );
-    const otherOccurrenceId = stringField(nestedObject(otherAdded.response.body, 'member', 'Other member create'), 'id', 'Other member create');
+    const otherOccurrenceId = stringField(
+      nestedObject(otherAdded.response.body, 'member', 'Other member create'),
+      'id',
+      'Other member create',
+    );
 
     const collectionOwnerReadAfterCreate = await capture(
       'collectionOwnerReadAfterCreate',
@@ -472,9 +495,14 @@ export async function startNativeCuratedResponsesFixture(): Promise<NativeCurate
       2,
       nextCursor(initialPage1, 'Initial owner member page'),
     );
-    const initialRows = [...listOfMembers(initialPage1, 'Initial owner page 1'), ...listOfMembers(initialPage2, 'Initial owner page 2')];
+    const initialRows = [
+      ...listOfMembers(initialPage1, 'Initial owner page 1'),
+      ...listOfMembers(initialPage2, 'Initial owner page 2'),
+    ];
     const initialOrder = initialRows.map((row) => stringField(row, 'id', 'Initial member row'));
-    const occurrenceToEdit = initialRows.find((row) => row.subjectId === firstSubject.id && row.id === duplicateOccurrenceId);
+    const occurrenceToEdit = initialRows.find(
+      (row) => row.subjectId === firstSubject.id && row.id === duplicateOccurrenceId,
+    );
     if (!occurrenceToEdit) throw new Error('Duplicate occurrence was absent from the actual first owner member pages');
     const originalAddedAt = stringField(occurrenceToEdit, 'addedAt', 'Duplicate occurrence');
 
@@ -644,7 +672,10 @@ export async function startNativeCuratedResponsesFixture(): Promise<NativeCurate
     );
     await readMembers('privateFinalOwnerMembers', 'private-after-visibility-cycle', collectionId, 'alice', 20);
 
-    const preRemovalRows = listOfMembers(outcomes.privateFinalOwnerMembers!, 'Private owner member read before removal');
+    const preRemovalRows = listOfMembers(
+      outcomes.privateFinalOwnerMembers!,
+      'Private owner member read before removal',
+    );
     const memberToRemove = preRemovalRows.find((row) => row.id === duplicateOccurrenceId);
     if (!memberToRemove) throw new Error('The selected duplicate occurrence was absent before ordinary removal');
     const preRemovalCollection = outcomes.privateFinalOwnerCollection!;
@@ -674,9 +705,11 @@ export async function startNativeCuratedResponsesFixture(): Promise<NativeCurate
     const removedResponseHeaders = memberRemove.response.headers;
     const deletionId = removedResponseHeaders['library-collection-member-deletion-id'];
     const deletionRevisionText = removedResponseHeaders['library-collection-member-deletion-revision'];
-    if (!deletionId || !deletionRevisionText) throw new Error('Native occurrence removal omitted its deletion receipt headers');
+    if (!deletionId || !deletionRevisionText)
+      throw new Error('Native occurrence removal omitted its deletion receipt headers');
     const deletionRevision = Number(deletionRevisionText);
-    if (!Number.isSafeInteger(deletionRevision)) throw new Error('Native occurrence deletion revision was not an integer');
+    if (!Number.isSafeInteger(deletionRevision))
+      throw new Error('Native occurrence deletion revision was not an integer');
     const memberUndo = await capture(
       'memberUndo',
       'private-curated-occurrence-exact-undo',
