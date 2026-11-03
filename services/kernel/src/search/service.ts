@@ -652,11 +652,11 @@ export function createSearchService({
           if (
             latest?.digest !== releaseBinding.digest ||
             (releaseBinding.head !== undefined && latest.head !== releaseBinding.head)
-          ) throw new ProblemError('search_restart_required');
+          )
+            throw new ProblemError('search_restart_required');
         } else if (releaseOverride) {
           const latest = await sourceRequest(release);
-          if (!latest || kindDigest(latest) !== kinds!.digest)
-            throw new ProblemError('search_restart_required');
+          if (!latest || kindDigest(latest) !== kinds!.digest) throw new ProblemError('search_restart_required');
         }
       };
       if ((filter || hitOptions.properties) && !current)

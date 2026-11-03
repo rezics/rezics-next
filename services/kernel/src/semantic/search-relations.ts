@@ -166,8 +166,12 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
       // The selected row's release explains its stored shape. It cannot grant
       // today's capability after a facet, property or qualifier is retired.
       if (
-        !release || !current || row.eligible !== true || !object(row.body) ||
-        !admitted.has(row.property) || !relationFacetProperty(runtime.release, row.property) ||
+        !release ||
+        !current ||
+        row.eligible !== true ||
+        !object(row.body) ||
+        !admitted.has(row.property) ||
+        !relationFacetProperty(runtime.release, row.property) ||
         !relationFacetProperty(release, row.property) ||
         release.properties[row.property]?.datatype !== current.datatype
       )
@@ -480,7 +484,14 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
             const body = row.body as Release;
             if (releaseDigest(body) === row.digest) releases.set(row.digest, body);
           }
-        return { runtime, subjects, releases, cursors, rows, pending: local.find((subject) => !subject.selection_ready) };
+        return {
+          runtime,
+          subjects,
+          releases,
+          cursors,
+          rows,
+          pending: local.find((subject) => !subject.selection_ready),
+        };
       });
       if (!snapshot) return probes.map(() => 'not_proven');
       const { runtime, subjects, releases, cursors, rows, pending } = snapshot;

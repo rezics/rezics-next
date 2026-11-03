@@ -224,12 +224,14 @@ test('release replacement after page composition retires populated and empty pub
     const fixture = await deployment(entries);
     const original = structuredClone(release);
     try {
-      await expect(fixture.service.search('anonymous', { filter: value(), sort: 'id' }, Date.now(), undefined, {
-        deadline: Date.now() + 30_000,
-        async complete() {
-          release.properties[author].qualifiers = [];
-        },
-      })).rejects.toMatchObject({ code: 'search_restart_required' });
+      await expect(
+        fixture.service.search('anonymous', { filter: value(), sort: 'id' }, Date.now(), undefined, {
+          deadline: Date.now() + 30_000,
+          async complete() {
+            release.properties[author].qualifiers = [];
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'search_restart_required' });
     } finally {
       Object.assign(release, original);
     }

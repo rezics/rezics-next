@@ -770,7 +770,9 @@ test('active facet and qualifier retirement suppress historical selected credits
   });
   await snapshot(book.id);
   const probe: SharedRelationFacetProbe = {
-    subject: book.id, property: 'schema:author', value: person.id,
+    subject: book.id,
+    property: 'schema:author',
+    value: person.id,
     qualifiers: [{ property: 'wdt:P3831', in: [role.id] }],
   };
   const match = source.matchRelationFacets!;
@@ -781,8 +783,9 @@ test('active facet and qualifier retirement suppress historical selected credits
     const replacement = structuredClone(original.release);
     replacement.catalogue.version += `-${change}`;
     if (change === 'facet') {
-      replacement.types['schema:Book']!.facets = replacement.types['schema:Book']!.facets!
-        .filter((property) => property !== probe.property);
+      replacement.types['schema:Book']!.facets = replacement.types['schema:Book']!.facets!.filter(
+        (property) => property !== probe.property,
+      );
     } else {
       const property = replacement.properties[probe.property]!;
       const qualifiers = typeof property.qualifiers === 'string' ? [property.qualifiers] : property.qualifiers;
