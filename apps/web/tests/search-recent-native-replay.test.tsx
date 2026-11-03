@@ -199,28 +199,50 @@ test('Library activation uses the installed session reader and HTTP result path;
   const requests = new AsyncLocalStorage<Request>();
   let principal = id;
   const credentialReads: string[] = [];
-  mock.module('cloudflare:workers', () => ({ env: {
-    KERNEL_ORIGIN: 'https://kernel.test',
-    SITE_ORIGINS: 'https://site.test', AUTH_ISSUER: 'https://auth.test', API_RESOURCE: 'https://api.test',
-    WEBSITE_SCOPES: 'openid subject:read', WEBSITE_CLIENT_ID: 'web', WEBSITE_CLIENT_KEY: 'unused',
-    SESSIONS: { idFromName: (name: string) => name, get: () => ({ credential: async () => {
-      credentialReads.push(principal);
-      return { status: 'active', subject: principal, accessToken: `token-${principal}` };
-    } }) },
-  } }));
-  mock.module('@tanstack/react-start', () => ({ ...start, createServerFn: () => {
-    const original = start.createServerFn();
-    const chain = {
-      validator(validate: (input: unknown) => unknown) { original.validator(validate); return chain; },
-      handler<T extends (...args: never[]) => unknown>(handler: T): T {
-        const invoke = original.handler(handler);
-        return ((input: { signal?: AbortSignal }) => requests.run(new Request('https://site.test/en/search', {
-          headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` }, signal: input.signal,
-        }), () => invoke(input as never))) as unknown as T;
+  mock.module('cloudflare:workers', () => ({
+    env: {
+      KERNEL_ORIGIN: 'https://kernel.test',
+      SITE_ORIGINS: 'https://site.test',
+      AUTH_ISSUER: 'https://auth.test',
+      API_RESOURCE: 'https://api.test',
+      WEBSITE_SCOPES: 'openid subject:read',
+      WEBSITE_CLIENT_ID: 'web',
+      WEBSITE_CLIENT_KEY: 'unused',
+      SESSIONS: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          credential: async () => {
+            credentialReads.push(principal);
+            return { status: 'active', subject: principal, accessToken: `token-${principal}` };
+          },
+        }),
       },
-    };
-    return chain;
-  } }));
+    },
+  }));
+  mock.module('@tanstack/react-start', () => ({
+    ...start,
+    createServerFn: () => {
+      const original = start.createServerFn();
+      const chain = {
+        validator(validate: (input: unknown) => unknown) {
+          original.validator(validate);
+          return chain;
+        },
+        handler<T extends (...args: never[]) => unknown>(handler: T): T {
+          const invoke = original.handler(handler);
+          return ((input: { signal?: AbortSignal }) =>
+            requests.run(
+              new Request('https://site.test/en/search', {
+                headers: { cookie: `__Host-rezics_session=${'a'.repeat(43)}` },
+                signal: input.signal,
+              }),
+              () => invoke(input as never),
+            )) as unknown as T;
+        },
+      };
+      return chain;
+    },
+  }));
   mock.module('@tanstack/react-start/server', () => ({ ...start, getRequest: () => requests.getStore()! }));
   const pending: { request: Request; resolve: (response: Response) => void }[] = [];
   const originalFetch = globalThis.fetch;
@@ -245,21 +267,32 @@ test('Library activation uses the installed session reader and HTTP result path;
   let current = true;
   let selected: SearchLoaderDeps | undefined;
   const history: RecentHistory = {
-    entries: [localRecentEntry(row('library'))], owner: () => current,
-    persistence: 'memory', sync: 'synced', remember() {}, remove() {},
+    entries: [localRecentEntry(row('library'))],
+    owner: () => current,
+    persistence: 'memory',
+    sync: 'synced',
+    remember() {},
+    remove() {},
   };
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   function Results() {
     const { data } = useSearchQuery('en', selected!, reader);
-    return <output>{data.discovery?.status === 'ready' ? JSON.stringify(data.discovery.page.hits) : data.recovery?.status}</output>;
+    return (
+      <output>
+        {data.discovery?.status === 'ready' ? JSON.stringify(data.discovery.page.hits) : data.recovery?.status}
+      </output>
+    );
   }
-  const render = () => root.render(<QueryClientProvider client={client}>
-    <RecentPanel history={history} global={false} />
-    <RecentHistoryView {...history} history />
-    {selected && <Results />}
-  </QueryClientProvider>);
+  const render = () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <RecentPanel history={history} global={false} />
+        <RecentHistoryView {...history} history />
+        {selected && <Results />}
+      </QueryClientProvider>,
+    );
   // Follow the anchor destination into the installed Search query; no replay callback performs the read.
   host.addEventListener('click', (event) => {
     if (event.defaultPrevented) return;
@@ -284,7 +317,12 @@ test('Library activation uses the installed session reader and HTTP result path;
       expect(host.querySelector('output')!.textContent).toContain('Mira’s Atlas');
       selected = undefined;
       await act(async () => render());
-      expect(client.getQueryCache().getAll().every((query) => query.getObserversCount() === 0)).toBe(true);
+      expect(
+        client
+          .getQueryCache()
+          .getAll()
+          .every((query) => query.getObserversCount() === 0),
+      ).toBe(true);
       client.clear();
       pending.length = credentialReads.length = 0;
     }
