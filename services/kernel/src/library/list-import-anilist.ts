@@ -49,7 +49,7 @@ export type AniListOutcome = {
   retained: string[];
 };
 type Stored = { source: AniListRow; review?: Review; started?: boolean; outcome?: AniListOutcome };
-type Header = { document: unknown; scoreFormat: string | null; count: number; cancelled: boolean };
+type Header = { document: unknown; rawUpload: string; scoreFormat: string | null; count: number; cancelled: boolean };
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const role: Record<string, string> = {
   CURRENT: 'active',
@@ -268,7 +268,13 @@ export function createAniListImport(deps: Dependencies) {
         ).rows[0].n;
         if (count >= ANILIST_LIMITS.uploads) throw new LibraryConflictError();
         const payloads = [
-          { document: parsed.document, scoreFormat: parsed.scoreFormat, count: parsed.rows.length, cancelled: false },
+          {
+            document: parsed.document,
+            rawUpload: upload,
+            scoreFormat: parsed.scoreFormat,
+            count: parsed.rows.length,
+            cancelled: false,
+          },
           ...parsed.rows.map((source) => ({ source })),
         ];
         await tx.query(

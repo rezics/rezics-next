@@ -51,6 +51,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   const page = await f.send(importer.bearer, 'GET', path);
   expect(page.status).toBe(200);
   const body = await page.json();
+  expect(body.header.rawUpload).toBe(upload);
   expect(body.rows[0].match).toMatchObject({ state: 'matched', candidates: [subjectId] });
   expect(body.rows[0].source.evidence.notes).toBe('private note');
   expect(body.rows[1].match.state).toBe('unmatched');

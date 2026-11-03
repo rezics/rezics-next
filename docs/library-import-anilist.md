@@ -28,7 +28,8 @@ Review may select any currently readable canonical target or skip. Apply refresh
 fingerprint and release pin; a stale unstarted review must be refreshed. Native entry commands enforce original
 revision/incarnation guards and current account admission; original source timestamps never order commands.
 
-Every row exposes its exact evidence, group metadata, provider identifiers and field validity/reason. Absent fields
+Every row exposes its evidence, group metadata, provider identifiers and field validity/reason; header rawUpload
+retains the original text, including numeric spellings that JSON parsing cannot represent exactly. Absent fields
 stay absent, null is unknown, zero stays zero, invalid values stay visible. Scores require separately declared
 POINT_100, POINT_10_DECIMAL, POINT_10, POINT_5 or POINT_3; omission means unknown scale. Scores and advanced
 components never create votes or aggregates. Progress keeps episodes (ANIME), chapters (MANGA), unknown measures
@@ -57,7 +58,7 @@ POST /v1/libraryImports/anilist:preview
 { upload: '[{"mediaId":1,"status":"PLANNING","notes":"private"}]', scoreFormat: 'POINT_10' }
 // 200 { id: string, count: number }
 GET /v1/libraryImports/anilist/{importId}?after=-1
-// 200 { header: {document: unknown, scoreFormat: string|null, count: number, cancelled: boolean},
+// 200 { header: {document: unknown, rawUpload: string, scoreFormat: string|null, count: number, cancelled: boolean},
 // rows: [{ordinal, source:{evidence,group,identifiers,fields}, match, proposal, review?,started?,outcome?}], next:number|null }
 POST /v1/libraryImports/anilist/{importId}:review
 { ordinal: 0, subjectId: 'canonical-uuid', fields: ['status'], replace: false }
