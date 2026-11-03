@@ -64,9 +64,12 @@ function creationStatementMap(value: unknown): value is Record<string, Statement
         rows.every(
           (row) =>
             nativePartShape(row) &&
-            (row.qualifiers === undefined || (Array.isArray(row.qualifiers) && row.qualifiers.every(nativePartShape))) &&
+            (row.qualifiers === undefined ||
+              (Array.isArray(row.qualifiers) && row.qualifiers.every(nativePartShape))) &&
             Array.isArray(row.references) &&
-            row.references.every((group) => record(group) && Array.isArray(group.parts) && group.parts.every(nativePartShape)),
+            row.references.every(
+              (group) => record(group) && Array.isArray(group.parts) && group.parts.every(nativePartShape),
+            ),
         ),
     )
   );
@@ -153,8 +156,7 @@ export function musicContextCreateDraft(
     (item.statements[property] ??= []).push(statement);
   }
   errors.push(...checkSubjectInput(item, release).violations);
-  if (musicContextKind(release, item.type) === 'unsupported')
-    errors.push({ pointer: '/type', code: 'unsupported' });
+  if (musicContextKind(release, item.type) === 'unsupported') errors.push({ pointer: '/type', code: 'unsupported' });
   const admitted = musicContextCreateFields(release, item.type);
   for (const [property, statements] of Object.entries(item.statements)) {
     if (!admitted.includes(property)) errors.push({ pointer: `/statements/${property}`, code: 'unsupported' });
@@ -201,10 +203,11 @@ export async function createMusicContext(
       errors: [{ pointer: '/statements', code: 'invalid_format' }],
     };
   const nativeErrors = checkSubjectInput(item, read.release).violations;
-  if (nativeErrors.length)
-    return { ok: false, reason: 'invalid', errors: nativeErrors, refreshDefinitions: true };
+  if (nativeErrors.length) return { ok: false, reason: 'invalid', errors: nativeErrors, refreshDefinitions: true };
   const statements = item.statements ?? {};
-  if (Object.entries(statements).some(([property, rows]) => rows.some((statement) => statement.property.id !== property)))
+  if (
+    Object.entries(statements).some(([property, rows]) => rows.some((statement) => statement.property.id !== property))
+  )
     return { ok: false, reason: 'invalid', errors: [{ pointer: '/statements', code: 'invalid_format' }] };
   const facts = Object.entries(statements).flatMap(([property, rows]) =>
     rows.map((statement, index) => ({ key: `${property}:${index}`, statement })),
@@ -416,7 +419,18 @@ function nestedControl(
     const key = statementHolderKey(part);
     if (key !== undefined) {
       const field = (
-        ['state', 'property', 'value', 'date', 'amount', 'unit', 'lowerBound', 'upperBound', 'text', 'language'] as const
+        [
+          'state',
+          'property',
+          'value',
+          'date',
+          'amount',
+          'unit',
+          'lowerBound',
+          'upperBound',
+          'text',
+          'language',
+        ] as const
       ).find(
         (candidate) =>
           presented.target === controlId(id, address, candidate) || presented.target.endsWith(`-${candidate}`),
@@ -458,10 +472,10 @@ export function musicContextCreateControl(
     const row = currentFact(holders[0]!, facts);
     return row
       ? { id: musicContextCreateHolder(row.key), label: fallback }
-    : {
-        id: `music-context-removed-${holders[0]!.key}`,
-        label: `${fallback} · ${m.music_context_create_review_removed({}, { locale: locale as never })}`,
-      };
+      : {
+          id: `music-context-removed-${holders[0]!.key}`,
+          label: `${fallback} · ${m.music_context_create_review_removed({}, { locale: locale as never })}`,
+        };
   }
   if (!/^(0|[1-9]\d*)$/.test(ordinal)) return { id: factsId, label: fallback };
   const holder = holders[Number(ordinal)];
@@ -474,16 +488,15 @@ export function musicContextCreateControl(
     };
   if (!musicContextCreateFields(release, type).includes(property))
     return { id: musicContextCreateHolder(row.key), label: fallback };
-  return nestedControl(segments.slice(3), holder, release, locale) ?? {
-    id: factsId,
-    label: m.music_context_create_review_unaddressable({}, { locale: locale as never }),
-  };
+  return (
+    nestedControl(segments.slice(3), holder, release, locale) ?? {
+      id: factsId,
+      label: m.music_context_create_review_unaddressable({}, { locale: locale as never }),
+    }
+  );
 }
 
-export function musicContextCreateUnsupported(
-  item: MusicContextCreateItem,
-  release: Release,
-): string[] {
+export function musicContextCreateUnsupported(item: MusicContextCreateItem, release: Release): string[] {
   const admitted = musicContextCreateFields(release, item.type);
   return Object.keys(item.statements).filter((property) => !admitted.includes(property));
 }

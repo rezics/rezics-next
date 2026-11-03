@@ -89,7 +89,12 @@ export function MusicContextStatementSummary({
       </ol>
       <p>
         {m.candidate_rank_normal({}, o)}
-        {statement.rank !== 'normal' && <> · <code>{statement.rank}</code></>}
+        {statement.rank !== 'normal' && (
+          <>
+            {' '}
+            · <code>{statement.rank}</code>
+          </>
+        )}
       </p>
     </div>
   );
@@ -138,7 +143,11 @@ export function MusicContextCreateReview({
         {m.music_context_create_review_title({}, o)}
       </ContentItemHeading>
       <p className="text-sm text-muted-foreground">{m.music_context_create_review_intro({}, o)}</p>
-      {stale && <p role="status" className="text-sm">{m.music_context_create_review_stale({}, o)}</p>}
+      {stale && (
+        <p role="status" className="text-sm">
+          {m.music_context_create_review_stale({}, o)}
+        </p>
+      )}
       <div className="min-w-0 space-y-2">
         <h3 className="font-semibold">{m.music_context_create_review_type({}, o)}</h3>
         <p lang={typeLabel.lang ?? undefined}>{typeLabel.text || item.type}</p>
@@ -147,7 +156,9 @@ export function MusicContextCreateReview({
             {typeMeaning.text}
           </p>
         )}
-        <p><code className="break-all">{item.type}</code></p>
+        <p>
+          <code className="break-all">{item.type}</code>
+        </p>
         <Button type="button" variant="outline" className={actionClass} onClick={() => onJump('create-type')}>
           {m.music_context_create_review_open({}, o)}
         </Button>
@@ -157,30 +168,56 @@ export function MusicContextCreateReview({
         {languages.map((language, index) => (
           <ContentItemFrame key={language} as="div" className="min-w-0 space-y-2 rounded-xl bg-muted/30 p-3">
             <p className="text-sm text-muted-foreground">{language}</p>
-            {item.labels[language] && <p lang={language} className="font-medium">{item.labels[language]}</p>}
+            {item.labels[language] && (
+              <p lang={language} className="font-medium">
+                {item.labels[language]}
+              </p>
+            )}
             {item.descriptions?.[language] && <p lang={language}>{item.descriptions[language]}</p>}
             {!!item.aliases?.[language]?.length && (
               <ul lang={language} className="list-disc ps-5">
-                {item.aliases[language]!.map((alias: string, aliasIndex: number) => <li key={aliasIndex}>{alias}</li>)}
+                {item.aliases[language]!.map((alias: string, aliasIndex: number) => (
+                  <li key={aliasIndex}>{alias}</li>
+                ))}
               </ul>
             )}
             <div className="flex flex-wrap gap-2">
               {item.labels[language] && (
-                <Button type="button" variant="outline" className={actionClass} onClick={() => onJump(`create-label-${index}`)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionClass}
+                  onClick={() => onJump(`create-label-${index}`)}
+                >
                   {m.music_context_create_review_open({}, o)} · {m.catalogue_create_label({}, o)}
                 </Button>
               )}
               {item.descriptions?.[language] && (
-                <Button type="button" variant="outline" className={actionClass} onClick={() => onJump(`create-description-${index}`)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionClass}
+                  onClick={() => onJump(`create-description-${index}`)}
+                >
                   {m.music_context_create_review_open({}, o)} · {m.catalogue_create_description({}, o)}
                 </Button>
               )}
               {!!item.aliases?.[language]?.length && (
-                <Button type="button" variant="outline" className={actionClass} onClick={() => onJump(`create-aliases-${index}`)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={actionClass}
+                  onClick={() => onJump(`create-aliases-${index}`)}
+                >
                   {m.music_context_create_review_open({}, o)} · {m.catalogue_create_aliases({}, o)}
                 </Button>
               )}
-              <Button type="button" variant="outline" className={actionClass} onClick={() => onJump(`create-language-${index}`)}>
+              <Button
+                type="button"
+                variant="outline"
+                className={actionClass}
+                onClick={() => onJump(`create-language-${index}`)}
+              >
                 {m.music_context_create_review_open({}, o)} · {m.catalogue_create_language({}, o)}
               </Button>
             </div>
@@ -199,7 +236,9 @@ export function MusicContextCreateReview({
                 {label.text || property}
               </ContentItemHeading>
               {!release.types[item.type]?.properties.includes(property) && (
-                <p role="status" className="text-sm">{m.music_context_create_review_unsupported({}, o)}</p>
+                <p role="status" className="text-sm">
+                  {m.music_context_create_review_unsupported({}, o)}
+                </p>
               )}
               {rows.map((statement, index) => {
                 const holder = sameProperty[index];
@@ -220,7 +259,9 @@ export function MusicContextCreateReview({
           <p role="status" className="text-sm">
             {m.music_context_create_review_unsupported({}, o)}{' '}
             {withdrawn.map((property) => (
-              <code key={property} className="me-2 break-all">{property}</code>
+              <code key={property} className="me-2 break-all">
+                {property}
+              </code>
             ))}
           </p>
         )}

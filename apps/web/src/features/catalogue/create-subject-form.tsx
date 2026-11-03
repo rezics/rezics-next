@@ -344,10 +344,7 @@ function CreateSubjectFormLive({
         typeRows.current.set(nextType, current);
         writeRows(current, nextType);
       } else {
-        writeRows(
-          [{ language: profile.initialLanguage ?? '', label: '', description: '', aliases: '' }],
-          nextType,
-        );
+        writeRows([{ language: profile.initialLanguage ?? '', label: '', description: '', aliases: '' }], nextType);
       }
     }
     setType(nextType);
@@ -546,11 +543,9 @@ function CreateSubjectFormLive({
           {usesDefinitions && definitions.data?.ok && types.length === 0 && (
             <p role="status">{m.catalogue_create_empty({}, options)}</p>
           )}
-          {(
-            directoryMode ||
+          {(directoryMode ||
             (usesDefinitions && definitions.data?.ok && (types.length > 0 || hasDraft)) ||
-            (!!profile?.metadata?.ready && (types.length > 0 || hasDraft))
-          ) && (
+            (!!profile?.metadata?.ready && (types.length > 0 || hasDraft))) && (
             <form className="space-y-6" noValidate onSubmit={(event) => void submit(event)} aria-busy={busy}>
               {rows.map((row, index) => (
                 <fieldset

@@ -12,10 +12,7 @@ import { CreateSubjectForm } from './create-subject-form';
 import { readCreatedCatalogueSubject } from './create-subject-actions';
 import type { CreateType, InitialSubject } from './create-subject';
 import { relationTargetSearch } from './relation-editor-search';
-import {
-  createCatalogueMusicContext,
-  loadMusicContextCreate,
-} from './music-context-create-actions';
+import { createCatalogueMusicContext, loadMusicContextCreate } from './music-context-create-actions';
 import {
   musicContextCreateControl,
   musicContextCreateDraft,
@@ -35,12 +32,16 @@ import { MusicContextCreateReview } from './music-context-create-review';
 type ReadyRead = Extract<MusicContextCreateRead, { ok: true }>;
 type Metadata = { ready: boolean; pending: boolean; failure: ReactNode; types: CreateType[] };
 const factsId = 'music-context-initial-facts';
-const formClass = 'inline-flex min-h-11 min-w-11 items-center justify-center whitespace-normal rounded-md border px-4 py-2';
+const formClass =
+  'inline-flex min-h-11 min-w-11 items-center justify-center whitespace-normal rounded-md border px-4 py-2';
 
 function MusicContextCreateSessionLive({ locale, initial }: { locale: string; initial: MusicContextCreateRead }) {
   const work = useCatalogueLifetime('music-context-create');
   const { state } = useSession();
-  const search = useCallback((text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale), [locale]);
+  const search = useCallback(
+    (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
+    [locale],
+  );
   const [reading, setReading] = useState<MusicContextCreateRead>(initial);
   const lastGood = useRef<ReadyRead | undefined>(initial.ok ? initial : undefined);
   const [pending, setPending] = useState(false);
@@ -48,15 +49,22 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
   const [factsByType, setFactsByType] = useState<Record<string, MusicContextCreateFact[]>>({});
   const [archived, setArchived] = useState<CreateType[]>([]);
   const refreshing = useRef(false);
-  const prepared = useRef<{
-    release: Release;
-    digest: string;
-    holders: ReturnType<typeof musicContextCreateHolders>;
-  } | undefined>(undefined);
+  const prepared = useRef<
+    | {
+        release: Release;
+        digest: string;
+        holders: ReturnType<typeof musicContextCreateHolders>;
+      }
+    | undefined
+  >(undefined);
 
   const retainedTypes = new Set([
-    ...Object.entries(termDrafts).filter(([, retained]) => retained).map(([type]) => type),
-    ...Object.entries(factsByType).filter(([, rows]) => rows.length > 0).map(([type]) => type),
+    ...Object.entries(termDrafts)
+      .filter(([, retained]) => retained)
+      .map(([type]) => type),
+    ...Object.entries(factsByType)
+      .filter(([, rows]) => rows.length > 0)
+      .map(([type]) => type),
   ]);
   const currentRead = reading.ok ? reading : lastGood.current;
   const release = currentRead?.release;
@@ -74,7 +82,7 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
     failure: <p>{m.music_context_create_unavailable({}, { locale: locale as never })}</p>,
     types,
   };
-  const metadataRevision = reading.ok ? reading.digest : currentRead?.digest ?? 'unavailable';
+  const metadataRevision = reading.ok ? reading.digest : (currentRead?.digest ?? 'unavailable');
   const activeTypeIds = new Set(activeTypes.map((entry) => entry.id));
 
   async function refreshMetadata() {
@@ -130,13 +138,13 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
   ) => {
     if (!release) return null;
     return (
-        <MusicContextCreateFields
+      <MusicContextCreateFields
         type={type}
         release={release}
         locale={locale}
         search={search}
         facts={factsByType[type] ?? []}
-          disabled={disabled || metadata.pending}
+        disabled={disabled || metadata.pending}
         canEdit={canEdit}
         invalidate={invalidate ?? (() => undefined)}
         discardTypeDraft={discard ?? (() => undefined)}
@@ -245,18 +253,7 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
             },
           }
         : undefined,
-    [
-      activeTypeIds,
-      factsByType,
-      fields,
-      locale,
-      metadata,
-      metadataRevision,
-      reading,
-      release,
-      retainedTypes,
-      search,
-    ],
+    [activeTypeIds, factsByType, fields, locale, metadata, metadataRevision, reading, release, retainedTypes, search],
   );
 
   if (!release || !profile) {
@@ -268,7 +265,13 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
         ) : (
           <div role="alert" className="space-y-3">
             <p>{m.music_context_create_unavailable({}, { locale: locale as never })}</p>
-            <Button type="button" variant="outline" className={formClass} disabled={pending} onClick={() => void refreshMetadata()}>
+            <Button
+              type="button"
+              variant="outline"
+              className={formClass}
+              disabled={pending}
+              onClick={() => void refreshMetadata()}
+            >
               {m.catalogue_create_retry({}, { locale: locale as never })}
             </Button>
           </div>

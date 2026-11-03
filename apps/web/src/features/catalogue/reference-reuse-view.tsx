@@ -27,15 +27,15 @@ function refusalText(reason: ReuseRefusal, locale: string) {
       ? m.facts_reuse_reason_unknown({}, o)
       : reason === 'withdrawn'
         ? m.facts_reuse_reason_withdrawn({}, o)
-    : reason === 'limit'
-      ? m.facts_reuse_reason_limit({}, o)
-      : reason === 'definition'
-        ? m.facts_reuse_reason_definition({}, o)
-        : reason === 'constraint'
-          ? m.facts_reuse_reason_constraint({}, o)
-          : reason === 'missing'
-            ? m.facts_reuse_reason_missing({}, o)
-            : m.facts_reuse_reason_source({}, o);
+        : reason === 'limit'
+          ? m.facts_reuse_reason_limit({}, o)
+          : reason === 'definition'
+            ? m.facts_reuse_reason_definition({}, o)
+            : reason === 'constraint'
+              ? m.facts_reuse_reason_constraint({}, o)
+              : reason === 'missing'
+                ? m.facts_reuse_reason_missing({}, o)
+                : m.facts_reuse_reason_source({}, o);
 }
 
 export function ReferenceReusePanel({

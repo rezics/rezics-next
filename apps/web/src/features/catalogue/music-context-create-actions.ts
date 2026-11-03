@@ -37,8 +37,8 @@ export const createCatalogueMusicContext = createServerFn({ method: 'POST', stri
           (key) => !['type', 'labels', 'descriptions', 'aliases', 'statements'].includes(key),
         ) ||
         !isRecord(input.item.statements) ||
-        Object.entries(input.item.statements).some(([property, rows]) =>
-          !property || !Array.isArray(rows) || rows.some((row) => !isRecord(row)),
+        Object.entries(input.item.statements).some(
+          ([property, rows]) => !property || !Array.isArray(rows) || rows.some((row) => !isRecord(row)),
         )
       )
         throw new Error('Invalid music-context creation');

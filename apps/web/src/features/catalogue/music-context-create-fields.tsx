@@ -133,7 +133,11 @@ export function MusicContextCreateFields({
         const holderId = musicContextCreateHolder(row.key);
         return (
           <section key={row.key} className="min-w-0 max-w-full">
-            <ContentItemFrame as="div" data-slot="music-context-initial-fact" className="min-w-0 space-y-4 p-4 [overflow-wrap:anywhere]">
+            <ContentItemFrame
+              as="div"
+              data-slot="music-context-initial-fact"
+              className="min-w-0 space-y-4 p-4 [overflow-wrap:anywhere]"
+            >
               <ContentItemHeading
                 level={3}
                 className="min-w-0 max-w-full whitespace-normal break-words font-sans text-base font-semibold"
