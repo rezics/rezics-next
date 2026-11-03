@@ -1,17 +1,16 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { Window } from 'happy-dom';
-import { m } from '../src/paraglide/messages.js';
 import type { MalImportPort, MalPage, MalPreviewRow } from '../src/library/personal-mal-import';
-import { MalImportPortContext } from '../src/library/personal-mal-import/port';
-import { PersonalMalImportPage } from '../src/library/personal-mal-import/page';
-import { malScoreLabel, malValueLabel } from '../src/library/personal-mal-import/meaning';
 import { libraryNavigation } from '../src/library/navigation';
 import type { MalVisit } from '../src/library/personal-mal-import/visit';
 
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
 const window = new Window({ url: 'https://site.test/en/library/import-mal' });
 for (const [key, value] of Object.entries({
   window,
@@ -21,10 +20,19 @@ for (const [key, value] of Object.entries({
   HTMLButtonElement: window.HTMLButtonElement,
   HTMLInputElement: window.HTMLInputElement,
   MouseEvent: window.MouseEvent,
+  Event: window.Event,
   Node: window.Node,
   IS_REACT_ACT_ENVIRONMENT: true,
 }))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+
+const { act } = await import('react');
+const { createRoot } = await import('react-dom/client');
+type Root = ReturnType<typeof createRoot>;
+const { m } = await import('../src/paraglide/messages.js');
+const { MalImportPortContext } = await import('../src/library/personal-mal-import/port');
+const { PersonalMalImportPage } = await import('../src/library/personal-mal-import/page');
+const { malScoreLabel, malValueLabel } = await import('../src/library/personal-mal-import/meaning');
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
 const subject = '0192f3a0-6c1e-7b2a-9d4e-00000000bbbb';
@@ -45,7 +53,10 @@ const visit = (viewer = 'alice', csrf = 'csrf-1'): MalVisit => {
   };
 };
 
-function value(kind: MalPreviewRow['status']['kind'], extra: Partial<MalPreviewRow['status']> = {}): MalPreviewRow['status'] {
+function value(
+  kind: MalPreviewRow['status']['kind'],
+  extra: Partial<MalPreviewRow['status']> = {},
+): MalPreviewRow['status'] {
   return { kind, ...extra };
 }
 
@@ -101,7 +112,6 @@ function pageOf(rows: MalPreviewRow[], extra: Partial<MalPage> = {}): MalPage {
 
 let host: HTMLDivElement;
 let root: Root;
-let router: ReturnType<typeof createRouter>;
 
 async function settle() {
   await act(async () => {
@@ -134,7 +144,10 @@ async function mount(port: MalImportPort, current = visit()) {
       </QueryClientProvider>
     ),
   });
-  router = createRouter({ routeTree: tree, history: createMemoryHistory({ initialEntries: ['/en/library/import-mal'] }) });
+  const router = createRouter({
+    routeTree: tree,
+    history: createMemoryHistory({ initialEntries: ['/en/library/import-mal'] }),
+  });
   await router.load();
   await act(async () => {
     root.render(<RouterProvider router={router} />);
@@ -157,7 +170,9 @@ test('zero scores, unknown dates and independent chapter/volume measures stay di
   expect(malScoreLabel(value('zero', { value: 0, scale: { min: 1, max: 10, step: 1 } }))).toBe(m.library_mal_score_none());
   expect(malValueLabel(value('unknown', { raw: '0000-00-00' }))).toBe(m.library_mal_unknown());
   expect(malValueLabel(value('missing'))).toBe(m.library_mal_missing());
-  expect(malValueLabel(value('value', { value: '2024', precision: 'year' }))).toBe(m.library_mal_precision_year({ value: '2024' }));
+  expect(malValueLabel(value('value', { value: '2024', precision: 'year' }))).toBe(
+    m.library_mal_precision_year({ value: '2024' }),
+  );
   expect(libraryNavigation.some((entry) => entry.id === 'library.import-mal')).toBe(true);
   expect(libraryNavigation.some((entry) => entry.id === 'library.discover-collections')).toBe(true);
   expect(libraryNavigation.some((entry) => entry.id === 'library.create-collection')).toBe(true);
@@ -208,7 +223,13 @@ test('explicit unmatched target, status selection, confirmation and partial resu
           remaining: [1],
           outcomes: [
             { row: 0, status: 'applied', applied: ['status'], retained: ['my_comments', 'my_score'], reason: null },
-            { row: 2, status: 'failed', applied: [], retained: ['manga_title'], reason: 'native-command-unavailable-retry-original' },
+            {
+              row: 2,
+              status: 'failed',
+              applied: [],
+              retained: ['manga_title'],
+              reason: 'native-command-unavailable-retry-original',
+            },
           ],
         },
       };
