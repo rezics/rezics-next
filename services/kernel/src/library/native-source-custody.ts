@@ -378,6 +378,7 @@ export function nativeSourceCustodyFootprint(sql: string, values: readonly unkno
   if (isNativeIdentitySourceBasisSQL(sql)) return nativeIdentitySourceBasisFootprint(sql, values);
   if (['BEGIN', 'COMMIT', 'ROLLBACK'].includes(text)) return footprint(sql, [...values], 0, 0);
   for (const [query, rows, points, metadata] of [
+    [partitionQuery, 16, 1, 1],
     [identityPartitionQuery, 16, 1, 1],
     [accountQuery, 16, 1, 0],
     [sourceQuery, 16, 1, 0],

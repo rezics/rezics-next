@@ -71,7 +71,9 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   expect(reopened.progressSession).toEqual({ ...completed, state: 'active', completedAt: null, revision: 4 });
   expect(await send('POST', `${path}:reopen`, { revision: 3 }, 200, key)).toEqual(reopened);
   await send('POST', `${path}:reopen`, { revision: 4 }, 400);
+  expect((await native.inspect(owner.actor.accountId)).entries).toEqual(before.entries);
   await send('POST', `${path}:record`, { revision: 4, amount: '7' });
+  const beforeRetirement = await native.inspect(owner.actor.accountId);
   const changes = (await send('GET', `${path}/changes`)).changes;
   expect(changes.map((row: { intent: unknown }) => row.intent)).toEqual([
     { amount: '10' },
@@ -103,7 +105,7 @@ test('one terminal occurrence reopens and a duplicate retires, with immutable sn
   await send('POST', `${path}:retire`, { revision: 5 });
   expect((await send('GET', `/v1/publishedLogs/${publicLog.id}`)).publishedLog).toEqual(publicLog);
   const after = await native.inspect(owner.actor.accountId);
-  expect(after.entries).toEqual(before.entries);
+  expect(after.entries).toEqual(beforeRetirement.entries);
   expect(after.copies).toEqual(before.copies);
   expect(after.sessions).toHaveLength(3); // Private history is retained for account erasure.
   expect(after.sessions.filter(({ row }) => row.state === 'retired')).toHaveLength(2);
