@@ -1,4 +1,4 @@
-Run the site locally with `bun run dev` from `apps/web`. Run `bun run check` to generate, type-check, test, and build.
+Local interface development uses Storybook: run `bun run storybook` from `apps/web`. `bun run dev` invokes the finite-check Web Vite entry point and is rejected outside its prepared test runtime; it does not start the standalone site. Run `bun run check` to generate, type-check, test, and build.
 
 ## Prepared remote Web checks
 
