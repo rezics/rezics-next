@@ -341,6 +341,15 @@ membership repair has its separate owner, and custom rank publication remains se
 `test/kernel.test.ts` adds the new command to the exhaustive typed route contract while retaining every existing
 route assertion. This is outside the declared paths because the kernel contract must include every mounted route.
 
+The installed client uses `createKernelClient(origin, options?)`, then
+`client['rating-questions'].get({ query: { realm?, limit?, cursor? } })` or
+`client['rating-questions']({ questionId }).get()`. Public `RatingQuestionDirectoryQuery`,
+`RatingQuestionDirectory` and `RatingQuestion` types derive from the complete mounted route declarations.
+Populated and empty successes share `{ ratingQuestions, next }`; an empty page with `next` still requires explicit
+continuation. Concealed selections return the ordinary `not_found` problem. Dependency failures return their
+ordinary retryable problem and no page; retry the identical query. A lifecycle-invalid cursor requires an explicit
+first-page restart. These observations never authorize a vote; vote admission retains its conditional guard.
+
 Focused outcomes live in `test/rating/realm-question-authoring.test.ts`: native manage grants, creation and exact
 replay, changed-input conflict, persisted author/provenance, point/selection refresh, binary and `0..10` scales,
 protected/ban denial, current vote admission and manage loss before replay. Physical growth is unmeasured;
@@ -746,7 +755,7 @@ reads, review-context selection and citation disclosure.
   current stored-unit metadata as the point route. This default selection contains only definitions without Realm
   provenance. UUID identity ascending is the only ordering. The `(realm_id, id)` index
   seek consumes at most `limit` entries and probes one unconsumed lookahead; the signed continuation starts after
-  the last consumed key. Every page rechecks Global authority before reading question rows. Denial preserves the
+  the last consumed key. Every page rechecks Global authority before and after reading question rows. Denial preserves the
   point route's `404`; unavailable authority or data reads retain ordinary problem responses, never empty choices.
   The cursor binds the directory operation, limit and native viewer/credential authority, with the existing
   4,096-character cap and 15-minute expiry. Expired or mismatched tokens return `invalid_cursor`.
@@ -754,15 +763,11 @@ reads, review-context selection and citation disclosure.
   votes or population statistics. Clients request each page explicitly.
   Choices are metadata, not feed membership, candidate eligibility or Source readiness. The cursor retains only
   a position and does not freeze question revisions or hydrate entries. Selected identity can be refreshed through
-  the point route; separate requests do not certify a shared snapshot. This installed directory adds no
-  feed predicate, Source, Home consumer or generated client declarations.
-
-  Operation Cost:
-  - **Touches:** one metadata page through `question_realm_directory_idx (realm_id, id)`, plus the existing Global authority probes.
-  - **Bound:** one indexed seek, at most 21 examined question rows and 20 returned rows, independent of catalogue
-    size; B-tree descent grows logarithmically. No alternate catalogue or ownership-derived authority.
-  - **Growth check:** native growth execution is deferred. The mounted paging/authority regression in
-    `test/rating/public-reads.test.ts` is authored but unrun; workspace typing alone is not native or feed proof.
+  the point route; separate requests do not certify a shared snapshot. The existing Home caller consumes the default
+  Global directory. Explicit Realm selection remains separate from Home's Global controls. The complete generated
+  client exposes both selections; metadata conveys no feed predicate or Source readiness. See
+  [Selectable directory Cost](#selectable-directory-cost) for the shared Global and Realm bounds and outstanding
+  physical-plan measurements.
 
 - `GET /v1/subjects/{id}/figure` is public under `subject:read`, with `404` for an unknown or unreadable subject.
   It returns `200 { figure }` using the reusable OpenAPI `PublicFigure` component:
