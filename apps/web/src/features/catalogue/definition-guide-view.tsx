@@ -226,7 +226,7 @@ function Constraints({
               {definition.targets.map((target) => (
                 <li key={target}>
                   <Meaning values={release.types[target]?.labels} locale={locale} />
-                  {!definitionText(release.types[target]?.labels, locale).text && (
+                  {(changed || !definitionText(release.types[target]?.labels, locale).text) && (
                     <details className="text-sm">
                       <summary className={summaryClassName}>{m.guide_identifier({}, o)}</summary>
                       <code className="break-all">{target}</code>
