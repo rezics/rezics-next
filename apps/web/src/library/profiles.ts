@@ -246,3 +246,43 @@ export function libraryCopyStatusLabel(
   const status = currentThenLegacy(release, type, (profile) => index(profile).statuses.get(kindId)?.get(statusId));
   return status ? localizedLabel(status.labels, locale) : undefined;
 }
+
+export type LibraryDescriptor =
+  | { state: 'unavailable' }
+  | { state: 'unsupported' }
+  | { state: 'ready'; profile: LibraryProfile; choices: LibraryChoices };
+
+/** Inspect the current released profile before presenting a choice. A type id is not permission. */
+export function libraryDescriptor(release: Release | undefined, type: string): LibraryDescriptor {
+  if (!release) return { state: 'unavailable' };
+  const profile = libraryProfile(release, type);
+  const choices = libraryChoices(release, type);
+  if (!profile || !choices) return { state: 'unsupported' };
+  return { state: 'ready', profile, choices };
+}
+
+/** Count admitted state, copy kind/status and progress mode/unit fields in one descriptor. */
+export function admittedFieldCount(choices: LibraryChoices): number {
+  return (
+    choices.states.length +
+    choices.copyKinds.reduce((count, kind) => count + 1 + kind.statuses.length, 0) +
+    choices.progress.reduce((count, mode) => count + 1 + mode.units.length, 0)
+  );
+}
+
+export type ManualProgressMeasure = {
+  mode: 'scalar_amount';
+  unit: LibraryChoices['progress'][number]['units'][number];
+};
+
+/** The first admitted scalar amount unit, when the profile offers a single manual measure. */
+export function singleManualProgress(choices: LibraryChoices): ManualProgressMeasure | undefined {
+  const mode = choices.progress.find((item) => item.mode === 'scalar_amount' && item.units.length > 0);
+  const unit = mode?.units[0];
+  return unit ? { mode: 'scalar_amount', unit } : undefined;
+}
+
+/** A stored state is historical when the current profile no longer admits that exact id. */
+export function storedStateIsHistorical(choices: LibraryChoices, stateId: string): boolean {
+  return !choices.states.some((state) => state.id === stateId);
+}

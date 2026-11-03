@@ -32,3 +32,15 @@ export function copyLabels(release: Release, type: string, kind: string | null, 
       libraryCopyStatusLabel(release, type, kind ?? 'legacy-unspecified', status, locale)?.text ?? m.library_other(),
   };
 }
+
+export type CopyProfileState =
+  | { state: 'ready'; profile: CopyProfile }
+  | { state: 'unsupported' }
+  | { state: 'unavailable' };
+
+/** Copy choices come from the current released profile; an empty or missing descriptor is unsupported. */
+export function copyProfileState(release: Release | undefined, type: string, locale: string): CopyProfileState {
+  if (!release) return { state: 'unavailable' };
+  const profile = resolveCopyProfile(release, type, locale);
+  return profile.kinds.some((kind) => kind.statuses.length) ? { state: 'ready', profile } : { state: 'unsupported' };
+}
