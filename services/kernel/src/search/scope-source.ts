@@ -23,7 +23,6 @@ import { readRelease } from '../semantic/definitions.ts';
 import { createIdentityScopedObservations } from '../semantic/identity-scoped-observations.ts';
 import { createPublicFilterSourceBinding } from '../semantic/public-filter-source-binding.ts';
 import { publicFilterSource } from '../semantic/public-filter-source.ts';
-import { publicFilterSource } from '../semantic/public-filter-source.ts';
 import {
   createSearchScopeOrder,
   sameScopeObservation,

@@ -346,8 +346,10 @@ export async function readNativeOwnerFilterClosure(
   if (catalogue === null) return { status: 'unavailable' } as const;
   // Ordinary enclosing readers repeat ALL retained originals at disclosure, including rejections.
   // Existing point/command consumers retain their immediate closure checks.
-  if (!deferDisclosure) for (const original of originalIds) await disclose(original);
-  await revalidateNativeOwnerFilter(binding, work);
+  if (!deferDisclosure) {
+    for (const original of originalIds) await disclose(original);
+    await revalidateNativeOwnerFilter(binding, work);
+  }
   const closure: OwnerFilterCandidateClosure = { subjectId, originals, releases, catalogue };
   return { status: 'complete', closure } as const;
 }

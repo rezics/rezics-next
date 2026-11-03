@@ -309,7 +309,7 @@ async function readWorkingOwnerFilterPage(
       cursor.epoch !== current.observation.stamp.epoch ||
       basis !== current.observation.basis.digest ||
       capture !== binding.scope.captureId ||
-      fence !== nativeOwnerFilterBinding(binding)?.ownerFence ||
+      fence !== (nativeOwnerFilterBinding(binding)?.ownerFence ?? '') ||
       revision !== binding.scope.committedRevision.toString()
     )
       throw new ProblemError('stale_cursor');
@@ -420,7 +420,7 @@ async function readWorkingOwnerFilterPage(
               current.observation.basis.digest,
               binding.scope.captureId,
               binding.scope.committedRevision.toString(),
-              nativeOwnerFilterBinding(binding)!.ownerFence,
+              nativeOwnerFilterBinding(binding)!.ownerFence ?? '',
               after!,
             ],
           },
