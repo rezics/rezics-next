@@ -43,7 +43,7 @@ import type { RequestContext } from './model.ts';
 import {
   appealReviewSnapshot,
   readAppealReviewIdentities,
-  readAppealReviewTargetContexts,
+  observeAppealReviewTargetContexts,
   targetKey,
   type AppealReviewAnchor,
   type AppealReviewIdentity,
@@ -339,12 +339,7 @@ function projectAppeal(
   };
 }
 
-async function selectedAppeal(
-  deps: AppealDependencies,
-  scope: AppealScope,
-  context: ReadContext,
-  appealId: string,
-): Promise<{ value: ReturnType<typeof projectAppeal> & { resolution: unknown }; anchor: AppealReviewAnchor }> {
+async function selectedAppeal(deps: AppealDependencies, scope: AppealScope, context: ReadContext, appealId: string) {
   const route = routeOf(appealId);
   if (route === null || route !== routeOf(scope.id)) throw missing();
   const initial = await appealReviewSnapshot(deps.pool, route, context.deadline, (client) =>
@@ -358,47 +353,18 @@ async function selectedAppeal(
     routeOf(initial.value.target_id) !== route
   )
     throw missing();
+  return { row: initial.value, anchor: initial.anchor };
+}
 
-  const target = { kind: initial.value.target_kind, id: initial.value.target_id } as const;
-  const [firstIdentities, targetContexts] = await Promise.all([
-    readAppealReviewIdentities(deps, [initial.value.appellant_account_id], context.deadline),
-    readAppealReviewTargetContexts(deps, [target], context),
-  ]);
-  // Re-read the public allowlist after foreign context preparation so an identity
-  // reduction is reflected by the response being serialized.
-  const finalIdentities = await readAppealReviewIdentities(
-    deps,
-    [initial.value.appellant_account_id],
-    context.deadline,
-  );
-  const final = await appealReviewSnapshot(deps.pool, route, context.deadline, (client) =>
-    readAppealReviewRow(client, route, appealId),
-  );
-  if (!final.value || !belongsToScope(final.value, scope) || !sameAppealReference(initial.value, final.value))
-    throw missing();
-  const canTakedown = final.value.outcome === null ? (await canAct(deps, final.value, context)).value : false;
-  const row = projectAppeal(
-    final.value,
-    final.anchor,
-    context.actor,
-    finalIdentities.get(final.value.appellant_account_id) ??
-      firstIdentities.get(final.value.appellant_account_id) ?? {
-        state: 'concealed',
-      },
-    targetContexts.get(targetKey(target)) ?? { state: 'unavailable' },
-    canTakedown,
-  );
-  if (final.value.outcome !== null && (!final.value.resolver_statement || !final.value.resolved_at))
+function retainedResolution(row: AppealSourceRow): unknown {
+  if (row.outcome === null) return null;
+  if (!row.resolver_statement || !row.resolved_at)
     throw new Error('Resolved appeal is missing its retained resolution');
-  const resolution =
-    final.value.outcome === null
-      ? null
-      : {
-          outcome: final.value.outcome,
-          statement: final.value.resolver_statement!,
-          resolvedAt: new Date(final.value.resolved_at!).toISOString(),
-        };
-  return { value: { ...row, resolution }, anchor: final.anchor };
+  return {
+    outcome: row.outcome,
+    statement: row.resolver_statement,
+    resolvedAt: new Date(row.resolved_at).toISOString(),
+  };
 }
 
 export async function listAppeals(
@@ -464,12 +430,15 @@ export async function listAppeals(
     if (!row || row.outcome !== null || !belongsToScope(row, scoped)) continue;
     admitted.push({ row, anchor: result.anchor });
   }
-  const targets = admitted.map(({ row }) => ({ kind: row.target_kind, id: row.target_id }) as const);
-  const appellantIds = admitted.map(({ row }) => row.appellant_account_id);
-  const firstIdentities = await readAppealReviewIdentities(deps, appellantIds, context.deadline);
-  const targetContexts = await readAppealReviewTargetContexts(deps, targets, context);
+  const selectedRead =
+    query.inspect === undefined ? undefined : await selectedAppeal(deps, scoped, context, query.inspect);
+  const references = selectedRead ? [...admitted, selectedRead] : admitted;
+  const targets = references.map(({ row }) => ({ kind: row.target_kind, id: row.target_id }) as const);
+  const appellantIds = references.map(({ row }) => row.appellant_account_id);
+  await readAppealReviewIdentities(deps, appellantIds, context.deadline);
+  const targetObservation = await observeAppealReviewTargetContexts(deps, targets, context);
   const finalIdentities = await readAppealReviewIdentities(deps, appellantIds, context.deadline);
-  const appeals = [];
+  const qualified: Array<{ row: AppealSourceRow; anchor: AppealReviewAnchor; canTakedown: boolean }> = [];
   for (const item of admitted) {
     const sourceRoute = routeOf(item.row.appeal_id)!;
     const current = await appealReviewSnapshot(deps.pool, sourceRoute, context.deadline, (client) =>
@@ -482,22 +451,48 @@ export async function listAppeals(
       !sameAppealReference(item.row, current.value)
     )
       continue;
-    const canTakedown = (await canAct(deps, current.value, context)).value;
-    const targetForRow = { kind: current.value.target_kind, id: current.value.target_id } as const;
-    appeals.push(
-      projectAppeal(
-        current.value,
-        current.anchor,
-        context.actor,
-        finalIdentities.get(current.value.appellant_account_id) ??
-          firstIdentities.get(current.value.appellant_account_id) ?? { state: 'concealed' },
-        targetContexts.get(targetKey(targetForRow)) ?? { state: 'unavailable' },
-        canTakedown,
-      ),
-    );
+    qualified.push({
+      row: current.value,
+      anchor: current.anchor,
+      canTakedown: (await canAct(deps, current.value, context)).value,
+    });
   }
-  const selectedRead =
-    query.inspect === undefined ? undefined : await selectedAppeal(deps, scoped, context, query.inspect);
+  let selectedCurrent: (typeof qualified)[number] | undefined;
+  if (selectedRead) {
+    const sourceRoute = routeOf(selectedRead.row.appeal_id)!;
+    const current = await appealReviewSnapshot(deps.pool, sourceRoute, context.deadline, (client) =>
+      readAppealReviewRow(client, sourceRoute, selectedRead.row.appeal_id),
+    );
+    if (
+      !current.value ||
+      !belongsToScope(current.value, scoped) ||
+      !sameAppealReference(selectedRead.row, current.value)
+    )
+      throw missing();
+    selectedCurrent = {
+      row: current.value,
+      anchor: current.anchor,
+      canTakedown: current.value.outcome === null ? (await canAct(deps, current.value, context)).value : false,
+    };
+  }
+  // Only these final ordinary native reads supply serialized destinations. Queue
+  // authority and retained case ownership never substitute for target disclosure.
+  const finalTargets = await targetObservation.verify();
+  const projectCurrent = (item: (typeof qualified)[number]) =>
+    projectAppeal(
+      item.row,
+      item.anchor,
+      context.actor,
+      finalIdentities.get(item.row.appellant_account_id) ?? { state: 'concealed' },
+      finalTargets.get(targetKey({ kind: item.row.target_kind, id: item.row.target_id } as const)) ?? {
+        state: 'unavailable',
+      },
+      item.canTakedown,
+    );
+  const appeals = qualified.map(projectCurrent);
+  const exact = selectedCurrent
+    ? { ...projectCurrent(selectedCurrent), resolution: retainedResolution(selectedCurrent.row) }
+    : undefined;
   const final = await appealReviewSnapshot(deps.pool, route, context.deadline, (client) => check(client));
   if (!final.value) throw missing();
   const last = selected.at(-1);
@@ -509,11 +504,11 @@ export async function listAppeals(
         candidates.value.length > limit && last
           ? encodeCursor(ring, binding, { epoch: final.anchor.epoch, after: [last.created_at!, last.appeal_id] })
           : null,
-      ...(selectedRead ? { selectedAppeal: selectedRead.value } : {}),
+      ...(exact ? { selectedAppeal: exact } : {}),
       provenance: provenance(context, final.anchor),
     },
     anchor: final.anchor,
-    selectedAnchor: selectedRead?.anchor,
+    selectedAnchor: selectedCurrent?.anchor,
   };
 }
 
