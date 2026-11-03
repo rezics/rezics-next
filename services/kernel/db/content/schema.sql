@@ -1361,7 +1361,7 @@ CREATE TABLE content.moderation_decision_board (
     target_id uuid NOT NULL,
     decided_at timestamp with time zone NOT NULL,
     CONSTRAINT moderation_decision_board_check CHECK ((route = ((get_byte(uuid_send(board_id), 10) * 256) + get_byte(uuid_send(board_id), 11)))),
-    CONSTRAINT moderation_decision_board_check1 CHECK (((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)) = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
+    CONSTRAINT moderation_decision_board_check1 CHECK ((((get_byte(uuid_send(decision_id), 10) * 256) + get_byte(uuid_send(decision_id), 11)) = ((get_byte(uuid_send(target_id), 10) * 256) + get_byte(uuid_send(target_id), 11)))),
     CONSTRAINT moderation_decision_board_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT moderation_decision_board_target_kind_check CHECK ((target_kind = ANY (ARRAY['thread'::text, 'post'::text])))
 );
@@ -3058,10 +3058,6 @@ END)));
 
 CREATE INDEX moderation_appeal_board_pending_idx ON content.moderation_appeal_board USING btree (route, board_id, created_at DESC, appeal_id DESC) WHERE pending;
 
-
---
--- Name: moderation_decision_board_page_idx; Type: INDEX; Schema: content; Owner: -
---
 
 --
 -- Name: moderation_appeal_thread_pending_idx; Type: INDEX; Schema: content; Owner: -
