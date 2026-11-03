@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createPersonalLabelCommands } from '../../src/library/label-commands.ts';
 import { createLabelAssignmentCommands } from '../../src/library/label-assignment-commands.ts';
 import { ownedQueries } from '../../src/library/erasure-owned-queries.ts';
@@ -6,12 +6,26 @@ import { purgeExpiredLabelConsolidations } from '../../src/library/label-consoli
 import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
-let f: NativeProfileFixture;
-beforeEach(async () => {
-  f = await createProfileEntryFixture();
+let f: NativeProfileFixture, shared: NativeProfileFixture;
+beforeAll(async () => {
+  shared = await createProfileEntryFixture();
 }, 120_000);
-afterEach(async () => {
-  await f?.close();
+beforeEach(async () => {
+  const owner = await shared.identity([
+    'subject:read',
+    'library_entry:read',
+    'library_entry:list',
+    'library_entry:update',
+    'library_entry:delete',
+  ]);
+  f = {
+    ...shared,
+    owner,
+    send: (persona, ...args) => shared.send(persona === 'owner' ? owner.bearer : persona, ...args),
+  };
+});
+afterAll(async () => {
+  await shared?.close();
 });
 
 const catalogue = () => createPersonalLabelCommands({ pool: f.pool, tokens: f.tokens });
