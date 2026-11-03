@@ -5,6 +5,7 @@ import { m } from '../../paraglide/messages.js';
 import { localizeHref } from '../../paraglide/runtime.js';
 import { PageHeading } from '../../shell/page-heading';
 import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistoryUnavailable } from '../workbench-history';
+import { WorkbenchTriageCase, workbenchTriageIdentity } from '../workbench-triage';
 import {
   workbenchCaseHref,
   workbenchScope,
@@ -18,7 +19,8 @@ const control =
   'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words px-3 py-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
 export type WorkbenchViewProps = {
-  page: Pick<WorkbenchRead, 'state' | 'realms' | 'realmsNext' | 'boards' | 'boardsNext' | 'cases' | 'next' | 'search'>;
+  page: Pick<WorkbenchRead, 'state' | 'realms' | 'realmsNext' | 'boards' | 'boardsNext' | 'cases' | 'next' | 'search'> &
+    Partial<Pick<WorkbenchRead, 'readKey' | 'generation'>>;
   onSearch: (search: WorkbenchSearch) => void;
   onRetry?: () => void;
 };
@@ -27,45 +29,24 @@ function labelOf(item: WorkbenchDirectoryItem): string {
   return item.title?.trim() || m.moderation_target_unavailable();
 }
 
-function CaseRow({ item, search }: { item: WorkbenchCase; search: WorkbenchSearch }) {
+function CaseRow({
+  item,
+  search,
+  identity,
+}: {
+  item: WorkbenchCase;
+  search: WorkbenchSearch;
+  identity: string;
+}) {
   const scope = workbenchQueueScope(search);
   if (!scope) return null;
   const href = localizeHref(workbenchCaseHref(scope, item.kind));
-  const kindLabel =
-    item.kind === 'appeal' ? m.moderation_workbench_queue_appeals() : m.moderation_workbench_queue_reports();
   return (
     <li className="min-w-0 border-b py-3">
       <a className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`} href={href}>
         {m.moderation_workbench_open_case({ id: item.id })}
       </a>
-      <p className="mt-1 text-sm text-muted-foreground">{kindLabel}</p>
-      <details className="mt-2 text-sm">
-        <summary className={`${control} cursor-pointer justify-start`}>
-          {m.moderation_workbench_case_reference()}
-        </summary>
-        <dl className="mt-2 grid gap-1 [overflow-wrap:anywhere]">
-          <div>
-            <dt className="text-muted-foreground">
-              {item.kind === 'appeal' ? m.moderation_case_details_appeal_id() : m.moderation_queue_details_report_id()}
-            </dt>
-            <dd>{item.id}</dd>
-          </div>
-          {item.decisionId ? (
-            <div>
-              <dt className="text-muted-foreground">{m.moderation_case_details_decision_id()}</dt>
-              <dd>{item.decisionId}</dd>
-            </div>
-          ) : null}
-          <div>
-            <dt className="text-muted-foreground">{m.moderation_case_details_target_id()}</dt>
-            <dd>{item.target.id}</dd>
-          </div>
-        </dl>
-      </details>
-      {item.evidence ? <p className="mt-2 max-w-prose text-sm [overflow-wrap:anywhere]">{item.evidence}</p> : null}
-      {item.statement ? (
-        <blockquote className="mt-2 max-w-prose text-sm [overflow-wrap:anywhere]">{item.statement}</blockquote>
-      ) : null}
+      <WorkbenchTriageCase item={item} identity={identity} />
     </li>
   );
 }
@@ -116,6 +97,7 @@ function Directory({
 
 export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
   const search = page.search;
+  const identity = workbenchTriageIdentity(page);
   const scope = workbenchScope(search);
   const queueScope = workbenchQueueScope(search);
   const next = page.next;
@@ -325,9 +307,9 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
               {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
             </p>
           ) : (
-            <ul className="min-w-0">
+            <ul key={identity} className="min-w-0">
               {page.cases.map((item) => (
-                <CaseRow key={`${item.kind}:${item.id}`} item={item} search={search} />
+                <CaseRow key={`${item.kind}:${item.id}`} item={item} search={search} identity={identity} />
               ))}
             </ul>
           )}
