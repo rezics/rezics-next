@@ -47,7 +47,7 @@ export type FeedActionBarProps = {
   /** Detail hosts can keep the reaction/menu cluster at top right and actions beside the body. */
   layout?: 'row' | 'detail';
   /** Source owners retire retained actions synchronously when a page visit is replaced. */
-  origin?: { key: string; isCurrent(): boolean } | undefined;
+  origin?: { key: string; reader?: string | null; isCurrent(): boolean } | undefined;
 };
 
 const actionClass = 'min-h-11 max-w-full whitespace-normal break-words sm:min-h-8 pointer-coarse:min-h-11';
@@ -90,7 +90,7 @@ export function HomeFeedActions({
   const destination = item.destination;
   const reaction = homeFeedReaction(item, {
     signedIn,
-    ...(origin === undefined ? {} : { origin }),
+    ...(origin === undefined ? {} : { origin: { ...origin, reader: origin.reader ?? null } }),
     reactionsAsOf,
     hasReactionFreshness,
   });
