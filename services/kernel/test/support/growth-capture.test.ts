@@ -163,10 +163,13 @@ test('parameterized SELECT plans retain their occurrence across transaction port
       await client.query('INSERT INTO growth_capture_test.binding_rows (id) SELECT $1 WHERE false', [12]);
       await client.query('SELECT $1::integer AS answer', [12]);
       await client.query('COMMIT');
+      await client.query('BEGIN');
+      await client.query('SELECT pg_try_advisory_xact_lock($1) AS acquired', [781]);
+      await client.query('ROLLBACK');
     }),
   );
-  expect(nativePlanEntries(result.capture).map(({ owner }) => owner)).toEqual([2, 3, 4, 5]);
-  expect(nativePlanEntries(result.capture).map(({ plan }) => plan['Actual Rows'])).toEqual([1, 1, 0, 1]);
+  expect(nativePlanEntries(result.capture).map(({ owner }) => owner)).toEqual([2, 3, 4, 5, 8]);
+  expect(nativePlanEntries(result.capture).map(({ plan }) => plan['Actual Rows'])).toEqual([1, 1, 0, 1, 1]);
 });
 
 test('a failed statement counts as executed work and carries its SQLSTATE', async () => {

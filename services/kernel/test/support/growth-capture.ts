@@ -517,8 +517,14 @@ function instrumentBytes(client: PoolClient, state: CaptureState): void {
 
   const execute = connection.execute.bind(connection);
   connection.execute = ((config, more) => {
-    clientExecutingStatement.set(client, clientWireStatement.get(client));
-    return execute(config, more);
+    const wireStatement = clientWireStatement.get(client);
+    clientExecutingStatement.set(client, wireStatement);
+    const result = execute(config, more);
+    // Finish a fully consumed unnamed portal before Sync. Otherwise a following ROLLBACK destroys its executor
+    // without an auto_explain notice, even though SELECT succeeded. Close adds no SQL or query execution and leaves
+    // transaction locks and writes intact. Suspended and named portals retain their caller's lifetime.
+    if (wireStatement?.record && !config.portal && !config.rows) connection.close({ type: 'P', name: '' });
+    return result;
   }) as typeof connection.execute;
 
   // Clear the dispatch owner before pg submits the next queued query. A SELECT's pending portal keeps its
