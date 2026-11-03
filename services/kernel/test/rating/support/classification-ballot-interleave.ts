@@ -1,8 +1,13 @@
 import type { Pool } from 'pg';
 
 /** Interleave a real owner mutation at one native SQL boundary, without replacing SQL or Access. */
-export function interleaveClassificationRead(pool: Pool, table: string, mutate: () => Promise<void>): Pool {
-  let armed = true;
+export function interleaveClassificationRead(
+  pool: Pool,
+  table: string,
+  mutate: () => Promise<void>,
+  occurrence = 1,
+): Pool {
+  let remaining = occurrence;
   return new Proxy(pool, {
     get(target, property) {
       if (property === 'connect')
@@ -15,8 +20,7 @@ export function interleaveClassificationRead(pool: Pool, table: string, mutate: 
                 return new Proxy(connection.query, {
                   async apply(query, _receiver, args) {
                     const sql = typeof args[0] === 'string' ? args[0] : args[0]?.text;
-                    if (armed && typeof sql === 'string' && sql.includes(`FROM ${table}\n`)) {
-                      armed = false;
+                    if (typeof sql === 'string' && sql.includes(`FROM ${table}\n`) && --remaining === 0) {
                       await mutate();
                     }
                     return Reflect.apply(query, connection, args);

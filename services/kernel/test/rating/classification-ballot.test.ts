@@ -467,7 +467,24 @@ test('mounted classification ballots stay private and converge through the durab
     pending: false,
   });
 
-  await suspendAccount(database.admin, accounts.voter1);
+  app = createKernel({
+    pool: interleaveClassificationRead(
+      database.pool,
+      'rating.classification_aggregate',
+      () => suspendAccount(database.admin, accounts.voter1),
+      2,
+    ),
+    access: realAccess.access,
+    tokens,
+    receiptKeys,
+    routeKey,
+    writeRate: realAccess.writeRate,
+  });
+  try {
+    expect((await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'))).status).toBe(503);
+  } finally {
+    app = ordinaryApp;
+  }
   expect((await request('voter0', 'GET', ballotPath(subject.id, associationId, 'aggregate'))).status).toBe(503);
   await driveWorker(partitions);
   expect(await aggregate('voter0', subject.id, associationId)).toMatchObject({
