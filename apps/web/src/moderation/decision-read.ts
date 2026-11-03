@@ -181,7 +181,7 @@ export function decisionReadAdapters(client: KernelClient, authorization: string
       const result = await client['moderation-decisions']({ id }).get(readOptions(authorization));
       if (result.error && refused(result)) return null;
       if (!result.data) throw new Error('Decision read unavailable');
-      source = result.headers?.get(SESSION_HEADER) ?? null;
+      source = new Headers(result.headers).get(SESSION_HEADER);
       return result.data;
     },
   };
