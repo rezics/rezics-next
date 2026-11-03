@@ -136404,6 +136404,28 @@
                       "items": {
                         "additionalProperties": false,
                         "properties": {
+                          "assessment": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "meaningRevision": {
+                                "const": 1,
+                                "type": "number"
+                              },
+                              "units": {
+                                "maximum": 20,
+                                "minimum": 0,
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "meaningRevision",
+                              "units"
+                            ],
+                            "type": "object"
+                          },
                           "id": {
                             "format": "uuid",
                             "type": "string"
@@ -136584,6 +136606,7 @@
                           "recordedStartedAt",
                           "recordedCompletedAt",
                           "reportedDates",
+                          "assessment",
                           "subject",
                           "versionSubject"
                         ],
@@ -154165,6 +154188,160 @@
                         "first"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "capturedAt": {
+                          "type": "string"
+                        },
+                        "completeness": {
+                          "const": "supported-native-facts",
+                          "type": "string"
+                        },
+                        "coverage": {
+                          "const": "private-library-owner-facts-v3",
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "exportId": {
+                          "type": "string"
+                        },
+                        "first": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "format": {
+                          "const": "https://rezics.com/formats/library-export",
+                          "type": "string"
+                        },
+                        "fullExport": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "omissions": {
+                          "patternProperties": {
+                            "^.*$": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "privacy": {
+                          "const": "private",
+                          "type": "string"
+                        },
+                        "sections": {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "entries",
+                              "type": "string"
+                            },
+                            {
+                              "const": "labels",
+                              "type": "string"
+                            },
+                            {
+                              "const": "assignments",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sessions",
+                              "type": "string"
+                            },
+                            {
+                              "const": "holdings",
+                              "type": "string"
+                            },
+                            {
+                              "const": "collections",
+                              "type": "string"
+                            },
+                            {
+                              "const": "collectionPins",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bangumiUploads",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bangumiEvidence",
+                              "type": "string"
+                            },
+                            {
+                              "const": "malImports",
+                              "type": "string"
+                            },
+                            {
+                              "const": "units",
+                              "type": "string"
+                            },
+                            {
+                              "const": "history",
+                              "type": "string"
+                            },
+                            {
+                              "const": "occurrences",
+                              "type": "string"
+                            },
+                            {
+                              "const": "malEvidence",
+                              "type": "string"
+                            },
+                            {
+                              "const": "annotations",
+                              "type": "string"
+                            },
+                            {
+                              "const": "provenance",
+                              "type": "string"
+                            },
+                            {
+                              "const": "journals",
+                              "type": "string"
+                            }
+                          ],
+                          "minItems": 17,
+                          "type": "array"
+                        },
+                        "state": {
+                          "enum": [
+                            "collecting",
+                            "ready",
+                            "stale",
+                            "cancelled",
+                            "expired",
+                            "limit"
+                          ],
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": 3,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "format",
+                        "version",
+                        "coverage",
+                        "exportId",
+                        "capturedAt",
+                        "expiresAt",
+                        "privacy",
+                        "completeness",
+                        "sections",
+                        "omissions",
+                        "fullExport",
+                        "state",
+                        "first"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -155167,6 +155344,160 @@
                         "first"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "capturedAt": {
+                          "type": "string"
+                        },
+                        "completeness": {
+                          "const": "supported-native-facts",
+                          "type": "string"
+                        },
+                        "coverage": {
+                          "const": "private-library-owner-facts-v3",
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "exportId": {
+                          "type": "string"
+                        },
+                        "first": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "format": {
+                          "const": "https://rezics.com/formats/library-export",
+                          "type": "string"
+                        },
+                        "fullExport": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "omissions": {
+                          "patternProperties": {
+                            "^.*$": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "privacy": {
+                          "const": "private",
+                          "type": "string"
+                        },
+                        "sections": {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "entries",
+                              "type": "string"
+                            },
+                            {
+                              "const": "labels",
+                              "type": "string"
+                            },
+                            {
+                              "const": "assignments",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sessions",
+                              "type": "string"
+                            },
+                            {
+                              "const": "holdings",
+                              "type": "string"
+                            },
+                            {
+                              "const": "collections",
+                              "type": "string"
+                            },
+                            {
+                              "const": "collectionPins",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bangumiUploads",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bangumiEvidence",
+                              "type": "string"
+                            },
+                            {
+                              "const": "malImports",
+                              "type": "string"
+                            },
+                            {
+                              "const": "units",
+                              "type": "string"
+                            },
+                            {
+                              "const": "history",
+                              "type": "string"
+                            },
+                            {
+                              "const": "occurrences",
+                              "type": "string"
+                            },
+                            {
+                              "const": "malEvidence",
+                              "type": "string"
+                            },
+                            {
+                              "const": "annotations",
+                              "type": "string"
+                            },
+                            {
+                              "const": "provenance",
+                              "type": "string"
+                            },
+                            {
+                              "const": "journals",
+                              "type": "string"
+                            }
+                          ],
+                          "minItems": 17,
+                          "type": "array"
+                        },
+                        "state": {
+                          "enum": [
+                            "collecting",
+                            "ready",
+                            "stale",
+                            "cancelled",
+                            "expired",
+                            "limit"
+                          ],
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": 3,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "format",
+                        "version",
+                        "coverage",
+                        "exportId",
+                        "capturedAt",
+                        "expiresAt",
+                        "privacy",
+                        "completeness",
+                        "sections",
+                        "omissions",
+                        "fullExport",
+                        "state",
+                        "first"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -156148,6 +156479,160 @@
                         },
                         "version": {
                           "const": 2,
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "format",
+                        "version",
+                        "coverage",
+                        "exportId",
+                        "capturedAt",
+                        "expiresAt",
+                        "privacy",
+                        "completeness",
+                        "sections",
+                        "omissions",
+                        "fullExport",
+                        "state",
+                        "first"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "capturedAt": {
+                          "type": "string"
+                        },
+                        "completeness": {
+                          "const": "supported-native-facts",
+                          "type": "string"
+                        },
+                        "coverage": {
+                          "const": "private-library-owner-facts-v3",
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "exportId": {
+                          "type": "string"
+                        },
+                        "first": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "format": {
+                          "const": "https://rezics.com/formats/library-export",
+                          "type": "string"
+                        },
+                        "fullExport": {
+                          "const": false,
+                          "type": "boolean"
+                        },
+                        "omissions": {
+                          "patternProperties": {
+                            "^.*$": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        },
+                        "privacy": {
+                          "const": "private",
+                          "type": "string"
+                        },
+                        "sections": {
+                          "additionalItems": false,
+                          "items": [
+                            {
+                              "const": "entries",
+                              "type": "string"
+                            },
+                            {
+                              "const": "labels",
+                              "type": "string"
+                            },
+                            {
+                              "const": "assignments",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sessions",
+                              "type": "string"
+                            },
+                            {
+                              "const": "holdings",
+                              "type": "string"
+                            },
+                            {
+                              "const": "collections",
+                              "type": "string"
+                            },
+                            {
+                              "const": "collectionPins",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bangumiUploads",
+                              "type": "string"
+                            },
+                            {
+                              "const": "bangumiEvidence",
+                              "type": "string"
+                            },
+                            {
+                              "const": "malImports",
+                              "type": "string"
+                            },
+                            {
+                              "const": "units",
+                              "type": "string"
+                            },
+                            {
+                              "const": "history",
+                              "type": "string"
+                            },
+                            {
+                              "const": "occurrences",
+                              "type": "string"
+                            },
+                            {
+                              "const": "malEvidence",
+                              "type": "string"
+                            },
+                            {
+                              "const": "annotations",
+                              "type": "string"
+                            },
+                            {
+                              "const": "provenance",
+                              "type": "string"
+                            },
+                            {
+                              "const": "journals",
+                              "type": "string"
+                            }
+                          ],
+                          "minItems": 17,
+                          "type": "array"
+                        },
+                        "state": {
+                          "enum": [
+                            "collecting",
+                            "ready",
+                            "stale",
+                            "cancelled",
+                            "expired",
+                            "limit"
+                          ],
+                          "type": "string"
+                        },
+                        "version": {
+                          "const": 3,
                           "type": "number"
                         }
                       },
@@ -157497,6 +157982,483 @@
                                 "sectionTotals"
                               ],
                               "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "capturedAt": {
+                                  "type": "string"
+                                },
+                                "completeness": {
+                                  "const": "supported-native-facts",
+                                  "type": "string"
+                                },
+                                "coverage": {
+                                  "const": "private-library-owner-facts-v3",
+                                  "type": "string"
+                                },
+                                "expiresAt": {
+                                  "type": "string"
+                                },
+                                "exportId": {
+                                  "type": "string"
+                                },
+                                "format": {
+                                  "const": "https://rezics.com/formats/library-export",
+                                  "type": "string"
+                                },
+                                "fullExport": {
+                                  "const": false,
+                                  "type": "boolean"
+                                },
+                                "omissions": {
+                                  "patternProperties": {
+                                    "^.*$": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "type": "object"
+                                },
+                                "privacy": {
+                                  "const": "private",
+                                  "type": "string"
+                                },
+                                "recordBytes": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "rows": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "sectionTotals": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "annotations": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "assignments": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "bangumiEvidence": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "bangumiUploads": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "collectionPins": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "collections": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "entries": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "history": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "holdings": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "journals": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "labels": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "malEvidence": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "malImports": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "occurrences": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "provenance": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "sessions": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "units": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "recordBytes": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "rows": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "rows",
+                                        "recordBytes"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  },
+                                  "required": [
+                                    "entries",
+                                    "labels",
+                                    "assignments",
+                                    "sessions",
+                                    "holdings",
+                                    "collections",
+                                    "collectionPins",
+                                    "bangumiUploads",
+                                    "bangumiEvidence",
+                                    "malImports",
+                                    "units",
+                                    "history",
+                                    "occurrences",
+                                    "malEvidence",
+                                    "annotations",
+                                    "provenance",
+                                    "journals"
+                                  ],
+                                  "type": "object"
+                                },
+                                "sections": {
+                                  "additionalItems": false,
+                                  "items": [
+                                    {
+                                      "const": "entries",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "labels",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "assignments",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "sessions",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "holdings",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "collections",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "collectionPins",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bangumiUploads",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bangumiEvidence",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "malImports",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "units",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "history",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "occurrences",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "malEvidence",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "annotations",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "provenance",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "journals",
+                                      "type": "string"
+                                    }
+                                  ],
+                                  "minItems": 17,
+                                  "type": "array"
+                                },
+                                "version": {
+                                  "const": 3,
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "format",
+                                "version",
+                                "coverage",
+                                "exportId",
+                                "capturedAt",
+                                "expiresAt",
+                                "privacy",
+                                "completeness",
+                                "sections",
+                                "omissions",
+                                "fullExport",
+                                "rows",
+                                "recordBytes",
+                                "sectionTotals"
+                              ],
+                              "type": "object"
                             }
                           ]
                         },
@@ -158071,6 +159033,259 @@
                                   "startDate",
                                   "finishDate",
                                   "reflection"
+                                ],
+                                "type": "object"
+                              },
+                              "lastChangedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "libraryProfilePin": {},
+                              "progressRevision": {
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "section": {
+                                "const": "journals",
+                                "type": "string"
+                              },
+                              "sessionId": {
+                                "type": "string"
+                              },
+                              "startedAt": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "type": "string"
+                              },
+                              "subjectId": {
+                                "type": "string"
+                              },
+                              "versionSubjectId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "section",
+                              "accountId",
+                              "sessionId",
+                              "subjectId",
+                              "versionSubjectId",
+                              "state",
+                              "progressRevision",
+                              "libraryProfilePin",
+                              "startedAt",
+                              "completedAt",
+                              "lastChangedAt",
+                              "journal"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "accountId": {
+                                "type": "string"
+                              },
+                              "completedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "journal": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "assessment": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "meaningRevision": {
+                                        "const": 1,
+                                        "type": "number"
+                                      },
+                                      "units": {
+                                        "maximum": 20,
+                                        "minimum": 0,
+                                        "type": [
+                                          "integer",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "meaningRevision",
+                                      "units"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "finishDate": {
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "year": {
+                                                "maximum": 9999,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "year"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "month": {
+                                                "maximum": 12,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "year": {
+                                                "maximum": 9999,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "year",
+                                              "month"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "day": {
+                                                "maximum": 31,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "month": {
+                                                "maximum": 12,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "year": {
+                                                "maximum": 9999,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "year",
+                                              "month",
+                                              "day"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "reflection": {
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "revision": {
+                                    "minimum": 1,
+                                    "type": "integer"
+                                  },
+                                  "sessionId": {
+                                    "type": "string"
+                                  },
+                                  "startDate": {
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "year": {
+                                                "maximum": 9999,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "year"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "month": {
+                                                "maximum": 12,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "year": {
+                                                "maximum": 9999,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "year",
+                                              "month"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "day": {
+                                                "maximum": 31,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "month": {
+                                                "maximum": 12,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "year": {
+                                                "maximum": 9999,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "year",
+                                              "month",
+                                              "day"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "sessionId",
+                                  "revision",
+                                  "startDate",
+                                  "finishDate",
+                                  "reflection",
+                                  "assessment"
                                 ],
                                 "type": "object"
                               },
@@ -182820,6 +184035,65 @@
                     "maximum": 499,
                     "minimum": 0,
                     "type": "integer"
+                  },
+                  "score": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "adopt",
+                            "type": "string"
+                          },
+                          "questionId": {
+                            "const": "00000000-0000-7000-8000-000000000001",
+                            "type": "string"
+                          },
+                          "questionRevision": {
+                            "const": 1,
+                            "type": "number"
+                          },
+                          "replaceCurrent": {
+                            "type": "boolean"
+                          },
+                          "units": {
+                            "maximum": 20,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "questionId",
+                          "questionRevision",
+                          "units"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "action": {
+                            "const": "clear",
+                            "type": "string"
+                          },
+                          "questionId": {
+                            "const": "00000000-0000-7000-8000-000000000001",
+                            "type": "string"
+                          },
+                          "questionRevision": {
+                            "const": 1,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "action",
+                          "questionId",
+                          "questionRevision"
+                        ],
+                        "type": "object"
+                      }
+                    ]
                   },
                   "skip": {
                     "type": "boolean"
@@ -273296,6 +274570,28 @@
                     "journal": {
                       "additionalProperties": false,
                       "properties": {
+                        "assessment": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "meaningRevision": {
+                              "const": 1,
+                              "type": "number"
+                            },
+                            "units": {
+                              "maximum": 20,
+                              "minimum": 0,
+                              "type": [
+                                "integer",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "meaningRevision",
+                            "units"
+                          ],
+                          "type": "object"
+                        },
                         "finishDate": {
                           "additionalProperties": false,
                           "properties": {
@@ -273372,7 +274668,8 @@
                         "revision",
                         "startDate",
                         "finishDate",
-                        "reflection"
+                        "reflection",
+                        "assessment"
                       ],
                       "type": "object"
                     }
@@ -273843,6 +275140,23 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
+                  "assessment": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "units": {
+                        "maximum": 20,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "units"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
                   "finishDate": {
                     "additionalProperties": false,
                     "properties": {
@@ -388237,7 +389551,10 @@
                   "additionalProperties": false,
                   "properties": {
                     "code": {
-                      "const": "invalid_request",
+                      "enum": [
+                        "invalid_request",
+                        "invalid_cursor"
+                      ],
                       "type": "string"
                     },
                     "detail": {
@@ -388284,19 +389601,28 @@
                       "type": "string"
                     },
                     "retryable": {
-                      "const": false,
-                      "type": "boolean"
+                      "enum": [
+                        false,
+                        false
+                      ],
+                      "type": "string"
                     },
                     "status": {
                       "const": 400,
                       "type": "number"
                     },
                     "title": {
-                      "const": "Invalid Request",
+                      "enum": [
+                        "Invalid Request",
+                        "Invalid Cursor"
+                      ],
                       "type": "string"
                     },
                     "type": {
-                      "const": "https://rezics.com/problems/invalid_request",
+                      "enum": [
+                        "https://rezics.com/problems/invalid_request",
+                        "https://rezics.com/problems/invalid_cursor"
+                      ],
                       "type": "string"
                     }
                   },
@@ -388313,7 +389639,7 @@
                 }
               }
             },
-            "description": "Invalid request"
+            "description": "Invalid request; Invalid cursor"
           },
           "401": {
             "content": {
