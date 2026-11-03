@@ -559,6 +559,12 @@ export function createCollectionPublicationEpisodes(config: {
             if (!original) throw unavailable();
             if (original.creation.initiator.creation.requestDigest !== requestDigest.toString('hex'))
               throw new IdempotencyConflictError(partitionOf(route));
+            if (creation) {
+              // A concurrent retry may have allocated a different unused candidate ID before the receipt lock.
+              const collection = await readCollection(tx, route, original.creation.source.locator.collectionId);
+              if (!collection || collection.state !== 'active' || collection.curatorAccountId !== actor.accountId)
+                throw new ProblemError('not_found');
+            }
             if (
               !creation &&
               (!(await readCollectionPublicationRule(tx, original.creation.source.locator)) ||
@@ -572,11 +578,7 @@ export function createCollectionPublicationEpisodes(config: {
           }
           const current = await readCurrentMeaning(tx, route, input.collectionId);
           if (creation) {
-            if (prior) {
-              const collection = await readCollection(tx, route, input.collectionId);
-              if (!collection || collection.state !== 'active' || collection.curatorAccountId !== actor.accountId)
-                throw new ProblemError('not_found');
-            } else if (current !== null) throw conflict();
+            if (!prior && current !== null) throw conflict();
           } else if (materialization ? current !== null : !isDeepStrictEqual(current, prepared.meaning))
             throw conflict();
           return mode;

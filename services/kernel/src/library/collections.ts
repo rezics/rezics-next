@@ -456,16 +456,7 @@ export function createCollectionCommands(config: {
       ...(draft.membershipKind === 'dynamic' ? { membershipKind: 'dynamic', rule: draft.rule } : {}),
     };
     const route = actor.kind === 'account' ? routeOf(actor.accountId) : null;
-    const previous =
-      rule && visibility !== 'private' && route !== null
-        ? (
-            await pool.query<{ id: string }>(
-              'SELECT collection_id::text AS id FROM library.collection_publication_operation WHERE route=$1 AND owner_account_id=$2 AND creation_key=$3',
-              [route, actor.kind === 'account' ? actor.accountId : null, requestKey],
-            )
-          ).rows[0]
-        : undefined;
-    const id = previous?.id ?? (route === null ? newId(1) : newId(route));
+    const id = route === null ? newId(1) : newId(route);
     let provenance: { transactionId: string; at: string } | null = null;
 
     if (rule && visibility !== 'private') {
