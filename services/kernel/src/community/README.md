@@ -482,6 +482,17 @@ adapter still needs an owner method such as `currentSourceTupleWitnesses(spaceKe
 current Space/Realm revisions, tuple list, producer generation/epoch/source position and an explicit complete bit;
 eligibility pages cannot supply those facts.
 
+Decision: a current Space tuple read certifies `complete: true` only after native placement equality and exact expected/reference tuple coverage; missing tuples never stand in for complete provenance.
+
+Each ready read includes its native `partition`, `epoch`, `position` and per-partition capability `generation`/`cut`
+under `native`. Both owner rounds must retain those same observations, heads and producer witness. Expected tuples
+and acknowledged references must each equal the declared tuple count and identity set, and references must belong
+to the current witness generation. Each exact owner/tuple-generation prefix reads at most 51 rows to detect overflow
+against the 50-tuple admission limit. Missing, stale or partial native projection rows withhold the witness even when
+the aggregate installation counters still say ready. A provisional publication acknowledgement does not carry
+`complete`; only the released owner/fence read can certify it. This does not install the production relationship
+source publisher or make a filtered or empty page a capability certificate.
+
 Dependency removal may delete an unexamined inverse key; the native change's own direct wake rehydrates that Space.
 Insertions behind a captured cursor, including late commits and changes during initialization, are covered by their
 own committed native change events. New inverse keys beyond the cut are likewise covered by that live relay. Old,
@@ -529,8 +540,8 @@ promotion remain distinct integration verification obligations. Focused cases li
 
 #### Cost: current tuple witness read
 
-- Touches: Two exact owner rounds cover at most 100 requested Spaces, two grouped current-fence reads cover at most 5,000 tuples, and two capability observations scan the fixed install/counter summaries.
-- Bound: Each owner contributes at most 50 tuples; each source-fence statement carries at most 100. In the worst spread, each fence round reads at most 5,000 tuple identities across at most 4,096 tuple homes, with one anchor per home; total selected owner/reference/fence rows stay below 20,200, before fixed transaction and index overhead.
+- Touches: Two exact owner rounds cover at most 100 requested Spaces, their current expected/reference tuple prefixes and one native capability point per owner partition; two grouped current-fence reads cover at most 5,000 tuples, and two capability observations scan the fixed install/counter summaries.
+- Bound: Each owner contributes at most 50 tuples, with at most 51 rows from each expected/reference prefix to reject overflow; each source-fence statement carries at most 100. In the worst spread, each fence round reads at most 5,000 tuple identities across at most 4,096 tuple homes, with one anchor per home. The two owner rounds retain at most 20,400 expected/reference rows, 200 owner rows and 200 capability points, plus at most 10,000 fence rows across both rounds, before fixed transaction and index overhead.
 - Growth check: Work is bounded by the 100-key interface and 50-tuple witness limit, not by source-fence table history, unrelated Spaces or unrelated tuples.
 
 #### Cost: source-fence frontier page

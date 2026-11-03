@@ -34,6 +34,15 @@ export type SpaceDiscoveryTupleWitnessInput = Readonly<{
 
 export type SpaceDiscoveryTupleWitness = Readonly<{
   state: 'preparing' | 'unavailable' | 'ready';
+  /** Only a current owner read, with complete expected/reference coverage, can certify this. */
+  complete?: true;
+  native?: Readonly<{
+    partition: number;
+    generation: string;
+    cut: string;
+    epoch: number;
+    position: string;
+  }>;
   spaceId: string;
   spaceRevision?: string;
   realmId?: string | null;
@@ -640,6 +649,13 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
       try {
         const anchor = await readPartition(connection, partition);
         if (!anchor || anchor.writeState !== 'active') throw new Error('Space tuple owner is unavailable');
+        const capability = (
+          await connection.query<{ generation: string; cut: string }>(
+            `SELECT generation::text,cut::text FROM community.space_discovery_tuple_capability WHERE partition_no=$1`,
+            [partition],
+          )
+        ).rows[0];
+        if (!capability) throw new Error('Space tuple owner capability is unavailable');
         const rows = (
           await connection.query<{
             route: number;
@@ -654,6 +670,7 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
             producer_generation: string | null;
             producer_epoch: string | null;
             source_position: string | null;
+            tuple_count: number | null;
             state: 'preparing' | 'unavailable' | 'ready' | null;
           }>(
             `WITH requested AS MATERIALIZED (
@@ -662,7 +679,7 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
              SELECT s.route,s.space_id,s.head_revision_id::text AS current_space_revision,
                     r.realm_id::text AS current_realm_id,r.head_revision_id::text AS current_realm_revision,
                     w.witness_generation::text,w.space_revision::text,w.realm_id::text,w.realm_revision::text,
-                    w.producer_generation,w.producer_epoch::text,w.source_position::text,w.state
+                    w.producer_generation,w.producer_epoch::text,w.source_position::text,w.tuple_count,w.state
              FROM requested k JOIN community.space s ON s.route=k.route AND s.space_id=k.id
              LEFT JOIN community.realm r ON r.route=s.route AND r.space_id=s.space_id
              LEFT JOIN community.space_discovery_tuple_witness w ON w.route=s.route AND w.space_id=s.space_id`,
@@ -671,20 +688,46 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
         ).rows;
         const refs = rows.length
           ? (
-              await connection.query<Identity & { space_id: string }>(
+              await connection.query<
+                Identity & { space_id: string; witness_generation: string; kind: 'reference' | 'expected' }
+              >(
                 `WITH requested AS MATERIALIZED (
                    SELECT * FROM jsonb_to_recordset($1::jsonb) AS k(route integer,id uuid)
                  )
-                 SELECT d.space_id,d.tuple_route AS route,d.source,d.external_id,d.field_group
-                 FROM requested k JOIN community.space_discovery_tuple_reference d
-                   ON d.route=k.route AND d.space_id=k.id
-                 ORDER BY d.route,d.space_id,d.tuple_route,d.source,d.external_id,d.field_group`,
+                 SELECT k.id AS space_id,d.tuple_route AS route,d.source,d.external_id,d.field_group,
+                        d.witness_generation::text,'reference' AS kind
+                 FROM requested k JOIN LATERAL (
+                   SELECT * FROM community.space_discovery_tuple_reference d
+                   WHERE d.route=k.route AND d.space_id=k.id
+                   ORDER BY d.tuple_route,d.source,d.external_id,d.field_group LIMIT 51
+                 ) d ON true
+                 UNION ALL
+                 SELECT k.id AS space_id,d.tuple_route AS route,d.source,d.external_id,d.field_group,
+                        d.witness_generation::text,'expected' AS kind
+                 FROM requested k
+                 JOIN community.space_discovery_tuple_witness w ON w.route=k.route AND w.space_id=k.id
+                 JOIN LATERAL (
+                   SELECT * FROM community.space_discovery_tuple_expected d
+                   WHERE d.route=k.route AND d.space_id=k.id AND d.witness_generation=w.witness_generation
+                   ORDER BY d.tuple_route,d.source,d.external_id,d.field_group LIMIT 51
+                 ) d ON true`,
                 [JSON.stringify(group)],
               )
             ).rows
           : [];
         const tuples = new Map<string, SourceFenceTuple[]>();
+        const expected = new Map<string, string[]>();
+        const generations = new Map<string, Set<string>>();
         for (const ref of refs) {
+          if (ref.kind === 'expected') {
+            const list = expected.get(ref.space_id) ?? [];
+            list.push(identity(ref));
+            expected.set(ref.space_id, list);
+            continue;
+          }
+          const observed = generations.get(ref.space_id) ?? new Set<string>();
+          observed.add(ref.witness_generation);
+          generations.set(ref.space_id, observed);
           const list = tuples.get(ref.space_id) ?? [];
           list.push({
             route: ref.route,
@@ -695,8 +738,16 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
           tuples.set(ref.space_id, list);
         }
         for (const row of rows) {
+          const references = tuples.get(row.space_id) ?? [];
+          const expectedKeys = expected.get(row.space_id) ?? [];
+          const referenceKeys = new Set(references.map(identity));
           const current =
             row.state === 'ready' &&
+            row.tuple_count !== null &&
+            row.tuple_count === references.length &&
+            row.tuple_count === expectedKeys.length &&
+            expectedKeys.every((key) => referenceKeys.has(key)) &&
+            [...(generations.get(row.space_id) ?? [])].every((value) => value === row.witness_generation) &&
             row.space_revision === row.current_space_revision &&
             row.realm_id === row.current_realm_id &&
             row.realm_revision === row.current_realm_revision;
@@ -712,11 +763,18 @@ async function readOwnerWitnesses(pool: Pool, keys: readonly Readonly<{ route: n
                   producerEpoch: row.producer_epoch!,
                   sourcePosition: row.source_position!,
                   witnessGeneration: row.witness_generation!,
+                  native: {
+                    partition,
+                    generation: capability.generation,
+                    cut: capability.cut,
+                    epoch: anchor.epoch,
+                    position: anchor.position.toString(),
+                  },
                 }
               : {}),
             generation: null,
             cut: null,
-            tuples: current ? (tuples.get(row.space_id) ?? []) : [],
+            tuples: current ? references : [],
           });
         }
         await connection.query('COMMIT');
@@ -810,6 +868,11 @@ export async function readSpaceDiscoveryTupleWitnesses(
     left.producerGeneration === right.producerGeneration &&
     left.producerEpoch === right.producerEpoch &&
     left.sourcePosition === right.sourcePosition &&
+    left.native?.partition === right.native?.partition &&
+    left.native?.epoch === right.native?.epoch &&
+    left.native?.position === right.native?.position &&
+    left.native?.generation === right.native?.generation &&
+    left.native?.cut === right.native?.cut &&
     JSON.stringify(left.tuples.map(identity)) === JSON.stringify(right.tuples.map(identity));
   if (keys.some(({ id }) => !same(first.get(id), second.get(id))))
     return new Map(keys.map(({ id }) => [id, unavailable(id, 'unavailable', second.get(id))]));
@@ -830,7 +893,7 @@ export async function readSpaceDiscoveryTupleWitnesses(
       result.set(id, unavailable(id, 'unavailable', witness));
       continue;
     }
-    result.set(id, { ...witness, generation: before.generation, cut: before.cut });
+    result.set(id, { ...witness, complete: true, generation: before.generation, cut: before.cut });
   }
   return result;
 }

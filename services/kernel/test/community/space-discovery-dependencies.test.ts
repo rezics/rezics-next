@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
+import { observeSql } from '../content/support/sql-observer.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
@@ -147,6 +148,11 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
     cut: expect.any(String),
     capabilities: { 'source-fence': 'connected' },
   });
+  expect((await source.tupleWitnesses(home, [space.spaceId])).get(space.spaceId)).toMatchObject({
+    state: 'ready',
+    complete: true,
+    tuples: [],
+  });
 
   const tuple = {
     route: tupleRoute(system.routeKey, 'example', 'tuple-witness-source'),
@@ -186,8 +192,59 @@ test('a complete empty tuple witness is explicit; imported tuple fences retire i
     (await readSpaceDiscoveryTupleWitnesses(system.database.pool, [space.spaceId])).get(space.spaceId),
   ).toMatchObject({
     state: 'ready',
+    complete: true,
     tuples: [tuple],
+    native: {
+      partition: home,
+      epoch: expect.any(Number),
+      position: expect.stringMatching(/^\d+$/),
+      generation: expect.any(String),
+      cut: expect.stringMatching(/^\d+$/),
+    },
   });
+  for (const table of ['space_discovery_tuple_reference', 'space_discovery_tuple_expected']) {
+    const removed = await system.database.pool.query(
+      `DELETE FROM community.${table} WHERE route=$1 AND space_id=$2 RETURNING *`,
+      [routeOf(space.spaceId), space.spaceId],
+    );
+    try {
+      expect((await source.tupleWitnesses(home, [space.spaceId])).get(space.spaceId)).toMatchObject({
+        state: 'unavailable',
+        tuples: [],
+      });
+    } finally {
+      await system.database.pool.query(
+        `INSERT INTO community.${table} SELECT * FROM jsonb_populate_record(NULL::community.${table},$1::jsonb)`,
+        [JSON.stringify(removed.rows[0])],
+      );
+    }
+  }
+  const observer = observeSql(system.database.pool);
+  const mutation = new Pool({ ...system.database.pool.options, max: 1 });
+  let nativeEpoch: number | undefined;
+  try {
+    const current = (await source.tupleWitnesses(home, [space.spaceId])).get(space.spaceId)!;
+    nativeEpoch = current.native!.epoch;
+    const statement = observer.records.find(({ statement }) =>
+      statement.includes('AS current_space_revision'),
+    )!.statement;
+    const barrier = observer.hold({ statement }, 'after');
+    const pending = source.tupleWitnesses(home, [space.spaceId]);
+    try {
+      await barrier.entered;
+      await mutation.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [home]);
+    } finally {
+      barrier.release();
+    }
+    const changed = (await pending).get(space.spaceId)!;
+    expect(changed).toMatchObject({ state: 'unavailable', tuples: [] });
+    expect(changed).not.toHaveProperty('complete');
+  } finally {
+    if (nativeEpoch !== undefined)
+      await mutation.query('UPDATE core.partition SET epoch=$2 WHERE partition_no=$1', [home, nativeEpoch]);
+    await mutation.end();
+    await observer.close();
+  }
   await expect(
     publishSpaceDiscoveryTupleWitness(system.database.pool, {
       spaceId: space.spaceId,
