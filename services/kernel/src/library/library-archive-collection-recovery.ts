@@ -9,11 +9,12 @@ import { AuthenticationError, type Access, type Actor } from '../request/access.
 import { deadlineFor } from '../request/deadline.ts';
 import { newId } from '../route/route.ts';
 import { routeOf } from '../route/route.ts';
-import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { createCollectionCommands } from './collections.ts';
 import {
   ArchiveValidationError,
+  type ArchiveCoverage,
   LIBRARY_ARCHIVE_LIMITS,
   LIBRARY_ARCHIVE_RECOVERY_LIMITS,
   type ArchiveRecord,
@@ -47,6 +48,8 @@ const sectionReasons: Record<string, string> = {
 };
 
 type RecoveryState = 'preview' | 'reviewed' | 'applying' | 'complete' | 'partial' | 'cancelled' | 'expired';
+type OwnerActor = Extract<Actor, { kind: 'account' }>;
+type RecoveryCoverage = ArchiveCoverage & { reason: string };
 type RecoveryRoot = {
   route: number;
   accountId: string;
@@ -54,7 +57,7 @@ type RecoveryRoot = {
   requestKey: string;
   uploadDigest: string;
   manifest: LibraryArchiveManifest | Record<string, never>;
-  coverage: unknown[];
+  coverage: RecoveryCoverage[];
   sourcePins: string[] | null;
   createdAt: string;
   expiresAt: string;
@@ -139,7 +142,7 @@ type RootRow = {
   request_key: string;
   upload_digest: string;
   manifest: LibraryArchiveManifest | Record<string, never>;
-  coverage: unknown[];
+  coverage: RecoveryCoverage[];
   source_pins: string[] | null;
   created_at: string;
   expires_at: string;
@@ -217,7 +220,7 @@ function subjectUnavailable(error: unknown) {
 const notFound = () => new ProblemError('not_found');
 const conflict = () => new ProblemError('conflict');
 
-function accountOwner(actor: Actor, scopes: readonly string[] = []) {
+function accountOwner(actor: Actor, scopes: readonly string[] = []): OwnerActor {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   if (routeOf(actor.accountId) === null) throw new ProblemError('forbidden');
   if (scopes.some((scope) => !actor.scopes.includes(scope))) throw new ProblemError('forbidden');
@@ -494,7 +497,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     return owner;
   }
 
-  async function load(owner: Actor, uploadId: string): Promise<RecoveryRoot> {
+  async function load(owner: OwnerActor, uploadId: string): Promise<RecoveryRoot> {
     const route = routeOf(owner.accountId)!;
     if (!UUID.test(uploadId) || routeOf(uploadId) === null) throw notFound();
     let result = await deps.pool.query<RootRow>(
@@ -519,7 +522,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     return root;
   }
 
-  async function currentRoot(owner: Actor, uploadId: string, signal?: AbortSignal, scopes: readonly string[] = []) {
+  async function currentRoot(owner: OwnerActor, uploadId: string, signal?: AbortSignal, scopes: readonly string[] = []) {
     const root = await load(owner, uploadId);
     await admit(owner, scopes);
     abortIfRequested(signal);
@@ -630,7 +633,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     return recoveryStatus(current);
   }
 
-  function collectionCursor(root: RecoveryRoot, collectionId: string, after: readonly unknown[], limit: number) {
+  function collectionCursor(root: RecoveryRoot, collectionId: string, after: readonly CursorKey[], limit: number) {
     return encodeCursor(
       deps.tokens,
       { operation: 'library_archive_collection.preview', parameters: { accountId: root.accountId, uploadId: root.uploadId, collectionId, limit } },
@@ -775,7 +778,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     };
   }
 
-  async function mapTargets(owner: Actor, mappings: ReviewInput['mappings'], signal?: AbortSignal) {
+  async function mapTargets(owner: OwnerActor, mappings: ReviewInput['mappings'], signal?: AbortSignal) {
     const results: ReviewMapping[] = [];
     for (const mapping of mappings) {
       abortIfRequested(signal);
@@ -1016,7 +1019,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     return {
       ...recoveryStatus(root),
       selectedCollectionId: root.selectedCollectionId,
-      review: root.reviewSnapshot ? {
+      review: root.reviewSnapshot && root.reviewDigest ? {
         reviewId: root.reviewSnapshot.reviewId,
         digest: root.reviewDigest,
         epoch: root.reviewSnapshot.reviewEpoch,
@@ -1042,7 +1045,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     );
   }
 
-  async function reviewedMappingsCurrent(owner: Actor, snapshot: ReviewSnapshot, signal?: AbortSignal) {
+  async function reviewedMappingsCurrent(owner: OwnerActor, snapshot: ReviewSnapshot, signal?: AbortSignal) {
     for (const mapping of snapshot.mappings) {
       if (mapping.state !== 'mapped' || !mapping.targetSubjectId) continue;
       abortIfRequested(signal);
@@ -1367,9 +1370,21 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
           if (!(await beginEffect(root, leaseId, 'pin'))) break;
           let pinApplied = false;
           try {
+            const collectionId = root.nativeCollectionId;
+            if (collectionId === null) {
+              await checkpointEffect(
+                root,
+                leaseId,
+                `UPDATE library.collection_archive_recovery SET pin_state='unsupported',pin_reason='native_collection_missing'
+                 WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND lease_id=$4::uuid`,
+                [root.route, owner.accountId, uploadId, leaseId],
+              );
+              commandCount++;
+              continue;
+            }
             await pins().mutate(
               owner,
-              root.nativeCollectionId,
+              collectionId,
               { revision: Number(root.pinRevision), ...(root.pinAfter === null ? { after: null } : { after: root.pinAfter }) },
               commandKey(root, 'pin'),
             );
@@ -1459,12 +1474,16 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       const current = await currentRoot(owner, uploadId, signal);
       return { ...recoveryStatus(current), collection: null, outcomes: [], next: null };
     }
-    let after: readonly unknown[] = ['', '00000000-0000-0000-0000-000000000000'];
+    let after: readonly CursorKey[] = ['', '00000000-0000-0000-0000-000000000000'];
     if (options.cursor) after = collectionSeek(root, root.selectedCollectionId, options.cursor, limit);
     const page = await deps.pool.query<{
       sourceOccurrenceId: string; sourceSubjectId: string | null; targetSubjectId: string | null;
       nativeMemberId: string | null; note: string | null; notePresent: boolean; noteValid: boolean; orderKey: string;
-      orderPresent: boolean; addState: string; noteState: string; orderState: string; outcomeReason: string | null;
+      orderPresent: boolean;
+      addState: 'pending' | 'applied' | 'failed' | 'unresolved' | 'unsupported';
+      noteState: 'pending' | 'applied' | 'failed' | 'unsupported';
+      orderState: 'pending' | 'applied' | 'failed' | 'unsupported';
+      outcomeReason: string | null;
     }>(
       `SELECT source_id::text AS "sourceOccurrenceId",source_subject_id AS "sourceSubjectId",
          target_subject_id AS "targetSubjectId",native_member_id::text AS "nativeMemberId",note,

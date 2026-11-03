@@ -12,7 +12,7 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
-import { decodeLibraryArchive } from '../../src/library/library-archive.ts';
+import { decodeLibraryArchive, type ArchiveRecord } from '../../src/library/library-archive.ts';
 import { createLibraryArchiveCollectionRecovery } from '../../src/library/library-archive-collection-recovery.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 let workClient: WorkClient;
@@ -131,7 +131,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   const id = original.exportId;
   expect((await capture(key)).exportId).toBe(id);
   expect((await request('GET', `/v1/libraryExports/${id}`, 'other')).status).toBe(404);
-  const records: Record<string, any>[] = [];
+  const records: ArchiveRecord[] = [];
   let cursor = original.first,
     final: any,
     pages = 0;
@@ -190,7 +190,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   });
   expect(decoded.fullRestoration).toBe(false);
 
-  await fixture.grant({ route, id: subjectIds[4] }, 'owner', 'subject:read');
+  await fixture.grant({ route, id: subjectIds[4]! }, 'owner', 'subject:read');
   const archiveBase64 = Buffer.from(JSON.stringify({ manifest: final.manifest, records })).toString('base64');
   const client = createKernelClient('http://kernel.test', {
     headers: { authorization: `Bearer ${fixture.bearer('owner')}` },
@@ -262,14 +262,17 @@ test('native owner export streams independent persisted facts, preserves dates, 
     .toEqual([[subjectIds[4], 'second occurrence'], [subjectIds[4], 'first occurrence']]);
   expect((await request('GET', `/v1/libraryArchiveCollectionRecoveries/${recoveryUploadId}`, 'other')).status).toBe(404);
 
-  const ownerActor = await fixture.access.authenticate(fixture.bearer('owner'), {
+  const recoveryAccess = fixture.access({
+    actions: new Map([...scopes.map((action) => [action, { anonymous: false }] as const), ...LIFECYCLE_ACTIONS]),
+  });
+  const ownerActor = await recoveryAccess.authenticate(fixture.bearer('owner'), {
     pool: db.pool,
     deadline: Date.now() + 10_000,
   });
   const failedEffects = new Set(['create', 'member', 'order']);
   const replayService = createLibraryArchiveCollectionRecovery({
     pool: db.pool,
-    access: fixture.access,
+    access: recoveryAccess,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     routeKey,
     clock: () => new Date(now),
@@ -335,15 +338,15 @@ test('native owner export streams independent persisted facts, preserves dates, 
   ]);
   expect(directCollections.collections.find((item) => item.id === collection)?.eligible).toBe(true);
 
-  await fixture.grant({ route, id: subjectIds[4] }, 'other', 'subject:read');
-  const otherActor = await fixture.access.authenticate(fixture.bearer('other'), {
+  await fixture.grant({ route, id: subjectIds[4]! }, 'other', 'subject:read');
+  const otherActor = await recoveryAccess.authenticate(fixture.bearer('other'), {
     pool: db.pool,
     deadline: Date.now() + 10_000,
   });
   let otherNow = now;
   const otherService = createLibraryArchiveCollectionRecovery({
     pool: db.pool,
-    access: fixture.access,
+    access: recoveryAccess,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     routeKey,
     clock: () => new Date(otherNow),
@@ -356,7 +359,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
     }
     return record.member_id === sourceMemberIds[1] ? { ...record, note: null } : record;
   });
-  const archiveForOther = (archiveRecords: Record<string, any>[]) => {
+  const archiveForOther = (archiveRecords: ArchiveRecord[]) => {
     const manifest = {
       ...final.manifest,
       rows: archiveRecords.length,
@@ -403,7 +406,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   let cancelService: ReturnType<typeof createLibraryArchiveCollectionRecovery>;
   cancelService = createLibraryArchiveCollectionRecovery({
     pool: db.pool,
-    access: fixture.access,
+    access: recoveryAccess,
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     routeKey,
     clock: () => new Date(otherNow),
@@ -433,6 +436,7 @@ test('native owner export streams independent persisted facts, preserves dates, 
   );
   const cancelled = await cancelService.apply(otherActor, cancellationUploadId, cancellationReview.confirmation!);
   expect(cancelled).toMatchObject({ state: 'cancelled', cancelRequested: true });
+  if (!cancelled.collectionId) throw new Error('Cancelled recovery did not retain its Collection ID');
   expect(cancelled.collectionId).toBeString();
   const cancelledOutcomes = await cancelService.outcomes(otherActor, cancellationUploadId, { limit: 50 });
   expect(cancelledOutcomes.outcomes.filter((item) => item.addState === 'applied')).toHaveLength(1);

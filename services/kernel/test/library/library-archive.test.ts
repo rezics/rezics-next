@@ -4,6 +4,7 @@ import {
   ArchiveValidationError,
   decodeLibraryArchive,
   LIBRARY_ARCHIVE_LIMITS,
+  type ArchiveRecord,
   type ArchiveValidationCode,
 } from '../../src/library/library-archive.ts';
 import { libraryExportManifest } from '../../src/library/library-export-format.ts';
@@ -15,7 +16,7 @@ const at = '2026-01-01 00:00:00.123456+00';
 const reference = (id: string) => ({ id, href: `https://rezics.com/subjects/${id}` });
 function entry(subject: string, state = 'retired-vocabulary') {
   return {
-    section: 'entries',
+    section: 'entries' as const,
     subject_id: subject,
     requested_subject_id: null,
     incarnation_id: null,
@@ -30,11 +31,11 @@ function entry(subject: string, state = 'retired-vocabulary') {
   };
 }
 function named(id = label, name = 'weekend') {
-  return { section: 'labels', label_id: id, normalized_name: name, revision: 2, created_at: at, updated_at: at };
+  return { section: 'labels' as const, label_id: id, normalized_name: name, revision: 2, created_at: at, updated_at: at };
 }
 function assignment() {
   return {
-    section: 'assignments',
+    section: 'assignments' as const,
     subject_id: first,
     label_id: label,
     assignment_id: null,
@@ -44,7 +45,7 @@ function assignment() {
     subject_id_reference: reference(first),
   };
 }
-function archive(records: Record<string, unknown>[] = [entry(first), entry(second, 'planned'), named(), assignment()]) {
+function archive(records: ArchiveRecord[] = [entry(first), entry(second, 'planned'), named(), assignment()]) {
   return {
     manifest: {
       ...libraryExportManifest({
