@@ -262,6 +262,10 @@ test('native uploader cursors expire and bind the complete viewer and observed h
     for (const cursor of [
       token(binding.parameters, home.rows[0]!.epoch, now - 900_001),
       token({ ...binding.parameters, scopes: '[]' }),
+      token({ ...binding.parameters, accountId: system.actors.other.actor.accountId }),
+      token({ ...binding.parameters, filter: 'another-filter' }),
+      token({ ...binding.parameters, order: 'descending' }),
+      token({ ...binding.parameters, limit: 10 }),
       token({ ...binding.parameters, clientId: 'another-client' }),
       token({ ...binding.parameters, requestedBy: actor.accountId }),
       token({ ...binding.parameters, authnEpoch: actor.authnEpoch + 1 }),
@@ -280,7 +284,7 @@ test('native uploader cursors expire and bind the complete viewer and observed h
   }
 });
 
-test('a fabricated account actor cannot read even an empty native uploader home', async () => {
+test('a fabricated account actor cannot select a native uploader home', async () => {
   const { system } = currentMediaScenario();
   const observer = observeSql(system.database.pool);
   try {
