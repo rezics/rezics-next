@@ -868,7 +868,9 @@ export function createSearchService({
             disclosureSource,
             hits,
             clauses,
-            admitted && !preparedScope && !realmScopedRequest ? { filter: admitted, relationProperties } : undefined,
+            admitted && !preparedScope && !realmScopedRequest
+              ? { filter: admitted as FilterDocument, relationProperties }
+              : undefined,
           ),
         );
         inexact ||= relationRejected === true;

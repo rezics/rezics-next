@@ -39,7 +39,7 @@ import type { PublicFilterSourceDefinition } from '../semantic/public-filter-sou
 import { ScopeWork, scopeAllowance, zeroScopeWork, evaluateScopeSubjects } from './scope-execution.ts';
 import { compileCurrentOwnerFilter, type CurrentOwnerFilterPlan } from './current-filter-plan.ts';
 import { discoveryIndexUuid, subjectGenerations, subjectIndexName } from './indices.ts';
-import { searchSubjectHits } from './query.ts';
+import { kindDigest, searchSubjectHits } from './query.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { LeafOptions, LeafProgress, LeafWork } from '../semantic/scope-leaf-evidence.ts';
 import { packScopeLeafProgress, type ScopeLeafPosition } from './scope-progress.ts';
@@ -428,7 +428,15 @@ export function createSearchScopeSource({
       ...(evidence ? { reader: evidence } : {}),
       ...(realmSubjects ? { source: realmSubjects } : {}),
       ...(realmSubjectCapabilities ? { capabilities: realmSubjectCapabilities } : {}),
-      release: (digest) => readSearchScopeRelease(pool, digest),
+      release: async (digest) => {
+        if (release) {
+          const current = await release();
+          if (!current) return null;
+          const resolved = { digest: kindDigest(current), release: current };
+          return digest === undefined || digest === resolved.digest ? resolved : null;
+        }
+        return readSearchScopeRelease(pool, digest);
+      },
     }),
     /** Additive native caller accounting; opaque result shapes and the legacy evaluation ABI stay unchanged. */
     work(result: PreparedSearchScope | SearchScopeEvaluation): WorkReceipt {
