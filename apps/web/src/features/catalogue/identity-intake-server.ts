@@ -1,4 +1,3 @@
-import { pickText } from '@rezics/composition';
 import type { SessionEnv } from '../../session/client';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { problemResponse } from '../../media/kernel';
@@ -6,7 +5,6 @@ import { readSubjectSuggestions, type SuggestQuery } from '../../search/suggesti
 import type { DescriptorRead } from './type-directory-client';
 import {
   parseIdentityIntakeRequest,
-  type IdentityFact,
   type IdentityHit,
   type IdentityIntakeBinding,
   type IdentityIntakePage,
@@ -79,24 +77,9 @@ function preferredLabels(
 
 const languageTag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u;
 
-function projectFact(value: unknown, locale: string): IdentityFact | undefined {
-  if (!value || typeof value !== 'object' || !('kind' in value)) return;
-  const fact = value as { kind: string; labels?: Record<string, string>; year?: number; amount?: number; unit?: string; value?: string };
-  if (fact.kind === 'item' && fact.labels && typeof fact.labels === 'object') {
-    const label = pickText(fact.labels, locale).text;
-    return label ? { kind: 'item', label: limited(label) } : { kind: 'item' };
-  }
-  if (fact.kind === 'time' && typeof fact.year === 'number' && Number.isInteger(fact.year))
-    return { kind: 'time', year: fact.year };
-  if (fact.kind === 'quantity' && typeof fact.amount === 'number' && Number.isFinite(fact.amount) && typeof fact.unit === 'string')
-    return { kind: 'quantity', amount: fact.amount, unit: limited(fact.unit, 64) };
-  if (fact.kind === 'code' && typeof fact.value === 'string') return { kind: 'code', value: limited(fact.value) };
-}
-
 function projectResults(
   page: NativeSuggestionPage,
   descriptor: Extract<DescriptorRead, { ok: true }>['descriptor'],
-  locale: string,
   language: string,
 ): IdentityHit[] {
   return page.subjects.slice(0, 8).map((subject) => {
@@ -116,35 +99,12 @@ function projectResults(
           types: subject.summary.types.slice(0, 4).map((type) => limited(type, 96)),
         }
       : null;
-    const releasedProperties = new Set(
-      Array.isArray(descriptor.definition.properties)
-        ? descriptor.definition.properties.filter((property): property is string => typeof property === 'string')
-        : [],
-    );
-    const facts = Object.entries(subject.facts ?? {})
-      .filter(([property]) => releasedProperties.has(property))
-      .slice(0, 4)
-      .flatMap(([property, values]) => {
-        const value = values[0];
-        if (!value) return [];
-        const projected = projectFact(value, locale);
-        if (!projected) return [];
-        const propertyLabel = pickText(descriptor.properties?.[property]?.labels ?? {}, locale).text;
-        return [
-          {
-            property: limited(property, 128),
-            ...(propertyLabel ? { propertyLabel: limited(propertyLabel, 128) } : {}),
-            value: projected,
-          },
-        ];
-      });
     return {
       id: subject.id,
       type: limited(subject.type, 128),
       ...(typeLabel ? { typeLabel: limited(typeLabel, 128) } : {}),
       labels,
       summary,
-      facts,
     };
   });
 }
@@ -239,7 +199,7 @@ export async function identityIntakeResponse(
       request.signal,
       binding.locale,
     );
-    const results = projectResults(suggestions, descriptor.descriptor, binding.locale, binding.language);
+    const results = projectResults(suggestions, descriptor.descriptor, binding.language);
     const partial = results.some((hit) => !hit.summary || !hit.typeLabel || hit.labels.length === 0);
     return privateJson(createPage(binding, results.length === 0 ? 'empty' : partial ? 'partial' : 'ready', viewer, results));
   } catch (error) {

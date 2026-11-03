@@ -17,19 +17,12 @@ export type IdentityIntakeStatus =
   | 'denied'
   | 'invalid';
 
-export type IdentityFact =
-  | { kind: 'item'; label?: string }
-  | { kind: 'time'; year: number }
-  | { kind: 'quantity'; amount: number; unit: string }
-  | { kind: 'code'; value: string };
-
 export type IdentityHit = {
   id: string;
   type: string;
   typeLabel?: string;
   labels: { language: string; value: string }[];
   summary: { label?: { language: string; value: string }; creativeWork: boolean; types: string[] } | null;
-  facts: { property: string; propertyLabel?: string; value: IdentityFact }[];
 };
 
 export type IdentityIntakePage = {

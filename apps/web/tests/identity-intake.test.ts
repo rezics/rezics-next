@@ -81,7 +81,6 @@ test('one private read returns current suggestions, viewer and unknown create au
             creativeWork: true,
             cover: null,
           },
-          facts: { 'schema:datePublished': [{ kind: 'time', year: 2020 }] },
         },
       ],
     } as never;

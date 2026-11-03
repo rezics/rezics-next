@@ -956,7 +956,7 @@ function CreateSubjectFormLive({
                   viewerKey={identityIntake.viewerKey}
                   viewerState={identityIntake.viewerState}
                   hasType={!!directoryType}
-                  typeLabel={directoryType?.label}
+                  {...(directoryType?.label ? { typeLabel: directoryType.label } : {})}
                   typeCurrent={directoryDescriptorState === 'current' && !!directoryType?.releaseDigest}
                   disabled={locked}
                   confirmed={identityConfirmed}

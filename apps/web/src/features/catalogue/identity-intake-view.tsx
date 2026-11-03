@@ -219,7 +219,7 @@ export function IdentityIntakePanel({
                       ) : null}
                     </div>
 
-                    {hit.summary || hit.facts.length ? (
+                    {hit.summary ? (
                       <div className="min-w-0 text-sm">
                         <p className="font-medium">{m.identity_intake_summary({}, options)}</p>
                         {hit.summary?.label ? (
@@ -227,28 +227,12 @@ export function IdentityIntakePanel({
                             {hit.summary.label.value}
                           </p>
                         ) : null}
-                        {hit.facts.length ? (
-                          <dl className="mt-1 grid min-w-0 gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)]">
-                            {hit.facts.map((fact, index) => {
-                              const value = fact.value.kind === 'item'
-                                ? fact.value.label ?? m.identity_intake_partial({}, options)
-                                : fact.value.kind === 'time'
-                                  ? String(fact.value.year)
-                                  : fact.value.kind === 'quantity'
-                                    ? `${new Intl.NumberFormat(locale).format(fact.value.amount)} ${fact.value.unit}`
-                                    : fact.value.value;
-                              return (
-                                <div key={`${fact.property}-${index}`} className="grid min-w-0 grid-cols-subgrid sm:col-span-2">
-                                  <dt className="break-words text-muted-foreground">{fact.propertyLabel ?? fact.property}</dt>
-                                  <dd className="break-words">{value}</dd>
-                                </div>
-                              );
-                            })}
-                          </dl>
+                        {!hit.summary.label ? (
+                          <p>{m.identity_intake_metadata_unavailable({}, options)}</p>
                         ) : null}
                       </div>
                     ) : (
-                      <p className="text-sm text-muted-foreground">{m.identity_intake_partial({}, options)}</p>
+                      <p className="text-sm text-muted-foreground">{m.identity_intake_metadata_unavailable({}, options)}</p>
                     )}
 
                     <a className={buttonVariants({ variant: 'outline', size: 'lg' })} href={href} target="_blank" rel="noopener noreferrer">
