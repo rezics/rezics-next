@@ -156,7 +156,7 @@ export async function presentationSettingsFixture() {
           'community.space': [{ ...space, space_id: spaceId, head_revision_id: spaceHead }],
           'community.space_revision': [{ ...spaceRevision, space_id: spaceId, revision_id: spaceHead, predecessor: null }],
           'community.realm': [{ ...realm, realm_id: realmId, space_id: spaceId, head_revision_id: revisionId }],
-          'community.realm_revision': [{ ...realmRevision, realm_id: realmId, revision_id: revisionId, predecessor: null }],
+          'community.realm_revision': [{ ...realmRevision, realm_id: realmId, revision_id: revisionId, predecessor: null, presentation: empty }],
         };
       },
     };

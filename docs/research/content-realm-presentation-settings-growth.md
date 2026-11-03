@@ -28,7 +28,8 @@ board disclosure checks are separate, unmeasured operations. A header/home read 
 
 ## Population and assertions
 
-Every branch has a fresh native selected Realm and post. Each axis seeds 256, 1,024 and 4,096 rows outside observation:
+Every branch has a fresh isolated native database, selected Realm and post, so earlier series cannot mask growth.
+Each axis seeds 256, 1,024 and 4,096 rows outside observation:
 
 | Axis | Pressure | Fixed selected neighborhood |
 | --- | --- | --- |

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { serializeDocument } from '@rezics/document';
 import { newId, routeOf } from '../../src/route/route.ts';
 import {
@@ -7,8 +7,8 @@ import {
 } from './support/growth-realm-presentation-settings-fixture.ts';
 
 let f: PresentationSettingsFixture;
-beforeAll(async () => { f = await presentationSettingsFixture(); }, 240_000);
-afterAll(async () => { await f?.close(); });
+beforeEach(async () => { f = await presentationSettingsFixture(); }, 240_000);
+afterEach(async () => { await f?.close(); }, 120_000);
 
 const branches = [
   'adopt', 'clear', 'replay', 'stale', 'missing-post', 'missing-revision',
