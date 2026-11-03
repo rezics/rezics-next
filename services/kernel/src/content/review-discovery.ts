@@ -104,11 +104,12 @@ export type ReviewDiscoverySource = Readonly<{
 
 /** Additional native maintenance ports. Search's legacy Count remains compatible;
  * candidate installation does not grant it anonymous eligibility coverage. */
-export type NativeReviewDiscoverySource = ReviewDiscoverySource & Readonly<{
-  pageWithCut: NonNullable<ReviewDiscoverySource['pageWithCut']>;
-  maintainCensus(partition: number): Promise<ReviewCensusStep>;
-  censusCoverage(partition: number): Promise<ReviewCensusCoverage>;
-}>;
+export type NativeReviewDiscoverySource = ReviewDiscoverySource &
+  Readonly<{
+    pageWithCut: NonNullable<ReviewDiscoverySource['pageWithCut']>;
+    maintainCensus(partition: number): Promise<ReviewCensusStep>;
+    censusCoverage(partition: number): Promise<ReviewCensusCoverage>;
+  }>;
 
 export const REVIEW_DISCOVERY_BOUNDS = Object.freeze({
   readIds: REVIEW_DISCOVERY_READ_LIMIT,
@@ -350,7 +351,11 @@ type CutState =
   | Readonly<{ position: bigint; cut: PopulationCut; status: 'ready' }>
   | Readonly<{ position: bigint; cut: null; status: 'preparing' | 'unavailable'; missing: string }>;
 
-async function captureCut(client: Pick<PoolClient, 'query'>, partition: number, homes: readonly number[]): Promise<CutState> {
+async function captureCut(
+  client: Pick<PoolClient, 'query'>,
+  partition: number,
+  homes: readonly number[],
+): Promise<CutState> {
   const selected = [...new Set([partition, ...homes])].sort((a, b) => a - b);
   if (selected.length > REVIEW_DISCOVERY_MAX_CUT_HOMES)
     return { position: 0n, cut: null, status: 'unavailable', missing: 'dependency-home-bound' };
@@ -692,9 +697,13 @@ export function createReviewDiscoverySource(
       previousCut = cutFromToken(signed);
     }
     const currentContext = checkedContext(makeAnonymousContext);
-    const context = censusDeadline === undefined ? currentContext : {
-      ...currentContext, deadline: Math.min(currentContext.deadline, censusDeadline),
-    };
+    const context =
+      censusDeadline === undefined
+        ? currentContext
+        : {
+            ...currentContext,
+            deadline: Math.min(currentContext.deadline, censusDeadline),
+          };
     const candidateLimit = limit * REVIEW_DISCOVERY_CANDIDATE_FACTOR;
     type NativePage =
       | Readonly<{
@@ -750,12 +759,18 @@ export function createReviewDiscoverySource(
       if (value) {
         reviews.push(indexRecord(indexHydrated(value, item, native.depSet.byReview.get(item.id) ?? [], native.cut)));
       }
-      if (retainEpisodes) episodes.push({
-        route: item.route, id: item.id, boardId: item.boardId, realmId: item.realmId,
-        subjectId: item.subjectId, openingId: item.firstPostId, revisionId: item.revisionId,
-        sourceVersion: sourceVersion(item, native.depSet.byReview.get(item.id) ?? [], native.cut),
-        eligible: value !== null,
-      });
+      if (retainEpisodes)
+        episodes.push({
+          route: item.route,
+          id: item.id,
+          boardId: item.boardId,
+          realmId: item.realmId,
+          subjectId: item.subjectId,
+          openingId: item.firstPostId,
+          revisionId: item.revisionId,
+          sourceVersion: sourceVersion(item, native.depSet.byReview.get(item.id) ?? [], native.cut),
+          eligible: value !== null,
+        });
       if (reviews.length === limit) break;
     }
     const finalState = await withReadTransaction(
@@ -794,10 +809,20 @@ export function createReviewDiscoverySource(
         return failedPopulationPage(partition, 'unavailable', 'continuation-signing-key', finalState.position);
       next = { ...key, token };
     }
-    return { state: 'ready', partition, position: finalState.position, reviews, next,
-      ...(retainEpisodes ? { census: {
-        cut: { homes: tokenObservation(finalState.cut), frontier: finalState.cut.frontier.toString() }, episodes,
-      } } : {}),
+    return {
+      state: 'ready',
+      partition,
+      position: finalState.position,
+      reviews,
+      next,
+      ...(retainEpisodes
+        ? {
+            census: {
+              cut: { homes: tokenObservation(finalState.cut), frontier: finalState.cut.frontier.toString() },
+              episodes,
+            },
+          }
+        : {}),
     };
   }
 
@@ -806,14 +831,23 @@ export function createReviewDiscoverySource(
       const page = await coherentPage(partition, after, REVIEW_CENSUS_PAGE_SIZE, true, deadline);
       if (page.state !== 'ready') return page;
       if (!page.census) throw new Error('Review census native observation unavailable');
-      return { state: 'ready', position: page.position, cut: page.census.cut,
-        episodes: page.census.episodes, next: page.next };
+      return {
+        state: 'ready',
+        position: page.position,
+        cut: page.census.cut,
+        episodes: page.census.episodes,
+        next: page.next,
+      };
     },
     async observe(client, partition, cut) {
       const current = await captureCut(client, partition, cut?.homes.map((home) => home.partition) ?? []);
-      if (current.status !== 'ready') return { state: current.status, position: current.position, missing: current.missing };
-      return { state: 'ready', position: current.position,
-        cut: { homes: tokenObservation(current.cut), frontier: current.cut.frontier.toString() } };
+      if (current.status !== 'ready')
+        return { state: current.status, position: current.position, missing: current.missing };
+      return {
+        state: 'ready',
+        position: current.position,
+        cut: { homes: tokenObservation(current.cut), frontier: current.cut.frontier.toString() },
+      };
     },
   });
 
