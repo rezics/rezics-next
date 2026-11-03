@@ -262,6 +262,11 @@ async function family(root: HTMLElement, type: FamilyType, long = false) {
     const cite = citation(root, property);
     await userEvent.type(cite, longCitation);
     await expect(cite).toHaveValue(longCitation);
+    cite.focus();
+    await expect(cite).toHaveFocus();
+    await userEvent.keyboard('{Tab}');
+    await expect(within(fieldset).getByRole('combobox', { name: m.correction_add_part() })).toHaveFocus();
+    await expect(cite).toHaveValue(longCitation);
     await bounds(cite, fieldset);
     const remove = group.getByRole('button', { name: m.people_profile_remove_fact() });
     await expect(remove).toHaveAttribute('type', 'button');

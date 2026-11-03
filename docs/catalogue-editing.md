@@ -733,7 +733,20 @@ from another field. Decision: Literary initial entry remains scalar-only; relati
 post-creation relation editor. The form retains independent drafts across Type choices. Native rejection refreshes
 metadata while retaining the draft; uncertain delivery retains the exact command and key. The returned subject ID
 is reread before offering its canonical current-reader link. A created identity with an unavailable reader is
-shown as created, with a separate read retry.
+shown as created, with a separate read retry of that UUID, never another create.
+
+Standalone Book and BookSeries creation reviews the exact prepared item before sealing: chosen Book versus BookSeries
+and its label language, every multilingual term and alias, and every admitted initial assertion with its qualifiers,
+normal rank and grouped references. Dates keep their precision and quantities keep their units and bounds; they are
+not rewritten as display labels. A later edit, type switch, reference copy or successful metadata change requires
+reviewing the current item again. Contributors may copy one complete reference group onto up to sixteen other initial
+statements in this creator; copies are independent, leave each destination's existing groups in place, and never copy
+values, qualifiers, rank or authority. Incompatible, removed, sealed and uncertain holders cannot receive a copy.
+Source or destination edits while copy review is open make it stale; Cancel leaves drafts unchanged. A BookSeries
+title is not a source series identity. Whole-item review does not select imported candidates, attach editions,
+populate contents or publish relations. Decision: pinned Book scalars currently admit no initial qualifiers; review
+still shows qualifier lists when a statement carries them, and growth uses 2/4/8 holders with 16-part groups
+(34/68/136 structured parts) under the existing 12-row and 16-part limits.
 
 Initial Literary metadata retry admits one read, retains its recovery action while pending, and moves focus to the creation heading only for still-current keyboard intent; failure retains the action and moved focus, pointer initiation or caller, locale or session retirement stays silent.
 

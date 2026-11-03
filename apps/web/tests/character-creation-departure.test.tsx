@@ -95,7 +95,7 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     );
   }
   const rootRoute = createRootRoute({ component: Outlet });
-  const createRoute = createRoute({ getParentRoute: () => rootRoute, path: '/create', component: CreatePage });
+  const createPageRoute = createRoute({ getParentRoute: () => rootRoute, path: '/create', component: CreatePage });
   const awayRoute = createRoute({ getParentRoute: () => rootRoute, path: '/away', component: () => <h1>Away</h1> });
   const successRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -103,7 +103,7 @@ test('Character creation protects local work, preserves unknown retries on Stay 
     component: () => <h1>Created</h1>,
   });
   router = createRouter({
-    routeTree: rootRoute.addChildren([createRoute, awayRoute, successRoute]),
+    routeTree: rootRoute.addChildren([createPageRoute, awayRoute, successRoute]),
     history: createMemoryHistory({ initialEntries: ['/create'] }),
   });
   const host = window.document.createElement('main');

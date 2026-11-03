@@ -16,8 +16,20 @@ import { m } from '../../paraglide/messages.js';
 import { ViewHeading } from '../pages/view-heading';
 import { subjectHref } from '../../subject/subject-href';
 import type { CandidateTransport } from '../../subject/candidate-review';
-import { createTypes, type CreateTransport, type InitialSubject } from './create-subject';
+import { createTypes, type CreateTransport, type CreatedReader, type InitialSubject } from './create-subject';
 import { CreateSubjectForm } from './create-subject-form';
+import { applyReuse, captureReuse, cloneReferenceGroup } from './reference-reuse';
+import { ReferenceReusePanel } from './reference-reuse-view';
+import {
+  captureLiteraryReuse,
+  literaryAdmitCreatedReader,
+  literaryCreateFactsRead,
+  literaryFactDrafts,
+  literaryFactsFromDrafts,
+  literaryHolder,
+  type LiteraryReuseState,
+} from './literary-create-review';
+import { LiteraryCreateReview } from './literary-create-review-view';
 import { EditorFailure, StatementFields, statementHolderKey, type StatementFieldsRead } from './statement-editor-view';
 import { controlId, presentStatementViolations } from './statement-validation-presentation';
 import {
@@ -29,7 +41,13 @@ import {
 } from './statement-editor';
 import { SubjectFacts } from './subject-facts-view';
 import type { FactsTransport } from './subject-facts';
-import { isLiteraryType, literaryFields, literaryInitialItem, type LiteraryRead } from './literary-profile';
+import {
+  isLiteraryType,
+  literaryFields,
+  literaryInitialItem,
+  type LiteraryItem,
+  type LiteraryRead,
+} from './literary-profile';
 
 export type LiteraryTransport = Pick<CreateTransport, 'submit' | 'read'> & { load: () => Promise<LiteraryRead> };
 type Ready = Extract<LiteraryRead, { ok: true }>;
@@ -236,6 +254,14 @@ export function InitialFacts({
   rows,
   change,
   canEdit = editableInitialFacts,
+  reuse = null,
+  focusCopy,
+  onReuse,
+  onReuseSelected,
+  onReuseApply,
+  onReuseCancel,
+  onReuseRefresh,
+  onReuseOpen,
 }: {
   type: string;
   read: Ready;
@@ -244,6 +270,14 @@ export function InitialFacts({
   rows: InitialRow[];
   change: (rows: InitialRow[]) => void;
   canEdit?: () => boolean;
+  reuse?: LiteraryReuseState | null;
+  focusCopy?: { holder: string; index: number; nonce: number };
+  onReuse?: (row: InitialRow, index: number) => void;
+  onReuseSelected?: (holders: string[]) => void;
+  onReuseApply?: () => void;
+  onReuseCancel?: () => void;
+  onReuseRefresh?: () => void;
+  onReuseOpen?: (holder: string, index: number) => void;
 }) {
   const o = { locale: locale as never };
   const [property, setProperty] = useState('');
@@ -298,6 +332,9 @@ export function InitialFacts({
     source: null,
     public: { related: {}, subject: { type } },
   };
+  const admittedRows = rows.filter((row) => fields.includes(row.statement.property.id));
+  const reuseDrafts = literaryFactDrafts(admittedRows);
+  const editable = () => canEdit();
   const currentRow = (row: InitialRow) => {
     const holder = holders.current.get(row);
     return admitted()
@@ -344,6 +381,14 @@ export function InitialFacts({
                     guideReturn={`/${locale}/catalogue/literary`}
                     heading="h4"
                     change={(next) => update(row, next)}
+                    reuse={
+                      onReuse && editable() && admittedRows.length > 1
+                        ? { disabled, onReuse: (index) => onReuse(row, index) }
+                        : undefined
+                    }
+                    focusReference={
+                      focusCopy && focusCopy.holder === `literary-fact-${id}` ? focusCopy : undefined
+                    }
                   />
                 ) : (
                   <EditorFailure locale={locale} reason="stale" />
@@ -446,6 +491,23 @@ export function InitialFacts({
             {m.correction_add({}, o)}
           </Button>
         </div>
+        {reuse && onReuseSelected && onReuseApply && onReuseCancel && onReuseRefresh && onReuseOpen && (
+          <ReferenceReusePanel
+            source={reuse.source}
+            drafts={reuseDrafts}
+            selected={reuse.selected}
+            read={literaryCreateFactsRead(read.release, type)}
+            locale={locale}
+            capture={reuse.capture}
+            applied={reuse.applied}
+            refused={reuse.refused}
+            onSelected={onReuseSelected}
+            onApply={onReuseApply}
+            onCancel={onReuseCancel}
+            onRefresh={onReuseRefresh}
+            onOpen={onReuseOpen}
+          />
+        )}
       </ContentItemFrame>
     </fieldset>
   );
@@ -562,9 +624,31 @@ function LiteraryProfileLive({
     if (attempt.keyboard && lifetime.active()) (read ? creationHeading.current : creationOpener.current)?.focus();
   });
   const [drafts, setDrafts] = useState<Record<string, InitialRow[]>>({});
+  const [reuse, setReuse] = useState<LiteraryReuseState | null>(null);
+  const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number }>();
+  const [createdId, setCreatedId] = useState<string>();
   // Keep independently entered facts when switching Types; only the currently chosen Type is submitted.
   const latest = useRef(drafts);
   latest.current = drafts;
+  function jump(id: string) {
+    const target = document.getElementById(id);
+    if (!target) return;
+    for (let parent = target.parentElement; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
+    const focus = target.matches('input, select, textarea, button')
+      ? target
+      : target.querySelector<HTMLElement>(
+          'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
+        );
+    if (focus) focus.focus();
+    else {
+      target.setAttribute('tabindex', '-1');
+      target.focus();
+    }
+  }
+  function admitReader(id: string, reader: CreatedReader): CreatedReader {
+    return literaryAdmitCreatedReader(reader, id);
+  }
   const heading = (
     <header className="space-y-3">
       <ViewHeading
@@ -577,6 +661,11 @@ function LiteraryProfileLive({
         <>
           <p className="text-muted-foreground">{m.literary_intro({}, o)}</p>
           <p className="text-sm text-muted-foreground">{m.literary_grain({}, o)}</p>
+          {createdId && (
+            <p role="status">
+              {m.literary_created_id({}, o)} <code className="break-all">{createdId}</code>
+            </p>
+          )}
         </>
       )}
     </header>
@@ -613,6 +702,9 @@ function LiteraryProfileLive({
         <CreateSubjectForm
           locale={locale}
           session={session}
+          onCreated={(result) => {
+            if (lifetime.active()) setCreatedId(result.id);
+          }}
           onNavigate={() => {
             /* Keep the exact current-reader link visible. */
           }}
@@ -634,6 +726,13 @@ function LiteraryProfileLive({
                 types: createTypes(metadata.release, locale).filter((type) => isLiteraryType(type.id)),
               };
             },
+            submit: async (command) => {
+              const result = await transport.submit(command);
+              if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
+              if (!result.ok) return result;
+              return { ...result, reader: admitReader(result.id, result.reader) };
+            },
+            read: async (created) => admitReader(created, await transport.read(created)),
           }}
           profile={{
             scope: 'literary',
@@ -651,17 +750,72 @@ function LiteraryProfileLive({
             descriptionLanguage: (type) =>
               pickText(read.release.types[type]?.descriptions ?? {}, locale).lang ?? undefined,
             control: (pointer, type) => initialFactControl(pointer, latest.current[type] ?? [], read, type, locale),
-            fields: (type, disabled, canEdit) => (
-              <InitialFacts
-                type={type}
-                read={read}
-                locale={locale}
-                disabled={disabled}
-                canEdit={canEdit}
-                rows={drafts[type] ?? []}
-                change={(rows) => setDrafts((previous) => ({ ...previous, [type]: rows }))}
-              />
-            ),
+            fields: (type, disabled, canEdit, invalidate) => {
+              const rows = drafts[type] ?? [];
+              const touch = () => invalidate?.();
+              return (
+                <InitialFacts
+                  type={type}
+                  read={read}
+                  locale={locale}
+                  disabled={disabled}
+                  canEdit={canEdit}
+                  rows={rows}
+                  change={(next) => {
+                    setDrafts((previous) => ({ ...previous, [type]: next }));
+                    setReuse((currentReuse) =>
+                      currentReuse &&
+                      currentReuse.type === type &&
+                      next.some((row) => literaryHolder(row) === currentReuse.source.holder)
+                        ? currentReuse
+                        : currentReuse?.type === type
+                          ? null
+                          : currentReuse,
+                    );
+                    touch();
+                  }}
+                  reuse={reuse && reuse.type === type ? reuse : null}
+                  {...(focusCopy ? { focusCopy } : {})}
+                  onReuse={(row, index) => {
+                    if (!lifetime.active() || !canEdit()) return;
+                    const next = captureLiteraryReuse(rows, type, row, index);
+                    if (next) setReuse(next);
+                  }}
+                  onReuseSelected={(selected) => {
+                    if (!lifetime.active() || !reuse) return;
+                    setReuse({ ...reuse, selected, applied: [], refused: [] });
+                  }}
+                  onReuseApply={() => {
+                    if (!lifetime.active() || !canEdit() || !reuse || reuse.type !== type) return;
+                    const result = applyReuse(literaryFactDrafts(rows), reuse.source, reuse.selected, read.release);
+                    setDrafts((previous) => ({
+                      ...previous,
+                      [type]: literaryFactsFromDrafts(result.drafts, previous[type] ?? []),
+                    }));
+                    setReuse({ ...reuse, applied: result.applied, refused: result.refused });
+                    const first = result.applied[0];
+                    if (first) setFocusCopy({ holder: first.holder, index: first.index, nonce: Date.now() });
+                    touch();
+                  }}
+                  onReuseCancel={() => setReuse(null)}
+                  onReuseRefresh={() => {
+                    if (!lifetime.active() || !reuse) return;
+                    const origin = rows.find((row) => literaryHolder(row) === reuse.source.holder);
+                    const group = origin?.statement.references[reuse.source.groupIndex];
+                    if (!origin || !group) return;
+                    const source = { ...reuse.source, snapshot: cloneReferenceGroup(group) };
+                    setReuse({
+                      ...reuse,
+                      source,
+                      capture: captureReuse(source, literaryFactDrafts(rows)),
+                      applied: [],
+                      refused: [],
+                    });
+                  }}
+                  onReuseOpen={(holder, index) => setFocusCopy({ holder, index, nonce: Date.now() })}
+                />
+              );
+            },
             prepare: (item: InitialSubject) => {
               return literaryInitialItem(
                 creationMetadata.current!.value.release,
@@ -670,6 +824,21 @@ function LiteraryProfileLive({
                 locale,
               );
             },
+            review: ({ item, stale }) => (
+              <LiteraryCreateReview
+                item={item as LiteraryItem}
+                release={creationMetadata.current?.value.release ?? read.release}
+                locale={locale}
+                stale={stale}
+                onJump={jump}
+                factId={(property, index) => {
+                  const match = (latest.current[item.type] ?? []).filter(
+                    (row) => row.statement.property.id === property,
+                  )[index];
+                  return match ? literaryHolder(match) : `literary-fact-${property}`;
+                }}
+              />
+            ),
           }}
         />
       </section>

@@ -118,7 +118,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
   const fields = () => host.querySelectorAll<HTMLFieldSetElement>('fieldset[id^="people-fact-"]');
   const group = (property: string, region = host) =>
     region.querySelector<HTMLFieldSetElement>(`fieldset[id="people-fact-${property}"]`)!;
-  const citation = (region: HTMLElement) =>
+  const citationInput = (region: HTMLElement) =>
     within(within(region).getByRole('group', { name: `${m.correction_references()} 1` })).getByRole('textbox', {
       name: m.correction_url(),
     }) as HTMLInputElement;
@@ -253,7 +253,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
                 calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
               };
             } else await value(fixture, property, String(content));
-            const cite = citation(fieldset);
+            const cite = citationInput(fieldset);
             expect(cite.id).toMatch(/-people-\d+-part-\d+-value$/);
             expect(cite.getAttribute('type')).toBe('url');
             await act(async () => user.type(cite, citation));
@@ -375,7 +375,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
         user.selectOptions(within(fieldset).getByRole('combobox', { name: m.correction_value_state() }), state),
       );
       expect(within(fieldset).queryByRole('combobox', { name: m.correction_precision() })).toBeNull();
-      const cite = citation(fieldset);
+      const cite = citationInput(fieldset);
       await act(async () => {
         await user.type(cite, citation);
         await user.clear(cite);
@@ -449,7 +449,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
       await value(fixture, 'schema:url', 'https://example.org/person');
       await add(fixture, 'schema:sameAs');
       await value(fixture, 'schema:sameAs', 'https://example.org/sibling');
-      const cite = citation(group('schema:url'));
+      const cite = citationInput(group('schema:url'));
       await act(async () => user.type(cite, 'https://example.org/rejected'));
       await submit();
       await waitFor(() => expect(host.textContent).toContain(m.correction_unavailable()));
@@ -513,7 +513,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
       await terms('Private recovery draft');
       await add(fixture, 'schema:url');
       await value(fixture, 'schema:url', url);
-      const cite = citation(group('schema:url'));
+      const cite = citationInput(group('schema:url'));
       await act(async () => user.type(cite, citation));
       await submit();
       await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
@@ -589,7 +589,7 @@ test('whole Person and Organization creation families retain exact facts, indepe
     await terms('Removed metadata');
     await add(removed, 'schema:url');
     await value(removed, 'schema:url', url);
-    await act(async () => user.type(citation(group('schema:url')), citation));
+    await act(async () => user.type(citationInput(group('schema:url')), citation));
     await submit();
     await waitFor(() => expect(group('schema:url').textContent).toContain(m.correction_stale()));
     expect(group('schema:url').querySelector('legend')!.textContent).toBe(m.candidate_value_unavailable());

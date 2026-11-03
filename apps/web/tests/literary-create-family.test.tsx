@@ -363,6 +363,11 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       const unit = row(scope).querySelector<HTMLSelectElement>(`select[aria-label="${m.correction_unit()}"]`)!;
       await change(unit, '1');
     };
+    const confirm = async (scope: HTMLElement = host) => {
+      await click(m.catalogue_create_submit(), scope);
+      if (scope.querySelector('[data-literary-create-review]'))
+        await click(m.catalogue_create_submit(), scope);
+    };
     const cite = 'https://Example.org/Original%2FSource?edition=First&language=ja#' + 'Bibliography'.repeat(25);
 
     // Independent actual create forms keep only the new property association mount-local.
@@ -496,7 +501,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     const lockedAmount = queuedInput(labelledInput(fact, m.correction_amount()));
     const lockedCitation = queuedInput(labelledInput(fact, m.correction_url()));
     await click(m.literary_remove_fact(), fact);
-    await click(m.catalogue_create_submit());
+    await confirm();
     await until(() => host.textContent!.includes(m.catalogue_create_uncertain()));
     expect(button(fact, m.literary_remove_fact()).disabled).toBe(true);
     await act(async () => button(fact, m.literary_remove_fact()).click());
@@ -588,7 +593,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       row().querySelector<HTMLSelectElement>(`select[aria-label="${m.correction_unit()}"]`)!,
       'http://www.wikidata.org/entity/Q1238720',
     );
-    await click(m.catalogue_create_submit());
+    await confirm();
     await until(() => !!host.querySelector(`a[href*="${literaryWorkId}"]`));
     const seriesPost = bounded.calls.find((call) => call.method === 'POST')!;
     expect(seriesPost.body).toMatchObject({
@@ -626,7 +631,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await input(host.querySelector<HTMLInputElement>('#create-label-1')!, 'Private English title');
     const invalidRow = row();
     recovery = 'throw';
-    await click(m.catalogue_create_submit());
+    await confirm();
     await until(() => !!host.querySelector('[role="alert"] code'));
     expect(host.querySelector('[role="alert"] a[href^="#literary-fact-"]')).toBeNull();
     expect(host.querySelector('[role="alert"] code')!.textContent).toBe('/statements/schema:wordCount');
@@ -704,7 +709,7 @@ test('mounted Literary creation keeps the complete initial bibliography family a
       await show(fixture);
       await enter();
       await input(labelledInput(row(), m.correction_url()), cite);
-      await click(m.catalogue_create_submit());
+      await confirm();
       const message =
         scenario === 'denied'
           ? m.catalogue_create_denied()
@@ -814,6 +819,8 @@ test('mounted Literary creation keeps the complete initial bibliography family a
     await reader('00000000-0000-4000-8000-000000000001');
     await until(() => !!type());
     await enter();
+    await click(m.catalogue_create_submit());
+    await until(() => !!host.querySelector('[data-literary-create-review]'));
     const saved = queuedSubmit(host.querySelector('form')!);
     const pendingAmount = queuedInput(labelledInput(row(), m.correction_amount()));
     const pendingCitation = queuedInput(labelledInput(row(), m.correction_url()));
