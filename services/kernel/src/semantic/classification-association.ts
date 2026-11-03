@@ -53,6 +53,7 @@ export async function readCurrentClassificationAssociation(input: {
   deadline: number;
   time?: AuthoritativeTime;
 }): Promise<CurrentClassificationAssociation | null> {
+  console.info('classification association helper', input.action);
   const subjectRoute = routeOf(input.subjectId);
   if (
     subjectRoute === null ||
@@ -83,6 +84,10 @@ export async function readCurrentClassificationAssociation(input: {
 
   const source = async (): Promise<CurrentRead | null> =>
     withReadTransaction(input.pool, async (client) => {
+      const reject = (reason: string): null => {
+        console.info('classification association source rejected', input.action, reason);
+        return null;
+      };
       requireAccessDeadline(input.deadline);
       const home = await readPartition(client, partitionOf(subjectRoute));
       if (!home || home.writeState === 'moved') throw new AccessUnavailableError('contention');
@@ -90,25 +95,27 @@ export async function readCurrentClassificationAssociation(input: {
       const ballotAllowed = await ballotAction(client, input.time);
       if (!subjectAllowed || !ballotAllowed) {
         console.info('classification association access probe', input.action, subjectAllowed, ballotAllowed);
-        return null;
+        return reject('access');
       }
 
       const visible = await readVisibility.run(client, { route: subjectRoute, subject_id: input.subjectId });
-      if (visible?.visibility !== 'visible' || !visible.type) return null;
+      if (visible?.visibility !== 'visible' || !visible.type) return reject('visibility');
       const subjectVersion = await readItemIdentityVersion(client, input.subjectId);
-      if (!subjectVersion || subjectVersion.redirect !== null) return null;
+      if (!subjectVersion || subjectVersion.redirect !== null) return reject('subject identity');
 
       const candidate = await readAssociation.run(client, {
         route: subjectRoute,
         subject_id: input.subjectId,
         candidate_id: input.associationId,
       });
-      if (!candidate || candidate.candidateId !== input.associationId || candidate.relation) return null;
+      if (!candidate || candidate.candidateId !== input.associationId || candidate.relation)
+        return reject('candidate identity');
       const revision = Number(candidate.revision);
-      if (!Number.isSafeInteger(revision) || revision < 1 || typeof candidate.release !== 'string') return null;
+      if (!Number.isSafeInteger(revision) || revision < 1 || typeof candidate.release !== 'string')
+        return reject('candidate revision');
 
       const release = await readRelease(client, candidate.release, { composed: false });
-      if (!release) return null;
+      if (!release) return reject('release');
       const property = release.properties[candidate.property];
       const holder = release.types[visible.type];
       if (
@@ -117,7 +124,7 @@ export async function readCurrentClassificationAssociation(input: {
         !property.targets?.includes('skos:Concept') ||
         !holder?.properties.includes(candidate.property)
       )
-        return null;
+        return reject('classification property');
 
       const selected = await effectiveGlobalSlotFacts(client, input.subjectId, candidate.property, candidate.slotId);
       const current = selected.facts.find(
@@ -127,7 +134,7 @@ export async function readCurrentClassificationAssociation(input: {
           fact.fact_release === candidate.release &&
           Number(fact.fact_revision) === revision,
       );
-      if (!current) return null;
+      if (!current) return reject('selected slot');
       const statement = candidate.statement as {
         property?: { id?: unknown };
         value?: { type?: unknown; content?: unknown };
@@ -140,16 +147,16 @@ export async function readCurrentClassificationAssociation(input: {
         routeOf(statement.value.content) === null ||
         !Array.isArray(statement.qualifiers)
       )
-        return null;
+        return reject('statement binding');
       const canonicalStatement = canonicalize(candidate.statement);
-      if (typeof canonicalStatement !== 'string') return null;
+      if (typeof canonicalStatement !== 'string') return reject('statement canonicalization');
       const statementDigest = createHash('sha256').update(canonicalStatement).digest('hex');
       const targetId = statement.value.content;
       const disclosure = await readCandidateDisclosure(client, {
         subject: input.subjectId,
         candidate: input.associationId,
       });
-      if (!disclosure?.disclosed) return null;
+      if (!disclosure?.disclosed) return reject('candidate disclosure');
 
       return {
         id: input.subjectId,
@@ -199,7 +206,10 @@ export async function readCurrentClassificationAssociation(input: {
     }, input.deadline);
 
   const firstTarget = await targetSnapshot();
-  if (!firstTarget) return null;
+  if (!firstTarget) {
+    console.info('classification association target rejected', input.action);
+    return null;
+  }
   const last = await source();
   const lastTarget = await targetSnapshot();
   requireAccessDeadline(input.deadline);
@@ -207,8 +217,10 @@ export async function readCurrentClassificationAssociation(input: {
     !last ||
     JSON.stringify(first) !== JSON.stringify(last) ||
     JSON.stringify(firstTarget) !== JSON.stringify(lastTarget)
-  )
+  ) {
+    console.info('classification association changed during read', input.action);
     throw new AccessUnavailableError('contention');
+  }
 
   const serialized = canonicalize(first.binding);
   if (typeof serialized !== 'string') throw new TypeError('Classification identity is not canonical JSON');
