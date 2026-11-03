@@ -1206,7 +1206,7 @@ CREATE FUNCTION library.owner_original_activity(r integer, a uuid, s uuid) RETUR
     (SELECT h.last_changed_at FROM library.progress_head h WHERE h.route=r AND h.account_id=a AND h.subject_id=s)
   ), EXISTS(SELECT 1 FROM library.entry e WHERE e.route=r AND e.account_id=a AND e.subject_id=s
       AND e.activity_at IS NULL)
-    OR (EXISTS(SELECT 1 FROM library.progress_session p WHERE p.route=r AND p.account_id=a AND p.subject_id=s)
+    OR (EXISTS(SELECT 1 FROM library.progress_session p WHERE p.state <> 'retired' AND p.route=r AND p.account_id=a AND p.subject_id=s)
       AND NOT EXISTS(SELECT 1 FROM library.progress_head h WHERE h.route=r AND h.account_id=a AND h.subject_id=s
         AND h.last_changed_at IS NOT NULL));
 $$;
@@ -1328,7 +1328,7 @@ BEGIN
     SELECT EXISTS (SELECT 1 FROM library.entry WHERE route=r AND account_id=a AND subject_id=s
       AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
   ELSIF f='session' THEN
-    SELECT EXISTS (SELECT 1 FROM library.progress_session WHERE route=r AND account_id=a AND subject_id=s
+    SELECT EXISTS (SELECT 1 FROM library.progress_session WHERE state <> 'retired' AND route=r AND account_id=a AND subject_id=s
       AND COALESCE(library_profile_pin,'{}'::jsonb)=p) INTO live;
   ELSIF f='copy' THEN
     SELECT EXISTS (SELECT 1 FROM library.copy WHERE route=r AND account_id=a AND subject_id=s
@@ -3306,6 +3306,11 @@ CREATE TABLE library.progress_session (
     last_changed_at timestamp with time zone,
     library_profile_pin jsonb,
     additional_measures jsonb DEFAULT '[]'::jsonb NOT NULL,
+    CONSTRAINT progress_session_additional_measures_check CHECK (
+CASE
+    WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb)))
+    ELSE false
+END),
     CONSTRAINT progress_session_amount_check CHECK (((amount IS NULL) OR (amount >= (0)::numeric))),
     CONSTRAINT progress_session_check CHECK ((route = ((get_byte(uuid_send(session_id), 10) * 256) + get_byte(uuid_send(session_id), 11)))),
     CONSTRAINT progress_session_check1 CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
@@ -3313,13 +3318,12 @@ CREATE TABLE library.progress_session (
     CONSTRAINT progress_session_check4 CHECK ((((mode = 'scalar_amount'::text) AND (locator IS NULL) AND ("position" IS NULL) AND (completed_unit_count = 0)) OR ((mode = 'cursor_position'::text) AND (amount IS NULL) AND (total IS NULL) AND (completed_unit_count = 0) AND (((locator IS NULL) AND ("position" IS NULL)) OR ((locator IS NOT NULL) AND ("position" IS NOT NULL)))) OR ((mode = 'completed_units'::text) AND (amount IS NULL) AND (total IS NULL) AND (locator IS NULL) AND ("position" IS NULL)))),
     CONSTRAINT progress_session_completed_unit_count_check CHECK (((completed_unit_count >= 0) AND (completed_unit_count <= 20000))),
     CONSTRAINT progress_session_library_profile_pin_check CHECK (((library_profile_pin IS NULL) OR library.library_profile_pin_valid(library_profile_pin))),
-    CONSTRAINT progress_session_additional_measures_check CHECK ((CASE WHEN (jsonb_typeof(additional_measures) = 'array'::text) THEN ((jsonb_array_length(additional_measures) <= 7) AND (octet_length((additional_measures)::text) <= 4096) AND ((mode = 'scalar_amount'::text) OR (additional_measures = '[]'::jsonb))) ELSE false END)),
     CONSTRAINT progress_session_locator_check CHECK (((locator IS NULL) OR ((char_length(locator) >= 1) AND (char_length(locator) <= 256)))),
     CONSTRAINT progress_session_mode_check CHECK ((mode = ANY (ARRAY['scalar_amount'::text, 'cursor_position'::text, 'completed_units'::text]))),
     CONSTRAINT progress_session_position_check CHECK ((("position" IS NULL) OR ("position" >= (0)::numeric))),
     CONSTRAINT progress_session_revision_check CHECK ((revision >= 1)),
     CONSTRAINT progress_session_route_check CHECK (((route >= 0) AND (route <= 65535))),
-    CONSTRAINT progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text]))),
+    CONSTRAINT progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text, 'retired'::text]))),
     CONSTRAINT progress_session_total_check CHECK (((total IS NULL) OR (total >= (0)::numeric)))
 );
 
@@ -5800,7 +5804,7 @@ CREATE INDEX owner_index_pending_pin ON library.owner_index_pin USING btree (rou
 -- Name: owner_index_session_scope; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX owner_index_session_scope ON library.progress_session USING btree (route, account_id, subject_id, COALESCE(library_profile_pin, '{}'::jsonb));
+CREATE INDEX owner_index_session_scope ON library.progress_session USING btree (route, account_id, subject_id, COALESCE(library_profile_pin, '{}'::jsonb)) WHERE (state <> 'retired'::text);
 
 
 --
@@ -5850,6 +5854,27 @@ CREATE INDEX progress_session_account_subject ON library.progress_session USING 
 --
 
 CREATE INDEX progress_session_active ON library.progress_session USING btree (route, account_id, subject_id, last_changed_at DESC, session_id) WHERE (state = 'active'::text);
+
+
+--
+-- Name: progress_session_live_owner; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_live_owner ON library.progress_session USING btree (route, account_id, session_id) WHERE (state <> 'retired'::text);
+
+
+--
+-- Name: progress_session_live_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_live_page ON library.progress_session USING btree (route, account_id, subject_id, started_at DESC, session_id) WHERE (state <> 'retired'::text);
+
+
+--
+-- Name: progress_session_live_source; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX progress_session_live_source ON library.progress_session USING btree (route, account_id, subject_id, session_id) WHERE (state <> 'retired'::text);
 
 
 --
