@@ -135,7 +135,7 @@ export function WorkPartsOrderingBoard({
   onOpenCandidate,
 }: {
   stream: PartStream;
-  cursor?: string;
+  cursor?: string | undefined;
   labels: Record<string, ReturnType<typeof pickText>>;
   locale: string;
   drafts: OrderingDraft[];

@@ -640,7 +640,7 @@ function WorkPartsPageLive({
               search={search}
               composition={{
                 statement: reviewing.statement,
-                slot: reviewing.slot,
+                ...(reviewing.slot ? { slot: reviewing.slot } : {}),
                 positionEditable: stream?.positionEditable ?? false,
                 session: read?.session,
               }}

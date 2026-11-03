@@ -24,17 +24,17 @@ export type OrderingDraft = {
   related: PartRow['related'];
   original: RelationDraft;
   statement: RelationDraft;
-  originalSlot?: RelationSlot;
-  slot?: RelationSlot;
+  originalSlot?: RelationSlot | undefined;
+  slot?: RelationSlot | undefined;
   currentPosition: string;
   proposedPosition: string;
   positionIsSlotKey: boolean;
   included: boolean;
   admitted: boolean;
-  present?: boolean;
-  disabledReason?: 'definition' | 'unavailable';
-  command?: RelationProposal;
-  result?: OrderingResult;
+  present?: boolean | undefined;
+  disabledReason?: 'definition' | 'unavailable' | undefined;
+  command?: RelationProposal | undefined;
+  result?: OrderingResult | undefined;
 };
 
 export function orderingKey(row: Pick<PartRow, 'holder' | 'statementId'>): string {
@@ -288,7 +288,7 @@ export function sealOrdering(drafts: OrderingDraft[]): OrderingDraft[] {
   return drafts.map((draft) => {
     if (!pending.includes(draft) || draft.command) return draft;
     const statement = replacePosition(draft.original, draft.proposedPosition);
-    const slot = proposedSlot({ ...draft, statement }) ?? writerSlot(draft.originalSlot);
+    const slot = proposedSlot(draft) ?? writerSlot(draft.originalSlot);
     if (!slot)
       return {
         ...draft,
