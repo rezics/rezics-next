@@ -10,6 +10,10 @@ export type SubjectFact = {
 } | {
     property: string;
     year: number;
+    month?: number;
+    day?: number;
+    time_lower?: string;
+    time_upper?: string;
     qualifiers: string[];
 } | {
     property: string;
@@ -69,7 +73,9 @@ export type IndexAction<Document extends SearchDocument = SubjectDocument> = {
     id: string;
     version: bigint;
 };
-export declare function documentActions(snapshot: SubjectSnapshot, ids: readonly string[], counts?: ReadonlyMap<string, number>): IndexAction[];
+export declare function documentActions(snapshot: SubjectSnapshot, ids: readonly string[], counts?: ReadonlyMap<string, number>, 
+/** Explicit successor projection; legacy physical writers retain their historical shape. */
+calendarFormat?: 1): IndexAction[];
 /** The caller admits the native snapshot before constructing these positioned replacements/deletes. */
 export declare function accountDocumentActions(snapshot: AccountSnapshot, ids: readonly string[]): IndexAction<AccountDocument>[];
 /** Same Subject projection and native version; only the new generation's identity envelope changes. */
