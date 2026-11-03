@@ -8,6 +8,10 @@ import { hitCalendarDate, releaseDateText } from '../src/search/release-search-d
 import { ResultRow, type Fact } from '../src/search/results';
 import { listKeyFacts } from '../src/media/type-presentation';
 import { parseDiscoveryPage, parseLegacySearchPage, readDiscovery } from '../src/search/discovery';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import type { FilterRelease } from '@rezics/filter';
+import { parseReleaseSearch, releaseSearchHref, releaseSearchRequest } from '../src/search/release-search';
+import { ReleaseSearchPage } from '../src/search/release-search-page';
 
 test('the universal editor preserves precise endpoints instead of rendering numeric year inputs', () => {
   const locale = 'ja';
@@ -167,5 +171,127 @@ test('malformed wire dates make the response unavailable instead of silently bec
       data: pages.discovery,
     }));
     expect(response.discovery.status).toBe('unavailable');
+  }
+});
+
+test('release URLs round-trip ordered display and same-platform languages, exact dates and independent credits', () => {
+  for (const locale of locales) {
+    const raw = {
+      subtype: releaseType,
+      q: 'Edition',
+      platform: releaseId,
+      releaseLanguage: ['ja', 'en'],
+      language: ['fr', 'ja'],
+      gte: '2024-02-29',
+      lte: '2024-03',
+      developer: releaseId,
+      publisher: releaseId,
+      sort: 'name',
+      threshold: '2',
+      cursor: 'opaque+next/==',
+      condition: JSON.stringify({ not: { statement: { property: 'schema:inLanguage', in: ['de'] } } }),
+    };
+    const parsed = parseReleaseSearch(raw, bundledRelease, locale);
+    expect(parsed.invalid).toEqual([]);
+    const request = releaseSearchRequest(parsed.search, bundledRelease);
+    expect(request.languages).toEqual(['fr', 'ja']);
+    expect(request.spoilerThreshold).toBe(2);
+    expect(request.cursor).toBe(raw.cursor);
+    expect(JSON.stringify(request.filter)).toContain(
+      JSON.stringify({
+        statement: {
+          property: 'schema:gamePlatform',
+          in: [releaseId],
+          qualifiers: [{ property: 'schema:inLanguage', in: ['ja', 'en'] }],
+        },
+      }),
+    );
+    expect(JSON.stringify(request.filter)).toContain('2024-02-29');
+    expect(JSON.stringify(request.filter)).toContain('wdt:P178');
+    expect(JSON.stringify(request.filter)).toContain('schema:publisher');
+    const nextUrl = new URL(releaseSearchHref(locale, parsed.form, raw.cursor), 'https://example.test');
+    const restored = parseReleaseSearch(Object.fromEntries(nextUrl.searchParams), bundledRelease, locale);
+    expect(releaseSearchRequest(restored.search, bundledRelease)).toEqual(request);
+    expect(new URL(releaseSearchHref(locale, parsed.form), nextUrl).searchParams.has('cursor')).toBe(false);
+    const displayOnly = parseReleaseSearch({ subtype: releaseType, language: ['fr', 'ja'] }, bundledRelease, locale);
+    expect(JSON.stringify(releaseSearchRequest(displayOnly.search, bundledRelease).filter)).not.toContain(
+      'schema:inLanguage',
+    );
+  }
+});
+
+test('withdrawn controls and malformed URL operands remain repairable without broadening the search', () => {
+  const release: FilterRelease = structuredClone(bundledRelease);
+  release.types[releaseType]!.facets = release.types[releaseType]!.facets!.filter(
+    (property) => property !== 'schema:publisher',
+  );
+  for (const [raw, field] of [
+    [{ publisher: releaseId }, 'publisher'],
+    [{ subtype: 'local:Missing' }, 'subtype'],
+    [{ platform: 'bad-id' }, 'platform'],
+    [{ gte: '2023-02-29' }, 'gte'],
+    [{ gte: '2025', lte: '2024' }, 'lte'],
+    [{ language: ['ja', 'ja'] }, 'language'],
+    [{ language: [] }, 'language'],
+    [{ releaseLanguage: '??' }, 'releaseLanguage'],
+    [{ sort: 'relevance' }, 'sort'],
+    [{ threshold: '3' }, 'threshold'],
+    [{ condition: '{broken' }, 'condition'],
+    [{ cursor: '' }, 'cursor'],
+    [{ q: ['one', 'two'] }, 'q'],
+    [{ ageGte: ' ' }, 'ageGte'],
+  ] as const) {
+    const parsed = parseReleaseSearch({ subtype: releaseType, ...raw }, release, 'en');
+    expect(parsed.invalid).toContain(field);
+    const html = renderToStaticMarkup(
+      createElement(ReleaseSearchPage, {
+        locale: 'en',
+        parsed,
+        types: [{ id: releaseType, label: 'Release' }],
+        state: { status: 'invalid' },
+      }),
+    );
+    expect(html).toContain('role="alert"');
+    expect(html).not.toContain('data-slot="discovery-results"');
+    if (field !== 'cursor') expect(html).toContain('aria-invalid="true"');
+  }
+  const typed = parseReleaseSearch({ subtype: releaseType, threshold: 1, gte: 2024, ageGte: 0 }, release, 'en');
+  expect(typed.form.threshold).toBe('1');
+  expect(typed.form.gte).toBe('2024');
+  expect(typed.form.ageGte).toBe('0');
+});
+
+test('the release page localizes controls and distinguishes loading, unavailable, empty continuation and terminal cards', () => {
+  for (const locale of locales) {
+    const parsed = parseReleaseSearch(
+      { subtype: releaseType, gte: '2024-02-29', language: ['ja', 'en'] },
+      bundledRelease,
+      locale,
+    );
+    const render = (state: Parameters<typeof ReleaseSearchPage>[0]['state']) =>
+      renderToStaticMarkup(
+        createElement(ReleaseSearchPage, {
+          locale,
+          parsed,
+          types: [{ id: releaseType, label: 'Released subtype' }],
+          state,
+        }),
+      );
+    const loading = render({ status: 'loading' });
+    expect(loading).toContain(m.release_search_heading({}, { locale }));
+    expect(loading).toContain('aria-busy="true"');
+    expect(loading).toContain('value="2024-02-29"');
+    expect(loading).toContain('value="ja, en"');
+    expect(loading).toContain('<label');
+    expect(render({ status: 'unavailable' })).toContain('role="alert"');
+    const empty = { hits: [], kinds: { values: [], next: null }, next: null, as_of: 'now' };
+    expect(render({ status: 'ready', page: empty })).not.toContain(m.release_search_continue({}, { locale }));
+    const continuing = render({ status: 'ready', page: { ...empty, next: 'next+page' } });
+    expect(continuing).toContain(m.release_search_page_empty({}, { locale }));
+    expect(continuing).toContain('cursor=next%2Bpage');
+    const page = parseDiscoveryPage(releasePages({ year: 2024, month: 2, day: 29 }).discovery)!;
+    const terminal = render({ status: 'ready', page });
+    expect(terminal).toContain(`>${releaseDateText({ year: 2024, month: 2, day: 29 }, locale)}</span>`);
+    expect(terminal).toContain(m.release_search_terminal({}, { locale }));
   }
 });

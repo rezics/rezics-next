@@ -80,6 +80,15 @@ admission from diverging. Existing role-specific producer operands retain their 
 
 ## Remaining integration
 
+Decision: ordered display languages and release-language operands have separate URL fields; applying a predicate
+edit drops result continuations, while navigation links preserve the complete form and ordered operands.
+
+The mounted `/search/releases` page derives subtype controls and its filter from the shared `@rezics/filter`
+release roster. It preserves precise calendar endpoints, separate developer/publisher operands, imported Boolean
+conditions, sort, spoiler threshold and display language order across URL navigation. Unsupported or withdrawn
+operands remain in the repair form and are never silently removed. Its current bounded universal response renders
+matching release cards with exact recorded date precision; no work or child association is inferred from previews.
+
 Decision: mixed calendar documents use format 3, derived from the immutable mixed format-2 mapping with calendar
 fact fields; format-2 documents and physical generations retain their year-only meaning. New mixed physical
 generations use the format-3 mapping, and population, replay, reconciliation and continuing native writes select
