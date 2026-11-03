@@ -78,10 +78,7 @@ test('native merge selection reaches survivor and redirected duplicate rows with
   const expectedVote = {
     state: 'present',
     units: 7,
-    originalTargetId: original,
-    countingTargetId: survivor,
     revision: 1,
-    countedRevision: 2,
   };
   expect(await page([original, survivor, survivor, absent])).toMatchObject({
     state: 'current',
@@ -90,17 +87,21 @@ test('native merge selection reaches survivor and redirected duplicate rows with
         rowKey: '0',
         subjectId: original,
         entry: { entryState: 'paused' },
-        vote: { ...expectedVote, requestedTargetId: original },
+        vote: expectedVote,
       },
       {
         rowKey: '1',
         subjectId: survivor,
         entry: { entryState: 'planned' },
-        vote: { ...expectedVote, requestedTargetId: survivor },
+        vote: expectedVote,
       },
       { rowKey: '2', subjectId: survivor, vote: expectedVote },
       { rowKey: '3', entry: { state: 'absent' }, vote: { state: 'absent' } },
     ],
+  });
+  expect(await page([original], { ...owner, accountId: fixture.nativeFigures!.globalVoters[1]!.id })).toMatchObject({
+    state: 'current',
+    rows: [{ entry: { state: 'absent' }, vote: { state: 'absent' } }],
   });
   const reads = createCollectionReads({
     ...deps(),
@@ -114,21 +115,23 @@ test('native merge selection reaches survivor and redirected duplicate rows with
     original,
   ]);
   expect(await page([original])).toMatchObject({ state: 'current', rows: [{ entry: { entryState: 'planned' } }] });
+  await fixture.database.admin.query(
+    "UPDATE library.entry SET state='paused',revision=2 WHERE account_id=$1 AND subject_id=$2",
+    [owner.accountId, survivor],
+  );
+  expect(await page([survivor])).toMatchObject({
+    state: 'current',
+    rows: [{ entry: { state: 'present', entryState: 'paused', revision: 2 } }],
+  });
   await vote(survivor, 0);
   expect(await page([original, survivor])).toMatchObject({
     state: 'current',
-    rows: [
-      { vote: { state: 'present', units: 0, originalTargetId: survivor } },
-      { vote: { state: 'present', units: 0 } },
-    ],
+    rows: [{ vote: { state: 'present', units: 0 } }, { vote: { state: 'present', units: 0 } }],
   });
   await vote(survivor, null);
   expect(await page([survivor, absent])).toMatchObject({
     state: 'current',
-    rows: [
-      { vote: { state: 'clear', originalTargetId: survivor, revision: 2, countedRevision: 2 } },
-      { vote: { state: 'absent' } },
-    ],
+    rows: [{ vote: { state: 'absent' } }, { vote: { state: 'absent' } }],
   });
   expect(await page(Array(100).fill(survivor))).toMatchObject({ state: 'current', rows: expect.any(Array) });
   await expect(page(Array(101).fill(survivor))).rejects.toThrow('at most 100 rows');
@@ -196,7 +199,8 @@ test('late Subject disclosure loss refuses currentness and never exposes a conce
   expect(response.status, await response.clone().text()).toBe(200);
   expect(await viewerFactsCurrent(deps(), owner, prepared, deadline())).toBe(false);
   expect(await page([id])).toMatchObject({
-    state: 'current',
-    rows: [{ vote: { state: 'unavailable', reason: 'subject' } }],
+    state: 'unavailable',
+    reason: 'identity',
+    retryable: true,
   });
 }, 180_000);

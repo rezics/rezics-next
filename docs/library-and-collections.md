@@ -85,13 +85,16 @@ preparation and selected-row evidence remain private in a WeakMap; they cannot b
 Preparation occurs before checkout, read uses the caller's account-home repeatable-read client, and finish runs
 after release. These are observations across native snapshots, not one atomic cross-home snapshot.
 
-The wire vote distinguishes `present` (including zero), `clear`, `absent` and `unavailable`. Available observations
-carry `requestedTargetId`, `countingTargetId` and `sourceEpoch`; present/clear also retain the selected vote's
-`originalTargetId`, original `revision` and separate `countedRevision`. Clear has no score units. Unavailable
-Subject disclosure exposes no terminal ID. Missing Entry scope stays unavailable; missing vote scope, unavailable
-question meaning or disclosure never becomes an absent vote. Imported ratings and public aggregates are excluded.
-Decision: nonstandard questions return explicit vote `unavailable/question` with their visible question metadata,
-without rescaling; standard native clears have a distinct wire state and retain native revision/identity evidence.
+The existing wire remains `present`, `absent` or `unavailable`: zero is present; native clear maps deliberately
+to an absent score. Native clear and true absence remain distinct in the private read result and final comparison:
+a clear retains its selected tombstone, original target/revision, counted target/revision, time and transaction ID;
+true absence has no selected row. Requested targets and source epochs remain in the same instance-local native
+preparation. No identity or revision is relabelled: the wire's present `revision` is the original native vote revision,
+not `countedRevision`. Native disclosure unavailable makes the entire fact page unavailable/identity without
+exposing a concealed terminal. Missing Entry/vote scopes stay unavailable; unavailable question meaning never
+becomes an absent vote. Imported ratings and public aggregates are excluded.
+Decision: retain the existing wire's clear-to-absent-score mapping with distinct native currentness witnesses;
+nonstandard questions return explicit vote `unavailable/question` without rescaling or a client wire extension.
 
 Pending mappings and changed account standing, authentication epoch, scopes, question meaning/lifecycle,
 identity, disclosure or selected vote rows refuse successful current assembly. Staged Search callers must retain
@@ -120,7 +123,7 @@ nonempty standard call pays the following complete composition in addition to it
   connection/transaction costs remain those of the installed Content/Access contracts, not the wire caps above.
   Each statement's B-tree positioning can grow with unrelated retained history. No owner-wide Library, vote or
   history scan, blanket reservation, maintained cache, new payer, vote mutation or repair occurs.
-- Correlation and encoding cost O(N) rows plus the bounded serialized input/output bytes and native fingerprints.
+- Correlation and encoding cost O(N) rows plus the bounded serialized input/output bytes and native fingerprints (which retain clear/absence distinctions).
   Empty/no-scope/unsupported-question paths skip native vote work; identity/preparation/read/finish mismatch exits
   early and discards provisional facts. Byte overflow returns unavailable; deadline, cancellation and dependency
   errors propagate through existing rollback/release paths. A same-input retry pays preparation and snapshots

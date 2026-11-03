@@ -38,26 +38,16 @@ export type ViewerEntryFact =
   | Readonly<{ state: 'present'; incarnationId: string | null; entryState: string | null; revision: number }>
   | Readonly<{ state: 'absent' }>
   | Readonly<{ state: 'unavailable'; reason: 'scope' }>;
-type VoteIdentity = Readonly<{ requestedTargetId: string; countingTargetId: string; sourceEpoch: string }>;
-type VoteRevision = Readonly<{ originalTargetId: string; revision: number; countedRevision: number }>;
 export type ViewerVoteFact =
-  | (VoteIdentity &
-      VoteRevision &
-      Readonly<{
-        state: 'present';
-        questionId: string;
-        questionRevision: number;
-        units: number;
-      }>)
-  | (VoteIdentity &
-      VoteRevision &
-      Readonly<{
-        state: 'clear';
-        questionId: string;
-        questionRevision: number;
-      }>)
-  | (VoteIdentity & Readonly<{ state: 'absent'; questionId: string; questionRevision: number }>)
-  | Readonly<{ state: 'unavailable'; reason: 'scope' | 'question' | 'subject' }>;
+  | Readonly<{
+      state: 'present';
+      questionId: string;
+      questionRevision: number;
+      units: number;
+      revision: number;
+    }>
+  | Readonly<{ state: 'absent'; questionId: string; questionRevision: number }>
+  | Readonly<{ state: 'unavailable'; reason: 'scope' | 'question' }>;
 export type ViewerFact = Readonly<{
   rowKey: string;
   subjectId: string;
@@ -75,16 +65,6 @@ export type ViewerFactsPage =
 const closed = { additionalProperties: false } as const;
 const idSchema = t.String({ format: 'uuid' });
 const nullableStringSchema = t.Union([t.String(), t.Null()]);
-const voteIdentitySchema = {
-  requestedTargetId: idSchema,
-  countingTargetId: idSchema,
-  sourceEpoch: t.String(),
-};
-const voteRevisionSchema = {
-  originalTargetId: idSchema,
-  revision: t.Integer({ minimum: 1 }),
-  countedRevision: t.Integer({ minimum: 1 }),
-};
 const viewerFactSchema = t.Object(
   {
     rowKey: t.String(),
@@ -106,38 +86,19 @@ const viewerFactSchema = t.Object(
       t.Object(
         {
           state: t.Literal('present'),
-          ...voteIdentitySchema,
-          ...voteRevisionSchema,
           questionId: idSchema,
           questionRevision: t.Integer({ minimum: 1 }),
           units: t.Integer(),
+          revision: t.Integer({ minimum: 1 }),
         },
         closed,
       ),
       t.Object(
-        {
-          state: t.Literal('clear'),
-          ...voteIdentitySchema,
-          ...voteRevisionSchema,
-          questionId: idSchema,
-          questionRevision: t.Integer({ minimum: 1 }),
-        },
+        { state: t.Literal('absent'), questionId: idSchema, questionRevision: t.Integer({ minimum: 1 }) },
         closed,
       ),
       t.Object(
-        {
-          state: t.Literal('absent'),
-          ...voteIdentitySchema,
-          questionId: idSchema,
-          questionRevision: t.Integer({ minimum: 1 }),
-        },
-        closed,
-      ),
-      t.Object(
-        {
-          state: t.Literal('unavailable'),
-          reason: t.Union([t.Literal('scope'), t.Literal('question'), t.Literal('subject')]),
-        },
+        { state: t.Literal('unavailable'), reason: t.Union([t.Literal('scope'), t.Literal('question')]) },
         closed,
       ),
     ]),
@@ -348,6 +309,7 @@ export async function readViewerFacts(
     return unavailable('currentness');
   if (native && (!native.preparation || actor !== native.request.actor)) return unavailable('currentness');
   if (native?.preparation) {
+    if (native.preparation.targets.some((target) => 'state' in target)) return unavailable('identity');
     native.read = await native.reader.read(client, native.request, native.preparation);
     if (native.read.status !== 'read') return unavailable('currentness');
   }
@@ -379,24 +341,20 @@ export async function readViewerFacts(
         ? { state: 'unavailable', reason: 'question' }
         : (() => {
             const target = nativeTargets.get(input.subjectId);
-            if (!target || 'state' in target) return { state: 'unavailable', reason: 'subject' } as const;
-            const identity = {
-              requestedTargetId: target.requestedTargetId,
-              countingTargetId: target.countingTargetId,
-              sourceEpoch: target.sourceEpoch,
-              questionId: prepared.question.id,
-              questionRevision: prepared.question.revision,
-            };
+            if (!target || 'state' in target) return { state: 'unavailable', reason: 'question' } as const;
+            const question = prepared.question!;
             const own = nativeRows.get(target.countingTargetId);
-            if (!own) return { ...identity, state: 'absent' } as const;
-            const revision = {
-              originalTargetId: own.originalTargetId,
-              revision: own.revision,
-              countedRevision: own.countedRevision,
-            };
-            return own.units === null
-              ? ({ ...identity, ...revision, state: 'clear' } as const)
-              : ({ ...identity, ...revision, state: 'present', units: own.units } as const);
+            // Clear remains an absent score on the established wire. The native read retains
+            // its tombstone, original/counted revisions and fingerprint for finish's comparison.
+            return !own || own.units === null
+              ? ({ state: 'absent', questionId: question.id, questionRevision: question.revision } as const)
+              : ({
+                  state: 'present',
+                  questionId: question.id,
+                  questionRevision: question.revision,
+                  units: own.units,
+                  revision: own.revision,
+                } as const);
           })();
     return { rowKey: input.rowKey, subjectId: input.subjectId, entry, vote };
   });

@@ -35,12 +35,14 @@ Preparations and selected rows stay instance-local; callers keep the exact actor
 provisional facts on false currentness. `readViewerFactsPage` performs that sequence for actual Library list and
 Collection member consumers. Search retains admission, source witnesses, private assembly and its final guard.
 
-The [owning wire and complete caller cost](../../../../docs/library-and-collections.md) distinguish score zero,
-clear, absence and unavailable disclosure/meaning. Available votes carry requested/counting/source-epoch evidence;
-present/clear carry original-target and original/counted revisions separately. Exact requested Entry precedence
-is unchanged. Nonstandard questions explicitly return vote unavailable/question; no native standard interpretation
-is applied. The mounted schema drives generated clients through the real kernel generator. Generated evidence is
-separate from source/native outcome coverage; no shelf score-ordering installation is claimed.
+The [owning wire and complete caller cost](../../../../docs/library-and-collections.md) preserve zero and
+unavailable disclosure/meaning. Native clear and true absence retain distinct private row/fingerprint evidence;
+clear deliberately maps to an absent score on the unchanged wire. Requested/original/counting identities and
+original/counted revisions retain their native meanings in the retained preparation/read result, while present
+wire revision remains the original vote revision. Exact requested Entry precedence is unchanged. Nonstandard
+questions explicitly return vote unavailable/question without rescaling. No generated wire extension is needed;
+existing viewer-facts and counted-client generation remain with their existing owners. No shelf score-ordering
+installation is claimed.
 
 `test/library/viewer-facts.test.ts` uses actual native vote and merge commands and the existing figure worker to
 exercise survivor/redirected/duplicate rows, Entry precedence, zero/clear/absence, pending identity and late selected
