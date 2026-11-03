@@ -7,7 +7,7 @@ import type { BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bu
 import { IMPORTER_SCOPES } from '../src/credentials.ts';
 import { runImportCli, type ImportCliObserver } from '../src/cli.ts';
 import { ImportSession } from '../src/import-session.ts';
-import { readSourceDestination } from '../src/source-destination.ts';
+import { insertSourceDestination, readSourceDestination } from '../src/source-destination.ts';
 import type { SourceProjection } from '../src/run-store.ts';
 
 const temporaryRoot = resolve(import.meta.dir, '../../../.temp');
@@ -111,6 +111,32 @@ function staged(source: string, key: string) {
       normalizedRecord: { id: key, type: 'item', labels: {}, descriptions: {}, aliases: {}, claims: {} },
     } satisfies SourceProjection,
   };
+}
+
+function tableNames(state: string) {
+  const database = new Database(state, { readonly: true, create: false });
+  const names = database
+    .query("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+    .all()
+    .map((row) => (row as { name: string }).name);
+  database.close();
+  return names;
+}
+
+function generationColumns(state: string) {
+  const database = new Database(state, { readonly: true, create: false });
+  const names = database
+    .query('PRAGMA table_info(run_generations)')
+    .all()
+    .map((row) => (row as { name: string }).name);
+  database.close();
+  return names;
+}
+
+function dropDiagnosticRecords(state: string) {
+  const database = new Database(state);
+  database.exec('ALTER TABLE run_generations DROP COLUMN diagnostic_records');
+  database.close();
 }
 
 function seedLegacy(state: string, source = 'wikidata') {
@@ -303,6 +329,11 @@ test('legacy unbound history stays inspectable, refuses silent publish, then dec
     expect(document.status).toBe('unbound');
     expect(document.recorded).toBeNull();
 
+    dropDiagnosticRecords(dir.state);
+    const tablesBefore = tableNames(dir.state);
+    const columnsBefore = generationColumns(dir.state);
+    expect(columnsBefore).not.toContain('diagnostic_records');
+
     const declared = await runImportCli([
       'destination',
       '--state',
@@ -320,6 +351,9 @@ test('legacy unbound history stays inspectable, refuses silent publish, then dec
     expect(declared.code, declared.stderr).toBe(0);
     const after = JSON.parse(declared.stdout) as { status: string; recorded: string; origin: string };
     expect(after).toMatchObject({ status: 'bound', recorded: 'operator-declared', origin: 'https://api.a.example' });
+    expect(generationColumns(dir.state)).toEqual(columnsBefore);
+    expect(tableNames(dir.state).filter((name) => name !== 'source_destinations')).toEqual(tablesBefore);
+    expect(tableNames(dir.state)).toContain('source_destinations');
 
     const boundReview = await runImportCli([
       'destination',
@@ -349,13 +383,45 @@ test('legacy unbound history stays inspectable, refuses silent publish, then dec
     ]);
     expect(rebound.code).toBe(2);
     expect(rebound.stderr).toContain('already has recorded origin');
+    expect(generationColumns(dir.state)).toEqual(columnsBefore);
+    expect(tableNames(dir.state).filter((name) => name !== 'source_destinations')).toEqual(tablesBefore);
 
-    const session = new ImportSession(dir.state, { create: false });
-    expect(session.store.database.query('SELECT source,record_key,bytes FROM run_envelopes').all()).toEqual(
-      before.journal,
-    );
-    expect(session.store.database.query('SELECT record_key FROM run_acknowledged').all()).toEqual(before.acknowledged);
+    const database = new Database(dir.state, { readonly: true, create: false });
+    expect(database.query('SELECT source,record_key,bytes FROM run_envelopes').all()).toEqual(before.journal);
+    expect(database.query('SELECT record_key FROM run_acknowledged').all()).toEqual(before.acknowledged);
+    database.close();
+  } finally {
+    dir.close();
+  }
+});
+
+test('refused declaration through the destination CLI leaves a legacy generation schema unchanged', async () => {
+  const dir = directory();
+  try {
+    const session = new ImportSession(dir.state);
+    insertSourceDestination(session.store.database, 'wikidata', 'https://api.a.example', 'first-use');
     session.close();
+    dropDiagnosticRecords(dir.state);
+    const tablesBefore = tableNames(dir.state);
+    const columnsBefore = generationColumns(dir.state);
+    expect(columnsBefore).not.toContain('diagnostic_records');
+    const refused = await runImportCli([
+      'destination',
+      '--state',
+      dir.state,
+      '--source',
+      'wikidata',
+      '--api',
+      'https://api.b.example',
+      '--review-revision',
+      'a'.repeat(64),
+      '--declare',
+      '--acknowledge-unverified',
+    ]);
+    expect(refused.code).toBe(2);
+    expect(refused.stderr).toContain('Declaration cannot rebind it');
+    expect(generationColumns(dir.state)).toEqual(columnsBefore);
+    expect(tableNames(dir.state)).toEqual(tablesBefore);
   } finally {
     dir.close();
   }

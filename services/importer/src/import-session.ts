@@ -62,6 +62,19 @@ export function importOwnerIsBusy(owner: Readonly<{ pid: number; birth: string }
   return importOwnerAvailability(owner) !== 'stale';
 }
 
+/** Missing owner table means no live holder; declaration must not create it while refusing. */
+export function readImportOwner(database: Database, source: string): { pid: number; birth: string } | null {
+  const table = database
+    .query("SELECT 1 AS found FROM sqlite_schema WHERE type='table' AND name='import_owners'")
+    .get() as { found: number } | null;
+  if (!table) return null;
+  const row = database.prepare('SELECT pid,birth FROM import_owners WHERE source=?').get(source) as {
+    pid: number;
+    birth: string;
+  } | null;
+  return row ? { pid: row.pid, birth: row.birth } : null;
+}
+
 /** Same-file, exact-source ownership protects RunStore's capability rotation. */
 export class ImportSession {
   readonly store: RunStore<SourceProjection>;
@@ -103,6 +116,36 @@ export class ImportSession {
         existing: true,
         descriptor: opened.descriptor,
       });
+    } catch (error) {
+      await closeExistingImporterState(opened);
+      throw error instanceof ResumeStateError
+        ? error
+        : new ResumeStateError('unavailable', 'Importer state is damaged or unavailable.');
+    }
+  }
+
+  /**
+   * Existing-state handle for destination declaration. Admits a retained file and does not
+   * construct RunStore or RecordBindings, so ordinary run and binding migrations cannot run.
+   */
+  static async openDestinationDeclaration(
+    path: string,
+    options: Pick<ImportSessionOptions, 'instrumentDatabase'> = {},
+  ): Promise<{ database: Database; close(): void }> {
+    const opened = await openExistingImporterState(path);
+    try {
+      const database = options.instrumentDatabase?.(opened.database) ?? opened.database;
+      return {
+        database,
+        close() {
+          try {
+            database.close();
+          } catch {
+            // The caller may already have closed this handle.
+          }
+          void opened.descriptor.close().catch(() => {});
+        },
+      };
     } catch (error) {
       await closeExistingImporterState(opened);
       throw error instanceof ResumeStateError
@@ -215,11 +258,7 @@ export class ImportSession {
 
   readOwner(source: string): { pid: number; birth: string } | null {
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(source)) throw new TypeError('Invalid import source');
-    const row = this.store.database.prepare('SELECT pid,birth FROM import_owners WHERE source=?').get(source) as {
-      pid: number;
-      birth: string;
-    } | null;
-    return row ? { pid: row.pid, birth: row.birth } : null;
+    return readImportOwner(this.store.database, source);
   }
 
   release(ownership: ImportOwnership): void {

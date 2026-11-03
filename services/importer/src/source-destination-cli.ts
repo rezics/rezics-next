@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { InspectionFailure } from './inspection-open.ts';
-import { ImportSession, importOwnerIsBusy } from './import-session.ts';
+import { ImportSession, importOwnerIsBusy, readImportOwner } from './import-session.ts';
+import { ResumeStateError } from './resume-state.ts';
 import {
   DESTINATION_REVIEW_REVISION,
   SourceDestinationError,
@@ -171,17 +172,16 @@ export function renderDestinationReview(document: SourceDestinationReview, decla
   return `${lines.map(terminalSafe).join('\n')}\n`;
 }
 
-function declareOnSession(
-  session: ImportSession,
-  source: string,
-  origin: string,
-  reviewRevision: string,
-): SourceDestinationReview {
-  const db = session.store.database;
-  const owner = session.readOwner(source);
+function refuseLiveOwner(owner: { pid: number; birth: string } | null): void {
   if (owner && importOwnerIsBusy(owner))
     throw new SourceDestinationError('A live or uninspectable owner holds this source.', 'busy', 5);
-  const current = reviewSourceDestination(db, source, origin);
+}
+
+function refuseDeclaration(
+  current: SourceDestinationReview,
+  source: string,
+  reviewRevision: string,
+): void {
   if (current.status === 'unavailable')
     throw new SourceDestinationError(
       'Destination metadata is damaged or unreadable; importer state was not changed.',
@@ -202,51 +202,52 @@ function declareOnSession(
       'Destination review is stale; inspect again and declare against the current local revision.',
       'stale',
     );
-  const ownership = session.acquire(source);
-  if (ownership === 'busy')
-    throw new SourceDestinationError('A live or uninspectable owner holds this source.', 'busy', 5);
-  try {
-    return db
-      .transaction(() => {
-        session.assertHeld(ownership);
-        const afterLock = reviewSourceDestination(db, source, origin);
-        if (afterLock.status === 'bound')
-          throw new SourceDestinationError(
-            `Source ${JSON.stringify(source)} already has recorded origin ${afterLock.origin}. Declaration cannot rebind it.`,
-            'already-bound',
-          );
-        if (afterLock.reviewRevision !== reviewRevision)
-          throw new SourceDestinationError(
-            'Destination review is stale; inspect again and declare against the current local revision.',
-            'stale',
-          );
-        insertSourceDestination(db, source, origin, 'operator-declared');
-        return reviewSourceDestination(db, source, origin);
-      })
-      .immediate();
-  } finally {
-    session.release(ownership);
-  }
+}
+
+function declareOnDatabase(
+  database: Database,
+  source: string,
+  origin: string,
+  reviewRevision: string,
+): SourceDestinationReview {
+  refuseLiveOwner(readImportOwner(database, source));
+  refuseDeclaration(reviewSourceDestination(database, source, origin), source, reviewRevision);
+  return database
+    .transaction(() => {
+      refuseLiveOwner(readImportOwner(database, source));
+      const afterLock = reviewSourceDestination(database, source, origin);
+      refuseDeclaration(afterLock, source, reviewRevision);
+      insertSourceDestination(database, source, origin, 'operator-declared');
+      return reviewSourceDestination(database, source, origin);
+    })
+    .immediate();
 }
 
 function failure(error: unknown, json: boolean): DestinationCliResult {
   const missing =
-    error instanceof Error &&
-    /No importer state database exists|unable to open database|SQLITE_CANTOPEN/i.test(error.message);
+    (error instanceof ResumeStateError && error.kind === 'missing') ||
+    (error instanceof Error &&
+      /No importer state database exists|unable to open database|SQLITE_CANTOPEN/i.test(error.message));
   const code =
     error instanceof SourceDestinationError
       ? error.exitCode
       : error instanceof InspectionFailure
         ? error.code
-        : missing
-          ? 2
-          : 1;
+        : error instanceof ResumeStateError
+          ? error.kind === 'busy-lock'
+            ? 1
+            : 2
+          : missing
+            ? 2
+            : 1;
   const message =
     error instanceof SourceDestinationError || error instanceof InspectionFailure
       ? error.message
-      : missing
-        ? 'State file does not exist or is not a supported importer database.'
-        : 'Destination command failed safely; importer state was not changed.';
+      : error instanceof ResumeStateError && error.kind !== 'missing'
+        ? error.message
+        : missing
+          ? 'State file does not exist or is not a supported importer database.'
+          : 'Destination command failed safely; importer state was not changed.';
   if (json) return { code, stdout: `${jsonSafe({ version: 1, error: message })}\n`, stderr: '', openHandles: 0 };
   return { code, stdout: '', stderr: `${terminalSafe(message)}\n`, openHandles: 0 };
 }
@@ -292,13 +293,13 @@ export async function runDestinationCli(
     }
   }
 
-  let session: ImportSession | undefined;
+  let opened: { close(): void } | undefined;
   try {
-    session = new ImportSession(parsed.state, {
-      create: false,
+    const declared = await ImportSession.openDestinationDeclaration(parsed.state, {
       ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
     });
-    const document = declareOnSession(session, parsed.source, origin, parsed.reviewRevision!);
+    opened = declared;
+    const document = declareOnDatabase(declared.database, parsed.source, origin, parsed.reviewRevision!);
     return {
       code: 0,
       stdout: parsed.json ? `${jsonSafe({ ...document, declared: true })}\n` : renderDestinationReview(document, true),
@@ -308,7 +309,7 @@ export async function runDestinationCli(
   } catch (error) {
     return failure(error, parsed.json);
   } finally {
-    session?.close();
+    opened?.close();
   }
 }
 

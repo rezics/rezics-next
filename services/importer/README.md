@@ -153,9 +153,14 @@ establish the original destination leaves the history unbound and uses read-only
 use starts with a separate state file. Backups preserve binding and provenance; a restored legacy snapshot stays
 unbound until explicit declaration.
 
+Declaration opens retained existing state without constructing RunStore or RecordBindings, so a refused declaration
+leaves schema and history unchanged and an accepted declaration does not migrate unrelated importer tables.
+
 Decision: destination binding is source-exact local configuration recorded on first use or by explicit operator
 declaration; mismatch and unbound history fail before credentials. Sealed resume uses the same origin guard and does
 not record a first-use binding on empty state. The `source_destinations` table is additive; legacy files stay readable.
+Declaration reuses existing-state inode admission and writes only destination metadata; it serializes with an immediate
+transaction and refuses a live or uninspectable owner without creating or rotating a capability.
 
 ## Compare two retained complete captures
 
