@@ -69,6 +69,7 @@ test('native admission and local replay preserve exactly the installed Search re
         href.replace(encodeURIComponent(id), '019f0000-0000-7000-8000-734100000003'),
         href.replace('q=', 'foreign='),
         href + '#fragment',
+        href + '&foreign=%FF',
         '/search?q=x&filter=' + encodeURIComponent('['.repeat(2000) + ']'.repeat(2000)),
       ];
       url.searchParams.set('filter', JSON.stringify({ and: [{ [kind]: { id } }, { kind: { in: ['account'] } }] }));

@@ -22,6 +22,8 @@ function localURL(href: string): URL | undefined {
   if (href.length > 8192 || !href.startsWith('/') || href.startsWith('//') || /[\\\r\n]/.test(href)) return;
   try {
     const url = new URL(href, 'https://recent.invalid');
+    // URLSearchParams replaces malformed UTF-8; that is not equivalent escaping.
+    decodeURIComponent(url.search.replaceAll('+', ' '));
     if (url.origin === 'https://recent.invalid' && !url.username && !url.password && !url.hash) return url;
   } catch {
     /* Unparseable evidence has no destination. */
