@@ -7125,6 +7125,8 @@
   "following_reading_copied": "Copied",
   "following_reading_copy_failed": "Could not copy. Select the reference and copy it manually.",
   "following_reading_return_controls": "Return to follow controls",
+  "following_reading_actions_unavailable": "Actions for this destination are currently unavailable here. Your follow is unchanged.",
+  "following_reading_return_preparing": "Updating this page before opening another target…",
   "following_reading_refresh": "Refresh this page",
   "library_diary_close": "Close diary",
   "library_diary_closing": "Closing…",

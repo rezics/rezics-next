@@ -33,6 +33,7 @@ type ReviewFollow = (targetId: string) => Promise<FollowState | null>;
 const retiredPage: MineFollowingPage = { signedIn: false, follows: [], next: null };
 
 const followingOperations = ['follow.list'] as const;
+const followingReadingOperations = ['follow.list', 'collection.get'] as const;
 
 export const mineFollowingQuery = (
   subject: string,
@@ -56,6 +57,7 @@ export const mineFollowingQuery = (
       }
     },
     gcTime: 0,
+    structuralSharing: false,
     staleTime: Infinity,
     refetchOnMount: true,
     retry: false,
@@ -291,13 +293,23 @@ function MineFollowingPageState({
     const activeIds = new Set(follows.map((follow) => follow.targetId));
     return prepared.rows.filter((row) => activeIds.has(row.follow.targetId));
   }, [prepared, follows]);
-  const readingOrigin = useHistoryCurrentOrigin(JSON.stringify([locale, cursor]), followingOperations, null, origin);
+  const readingOrigin = useHistoryCurrentOrigin(
+    JSON.stringify([locale, cursor, canReadCollection]),
+    followingReadingOperations,
+    null,
+    origin,
+  );
   const reading = useFollowingSelection(page, locale, {
     lifetime: readingOrigin.boundary.lifetime,
     isCurrent: () =>
-      readingOrigin.current(0) && origin.isCurrent() && getLocale() === locale && !status && !addressRejected,
+      readingOrigin.current(0) &&
+      (!canReadCollection || readingOrigin.current(1)) &&
+      origin.isCurrent() &&
+      getLocale() === locale &&
+      !status &&
+      !addressRejected,
   });
-  useFollowingReturn(reading.current, reading.close, onRefresh, reading.restoreFocus);
+  useFollowingReturn(reading.returnCurrent, reading.suspend, onRefresh, reading.restoreFocus);
   const restart = !addressRejected && (!!cursor || !!page.cursorReset || removed);
   const firstPageEmpty = !restart && !page.next;
 
@@ -330,13 +342,14 @@ function MineFollowingPageState({
         <p role="status">{m.library_collections_cursor_reset()}</p>
       ) : null}
       {!addressRejected && page.signedIn && removed ? <p role="status">{m.library_follow_removed()}</p> : null}
+      {reading.suspended ? <p role="status">{m.following_reading_return_preparing()}</p> : null}
       {!addressRejected && page.signedIn && onRefresh ? (
         <Button
           className="min-h-11"
           variant="outline"
           disabled={!!status}
           onClick={() => {
-            if (!reading.current()) return;
+            if (!reading.returnCurrent()) return;
             reading.close(false);
             onRefresh();
           }}
@@ -359,7 +372,10 @@ function MineFollowingPageState({
         <ul className="list-none space-y-1" aria-label={m.library_following_heading()}>
           {active.map((row) => {
             const { follow, title, kind, reason, destination } = row;
-            const href = destination?.kind === 'collection' && !canReadCollection ? undefined : destination?.href;
+            const href =
+              reading.suspended || (destination?.kind === 'collection' && !canReadCollection)
+                ? undefined
+                : destination?.href;
             return (
               <ContentItem
                 key={follow.targetId}
@@ -406,6 +422,7 @@ function MineFollowingPageState({
                       className="min-h-11"
                       variant="outline"
                       disabled={!!status}
+                      aria-disabled={reading.suspended || undefined}
                       aria-label={m.following_reading_inspect_target({ title: title.text })}
                       onClick={(event) => {
                         const current = prepared.byId.get(follow.targetId);

@@ -152,6 +152,7 @@ export function FollowingInspection({
         <p>{reason}</p>
         <p>{m.following_reading_meaning()}</p>
         <p>{m.following_reading_remove_meaning()}</p>
+        <p role="status">{m.following_reading_actions_unavailable()}</p>
       </div>
       {stateText ? <p role="status">{stateText}</p> : null}
       {ready ? (
@@ -163,7 +164,15 @@ export function FollowingInspection({
       ) : null}
       {isSpace &&
       (space.result.state === 'unavailable' || space.result.state === 'denied' || space.result.state === 'retired') ? (
-        <Button className="min-h-11" variant="outline" onClick={space.retry}>
+        <Button
+          className="min-h-11"
+          variant="outline"
+          onClick={() => {
+            if (!space.current()) return;
+            heading.current?.focus();
+            space.retry();
+          }}
+        >
           {m.library_follow_retry()}
         </Button>
       ) : null}

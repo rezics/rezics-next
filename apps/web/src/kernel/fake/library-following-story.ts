@@ -15,6 +15,8 @@ export type LibraryFollowingStoryMode =
   | 'reading-preparing'
   | 'reading-no-destination'
   | 'reading-unavailable'
+  | 'reading-denied'
+  | 'reading-retired'
   | 'reading-long'
   | 'reading-current-source';
 
@@ -59,7 +61,7 @@ function list() {
     return { status: 200, follows: hidden, next: null };
   }
   if (mode === 'many') {
-    const follows = Array.from({ length: 12 }, (_, index) => {
+    const follows = Array.from({ length: 20 }, (_, index) => {
       const source = base[index % base.length]!;
       const targetId = `0192f3a0-6c1e-7b2a-9d4e-${String(index + 1).padStart(12, '0')}`;
       const target = { ...source.target, id: targetId, label: `Following item ${index + 1}` };
@@ -77,6 +79,8 @@ export const routes: FakeRoute[] = [
     story: () => {
       if (mode === 'reading-preparing') return new Promise(() => {});
       if (mode === 'reading-unavailable') return { status: 503, code: 'unavailable' };
+      if (mode === 'reading-denied') return { status: 403, code: 'forbidden' };
+      if (mode === 'reading-retired') return { status: 410, code: 'gone' };
       return {
         status: 200,
         space: {

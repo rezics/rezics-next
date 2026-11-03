@@ -7075,6 +7075,8 @@
   "following_reading_copied": "Kopiert",
   "following_reading_copy_failed": "Kopieren fehlgeschlagen. Wähle die Referenz aus und kopiere sie manuell.",
   "following_reading_return_controls": "Zurück zu den Folgeaktionen",
+  "following_reading_actions_unavailable": "Aktionen für dieses Ziel sind hier derzeit nicht verfügbar. Du folgst ihm weiterhin.",
+  "following_reading_return_preparing": "Diese Seite wird aktualisiert, bevor ein weiteres Ziel geöffnet werden kann…",
   "following_reading_refresh": "Diese Seite aktualisieren",
   "library_diary_close": "Tagebuch schließen",
   "library_diary_closing": "Wird geschlossen…",

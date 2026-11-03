@@ -27,7 +27,13 @@ test('keyboard close restores only the current trigger; ordinary links keep the 
     await h.settle(() => h.window.dispatchEvent(show));
     expect(h.refreshes).toBe(1);
     expect(h.window.document.activeElement).toBe(trigger);
+    expect(h.host.textContent).toContain('Updating this page before opening another target');
+    expect(h.host.querySelector('[data-follow-target-type="subject"] a')).toBeNull();
     await h.inspect(spaceId);
+    expect(h.host.querySelector('[role="dialog"]')).toBeNull();
+    await h.replace({ ...page(follow('subject')), next: 'opaque/page+' });
+    await h.inspect(spaceId);
+    expect(h.host.querySelector('[role="dialog"] a')).not.toBeNull();
     await h.router.navigate({ to: '/library/following', search: { cursor: 'new-page' } });
     await h.settle();
     expect(h.host.querySelector('[role="dialog"]')).toBeNull();

@@ -6,7 +6,15 @@ import { PageStory, libraryFollowingReady, libraryHeadingReady, pagePaths, pageR
 
 const meta = {
   title: 'Pages/Library/Following',
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'The installed FULL page supplies summaries. Community inspection uses one deliberate Space read. Native destination actions remain unavailable until the existing page producer supplies admitted operands.',
+      },
+    },
+  },
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -97,7 +105,7 @@ export const LongContent: Story = {
   play: async (context) => {
     await libraryHeadingReady(context, m.library_following_heading);
     await expect(
-      await within(context.canvasElement).findByRole('heading', { name: 'Following item 12' }),
+      await within(context.canvasElement).findByRole('heading', { name: 'Following item 20' }),
     ).toBeVisible();
   },
 };
@@ -210,6 +218,7 @@ export const InspectionReady: Story = {
     await inspectCommunity(canvasElement);
     const panel = await within(canvasElement).findByRole('dialog');
     await expect(await within(panel).findByText(m.following_reading_current_identity())).toBeVisible();
+    await expect(within(panel).getByText(m.following_reading_actions_unavailable())).toBeVisible();
   },
 };
 export const CommunityPreparing: Story = {
@@ -224,6 +233,20 @@ export const InspectionUnavailable: Story = {
   play: async ({ canvasElement }) => {
     await inspectCommunity(canvasElement);
     await expect(await within(canvasElement).findByText(m.following_reading_unavailable())).toBeVisible();
+  },
+};
+export const InspectionDenied: Story = {
+  render: () => FollowingStory('reading-denied'),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByText(m.following_reading_denied())).toBeVisible();
+  },
+};
+export const InspectionRetired: Story = {
+  render: () => FollowingStory('reading-retired'),
+  play: async ({ canvasElement }) => {
+    await inspectCommunity(canvasElement);
+    await expect(await within(canvasElement).findByText(m.following_reading_retired())).toBeVisible();
   },
 };
 export const NoDestination: Story = {

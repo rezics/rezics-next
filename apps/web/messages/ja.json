@@ -7075,6 +7075,8 @@
   "following_reading_copied": "コピーしました",
   "following_reading_copy_failed": "コピーできませんでした。参照を選択して手動でコピーしてください。",
   "following_reading_return_controls": "フォロー操作に戻る",
+  "following_reading_actions_unavailable": "この移動先の操作は、現在ここでは利用できません。フォローは維持されます。",
+  "following_reading_return_preparing": "別の対象を開く前に、このページを更新しています…",
   "following_reading_refresh": "このページを更新",
   "library_diary_close": "日記を閉じる",
   "library_diary_closing": "閉じています…",

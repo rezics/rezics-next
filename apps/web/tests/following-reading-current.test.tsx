@@ -12,6 +12,51 @@ const ready = (address: string | null, admittedRealm: string | null = realmId): 
   },
 });
 
+test('denied, preparing, unavailable, retired and ready without a destination retain the follow and retry focus', async () => {
+  let reads = 0;
+  const pending = deferred<SpaceRead>();
+  const h = await mountFollowing(page(follow('space')), async (input) => {
+    reads++;
+    if (reads === 2) return pending.promise;
+    return reads === 4 ? ready(null, null) : { ...input, result: { state: reads === 1 ? 'denied' : 'retired' } };
+  });
+  try {
+    const trigger = await h.inspect(spaceId);
+    expect(h.host.textContent).toContain('This community read was denied');
+    const retry = () =>
+      [...h.host.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (button) => button.textContent === 'Try again',
+      )!;
+    await h.settle(() => {
+      retry().focus();
+      retry().click();
+    });
+    expect(h.window.document.activeElement?.id).toBe('following-inspection-title');
+    expect(h.host.textContent).toContain('Reading this community');
+    expect(h.host.querySelector('[role="dialog"] a')).toBeNull();
+    await h.settle(() =>
+      pending.resolve({ subject: 'owner', locale: 'en', spaceId, result: { state: 'unavailable' } }),
+    );
+    expect(h.host.textContent).toContain('could not be read');
+    await h.settle(() => retry().click());
+    expect(h.host.textContent).toContain('no longer readable here');
+    await h.settle(() => retry().click());
+    expect(h.host.textContent).toContain('No currently readable destination');
+    expect(h.host.textContent).toContain('Actions for this destination are currently unavailable');
+    expect(h.host.querySelector('[role="dialog"] a')).toBeNull();
+    expect(reads).toBe(4);
+    await h.settle(() =>
+      h.host
+        .querySelector('[role="dialog"]')!
+        .dispatchEvent(new h.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    );
+    expect(h.window.document.activeElement).toBe(trigger);
+    expect(h.host.querySelector('[data-follow-target-type="space"]')).not.toBeNull();
+  } finally {
+    await h.dispose();
+  }
+});
+
 test('at 1/10/20 follows initial reads stay zero and only the deliberately inspected community makes one point read', async () => {
   for (const n of [1, 10, 20]) {
     const pending = deferred<SpaceRead>();

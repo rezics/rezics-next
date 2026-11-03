@@ -7075,6 +7075,8 @@
   "following_reading_copied": "已复制",
   "following_reading_copy_failed": "无法复制。请选择引用并手动复制。",
   "following_reading_return_controls": "返回关注控件",
+  "following_reading_actions_unavailable": "目前无法在此操作该目标。你的关注保持不变。",
+  "following_reading_return_preparing": "正在更新此页面，完成后即可打开其他目标…",
   "following_reading_refresh": "刷新此页",
   "library_diary_close": "关闭日记",
   "library_diary_closing": "正在关闭…",

@@ -133,6 +133,9 @@ independent rather than making shared files or unfinished producer delivery into
   removal, uncertain review, refresh and cursor recovery. Commerce's one-page admitted destination/action projection
   is still missing; summary Space IDs are never used as Realm IDs or addresses. Native access cost stays producer-owned.
   Decision: preserve native row order and request twenty rows, replacing the base's type grouping and hundred-row read.
+  Decision: after browser return, keep target inspection and links suspended until a fresh page observation arrives.
+  Destination actions remain explicitly unavailable until the installed generated follow row supplies admitted operands;
+  Collection exposure withdrawal retires inspection and old links independently of uncertain follow commands.
   Details: [Following reading](../../apps/web/src/library/following-reading/README.md).
 - **Collection discovery.** Home consumes disclosed Collection summaries through the existing ContentItem adapter
   and exact `kind` selection. Following Collections are delivered: title, description and `/collections/{id}` are

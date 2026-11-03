@@ -24,17 +24,30 @@ test('one native-order index at 1/10/20 rows; repeated exact selections do not p
   }
 });
 
-test('inspect supplied Subject, Collection and unavailable identity without point reads or guessed destinations', async () => {
+test('a mixed twenty-row page inspects supplied Subject, Collection and missing identity without initial point reads', async () => {
   let reads = 0;
   const subject = follow('subject', 'subject-id');
   const collection = follow('collection', 'collection-id');
   const missing = { ...follow('space', 'missing-id'), target: null };
-  const h = await mountFollowing(page(subject, collection, missing), async (input) => {
+  const follows = [
+    subject,
+    collection,
+    missing,
+    ...Array.from({ length: 17 }, (_, i) =>
+      follow((['space', 'subject', 'collection'] as const)[i % 3]!, `mixed-${i}`),
+    ),
+  ];
+  const h = await mountFollowing(page(...follows), async (input) => {
     reads++;
     return { ...input, result: { state: 'unavailable' } };
   });
   try {
     expect(reads).toBe(0);
+    expect(
+      [...h.host.querySelectorAll('[data-follow-target-type]')].map((row) =>
+        row.getAttribute('data-follow-target-type'),
+      ),
+    ).toEqual(follows.map((row) => row.targetType));
     for (const row of [subject, collection]) {
       await h.inspect(row.targetId);
       const panel = h.host.querySelector('[role="dialog"]')!;
@@ -51,6 +64,23 @@ test('inspect supplied Subject, Collection and unavailable identity without poin
     expect(panel.textContent).toContain('Followed Space ID');
     expect(panel.textContent).toContain('missing-id');
     expect(reads).toBe(0);
+  } finally {
+    await h.dispose();
+  }
+});
+
+test('Collection exposure withdrawal retires retained links and inspection without losing the follow', async () => {
+  const h = await mountFollowing(page(follow('collection')));
+  try {
+    await h.inspect(spaceId);
+    const link = h.host.querySelector<HTMLAnchorElement>('[role="dialog"] a')!;
+    await h.admit(['personal_library']);
+    expect(h.host.querySelector('[role="dialog"]')).toBeNull();
+    expect(link.dispatchEvent(new h.window.MouseEvent('click', { bubbles: true, cancelable: true }))).toBe(false);
+    await h.inspect(spaceId);
+    expect(h.host.querySelector('[role="dialog"] a')).toBeNull();
+    expect(h.host.textContent).toContain('Actions for this destination are currently unavailable');
+    expect(h.host.querySelector('[data-follow-target-type="collection"]')).not.toBeNull();
   } finally {
     await h.dispose();
   }

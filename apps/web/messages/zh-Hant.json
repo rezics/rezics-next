@@ -7075,6 +7075,8 @@
   "following_reading_copied": "已複製",
   "following_reading_copy_failed": "無法複製。請選取參照並手動複製。",
   "following_reading_return_controls": "返回追蹤控制項",
+  "following_reading_actions_unavailable": "目前無法在此操作該目標。你的關注保持不變。",
+  "following_reading_return_preparing": "正在更新此頁面，完成後即可開啟其他目標…",
   "following_reading_refresh": "重新整理此頁",
   "library_diary_close": "關閉日記",
   "library_diary_closing": "正在關閉…",

@@ -7075,6 +7075,8 @@
   "following_reading_copied": "복사됨",
   "following_reading_copy_failed": "복사하지 못했습니다. 참조를 선택하고 직접 복사하세요.",
   "following_reading_return_controls": "팔로우 제어로 돌아가기",
+  "following_reading_actions_unavailable": "이 대상에 대한 작업은 현재 여기에서 사용할 수 없습니다. 팔로우는 유지됩니다.",
+  "following_reading_return_preparing": "다른 대상을 열기 전에 이 페이지를 갱신하고 있습니다…",
   "following_reading_refresh": "이 페이지 새로 고침",
   "library_diary_close": "일지 닫기",
   "library_diary_closing": "닫는 중…",

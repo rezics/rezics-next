@@ -27,15 +27,32 @@ exposure, parent origin, close and source replacement fence responses, clipboard
 one selection/request are retained, with no row/return payload in local storage or public URLs. Inspection focuses
 its heading; Escape or Close synchronously restores its current trigger. Links use ordinary browser navigation;
 the browser keeps the requested cursor address. Page hide retires inspection, and a restored browser document
-requests a current page reread before a new inspection. Destination admission remains authoritative, so denied or
+requests a current page reread before a new inspection. Until a fresh page arrives, inspection and target links stay
+suspended, with a readable updating state; the current trigger remains focusable. Retry focuses the inspection heading
+before replacing its button with the preparing state. Collection exposure withdrawal also retires existing inspection
+and retained link callbacks without replacing the follow command owner. Destination admission remains authoritative, so denied or
 not-found recovery never removes a follow.
 
-Commerce still owns the missing one-page destination/action projection. Native FULL Space summaries currently carry
-only id/type/label: this interface never treats them as full Spaces. Commerce's existing follow-page producer must
-publish admitted destinations and applicable actions with generated types; no successor task identity has been
-supplied. Replacing this selected-read seam requires an explicit decision when that projection is installed.
+Commerce still owns the missing one-page destination/action projection. The installed
+[`personalLibraryRoutes` declaration](../../../../../packages/client/src/kernel/library/personal-routes.d.ts) returns
+follow identity/state/reason and optional `target`; its Space summary has only `id`, `type` and `label`. Neither
+admitted destination nor applicable-action operands are exported on that row. This interface preserves the selected-only
+Space reader and explicitly says destination actions are unavailable. It does not reconstruct command operands from
+the destination or follow reason. Activate native page destinations/actions only when that existing generated row
+carries actual Community-admitted operands; then pass them to their existing action owners with current viewer,
+exposure and original command intent.
 Content/community retains Space/Realm reads and membership; watch/Inbox management, Library tracking and shell
 community navigation remain with their existing owners.
+
+The bounded journey is one `GET /v1/follows?view=FULL&limit=20`, optionally one deliberate selected
+`GET /v1/spaces/{spaceId}`, then ordinary navigation to the admitted encoded address or Realm. No native destination
+action is sent from this panel while operands are absent. Existing follow removal uses its existing writer, independently.
+Native work includes the page producer's [`fullView`](../../../../../services/kernel/src/library/views.ts)
+summary expansion and the Community reader's nested access/admission, not just the HTTP request count; those budgets
+remain with their native owners. Connected stories distinguish selected-read success, denial, retirement, unavailability
+and no destination; their successful inspection does not claim a delivered one-page destination/action projection.
+
+Decision: after browser return, keep target inspection and links suspended until a fresh page observation arrives.
 
 Decision: preserve native row order rather than type grouping, and request twenty rows from the existing page reader;
 the retained base requested one hundred rows and grouped them by type.

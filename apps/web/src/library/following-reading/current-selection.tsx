@@ -12,7 +12,14 @@ export type FollowingSelection = {
 
 /** Separate read observation identity from the removal owner's intent equivalence. */
 export function useFollowingSelection(source: object, locale: string, origin: HistoryOrigin) {
-  const observation = useRef({ source, locale, parent: origin.lifetime, active: true, mounted: false });
+  const observation = useRef({
+    source,
+    locale,
+    parent: origin.lifetime,
+    active: true,
+    mounted: false,
+    suspended: false,
+  });
   const selected = useRef<FollowingSelection | null>(null);
   const bookmark = useRef<{ owner: object; trigger: HTMLButtonElement } | null>(null);
   const latest = useRef(origin);
@@ -26,14 +33,15 @@ export function useFollowingSelection(source: object, locale: string, origin: Hi
     observation.current.active = false;
     if (selected.current) selected.current.active = false;
     selected.current = null;
-    observation.current = { source, locale, parent: origin.lifetime, active: true, mounted: false };
+    observation.current = { source, locale, parent: origin.lifetime, active: true, mounted: false, suspended: false };
   }
   if (selected.current && !origin.isCurrent()) {
     selected.current.active = false;
     selected.current = null;
   }
   const owner = observation.current;
-  const current = () => owner.active && owner.mounted && origin.isCurrent() && latest.current.isCurrent();
+  const returnCurrent = () => owner.active && owner.mounted && origin.isCurrent() && latest.current.isCurrent();
+  const current = () => !owner.suspended && returnCurrent();
   useLayoutEffect(() => {
     owner.mounted = true;
     return () => {
@@ -65,8 +73,22 @@ export function useFollowingSelection(source: object, locale: string, origin: Hi
     render((n) => n + 1);
   }
   function restoreFocus() {
-    if (current() && bookmark.current?.owner === owner && bookmark.current.trigger.isConnected)
+    if (returnCurrent() && bookmark.current?.owner === owner && bookmark.current.trigger.isConnected)
       bookmark.current.trigger.focus();
   }
-  return { selection: selected.current?.current() ? selected.current : null, select, close, current, restoreFocus };
+  function suspend() {
+    owner.suspended = true;
+    close(false);
+    render((n) => n + 1);
+  }
+  return {
+    selection: selected.current?.current() ? selected.current : null,
+    select,
+    close,
+    current,
+    returnCurrent,
+    suspend,
+    suspended: owner.suspended,
+    restoreFocus,
+  };
 }

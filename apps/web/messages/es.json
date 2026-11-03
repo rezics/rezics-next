@@ -7075,6 +7075,8 @@
   "following_reading_copied": "Copiado",
   "following_reading_copy_failed": "No se pudo copiar. Selecciona la referencia y cópiala manualmente.",
   "following_reading_return_controls": "Volver a los controles de seguimiento",
+  "following_reading_actions_unavailable": "Las acciones de este destino no están disponibles aquí en este momento. Lo sigues siguiendo.",
+  "following_reading_return_preparing": "Actualizando esta página antes de abrir otro destino…",
   "following_reading_refresh": "Actualizar esta página",
   "library_diary_close": "Cerrar diario",
   "library_diary_closing": "Cerrando…",

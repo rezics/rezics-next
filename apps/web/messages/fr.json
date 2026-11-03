@@ -7075,6 +7075,8 @@
   "following_reading_copied": "Copié",
   "following_reading_copy_failed": "Échec de la copie. Sélectionnez la référence et copiez-la manuellement.",
   "following_reading_return_controls": "Revenir aux commandes de suivi",
+  "following_reading_actions_unavailable": "Les actions pour cette destination sont actuellement indisponibles ici. Votre suivi est conservé.",
+  "following_reading_return_preparing": "Actualisation de cette page avant d’ouvrir une autre destination…",
   "following_reading_refresh": "Actualiser cette page",
   "library_diary_close": "Fermer le journal",
   "library_diary_closing": "Fermeture…",
