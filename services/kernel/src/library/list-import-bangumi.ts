@@ -276,11 +276,14 @@ export function createBangumiImport(deps: Dependencies) {
         if ((await header(tx, a, id)).cancelled) throw new ProblemError('conflict');
         return row(tx, a, id, ordinal);
       });
+      // A receipt for an older confirmation cannot admit a subsequently refreshed review.
+      if (r.review?.token !== choice.reviewToken) throw new ProblemError('conflict');
       if (r.outcome) {
         outcomes.push(r.outcome);
         continue;
       }
-      const v = r.review!;
+      if (canonicalize(r.choice) !== canonicalize(choice)) throw new ProblemError('conflict');
+      const v = r.review;
       const outcome: BangumiOutcome = {
         ordinal,
         status: 'unsupported',
@@ -323,12 +326,13 @@ export function createBangumiImport(deps: Dependencies) {
         await header(tx, a, id, true);
         await tx.query(
           `UPDATE library.bangumi_upload_row SET outcome=$5::jsonb,
-          choice=CASE WHEN $6 THEN NULL ELSE choice END WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4`,
+          choice=CASE WHEN $6 THEN NULL ELSE choice END WHERE route=$1 AND account_id=$2 AND upload_id=$3 AND ordinal=$4 AND review->>'token'=$7`,
           [
             ...args(a, id),
             ordinal,
             outcome.status === 'failed' ? null : JSON.stringify(outcome),
             outcome.status === 'stale',
+            choice.reviewToken,
           ],
         );
         return { ordinal, status: outcome.status };

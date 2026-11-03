@@ -144,6 +144,8 @@ test('conflict preservation, guarded replacement, stale review refresh and origi
   await setState('paused');
   expect((await apply(replace, [choice(0, stale, 'replace')])).outcomes[0].status).toBe('stale');
   const refreshed = await review(replace, 0);
+  const oldRetry = { rows: [choice(0, stale, 'replace')] };
+  expect((await send('POST', `/${replace}:apply`, oldRetry)).status).toBe(409);
   const confirmed = [choice(0, refreshed, 'replace')];
   const result = await apply(replace, confirmed);
   expect(result.outcomes[0].status).toBe('applied');

@@ -166,12 +166,14 @@ export function bangumiImportRoutes(
         response: { 200: t.Object({ uploadId: id, cancelled: t.Boolean() }), ...failures },
         detail: detail('library_bangumi.cancel'),
       },
-      ({ actor, params, headers, admission, job }) =>
-        admitted(actor, () =>
+      ({ actor, params, headers, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () =>
           admission.run('normal', job, () =>
             engine().cancel(actor, params.uploadId, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
           ),
-        ),
+        );
+      },
     )
     .delete(
       '/v1/libraryImports/bangumi/:uploadId',
@@ -181,11 +183,13 @@ export function bangumiImportRoutes(
         response: { 200: t.Object({ deleted: t.Boolean() }), ...failures },
         detail: detail('library_bangumi.delete'),
       },
-      ({ actor, params, headers, admission, job }) =>
-        admitted(actor, () =>
+      ({ actor, params, headers, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admitted(actor, () =>
           admission.run('normal', job, () =>
             engine().remove(actor, params.uploadId, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
           ),
-        ),
+        );
+      },
     );
 }
