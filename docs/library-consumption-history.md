@@ -60,7 +60,9 @@ Filtered page and summary revisions must agree before the occurrence list is sho
 of the same bucket; missing current counts offers an explicit retry. Each occurrence link carries the exact opaque
 cursor, selected year/month, original caller and opened Session ID for keyboard focus on return. Detail returns to
 that frontier deliberately and reads it afresh. A stale native cursor offers a first-page restart retaining the bucket.
-Date correction, retirement and deletion never adjust displayed counts locally.
+Detail return also retains the native snapshot revision, including on the first page without a cursor; a changed
+revision requires an explicit restart of the same bucket. Date correction, retirement and deletion never adjust
+displayed counts locally.
 
 One page visit uses one diary GET and one summary GET, all-time or reported-year. The retained diary page is at most
 25 rows / 65,536 bytes; reported-year summary is at most 16,384 bytes, twelve months and one unallocated bucket.

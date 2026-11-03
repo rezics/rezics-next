@@ -60,7 +60,9 @@ export function PrivateDiaryPage({
   const yearSummary = authorizedLoad?.reportedYear;
   const currentPage =
     address.year === undefined ||
-    (yearSummary?.kind === 'ready' && page?.currentness?.revision === yearSummary.value.currentness.revision);
+    (yearSummary?.kind === 'ready' &&
+      page?.currentness?.revision === yearSummary.value.currentness.revision &&
+      (address.snapshot === undefined || address.snapshot === page.currentness?.revision));
   const visiblePage = currentPage ? page : null;
   useEffect(() => {
     if (visiblePage && address.focus && visiblePage.occurrences.some((row) => row.id === address.focus))
@@ -305,7 +307,12 @@ export function PrivateDiaryPage({
                       to="/library/progress/$id"
                       params={{ id: occurrence.id }}
                       search={{
-                        history: diaryReturnContext({ ...address, focus: occurrence.id, returnTo: currentReturn }),
+                        history: diaryReturnContext({
+                          ...address,
+                          snapshot: visiblePage.currentness?.revision,
+                          focus: occurrence.id,
+                          returnTo: currentReturn,
+                        }),
                       }}
                     >
                       {m.library_diary_open_occurrence()}
@@ -320,7 +327,13 @@ export function PrivateDiaryPage({
               className="inline-flex min-h-11 items-center rounded-md border px-4"
               to="/library/history"
               replace
-              search={{ cursor: visiblePage.next, year: address.year, month: address.month, returnTo: currentReturn }}
+              search={{
+                cursor: visiblePage.next,
+                year: address.year,
+                month: address.month,
+                snapshot: address.snapshot,
+                returnTo: currentReturn,
+              }}
             >
               {m.library_diary_next()}
             </Link>

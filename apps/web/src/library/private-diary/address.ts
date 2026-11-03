@@ -5,6 +5,7 @@ export type DiaryAddress = {
   cursor?: string | undefined;
   year?: number | undefined;
   month?: NonNullable<DiaryQuery>['month'] | undefined;
+  snapshot?: string | undefined;
   focus?: string | undefined;
   returnTo?: string | undefined;
 };
@@ -29,18 +30,20 @@ export function diarySearch(search: Record<string, unknown>): DiaryAddress {
   const validMonth =
     month === 'unallocated' || (typeof month === 'number' && Number.isInteger(month) && month >= 1 && month <= 12);
   const focus = typeof search.focus === 'string' && search.focus.length <= 128 ? search.focus : undefined;
+  const snapshot = typeof search.snapshot === 'string' && search.snapshot.length <= 2048 ? search.snapshot : undefined;
   const returnTo = typeof search.returnTo === 'string' && search.returnTo.length <= 2048 ? search.returnTo : undefined;
   return {
     ...(cursor ? { cursor } : {}),
     ...(validYear ? { year } : {}),
     ...(validYear && validMonth ? { month } : {}),
+    ...(validYear && snapshot ? { snapshot } : {}),
     ...(focus ? { focus } : {}),
     ...(returnTo ? { returnTo } : {}),
   };
 }
 
 export function sameDiaryAddress(a: DiaryAddress, b: DiaryAddress) {
-  return a.cursor === b.cursor && a.year === b.year && a.month === b.month;
+  return a.cursor === b.cursor && a.year === b.year && a.month === b.month && a.snapshot === b.snapshot;
 }
 
 export function safeReturnTo(value: string | undefined): string {
@@ -60,6 +63,7 @@ export function diaryReturnContext(address: DiaryAddress): string {
   if (address.cursor) query.set('cursor', address.cursor);
   if (address.year !== undefined) query.set('year', String(address.year));
   if (address.month !== undefined) query.set('month', String(address.month));
+  if (address.year !== undefined && address.snapshot) query.set('snapshot', address.snapshot);
   if (address.focus) query.set('focus', address.focus);
   if (address.returnTo) query.set('returnTo', safeReturnTo(address.returnTo));
   return '/library/history' + (query.size ? '?' + query.toString() : '');
