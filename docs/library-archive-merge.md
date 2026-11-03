@@ -62,6 +62,26 @@ V2 annotation and journal rows use the same retained item, review epoch, cancell
 Supported fields, private visibility behavior, native setters, and exact per-item outcomes are owned by
 [Personal archive annotation and journal recovery](library-archive-personal-fact-recovery.md).
 
+Decision: confirm `{items:[{ordinal,reviewRevision}]}` from the exact private review. Every saved review,
+even an identical refresh, increments `reviewRevision`; preview includes it (zero means unreviewed), and review
+returns it with each ordinal/status. The revision addresses the owner's upload row and its canonical target/profile,
+current incarnation/revisions, field choices and values. It is not authority on its own.
+
+Apply rejects a stale or mixed selection with HTTP 409 before starting any item. Missing/foreign uploads return
+404; expired evidence returns 404; cancelled selections with unstarted effects return 409. Duplicated ordinals,
+missing revisions and out-of-range selections are invalid requests. Each item repeats the revision check before
+receipt replay or native execution, closing a concurrent refresh race. A later concurrent change may leave already
+accepted items intact; retry the original confirmation to recover their original receipts. Native target changes
+continue to report per-item `current_conflict`/`unresolved` for Entry/label work and `stale` for personal fields.
+A refresh cannot change an applying/acknowledged item. Those items keep their original key and canonical operands;
+accepted receipts can be retried after cancellation, while expiry/pruning never undoes native effects.
+
+The generated `KernelClient.libraryArchiveMerges` owns upload, preview, review and apply. Upload's declared body is
+`{manifest: Record<string,unknown>, records: Record<string,unknown>[]}`; ingress still preserves raw bytes and the
+strict bounded decoder alone admits the artifact. Web's canonical archive consumer8bb retains the existing
+`/library/recover-archive` interface and all file/recovery ownership; it receives these generated methods, without
+a handwritten client, proxy cast or alternate upload route.
+
 A bounded per-item journal preserves original command identities across uncertain acknowledgements and partial
 success. Cancellation stops unstarted effects and retains acknowledged ones. Uploads, previews, reviews and results
 expire after seven days; explicit pruning and the owned-graph erasure phase delete at most 100 child rows per step.
@@ -93,7 +113,20 @@ bounded bulk child statement; each request performs fixed owner/admission checks
 current identity/profile and native fact reads for R≤20; apply delegates up to R≤20 effects to the entry, label and
 assignment command owners (including nested History); journal writes address one `(route,account,upload,ordinal)`
 row; preview/results inspect at most 101 indexed rows; prune and erasure delete at most 100 child rows per step.
-These are source-derived bounds, not observed growth results. Performance review of unresolved composed bounds is
+Apply additionally performs one whole-selection authority transaction, one locked upload read and R addressed
+item reads before any effect. Each begin and acknowledgement/refusal repeats current caller authority and addressed
+upload/item reads and locks. Native command preparation, authorization/target locks, receipt lookup (including
+retries), writes, History/events, export fences and summaries remain charged to their existing owners and payers;
+no allowance increases. A retry pays the preflight plus each original receipt read again, rather than claiming
+zero-cost replay. Review costs both authority passes, current target/profile reads and up to R CAS writes.
+
+Retained bytes include the original compact evidence plus full canonical review JSON, native operand JSON,
+request keys and result JSON for each addressed item, bounded by the existing row/field/record caps. Wire work
+charges UTF-8 bytes of the complete serialized envelopes: coverage, evidence, review, revisions, results, escaping
+and punctuation, not just `recordBytes`. Preview/results process at most P+1 rows and serialize P; review/apply
+serialize at most R outcomes and all selected native operands. Cleanup charges its indexed 100-row key selection,
+full retained row/operand deletion, remaining-child probe and final root deletion, including each repeated caller
+check. No history scan or blanket reservation is introduced. These are source-derived bounds, not observed growth results. Performance review of unresolved composed bounds is
 requested. Native64/512/4096 observations for upload, first/deep/terminal pages, selected apply, stale refusal,
 original replay and cleanup remain deferred to integration; acceptance and broader native placement are also
 controller responsibilities.
