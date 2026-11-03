@@ -2,6 +2,8 @@ import { indexedStatement, selectedCandidate, selectedRank } from './scope-leaf-
 export { indexedStatement } from './scope-leaf-selection.ts';
 import {
   readSubjectKeyPage,
+  createSubjectCanonicalNames,
+  type SubjectCanonicalNames,
   type SubjectSourceKeyTraversal as SubjectSourceKeyPages,
 } from './subject-source-key-pages.ts';
 import type { Release } from '@rezics/definitions';
@@ -150,10 +152,13 @@ export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient)
   });
 }
 
-export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource & SubjectSourceKeyPages {
+export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource & SubjectSourceKeyPages & {
+  canonicalNames: SubjectCanonicalNames;
+} {
   const relations = relationSource(pool, routeKey);
   return {
     readSubjectKeyPage,
+    canonicalNames: createSubjectCanonicalNames(pool),
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
       if (ids.length > 256) throw new TypeError('A subject snapshot accepts at most 256 ids');

@@ -10,6 +10,11 @@ import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import readIdentity from '../semantic/read-subject-identity.sql';
+import {
+  createSubjectCanonicalNames,
+  type SubjectCanonicalPopulation,
+  type SubjectCanonicalNameKey,
+} from '../semantic/subject-source-key-pages.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { STANDARD_QUESTION_ID } from './votes.ts';
 import readFreshness from './aggregate-read-freshness.sql';
@@ -66,6 +71,7 @@ export type RealmRankOrderObservation = Readonly<{
   realmAuthority: string;
   realmRevision: string;
   publicationGeneration: string;
+  canonicalPopulation: SubjectCanonicalPopulation;
 }>;
 export type RealmRankOrderCandidate = RealmRankCandidate & Readonly<{ securityRevision: number }>;
 export type RealmRankFigureValue = Readonly<{
@@ -89,6 +95,30 @@ export interface RealmRankOrderSource {
     input: Readonly<{ realmId: string; questionId: string }>,
     context: { deadline: number },
   ): Promise<RealmRankOrderObservation>;
+  /** Bounded raw canonical-name candidates, with complete native figure proofs.
+   * Scored rows remain explicit; a consumer must account for them when walking the complement.
+   * These internal keys do not replace current Subject disclosure or predicate admission.
+   */
+  readCanonicalPartition(
+    actor: Actor,
+    input: Readonly<{
+      realmId: string;
+      questionId: string;
+      partition: number;
+      after: SubjectCanonicalNameKey | null;
+      limit: number;
+    }>,
+    observation: RealmRankOrderObservation,
+    context: { deadline: number },
+  ): Promise<Readonly<{
+    partition: number;
+    epoch: number;
+    position: bigint;
+    candidates: readonly (SubjectCanonicalNameKey & Readonly<{
+      securityRevision: number;
+      proof: RealmRankFigureProof;
+    }>)[];
+  }>>;
   listScoredPartitions(
     actor: Actor,
     input: Readonly<{ realmId: string; questionId: string }>,
@@ -467,9 +497,12 @@ function authorityDigest(actor: Actor): string {
   return createHash('sha256').update(JSON.stringify(authority)).digest('hex');
 }
 
-/** Native observations and scored/figure primitives. Canonical population/name seeks are still required
- * before Search can bind a complete order; the compatibility page remains scored-only. */
+/** Native observations, canonical population/name candidates and scored/figure primitives.
+ * Search still needs canonical scored ties and admitted predicate composition before complete ordering.
+ * The compatibility page remains scored-only.
+ */
 export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSource {
+  const canonicalNames = createSubjectCanonicalNames(deps.pool);
   const reobserve = async (
     actor: Actor,
     input: Readonly<{ realmId: string; questionId: string }>,
@@ -491,6 +524,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       current.realmAuthority !== expected.realmAuthority ||
       current.realmRevision !== expected.realmRevision ||
       current.publicationGeneration !== expected.publicationGeneration ||
+      current.canonicalPopulation.generation !== expected.canonicalPopulation?.generation ||
       current.populationHome.partition !== expected.populationHome?.partition ||
       current.populationHome.epoch !== expected.populationHome?.epoch ||
       current.populationHome.position !== expected.populationHome?.position
@@ -539,6 +573,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
       const generation = publication.rows[0];
       if (!generation || !/^[0-9]+$/.test(generation.last_value))
         throw new Error('Rank publication generation is unavailable');
+      const canonicalPopulation = await canonicalNames.observe({ deadline });
       return {
         populationId: input.realmId,
         questionPublication: questionPublication(question),
@@ -555,6 +590,32 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
         realmAuthority: authorityDigest(actor),
         realmRevision: `${realm.headRevisionId}:${realm.state}:${realm.visibility}`,
         publicationGeneration: `${generation.last_value}:${generation.is_called ? 1 : 0}`,
+        canonicalPopulation,
+      };
+    },
+
+    async readCanonicalPartition(actor, input, observation, { deadline }) {
+      if (input.realmId !== observation.populationId || input.questionId !== observation.question.id)
+        throw new ProblemError('invalid_request');
+      const request = { partition: input.partition, after: input.after === null ? null : { ...input.after }, limit: input.limit };
+      const selected = { realmId: input.realmId, questionId: input.questionId };
+      await reobserve(actor, selected, observation, deadline);
+      const page = await canonicalNames.read(request, observation.canonicalPopulation, { deadline });
+      const proof = await source.proveFigures(actor, {
+        ...selected, partition: request.partition, subjectIds: page.candidates.map(({ id }) => id),
+      }, observation, { deadline });
+      if (proof.epoch !== page.home.epoch || proof.position.toString() !== page.home.position)
+        throw new ProblemError('search_restart_required');
+      const figures = new Map(proof.figures.map((figure) => [figure.subjectId, figure]));
+      if (figures.size !== page.candidates.length) throw new ProblemError('index_not_ready');
+      await reobserve(actor, selected, observation, deadline);
+      return {
+        partition: request.partition, epoch: page.home.epoch, position: proof.position,
+        candidates: page.candidates.map((candidate) => {
+          const proof = figures.get(candidate.id);
+          if (!proof) throw new ProblemError('index_not_ready');
+          return { ...candidate, proof };
+        }),
       };
     },
 

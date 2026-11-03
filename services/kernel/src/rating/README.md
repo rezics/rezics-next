@@ -524,23 +524,35 @@ cross-partition composition; Web owns the remaining Content interfaces. This por
 installs no additional search route or service.
 
 Search's `createRealmRatingNativeSource` in `search/realm-rating-native.ts` remains at `index_not_ready`.
-`createRealmRankOrderSource` currently supplies native selected-question observations, scored score/UUID seeks
-and exact figure proofs. These primitives do not supply canonical name ties or the complete unscored population;
-Semantic's ID-key inventory is a rebuild path, not a request-time name seek. Private Realm figures remain outside
-the common Search index. Complete ordering still requires bounded partition-local native canonical population/name
-seeks and a compatible generation, before Search may compose their finite frontier. Search retains parsing,
+`createRealmRankOrderSource` supplies native selected-question observations, scored score/UUID seeks,
+exact figure proofs and `readCanonicalPartition` raw name/ID candidates with complete figure proofs.
+Semantic's `subjectSource.canonicalNames` supplies current native population observations and bounded name/ID
+seeks, separately from the background ID-key inventory. Private Realm figures remain outside the common Search
+index. Complete ordering still requires scored canonical-name ties and admitted predicate composition before Search
+may compose the finite frontier. Search retains parsing,
 text/analyzer/Boolean semantics, admission, useful-page accounting, public response and signed outer cursor.
 The required scored order is score descending, canonical name ascending (missing last), then subject ID ascending;
 the unscored phase uses that same name/ID order. The compatibility `page` retains its score/UUID-descending order.
 
 The native observation binds the selected population, question measurement identity, revision, publication digest
 and explicit provenance (Global or the owning Realm), current Realm authority/revision, prior eligibility and
-publication generation, and the population home's epoch/position. Every native partition inventory, scored read
+publication generation, the population home's epoch/position and the canonical population observation. Every native partition inventory, scored read
 and figure proof reobserves this evidence before and after its read, including empty requests. A changed caption,
 lifecycle, prior, publication or source home restarts the read; denied Realm or question provenance fails closed.
 Retired questions cannot supply new observations. Pending population work cannot prove eligibility, including an
 empty scored set or an inactive prior. Exact figure proofs preserve score zero and withhold below-threshold figures.
-These observations do not supply canonical name generation or replace current Subject disclosure.
+Canonical observation homes include each occupied native Subject partition's committed generation and source-home
+epoch/position. `semantic.subject.canonical_name` follows the current native label head in language order, with
+missing names last and UUID ascending ties; the native expression index supplies bounded partition-local seeks.
+Term head changes and privileged fact minimization/removal refresh this key in the same transaction. Native
+population counts and generations extend `semantic.partition_subjects`; they do not introduce another catalogue.
+The partition frontier includes internal hidden/redirected candidates: it never grants Subject read access.
+`readCanonicalPartition` reobserves the selected Realm/question and complete native figure evidence even for empty
+reads and inactive priors. Scored candidates stay explicit and must be charged when walking the complement.
+These primitives do not replace current Subject disclosure or prove the complete Search predicate.
+
+Decision: canonical name keys extend the native Subject row and use committed per-home population generations;
+Search remains unavailable until canonical scored ties and complete admitted predicate execution are delivered.
 
 Decision: native primitive reads conservatively restart on any population-home position change until the complete
 canonical producer supplies narrower currentness evidence; the scored-only compatibility port is unchanged.
