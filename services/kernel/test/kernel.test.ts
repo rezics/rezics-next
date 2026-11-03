@@ -427,9 +427,11 @@ type Loose = LooseRoutes<Kernel['~Routes']>;
 const precise: [Loose] extends [never] ? true : Loose = true;
 
 test("the kernel app's type, which is the Eden contract, carries exactly the routes it serves and their responses", () => {
-  const served = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) }).routes.map(
-    ({ method, path }) => `${method} ${path}`,
-  );
+  const app = createKernel({ receiptKeys: testReceiptKeys(), pool, routeKey: new Uint8Array(32) });
+  const served = app.routes.map(({ method, path }) => `${method} ${path}`);
+  const journal = openApiDocument(app).paths['/v1/progressSessions/{sessionId}/journal'];
+  expect(journal?.get?.operationId).toBe('progress_session_journal.read');
+  expect(journal?.put?.operationId).toBe('progress_session_journal.update');
   expect([complete, precise]).toEqual([true, true]);
   expect(served.sort()).toEqual([...typed].sort());
 });
