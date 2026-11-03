@@ -5,7 +5,7 @@ import { accessCommandAuthorization } from '../../src/request/access.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { mergeSubjects } from '../../src/semantic/merges.ts';
 import { createAuthService } from '@rezics/auth';
-import { exportJWK, generateKeyPair } from 'jose';
+import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -137,7 +137,10 @@ export async function createSourceStatisticLifecycleFixture(options: { nativeFig
         })),
     });
     const fullBearer = await issue(auth, accountId, clientId, scopes);
-    const readerBearer = await issue(auth, accountId, clientId, ['subject:read']);
+    // Keep the real Auth session claims while restricting the independently signed reader token.
+    const readerBearer = await new SignJWT({ ...decodeJwt(fullBearer), scope: 'subject:read' })
+      .setProtectedHeader({ alg: 'ES256', kid: signing.kid, typ: 'at+jwt' })
+      .sign(await importJWK(signing, 'ES256'));
 
     await database.admin.query(
       `INSERT INTO access.resource_role_grant
