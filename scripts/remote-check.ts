@@ -2981,7 +2981,9 @@ for current,dirs,files in os.walk(root,followlinks=False):
         if rel in CONTROL_ROOT_FILES: continue
         add_actual_path(rel)
 if actual_paths!=expected_paths:
-    raise SystemExit('uploaded source file set does not match the frozen candidate')
+    raise SystemExit('uploaded source file set does not match the frozen candidate\nmissing: '+
+                     repr(sorted(expected_paths-actual_paths)[:10])+'\nunexpected: '+
+                     repr(sorted(actual_paths-expected_paths)[:10]))
 `;
 
 export const preparedInputEvidenceProgram = String.raw`import hashlib,json,os,stat,sys
