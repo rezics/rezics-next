@@ -113,7 +113,7 @@ const meta = {
         await expect(within(row as HTMLElement).getByText(m.realms_entry_unavailable())).toBeVisible();
         await expect(row.querySelectorAll('a')).toHaveLength(0);
         if (realm.description) {
-          const description = row.querySelector('p');
+          const description = row.querySelector('[data-content-item-slot="preview"] p');
           await expect(description).toHaveTextContent(realm.description);
           await expect(description).toHaveAttribute('class', 'text-sm leading-relaxed text-muted-foreground');
         } else await expect(row.querySelector('[data-content-item-slot="preview"]')).toBeNull();

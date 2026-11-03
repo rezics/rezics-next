@@ -235,7 +235,7 @@ afterAll(async () => {
   }
 });
 
-test('the actual signed-in route hydrates its one read through the current query result and keeps SSR metadata and native links', async () => {
+test('the actual signed-in route hydrates its one read through the current query result and keeps SSR metadata with unavailable entry', async () => {
   resetReader(async () => page('SSR member realm', 'opaque-next-cursor'));
   const surface = await createSurface();
   try {
@@ -245,7 +245,7 @@ test('the actual signed-in route hydrates its one read through the current query
     const markup = renderToString(surface.tree());
     expect(markup).toContain('SSR member realm');
     expect(markup).toContain('Private description for SSR member realm');
-    expect(markup).toContain('href="/en/realms/0192f3a0-6c1e-7b2a-9d4e-000000000201"');
+    expect(markup).not.toContain('href="/en/realms/0192f3a0-6c1e-7b2a-9d4e-000000000201"');
     expect(readCalls).toEqual([{}]);
 
     surface.host.innerHTML = markup;
@@ -269,7 +269,7 @@ test('the actual current route reads once under StrictMode and renders the Query
     expect(visiblePrivateNames(surface)).toContain('Query-owned realm');
     expect(visiblePrivateNames(surface)).toContain('Private description for Query-owned realm');
     expect(surface.host.querySelector('h2')?.textContent).toBe('Query-owned realm');
-    expect(surface.host.querySelector('a[href="/en/realms/0192f3a0-6c1e-7b2a-9d4e-000000000201"]')).not.toBeNull();
+    expect(surface.host.querySelector('li a')).toBeNull();
   } finally {
     await surface.dispose();
   }
