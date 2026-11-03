@@ -127,6 +127,7 @@ A shared dependency change emits one scope obligation with no Space enumeration.
 retry retain their existing per-event bounds. Physical/native/main convergence costs remain unmeasured; focused
 `test/community/space-discovery.test.ts` covers actual native edit/gate/removal/restoration delivery, reordering,
 duplicate delivery and one actual source-fence scope obligation.
+
 ## Public Space discovery source
 
 `spaceDiscoverySource({pool,access,clock?}, {deadline}?)` in `space-discovery.ts` exports Community's internal
