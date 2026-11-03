@@ -53,6 +53,8 @@ Accounts summary batch supplies at most 20 current identities with its own final
 omits `author`; withheld or empty text omits `excerpt`. No author IDs, ratings or per-row enrichment are added.
 Excerpts collapse native document whitespace and count at most 160 Unicode code points, stopping before a
 whole grapheme would exceed the cap. Home uses these fields without a second content or identity request.
+The [feed contract](../../../../docs/feeds.md#content-reaction-summaries) defines native reaction targets, viewer slots,
+source freshness and the bounded cost for disclosed thread/post cards.
 The producer constants derive at most 91 mixed candidates plus 21 author keys (seven identities, each with
 at most one avatar and one verified-agent Subject), 123 anonymous candidates, or 20 Following candidates plus
 60 author keys; the composed maxima 112, 123 and 80 remain below the 160 ceiling.
