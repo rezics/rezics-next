@@ -14,7 +14,7 @@ import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
-import { exportSectionsV2, initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
+import { initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
 import {
   libraryExportManifest as manifest,
   LIBRARY_EXPORT_LIMITS,
@@ -122,7 +122,7 @@ function seekOf(
   if (capture.format_version === 1) return { section, parent, after, rows, bytes };
   if (
     !Array.isArray(sectionTotals) ||
-    sectionTotals.length !== exportSectionsV2.length ||
+    sectionTotals.length !== sections.length ||
     sectionTotals.some(
       (total) =>
         !Array.isArray(total) ||
@@ -256,8 +256,10 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
     const expiredEvidence =
       (
         await tx.query(
-          `SELECT 1 FROM library.list_import_mal WHERE route=$1 AND account_id=$2
-        AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz LIMIT 1`,
+          `SELECT 1 WHERE EXISTS (SELECT 1 FROM library.list_import_mal WHERE route=$1 AND account_id=$2
+        AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)
+        ${capture.format_version === 3 ? `OR EXISTS (SELECT 1 FROM library.vndb_import WHERE route=$1 AND account_id=$2
+          AND expires_at>$3::timestamptz AND expires_at<=$4::timestamptz)` : ''}`,
           [route, accountId, capture.created_at, new Date(now).toISOString()],
         )
       ).rowCount !== 0;
@@ -345,6 +347,11 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           };
         const seek = seekOf(deps, accountId, capture, token, now);
         const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at, capture.format_version);
+        // Expiry has no row write. Recheck after serialization as well as before reading,
+        // including replay of a completed download under the original request identity.
+        const final = await current(tx, route, accountId, id, Math.max(now, clock().getTime()));
+        if (final.state !== 'collecting' && final.state !== 'ready')
+          return { exportId: id, state: final.state, records: [], next: null, manifest: null };
         if (
           page.oversized ||
           page.seek.rows > LIBRARY_EXPORT_LIMITS.records ||
@@ -381,7 +388,7 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
                 ...(capture.format_version >= 2
                   ? {
                       sectionTotals: Object.fromEntries(
-                        exportSectionsV2.map((section, index) => {
+                        sectionsForVersion(capture.format_version).map((section, index) => {
                           const [rows, recordBytes] = page.seek.sectionTotals?.[index] ?? [0, 0];
                           return [section, { rows, recordBytes }];
                         }),
