@@ -225,9 +225,10 @@ function CreateSubjectFormLive({
   const hasCurrentType = directoryMode ? directoryType?.id === type : types.some((entry) => entry.id === type);
   const definitionsBlocked =
     !request.current &&
-    (!!profile?.metadata?.pending || (directoryMode
-      ? directoryPending || (!!type && !hasCurrentType)
-      : definitionsFailed || definitions.isFetching || types.length === 0));
+    (!!profile?.metadata?.pending ||
+      (directoryMode
+        ? directoryPending || (!!type && !hasCurrentType)
+        : definitionsFailed || definitions.isFetching || types.length === 0));
   // Profile callbacks share this form's workspace and command lock, including before busy renders.
   const profileEditable = !disabled && !definitionsBlocked && !profile?.metadata?.pending && !!selectedType && !created;
   const currentEdit = useRef<object | null>(null);

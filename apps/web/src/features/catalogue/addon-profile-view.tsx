@@ -86,7 +86,10 @@ function AddonProfileLive({
     if (!current.ok) return current;
     if (current.workIssue) return { ok: false as const, reason: current.workIssue };
     if (!current.work || current.work.subject.id !== targetId) return { ok: false as const, reason: 'stale' as const };
-    if (!addonFields(current.release).includes(addonBase) || !addonTarget(current.release, addonBase, current.work.subject.type))
+    if (
+      !addonFields(current.release).includes(addonBase) ||
+      !addonTarget(current.release, addonBase, current.work.subject.type)
+    )
       return { ok: false as const, reason: 'invalid' as const };
     return { ok: true as const, type: current.work.subject.type };
   };
@@ -156,7 +159,9 @@ function AddonProfileLive({
                     </>
                   ) : (
                     <>
-                      <p><code>{read.workId}</code></p>
+                      <p>
+                        <code>{read.workId}</code>
+                      </p>
                       <EditorFailure locale={locale} reason={read.workIssue ?? 'unavailable'} />
                     </>
                   )}
@@ -250,10 +255,11 @@ function AddonProfileLive({
           {read.public && (
             <section className="min-w-0 space-y-3">
               <h2 className="text-xl font-semibold">{m.addon_base_current_title({}, o)}</h2>
-              {!addonFields(read.release).includes(addonBase) && (
-                <p role="status">{m.addon_base_withdrawn({}, o)}</p>
-              )}
-              <AddonBaseCurrent read={read as AddonReadyRead & { public: NonNullable<AddonReadyRead['public']> }} locale={locale} />
+              {!addonFields(read.release).includes(addonBase) && <p role="status">{m.addon_base_withdrawn({}, o)}</p>}
+              <AddonBaseCurrent
+                read={read as AddonReadyRead & { public: NonNullable<AddonReadyRead['public']> }}
+                locale={locale}
+              />
             </section>
           )}
           {read.public && (
@@ -352,7 +358,13 @@ function AddonProfileLive({
   );
 }
 
-function AddonBaseCurrent({ read, locale }: { read: AddonReadyRead & { public: NonNullable<AddonReadyRead['public']> }; locale: string }) {
+function AddonBaseCurrent({
+  read,
+  locale,
+}: {
+  read: AddonReadyRead & { public: NonNullable<AddonReadyRead['public']> };
+  locale: string;
+}) {
   const options = { locale: locale as never };
   const statements = read.public.subject.statements[addonBase] ?? [];
   const unresolved = read.public.subject.resolution?.[addonBase] === 'unresolved';
@@ -386,7 +398,9 @@ function AddonBaseCurrent({ read, locale }: { read: AddonReadyRead & { public: N
                   <dt className="text-muted-foreground">
                     {pageText(read.release.properties[part.property.id]?.labels ?? {}, locale).text || part.property.id}
                   </dt>
-                  <dd><CandidateValue snak={part} related={read.public.related} locale={locale} /></dd>
+                  <dd>
+                    <CandidateValue snak={part} related={read.public.related} locale={locale} />
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -399,7 +413,9 @@ function AddonBaseCurrent({ read, locale }: { read: AddonReadyRead & { public: N
                   {reference.parts.map((part, at) => (
                     <p key={at}>
                       <span className="text-muted-foreground">
-                        {pageText(read.release.properties[part.property.id]?.labels ?? {}, locale).text || part.property.id}:{' '}
+                        {pageText(read.release.properties[part.property.id]?.labels ?? {}, locale).text ||
+                          part.property.id}
+                        :{' '}
                       </span>
                       <CandidateValue snak={part} related={read.public.related} locale={locale} />
                     </p>

@@ -56,14 +56,15 @@ describe('native add-on base-work workspace', () => {
 
     const page = await fixture.alice.context.newPage();
     page.setDefaultTimeout(60_000);
-    const creation = await page.goto(
-      `${fixture.stack.web}/en/catalogue/addon?work=${encodeURIComponent(base.id)}`,
-      { waitUntil: 'domcontentloaded' },
-    );
+    const creation = await page.goto(`${fixture.stack.web}/en/catalogue/addon?work=${encodeURIComponent(base.id)}`, {
+      waitUntil: 'domcontentloaded',
+    });
     expect(creation?.status()).toBe(200);
     await hydrate(page);
     await playExpect(page.getByRole('heading', { name: 'Work query suggestion', exact: true })).toBeVisible();
-    await playExpect(page.getByText('This exact readable work came from page context.', { exact: false })).toBeVisible();
+    await playExpect(
+      page.getByText('This exact readable work came from page context.', { exact: false }),
+    ).toBeVisible();
     const creationPicker = page.getByRole('combobox', { name: 'Base work', exact: true });
     await playExpect(creationPicker).toHaveValue('');
     await chooseSubject(page, 'Base work', base);
@@ -105,11 +106,17 @@ describe('native add-on base-work workspace', () => {
     await hydrate(correction);
 
     await playExpect(correction.getByRole('heading', { name: 'Work query suggestion', exact: true })).toBeVisible();
-    await playExpect(correction.getByRole('heading', { name: 'Current base-work membership', exact: true })).toBeVisible();
-    await playExpect(correction.getByText('The current public read has no selected base-work statement.')).toBeVisible();
+    await playExpect(
+      correction.getByRole('heading', { name: 'Current base-work membership', exact: true }),
+    ).toBeVisible();
+    await playExpect(
+      correction.getByText('The current public read has no selected base-work statement.'),
+    ).toBeVisible();
     expect(await readPublicStatements(fixture.stack, addon.id, baseProperty)).toEqual([]);
 
-    const workspace = correction.getByRole('heading', { name: 'Choose a base work explicitly', exact: true }).locator('xpath=..');
+    const workspace = correction
+      .getByRole('heading', { name: 'Choose a base work explicitly', exact: true })
+      .locator('xpath=..');
     await workspace.getByRole('button', { name: 'Open relation editor', exact: true }).click();
     await playExpect(correction.getByLabel('Relation', { exact: true })).toHaveValue(baseProperty);
     await chooseSubject(correction, 'Target subject', base);

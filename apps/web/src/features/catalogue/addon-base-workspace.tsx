@@ -9,13 +9,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { pageText } from '../pages/data';
 import { EditorFailure, PartValue, type StatementFieldsRead } from './statement-editor-view';
 import { GameInitialFactRemove, GameStatementFields } from './game-profile-fields';
-import {
-  addonBase,
-  addonFields,
-  addonTarget,
-  addonType,
-  type AddonRead,
-} from './addon-profile';
+import { addonBase, addonFields, addonTarget, addonType, type AddonRead } from './addon-profile';
 import type { StatementInput } from './statement-editor';
 
 export type AddonBaseDraft = { key: string; statement: StatementInput };
@@ -93,13 +87,19 @@ export function AddonBaseWorkspace({
       : '';
   const exact = checked?.subject.id === target ? checked : read.work?.subject.id === target ? read.work : undefined;
   const pickerValue = target
-    ? [picked?.id === target ? picked : exact ? exactPickerSubject(exact, read.release, locale) : {
-        id: target,
-        title: target,
-        types: [],
-        typeLabel: '',
-        cover: null,
-      }]
+    ? [
+        picked?.id === target
+          ? picked
+          : exact
+            ? exactPickerSubject(exact, read.release, locale)
+            : {
+                id: target,
+                title: target,
+                types: [],
+                typeLabel: '',
+                cover: null,
+              },
+      ]
     : [];
   const admitted = addonFields(read.release).includes(addonBase);
   const canEdit = !disabled && !checking;
@@ -185,10 +185,12 @@ export function AddonBaseWorkspace({
               <p>
                 <a
                   className="underline underline-offset-4"
-                  href={subjectHref(
-                    { id: read.work.subject.id, label: pageText(read.work.subject.labels, locale).text },
-                    locale,
-                  ).href}
+                  href={
+                    subjectHref(
+                      { id: read.work.subject.id, label: pageText(read.work.subject.labels, locale).text },
+                      locale,
+                    ).href
+                  }
                 >
                   {pageText(read.work.subject.labels, locale).text || m.subject_value_unlabelled({}, options)}
                 </a>
@@ -200,7 +202,9 @@ export function AddonBaseWorkspace({
             </>
           ) : (
             <>
-              <p className="break-all text-sm"><code>{read.workId}</code></p>
+              <p className="break-all text-sm">
+                <code>{read.workId}</code>
+              </p>
               <EditorFailure locale={locale} reason={read.workIssue ?? 'unavailable'} />
             </>
           )}

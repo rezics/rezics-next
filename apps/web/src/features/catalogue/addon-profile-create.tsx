@@ -8,13 +8,7 @@ import { createTypes, type CreateResult } from './create-subject';
 import { GameInitialFacts } from './game-profile-fields';
 import { AddonBaseWorkspace, type AddonBaseDraft } from './addon-base-workspace';
 import type { StatementInput } from './statement-editor';
-import {
-  addonBase,
-  addonInitialDraft,
-  addonType,
-  type AddonRead,
-  type AddonTransport,
-} from './addon-profile';
+import { addonBase, addonInitialDraft, addonType, type AddonRead, type AddonTransport } from './addon-profile';
 
 type InitialFact = { key: string; statement: StatementInput };
 /** Configures the existing game creation controls for the one admitted add-on Type. */
@@ -72,11 +66,10 @@ export function AddonProfileCreate({
         descriptionLanguage: (type) => pageText(release.types[type]?.descriptions, locale).lang,
         control: (pointer) => (pointer.startsWith('/statements') ? factsId : undefined),
         prepare: (initial) =>
-          addonInitialDraft(
-            release,
-            initial,
-            [...facts.map((row) => row.statement), ...(baseDraft ? [baseDraft.statement] : [])],
-          ),
+          addonInitialDraft(release, initial, [
+            ...facts.map((row) => row.statement),
+            ...(baseDraft ? [baseDraft.statement] : []),
+          ]),
         fields: (_type, disabled, canEdit) => (
           <ContentItemFrame
             as="div"

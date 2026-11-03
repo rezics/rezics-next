@@ -293,8 +293,7 @@ function RelationEditorLive({
   const current = read?.ok ? read : undefined;
   const fields = current?.fields.filter(
     (item) =>
-      (propertyIds === undefined || propertyIds.includes(item.id)) &&
-      !(excludedProperties ?? []).includes(item.id),
+      (propertyIds === undefined || propertyIds.includes(item.id)) && !(excludedProperties ?? []).includes(item.id),
   );
   const field = fields?.find((item) => item.id === draft.property.id);
   useEffect(() => {
@@ -948,12 +947,7 @@ function RelationEditorLive({
     setTargetFailure(undefined);
     try {
       const resolved = await resolveTarget(value);
-      if (
-        !mount.active() ||
-        !visible ||
-        targetCheck.current !== generation ||
-        draftRevision.current !== revision
-      )
+      if (!mount.active() || !visible || targetCheck.current !== generation || draftRevision.current !== revision)
         return;
       if (!resolved.ok) {
         setTargetFailure(resolved.reason);
