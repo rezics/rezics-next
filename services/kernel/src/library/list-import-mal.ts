@@ -44,7 +44,11 @@ export type MalOutcome = {
   applied: string[];
   retained: string[];
   reason: string | null;
-  progress?: { occurrence: ProgressAdoptionCheckpoint['occurrence']; complete: boolean; measures: ReturnType<typeof progressResults> };
+  progress?: {
+    occurrence: ProgressAdoptionCheckpoint['occurrence'];
+    complete: boolean;
+    measures: ReturnType<typeof progressResults>;
+  };
 };
 type Binding = { subject: string; route: number; source: string; externalId: string };
 export type MalReview = {
@@ -61,7 +65,13 @@ export type MalReview = {
   fingerprint: string;
   progress?: ProgressAdoptionPlan;
 };
-type Intent = { review: MalReview; fields: string[]; key: string; progress?: ProgressAdoptionCheckpoint; outcome?: MalOutcome };
+type Intent = {
+  review: MalReview;
+  fields: string[];
+  key: string;
+  progress?: ProgressAdoptionCheckpoint;
+  outcome?: MalOutcome;
+};
 type Document = {
   xml: string;
   rows: MalRow[];
@@ -75,18 +85,20 @@ const missing = () => new ProblemError('not_found');
 const stale = () => new ProblemError('conflict');
 
 function malProgressSources(row: MalRow): ProgressSourceValue[] {
-  const pairs = row.kind === 'anime'
-    ? [['my_watched_episodes', 'episode']]
-    : [['my_read_chapters', 'chapter'], ['my_read_volumes', 'volume']];
+  const pairs =
+    row.kind === 'anime'
+      ? [['my_watched_episodes', 'episode']]
+      : [
+          ['my_read_chapters', 'chapter'],
+          ['my_read_volumes', 'volume'],
+        ];
   return pairs.map(([field, unit]) => {
     const value = row.progress[field!] ?? { kind: 'missing' as const };
     return {
       field: field!,
       unit: unit!,
       state: value.kind,
-      ...(typeof value.value === 'number' && Number.isSafeInteger(value.value)
-        ? { amount: String(value.value) }
-        : {}),
+      ...(typeof value.value === 'number' && Number.isSafeInteger(value.value) ? { amount: String(value.value) } : {}),
     };
   });
 }
@@ -231,13 +243,31 @@ export function createMalImport(deps: Dependencies) {
         ? { subject: claim.subject_id, route, source: identifier.source, externalId: identifier.value }
         : null;
     if (!target)
-      return { target: null, binding, source: null, profile: null, profileBinding: null, current: null, state: null, match: 'unmatched' as const };
+      return {
+        target: null,
+        binding,
+        source: null,
+        profile: null,
+        profileBinding: null,
+        current: null,
+        state: null,
+        match: 'unmatched' as const,
+      };
     const observation = await readLibraryProfileSourceObservation(
       { pool, access, actor: a.actor, at: a.at, deadline },
       target,
     );
     if (!observation || observation.source.subjectId !== target)
-      return { target: null, binding: null, source: null, profile: null, profileBinding: null, current: null, state: null, match: 'unavailable' as const };
+      return {
+        target: null,
+        binding: null,
+        source: null,
+        profile: null,
+        profileBinding: null,
+        current: null,
+        state: null,
+        match: 'unavailable' as const,
+      };
     const { source, anchor } = observation;
     let current: Entry | null = null;
     try {
@@ -258,9 +288,10 @@ export function createMalImport(deps: Dependencies) {
         acceptingType: anchor.acceptingType,
       },
       profile: source.kind === 'supported' ? source.profile : null,
-      profileBinding: source.kind === 'supported'
-        ? { pin: source.pin, epoch: anchor.identityEpoch.toString(), acceptingType: anchor.acceptingType }
-        : null,
+      profileBinding:
+        source.kind === 'supported'
+          ? { pin: source.pin, epoch: anchor.identityEpoch.toString(), acceptingType: anchor.acceptingType }
+          : null,
       current: current
         ? { state: current.state, revision: current.revision, incarnationId: current.incarnationId ?? null }
         : null,
@@ -268,7 +299,11 @@ export function createMalImport(deps: Dependencies) {
       match: current ? ('already-matched' as const) : ('matched' as const),
     };
   }
-  async function progressBinding(actor: Actor, subjectId: string, deadline: number): Promise<ProgressProfileBinding | null> {
+  async function progressBinding(
+    actor: Actor,
+    subjectId: string,
+    deadline: number,
+  ): Promise<ProgressProfileBinding | null> {
     const a = await authority(actor, deadline);
     const observation = await readLibraryProfileSourceObservation(
       { pool, access, actor: a.actor, at: a.at, deadline },
@@ -496,7 +531,10 @@ export function createMalImport(deps: Dependencies) {
         if (statuses.includes('stale')) {
           outcome.status = 'stale';
           outcome.reason = 'refresh-review';
-        } else if (outcome.status === 'unsupported' && statuses.some((status) => status === 'applied' || status === 'cleared')) {
+        } else if (
+          outcome.status === 'unsupported' &&
+          statuses.some((status) => status === 'applied' || status === 'cleared')
+        ) {
           outcome.status = 'applied';
           outcome.reason = null;
         } else if (statuses.includes('failed')) {

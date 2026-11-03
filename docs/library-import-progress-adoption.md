@@ -19,6 +19,8 @@ remain unsupported until a current accepting profile admits those exact units.
 | AniList `progress` | ANIME | `episode` | Anime series and season |
 | AniList `progress` | MANGA | `chapter` | Unsupported by current Book profiles |
 | AniList `progressVolumes` | MANGA | `volume` | Unsupported by current Book profiles |
+| AniList `progress` or `progressVolumes` | Other media type with retained field | none | Unsupported |
+| AniList `progressVolumes` | ANIME with retained field | none | Unsupported |
 
 The source field mapping is fixed and does not use titles, labels, dimensions or conversion. An accepting profile must
 admit the exact unit as `scalar_amount` with native structure and identity `none`. The current profile also validates
@@ -71,12 +73,17 @@ The receiving controller owns native placement and those integration gates.
 ## Provider extensions
 
 MAL keeps `POST /v1/libraryImports/mal/:id/review`, `/apply` and the existing paged `GET` response. Review accepts an
-optional progress selection; apply continues to confirm the review version and existing source fields. The row page
-adds a private exact field/unit admission matrix and per-measure result.
+optional progress selection shaped as an explicit existing session ID or `{ kind: "start", primaryUnit }`, plus one
+to eight unique retained fields with `adopt` or explicit `clear` actions. `replace` opts into replacing an existing
+local amount and applies only to `adopt`; new sessions accept `adopt` only. Apply continues to confirm the review
+version and existing source fields. The row page adds a private exact field/unit admission matrix and per-measure result.
 
 AniList keeps `POST /v1/libraryImports/anilist/:importId:review`, `:apply` and its existing paged response. Review
 accepts the same occurrence and per-measure choices alongside its existing source-field selection. Apply continues
-to confirm the stored review ID. The row page adds the private field/unit matrix and per-measure result.
+to confirm the stored review ID. Both APIs return `stale` for a changed shared revision, current profile or selected
+occurrence; separate start and measure receipts expose an admitted partial occurrence when a later measure fails.
+Failed or uncertain effects retry the original native receipt and operands. The row page adds the private field/unit
+matrix and per-measure result.
 
 Both provider methods use the native `GET /v1/progressSessions?subjectId=...` bounded selection pages,
 `GET /v1/progressSessions/:sessionId` inspection, `POST /v1/progressSessions` explicit start, and

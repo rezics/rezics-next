@@ -16,9 +16,7 @@ export type ProgressSourceValue = {
   amount?: string;
 };
 export type ProgressAdoptionInput = {
-  occurrence:
-    | { kind: 'existing'; sessionId: string }
-    | { kind: 'start'; primaryUnit: string };
+  occurrence: { kind: 'existing'; sessionId: string } | { kind: 'start'; primaryUnit: string };
   measures: { field: string; action: 'adopt' | 'clear'; replace?: boolean }[];
 };
 export type ProgressProfileBinding = {
@@ -115,20 +113,24 @@ export function progressMeasureUnit(
 }
 
 function bindingMatches(left: ProgressProfileBinding, right: ProgressProfileBinding | null): boolean {
-  return right !== null &&
+  return (
+    right !== null &&
     left.epoch === right.epoch &&
     left.acceptingType === right.acceptingType &&
     left.pin.provenance === right.pin.provenance &&
     left.pin.releaseDigest === right.pin.releaseDigest &&
     left.pin.profileId === right.pin.profileId &&
-    left.pin.acceptingType === right.pin.acceptingType;
+    left.pin.acceptingType === right.pin.acceptingType
+  );
 }
 
 function staleError(error: unknown) {
-  return error instanceof ProgressConflictError ||
+  return (
+    error instanceof ProgressConflictError ||
     error instanceof LibraryConflictError ||
     error instanceof LibraryNotFoundError ||
-    (error instanceof ProblemError && ['unsupported_library_profile', 'not_found', 'conflict'].includes(error.code));
+    (error instanceof ProblemError && ['unsupported_library_profile', 'not_found', 'conflict'].includes(error.code))
+  );
 }
 
 export function describeProgressSources(
@@ -139,9 +141,10 @@ export function describeProgressSources(
     const descriptor = progressMeasureUnit(profile, source.unit);
     const amount = source.amount ?? null;
     const numeric = source.state === 'zero' || source.state === 'value';
-    const parsed = numeric && amount !== null && descriptor
-      ? parseRecord('scalar_amount', { amount }, { unit: source.unit!, state: 'active' }, descriptor)
-      : null;
+    const parsed =
+      numeric && amount !== null && descriptor
+        ? parseRecord('scalar_amount', { amount }, { unit: source.unit!, state: 'active' }, descriptor)
+        : null;
     const supported = descriptor !== null && (!numeric || parsed?.ok === true);
     return {
       field: source.field,
@@ -196,7 +199,12 @@ export async function reviewProgressAdoption(
   input: ProgressAdoptionInput,
   startRequestKey: string,
 ): Promise<ProgressAdoptionPlan> {
-  if (!input.measures.length || input.measures.length > 8 || new Set(input.measures.map((m) => m.field)).size !== input.measures.length)
+  if (
+    !input.measures.length ||
+    input.measures.length > 8 ||
+    new Set(input.measures.map((m) => m.field)).size !== input.measures.length ||
+    input.measures.some((measure) => measure.action === 'clear' && measure.replace === true)
+  )
     throw new ProblemError('invalid_request');
   const sourceByField = new Map(sourceValues.map((source) => [source.field, source]));
   if (input.measures.some((measure) => !sourceByField.has(measure.field))) throw new ProblemError('invalid_request');
@@ -209,47 +217,52 @@ export async function reviewProgressAdoption(
     const source = sourceByField.get(selection.field)!;
     const descriptor = progressMeasureUnit(profile, source.unit);
     const numeric = source.state === 'value' || source.state === 'zero';
-    const nonNumericState = source.state === 'missing' || source.state === 'unknown' || source.state === 'invalid'
-      ? source.state
-      : 'invalid';
+    const nonNumericState =
+      source.state === 'missing' || source.state === 'unknown' || source.state === 'invalid' ? source.state : 'invalid';
     let eligibility: ProgressAdoptionPlanMeasure['eligibility'] =
-      selection.action === 'adopt' && !numeric
-        ? nonNumericState
-        : descriptor === null
-          ? 'unsupported'
-          : 'ready';
+      selection.action === 'adopt' && !numeric ? nonNumericState : descriptor === null ? 'unsupported' : 'ready';
     let reason: string | null = null;
     if (selection.action === 'adopt' && !numeric) {
       eligibility = nonNumericState;
-      reason = source.unit === null
-        ? 'source-field-has-no-unit-mapping'
-        : descriptor === null
-          ? 'current-profile-does-not-admit-scalar-unit'
-          : null;
+      reason =
+        source.unit === null
+          ? 'source-field-has-no-unit-mapping'
+          : descriptor === null
+            ? 'current-profile-does-not-admit-scalar-unit'
+            : null;
     } else if (source.unit === null || !descriptor) {
       eligibility = 'unsupported';
       reason = source.unit === null ? 'source-field-has-no-unit-mapping' : 'current-profile-does-not-admit-scalar-unit';
-    } else if (selection.action === 'adopt' && (!source.amount || !parseRecord(
-      'scalar_amount',
-      { amount: source.amount },
-      { unit: source.unit, state: 'active' },
-      descriptor,
-    ).ok)) {
+    } else if (
+      selection.action === 'adopt' &&
+      (!source.amount ||
+        !parseRecord('scalar_amount', { amount: source.amount }, { unit: source.unit, state: 'active' }, descriptor).ok)
+    ) {
       eligibility = 'invalid';
       reason = 'source-value-is-outside-current-profile-rules';
     }
     if (input.occurrence.kind === 'existing' && current && (selection.action === 'clear' || eligibility === 'ready')) {
       if (!hasUnit(current, source.unit ?? '') || current.state !== 'active' || current.mode !== 'scalar_amount') {
         eligibility = 'unsupported';
-        reason = current.state !== 'active' ? 'selected-occurrence-is-not-active' : 'selected-occurrence-does-not-contain-unit';
+        reason =
+          current.state !== 'active'
+            ? 'selected-occurrence-is-not-active'
+            : 'selected-occurrence-does-not-contain-unit';
       } else if (recordingFor(presented!, source.unit!) !== 'supported') {
         eligibility = 'unsupported';
         reason = 'selected-occurrence-unit-is-not-currently-recordable';
       }
     }
-    if (selection.action === 'clear' && descriptor && input.occurrence.kind === 'existing' && current &&
-      current.state === 'active' && current.mode === 'scalar_amount' && hasUnit(current, source.unit ?? '') &&
-      recordingFor(presented!, source.unit!) === 'supported') {
+    if (
+      selection.action === 'clear' &&
+      descriptor &&
+      input.occurrence.kind === 'existing' &&
+      current &&
+      current.state === 'active' &&
+      current.mode === 'scalar_amount' &&
+      hasUnit(current, source.unit ?? '') &&
+      recordingFor(presented!, source.unit!) === 'supported'
+    ) {
       eligibility = 'ready';
       reason = null;
     }
@@ -315,7 +328,8 @@ export async function reviewProgressAdoption(
       return descriptor !== null && parseProgressMeasureCreate(measure, descriptor).ok;
     });
     const parsed = parseSessionCreate(candidate, primaryDescriptor);
-    if (!primaryTotal.ok || !additionalValid || !parsed.ok) reason = 'current-profile-requires-an-unavailable-total-or-shape';
+    if (!primaryTotal.ok || !additionalValid || !parsed.ok)
+      reason = 'current-profile-requires-an-unavailable-total-or-shape';
     else startInput = parsed.value;
   }
   return {
@@ -339,9 +353,7 @@ export function progressResults(
     const result = checkpoint?.steps[measure.field]?.result;
     if (result) return result;
     const status: ProgressAdoptionMeasureResult['status'] =
-      measure.eligibility === 'ready'
-        ? 'unattempted'
-        : measure.eligibility;
+      measure.eligibility === 'ready' ? 'unattempted' : measure.eligibility;
     return {
       field: measure.field,
       unit: measure.unit,
@@ -386,7 +398,10 @@ export async function executeProgressAdoption(
       };
       checkpoint.steps[measure.field] = {
         requestKey: step?.requestKey ?? '',
-        revision: step?.revision ?? checkpoint.lastRevision ?? (plan.occurrence.kind === 'existing' ? plan.occurrence.revision : 0),
+        revision:
+          step?.revision ??
+          checkpoint.lastRevision ??
+          (plan.occurrence.kind === 'existing' ? plan.occurrence.revision : 0),
         attempted: step?.attempted ?? false,
         result,
       };
@@ -403,7 +418,7 @@ export async function executeProgressAdoption(
       await controls.save(checkpoint);
       return checkpoint;
     }
-    if (!checkpoint.startAttempted && await controls.canceled()) {
+    if (!checkpoint.startAttempted && (await controls.canceled())) {
       await stopRemaining(0, 'unattempted', 'import-was-canceled-before-start');
       return checkpoint;
     }
@@ -413,7 +428,7 @@ export async function executeProgressAdoption(
     }
     if (!checkpoint.startAttempted) {
       checkpoint.startAttempted = true;
-      if (await controls.save(checkpoint, true) === false) {
+      if ((await controls.save(checkpoint, true)) === false) {
         checkpoint.startAttempted = false;
         await stopRemaining(0, 'unattempted', 'import-was-canceled-before-start');
         return checkpoint;
@@ -440,7 +455,8 @@ export async function executeProgressAdoption(
     }
   }
 
-  const occurrence = checkpoint.occurrence ??
+  const occurrence =
+    checkpoint.occurrence ??
     (plan.occurrence.kind === 'existing'
       ? {
           sessionId: plan.occurrence.sessionId,
@@ -515,10 +531,64 @@ export async function executeProgressAdoption(
       await controls.save(checkpoint);
       continue;
     }
-    if (measure.action === 'adopt' && plan.occurrence.kind === 'existing' && measure.currentAmount !== null && !measure.replace) {
+    if (!existingStep?.attempted && (await controls.canceled())) {
+      await stopRemaining(index, 'unattempted', 'import-was-canceled');
+      break;
+    }
+    if (!(await currentBinding())) {
+      await stopRemaining(index, 'stale', 'current-profile-or-subject-changed');
+      break;
+    }
+
+    let latest: Presented;
+    try {
+      latest = await inspect(sessions, actor, occurrence.sessionId);
+    } catch (error) {
+      if (
+        error instanceof ProblemError &&
+        ['not_found', 'conflict', 'unsupported_library_profile'].includes(error.code)
+      ) {
+        await stopRemaining(index, 'stale', 'selected-occurrence-is-no-longer-current');
+        break;
+      }
+      throw error;
+    }
+    const sameOccurrence =
+      latest.session.id === occurrence.sessionId &&
+      latest.session.subjectId === plan.subjectId &&
+      latest.session.startedAt === occurrence.startedAt &&
+      latest.session.transactionId === occurrence.transactionId;
+    if (
+      !sameOccurrence ||
+      latest.session.state !== 'active' ||
+      latest.session.mode !== 'scalar_amount' ||
+      recordingFor(latest, measure.unit) !== 'supported'
+    ) {
+      await stopRemaining(index, 'stale', 'selected-occurrence-or-measure-changed');
+      break;
+    }
+
+    const step = checkpoint.steps[measure.field];
+    const revision = step?.attempted ? step.revision : (checkpoint.lastRevision ?? latest.session.revision);
+    if (!step?.attempted && latest.session.revision !== revision) {
+      await stopRemaining(index, 'stale', 'shared-occurrence-revision-changed');
+      break;
+    }
+    const currentAmount = amountOf(latest.session, measure.unit);
+    if (
+      !step?.attempted &&
+      measure.action === 'adopt' &&
+      plan.occurrence.kind === 'existing' &&
+      currentAmount !== null &&
+      !measure.replace
+    ) {
+      if (currentAmount !== measure.currentAmount) {
+        await stopRemaining(index, 'stale', 'selected-measure-changed-since-review');
+        break;
+      }
       checkpoint.steps[measure.field] = {
         requestKey: '',
-        revision: checkpoint.lastRevision,
+        revision,
         attempted: false,
         result: {
           field: measure.field,
@@ -526,7 +596,7 @@ export async function executeProgressAdoption(
           action: measure.action,
           status: 'preserved',
           sourceAmount: measure.amount,
-          currentAmount: measure.currentAmount,
+          currentAmount,
           reason: 'preserve-local-measure',
         },
       };
@@ -534,10 +604,14 @@ export async function executeProgressAdoption(
       await controls.save(checkpoint);
       continue;
     }
-    if (measure.action === 'clear' && measure.currentAmount === null) {
+    if (!step?.attempted && measure.action === 'clear' && currentAmount === null) {
+      if (measure.currentAmount !== null) {
+        await stopRemaining(index, 'stale', 'selected-measure-changed-since-review');
+        break;
+      }
       checkpoint.steps[measure.field] = {
         requestKey: '',
-        revision: checkpoint.lastRevision,
+        revision,
         attempted: false,
         result: {
           field: measure.field,
@@ -553,44 +627,11 @@ export async function executeProgressAdoption(
       await controls.save(checkpoint);
       continue;
     }
-    if (!existingStep?.attempted && await controls.canceled()) {
-      await stopRemaining(index, 'unattempted', 'import-was-canceled');
-      break;
-    }
-    if (!(await currentBinding())) {
-      await stopRemaining(index, 'stale', 'current-profile-or-subject-changed');
-      break;
-    }
-
-    let latest: Presented;
-    try {
-      latest = await inspect(sessions, actor, occurrence.sessionId);
-    } catch (error) {
-      if (error instanceof ProblemError && ['not_found', 'conflict', 'unsupported_library_profile'].includes(error.code)) {
-        await stopRemaining(index, 'stale', 'selected-occurrence-is-no-longer-current');
-        break;
-      }
-      throw error;
-    }
-    const sameOccurrence = latest.session.id === occurrence.sessionId &&
-      latest.session.subjectId === plan.subjectId &&
-      latest.session.startedAt === occurrence.startedAt &&
-      latest.session.transactionId === occurrence.transactionId;
-    if (!sameOccurrence || latest.session.state !== 'active' || latest.session.mode !== 'scalar_amount' ||
-      recordingFor(latest, measure.unit) !== 'supported') {
-      await stopRemaining(index, 'stale', 'selected-occurrence-or-measure-changed');
-      break;
-    }
-
-    const step = checkpoint.steps[measure.field];
-    const revision = step?.attempted ? step.revision : checkpoint.lastRevision ?? latest.session.revision;
-    if (!step?.attempted && latest.session.revision !== revision) {
-      await stopRemaining(index, 'stale', 'shared-occurrence-revision-changed');
-      break;
-    }
-    const requestKey = step?.requestKey || `progress-adopt:${createHash('sha256')
-      .update(`${plan.requestKeySeed}\0${measure.field}\0${measure.action}`)
-      .digest('hex')}`;
+    const requestKey =
+      step?.requestKey ||
+      `progress-adopt:${createHash('sha256')
+        .update(`${plan.requestKeySeed}\0${measure.field}\0${measure.action}`)
+        .digest('hex')}`;
     const pending = {
       requestKey,
       revision,
@@ -598,7 +639,7 @@ export async function executeProgressAdoption(
     };
     checkpoint.steps[measure.field] = pending;
     checkpoint.measures = progressResults(plan, checkpoint);
-    if (await controls.save(checkpoint, true) === false) {
+    if ((await controls.save(checkpoint, true)) === false) {
       checkpoint.steps[measure.field] = {
         ...pending,
         attempted: false,

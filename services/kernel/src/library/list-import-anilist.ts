@@ -71,9 +71,19 @@ export type AniListOutcome = {
   ordinal: number;
   status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
   retained: string[];
-  progress?: { occurrence: ProgressAdoptionCheckpoint['occurrence']; complete: boolean; measures: ReturnType<typeof progressResults> };
+  progress?: {
+    occurrence: ProgressAdoptionCheckpoint['occurrence'];
+    complete: boolean;
+    measures: ReturnType<typeof progressResults>;
+  };
 };
-type Stored = { source: AniListRow; review?: Review; started?: boolean; progress?: ProgressAdoptionCheckpoint; outcome?: AniListOutcome };
+type Stored = {
+  source: AniListRow;
+  review?: Review;
+  started?: boolean;
+  progress?: ProgressAdoptionCheckpoint;
+  outcome?: AniListOutcome;
+};
 type Header = { document: unknown; rawUpload: string; scoreFormat: string | null; count: number; cancelled: boolean };
 const hash = (v: unknown) => createHash('sha256').update(canonicalize(v)!).digest('hex');
 const role: Record<string, string> = {
@@ -86,17 +96,25 @@ const role: Record<string, string> = {
 function aniListProgressSources(row: AniListRow): ProgressSourceValue[] {
   const evidence = row.evidence;
   const media = evidence.media;
-  const kind = media !== null && typeof media === 'object' && !Array.isArray(media)
-    ? (media as Record<string, unknown>).type
-    : null;
-  const fields: [string, string | null][] = kind === 'ANIME'
-    ? [['progress', 'episode'], ...(Object.hasOwn(evidence, 'progressVolumes') ? [['progressVolumes', null] as [string, null]] : [])]
-    : kind === 'MANGA'
-      ? [['progress', 'chapter'], ['progressVolumes', 'volume']]
-      : [
-          ...(Object.hasOwn(evidence, 'progress') ? [['progress', null] as [string, null]] : []),
+  const kind =
+    media !== null && typeof media === 'object' && !Array.isArray(media)
+      ? (media as Record<string, unknown>).type
+      : null;
+  const fields: [string, string | null][] =
+    kind === 'ANIME'
+      ? [
+          ['progress', 'episode'],
           ...(Object.hasOwn(evidence, 'progressVolumes') ? [['progressVolumes', null] as [string, null]] : []),
-        ];
+        ]
+      : kind === 'MANGA'
+        ? [
+            ['progress', 'chapter'],
+            ['progressVolumes', 'volume'],
+          ]
+        : [
+            ...(Object.hasOwn(evidence, 'progress') ? [['progress', null] as [string, null]] : []),
+            ...(Object.hasOwn(evidence, 'progressVolumes') ? [['progressVolumes', null] as [string, null]] : []),
+          ];
   return fields.map(([field, unit]) => {
     const present = Object.hasOwn(evidence, field!);
     const validity = row.fields.find((item) => item.field === field)?.validity;
@@ -254,9 +272,10 @@ export function createAniListImport(deps: Dependencies) {
           ? (source.profile.entryStateSet?.states ?? []).map((s) => ({ id: s.id, ...(s.role ? { role: s.role } : {}) }))
           : [],
       profile: source.kind === 'supported' ? source.profile : null,
-      profileBinding: source.kind === 'supported'
-        ? { pin: source.pin, epoch: String(anchor.identityEpoch), acceptingType: anchor.acceptingType }
-        : null,
+      profileBinding:
+        source.kind === 'supported'
+          ? { pin: source.pin, epoch: String(anchor.identityEpoch), acceptingType: anchor.acceptingType }
+          : null,
       proposedState: null,
     };
   }
@@ -381,12 +400,9 @@ export function createAniListImport(deps: Dependencies) {
     const rows = [];
     for (const row of raw) {
       const matching = await match(actor, row.payload.source);
-      const observed =
-        matching.state === 'matched'
-          ? await observe(actor, matching.candidates[0]!)
-          : null;
+      const observed = matching.state === 'matched' ? await observe(actor, matching.candidates[0]!) : null;
       const { profile, profileBinding: _profileBinding, ...visibleObservation } = observed ?? {};
-      const proposal = propose(observed ? visibleObservation as Observation : null, row.payload.source);
+      const proposal = propose(observed ? (visibleObservation as Observation) : null, row.payload.source);
       rows.push({
         ordinal: row.ordinal,
         source: row.payload.source,
@@ -414,7 +430,7 @@ export function createAniListImport(deps: Dependencies) {
     if (!input.skip && !selected) throw new LibraryConflictError();
     const inspected = selected ? await observe(actor, selected) : null;
     const { profile: _profile, profileBinding: _profileBinding, ...stateObservation } = inspected ?? {};
-    const observation = selected ? propose(inspected ? stateObservation as Observation : null, stored.source) : null;
+    const observation = selected ? propose(inspected ? (stateObservation as Observation) : null, stored.source) : null;
     if (selected && (!observation || selected !== observation.subjectId)) throw new LibraryConflictError();
     if (input.progress && (!selected || !inspected?.profile || !inspected.profileBinding))
       throw new LibraryConflictError();
