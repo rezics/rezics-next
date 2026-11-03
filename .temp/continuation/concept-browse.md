@@ -38,9 +38,9 @@ waiting: []
 acceptance:
   tests:
     - "Implement the retained traversal storage seam within the existing plan/worker lifecycle using indexed membership/frontier rows, CAS, expiry and bounded retirement cleanup. Connect Semantic's current indexed relations/configuration and runtime release observations; mount the hierarchy API and service caller."
-    - "Extend the universal typed condition algebra and current matcher for exact concepts and optional descendants, include/exclude, Boolean composition, disclosure and spoiler-qualified same-statement witnesses. Never turn incomplete traversal into negative evidence or lower complete closures to in:64."
-    - "Install /search/concepts with scheme selection, breadcrumbs, bounded parent/child pages, editable include/exclude, child toggles, spoiler threshold, URL/back navigation, useful result pages, accessible repair states and all eight locales."
-    - "Run native hierarchy/classified-subject 1x/4x/16x growth acceptance after integration when authorized, including sparse positives, dense rejection, interruption/resume, mutations and first/next/final pages; measure actual all-pool work against the derived bound. Run the connected browser journey after backend checks when authorized."
+    - 'Extend the universal typed condition algebra and current matcher for exact concepts and optional descendants, include/exclude, Boolean composition, disclosure and spoiler-qualified same-statement witnesses. Never turn incomplete traversal into negative evidence or lower complete closures to in:64.'
+    - 'Install /search/concepts with scheme selection, breadcrumbs, bounded parent/child pages, editable include/exclude, child toggles, spoiler threshold, URL/back navigation, useful result pages, accessible repair states and all eight locales.'
+    - 'Run native hierarchy/classified-subject 1x/4x/16x growth acceptance after integration when authorized, including sparse positives, dense rejection, interruption/resume, mutations and first/next/final pages; measure actual all-pool work against the derived bound. Run the connected browser journey after backend checks when authorized.'
   workerOwned: true
 estimate:
   lines: 2100

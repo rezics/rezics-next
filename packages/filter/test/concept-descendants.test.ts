@@ -44,10 +44,12 @@ test('concept statements require one item value and a UUID scheme', () => {
     { property: 'schema:genre', in: [root], concept: { scheme, includeChildren: 'yes' } },
   ])
     expect(() => parseFilter({ statement })).toThrow();
-  expect(() => admitFilter(parseFilter({ statement: { property: 'schema:genre', in: [root], concept: { scheme } } }), {
-    ...release,
-    types: { 'schema:Book': { facets: ['schema:name'] } },
-  })).toThrow();
+  expect(() =>
+    admitFilter(parseFilter({ statement: { property: 'schema:genre', in: [root], concept: { scheme } } }), {
+      ...release,
+      types: { 'schema:Book': { facets: ['schema:name'] } },
+    }),
+  ).toThrow();
 });
 
 test('ordinary exact statement values keep their existing grammar', () => {
