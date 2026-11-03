@@ -42,10 +42,10 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "Complete the retained hierarchy producer with current source witnesses, bounded all-pool reservations and replay-safe absence proofs, including empty terminal seeks."
+    - 'Complete the retained hierarchy producer with current source witnesses, bounded all-pool reservations and replay-safe absence proofs, including empty terminal seeks.'
     - Install exact and descendant Boolean concept conditions in universal Search and direct clients; revalidate native witnesses and restart the retained cut on rejected-candidate mutations.
-    - "Mount bounded authorized scheme, breadcrumb, parent and child APIs and the localized concepts journey with contextual native cards, current viewer actions, URL/back behavior and named repair states in all eight locales."
-    - "Derive useful-page work for raw candidates, leaves and contexts without fitted caps or unbounded refill; add focused tests and pass changed-workspace typing under the launch policy."
+    - 'Mount bounded authorized scheme, breadcrumb, parent and child APIs and the localized concepts journey with contextual native cards, current viewer actions, URL/back behavior and named repair states in all eight locales.'
+    - 'Derive useful-page work for raw candidates, leaves and contexts without fitted caps or unbounded refill; add focused tests and pass changed-workspace typing under the launch policy.'
   workerOwned: true
 estimate:
   lines: 1500

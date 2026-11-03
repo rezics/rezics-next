@@ -735,9 +735,10 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
     async function snapshot() {
       return inSearchSnapshot(pool, async (client) => {
         const home = await readPartition(client, partitionOf(route));
-        const schemeHome = partitionOf(route) === partitionOf(schemeRoute)
-          ? home
-          : await readPartition(client, partitionOf(schemeRoute));
+        const schemeHome =
+          partitionOf(route) === partitionOf(schemeRoute)
+            ? home
+            : await readPartition(client, partitionOf(schemeRoute));
         if (!home || !schemeHome || home.writeState === 'moved' || schemeHome.writeState === 'moved') return null;
         const runtime = await activeRelease(client);
         if (!runtime) return null;
@@ -816,9 +817,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         if (!final.conceptReady || !final.schemeReady) return { status: 'preparing' as const };
         if (!expected(final) || !final.member) return { status: 'rejected' as const };
         const binding = bind(final);
-        return same(bind(first), binding)
-          ? { status: 'current' as const, binding }
-          : { status: 'preparing' as const };
+        return same(bind(first), binding) ? { status: 'current' as const, binding } : { status: 'preparing' as const };
       },
       async children(input) {
         const { parent, after, binding, limit } = input;
