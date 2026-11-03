@@ -35,6 +35,16 @@ import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
 import {
+  bindDisclosedClassificationAssociation,
+  disclosedClassificationAssociations,
+  type DisclosedClassificationAssociation,
+} from './subject-classification-assessment';
+import {
+  ClassificationAssessControl,
+  classificationChangesHref,
+  classificationInspectHref,
+} from './subject-classification-assessment-view';
+import {
   bestRank,
   ExternalValue,
   fieldLabel,
@@ -113,6 +123,7 @@ type PreparedRead = {
   /** The subject's tags, as chips; a tag above the reader's spoiler level waits behind a reveal. */
   tags?: ReactNode;
   sources?: Sources;
+  classifications?: DisclosedClassificationAssociation[];
 };
 
 /** A Zone's `cover` appearance token chooses the frame shared by its rows. */
@@ -639,6 +650,16 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
               context={read.subject.context}
               locale={options.locale}
             />
+            {(() => {
+              const bound = bindDisclosedClassificationAssociation({
+                subjectId: read.subject.id,
+                contextId: read.subject.context,
+                statement,
+                related: read.related,
+              });
+              if ('kind' in bound) return null;
+              return <ClassificationAssessControl identity={bound} locale={options.locale} />;
+            })()}
           </div>
         </dd>,
       ];
@@ -718,6 +739,25 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
     groups,
     tags,
     more: [...groups].filter(([property]) => !shown.has(property)).map(([, group]) => group),
+    classifications: disclosedClassificationAssociations({
+      subjectId: read.subject.id,
+      contextId: read.subject.context,
+      statements: read.subject.statements,
+      related: read.related,
+      propertyLabel: (propertyId) => fieldLabel(relatedLabel(propertyId), options.locale).text,
+      targetLabel: (targetId) => pageText(Object.hasOwn(read.related, targetId) ? read.related[targetId]?.labels : {}, options.locale).text,
+      inspectHref: (identity) =>
+        classificationInspectHref(
+          identity,
+          pageText(read.subject.labels, options.locale, original).text,
+          options.locale,
+        ),
+      changesHref: classificationChangesHref(
+        read.subject.id,
+        pageText(read.subject.labels, options.locale, original).text,
+        options.locale,
+      ),
+    }),
     sources: {
       credit: read.summary?.cover?.credit ?? null,
       records,
@@ -923,6 +963,7 @@ export function PageData({
     ...(context ? { context } : {}),
     ...(realm ? { realm } : {}),
     ...(about ? { about } : {}),
+    ...(aboutRead?.classifications?.length ? { classifications: aboutRead.classifications } : {}),
     relations,
     relationNodes: nodesOfType(composition.content, 'RelationGroups'),
     ...(zoneRatio ? { ratio: zoneRatio } : {}),

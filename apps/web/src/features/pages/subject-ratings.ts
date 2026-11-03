@@ -16,6 +16,7 @@ export type Figure = {
   remaining?: number;
   freshness?: { asOf: string | null; updating: boolean };
 };
+export type StatisticObservation = { kind: 'unversioned'; digest: string };
 export type Statistic = {
   source: string;
   scale: { min: number; max: number };
@@ -26,7 +27,17 @@ export type Statistic = {
   attribution?: string;
   sourceRecordId?: string;
   sourceAlias?: string;
+  observation?: StatisticObservation;
 };
+
+export const SOURCE_STATISTIC_PROVIDERS = ['vndb', 'bangumi'] as const;
+export type SourceStatisticProvider = (typeof SOURCE_STATISTIC_PROVIDERS)[number];
+
+export function providerStatisticLabel(source: string): string {
+  if (source === 'vndb') return 'VNDB';
+  if (source === 'bangumi') return 'Bangumi';
+  return source;
+}
 type SubjectRoutes = ReturnType<KernelClient['subjects']>;
 export type RatingQuestion = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['rating-questions']>['get']>>['data']
@@ -197,12 +208,23 @@ function isPublicFigure(value: unknown): value is PublicFigure {
   );
 }
 
+function isObservation(value: unknown): value is StatisticObservation {
+  return (
+    isRecord(value) &&
+    value.kind === 'unversioned' &&
+    typeof value.digest === 'string' &&
+    /^[0-9a-f]{64}$/.test(value.digest)
+  );
+}
+
 function isStatistic(value: unknown): value is Statistic {
   if (!isRecord(value) || !isRecord(value.scale)) return false;
   const { min, max } = value.scale;
+  const source = value.source;
+  const record = value.sourceRecordId;
   return (
-    typeof value.source === 'string' &&
-    value.source.length > 0 &&
+    typeof source === 'string' &&
+    (source === 'vndb' || source === 'bangumi' || source.length > 0) &&
     isInteger(min) &&
     min >= 0 &&
     min <= 4096 &&
@@ -221,12 +243,30 @@ function isStatistic(value: unknown): value is Statistic {
     (value.licence === undefined ||
       (typeof value.licence === 'string' && value.licence.length >= 1 && value.licence.length <= 1024)) &&
     (value.attribution === undefined ||
-      (typeof value.attribution === 'string' && value.attribution.length >= 1 && value.attribution.length <= 2000))
+      (typeof value.attribution === 'string' &&
+        value.attribution.length >= 1 &&
+        value.attribution.length <= 2000)) &&
+    (value.sourceAlias === undefined ||
+      (typeof value.sourceAlias === 'string' && value.sourceAlias.length >= 1 && value.sourceAlias.length <= 128)) &&
+    (record === undefined || (typeof record === 'string' && record.length >= 1 && record.length <= 1024)) &&
+    (value.observation === undefined || isObservation(value.observation))
   );
 }
 
+function isNativeStatistic(value: Statistic): boolean {
+  if (value.source !== 'vndb' && value.source !== 'bangumi') return false;
+  if (value.source === 'bangumi' && value.scale.min === 0 && value.scale.max === 10) {
+    if (value.sourceRecordId !== undefined && !/^[1-9][0-9]*$/.test(value.sourceRecordId)) return false;
+  }
+  return true;
+}
+
 function isStatistics(value: unknown): value is Statistic[] {
-  return Array.isArray(value) && value.every(isStatistic);
+  if (!Array.isArray(value) || value.length > 2 || !value.every(isStatistic)) return false;
+  const native = value.filter(isNativeStatistic);
+  if (native.length !== value.length) return value.every(isStatistic) && value.length <= 2;
+  const providers = native.map((item) => item.source);
+  return new Set(providers).size === providers.length;
 }
 
 /** Legacy supplied display fixtures are adapted explicitly; they are never native population authority. */

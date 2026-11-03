@@ -7,6 +7,11 @@ import { catalogueEntries } from '../catalogue/catalogue-entry';
 import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { CharacterRelationshipsGroups } from './character-relationships';
 import type { CharacterRelationshipsRead } from '../catalogue/character-relationships/reading';
+import { ClassificationAssessmentSection } from './subject-classification-assessment-view';
+import type { ClassificationAssessmentHandlers } from './subject-classification-assessment-view';
+import type { ClassificationAssessmentSession } from './subject-classification-assessment-controller';
+import type { Statistic } from './subject-ratings';
+import { subjectHref } from '../../subject/subject-href';
 
 /** Only fields from the successful public subject read; no Library state or private commerce DTO. */
 export type SubjectPurchaseContext = Readonly<{ subjectId: string; subjectType: string; locale: string }>;
@@ -206,5 +211,40 @@ export function CharacterRelationshipsSlot({ context }: { context: CharacterRela
         />
       )}
     </div>
+  );
+}
+
+/** Ordinary Subject assessment of one disclosed Global classification association. */
+export function ClassificationAssessmentSlot({
+  subjectId,
+  label,
+  locale,
+  returnTo,
+  csrfToken,
+  session,
+  statistics,
+  handlers,
+}: {
+  subjectId: string;
+  label: string;
+  locale: string;
+  returnTo: string;
+  csrfToken: string | null;
+  session: ClassificationAssessmentSession;
+  statistics?: Statistic[];
+  handlers: ClassificationAssessmentHandlers;
+}) {
+  const sourcesHref = `${subjectHref({ id: subjectId, label }, locale).href}/sources`;
+  return (
+    <ClassificationAssessmentSection
+      locale={locale}
+      title={label}
+      returnTo={returnTo}
+      csrfToken={csrfToken}
+      {...(statistics ? { statistics } : {})}
+      sourcesHref={sourcesHref}
+      session={session}
+      handlers={handlers}
+    />
   );
 }

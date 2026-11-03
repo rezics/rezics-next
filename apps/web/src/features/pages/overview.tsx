@@ -117,6 +117,8 @@ export type OverviewValue = {
    * node, which then renders nothing itself, and the subject's tags.
    */
   about?: { statements: string; facts: ReactNode; tags: ReactNode };
+  /** Currently disclosed Global classification associations on this Subject read. */
+  classifications?: import('./subject-classification-assessment').DisclosedClassificationAssociation[];
   /** How each relation property reads on this page, from the definition release; absent properties have no label. */
   relations: Record<string, RelationDefinition>;
   /** Every `RelationGroups` node of the page in document order; the first one renders all of them by group. */

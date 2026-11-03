@@ -1197,6 +1197,65 @@ remain unverified. A fixture does not prove private first-render/SSR production 
 across independent QueryClients; both boundaries remain unresolved. Existing Subject shell, reactions, personal
 preference/own-vote helpers, canonical routing and native producers keep their ordinary owners.
 
+## Classification assessment on pages
+
+A person assesses one currently disclosed canonical Global classification association from the ordinary Subject page.
+This is never classification proposal, fact acceptance or native enjoyment rating. Semantic classification editors and
+the current-reading owner stay authoritative. Realm-local associations are named unavailable until native disclosure
+admits them. Display labels, redirected subjects and a concept alone cannot identify a ballot.
+
+Association identity binds subject, candidate (`associationId`), released property, concept target, Global context,
+qualifier key (including spoiler) and optional release/revision supplied by native admission. Inspecting meaning reuses
+the existing value-explanation and Changes destinations.
+
+Installed typed methods, bound after the native ballots and SourceStatistics producers landed:
+
+- `PUT /v1/subjects/{id}/classification-associations/{associationId}/assessment` (`classification_ballot:set`) with
+  `{ assessment: "support" | "oppose", falsePositive: boolean }`. Response `{ associationId, revision, delivery }` where
+  `delivery` is `enqueued` or `unchanged`. Acknowledgement does not establish committed own state or a new aggregate.
+- `DELETE` on the same path withdraws the whole ballot (`204`).
+- `GET` on the same path (`classification_ballot:read-own`) returns only the authenticated person's slot:
+  `{ associationId, hasBallot, assessment, falsePositive, revision, pending }`. Own `pending` compares that person's slot
+  revision with their retained contribution.
+- `GET /v1/subjects/{id}/classification-associations/{associationId}/aggregate`
+  (`classification_ballot:read-aggregate`). Below five eligible ballots the aggregate is `{ associationId, state:
+  "suppressed", pending: "unknown" }` with no count, denominator, fraction, flag count, progress or ordering hint.
+  Missing numbers are not zero. At five or more, `state: "published"` includes support and oppose counts, an independent
+  false-positive count, `supportFraction = supportCount / (supportCount + opposeCount)`, `asOf`, `generation` and
+  `pending: "unknown"`. Public pending is unknown, never a current published aggregate. The native suppression threshold
+  stays five; Web invents no confidence, weighting or threshold adaptation.
+- `GET /v1/subjects/{id}/source-statistics` remains the independent provider array, now bounded to at most VNDB and
+  Bangumi. Each row keeps provider, alias, record, scale, mean/count, asOf, licence and attribution. Additive optional
+  `observation={kind:"unversioned",digest}` is provenance, not a version promise. Bangumi uses canonical numeric IDs and
+  a 0–10 scale. A valid zero mean differs from a missing or cleared figure. An absent provider is not a zero count.
+  Providers are never averaged, normalized into native enjoyment units, turned into classification votes or treated as
+  per-person ballots. A concealed VNDB row cannot remove an independently disclosed Bangumi row. Record links use the
+  admitted Subject Sources route, never an arbitrary URL.
+
+The generated KernelClient nested types do not yet export `classification-associations`; Web binds the installed HTTP
+paths through the same seam used for own reactions, and names the producer unavailable when the handle is missing. Native
+authorization alone admits controls. Ballots never enter `rating.vote`, the public headline, JSON-LD, ranking or native
+rating counts.
+
+Own states: preparing, signed-out, absent, acknowledged, actor-local pending, denied, concealed, unavailable, conflict
+and stale. Subject, association, viewer or session replacement retires public/private rows, callbacks and effects.
+Concealment never leaves a stale own ballot or public aggregate visible. An uncertain write keeps the original sender,
+credentials, idempotency key and operands; explicit retry replays that command. A new edit is deliberate only after
+native outcome is reconciled.
+
+Decision: native classification aggregates have no delivered `updating` state; public `pending` stays `"unknown"` as
+installed, and write-pending is actor-local only. Decision: source statistics retain the existing independent array
+bounded to VNDB and Bangumi, with optional unversioned observation provenance.
+
+Cost: for one selected disclosed association the fixed installed components C are current-reading, own-ballot, native
+aggregate and source-statistics. The provider array has at most two independent rows. Web projection/retention is
+O(one bounded association response + one own ballot + one aggregate + two bounded source rows); calls are at most C,
+independent of eligible voters N or provider observation history H. A deliberate set/delete uses one addressed native
+command plus a fixed reconciliation sequence. Acknowledgements do not authorize unbounded aggregate polling. Growth
+acceptance is `apps/web/tests/subject-classification-assessment.test.tsx` at 20, 200 and 2,000 eligible historical
+ballots with the selected association and two provider rows held fixed. Unknown native scan bounds remain unknown.
+No engine adapter is added; existing native engines stay producer-owned.
+
 ## Realm context
 
 The same subject page is reachable from the general site and from a Realm or Zone. The facts come from the

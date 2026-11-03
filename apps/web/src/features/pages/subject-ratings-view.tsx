@@ -12,6 +12,7 @@ import {
   displayRating,
   GLOBAL,
   PUBLIC_RATING_SCALE,
+  providerStatisticLabel,
   suppliedRatingSources,
   type Figure,
   type Ratings,
@@ -24,6 +25,12 @@ import { PublicRatingFigure } from './public-rating-figure';
 import { RatingDistribution } from './rating-distribution';
 import { OverviewContext, viewHref } from './overview';
 import { useRatingSourceRetryFocus, type RatingRetryOwner } from './subject-rating-retry-focus';
+import {
+  ClassificationAssessmentHandlerContext,
+  ClassificationAssessmentChromeContext,
+  ClassificationAssessmentSection,
+} from './subject-classification-assessment-view';
+import { subjectHref } from '../../subject/subject-href';
 
 const sectionClass = 'min-w-0 space-y-4 in-data-[density=compact]:space-y-3';
 const headingClass =
@@ -209,6 +216,9 @@ export function RatingsView({
   const options = { locale: locale as never };
   const recovery = useContext(RatingsRecoveryContext);
   const populations = useContext(RatingPopulationsContext);
+  const assessmentHandlers = useContext(ClassificationAssessmentHandlerContext);
+  const assessmentChrome = useContext(ClassificationAssessmentChromeContext);
+  const page = useContext(OverviewContext);
   const title = m.subject_ratings({}, options);
   const { reviewsHref } = useRatingNavigation(subject, locale);
   if (!data) return <RatingsFailure id={id} subject={subject} locale={locale} />;
@@ -378,14 +388,26 @@ export function RatingsView({
             'statistics',
             statistics.length
               ? statistics.map((item) => (
-                  <p key={item.source} data-slot="imported-score" className="min-w-0 break-words">
+                  <p key={`${item.source}:${item.sourceRecordId ?? ''}`} data-slot="imported-score" data-provider={item.source} className="min-w-0 break-words">
                     <MetaLine
                       items={[
-                        <span className="font-medium">{item.source === 'vndb' ? 'VNDB' : item.source}</span>,
+                        <span className="font-medium">{providerStatisticLabel(item.source)}</span>,
                         <strong className="tabular-nums">
                           {number(item.mean, 2)} ({number(item.scale.min)}–{number(item.scale.max)})
                         </strong>,
                         m.subject_ratings_imported({ count: number(item.count), date: date(item.asOf) }, options),
+                        item.sourceRecordId
+                          ? m.subject_classification_source_record({ record: item.sourceRecordId }, options)
+                          : null,
+                        item.sourceAlias && item.sourceAlias !== item.source
+                          ? m.subject_classification_source_alias({ alias: item.sourceAlias }, options)
+                          : null,
+                        item.observation
+                          ? m.subject_classification_source_unversioned(
+                              { digest: item.observation.digest.slice(0, 12) },
+                              options,
+                            )
+                          : null,
                         item.licence ? m.rating_import_licence({ licence: item.licence }, options) : null,
                         item.attribution
                           ? m.rating_import_attribution({ attribution: item.attribution }, options)
@@ -398,6 +420,18 @@ export function RatingsView({
           )}
         </div>
       </details>
+      {assessmentHandlers && assessmentChrome && control && (
+        <ClassificationAssessmentSection
+          locale={locale}
+          title={assessmentChrome.title || page?.subjectLabel || title}
+          returnTo={assessmentChrome.returnTo}
+          csrfToken={assessmentChrome.csrfToken}
+          statistics={statistics}
+          sourcesHref={`${subjectHref({ id: subject, label: assessmentChrome.title || page?.subjectLabel || title }, locale).href}/sources`}
+          session={control.session}
+          handlers={assessmentHandlers}
+        />
+      )}
       <a data-slot="see-reviews" className={linkClass} href={reviewsHref}>
         {m.subject_ratings_reviews({}, options)}
       </a>

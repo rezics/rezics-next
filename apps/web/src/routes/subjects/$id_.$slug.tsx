@@ -42,6 +42,8 @@ import {
   subjectUrlForView,
 } from '../../features/pages/subject-queries';
 import { SubjectLibrarySlot } from '../../library/subject-slot-view';
+import { ClassificationAssessmentProviders } from '../../features/pages/subject-classification-assessment-view';
+import { useClassificationAssessmentVisit } from '../../features/pages/subject-classification-assessment-live';
 import { submitSubjectLabelForm } from '../../library/subject-slot-form-action';
 import { useSession } from '../../session/query';
 import { m } from '../../paraglide/messages.js';
@@ -409,8 +411,32 @@ export function SubjectOverview({
   const ratings = publicRatings;
   const returnTo = contextHref(useLocation().publicHref.split(/[?#]/, 1)[0]!, realm);
   const nonce = useRouter().options.ssr?.nonce;
+  const assessment = useClassificationAssessmentVisit({
+    identity: null,
+    locale,
+    session,
+    reader: personal.readerId,
+    csrfToken: browserSession.csrfToken,
+  });
   if (!currentReader) return <PendingPage />;
   return (
+    <ClassificationAssessmentProviders
+      snapshot={assessment.snapshot}
+      handlers={{
+        onSelect: assessment.select,
+        onCommand: (command) => {
+          void assessment.send(command);
+        },
+        onRetry: () => {
+          void assessment.retry();
+        },
+      }}
+      chrome={{
+        csrfToken: browserSession.csrfToken,
+        returnTo,
+        title: subjectPageTitle(page, locale),
+      }}
+    >
     <RatingControlContext.Provider
       value={{
         subjectId: id,
@@ -503,5 +529,6 @@ export function SubjectOverview({
         </RatingPopulationsContext.Provider>
       </RatingsRecoveryContext.Provider>
     </RatingControlContext.Provider>
+    </ClassificationAssessmentProviders>
   );
 }
