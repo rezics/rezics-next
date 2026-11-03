@@ -145,7 +145,14 @@ export async function readWorkbench(
 ): Promise<Omit<WorkbenchRead, keyof PrivateReaderRead | 'generation'>> {
   const scope = workbenchScope(search);
   const identity = { readKey: workbenchReadKey(search), search };
-  const idle = { realms: [] as WorkbenchDirectoryItem[], realmsNext: null as string | null, boards: [] as WorkbenchDirectoryItem[], boardsNext: null as string | null, cases: [] as WorkbenchCase[], next: null as string | null };
+  const idle = {
+    realms: [] as WorkbenchDirectoryItem[],
+    realmsNext: null as string | null,
+    boards: [] as WorkbenchDirectoryItem[],
+    boardsNext: null as string | null,
+    cases: [] as WorkbenchCase[],
+    next: null as string | null,
+  };
   if (scope.kind === 'none') {
     const page = await source.realms(search.realmsCursor);
     return { ...identity, state: 'ready', ...idle, realms: bounded(page.items, 50), realmsNext: page.next };
@@ -313,7 +320,10 @@ export async function prepareWorkbenchRead(
   const original = workbenchSearch(search);
   const page = await preparePrivateReaderRead(cache, workbenchReadKey(original), () => read(original), signal);
   return page.readerBinding.retired || !page.readerOrigin
-    ? { ...emptyRead(original, page.readerOrigin ?? null, page.readerBinding.retired ? 'denied' : 'unavailable'), readerBinding: page.readerBinding }
+    ? {
+        ...emptyRead(original, page.readerOrigin ?? null, page.readerBinding.retired ? 'denied' : 'unavailable'),
+        readerBinding: page.readerBinding,
+      }
     : page;
 }
 

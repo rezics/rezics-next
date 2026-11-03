@@ -164,9 +164,7 @@ test('the workbench view covers preparation, empty, denied, unavailable recovery
   const search = workbenchSearch({ board: boardId, queue: 'reports' });
   const preparing = await mount(<WorkbenchPreparing />);
   expect(preparing.textContent).toContain(m.moderation_workbench_preparing());
-  const empty = await mount(
-    <WorkbenchView page={{ ...ready, search }} onSearch={(value) => searches.push(value)} />,
-  );
+  const empty = await mount(<WorkbenchView page={{ ...ready, search }} onSearch={(value) => searches.push(value)} />);
   expect(empty.textContent).toContain(m.moderation_workbench_empty());
   const denied = await mount(
     <WorkbenchView page={{ ...ready, state: 'denied', search }} onSearch={(value) => searches.push(value)} />,

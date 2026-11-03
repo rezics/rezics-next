@@ -93,7 +93,10 @@ function WorkbenchError({ error, reset }: ErrorComponentProps) {
       }}
       onSearch={(next) => void navigate({ search: workbenchSearch(next) })}
       onRetry={() =>
-        void router.invalidate({ sync: true }).then(() => reset(), () => undefined)
+        void router.invalidate({ sync: true }).then(
+          () => reset(),
+          () => undefined,
+        )
       }
     />
   );

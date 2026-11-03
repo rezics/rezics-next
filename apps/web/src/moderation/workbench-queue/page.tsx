@@ -27,7 +27,17 @@ export function WorkbenchPage({
   useEffect(() => () => owner?.retire(), [owner]);
   const retired = Boolean(owner && !owner.healthy()) && version >= 0;
   const view = retired
-    ? { ...page, search, state: 'denied' as const, cases: [], realms: [], boards: [], next: null, realmsNext: null, boardsNext: null }
+    ? {
+        ...page,
+        search,
+        state: 'denied' as const,
+        cases: [],
+        realms: [],
+        boards: [],
+        next: null,
+        realmsNext: null,
+        boardsNext: null,
+      }
     : { ...page, search };
   return <WorkbenchView page={view} onSearch={onSearch} {...(onRetry ? { onRetry } : {})} />;
 }

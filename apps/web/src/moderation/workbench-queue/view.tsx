@@ -29,18 +29,18 @@ function CaseRow({ item, search }: { item: WorkbenchCase; search: WorkbenchSearc
   const scope = workbenchQueueScope(search);
   if (!scope) return null;
   const href = localizeHref(workbenchCaseHref(scope, item.kind));
-  const kindLabel = item.kind === 'appeal' ? m.moderation_workbench_queue_appeals() : m.moderation_workbench_queue_reports();
+  const kindLabel =
+    item.kind === 'appeal' ? m.moderation_workbench_queue_appeals() : m.moderation_workbench_queue_reports();
   return (
     <li className="min-w-0 border-b py-3">
-      <a
-        className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`}
-        href={href}
-      >
+      <a className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`} href={href}>
         {m.moderation_workbench_open_case({ id: item.id })}
       </a>
       <p className="mt-1 text-sm text-muted-foreground">{kindLabel}</p>
       <details className="mt-2 text-sm">
-        <summary className={`${control} cursor-pointer justify-start`}>{m.moderation_workbench_case_reference()}</summary>
+        <summary className={`${control} cursor-pointer justify-start`}>
+          {m.moderation_workbench_case_reference()}
+        </summary>
         <dl className="mt-2 grid gap-1 [overflow-wrap:anywhere]">
           <div>
             <dt className="text-muted-foreground">
@@ -61,7 +61,9 @@ function CaseRow({ item, search }: { item: WorkbenchCase; search: WorkbenchSearc
         </dl>
       </details>
       {item.evidence ? <p className="mt-2 max-w-prose text-sm [overflow-wrap:anywhere]">{item.evidence}</p> : null}
-      {item.statement ? <blockquote className="mt-2 max-w-prose text-sm [overflow-wrap:anywhere]">{item.statement}</blockquote> : null}
+      {item.statement ? (
+        <blockquote className="mt-2 max-w-prose text-sm [overflow-wrap:anywhere]">{item.statement}</blockquote>
+      ) : null}
     </li>
   );
 }
@@ -89,7 +91,12 @@ function Directory({
         <ul className="min-w-0 divide-y">
           {items.map((item) => (
             <li key={item.id}>
-              <Button type="button" variant="ghost" className={`${control} w-full justify-start text-left`} onClick={() => onSelect(item.id)}>
+              <Button
+                type="button"
+                variant="ghost"
+                className={`${control} w-full justify-start text-left`}
+                onClick={() => onSelect(item.id)}
+              >
                 {labelOf(item)}
               </Button>
             </li>
@@ -125,10 +132,15 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
       <header className="space-y-3">
         <PageHeading>{m.moderation_workbench_heading()}</PageHeading>
         <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_intro()}</p>
-        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.moderation_workbench_membership_hint()}</p>
+        <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
+          {m.moderation_workbench_membership_hint()}
+        </p>
       </header>
       {status ? (
-        <p role={page.state === 'unavailable' || page.state === 'stale' ? 'alert' : 'status'} className="text-muted-foreground">
+        <p
+          role={page.state === 'unavailable' || page.state === 'stale' ? 'alert' : 'status'}
+          className="text-muted-foreground"
+        >
           {status}
         </p>
       ) : null}
@@ -168,7 +180,9 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
               type="button"
               variant="outline"
               className={control}
-              onClick={() => onSearch(workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest' }))}
+              onClick={() =>
+                onSearch(workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest' }))
+              }
             >
               {m.public_account_realms()}
             </Button>
@@ -182,7 +196,9 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
           next={page.realmsNext}
           empty={m.moderation_workbench_realms_empty()}
           onSelect={(realm) =>
-            onSearch(workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest', realm }))
+            onSearch(
+              workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest', realm }),
+            )
           }
           {...(realmsNext ? { onNext: () => onSearch(workbenchSearch({ ...search, realmsCursor: realmsNext })) } : {})}
         />
@@ -287,7 +303,11 @@ export function WorkbenchView({ page, onSearch, onRetry }: WorkbenchViewProps) {
               {next ? m.moderation_workbench_empty_next() : m.moderation_workbench_empty()}
             </p>
           ) : (
-            <ul className="min-w-0">{page.cases.map((item) => <CaseRow key={`${item.kind}:${item.id}`} item={item} search={search} />)}</ul>
+            <ul className="min-w-0">
+              {page.cases.map((item) => (
+                <CaseRow key={`${item.kind}:${item.id}`} item={item} search={search} />
+              ))}
+            </ul>
           )}
           {next ? (
             <Button
