@@ -1,57 +1,40 @@
-import { listRealmDiscovery } from "./discovery.ts";
-import { requestRealmClaim } from "./realm-continuity.ts";
-import { readOwnRealmClaim } from "./realm-claim-status.ts";
-import { listRealmClaimRequests } from "./realm-claim-review.ts";
-import { exactRealmPresentationImage } from "../content/realm-media.ts";
-import { approveRealmClaim } from "../access/realm-claim.ts";
-import { realmClaimApprovalResponseSchema } from "./schemas.ts";
+import { listRealmDiscovery } from './discovery.ts';
+import { requestRealmClaim } from './realm-continuity.ts';
+import { readOwnRealmClaim } from './realm-claim-status.ts';
+import { listRealmClaimRequests } from './realm-claim-review.ts';
+import { exactRealmPresentationImage } from '../content/realm-media.ts';
+import { approveRealmClaim } from '../access/realm-claim.ts';
+import { realmClaimApprovalResponseSchema } from './schemas.ts';
 import {
   discoveryQuerySchema,
   discoveryResponseSchema,
   RealmClaimRequestInputSchema,
   RealmClaimRequestSchema,
-} from "./schemas.ts";
-import { withHeaders } from "@elysia/openapi";
-import { t } from "elysia";
-import type { Pool } from "pg";
-import { parseItem } from "structured-headers";
-import type { Static, TSchema } from "typebox";
-import { Compile } from "typebox/compile";
-import { GrantDeniedError } from "../access/grant-commands.ts";
-import { normalizeHandle } from "../access/lifecycle.ts";
-import { withConnection } from "../database/pool.ts";
-import { customMethod } from "../http/custom-method.ts";
-import {
-  PROBLEMS,
-  ProblemError,
-  problemSchema,
-  type ProblemCode,
-} from "../http/problem.ts";
-import { ResourceAccessWriteDeniedError } from "../access/resource-denials.ts";
-import { defineRateLimit } from "../http/rate-limit.ts";
-import {
-  IDEMPOTENCY_HEADER,
-  idempotencyKeyOf,
-  SESSION_HEADER,
-} from "../http/request.ts";
-import {
-  AuthenticationError,
-  type Access,
-  type AccessClient,
-} from "../request/access.ts";
-import { REACTION_KINDS } from "../content/events.ts";
-import { MediaUnavailableError } from "../content/media.ts";
-import { SitemapQuerySchema } from "../content/schemas.ts";
-import { SitemapRealmPageSchema, SitemapSpacePageSchema } from "./schemas.ts";
-import {
-  InvalidCommunitySitemapCursorError,
-  listSitemapRealms,
-  listSitemapSpaces,
-} from "./sitemap.ts";
-import { routeOf } from "../route/route.ts";
-import type { KeyRing } from "../tokens/seal.ts";
-import type { WorkClient } from "../work/client.ts";
-import type { definitionRoutes } from "../semantic/http/definitions.ts";
+} from './schemas.ts';
+import { withHeaders } from '@elysia/openapi';
+import { t } from 'elysia';
+import type { Pool } from 'pg';
+import { parseItem } from 'structured-headers';
+import type { Static, TSchema } from 'typebox';
+import { Compile } from 'typebox/compile';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { normalizeHandle } from '../access/lifecycle.ts';
+import { withConnection } from '../database/pool.ts';
+import { customMethod } from '../http/custom-method.ts';
+import { PROBLEMS, ProblemError, problemSchema, type ProblemCode } from '../http/problem.ts';
+import { ResourceAccessWriteDeniedError } from '../access/resource-denials.ts';
+import { defineRateLimit } from '../http/rate-limit.ts';
+import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
+import { AuthenticationError, type Access, type AccessClient } from '../request/access.ts';
+import { REACTION_KINDS } from '../content/events.ts';
+import { MediaUnavailableError } from '../content/media.ts';
+import { SitemapQuerySchema } from '../content/schemas.ts';
+import { SitemapRealmPageSchema, SitemapSpacePageSchema } from './schemas.ts';
+import { InvalidCommunitySitemapCursorError, listSitemapRealms, listSitemapSpaces } from './sitemap.ts';
+import { routeOf } from '../route/route.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { WorkClient } from '../work/client.ts';
+import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   createSpace,
   readSpace,
@@ -62,12 +45,8 @@ import {
   updateSpace,
   type Space,
   type SpaceDependencies,
-} from "./space.ts";
-import {
-  claimSpaceAddress,
-  readSpaceAddress,
-  SpaceAddressConflictError,
-} from "./space-address.ts";
+} from './space.ts';
+import { claimSpaceAddress, readSpaceAddress, SpaceAddressConflictError } from './space-address.ts';
 import {
   createRealm,
   readRealm,
@@ -76,49 +55,37 @@ import {
   updateRealm,
   type RealmDependencies,
   type RealmView,
-} from "./realm.ts";
+} from './realm.ts';
 import {
   ContainerLifecycleConflictError,
   readContainerLifecycle,
   removeContainer,
   restoreContainer,
-} from "./container-lifecycle.ts";
-import { setBoardScheme } from "./board-scheme.ts";
-import { createRealmParticipationCheck } from "./participation.ts";
+} from './container-lifecycle.ts';
+import { setBoardScheme } from './board-scheme.ts';
+import { createRealmParticipationCheck } from './participation.ts';
 import {
   enqueueRealmJoin,
   enqueueRealmLeave,
   readOwnRealmMembership,
   RealmMembershipConflictError,
   type MembershipDependencies,
-} from "./join.ts";
-import {
-  banAccount,
-  unbanAccount,
-  listBans,
-  RealmBanInputError,
-  RealmBanRoleError,
-} from "./ban.ts";
-import { readRealmMembershipInterval } from "./membership.ts";
-import { listOwnRealms } from "./own-realms.ts";
-import { RealmPresentationSchema } from "./presentation.ts";
-import {
-  CommunityPresentationSchema,
-  communityPresentationResponse,
-} from "../content/community-presentation-model.ts";
-import { readCommunityPresentations } from "../content/community-presentation.ts";
-import { readRealmHomePresentation } from "./realm-home-presentation.ts";
-import {
-  readRealmSettingsPage,
-  RealmSettingsPageSchema,
-} from "./settings-page.ts";
+} from './join.ts';
+import { banAccount, unbanAccount, listBans, RealmBanInputError, RealmBanRoleError } from './ban.ts';
+import { readRealmMembershipInterval } from './membership.ts';
+import { listOwnRealms } from './own-realms.ts';
+import { RealmPresentationSchema } from './presentation.ts';
+import { CommunityPresentationSchema, communityPresentationResponse } from '../content/community-presentation-model.ts';
+import { readCommunityPresentations } from '../content/community-presentation.ts';
+import { readRealmHomePresentation } from './realm-home-presentation.ts';
+import { readRealmSettingsPage, RealmSettingsPageSchema } from './settings-page.ts';
 import {
   createRealmHomePublicationReader,
   RealmHomePublicationPageSchema,
   RealmHomePublicationQuerySchema,
   realmHomePublicationResponse,
-} from "./realm-home-publications.ts";
-import { ownRealmsQuerySchema, ownRealmsResponseSchema } from "./schemas.ts";
+} from './realm-home-publications.ts';
+import { ownRealmsQuerySchema, ownRealmsResponseSchema } from './schemas.ts';
 import {
   listPublications,
   publish,
@@ -131,11 +98,11 @@ import {
   withdraw,
   type PublicationHead,
   type PublicationResult,
-} from "./publication.ts";
+} from './publication.ts';
 
 const closed = { additionalProperties: false } as const;
-const id = t.String({ format: "uuid" });
-const instant = t.String({ format: "date-time" });
+const id = t.String({ format: 'uuid' });
+const instant = t.String({ format: 'date-time' });
 const title = t.String({ minLength: 1, maxLength: 1024 });
 const summary = t.String({ maxLength: 4096 });
 const space = t.Object(
@@ -144,9 +111,9 @@ const space = t.Object(
     realmId: t.Union([id, t.Null()], {
       readOnly: true,
       description:
-        "The active Realm carried by this Space, if the viewer passes its ordinary realm:read check; otherwise null. Derived per viewer and outside the Space revision chain. The Space ETag remains its head revision id, the If-Match token for Space writes.",
+        'The active Realm carried by this Space, if the viewer passes its ordinary realm:read check; otherwise null. Derived per viewer and outside the Space revision chain. The Space ETag remains its head revision id, the If-Match token for Space writes.',
     }),
-    state: t.Literal("active"),
+    state: t.Literal('active'),
     headRevisionId: id,
     createdAt: instant,
     creator: id,
@@ -167,7 +134,7 @@ const claimReviewResponse = t.Object(
           realmId: id,
           requestId: id,
           claimantAccountId: id,
-          state: t.Literal("pending"),
+          state: t.Literal('pending'),
           orphanedAt: instant,
           claimEligibleAt: instant,
           requestedAt: instant,
@@ -189,10 +156,7 @@ const claimReviewQuery = t.Object(
 );
 
 const spaceResponse = t.Object({ space }, closed);
-const spaceHomeResponse = t.Object(
-  { space, community: t.Union([CommunityPresentationSchema, t.Null()]) },
-  closed,
-);
+const spaceHomeResponse = t.Object({ space, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed);
 const voteWeight = t.Unsafe<1 | -1>(t.Integer({ enum: [1, -1] }));
 const votes = t.Object(
   {
@@ -210,11 +174,11 @@ const realm = t.Object(
   {
     realmId: id,
     spaceId: id,
-    state: t.Literal("active"),
-    visibility: t.Union([t.Literal("public"), t.Literal("protected")]),
+    state: t.Literal('active'),
+    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
     contextId: id,
     boardSchemeId: t.Union([id, t.Null()]),
-    ownershipState: t.Union([t.Literal("owned"), t.Literal("orphaned")]),
+    ownershipState: t.Union([t.Literal('owned'), t.Literal('orphaned')]),
     orphanedAt: t.Union([instant, t.Null()]),
     claimEligibleAt: t.Union([instant, t.Null()]),
     governanceReadOnly: t.Boolean(),
@@ -236,7 +200,7 @@ const realmClaimStatus = t.Object(
   {
     realmId: id,
     requestId: id,
-    state: t.Union([t.Literal("pending"), t.Literal("approved")]),
+    state: t.Union([t.Literal('pending'), t.Literal('approved')]),
     orphanedAt: instant,
     requestedAt: instant,
     approvedAt: t.Union([instant, t.Null()]),
@@ -251,17 +215,14 @@ const publicationFields = {
   subjectRevisionId: t.Null(),
   publishedAt: instant,
 };
-const publication = t.Object(
-  { ...publicationFields, verdict: t.Literal("adopt") },
-  closed,
-);
+const publication = t.Object({ ...publicationFields, verdict: t.Literal('adopt') }, closed);
 const publicationResponse = t.Object({ publication }, closed);
 const decisionResponse = t.Object(
   {
     publication: t.Object(
       {
         ...publicationFields,
-        verdict: t.Union([t.Literal("withdraw"), t.Literal("reject")]),
+        verdict: t.Union([t.Literal('withdraw'), t.Literal('reject')]),
         predecessor: t.Union([id, t.Null()]),
       },
       closed,
@@ -269,34 +230,21 @@ const decisionResponse = t.Object(
   },
   closed,
 );
-const publicationPage = t.Object(
-  { items: t.Array(publication), next: t.Union([t.String(), t.Null()]) },
-  closed,
-);
-const accepted = t.Object(
-  { workflowId: t.String({ minLength: 1, maxLength: 200 }) },
-  closed,
-);
+const publicationPage = t.Object({ items: t.Array(publication), next: t.Union([t.String(), t.Null()]) }, closed);
+const accepted = t.Object({ workflowId: t.String({ minLength: 1, maxLength: 200 }) }, closed);
 const membershipState = t.Object(
   {
-    state: t.Union([
-      t.Literal("none"),
-      t.Literal("pending"),
-      t.Literal("member"),
-    ]),
+    state: t.Union([t.Literal('none'), t.Literal('pending'), t.Literal('member')]),
     since: t.Union([instant, t.Null()]),
   },
   closed,
 );
 const addMemberInput = t.Object({ accountId: id }, closed);
-const publicationParams = t.Object(
-  { realmId: t.String(), subjectId: t.String() },
-  closed,
-);
+const publicationParams = t.Object({ realmId: t.String(), subjectId: t.String() }, closed);
 
-const lifecycleVersion = t.String({ pattern: "^(0|[1-9][0-9]{0,18})$" });
-const containerKind = t.Union([t.Literal("space"), t.Literal("realm")]);
-const lifecycleState = t.Union([t.Literal("active"), t.Literal("removed")]);
+const lifecycleVersion = t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' });
+const containerKind = t.Union([t.Literal('space'), t.Literal('realm')]);
+const lifecycleState = t.Union([t.Literal('active'), t.Literal('removed')]);
 const lifecycleResult = t.Object(
   {
     container: t.Object(
@@ -319,11 +267,7 @@ const lifecycleResponse = t.Object(
         ...lifecycleResult.properties.container.properties,
         removedAt: t.Union([instant, t.Null()]),
         reason: t.Union([t.String(), t.Null()]),
-        removerRole: t.Union([
-          t.Literal("owner"),
-          t.Literal("moderator"),
-          t.Null(),
-        ]),
+        removerRole: t.Union([t.Literal('owner'), t.Literal('moderator'), t.Null()]),
         mayRemove: t.Boolean(),
         mayRestore: t.Boolean(),
       },
@@ -333,32 +277,20 @@ const lifecycleResponse = t.Object(
   closed,
 );
 const removeContainerInput = t.Object(
-  {
-    expectedVersion: lifecycleVersion,
-    reason: t.String({ minLength: 1, maxLength: 1024 }),
-  },
+  { expectedVersion: lifecycleVersion, reason: t.String({ minLength: 1, maxLength: 1024 }) },
   closed,
 );
-const restoreContainerInput = t.Object(
-  { expectedVersion: lifecycleVersion },
-  closed,
-);
+const restoreContainerInput = t.Object({ expectedVersion: lifecycleVersion }, closed);
 
 const createInput = t.Object({ title, summary: t.Optional(summary) }, closed);
-const updateInput = t.Object(
-  { title: t.Optional(title), summary: t.Optional(summary) },
-  closed,
-);
-const addressInput = t.Object(
-  { address: t.String({ minLength: 1, maxLength: 64 }) },
-  closed,
-);
+const updateInput = t.Object({ title: t.Optional(title), summary: t.Optional(summary) }, closed);
+const addressInput = t.Object({ address: t.String({ minLength: 1, maxLength: 64 }) }, closed);
 const createRealmInput = t.Object(
   {
     spaceId: id,
     title,
     summary: t.Optional(summary),
-    visibility: t.Union([t.Literal("public"), t.Literal("protected")]),
+    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
     contextId: id,
     votes: t.Optional(votes),
   },
@@ -369,9 +301,7 @@ const updateRealmInput = t.Object(
     presentation: t.Optional(RealmPresentationSchema),
     title: t.Optional(title),
     summary: t.Optional(summary),
-    visibility: t.Optional(
-      t.Union([t.Literal("public"), t.Literal("protected")]),
-    ),
+    visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('protected')])),
     contextId: t.Optional(id),
     votes: t.Optional(votes),
   },
@@ -382,20 +312,14 @@ const updateRealmInput = t.Object(
 function strict<S extends TSchema>(schema: S) {
   const validator = Compile(schema);
   return {
-    "~standard": {
+    '~standard': {
       version: 1 as const,
-      vendor: "typebox",
+      vendor: 'typebox',
       types: undefined as { input: Static<S>; output: Static<S> } | undefined,
       validate(value: unknown) {
         return validator.Check(value)
           ? { value: value as Static<S> }
-          : {
-              issues: [
-                {
-                  message: "Value does not match the community request schema",
-                },
-              ],
-            };
+          : { issues: [{ message: 'Value does not match the community request schema' }] };
       },
       jsonSchema: { input: () => schema, output: () => schema },
     },
@@ -404,103 +328,75 @@ function strict<S extends TSchema>(schema: S) {
 
 const banParams = t.Object({ realmId: t.String(), accountId: id }, closed);
 const banRecord = t.Object(
-  {
-    accountId: id,
-    reason: t.String({ maxLength: 1024 }),
-    actor: t.Union([id, t.Null()]),
-    at: t.String(),
-  },
+  { accountId: id, reason: t.String({ maxLength: 1024 }), actor: t.Union([id, t.Null()]), at: t.String() },
   closed,
 );
 const banResponse = t.Object(
-  {
-    ban: t.Object(
-      {
-        ...banRecord.properties,
-        realmId: id,
-        workflowId: t.Union([t.String(), t.Null()]),
-      },
-      closed,
-    ),
-  },
+  { ban: t.Object({ ...banRecord.properties, realmId: id, workflowId: t.Union([t.String(), t.Null()]) }, closed) },
   closed,
 );
-const banPage = t.Object(
-  { items: t.Array(banRecord), next: t.Union([t.String(), t.Null()]) },
-  closed,
-);
+const banPage = t.Object({ items: t.Array(banRecord), next: t.Union([t.String(), t.Null()]) }, closed);
 const sitemapQuery = strict(SitemapQuerySchema);
 const sitemapRealmPage = strict(SitemapRealmPageSchema);
 const sitemapSpacePage = strict(SitemapSpacePageSchema);
 const banQuery = t.Object(
-  {
-    limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
-    cursor: t.Optional(t.String()),
-  },
+  { limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })), cursor: t.Optional(t.String()) },
   closed,
 );
 
 const readFailures = {
-  400: problemSchema("invalid_request"),
-  401: problemSchema("authentication_required", "invalid_credentials"),
-  404: problemSchema("not_found"),
-  500: problemSchema("internal_error"),
+  400: problemSchema('invalid_request'),
+  401: problemSchema('authentication_required', 'invalid_credentials'),
+  404: problemSchema('not_found'),
+  500: problemSchema('internal_error'),
   503: problemSchema(
-    "overloaded",
-    "deadline_exceeded",
-    "partition_unavailable",
-    "transaction_retry_exhausted",
-    "dependency_unavailable",
+    'overloaded',
+    'deadline_exceeded',
+    'partition_unavailable',
+    'transaction_retry_exhausted',
+    'dependency_unavailable',
   ),
 };
 const writeFailures = {
   ...readFailures,
-  403: problemSchema("forbidden"),
-  404: problemSchema("not_found"),
-  409: problemSchema("conflict"),
-  422: problemSchema("idempotency_conflict", "too_many_events"),
-  429: problemSchema("rate_limited"),
+  403: problemSchema('forbidden'),
+  404: problemSchema('not_found'),
+  409: problemSchema('conflict'),
+  422: problemSchema('idempotency_conflict', 'too_many_events'),
+  429: problemSchema('rate_limited'),
   503: problemSchema(
-    "overloaded",
-    "deadline_exceeded",
-    "partition_unavailable",
-    "transaction_retry_exhausted",
-    "dependency_unavailable",
-    "rate_limit_unavailable",
+    'overloaded',
+    'deadline_exceeded',
+    'partition_unavailable',
+    'transaction_retry_exhausted',
+    'dependency_unavailable',
+    'rate_limit_unavailable',
   ),
 };
 // Bind only the original problem catalogue. Until Access delivers its discriminator,
 // its native refusal stays generic; Community never manufactures the specific error.
 const realmLeaveConflict = problemSchema(
-  "conflict",
-  ...Object.keys(PROBLEMS).filter(
-    (code): code is ProblemCode => code === "realm_last_owner",
-  ),
+  'conflict',
+  ...Object.keys(PROBLEMS).filter((code): code is ProblemCode => code === 'realm_last_owner'),
 );
 const sessionHeader = { [SESSION_HEADER]: t.String() };
-const commandHeaders = t.Object(
-  { [IDEMPOTENCY_HEADER]: t.String() },
-  { additionalProperties: true },
-);
+const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
 const publicationHeaders = t.Object(
-  { [IDEMPOTENCY_HEADER]: t.String(), "if-match": t.Optional(t.String()) },
+  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) },
   { additionalProperties: true },
 );
 const updateHeaders = t.Object(
-  { [IDEMPOTENCY_HEADER]: t.String(), "if-match": t.String() },
+  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.String() },
   { additionalProperties: true },
 );
 const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
-const writeRate = defineRateLimit({ family: "write", units: 1 });
+const writeRate = defineRateLimit({ family: 'write', units: 1 });
 const params = t.Object({ spaceId: t.String() }, closed);
 const addressParams = t.Object({ address: t.String() }, closed);
 const realmParams = t.Object({ realmId: t.String() }, closed);
-const sitemapFailures = {
-  ...readFailures,
-  400: problemSchema("invalid_request", "invalid_cursor"),
-};
-const SITEMAP_DESCRIPTION = (kind: "Realms" | "Spaces") =>
+const sitemapFailures = { ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor') };
+const SITEMAP_DESCRIPTION = (kind: 'Realms' | 'Spaces') =>
   `Keyset feed of the public ${kind} for server-to-server sitemaps, evaluated as an anonymous reader. Each page ` +
   `examines at most 4 × limit candidates and may return fewer than limit items. Follow next until it is null.`;
 
@@ -516,46 +412,28 @@ export type CommunityRouteDependencies = {
 function communityProblem(error: unknown): never {
   // Preserve the native ownership subclass for the central problem mapper.
   if (error instanceof ResourceAccessWriteDeniedError) throw error;
-  if (error instanceof RealmBanRoleError)
-    throw new ProblemError("conflict", { detail: error.message });
-  if (error instanceof RealmBanInputError)
-    throw new ProblemError("invalid_request");
-  if (error instanceof SpaceInputError)
-    throw new ProblemError("invalid_request");
-  if (error instanceof SpaceAddressConflictError)
-    throw new ProblemError("conflict");
-  if (
-    error instanceof RealmInputError ||
-    error instanceof PublicationInputError
-  )
-    throw new ProblemError("invalid_request");
-  if (error instanceof MediaUnavailableError)
-    throw new ProblemError("media_unavailable");
+  if (error instanceof RealmBanRoleError) throw new ProblemError('conflict', { detail: error.message });
+  if (error instanceof RealmBanInputError) throw new ProblemError('invalid_request');
+  if (error instanceof SpaceInputError) throw new ProblemError('invalid_request');
+  if (error instanceof SpaceAddressConflictError) throw new ProblemError('conflict');
+  if (error instanceof RealmInputError || error instanceof PublicationInputError)
+    throw new ProblemError('invalid_request');
+  if (error instanceof MediaUnavailableError) throw new ProblemError('media_unavailable');
   if (error instanceof PublicationCursorError)
-    throw new ProblemError(
-      error.reason === "stale" ? "stale_cursor" : "invalid_cursor",
-    );
-  if (error instanceof PublicationOccupiedSlotError)
-    throw new ProblemError("conflict");
-  if (error instanceof PublicationConflictError)
-    throw new ProblemError("not_found");
-  if (error instanceof ContainerLifecycleConflictError)
-    throw new ProblemError("precondition_failed");
-  if (
-    error instanceof SpaceConflictError ||
-    error instanceof RealmConflictError
-  )
-    throw new ProblemError("precondition_failed");
-  if (error instanceof GrantDeniedError) throw new ProblemError("forbidden");
-  if (error instanceof RealmMembershipConflictError)
-    throw new ProblemError("idempotency_conflict");
+    throw new ProblemError(error.reason === 'stale' ? 'stale_cursor' : 'invalid_cursor');
+  if (error instanceof PublicationOccupiedSlotError) throw new ProblemError('conflict');
+  if (error instanceof PublicationConflictError) throw new ProblemError('not_found');
+  if (error instanceof ContainerLifecycleConflictError) throw new ProblemError('precondition_failed');
+  if (error instanceof SpaceConflictError || error instanceof RealmConflictError)
+    throw new ProblemError('precondition_failed');
+  if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+  if (error instanceof RealmMembershipConflictError) throw new ProblemError('idempotency_conflict');
   throw error;
 }
 
 function communitySitemapProblem(error: unknown): never {
-  if (error instanceof InvalidCommunitySitemapCursorError)
-    throw new ProblemError("invalid_cursor");
-  if (error instanceof RangeError) throw new ProblemError("invalid_request");
+  if (error instanceof InvalidCommunitySitemapCursorError) throw new ProblemError('invalid_cursor');
+  if (error instanceof RangeError) throw new ProblemError('invalid_request');
   throw error;
 }
 
@@ -564,19 +442,18 @@ function matchHead(header: string): string {
   try {
     [value] = parseItem(header);
   } catch {
-    throw new ProblemError("invalid_request");
+    throw new ProblemError('invalid_request');
   }
-  if (typeof value !== "string" || value.length < 1 || value.length > 255)
-    throw new ProblemError("invalid_request");
+  if (typeof value !== 'string' || value.length < 1 || value.length > 255) throw new ProblemError('invalid_request');
   return value;
 }
 
 function published(space: Space, realmId: string | null = null) {
-  if (space.state !== "active") throw new ProblemError("not_found");
+  if (space.state !== 'active') throw new ProblemError('not_found');
   return {
     spaceId: space.spaceId,
     realmId,
-    state: "active" as const,
+    state: 'active' as const,
     headRevisionId: space.headRevisionId,
     createdAt: space.createdAt,
     creator: space.creator,
@@ -590,12 +467,12 @@ function published(space: Space, realmId: string | null = null) {
 }
 
 function publishedRealm(value: RealmView) {
-  if (value.state !== "active") throw new ProblemError("not_found");
+  if (value.state !== 'active') throw new ProblemError('not_found');
   return {
     realmId: value.realmId,
     spaceId: value.spaceId,
-    state: "active" as const,
-    visibility: value.visibility as "public" | "protected",
+    state: 'active' as const,
+    visibility: value.visibility as 'public' | 'protected',
     contextId: value.contextId,
     boardSchemeId: value.boardSchemeId,
     ownershipState: value.ownershipState,
@@ -620,16 +497,13 @@ function publishedPublication(value: PublicationHead | PublicationResult) {
     realmId: value.realmId,
     subjectId: value.subjectId,
     publicationId: value.publicationId,
-    verdict: "adopt" as const,
+    verdict: 'adopt' as const,
     subjectRevisionId: null,
     publishedAt: new Date(value.publishedAt).toISOString(),
   };
 }
 
-export function communityRoutes(
-  app: ReturnType<typeof definitionRoutes>,
-  dependencies: CommunityRouteDependencies,
-) {
+export function communityRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: CommunityRouteDependencies) {
   const spaceDependencies = (): SpaceDependencies => ({
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -654,8 +528,7 @@ export function communityRoutes(
     tokens: dependencies.tokens,
     client: await dependencies.workClient(),
   });
-  const observedAt = () =>
-    (dependencies.clock ?? (() => new Date()))().toISOString();
+  const observedAt = () => (dependencies.clock ?? (() => new Date()))().toISOString();
   const sitemapDependencies = () => ({
     pool: dependencies.pool,
     access: dependencies.access(),
@@ -666,34 +539,24 @@ export function communityRoutes(
   return app
 
     .get(
-      "/v1/spaces/:spaceId/lifecycle",
+      '/v1/spaces/:spaceId/lifecycle',
       {
         params: t.Object({ spaceId: id }, closed),
-        response: {
-          200: strict(lifecycleResponse),
-          ...readFailures,
-          403: problemSchema("forbidden"),
-        },
+        response: { 200: strict(lifecycleResponse), ...readFailures, 403: problemSchema('forbidden') },
         detail: {
-          operationId: "space.lifecycle",
-          "x-exposure": "public",
-          "x-action": "space:manage",
-          "x-resource-types": ["community.space"],
+          operationId: 'space.lifecycle',
+          'x-exposure': 'public',
+          'x-action': 'space:manage',
+          'x-resource-types': ['community.space'],
           security: writeSecurity,
         },
       },
       async ({ params: { spaceId }, actor, admission, job }) => {
         try {
-          const container = await admission.run("normal", job, () =>
-            readContainerLifecycle(
-              spaceDependencies(),
-              actor,
-              "space",
-              spaceId,
-              { deadline: job.deadline },
-            ),
+          const container = await admission.run('normal', job, () =>
+            readContainerLifecycle(spaceDependencies(), actor, 'space', spaceId, { deadline: job.deadline }),
           );
-          if (!container) throw new ProblemError("not_found");
+          if (!container) throw new ProblemError('not_found');
           return { container };
         } catch (error) {
           communityProblem(error);
@@ -702,7 +565,7 @@ export function communityRoutes(
     )
 
     .post(
-      "/v1/spaces/:spaceId/removal",
+      '/v1/spaces/:spaceId/removal',
       {
         params: t.Object({ spaceId: id }, closed),
         headers: updateHeaders,
@@ -710,37 +573,28 @@ export function communityRoutes(
         response: {
           200: withHeaders(strict(lifecycleResult), sessionHeader),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "space.remove",
-          "x-exposure": "public",
-          "x-action": "space:manage",
-          "x-resource-types": ["community.space"],
-          "x-rate-limit": writeRate,
+          operationId: 'space.remove',
+          'x-exposure': 'public',
+          'x-action': 'space:manage',
+          'x-resource-types': ['community.space'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { spaceId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { spaceId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await removeContainer(
               spaceDependencies(),
               actor,
               {
-                kind: "space",
+                kind: 'space',
                 id: spaceId,
                 expectedHead,
                 expectedVersion: body.expectedVersion,
@@ -758,7 +612,7 @@ export function communityRoutes(
     )
 
     .post(
-      "/v1/spaces/:spaceId/restoration",
+      '/v1/spaces/:spaceId/restoration',
       {
         params: t.Object({ spaceId: id }, closed),
         headers: updateHeaders,
@@ -766,37 +620,28 @@ export function communityRoutes(
         response: {
           200: withHeaders(strict(lifecycleResult), sessionHeader),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "space.restore",
-          "x-exposure": "public",
-          "x-action": "space:restore",
-          "x-resource-types": ["community.space"],
-          "x-rate-limit": writeRate,
+          operationId: 'space.restore',
+          'x-exposure': 'public',
+          'x-action': 'space:restore',
+          'x-resource-types': ['community.space'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { spaceId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { spaceId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await restoreContainer(
               spaceDependencies(),
               actor,
               {
-                kind: "space",
+                kind: 'space',
                 id: spaceId,
                 expectedHead,
                 expectedVersion: body.expectedVersion,
@@ -813,34 +658,24 @@ export function communityRoutes(
     )
 
     .get(
-      "/v1/realms/:realmId/lifecycle",
+      '/v1/realms/:realmId/lifecycle',
       {
         params: t.Object({ realmId: id }, closed),
-        response: {
-          200: strict(lifecycleResponse),
-          ...readFailures,
-          403: problemSchema("forbidden"),
-        },
+        response: { 200: strict(lifecycleResponse), ...readFailures, 403: problemSchema('forbidden') },
         detail: {
-          operationId: "realm.lifecycle",
-          "x-exposure": "public",
-          "x-action": "moderation:takedown",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.lifecycle',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-resource-types': ['community.realm'],
           security: writeSecurity,
         },
       },
       async ({ params: { realmId }, actor, admission, job }) => {
         try {
-          const container = await admission.run("normal", job, () =>
-            readContainerLifecycle(
-              spaceDependencies(),
-              actor,
-              "realm",
-              realmId,
-              { deadline: job.deadline },
-            ),
+          const container = await admission.run('normal', job, () =>
+            readContainerLifecycle(spaceDependencies(), actor, 'realm', realmId, { deadline: job.deadline }),
           );
-          if (!container) throw new ProblemError("not_found");
+          if (!container) throw new ProblemError('not_found');
           return { container };
         } catch (error) {
           communityProblem(error);
@@ -849,7 +684,7 @@ export function communityRoutes(
     )
 
     .post(
-      "/v1/realms/:realmId/removal",
+      '/v1/realms/:realmId/removal',
       {
         params: t.Object({ realmId: id }, closed),
         headers: updateHeaders,
@@ -857,37 +692,28 @@ export function communityRoutes(
         response: {
           200: withHeaders(strict(lifecycleResult), sessionHeader),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "realm.remove",
-          "x-exposure": "public",
-          "x-action": "moderation:takedown",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.remove',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { realmId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await removeContainer(
               spaceDependencies(),
               actor,
               {
-                kind: "realm",
+                kind: 'realm',
                 id: realmId,
                 expectedHead,
                 expectedVersion: body.expectedVersion,
@@ -905,7 +731,7 @@ export function communityRoutes(
     )
 
     .post(
-      "/v1/realms/:realmId/restoration",
+      '/v1/realms/:realmId/restoration',
       {
         params: t.Object({ realmId: id }, closed),
         headers: updateHeaders,
@@ -913,37 +739,28 @@ export function communityRoutes(
         response: {
           200: withHeaders(strict(lifecycleResult), sessionHeader),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "realm.restore",
-          "x-exposure": "public",
-          "x-action": "realm:restore",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.restore',
+          'x-exposure': 'public',
+          'x-action': 'realm:restore',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { realmId }, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await restoreContainer(
               spaceDependencies(),
               actor,
               {
-                kind: "realm",
+                kind: 'realm',
                 id: realmId,
                 expectedHead,
                 expectedVersion: body.expectedVersion,
@@ -959,26 +776,26 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/realms/discovery",
+      '/v1/realms/discovery',
       {
         query: discoveryQuerySchema,
         response: {
           200: discoveryResponseSchema,
           ...readFailures,
-          400: problemSchema("invalid_request", "invalid_cursor"),
-          409: problemSchema("stale_cursor"),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
         },
         detail: {
-          operationId: "realms.discovery",
+          operationId: 'realms.discovery',
           description:
-            "Public discussion volume in the previous 30 complete UTC days (popular) or previous complete UTC day (trending). Examines at most min(limit,20) candidates; sparse and empty pages can have next. Deduplicate Realm IDs across pages.",
-          "x-exposure": "public",
-          "x-action": "realm:read",
+            'Public discussion volume in the previous 30 complete UTC days (popular) or previous complete UTC day (trending). Examines at most min(limit,20) candidates; sparse and empty pages can have next. Deduplicate Realm IDs across pages.',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
           security: readSecurity,
         },
       },
       async ({ query, admission, job }) =>
-        admission.run("normal", job, async () => {
+        admission.run('normal', job, async () => {
           const page = await listRealmDiscovery(
             {
               pool: dependencies.pool,
@@ -993,35 +810,31 @@ export function communityRoutes(
             ...page,
             realms: page.realms.map((realm) => ({
               ...realm,
-              avatar:
-                realm.avatar === null
-                  ? null
-                  : exactRealmPresentationImage(realm.avatar),
+              avatar: realm.avatar === null ? null : exactRealmPresentationImage(realm.avatar),
             })),
           };
         }),
     )
     .get(
-      "/v1/sitemap/realms",
+      '/v1/sitemap/realms',
       {
         query: SitemapQuerySchema,
         transform: ({ query }) => {
-          if ("issues" in sitemapQuery["~standard"].validate(query))
-            throw new ProblemError("invalid_request");
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
         response: { 200: sitemapRealmPage, ...sitemapFailures },
         detail: {
-          operationId: "sitemap_realms.list",
-          description: SITEMAP_DESCRIPTION("Realms"),
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'sitemap_realms.list',
+          description: SITEMAP_DESCRIPTION('Realms'),
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ query, admission, job }) => {
         try {
-          return await admission.run("normal", job, () =>
+          return await admission.run('normal', job, () =>
             listSitemapRealms(sitemapDependencies(), job.deadline, query),
           );
         } catch (error) {
@@ -1030,26 +843,25 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/sitemap/spaces",
+      '/v1/sitemap/spaces',
       {
         query: SitemapQuerySchema,
         transform: ({ query }) => {
-          if ("issues" in sitemapQuery["~standard"].validate(query))
-            throw new ProblemError("invalid_request");
+          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
         response: { 200: sitemapSpacePage, ...sitemapFailures },
         detail: {
-          operationId: "sitemap_spaces.list",
-          description: SITEMAP_DESCRIPTION("Spaces"),
-          "x-exposure": "public",
-          "x-action": "space:read",
-          "x-resource-types": ["community.space"],
+          operationId: 'sitemap_spaces.list',
+          description: SITEMAP_DESCRIPTION('Spaces'),
+          'x-exposure': 'public',
+          'x-action': 'space:read',
+          'x-resource-types': ['community.space'],
           security: readSecurity,
         },
       },
       async ({ query, admission, job }) => {
         try {
-          return await admission.run("normal", job, () =>
+          return await admission.run('normal', job, () =>
             listSitemapSpaces(sitemapDependencies(), job.deadline, query),
           );
         } catch (error) {
@@ -1058,35 +870,34 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/me/realms",
+      '/v1/me/realms',
       {
         query: strict(ownRealmsQuerySchema),
         response: {
           200: strict(ownRealmsResponseSchema),
-          400: problemSchema("invalid_request", "invalid_cursor"),
-          409: problemSchema("stale_cursor"),
-          401: problemSchema("authentication_required", "invalid_credentials"),
-          500: problemSchema("internal_error"),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
+          401: problemSchema('authentication_required', 'invalid_credentials'),
+          500: problemSchema('internal_error'),
           503: problemSchema(
-            "overloaded",
-            "deadline_exceeded",
-            "partition_unavailable",
-            "transaction_retry_exhausted",
-            "dependency_unavailable",
+            'overloaded',
+            'deadline_exceeded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'dependency_unavailable',
           ),
         },
         detail: {
-          operationId: "account.realms",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'account.realms',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ query, actor, admission, job }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        return admission.run("normal", job, () =>
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        return admission.run('normal', job, () =>
           listOwnRealms(
             { pool: dependencies.pool, tokens: dependencies.tokens },
             actor,
@@ -1097,61 +908,42 @@ export function communityRoutes(
       },
     )
     .post(
-      "/v1/spaces",
+      '/v1/spaces',
       {
         headers: commandHeaders,
         body: strict(createInput),
         response: {
-          201: withHeaders(strict(spaceResponse), {
-            ...sessionHeader,
-            location: t.String(),
-            etag: t.String(),
-          }),
+          201: withHeaders(strict(spaceResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
           ...writeFailures,
         },
         detail: {
-          operationId: "space.create",
-          "x-exposure": "public",
-          "x-action": "space:create",
-          "x-resource-types": ["community.space"],
-          "x-rate-limit": writeRate,
+          operationId: 'space.create',
+          'x-exposure': 'public',
+          'x-action': 'space:create',
+          'x-resource-types': ['community.space'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await createSpace(
               spaceDependencies(),
               actor,
-              {
-                title: body.title,
-                ...(body.summary === undefined
-                  ? {}
-                  : { summary: body.summary }),
-              },
+              { title: body.title, ...(body.summary === undefined ? {} : { summary: body.summary }) },
               { idempotencyKey: key, deadline: job.deadline },
             );
             const current = result.replayed
-              ? await readSpaceForViewer(
-                  spaceDependencies(),
-                  actor,
-                  result.value.spaceId,
-                  observedAt(),
-                  {
-                    deadline: job.deadline,
-                  },
-                )
-              : await readSpace(
-                  dependencies.pool,
-                  result.value.spaceId,
-                  observedAt(),
-                ).then((space) => space && { ...space, realmId: null });
-            if (!current || current.headRevisionId !== result.value.revisionId)
-              throw new ProblemError("not_found");
+              ? await readSpaceForViewer(spaceDependencies(), actor, result.value.spaceId, observedAt(), {
+                  deadline: job.deadline,
+                })
+              : await readSpace(dependencies.pool, result.value.spaceId, observedAt()).then(
+                  (space) => space && { ...space, realmId: null },
+                );
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
             const representation = published(current, current.realmId);
             session.record(result);
             set.status = 201;
@@ -1165,7 +957,7 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/spaces/:spaceId",
+      '/v1/spaces/:spaceId',
       {
         params,
         response: {
@@ -1173,39 +965,22 @@ export function communityRoutes(
           ...readFailures,
         },
         detail: {
-          operationId: "space.get",
-          "x-exposure": "public",
-          "x-action": "space:read",
-          "x-resource-types": ["community.space"],
+          operationId: 'space.get',
+          'x-exposure': 'public',
+          'x-action': 'space:read',
+          'x-resource-types': ['community.space'],
           security: readSecurity,
         },
       },
-      async ({
-        params: { spaceId },
-        actor,
-        authorize,
-        admission,
-        job,
-        set,
-      }) => {
+      async ({ params: { spaceId }, actor, authorize, admission, job, set }) => {
         const route = routeOf(spaceId);
-        if (route === null) throw new ProblemError("not_found");
+        if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: spaceId };
-        const check = await authorize({
-          ...resource,
-          eligibility: spaceReadEligibility(resource),
-        });
-        const current = await admission.run("normal", job, () =>
-          readSpaceForViewer(
-            spaceDependencies(),
-            actor,
-            spaceId,
-            observedAt(),
-            { deadline: job.deadline },
-            check,
-          ),
+        const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
+        const current = await admission.run('normal', job, () =>
+          readSpaceForViewer(spaceDependencies(), actor, spaceId, observedAt(), { deadline: job.deadline }, check),
         );
-        if (!current) throw new ProblemError("not_found");
+        if (!current) throw new ProblemError('not_found');
         const community = current.realmId
           ? (
               await readCommunityPresentations(
@@ -1219,7 +994,7 @@ export function communityRoutes(
               )
             ).get(current.realmId)
           : null;
-        if (current.realmId && !community) throw new ProblemError("not_found");
+        if (current.realmId && !community) throw new ProblemError('not_found');
         // Re-read the Space after optional enrichment with the original admission.
         const final = await readSpaceForViewer(
           spaceDependencies(),
@@ -1229,79 +1004,50 @@ export function communityRoutes(
           { deadline: job.deadline },
           check,
         );
-        if (
-          !final ||
-          final.headRevisionId !== current.headRevisionId ||
-          final.realmId !== current.realmId
-        )
-          throw new ProblemError("not_found");
+        if (!final || final.headRevisionId !== current.headRevisionId || final.realmId !== current.realmId)
+          throw new ProblemError('not_found');
         const representation = published(final, final.realmId);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
-        return {
-          space: representation,
-          community: community
-            ? communityPresentationResponse(community)
-            : null,
-        };
+        return { space: representation, community: community ? communityPresentationResponse(community) : null };
       },
     )
     .put(
-      "/v1/spaces/:spaceId/address",
+      '/v1/spaces/:spaceId/address',
       {
         params,
         headers: updateHeaders,
         body: strict(addressInput),
         response: {
-          200: withHeaders(strict(spaceResponse), {
-            ...sessionHeader,
-            etag: t.String(),
-          }),
+          200: withHeaders(strict(spaceResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
-          409: problemSchema("conflict"),
+          412: problemSchema('precondition_failed'),
+          409: problemSchema('conflict'),
         },
         detail: {
-          operationId: "space_address.change",
-          "x-exposure": "public",
-          "x-action": "space:manage",
-          "x-resource-types": ["community.space"],
-          "x-rate-limit": writeRate,
+          operationId: 'space_address.change',
+          'x-exposure': 'public',
+          'x-action': 'space:manage',
+          'x-resource-types': ['community.space'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { spaceId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { spaceId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await claimSpaceAddress(
               spaceDependencies(),
               actor,
               { spaceId, expectedHead, address: body.address },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readSpaceForViewer(
-              spaceDependencies(),
-              actor,
-              result.value.spaceId,
-              observedAt(),
-              {
-                deadline: job.deadline,
-              },
-            );
-            if (!current || current.headRevisionId !== result.value.revisionId)
-              throw new ProblemError("not_found");
+            const current = await readSpaceForViewer(spaceDependencies(), actor, result.value.spaceId, observedAt(), {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
             const representation = published(current, current.realmId);
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
@@ -1313,7 +1059,7 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/spaceAddresses/:address",
+      '/v1/spaceAddresses/:address',
       {
         params: addressParams,
         response: {
@@ -1321,10 +1067,10 @@ export function communityRoutes(
           ...readFailures,
         },
         detail: {
-          operationId: "space_address.resolve",
-          "x-exposure": "public",
-          "x-action": "space:read",
-          "x-resource-types": ["community.space"],
+          operationId: 'space_address.resolve',
+          'x-exposure': 'public',
+          'x-action': 'space:read',
+          'x-resource-types': ['community.space'],
           security: readSecurity,
         },
       },
@@ -1333,70 +1079,52 @@ export function communityRoutes(
         try {
           normalized = normalizeHandle(address);
         } catch {
-          throw new ProblemError("not_found");
+          throw new ProblemError('not_found');
         }
-        const current = await admission.run("normal", job, async () => {
-          const claim = await withConnection(dependencies.pool, (client) =>
-            readSpaceAddress(client, normalized),
-          );
+        const current = await admission.run('normal', job, async () => {
+          const claim = await withConnection(dependencies.pool, (client) => readSpaceAddress(client, normalized));
           if (!claim) return null;
           const route = routeOf(claim.spaceId);
           if (route === null) return null;
           const resource = { route, id: claim.spaceId };
-          const check = await authorize({
-            ...resource,
-            eligibility: spaceReadEligibility(resource),
-          });
+          const check = await authorize({ ...resource, eligibility: spaceReadEligibility(resource) });
           return withConnection(dependencies.pool, async (client) => {
             if (!(await check(client))) return null;
             const space = await readSpace(client, claim.spaceId, observedAt());
             return space?.address === normalized ? space : null;
           });
         });
-        if (!current) throw new ProblemError("not_found");
+        if (!current) throw new ProblemError('not_found');
         published(current);
         return { spaceId: current.spaceId };
       },
     )
     .patch(
-      "/v1/spaces/:spaceId",
+      '/v1/spaces/:spaceId',
       {
         params,
         headers: updateHeaders,
         body: strict(updateInput),
         response: {
-          200: withHeaders(strict(spaceResponse), {
-            ...sessionHeader,
-            etag: t.String(),
-          }),
+          200: withHeaders(strict(spaceResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "space.update",
-          "x-exposure": "public",
-          "x-action": "space:manage",
-          "x-resource-types": ["community.space"],
-          "x-rate-limit": writeRate,
+          operationId: 'space.update',
+          'x-exposure': 'public',
+          'x-action': 'space:manage',
+          'x-resource-types': ['community.space'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { spaceId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { spaceId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await updateSpace(
               spaceDependencies(),
               actor,
@@ -1404,23 +1132,14 @@ export function communityRoutes(
                 spaceId,
                 expectedHead,
                 ...(body.title === undefined ? {} : { title: body.title }),
-                ...(body.summary === undefined
-                  ? {}
-                  : { summary: body.summary }),
+                ...(body.summary === undefined ? {} : { summary: body.summary }),
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readSpaceForViewer(
-              spaceDependencies(),
-              actor,
-              result.value.spaceId,
-              observedAt(),
-              {
-                deadline: job.deadline,
-              },
-            );
-            if (!current || current.headRevisionId !== result.value.revisionId)
-              throw new ProblemError("not_found");
+            const current = await readSpaceForViewer(spaceDependencies(), actor, result.value.spaceId, observedAt(), {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
             const representation = published(current, current.realmId);
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
@@ -1432,58 +1151,45 @@ export function communityRoutes(
       },
     )
     .post(
-      "/v1/realms",
+      '/v1/realms',
       {
         headers: commandHeaders,
         body: strict(createRealmInput),
         response: {
-          201: withHeaders(strict(realmResponse), {
-            ...sessionHeader,
-            location: t.String(),
-            etag: t.String(),
-          }),
+          201: withHeaders(strict(realmResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
           ...writeFailures,
         },
         detail: {
-          operationId: "realm.create",
-          "x-exposure": "public",
-          "x-action": "realm:create",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.create',
+          'x-exposure': 'public',
+          'x-action': 'realm:create',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await createRealm(
               realmDependencies(),
               actor,
               {
                 spaceId: body.spaceId,
                 title: body.title,
-                ...(body.summary === undefined
-                  ? {}
-                  : { summary: body.summary }),
+                ...(body.summary === undefined ? {} : { summary: body.summary }),
                 visibility: body.visibility,
                 contextId: body.contextId,
                 ...(body.votes === undefined ? {} : { votes: body.votes }),
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readRealm(
-              realmDependencies(),
-              actor,
-              result.value.realmId,
-              {
-                deadline: job.deadline,
-              },
-            );
-            if (!current || current.headRevisionId !== result.value.revisionId)
-              throw new ProblemError("not_found");
+            const current = await readRealm(realmDependencies(), actor, result.value.realmId, {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
             const representation = publishedRealm(current);
             session.record(result);
             set.status = 201;
@@ -1497,7 +1203,7 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/realms/:realmId",
+      '/v1/realms/:realmId',
       {
         params: realmParams,
         response: {
@@ -1505,27 +1211,25 @@ export function communityRoutes(
           ...readFailures,
         },
         detail: {
-          operationId: "realm.get",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.get',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ params: { realmId }, actor, admission, job, set }) => {
-        const current = await admission.run("normal", job, () =>
-          readRealm(realmDependencies(), actor, realmId, {
-            deadline: job.deadline,
-          }),
+        const current = await admission.run('normal', job, () =>
+          readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline }),
         );
-        if (!current) throw new ProblemError("not_found");
+        if (!current) throw new ProblemError('not_found');
         const representation = publishedRealm(current);
         set.headers.etag = JSON.stringify(representation.headRevisionId);
         return { realm: representation };
       },
     )
     .get(
-      "/v1/realms/:realmId/settings",
+      '/v1/realms/:realmId/settings',
       {
         params: realmParams,
         response: {
@@ -1535,119 +1239,109 @@ export function communityRoutes(
           ...readFailures,
         },
         detail: {
-          operationId: "realm.settings",
-          "x-exposure": "public",
-          "x-action": "realm:manage",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.settings',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['community.realm'],
           security: writeSecurity,
         },
       },
       async ({ params: { realmId }, actor, admission, job, set }) => {
-        const page = await admission.run("normal", job, () =>
+        const page = await admission.run('normal', job, () =>
           readRealmSettingsPage(realmDependencies(), actor, realmId, {
             deadline: job.deadline,
           }),
         );
         set.headers.etag = JSON.stringify(page.snapshot.head);
-        set.headers["cache-control"] = "private, no-store";
+        set.headers['cache-control'] = 'private, no-store';
         return page;
       },
     )
     .get(
-      "/v1/realms/:realmId/presentation",
+      '/v1/realms/:realmId/presentation',
       {
         params: realmParams,
-        response: {
-          200: strict(
-            t.Object({ community: CommunityPresentationSchema }, closed),
-          ),
-          ...readFailures,
-        },
+        response: { 200: strict(t.Object({ community: CommunityPresentationSchema }, closed)), ...readFailures },
         detail: {
-          operationId: "realm.presentation",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.presentation',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ params: { realmId }, actor, admission, job }) => {
-        const community = await admission.run("normal", job, () =>
-          readRealmHomePresentation(realmDependencies(), realmId, {
-            actor,
-            deadline: job.deadline,
-          }),
+        const community = await admission.run('normal', job, () =>
+          readRealmHomePresentation(realmDependencies(), realmId, { actor, deadline: job.deadline }),
         );
-        if (!community) throw new ProblemError("not_found");
+        if (!community) throw new ProblemError('not_found');
         return { community: communityPresentationResponse(community) };
       },
     )
     .get(
-      "/v1/realms/:realmId/participation",
+      '/v1/realms/:realmId/participation',
       {
         params: realmParams,
         response: {
           204: t.Void(),
           ...readFailures,
-          403: problemSchema("forbidden"),
-          429: problemSchema("rate_limited"),
+          403: problemSchema('forbidden'),
+          429: problemSchema('rate_limited'),
           503: problemSchema(
-            "overloaded",
-            "deadline_exceeded",
-            "partition_unavailable",
-            "transaction_retry_exhausted",
-            "dependency_unavailable",
-            "rate_limit_unavailable",
+            'overloaded',
+            'deadline_exceeded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'dependency_unavailable',
+            'rate_limit_unavailable',
           ),
         },
         detail: {
-          operationId: "realm.participation",
-          "x-exposure": "public",
-          "x-action": "realm:participate",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.participation',
+          'x-exposure': 'public',
+          'x-action': 'realm:participate',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ params: { realmId }, actor, admission, job, set }) => {
-        const allowed = await admission.run("normal", job, () =>
-          createRealmParticipationCheck({
-            pool: dependencies.pool,
-            access: dependencies.access(),
-          })(dependencies.pool as unknown as AccessClient, { realmId, actor }),
+        const allowed = await admission.run('normal', job, () =>
+          createRealmParticipationCheck({ pool: dependencies.pool, access: dependencies.access() })(
+            dependencies.pool as unknown as AccessClient,
+            { realmId, actor },
+          ),
         );
         if (!allowed) {
-          const readable = await admission.run("normal", job, () =>
-            readRealm(realmDependencies(), actor, realmId, {
-              deadline: job.deadline,
-            }),
+          const readable = await admission.run('normal', job, () =>
+            readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline }),
           );
-          if (!readable) throw new ProblemError("not_found");
-          throw new ProblemError("forbidden");
+          if (!readable) throw new ProblemError('not_found');
+          throw new ProblemError('forbidden');
         }
         set.status = 204;
       },
     )
     .get(
-      "/v1/realms/:realmId/claimRequests",
+      '/v1/realms/:realmId/claimRequests',
       {
         params: realmParams,
         query: claimReviewQuery,
         response: {
           200: strict(claimReviewResponse),
           ...readFailures,
-          400: problemSchema("invalid_request", "invalid_cursor"),
-          409: problemSchema("stale_cursor"),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
         },
         detail: {
-          operationId: "realm.claim_requests",
-          "x-exposure": "public",
-          "x-action": "realm:approve_claim",
+          operationId: 'realm.claim_requests',
+          'x-exposure': 'public',
+          'x-action': 'realm:approve_claim',
           security: writeSecurity,
         },
       },
       async ({ params: { realmId }, query, actor, admission, job }) =>
-        admission.run("normal", job, async () => {
+        admission.run('normal', job, async () => {
           const result = await listRealmClaimRequests(
             realmDependencies(),
             actor,
@@ -1656,14 +1350,11 @@ export function communityRoutes(
               deadline: job.deadline,
             },
           );
-          return {
-            claimRequests: [...result.claimRequests],
-            next: result.next,
-          };
+          return { claimRequests: [...result.claimRequests], next: result.next };
         }),
     )
     .post(
-      "/v1/realms/:realmId/claimRequests",
+      '/v1/realms/:realmId/claimRequests',
       {
         params: realmParams,
         headers: commandHeaders,
@@ -1673,44 +1364,28 @@ export function communityRoutes(
           ...writeFailures,
         },
         detail: {
-          operationId: "realm.claim_request",
-          "x-exposure": "public",
-          "x-action": "realm:participate",
-          "x-rate-limit": writeRate,
+          operationId: 'realm.claim_request',
+          'x-exposure': 'public',
+          'x-action': 'realm:participate',
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+      async ({ params: { realmId }, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
-            const result = await requestRealmClaim(
-              realmDependencies(),
-              actor,
-              realmId,
-              {
-                idempotencyKey: key,
-                deadline: job.deadline,
-              },
-            );
+          return await admission.run('normal', job, async () => {
+            const result = await requestRealmClaim(realmDependencies(), actor, realmId, {
+              idempotencyKey: key,
+              deadline: job.deadline,
+            });
             session.record(result);
             set.status = 202;
             return {
               ...result.value,
               orphanedAt: new Date(result.value.orphanedAt).toISOString(),
-              claimEligibleAt: new Date(
-                result.value.claimEligibleAt,
-              ).toISOString(),
+              claimEligibleAt: new Date(result.value.claimEligibleAt).toISOString(),
               requestedAt: new Date(result.value.requestedAt).toISOString(),
             };
           });
@@ -1720,103 +1395,76 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/realms/:realmId/claimRequests/mine",
+      '/v1/realms/:realmId/claimRequests/mine',
       {
         params: realmParams,
         response: {
-          200: strict(
-            t.Object(
-              { claimRequest: t.Union([realmClaimStatus, t.Null()]) },
-              closed,
-            ),
-          ),
+          200: strict(t.Object({ claimRequest: t.Union([realmClaimStatus, t.Null()]) }, closed)),
           ...readFailures,
         },
         detail: {
-          operationId: "realm.own_claim_request",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.own_claim_request',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ params, actor, admission, job }) => {
-        const claimRequest = await admission.run("normal", job, () =>
-          readOwnRealmClaim(realmDependencies(), actor, params, {
-            deadline: job.deadline,
-          }),
+        const claimRequest = await admission.run('normal', job, () =>
+          readOwnRealmClaim(realmDependencies(), actor, params, { deadline: job.deadline }),
         );
         return { claimRequest };
       },
     )
     .get(
-      "/v1/realms/:realmId/claimRequests/:requestId",
+      '/v1/realms/:realmId/claimRequests/:requestId',
       {
-        params: t.Object(
-          { realmId: t.String(), requestId: t.String() },
-          closed,
-        ),
-        response: {
-          200: strict(t.Object({ claimRequest: realmClaimStatus }, closed)),
-          ...readFailures,
-        },
+        params: t.Object({ realmId: t.String(), requestId: t.String() }, closed),
+        response: { 200: strict(t.Object({ claimRequest: realmClaimStatus }, closed)), ...readFailures },
         detail: {
-          operationId: "realm.claim_request_status",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.claim_request_status',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ params, actor, admission, job }) => {
-        const claimRequest = await admission.run("normal", job, () =>
-          readOwnRealmClaim(realmDependencies(), actor, params, {
-            deadline: job.deadline,
-          }),
+        const claimRequest = await admission.run('normal', job, () =>
+          readOwnRealmClaim(realmDependencies(), actor, params, { deadline: job.deadline }),
         );
-        if (!claimRequest) throw new ProblemError("not_found");
+        if (!claimRequest) throw new ProblemError('not_found');
         return { claimRequest };
       },
     )
     .post(
-      customMethod("/v1/realms/:realmId/claimRequests/:requestId", "approve"),
+      customMethod('/v1/realms/:realmId/claimRequests/:requestId', 'approve'),
       {
-        params: t.Object(
-          { realmId: t.String(), requestId: t.String() },
-          closed,
-        ),
+        params: t.Object({ realmId: t.String(), requestId: t.String() }, closed),
         headers: commandHeaders,
         response: {
-          200: withHeaders(
-            strict(realmClaimApprovalResponseSchema),
-            sessionHeader,
-          ),
+          200: withHeaders(strict(realmClaimApprovalResponseSchema), sessionHeader),
           ...writeFailures,
         },
         detail: {
-          operationId: "realm.approve_claim",
-          "x-exposure": "public",
-          "x-action": "realm:approve_claim",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.approve_claim',
+          'x-exposure': 'public',
+          'x-action': 'realm:approve_claim',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ params, headers, actor, admission, job }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
-            const result = await approveRealmClaim(
-              realmDependencies(),
-              actor,
-              params,
-              {
-                deadline: job.deadline,
-                idempotencyKey: key,
-              },
-            );
+          return await admission.run('normal', job, async () => {
+            const result = await approveRealmClaim(realmDependencies(), actor, params, {
+              deadline: job.deadline,
+              idempotencyKey: key,
+            });
             return {
               claim: {
                 ...result,
@@ -1831,45 +1479,32 @@ export function communityRoutes(
       },
     )
     .patch(
-      "/v1/realms/:realmId",
+      '/v1/realms/:realmId',
       {
         params: realmParams,
         headers: updateHeaders,
         body: strict(updateRealmInput),
         response: {
-          200: withHeaders(strict(realmResponse), {
-            ...sessionHeader,
-            etag: t.String(),
-          }),
+          200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
-          409: problemSchema("conflict", "media_unavailable"),
-          412: problemSchema("precondition_failed"),
+          409: problemSchema('conflict', 'media_unavailable'),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "realm.update",
-          "x-exposure": "public",
-          "x-action": "realm:manage",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.update',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { realmId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await updateRealm(
               realmDependencies(),
               actor,
@@ -1877,32 +1512,18 @@ export function communityRoutes(
                 realmId,
                 expectedHead,
                 ...(body.title === undefined ? {} : { title: body.title }),
-                ...(body.summary === undefined
-                  ? {}
-                  : { summary: body.summary }),
-                ...(body.visibility === undefined
-                  ? {}
-                  : { visibility: body.visibility }),
-                ...(body.contextId === undefined
-                  ? {}
-                  : { contextId: body.contextId }),
+                ...(body.summary === undefined ? {} : { summary: body.summary }),
+                ...(body.visibility === undefined ? {} : { visibility: body.visibility }),
+                ...(body.contextId === undefined ? {} : { contextId: body.contextId }),
                 ...(body.votes === undefined ? {} : { votes: body.votes }),
-                ...(body.presentation === undefined
-                  ? {}
-                  : { presentation: body.presentation }),
+                ...(body.presentation === undefined ? {} : { presentation: body.presentation }),
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readRealm(
-              realmDependencies(),
-              actor,
-              result.value.realmId,
-              {
-                deadline: job.deadline,
-              },
-            );
-            if (!current || current.headRevisionId !== result.value.revisionId)
-              throw new ProblemError("not_found");
+            const current = await readRealm(realmDependencies(), actor, result.value.realmId, {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
             const representation = publishedRealm(current);
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
@@ -1914,44 +1535,31 @@ export function communityRoutes(
       },
     )
     .put(
-      "/v1/realms/:realmId/boardScheme",
+      '/v1/realms/:realmId/boardScheme',
       {
         params: realmParams,
         headers: updateHeaders,
         body: strict(t.Object({ schemeId: id }, closed)),
         response: {
-          200: withHeaders(strict(realmResponse), {
-            ...sessionHeader,
-            etag: t.String(),
-          }),
+          200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "realm.board_scheme",
-          "x-exposure": "public",
-          "x-action": "realm:manage",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.board_scheme',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { realmId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await setBoardScheme(
               realmDependencies(),
               actor,
@@ -1962,16 +1570,10 @@ export function communityRoutes(
               },
               { idempotencyKey: key, deadline: job.deadline },
             );
-            const current = await readRealm(
-              realmDependencies(),
-              actor,
-              result.value.realmId,
-              {
-                deadline: job.deadline,
-              },
-            );
-            if (!current || current.headRevisionId !== result.value.revisionId)
-              throw new ProblemError("not_found");
+            const current = await readRealm(realmDependencies(), actor, result.value.realmId, {
+              deadline: job.deadline,
+            });
+            if (!current || current.headRevisionId !== result.value.revisionId) throw new ProblemError('not_found');
             const representation = publishedRealm(current);
             session.record(result);
             set.headers.etag = JSON.stringify(representation.headRevisionId);
@@ -1983,57 +1585,36 @@ export function communityRoutes(
       },
     )
     .post(
-      "/v1/realms/:realmId/publications",
+      '/v1/realms/:realmId/publications',
       {
         params: realmParams,
         headers: publicationHeaders,
         body: strict(t.Object({ subjectId: id }, closed)),
         response: {
-          201: withHeaders(strict(publicationResponse), {
-            ...sessionHeader,
-            location: t.String(),
-            etag: t.String(),
-          }),
+          201: withHeaders(strict(publicationResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
           ...writeFailures,
-          409: problemSchema("conflict"),
-          412: problemSchema("precondition_failed"),
+          409: problemSchema('conflict'),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "publication.publish",
-          "x-exposure": "public",
-          "x-action": "realm:publish",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'publication.publish',
+          'x-exposure': 'public',
+          'x-action': 'realm:publish',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead =
-          headers["if-match"] === undefined
-            ? undefined
-            : matchHead(headers["if-match"]);
+      async ({ params: { realmId }, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = headers['if-match'] === undefined ? undefined : matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await publish(
               realmDependencies(),
               actor,
-              {
-                realmId,
-                subjectId: body.subjectId,
-                ...(expectedHead === undefined ? {} : { expectedHead }),
-              },
+              { realmId, subjectId: body.subjectId, ...(expectedHead === undefined ? {} : { expectedHead }) },
               { idempotencyKey: key, deadline: job.deadline },
             );
             session.record(result);
@@ -2043,45 +1624,40 @@ export function communityRoutes(
             return { publication: publishedPublication(result.value) };
           });
         } catch (error) {
-          if (
-            error instanceof PublicationConflictError &&
-            expectedHead !== undefined
-          )
-            throw new ProblemError("precondition_failed");
+          if (error instanceof PublicationConflictError && expectedHead !== undefined)
+            throw new ProblemError('precondition_failed');
           communityProblem(error);
         }
       },
     )
     .get(
-      "/v1/realms/:realmId/publications",
+      '/v1/realms/:realmId/publications',
       {
         params: realmParams,
         query: t.Object(
           {
             cursor: t.Optional(t.String()),
-            limit: t.Optional(
-              t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 }),
-            ),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1 })),
           },
           closed,
         ),
         response: {
           200: strict(publicationPage),
           ...readFailures,
-          400: problemSchema("invalid_request", "invalid_cursor"),
-          409: problemSchema("stale_cursor"),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
         },
         detail: {
-          operationId: "publication.list",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'publication.list',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ params: { realmId }, query, actor, admission, job }) => {
         try {
-          const page = await admission.run("normal", job, () =>
+          const page = await admission.run('normal', job, () =>
             listPublications(
               realmDependencies(),
               realmId,
@@ -2092,46 +1668,39 @@ export function communityRoutes(
               },
             ),
           );
-          if (!page) throw new ProblemError("not_found");
-          return {
-            items: page.items.map(publishedPublication),
-            next: page.next,
-          };
+          if (!page) throw new ProblemError('not_found');
+          return { items: page.items.map(publishedPublication), next: page.next };
         } catch (error) {
           communityProblem(error);
         }
       },
     )
     .get(
-      "/v1/realms/:realmId/publicationShelf",
+      '/v1/realms/:realmId/publicationShelf',
       {
         params: realmParams,
         query: strict(RealmHomePublicationQuerySchema),
         response: {
           200: strict(RealmHomePublicationPageSchema),
           ...readFailures,
-          400: problemSchema("invalid_request", "invalid_cursor"),
-          409: problemSchema("stale_cursor"),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
         },
         detail: {
-          operationId: "realm.publicationShelf",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.publicationShelf',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ params: { realmId }, query, actor, admission, job, set }) => {
-        set.headers["cache-control"] = "private, no-store";
+        set.headers['cache-control'] = 'private, no-store';
         try {
-          const page = await admission.run("normal", job, () =>
-            createRealmHomePublicationReader(realmDependencies())(
-              realmId,
-              { actor, deadline: job.deadline },
-              query,
-            ),
+          const page = await admission.run('normal', job, () =>
+            createRealmHomePublicationReader(realmDependencies())(realmId, { actor, deadline: job.deadline }, query),
           );
-          if (!page) throw new ProblemError("not_found");
+          if (!page) throw new ProblemError('not_found');
           return realmHomePublicationResponse(page);
         } catch (error) {
           communityProblem(error);
@@ -2139,7 +1708,7 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/realms/:realmId/publications/:subjectId",
+      '/v1/realms/:realmId/publications/:subjectId',
       {
         params: publicationParams,
         response: {
@@ -2147,68 +1716,47 @@ export function communityRoutes(
           ...readFailures,
         },
         detail: {
-          operationId: "publication.get",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'publication.get',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
-      async ({
-        params: { realmId, subjectId },
-        actor,
-        admission,
-        job,
-        set,
-      }) => {
-        const current = await admission.run("normal", job, () =>
-          readPublication(realmDependencies(), realmId, subjectId, {
-            actor,
-            deadline: job.deadline,
-          }),
+      async ({ params: { realmId, subjectId }, actor, admission, job, set }) => {
+        const current = await admission.run('normal', job, () =>
+          readPublication(realmDependencies(), realmId, subjectId, { actor, deadline: job.deadline }),
         );
-        if (!current) throw new ProblemError("not_found");
+        if (!current) throw new ProblemError('not_found');
         set.headers.etag = JSON.stringify(current.publicationId);
         return { publication: publishedPublication(current) };
       },
     )
     .post(
-      customMethod("/v1/realms/:realmId/publications/:subjectId", "withdraw"),
+      customMethod('/v1/realms/:realmId/publications/:subjectId', 'withdraw'),
       {
         params: publicationParams,
         headers: updateHeaders,
         response: {
-          200: withHeaders(strict(decisionResponse), {
-            ...sessionHeader,
-            etag: t.String(),
-          }),
+          200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "publication.withdraw",
-          "x-exposure": "public",
-          "x-action": "realm:publish",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'publication.withdraw',
+          'x-exposure': 'public',
+          'x-action': 'realm:publish',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId, subjectId },
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { realmId, subjectId }, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await withdraw(
               realmDependencies(),
               actor,
@@ -2220,55 +1768,42 @@ export function communityRoutes(
             return {
               publication: {
                 ...result.value,
-                verdict: "withdraw" as const,
+                verdict: 'withdraw' as const,
                 publishedAt: new Date(result.value.publishedAt).toISOString(),
               },
             };
           });
         } catch (error) {
-          if (error instanceof PublicationConflictError)
-            throw new ProblemError("precondition_failed");
+          if (error instanceof PublicationConflictError) throw new ProblemError('precondition_failed');
           communityProblem(error);
         }
       },
     )
     .post(
-      customMethod("/v1/realms/:realmId/publications/:subjectId", "reject"),
+      customMethod('/v1/realms/:realmId/publications/:subjectId', 'reject'),
       {
         params: publicationParams,
         headers: updateHeaders,
         response: {
-          200: withHeaders(strict(decisionResponse), {
-            ...sessionHeader,
-            etag: t.String(),
-          }),
+          200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
           ...writeFailures,
-          412: problemSchema("precondition_failed"),
+          412: problemSchema('precondition_failed'),
         },
         detail: {
-          operationId: "publication.reject",
-          "x-exposure": "public",
-          "x-action": "realm:publish",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'publication.reject',
+          'x-exposure': 'public',
+          'x-action': 'realm:publish',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId, subjectId },
-        headers,
-        actor,
-        admission,
-        job,
-        session,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        const expectedHead = matchHead(headers["if-match"]);
+      async ({ params: { realmId, subjectId }, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const expectedHead = matchHead(headers['if-match']);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await reject(
               realmDependencies(),
               actor,
@@ -2280,76 +1815,53 @@ export function communityRoutes(
             return {
               publication: {
                 ...result.value,
-                verdict: "reject" as const,
+                verdict: 'reject' as const,
                 publishedAt: new Date(result.value.publishedAt).toISOString(),
               },
             };
           });
         } catch (error) {
-          if (error instanceof PublicationConflictError)
-            throw new ProblemError("precondition_failed");
+          if (error instanceof PublicationConflictError) throw new ProblemError('precondition_failed');
           communityProblem(error);
         }
       },
     )
     .post(
-      "/v1/realms/:realmId/membership",
+      '/v1/realms/:realmId/membership',
       {
         params: realmParams,
         headers: commandHeaders,
         response: { 202: strict(accepted), ...writeFailures },
         detail: {
-          operationId: "realm.join",
-          "x-exposure": "public",
-          "x-action": "realm:join",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.join',
+          'x-exposure': 'public',
+          'x-action': 'realm:join',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        headers,
-        actor,
-        admission,
-        job,
-        authorize,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+      async ({ params: { realmId }, headers, actor, admission, job, authorize, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const route = routeOf(realmId);
-        if (route === null) throw new ProblemError("not_found");
+        if (route === null) throw new ProblemError('not_found');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
-            const current = await readRealm(
-              realmDependencies(),
+          return await admission.run('normal', job, async () => {
+            const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!current) throw new ProblemError('not_found');
+            if (current.visibility !== 'public') throw new ProblemError('forbidden');
+            const allowed = await authorize({ route, id: realmId });
+            if (!(await withConnection(dependencies.pool, (client) => allowed(client))))
+              throw new ProblemError('forbidden');
+            const result = await enqueueRealmJoin(await membershipDependencies(), {
               actor,
               realmId,
-              { deadline: job.deadline },
-            );
-            if (!current) throw new ProblemError("not_found");
-            if (current.visibility !== "public")
-              throw new ProblemError("forbidden");
-            const allowed = await authorize({ route, id: realmId });
-            if (
-              !(await withConnection(dependencies.pool, (client) =>
-                allowed(client),
-              ))
-            )
-              throw new ProblemError("forbidden");
-            const result = await enqueueRealmJoin(
-              await membershipDependencies(),
-              {
-                actor,
-                realmId,
-                spaceId: current.spaceId,
-                memberAccountId: actor.accountId,
-                idempotencyKey: key,
-                deadline: job.deadline,
-              },
-            );
+              spaceId: current.spaceId,
+              memberAccountId: actor.accountId,
+              idempotencyKey: key,
+              deadline: job.deadline,
+            });
             set.status = 202;
             return result;
           });
@@ -2359,53 +1871,40 @@ export function communityRoutes(
       },
     )
     .delete(
-      "/v1/realms/:realmId/membership",
+      '/v1/realms/:realmId/membership',
       {
         params: realmParams,
-        response: {
-          202: strict(accepted),
-          ...writeFailures,
-          409: realmLeaveConflict,
-        },
+        response: { 202: strict(accepted), ...writeFailures, 409: realmLeaveConflict },
         detail: {
-          operationId: "realm.leave",
-          "x-exposure": "public",
-          "x-action": "realm:join",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.leave',
+          'x-exposure': 'public',
+          'x-action': 'realm:join',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ params: { realmId }, actor, admission, job, set }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        if (routeOf(realmId) === null) throw new ProblemError("not_found");
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(realmId) === null) throw new ProblemError('not_found');
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const interval = await readRealmMembershipInterval(
               dependencies.pool,
               realmId,
               actor.accountId,
               observedAt(),
             );
-            if (!interval) throw new ProblemError("not_found");
-            const current = await readRealm(
-              realmDependencies(),
+            if (!interval) throw new ProblemError('not_found');
+            const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!current) throw new ProblemError('not_found');
+            const result = await enqueueRealmLeave(await membershipDependencies(), {
               actor,
               realmId,
-              { deadline: job.deadline },
-            );
-            if (!current) throw new ProblemError("not_found");
-            const result = await enqueueRealmLeave(
-              await membershipDependencies(),
-              {
-                actor,
-                realmId,
-                spaceId: current.spaceId,
-                reservationId: interval.reservationId,
-                deadline: job.deadline,
-              },
-            );
+              spaceId: current.spaceId,
+              reservationId: interval.reservationId,
+              deadline: job.deadline,
+            });
             set.status = 202;
             return result;
           });
@@ -2415,66 +1914,45 @@ export function communityRoutes(
       },
     )
     .post(
-      "/v1/realms/:realmId/members",
+      '/v1/realms/:realmId/members',
       {
         params: realmParams,
         headers: commandHeaders,
         body: strict(addMemberInput),
         response: { 202: strict(accepted), ...writeFailures },
         detail: {
-          operationId: "realm.add_member",
-          "x-exposure": "public",
-          "x-action": "realm:manage",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.add_member',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
-      async ({
-        params: { realmId },
-        body,
-        headers,
-        actor,
-        admission,
-        job,
-        authorize,
-        set,
-      }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        if (routeOf(body.accountId) === null)
-          throw new ProblemError("invalid_request");
+      async ({ params: { realmId }, body, headers, actor, admission, job, authorize, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(body.accountId) === null) throw new ProblemError('invalid_request');
         const route = routeOf(realmId);
-        if (route === null) throw new ProblemError("not_found");
+        if (route === null) throw new ProblemError('not_found');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const allowed = await authorize({ route, id: realmId });
-            const granted = await withConnection(dependencies.pool, (client) =>
-              allowed(client),
-            );
-            const current = await readRealm(
-              realmDependencies(),
+            const granted = await withConnection(dependencies.pool, (client) => allowed(client));
+            const current = await readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline });
+            if (!granted) {
+              if (!current) throw new ProblemError('not_found');
+              throw new ProblemError('forbidden');
+            }
+            if (!current) throw new ProblemError('not_found');
+            const result = await enqueueRealmJoin(await membershipDependencies(), {
               actor,
               realmId,
-              { deadline: job.deadline },
-            );
-            if (!granted) {
-              if (!current) throw new ProblemError("not_found");
-              throw new ProblemError("forbidden");
-            }
-            if (!current) throw new ProblemError("not_found");
-            const result = await enqueueRealmJoin(
-              await membershipDependencies(),
-              {
-                actor,
-                realmId,
-                spaceId: current.spaceId,
-                memberAccountId: body.accountId,
-                idempotencyKey: key,
-                deadline: job.deadline,
-              },
-            );
+              spaceId: current.spaceId,
+              memberAccountId: body.accountId,
+              idempotencyKey: key,
+              deadline: job.deadline,
+            });
             set.status = 202;
             return result;
           });
@@ -2484,68 +1962,53 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/realms/:realmId/members/me",
+      '/v1/realms/:realmId/members/me',
       {
         params: realmParams,
-        response: {
-          200: strict(membershipState),
-          ...readFailures,
-          403: problemSchema("forbidden"),
-        },
+        response: { 200: strict(membershipState), ...readFailures, 403: problemSchema('forbidden') },
         detail: {
-          operationId: "realm.membership",
-          "x-exposure": "public",
-          "x-action": "realm:read",
-          "x-resource-types": ["community.realm"],
+          operationId: 'realm.membership',
+          'x-exposure': 'public',
+          'x-action': 'realm:read',
+          'x-resource-types': ['community.realm'],
           security: readSecurity,
         },
       },
       async ({ params: { realmId }, actor, admission, job }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
-        if (routeOf(realmId) === null) throw new ProblemError("not_found");
-        const current = await admission.run("normal", job, () =>
-          readRealm(realmDependencies(), actor, realmId, {
-            deadline: job.deadline,
-          }),
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (routeOf(realmId) === null) throw new ProblemError('not_found');
+        const current = await admission.run('normal', job, () =>
+          readRealm(realmDependencies(), actor, realmId, { deadline: job.deadline }),
         );
-        if (!current) throw new ProblemError("not_found");
-        return readOwnRealmMembership(
-          dependencies.pool,
-          realmId,
-          actor.accountId,
-          observedAt(),
-        );
+        if (!current) throw new ProblemError('not_found');
+        return readOwnRealmMembership(dependencies.pool, realmId, actor.accountId, observedAt());
       },
     )
     .put(
-      "/v1/realms/:realmId/bans/:accountId",
+      '/v1/realms/:realmId/bans/:accountId',
       {
         params: banParams,
         headers: commandHeaders,
-        body: strict(
-          t.Object({ reason: t.String({ maxLength: 1024 }) }, closed),
-        ),
+        body: strict(t.Object({ reason: t.String({ maxLength: 1024 }) }, closed)),
         response: {
           200: withHeaders(strict(banResponse), sessionHeader),
           ...writeFailures,
-          409: problemSchema("conflict"),
+          409: problemSchema('conflict'),
         },
         detail: {
-          operationId: "realm.ban",
-          "x-exposure": "public",
-          "x-action": "realm:ban",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.ban',
+          'x-exposure': 'public',
+          'x-action': 'realm:ban',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          return await admission.run("normal", job, async () => {
+          return await admission.run('normal', job, async () => {
             const result = await banAccount(
               banDependencies(),
               actor,
@@ -2561,35 +2024,29 @@ export function communityRoutes(
       },
     )
     .delete(
-      "/v1/realms/:realmId/bans/:accountId",
+      '/v1/realms/:realmId/bans/:accountId',
       {
         params: banParams,
         headers: commandHeaders,
         response: { 204: t.Void(), ...writeFailures },
         detail: {
-          operationId: "realm.unban",
-          "x-exposure": "public",
-          "x-action": "realm:ban",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.unban',
+          'x-exposure': 'public',
+          'x-action': 'realm:ban',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ params, headers, actor, admission, job, session, set }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         try {
-          await admission.run("normal", job, async () => {
-            const result = await unbanAccount(
-              banDependencies(),
-              actor,
-              params,
-              {
-                idempotencyKey: key,
-                deadline: job.deadline,
-              },
-            );
+          await admission.run('normal', job, async () => {
+            const result = await unbanAccount(banDependencies(), actor, params, {
+              idempotencyKey: key,
+              deadline: job.deadline,
+            });
             session.record(result);
           });
           set.status = 204;
@@ -2599,38 +2056,31 @@ export function communityRoutes(
       },
     )
     .get(
-      "/v1/realms/:realmId/bans",
+      '/v1/realms/:realmId/bans',
       {
         params: realmParams,
         query: banQuery,
         response: {
           200: strict(banPage),
           ...readFailures,
-          403: problemSchema("forbidden"),
-          429: problemSchema("rate_limited"),
+          403: problemSchema('forbidden'),
+          429: problemSchema('rate_limited'),
           503: writeFailures[503],
         },
         detail: {
-          operationId: "realm.bans",
-          "x-exposure": "public",
-          "x-action": "realm:ban",
-          "x-resource-types": ["community.realm"],
-          "x-rate-limit": writeRate,
+          operationId: 'realm.bans',
+          'x-exposure': 'public',
+          'x-action': 'realm:ban',
+          'x-resource-types': ['community.realm'],
+          'x-rate-limit': writeRate,
           security: writeSecurity,
         },
       },
       async ({ params: { realmId }, query, actor, admission, job }) => {
-        if (actor.kind !== "account")
-          throw new AuthenticationError(401, "Bearer");
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         try {
-          return await admission.run("normal", job, () =>
-            listBans(
-              banDependencies(),
-              actor,
-              realmId,
-              { deadline: job.deadline },
-              query,
-            ),
+          return await admission.run('normal', job, () =>
+            listBans(banDependencies(), actor, realmId, { deadline: job.deadline }, query),
           );
         } catch (error) {
           communityProblem(error);
