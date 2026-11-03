@@ -226,12 +226,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
   }
 
   return {
-    async list(
-      actor: Actor,
-      query: FeedReadQuery,
-      deadline: number,
-      languages: readonly string[],
-    ): Promise<FeedPage> {
+    async list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage> {
       const stream = query.stream ?? 'home';
       const limit = query.limit ?? FEED_PAGE_LIMIT;
       const kind = readFeedKind(query.kind);

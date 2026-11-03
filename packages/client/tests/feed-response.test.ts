@@ -6,7 +6,8 @@ expectTypeOf<Awaited<ReturnType<KernelClient['feedItems']['get']>>['data']>().to
 test('the exported mounted feed page preserves empty and retry continuations', async () => {
   for (const following of ['ready', 'unavailable'] as const) {
     const page: FeedPage = {
-      feedItems: [], next: following === 'unavailable' ? 'original-frontier' : null,
+      feedItems: [],
+      next: following === 'unavailable' ? 'original-frontier' : null,
       asOf: '2026-11-04T00:00:00Z',
       sources: { following, discovery: 'not_requested', continue: 'not_requested' },
     };
@@ -14,7 +15,9 @@ test('the exported mounted feed page preserves empty and retry continuations', a
       expect(String(input)).toBe('https://kernel.test/v1/feedItems?stream=following');
       return Response.json(page);
     }) as typeof globalThis.fetch;
-    const result = await createKernelClient('https://kernel.test', { fetch }).feedItems.get({ query: { stream: 'following' } });
+    const result = await createKernelClient('https://kernel.test', { fetch }).feedItems.get({
+      query: { stream: 'following' },
+    });
     expect(result.error).toBeNull();
     expect(result.data).toEqual(page);
   }
