@@ -1,10 +1,16 @@
-import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { candidateSession, useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import {
+  candidateSession,
+  captureCandidateSession,
+  useCatalogueLifetime,
+  type CandidateSessionLease,
+} from '../../subject/candidate-lifetime';
 import { sessionQuery, useSession } from '../../session/query';
 import { normalizeSessionObservation } from '../../session/browser-state';
 import { loadSubjectChange, loadSubjectChanges } from './subject-changes-actions';
 import { SubjectChanges, SubjectChangesPage } from './subject-changes-page';
+import { takeSubjectChangesReturn, type SubjectChangesReturn } from './subject-changes-navigation';
 
 // useSession deliberately reports unknown for query errors. History also observes the
 // installed query's transport state so those errors offer the same explicit recovery.
@@ -35,6 +41,22 @@ export const SubjectChangesSession = candidateSession(function SubjectChangesSes
   const observed = useSession();
   const { client, read } = useHistorySessionRead();
   const work = useCatalogueLifetime('subject-history');
+  const lease = useMemo(
+    () =>
+      observed.state === 'signed-in' && observed.subject
+        ? captureCandidateSession(client, observed.subject)
+        : undefined,
+    [client, observed.state, observed.subject, observed.csrfToken],
+  );
+  const [restored, setRestored] = useState<{
+    lease?: CandidateSessionLease;
+    checked: boolean;
+    visit?: SubjectChangesReturn;
+  }>({ checked: false });
+  useEffect(() => {
+    const visit = lease ? takeSubjectChangesReturn(id, lease.reader) : undefined;
+    setRestored({ lease, checked: true, ...(visit ? { visit } : {}) });
+  }, [id, lease]);
   const transport = useMemo(() => {
     const headers = observed.csrfToken ? { 'X-CSRF-Token': observed.csrfToken } : {};
     const address = () => {
@@ -74,5 +96,15 @@ export const SubjectChangesSession = candidateSession(function SubjectChangesSes
         }}
       />
     );
-  return <SubjectChanges locale={locale} transport={transport} currentHref={currentHref} />;
+  if (lease && (!restored.checked || restored.lease !== lease))
+    return <SubjectChangesPage state={{ loading: 'list' }} locale={locale} currentHref={currentHref} />;
+  return (
+    <SubjectChanges
+      locale={locale}
+      transport={transport}
+      currentHref={currentHref}
+      lease={lease}
+      initialReturn={restored.lease === lease ? restored.visit : undefined}
+    />
+  );
 });

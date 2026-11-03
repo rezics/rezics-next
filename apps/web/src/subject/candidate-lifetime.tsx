@@ -13,6 +13,7 @@ import { useSession } from '../session/query';
 
 export type CandidateWork = { reader: string; live: () => boolean };
 type Lifetime = CandidateWork & { generation: number; retire: () => void; active: () => boolean };
+export type CandidateSessionLease = { reader: string; current: () => boolean; subscribe: (listener: () => void) => () => void };
 let nextGeneration = 0;
 const Reader = createContext<Lifetime | null>(null);
 
@@ -116,8 +117,9 @@ export function useCandidateWork(address: string, fixtureReader?: string) {
 // the revision twice; no private payload or credential is cached by this observer.
 const sessionObservers = new WeakMap<QueryClient, ReturnType<typeof observeSession>>();
 function observeSession(client: QueryClient) {
+  const current = () => client.getQueryData<ReturnType<typeof useSession>>(['session']);
   const snapshot = () => {
-    const data = client.getQueryData<ReturnType<typeof useSession>>(['session']);
+    const data = current();
     return JSON.stringify([data?.state, data?.subject, data?.csrfToken]);
   };
   let last = snapshot();
@@ -132,6 +134,15 @@ function observeSession(client: QueryClient) {
   });
   return {
     revision: () => revision,
+    current: (reader: string, expected: number) => {
+      const data = current();
+      return (
+        !!reader &&
+        revision === expected &&
+        data?.state === 'signed-in' &&
+        data.subject === reader
+      );
+    },
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => {
@@ -147,6 +158,17 @@ function sessionChanges(client: QueryClient) {
     sessionObservers.set(client, store);
   }
   return store;
+}
+
+/** A route-return lease survives SPA navigation and retires on any installed session replacement. */
+export function captureCandidateSession(client: QueryClient, reader: string): CandidateSessionLease {
+  const store = sessionChanges(client);
+  const revision = store.revision();
+  return {
+    reader,
+    current: () => store.current(reader, revision),
+    subscribe: store.subscribe,
+  };
 }
 
 /** Public reads still retire with their mount/admission, without requiring sign-in. */

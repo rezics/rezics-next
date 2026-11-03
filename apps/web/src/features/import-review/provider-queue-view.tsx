@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import type { ProviderQueueRead } from './provider-queue';
 import {
   ProviderReviewActions,
@@ -16,10 +17,17 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { subjectHref } from '../../subject/subject-href';
 import {
   globalReviewContext,
+  firstProviderQueuePage,
+  nextProviderQueuePage,
+  previousProviderQueuePage,
+  providerQueueCursor,
+  providerQueueHistoryLimit,
   validQueueScope,
+  type QueuePageHistory,
   type QueueScope,
   type QueueState,
   type QueueTransport,
+  type ProviderQueueReturnVisit,
 } from './provider-queue';
 import { ProviderContextChoiceField } from './provider-context-choice-view';
 import {
@@ -30,7 +38,14 @@ import {
 } from './provider-context-choice';
 import { providerAlwaysCurrent, useProviderVisit, type ProviderVisit } from './provider-visit';
 
-type QueueLoad = { visitId: string; id: string; scope: QueueScope; choice: ProviderContextChoice; initial: QueueState };
+type QueueLoad = {
+  visitId: string;
+  id: string;
+  scope: QueueScope;
+  choice: ProviderContextChoice;
+  initial: QueueState;
+  initialReturn?: ProviderQueueReturnVisit;
+};
 
 /** Private event-owned reads retain the original no-private-SSR contract. */
 export function ProviderQueue({
@@ -39,6 +54,8 @@ export function ProviderQueue({
   initial = { state: 'idle' },
   initialScope,
   initialChoice,
+  initialReturn,
+  onReviewCandidate,
   canWrite = true,
   current = providerAlwaysCurrent,
 }: {
@@ -47,6 +64,8 @@ export function ProviderQueue({
   initial?: QueueState;
   initialScope?: QueueScope;
   initialChoice?: ProviderContextChoice;
+  initialReturn?: ProviderQueueReturnVisit | undefined;
+  onReviewCandidate?: (visit: Omit<ProviderQueueReturnVisit, 'id'>) => boolean | void;
   canWrite?: boolean;
   current?: () => boolean;
 }) {
@@ -57,14 +76,20 @@ export function ProviderQueue({
     [transport, contexts, canWrite, initialScope?.source, initialScope?.context, initialScope?.status],
   );
   const visit = useProviderVisit(current, identity);
+  const startingScope = initialScope ?? initialReturn?.scope;
   const startingChoice =
     initialChoice ??
-    (initialScope?.context === globalReviewContext ? { id: globalReviewContext, label: m.prq_global() } : null);
-  const [source, setSource] = useState(initialScope?.source ?? '');
+    (startingScope?.context === globalReviewContext
+      ? { id: globalReviewContext, label: m.prq_global() }
+      : initialReturn
+        ? { id: initialReturn.scope.context, label: initialReturn.contextLabel }
+        : null);
+  const [source, setSource] = useState(startingScope?.source ?? '');
   const [choice, setChoice] = useState<ProviderContextChoice | null>(startingChoice);
-  const [status, setStatus] = useState<QueueScope['status']>(initialScope?.status ?? 'pending');
+  const [status, setStatus] = useState<QueueScope['status']>(startingScope?.status ?? 'pending');
   const [invalidSource, setInvalidSource] = useState(false);
   const [choiceDenied, setChoiceDenied] = useState(false);
+  const [actionHeld, setActionHeld] = useState(false);
   const formVersion = useRef(0);
   const choiceVersion = useRef(0);
   const [choiceEpoch, setChoiceEpoch] = useState(0);
@@ -79,13 +104,14 @@ export function ProviderQueue({
     setChoiceEpoch((value) => value + 1);
   }
   const [load, setLoad] = useState<QueueLoad | null>(() =>
-    initialScope && startingChoice
+    startingScope && startingChoice
       ? {
           visitId: visit.id,
           id: crypto.randomUUID(),
-          scope: initialScope,
+          scope: startingScope,
           choice: startingChoice,
-          initial,
+          initial: initialReturn ? { state: 'loading' } : initial,
+          ...(initialReturn ? { initialReturn } : {}),
         }
       : null,
   );
@@ -116,7 +142,8 @@ export function ProviderQueue({
             !visit.live() ||
             renderedForm !== formVersion.current ||
             renderedChoice !== choiceVersion.current ||
-            active.current !== load?.id
+            active.current !== load?.id ||
+            actionHeld
           )
             return;
           const scope = { source: source.trim(), context: choice?.id ?? '', status };
@@ -135,6 +162,7 @@ export function ProviderQueue({
           });
         }}
       >
+        <fieldset disabled={actionHeld} className="min-w-0">
         <FieldGroup className="grid gap-4 sm:grid-cols-2">
           <Field data-invalid={invalidSource}>
             <FieldLabel htmlFor={`${id}-source`}>{m.prq_source()}</FieldLabel>
@@ -206,6 +234,7 @@ export function ProviderQueue({
             </Button>
           </div>
         </FieldGroup>
+        </fieldset>
       </form>
       {load && load.visitId === visit.id && visit.live() ? (
         <ProviderQueueResults
@@ -215,9 +244,13 @@ export function ProviderQueue({
           scope={load.scope}
           choice={load.choice}
           initial={load.initial}
+          initialReturn={load.initialReturn}
           current={loadedCurrent}
           canWrite={canWrite}
           locale={locale}
+          onReviewCandidate={onReviewCandidate}
+          actionHeld={actionHeld}
+          onActionHeldChange={setActionHeld}
           onChoiceRefused={() => {
             if (visit.live()) {
               replace(null);
@@ -239,9 +272,13 @@ function ProviderQueueResults({
   scope,
   choice: originalChoice,
   initial,
+  initialReturn,
   current,
   canWrite,
   locale,
+  onReviewCandidate,
+  actionHeld,
+  onActionHeldChange,
   onChoiceRefused,
 }: {
   transport: QueueTransport;
@@ -249,14 +286,21 @@ function ProviderQueueResults({
   scope: QueueScope;
   choice: ProviderContextChoice;
   initial: QueueState;
+  initialReturn?: ProviderQueueReturnVisit | undefined;
   current: () => boolean;
   canWrite: boolean;
   locale: string;
+  onReviewCandidate?: (visit: Omit<ProviderQueueReturnVisit, 'id'>) => boolean | void;
+  actionHeld: boolean;
+  onActionHeldChange: (held: boolean) => void;
   onChoiceRefused: () => void;
 }) {
   const visit = useProviderVisit(current, transport);
   const [page, setPage] = useState(initial);
   const [choice, setChoice] = useState(originalChoice);
+  const [history, setHistory] = useState<QueuePageHistory>(initialReturn?.history ?? firstProviderQueuePage());
+  const historyRef = useRef(history);
+  const [returnCandidate, setReturnCandidate] = useState(initialReturn?.candidate);
   const [busy, setBusy] = useState(false);
   const refreshed = useRef(new WeakMap<ProviderQueueRead, QueueState>());
   const running = useRef(false);
@@ -268,7 +312,7 @@ function ProviderQueueResults({
   const [custodyLocked, setCustodyLocked] = useState(false);
   const rowsLive = useRef(true);
   const actionCurrent = useMemo(() => () => visit.live() && rowsLive.current, [visit, actionEpoch]);
-  const session = useRef(initial.state === 'ready' ? initial.session : undefined);
+  const session = useRef(initialReturn?.session ?? (initial.state === 'ready' ? initial.session : undefined));
   const started = useRef<ProviderVisit | null>(null);
   const lastVisit = useRef(visit);
   if (lastVisit.current !== visit) {
@@ -301,13 +345,21 @@ function ProviderQueueResults({
     });
     return true;
   }
-  async function read(cursor?: string) {
+  function rememberHistory(next: QueuePageHistory) {
+    historyRef.current = next;
+    setHistory(next);
+  }
+  async function read(
+    cursor: string | undefined = providerQueueCursor(historyRef.current),
+    targetHistory = historyRef.current,
+  ) {
     if (!visit.live() || running.current || custodyBusy.current || requestAtRender !== requests.current) return;
     if (cursor !== undefined && cursor.length > 4096) {
       setPage({ state: 'invalid' });
       return;
     }
     requests.current++;
+    rememberHistory(targetHistory);
     if (!actionOwned.current) rowsLive.current = false;
     running.current = true;
     setBusy(true);
@@ -372,6 +424,8 @@ function ProviderQueueResults({
         sourceLabel: providerSourceLabel(scope.source),
         contextLabel: choice.label,
         statusLabel: scope.status === 'pending' ? m.prq_pending() : m.prq_accepted(),
+        pageAddress: providerQueueCursor(historyRef.current) ?? '',
+        ...(returnCandidate ? { returnCandidate } : {}),
         rows: state.page.candidates.map(({ subject, candidate }) => {
           const reading = state.readings?.find((entry) => entry.subject === subject)?.result ?? {
             ok: false as const,
@@ -420,7 +474,7 @@ function ProviderQueueResults({
         try {
           next = await transport.read(
             { ...batch.scope, status: batch.scope.status as QueueScope['status'] },
-            undefined,
+            providerQueueCursor(historyRef.current),
             observed,
           );
         } catch {
@@ -444,6 +498,30 @@ function ProviderQueueResults({
     invalid: m.prq_invalid,
     unavailable: m.prq_unavailable,
   };
+  const returnFound =
+    page.state === 'ready' &&
+    !!returnCandidate &&
+    page.page.candidates.some(
+      ({ subject, candidate }) =>
+        subject === returnCandidate.subject &&
+        candidate.id === returnCandidate.candidate &&
+        candidate.statement.property.id === returnCandidate.property,
+    );
+  const startOver = () => {
+    if (!visit.live()) return;
+    setReturnCandidate(undefined);
+    void read(undefined, firstProviderQueuePage());
+  };
+  const nextPage = () => {
+    if (!visit.live() || page.state !== 'ready' || !page.page.next) return;
+    const next = nextProviderQueuePage(historyRef.current, page.page.next);
+    if (next !== historyRef.current) void read(page.page.next, next);
+  };
+  const previousPage = () => {
+    if (!visit.live()) return;
+    const previous = previousProviderQueuePage(historyRef.current);
+    if (previous !== historyRef.current) void read(providerQueueCursor(previous), previous);
+  };
   if (!visit.live()) return null;
   return (
     <div className="flex flex-col gap-5" aria-busy={busy}>
@@ -459,32 +537,66 @@ function ProviderQueueResults({
           >
             {messages[page.state]()}
           </ContentItemHeading>
+          {page.state === 'invalid' && returnCandidate && (
+            <p role="status">{m.prq_return_unavailable()}</p>
+          )}
           {page.state === 'unavailable' && (
-            <Button type="button" disabled={busy || custodyLocked || !canWrite} onClick={() => void prepare()}>
+            <Button type="button" disabled={busy || custodyLocked || actionHeld || !canWrite} onClick={() => void prepare()}>
               {m.prq_prepare()}
             </Button>
           )}
-          {page.state !== 'loading' && page.state !== 'idle' && page.state !== 'denied' && (
+          {page.state !== 'loading' && page.state !== 'idle' && page.state !== 'denied' && page.state !== 'missing' && (
             <Button
               type="button"
               variant="outline"
-              disabled={busy || custodyLocked}
-              onClick={() => void read(page.state === 'preparing' ? page.next : undefined)}
+              disabled={busy || custodyLocked || actionHeld}
+              onClick={() =>
+                page.state === 'preparing' && page.next
+                  ? void read(page.next, nextProviderQueuePage(historyRef.current, page.next))
+                  : void read()
+              }
             >
               {page.state === 'preparing' && page.next ? m.prq_continue() : m.prq_retry()}
             </Button>
           )}
+          {page.state === 'invalid' && (
+            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={startOver}>
+              {m.prq_start_over()}
+            </Button>
+          )}
+          {history.index > 0 && (
+            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={previousPage}>
+              {m.prq_previous()}
+            </Button>
+          )}
           {page.state === 'idle' && (
-            <Button type="button" variant="outline" disabled={busy || custodyLocked} onClick={() => void read()}>
+            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={() => void read()}>
               {m.prq_refresh()}
             </Button>
           )}
         </ContentItemFrame>
       ) : (
         <>
-          <Button type="button" variant="outline" disabled={busy || custodyLocked} onClick={() => void read()}>
-            {m.prq_refresh()}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={() => void read()}>
+              {m.prq_retry_page()}
+            </Button>
+            <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={startOver}>
+              {m.prq_start_over()}
+            </Button>
+            {history.index > 0 && (
+              <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={previousPage}>
+                {m.prq_previous()}
+              </Button>
+            )}
+            {page.page.next && (
+              <Button type="button" variant="outline" disabled={busy || custodyLocked || actionHeld} onClick={nextPage}>
+                {m.prq_next()}
+              </Button>
+            )}
+          </div>
+          {history.truncated && <p role="status">{m.prq_history_truncated()}</p>}
+          {returnCandidate && <p role="status">{returnFound ? m.prq_return_found() : m.prq_return_moved()}</p>}
           {!page.page.freshness.caught_up && <p role="status">{m.prq_lagging()}</p>}
           {!page.page.candidates.length && (
             <ContentItemFrame as="div" className="p-5">
@@ -493,28 +605,62 @@ function ProviderQueueResults({
               </ContentItemHeading>
             </ContentItemFrame>
           )}
-          {page.page.next && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy || custodyLocked}
-              onClick={() => void read(page.page.next!)}
-            >
-              {m.prq_continue()}
-            </Button>
-          )}
         </>
       )}
       <ProviderReviewActions
         key={actionEpoch}
         page={presentation.ok ? presentation.page : undefined}
         currentScope={scope}
+        renderDetails={(row, locked) => {
+          if (!row.href.startsWith('/') || row.href.startsWith('//') || row.href.includes('\\')) return null;
+          const address = {
+            subject: row.subject,
+            property: row.candidate.statement.property.id,
+            candidate: row.candidate.id,
+          };
+          const query = new URLSearchParams({
+            reviewProperty: address.property,
+            candidate: address.candidate,
+            context: scope.context,
+            returnTo: 'queue',
+          });
+          const href = `${row.href.replace(/\/$/, '')}/edit?${query.toString()}`;
+          if (locked || busy || custodyLocked || actionHeld)
+            return (
+              <span className="text-sm text-muted-foreground" aria-disabled="true">
+                {m.prq_open_candidate()}
+              </span>
+            );
+          return (
+            <Link
+              className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
+              to={href as never}
+              onClick={(event) => {
+                if (!visit.live()) {
+                  event.preventDefault();
+                  return;
+                }
+                const saved = onReviewCandidate?.({
+                  scope,
+                  contextLabel: choice.label,
+                  history: historyRef.current,
+                  candidate: address,
+                  ...(session.current ? { session: session.current } : {}),
+                });
+                if (saved === false) event.preventDefault();
+              }}
+            >
+              {m.prq_open_candidate()}
+            </Link>
+          );
+        }}
         locale={locale}
         disabled={!canWrite}
         current={actionCurrent}
         onCustodyChange={(held, phase) => {
           if (visit.live()) {
             actionOwned.current = held;
+            onActionHeldChange(held);
             custodyBusy.current = held && phase !== 'settled';
             setCustodyLocked(custodyBusy.current);
           }

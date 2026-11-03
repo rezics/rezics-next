@@ -25,6 +25,8 @@ export type CatalogueChangesFixture = {
   secondProposal: number;
   secondCandidate: string;
   secondAdoption: number;
+  multiAdoption?: number;
+  multiCandidates?: [string, string];
   selected: CatalogueChangeStatement;
   close(): Promise<void>;
 };
@@ -89,7 +91,7 @@ function selectedUrl(subject: Json, content: string): CatalogueChangeStatement {
 }
 
 /** Provision terms and two adoption revisions through the admitted catalogue APIs. */
-export async function startCatalogueChangesFixture(): Promise<CatalogueChangesFixture> {
+export async function startCatalogueChangesFixture(options: { multipleSelection?: boolean } = {}): Promise<CatalogueChangesFixture> {
   const stack = await startNativeWebStack();
   let auth: NativeAuthStack | undefined;
   try {
@@ -157,6 +159,35 @@ export async function startCatalogueChangesFixture(): Promise<CatalogueChangesFi
       selection: [{ candidate: secondProposed.candidate, rank: 'preferred' }],
       expected_head: (firstAdopted.adoption as { head: number }).head,
     });
+    let multiAdoption: number | undefined;
+    let multiCandidates: [string, string] | undefined;
+    if (options.multipleSelection) {
+      const languageCandidates: string[] = [];
+      for (const language of ['en', 'fr']) {
+        const proposed = await command(
+          stack,
+          'POST',
+          `/v1/subjects/${id}/candidates`,
+          { statement: cited('schema:inLanguage', language) },
+          {},
+          201,
+        );
+        await command(stack, 'POST', `/v1/subjects/${id}/candidates/${proposed.candidate}:accept`, {
+          context: candidateContext,
+          expected_head: null,
+        });
+        languageCandidates.push(proposed.candidate as string);
+      }
+      const adopted = await command(stack, 'POST', `/v1/subjects/${id}:adopt`, {
+        context: candidateContext,
+        property: 'schema:inLanguage',
+        mode: 'replace',
+        selection: languageCandidates.map((candidate, index) => ({ candidate, rank: index ? 'preferred' : 'normal' })),
+        expected_head: null,
+      });
+      multiAdoption = adopted.revision as number;
+      multiCandidates = [languageCandidates[0]!, languageCandidates[1]!];
+    }
     const reading = await currentSubject(stack, id);
     return {
       stack,
@@ -172,6 +203,7 @@ export async function startCatalogueChangesFixture(): Promise<CatalogueChangesFi
       secondProposal: secondProposed.revision as number,
       secondCandidate: secondProposed.candidate as string,
       secondAdoption: secondAdopted.revision as number,
+      ...(multiAdoption !== undefined && multiCandidates ? { multiAdoption, multiCandidates } : {}),
       selected: selectedUrl(reading.subject as Json, secondUrl),
       async close() {
         await auth?.stop();

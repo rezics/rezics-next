@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSession } from '../../session/query';
 import {
@@ -10,10 +10,16 @@ import {
   resolveProviderContextAction,
 } from './provider-queue-actions';
 import { ProviderQueue } from './provider-queue-view';
-import type { QueueTransport } from './provider-queue';
+import {
+  peekProviderQueueReturn,
+  saveProviderQueueReturn,
+  takeProviderQueueReturn,
+  type ProviderQueueReturnVisit,
+  type QueueTransport,
+} from './provider-queue';
 import type { ProviderContextSource } from './provider-context-choice';
 import {
-  ProviderSessionSource,
+  providerSessionSource,
   providerReaderMatches,
   useProviderVisit,
   type ProviderAdmission,
@@ -30,13 +36,19 @@ export function ProviderQueueJourney({
 } = {}) {
   const client = useQueryClient();
   const session = useSession();
-  const source = useMemo(() => new ProviderSessionSource(client), [client]);
-  const previous = useRef(source);
-  if (previous.current !== source) {
-    previous.current.retire();
-    previous.current = source;
-  }
+  const source = useMemo(() => providerSessionSource(client), [client]);
   const admission = useSyncExternalStore(source.subscribe, source.snapshot, () => null);
+  const [restored, setRestored] = useState<{ admission: string; visit: ProviderQueueReturnVisit } | null>(null);
+  useEffect(() => {
+    if (restored && restored.admission !== admission?.id) setRestored(null);
+    if (!admission) return;
+    const visit = peekProviderQueueReturn(source, admission);
+    if (visit) setRestored({ admission: admission.id, visit });
+  }, [source, admission]);
+  useEffect(() => {
+    if (!admission || !restored || restored.admission !== admission.id) return;
+    takeProviderQueueReturn(source, admission, restored.visit.id);
+  }, [source, admission, restored]);
   const owner = useMemo(() => () => !!admission && source.current(admission), [source, admission]);
   const [refused, setRefused] = useState(false);
   const [recovery, setRecovery] = useState(0);
@@ -148,6 +160,10 @@ export function ProviderQueueJourney({
       {...bound}
       current={visit.live}
       canWrite={!!admission.csrfToken}
+      initialReturn={restored?.admission === admission.id ? restored.visit : undefined}
+      onReviewCandidate={(state) => {
+        return visit.live() ? !!saveProviderQueueReturn(source, admission, state) : false;
+      }}
     />
   );
 }

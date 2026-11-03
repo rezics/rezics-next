@@ -22,6 +22,7 @@ import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
+import { candidateContext } from '../../subject/candidates';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { EditorFailure, PartValue, StatementFields, StatementViolationLinks } from './statement-editor-view';
@@ -61,7 +62,15 @@ import {
 export { ExactReview };
 export { SelectedFacts };
 
-type ReviewAddress = { property: string; candidate: string; session?: string | undefined };
+type ReviewAddress = {
+  property: string;
+  candidate: string;
+  context?: string;
+  returnHref?: string;
+  returnLabel?: string;
+  returnUnavailable?: boolean;
+  session?: string | undefined;
+};
 /** Refresh preserves an explicit source only while that exact statement remains selected. */
 export function reconcileFactSource(source: string, selected: readonly { id: string }[]): string {
   return selected.some((statement) => statement.id === source) ? source : '';
@@ -84,11 +93,11 @@ function ExactReview({
   address: ReviewAddress;
   id: string;
   locale: string;
-  review: (property: string, session?: string) => CandidateTransport;
+  review: (property: string, session?: string, context?: string) => CandidateTransport;
 }) {
   const transport = useMemo(
-    () => review(address.property, address.session),
-    [review, address.property, address.session],
+    () => review(address.property, address.session, address.context),
+    [review, address.property, address.session, address.context],
   );
   return (
     <CandidateReview
@@ -96,6 +105,10 @@ function ExactReview({
       locale={locale}
       initialProperty={address.property}
       exactCandidate={address.candidate}
+      context={address.context === candidateContext ? undefined : address.context}
+      returnHref={address.returnHref}
+      returnLabel={address.returnLabel}
+      returnUnavailable={address.returnUnavailable}
       transport={transport}
     />
   );
@@ -715,7 +728,7 @@ function SubjectFactsLive({
   initial: EditorRead;
   locale: string;
   transport: FactsTransport;
-  review: (property: string, session?: string) => CandidateTransport;
+  review: (property: string, session?: string, context?: string) => CandidateTransport;
   initialReview?: ReviewAddress | undefined;
   profile?: FactsProfile | undefined;
   profileHeadingRef?: Ref<HTMLHeadingElement> | undefined;

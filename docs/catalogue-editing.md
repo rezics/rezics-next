@@ -437,6 +437,14 @@ The final read checks current disclosure again. Responses use `Cache-Control: no
 `reading` uses actual current decision and selected slot rank in the record's Context (Global for proposals).
 An adoption's selection describes that recorded adoption only. Revision order never proves current adoption.
 
+Changes offers **Review current candidate** for candidate and decision revisions. For an adoption, choose one of
+its recorded selected rows before opening that exact candidate. These actions perform a new exact current read in
+the disclosed Context; they do not recreate historical candidate bodies, actors or selection state. Candidate
+status comes from the current candidate read, while current selection comes from the current subject/Context read.
+Returning restores the original subject and selected revision after rereading at most five loaded history pages.
+The return address is held in memory and retired when the signed-in authority changes. A concealed, missing or
+expired target stays unavailable and never falls back to cached detail.
+
 The existing revision, candidate, decision and adoption stores remain authoritative. Three Subject/revision
 indexes locate the relevant record without enumerating history; candidate hydration and current selection retain
 the native selection bounds. No second history or personal-payload store is introduced. The generated client now

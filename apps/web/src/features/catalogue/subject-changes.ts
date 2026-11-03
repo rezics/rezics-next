@@ -65,7 +65,8 @@ export type ChangesEvent =
   | { type: 'detail'; result: DetailRead };
 
 export function changesState(state: ChangesState, event: ChangesEvent): ChangesState {
-  if (event.type === 'list-start') return { ...state, failure: undefined, loading: event.more ? 'more' : 'list' };
+  if (event.type === 'list-start')
+    return event.more ? { ...state, failure: undefined, loading: 'more' } : { loading: 'list' };
   if (event.type === 'detail-start')
     // Discard the previous authorized payload before each read, including retries.
     return { ...state, selected: event.revision, detail: undefined, loading: 'detail' };
@@ -94,7 +95,7 @@ export function changesState(state: ChangesState, event: ChangesEvent): ChangesS
             ...page,
             revisions: [
               ...new Map([...state.page.revisions, ...page.revisions].map((row) => [row.revision, row])).values(),
-            ],
+            ].slice(-100),
           }
         : page,
   };

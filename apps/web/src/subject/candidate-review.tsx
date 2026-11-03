@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ComponentProps } from 'react';
+import { Link } from '@tanstack/react-router';
 import { useCandidateWork, type CandidateWork } from './candidate-lifetime';
 import { ContextComparisonView } from '../features/catalogue/context-curation-view';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -45,9 +46,21 @@ export type CandidateLifecycle = {
 
 /** A session-only region: the owning subject route mounts it only after sign-in hydration. */
 export function CandidateReview(props: Omit<ComponentProps<typeof CandidateReviewLive>, 'work'>) {
-  const { id, locale, initialProperty, exactCandidate, context, slot } = props;
+  const { id, locale, initialProperty, exactCandidate, context, slot, returnHref, returnLabel, returnUnavailable } = props;
   const work = useCandidateWork(
-    JSON.stringify([id, locale, initialProperty, exactCandidate, context, slot?.target, slot?.sameAs, slot?.key]),
+    JSON.stringify([
+      id,
+      locale,
+      initialProperty,
+      exactCandidate,
+      context,
+      slot?.target,
+      slot?.sameAs,
+      slot?.key,
+      returnHref,
+      returnLabel,
+      returnUnavailable,
+    ]),
     props.transport.reader,
   );
   if (!work.live()) return null;
@@ -63,6 +76,9 @@ function CandidateReviewLive({
   exactCandidate,
   context,
   slot,
+  returnHref,
+  returnLabel,
+  returnUnavailable,
   documents,
   work,
 }: {
@@ -74,6 +90,9 @@ function CandidateReviewLive({
   initialProperty?: string | undefined;
   exactCandidate?: string;
   context?: string;
+  returnHref?: string;
+  returnLabel?: string;
+  returnUnavailable?: boolean;
   slot?: CandidateSlot | undefined;
   documents?: { public: unknown; candidates: unknown };
 }) {
@@ -112,6 +131,10 @@ function CandidateReviewLive({
   const draft = drafts[property];
   const maximum = current?.fields.find((field) => field.id === property)?.multivalued ? 32 : 1;
   const locked = busy || confirmation !== null || !!request.current || !!result;
+  const safeReturnHref =
+    returnHref && returnHref.startsWith('/') && !returnHref.startsWith('//') && !returnHref.includes('\\')
+      ? returnHref
+      : undefined;
   const publicStatements = context
     ? (result?.contextReview?.selected ?? current?.contextReview?.selected ?? []).filter(
         (statement) => statement.rank === 'normal' || statement.rank === 'preferred',
@@ -156,6 +179,20 @@ function CandidateReviewLive({
         return;
       }
       session.current = next.session ?? session.current;
+      if (
+        exactCandidate &&
+        !next.page?.candidates.some(
+          (item) =>
+            item.id === exactCandidate &&
+            item.retracted === null &&
+            item.statement.property.id === field,
+        )
+      ) {
+        setRead(undefined);
+        setCandidate(undefined);
+        setFailure({ ok: false, reason: 'unavailable' });
+        return;
+      }
       setRead(
         cursor && current?.page && next.page
           ? {
@@ -413,6 +450,18 @@ function CandidateReviewLive({
         <p className="text-sm text-muted-foreground">
           {context ? m.context_authority({}, options) : m.candidate_intro({}, options)}
         </p>
+        {safeReturnHref && !busy && confirmation === null && !request.current && (
+          <Link
+            className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4"
+            to={safeReturnHref as never}
+            onClick={(event) => {
+              if (!work.live() || busy || confirmation !== null || request.current) event.preventDefault();
+            }}
+          >
+            {returnLabel ?? m.changes_return_to_changes()}
+          </Link>
+        )}
+        {returnUnavailable && <p role="status">{m.candidate_unavailable({}, options)}</p>}
       </div>
       {!opened ? (
         <Button variant="outline" className="min-h-11" onClick={() => void load()}>

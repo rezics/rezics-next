@@ -70,6 +70,18 @@ export class ProviderSessionSource {
   };
 }
 
+const sessionSources = new WeakMap<QueryClient, ProviderSessionSource>();
+
+/** Keep the actual session Query observation stable across SPA route visits. */
+export function providerSessionSource(client: QueryClient): ProviderSessionSource {
+  let source = sessionSources.get(client);
+  if (!source) {
+    source = new ProviderSessionSource(client);
+    sessionSources.set(client, source);
+  }
+  return source;
+}
+
 export const providerAlwaysCurrent = () => true;
 
 /** Every callback retains this original object. Retirement is monotonic, even after scope ABA. */

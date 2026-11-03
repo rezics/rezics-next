@@ -1,11 +1,23 @@
-import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import {
+  useCatalogueLifetime,
+  type CandidateSessionLease,
+} from '../../subject/candidate-lifetime';
 import { useEffect, useId, useLayoutEffect, useReducer, useRef, useState, type MouseEvent, type Ref } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { SubjectFrame, ViewHeading } from '../pages/subject-frame';
 import { viewTabLabels } from '../pages/route-support';
 import { languageName } from '../../subject/language';
 import { candidateContext } from '../../subject/candidates';
+import type { CurrentCandidateAddress } from './subject-changes-navigation';
+import {
+  appendChangePage,
+  firstChangePage,
+  saveSubjectChangesReturn,
+  type ChangePageHistory,
+  type SubjectChangesReturn,
+} from './subject-changes-navigation';
 import type { TermField } from './subject-terms';
 import { m } from '../../paraglide/messages.js';
 import {
@@ -33,6 +45,10 @@ type Props = {
   onSelect?: (revision: number, event: ChangeAction) => void;
   onRetry?: (event: ChangeAction) => void;
   onDetailRetry?: (event: ChangeAction) => void;
+  onReviewCandidate?: (address: CurrentCandidateAddress, href: string, revision: number) => boolean;
+  returnUnavailable?: boolean;
+  historyTruncated?: boolean;
+  onStartOver?: () => void;
 };
 const actionClassName =
   'relative z-10 h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -67,7 +83,67 @@ function revisionKind(kind: string, locale: string) {
           ? m.changes_adoption({}, o)
           : m.changes_recorded({}, o);
 }
-export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; locale: string }) {
+function currentReviewHref(pageHref: string | undefined, address: CurrentCandidateAddress) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (
+    !pageHref?.startsWith('/') ||
+    pageHref.startsWith('//') ||
+    pageHref.includes('\\') ||
+    !uuid.test(address.subject) ||
+    !uuid.test(address.candidate) ||
+    !uuid.test(address.context) ||
+    !address.property ||
+    address.property.length > 256
+  )
+    return undefined;
+  const query = new URLSearchParams({
+    reviewProperty: address.property,
+    candidate: address.candidate,
+    context: address.context,
+    returnTo: 'changes',
+  });
+  return `${pageHref.replace(/\/$/, '')}/edit?${query.toString()}`;
+}
+
+function CurrentReviewLink({
+  pageHref,
+  address,
+  revision,
+  onReviewCandidate,
+}: {
+  pageHref?: string;
+  address: CurrentCandidateAddress;
+  revision: number;
+  onReviewCandidate?: Props['onReviewCandidate'];
+}) {
+  const href = currentReviewHref(pageHref, address);
+  if (!href || !onReviewCandidate) return null;
+  return (
+    <Link
+      className={`${actionClassName} inline-flex items-center text-primary underline-offset-4 hover:underline`}
+      to={href as never}
+      onClick={(event) => {
+        if (!onReviewCandidate(address, `${pageHref!.replace(/\/$/, '')}/changes`, revision)) event.preventDefault();
+      }}
+    >
+      {m.changes_review_current()}
+    </Link>
+  );
+}
+
+export function ChangeExplanation({
+  detail,
+  revision,
+  locale,
+  pageHref,
+  onReviewCandidate,
+}: {
+  detail: ChangeDetail;
+  revision: number;
+  locale: string;
+  pageHref?: string;
+  onReviewCandidate?: Props['onReviewCandidate'];
+}) {
   const o = { locale: locale as never };
   const summary = detail.summary;
   const reading = summary.kind === 'candidate' || summary.kind === 'decision' ? summary.reading : undefined;
@@ -145,24 +221,59 @@ export function ChangeExplanation({ detail, locale }: { detail: ChangeDetail; lo
           )}
         </section>
       )}
-      {summary.kind === 'adoption' && summary.mode && (
+      {(summary.kind === 'candidate' || summary.kind === 'decision') &&
+        summary.candidate &&
+        summary.property && (
+          <section className="space-y-2" aria-label={m.changes_review_current({}, o)}>
+            <p className="text-sm text-muted-foreground">{m.changes_review_notice({}, o)}</p>
+            <CurrentReviewLink
+              pageHref={pageHref}
+              address={{
+                subject: detail.id,
+                property: summary.property,
+                candidate: summary.candidate,
+                context: summary.context ?? candidateContext,
+              }}
+              revision={revision}
+              onReviewCandidate={onReviewCandidate}
+            />
+          </section>
+        )}
+      {summary.kind === 'adoption' && (
         <section className="space-y-2 text-sm" aria-label={m.changes_recorded({}, o)}>
           <h3 className="font-medium">{m.changes_recorded({}, o)}</h3>
-          <p>
-            {m.context_mode({}, o)}:{' '}
-            {summary.mode === 'inherit'
-              ? m.context_inherit({}, o)
-              : summary.mode === 'replace'
-                ? m.context_replace({}, o)
-                : m.context_suppress({}, o)}
-          </p>
-          <ol className="space-y-1">
-            {summary.selection?.map((entry, index) => (
-              <li key={entry.candidate}>
-                {m.facts_selected_value({ number: String(index + 1) }, o)} · {rank(entry.rank)}
+          {summary.mode && (
+            <p>
+              {m.context_mode({}, o)}:{' '}
+              {summary.mode === 'inherit'
+                ? m.context_inherit({}, o)
+                : summary.mode === 'replace'
+                  ? m.context_replace({}, o)
+                  : m.context_suppress({}, o)}
+            </p>
+          )}
+          <ol className="space-y-2">
+            {summary.selection?.slice(0, 32).map((entry, index) => (
+              <li key={entry.candidate} className="space-y-1">
+                <span className="block">
+                  {m.facts_selected_value({ number: String(index + 1) }, o)} · {rank(entry.rank)}
+                </span>
+                <CurrentReviewLink
+                  pageHref={pageHref}
+                  address={{
+                    subject: detail.id,
+                    property: summary.property,
+                    candidate: entry.candidate,
+                    context: summary.context,
+                  }}
+                  revision={revision}
+                  onReviewCandidate={onReviewCandidate}
+                />
               </li>
             ))}
           </ol>
+          <p className="text-sm text-muted-foreground">{m.changes_choose_candidate({}, o)}</p>
+          <p className="text-sm text-muted-foreground">{m.changes_review_notice({}, o)}</p>
         </section>
       )}
     </div>
@@ -178,6 +289,10 @@ export function SubjectChangesPage({
   onSelect,
   onRetry,
   onDetailRetry,
+  onReviewCandidate,
+  returnUnavailable,
+  historyTruncated,
+  onStartOver,
   rootRef,
   focusResult,
 }: Props) {
@@ -237,6 +352,17 @@ export function SubjectChangesPage({
         </a>
       )}
       {state.loading === 'list' && <p role="status">{m.changes_loading({}, o)}</p>}
+      {historyTruncated && <p role="status">{m.changes_history_truncated({}, o)}</p>}
+      {returnUnavailable && (
+        <div className="space-y-2" role="status">
+          <p>{m.changes_return_unavailable({}, o)}</p>
+          {onStartOver && (
+            <Button variant="outline" className={actionClassName} onClick={onStartOver}>
+              {m.changes_start_over({}, o)}
+            </Button>
+          )}
+        </div>
+      )}
       {state.failure && (
         <div className="space-y-3" tabIndex={-1} data-changes-focus="failure">
           <Failure failure={state.failure} locale={locale} />
@@ -305,7 +431,6 @@ export function SubjectChangesPage({
                 </ContentItemHeading>
                 {state.selected === undefined && <p className="text-muted-foreground">{m.changes_choose({}, o)}</p>}
                 {state.loading === 'detail' && <p role="status">{m.changes_detail_loading({}, o)}</p>}
-                {detail && <ChangeExplanation detail={detail} locale={locale} />}
                 {state.detail && state.detail.kind !== 'ready' && (
                   <div className="space-y-3" tabIndex={-1} data-changes-focus="detail-failure">
                     <Failure failure={state.detail} locale={locale} />
@@ -319,6 +444,15 @@ export function SubjectChangesPage({
                 {detail && !reading && (
                   <p className="text-sm text-muted-foreground">{m.changes_current_notice({}, o)}</p>
                 )}
+                {detail && (
+                  <ChangeExplanation
+                    detail={detail}
+                    revision={detail.revision}
+                    locale={locale}
+                    pageHref={page?.href}
+                    onReviewCandidate={onReviewCandidate}
+                  />
+                )}
               </ContentItemFrame>
             </section>
           )}
@@ -329,7 +463,13 @@ export function SubjectChangesPage({
 }
 
 /** Each admitted visit owns its private list, selected explanation and native continuation. */
-export function SubjectChanges(props: { locale: string; transport: ChangesTransport; currentHref?: string }) {
+export function SubjectChanges(props: {
+  locale: string;
+  transport: ChangesTransport;
+  currentHref?: string;
+  lease?: CandidateSessionLease;
+  initialReturn?: SubjectChangesReturn;
+}) {
   const work = useCatalogueLifetime(JSON.stringify([props.locale, props.currentHref]));
   return <SubjectChangesReader key={work.generation} {...props} work={work} />;
 }
@@ -338,11 +478,15 @@ function SubjectChangesReader({
   locale,
   transport,
   currentHref,
+  lease,
+  initialReturn,
   work,
 }: {
   locale: string;
   transport: ChangesTransport;
   currentHref?: string;
+  lease?: CandidateSessionLease;
+  initialReturn?: SubjectChangesReturn;
   work: ReturnType<typeof useCatalogueLifetime>;
 }) {
   const [state, dispatch] = useReducer(changesState, { loading: 'list' });
@@ -357,6 +501,10 @@ function SubjectChangesReader({
   const currentTransport = useRef(transport);
   currentTransport.current = transport;
   const retryCursor = useRef<string | undefined>(undefined);
+  const historyRef = useRef<ChangePageHistory>(initialReturn?.history ?? firstChangePage());
+  const [historyTruncated, setHistoryTruncated] = useState(historyRef.current.truncated);
+  const [returnUnavailable, setReturnUnavailable] = useState(false);
+  const revisionAddresses = useRef(new Map<number, string | undefined>());
   const latest = useRef(state);
   latest.current = state;
   const active = () => mounted.current && work.active();
@@ -418,7 +566,8 @@ function SubjectChangesReader({
   }
   useEffect(() => {
     mounted.current = true;
-    void load();
+    if (initialReturn) void restore(initialReturn);
+    else void load();
     return () => {
       mounted.current = false;
       running.current = null;
@@ -452,7 +601,23 @@ function SubjectChangesReader({
     try {
       const result = await currentTransport.current.list(cursor, session.current);
       if (!operation.current()) return;
-      if (result.kind === 'ready') session.current = result.session ?? session.current;
+      if (result.kind === 'ready') {
+        session.current = result.session ?? session.current;
+        if (cursor === undefined && !explicit) {
+          historyRef.current = firstChangePage();
+          revisionAddresses.current.clear();
+          setHistoryTruncated(false);
+        } else if (cursor !== undefined) {
+          historyRef.current = appendChangePage(historyRef.current, cursor);
+          setHistoryTruncated(historyRef.current.truncated);
+        }
+        const retainedAddresses = new Set(historyRef.current.addresses);
+        for (const [revision, address] of revisionAddresses.current)
+          if (!retainedAddresses.has(address)) revisionAddresses.current.delete(revision);
+        for (const row of result.page.revisions) revisionAddresses.current.set(row.revision, cursor);
+        while (revisionAddresses.current.size > 100)
+          revisionAddresses.current.delete(revisionAddresses.current.keys().next().value!);
+      }
       finish({ type: 'list', result, more: cursor !== undefined });
     } catch {
       if (operation.current()) finish({ type: 'list', result: { kind: 'unavailable' }, more: cursor !== undefined });
@@ -480,12 +645,97 @@ function SubjectChangesReader({
       operation.finish();
     }
   }
+  async function restore(visit: SubjectChangesReturn) {
+    const operation = begin();
+    if (!operation) return;
+    const history = visit.history;
+    let found = false;
+    let chainNext: string | null | undefined;
+    try {
+      if (!visit.lease.current() || visit.subject !== visit.id || visit.revision < 1) throw new Error('Expired history visit');
+      for (let index = 0; index < history.addresses.length; index++) {
+        const cursor = history.addresses[index];
+        if (index > 0 && cursor !== chainNext) throw new Error('Expired history continuation');
+        dispatch({ type: 'list-start', more: index > 0 });
+        const result = await currentTransport.current.list(cursor, session.current);
+        if (!operation.current() || !visit.lease.current()) return;
+        if (result.kind !== 'ready') throw new Error('History page unavailable');
+        session.current = result.session ?? session.current;
+        chainNext = result.page.next;
+        for (const row of result.page.revisions) {
+          revisionAddresses.current.set(row.revision, cursor);
+          if (row.revision === visit.revision) found = true;
+        }
+        dispatch({ type: 'list', result, more: index > 0 });
+        if (index + 1 < history.addresses.length && result.page.next !== history.addresses[index + 1])
+          throw new Error('History continuation changed');
+      }
+      setHistoryTruncated(history.truncated);
+      setReturnUnavailable(!found);
+      dispatch({ type: 'detail-start', revision: visit.revision });
+      if (found) {
+        const result = await currentTransport.current.detail(visit.revision, session.current);
+        if (!operation.current() || !visit.lease.current()) return;
+        if (result.kind === 'ready') session.current = result.session ?? session.current;
+        dispatch({ type: 'detail', result });
+        setReturnUnavailable(result.kind !== 'ready');
+      } else {
+        dispatch({ type: 'detail', result: { kind: 'unavailable' } });
+      }
+      setFocusResult({ kind: 'detail' });
+    } catch {
+      if (operation.current()) {
+        setReturnUnavailable(true);
+        dispatch({ type: 'detail-start', revision: visit.revision });
+        dispatch({ type: 'detail', result: { kind: 'unavailable' } });
+        setFocusResult({ kind: 'detail' });
+      }
+    } finally {
+      operation.finish();
+    }
+  }
+  function startOver() {
+    if (!active()) return;
+    setReturnUnavailable(false);
+    historyRef.current = firstChangePage();
+    setHistoryTruncated(false);
+    revisionAddresses.current.clear();
+    void load(undefined, false);
+  }
+  function reviewCandidate(address: CurrentCandidateAddress, href: string, revision: number) {
+    const page = latest.current.page;
+    if (
+      !lease ||
+      !lease.current() ||
+      !active() ||
+      !page ||
+      latest.current.selected !== revision ||
+      !revisionAddresses.current.has(revision)
+    )
+      return false;
+    const cursor = revisionAddresses.current.get(revision);
+    if (!historyRef.current.addresses.includes(cursor)) return false;
+    return saveSubjectChangesReturn({
+      id: page.id,
+      subject: page.id,
+      href,
+      locale,
+      history: { addresses: [...historyRef.current.addresses], truncated: historyRef.current.truncated },
+      revision,
+      address,
+      lease,
+    });
+  }
   return (
     <SubjectChangesPage
       rootRef={focusRoot}
       focusResult={focusResult}
       state={state}
       locale={locale}
+      historyTruncated={historyTruncated}
+      returnUnavailable={returnUnavailable}
+      onStartOver={startOver}
+      {...(lease ? { onReviewCandidate: reviewCandidate } : {})}
       {...(currentHref ? { currentHref } : {})}
       onMore={(event) => {
         const cursor = state.page?.next;

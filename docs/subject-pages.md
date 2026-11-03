@@ -224,6 +224,12 @@ is shown separately. Failed and uncertain attempts retain their exact payload an
 successes. An uncertain result stays sealed until resolved. A changed scope clears checkboxes while preserving
 the earlier attempt; it must be revisited before retrying under a different visible scope.
 
+The visit retains at most five opaque page addresses. Exact candidate review returns to the original scoped page
+and rereads it with current authority. The candidate is highlighted only when it remains on that page and in the
+selected status; otherwise the queue reports that it moved or became unavailable. An expired continuation can
+be replaced only by an explicit start-over action. Source, Context, status and candidate selection are reset when
+the scope changes.
+
 After decisions, refresh the actual queue and current subject readings in parallel. Refresh failure retains the
 decision results rather than claiming all rows disappeared. Missing and hidden subjects share a concealed state;
 related values use supplied summaries, with no per-field fetches or private totals. An unserved queue preparation

@@ -104,6 +104,13 @@ heads and original idempotency keys on uncertain retries. Queue refresh and curr
 parallel, with individual results retained on refresh failure. Selection requires its independent `context:adopt`
 authority and exact slot workflow.
 
+The queue keeps up to five opaque page addresses in the current private visit. Previous, next, retry-current-page
+and start-over actions reread native twenty-row pages under the current session; older addresses are explicitly
+truncated. Opening an exact candidate review keeps the source, Context, status, page and candidate address in
+memory. Returning rereads that page and highlights the candidate only if it is still there. A moved candidate is
+reported without cached row data. An expired continuation offers an explicit start-over action. Account changes
+retire the visit, and cursors and session material are never placed in the URL or persistent browser storage.
+
 Native exports belong to `semantic/provider-review-queue.ts`; route schemas and action/exposure metadata belong
 to `semantic/http/provider-review-queue.ts`. Generated `KernelClient` endpoints are `review-candidates.get` and
 `review-candidates.$prepare.post`. Registration alone does not establish running-worker availability.

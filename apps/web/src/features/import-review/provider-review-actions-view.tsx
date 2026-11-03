@@ -199,7 +199,7 @@ export function ProviderReviewActions({
   onRefresh: (read: ProviderQueueRead) => void;
   concealRows?: boolean;
   disabled?: boolean;
-  renderDetails?: (row: ProviderDecisionRow) => ReactNode;
+  renderDetails?: (row: ProviderDecisionRow, locked: boolean) => ReactNode;
   currentScope?: ProviderScope;
   current?: () => boolean;
   onCustodyChange?: (held: boolean, phase?: 'confirmation' | 'writing' | 'settled') => void;
@@ -211,7 +211,12 @@ export function ProviderReviewActions({
   const enabled = useRef(!disabled);
   if (enabled.current && disabled) visit.retire();
   enabled.current = !disabled;
-  const [selection, setSelection] = useState<{ scope: string; ids: string[] }>({ scope, ids: [] });
+  const pageAddress = page?.pageAddress ?? '';
+  const [selection, setSelection] = useState<{ scope: string; page: string; ids: string[] }>({
+    scope,
+    page: pageAddress,
+    ids: [],
+  });
   const [batch, setBatch] = useState<ProviderBatch>();
   const [confirmation, setConfirmation] = useState<ProviderBatch>();
   const confirmationOwner = useRef<ProviderBatch | null>(null);
@@ -230,12 +235,15 @@ export function ProviderReviewActions({
   const lastScope = useRef(scope);
   if (selectedScope) lastScope.current = scope;
   // A changed source, Context or status clears checkboxes before the new scope can be acted on.
-  if (selection.scope !== scope) setSelection({ scope, ids: [] });
+  if (selection.scope !== scope || selection.page !== pageAddress)
+    setSelection({ scope, page: pageAddress, ids: [] });
   if (confirmation && providerScopeKey(confirmation.scope) !== scope) {
     confirmationOwner.current = null;
     setConfirmation(undefined);
   }
-  const selected = providerSelectionInScope(selection, scope);
+  const selected = selection.scope === scope && selection.page === pageAddress
+    ? providerSelectionInScope(selection, scope)
+    : [];
   const visible = page?.rows ?? [];
   function concealed(row: ProviderDecisionRow) {
     return (
@@ -346,7 +354,7 @@ export function ProviderReviewActions({
     onCustodyChange?.(true, 'writing');
     setBusy(true);
     setConfirmation(undefined);
-    setSelection({ scope, ids: [] });
+    setSelection({ scope, page: pageAddress, ids: [] });
     setBatch(current);
     try {
       const next = await runProviderBatch(current, (command) => {
@@ -412,7 +420,7 @@ export function ProviderReviewActions({
                   className="min-h-11"
                   disabled={locked || !selected.length}
                   onClick={() => {
-                    if (visit.live()) setSelection({ scope, ids: [] });
+                    if (visit.live()) setSelection({ scope, page: pageAddress, ids: [] });
                   }}
                 >
                   {m.provider_clear({}, o)}
@@ -427,12 +435,17 @@ export function ProviderReviewActions({
             {visible.map((row, index) => {
               const key = providerRowKey(row);
               const checked = selected.includes(key);
+              const returned =
+                page?.returnCandidate?.subject === row.subject &&
+                page.returnCandidate.candidate === row.candidate.id &&
+                page.returnCandidate.property === row.candidate.statement.property.id;
               if (concealed(row))
                 return <ContentItem key={key} title={m.provider_missing({}, o)} headingLevel={3} role="status" />;
               const href = destination(row);
               return (
                 <ContentItem
                   key={key}
+                  className={returned ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : undefined}
                   title={row.label}
                   {...(href ? { href } : {})}
                   context={row.propertyLabel}
@@ -444,7 +457,7 @@ export function ProviderReviewActions({
                         </summary>
                         <ProviderComparison row={row} locale={locale} />
                       </details>
-                      {renderDetails?.(row)}
+                      {renderDetails?.(row, locked || selected.length > 0)}
                     </>
                   }
                   actions={
@@ -465,6 +478,7 @@ export function ProviderReviewActions({
                               if (value && !ids.includes(key) && ids.length >= providerSelectionLimit) return previous;
                               return {
                                 scope,
+                                page: pageAddress,
                                 ids: value ? [...new Set([...ids, key])] : ids.filter((id) => id !== key),
                               };
                             });

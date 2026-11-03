@@ -11,6 +11,7 @@ import {
 import type { KernelClient } from '@rezics/client';
 import type { Release } from '../../subject/definitions';
 import { candidateFailure, candidateHasPayload, type Candidate } from '../../subject/candidates';
+import type { ProviderAdmission, ProviderSessionSource } from './provider-visit';
 
 /** Presentation props retained for the existing bounded decision-action component. */
 export type ProviderQueueRow = ProviderDecisionRow;
@@ -20,12 +21,132 @@ export type ProviderQueuePage = {
   contextLabel: string;
   statusLabel: string;
   rows: ProviderQueueRow[];
+  returnCandidate?: { subject: string; property: string; candidate: string };
+  pageAddress?: string;
   session?: string;
 };
 export type ProviderQueueRead = ProviderFailure | { ok: true; page: ProviderQueuePage };
 
 export const globalReviewContext = '00000000-0000-8000-8000-000000000000';
 export type QueueScope = { source: string; context: string; status: 'pending' | 'accepted_unselected' };
+export type QueuePageHistory = { addresses: (string | undefined)[]; index: number; truncated: boolean };
+export const providerQueueHistoryLimit = 5;
+export function firstProviderQueuePage(): QueuePageHistory {
+  return { addresses: [undefined], index: 0, truncated: false };
+}
+export function providerQueueCursor(history: QueuePageHistory): string | undefined {
+  return history.addresses[history.index];
+}
+export function nextProviderQueuePage(history: QueuePageHistory, cursor: string): QueuePageHistory {
+  if (!cursor || cursor.length > 4096) return history;
+  const addresses = history.addresses.slice(0, history.index + 1);
+  if (addresses.at(-1) === cursor) return history;
+  addresses.push(cursor);
+  const truncated = history.truncated || addresses.length > providerQueueHistoryLimit;
+  if (addresses.length > providerQueueHistoryLimit) addresses.shift();
+  return { addresses, index: addresses.length - 1, truncated };
+}
+export function previousProviderQueuePage(history: QueuePageHistory): QueuePageHistory {
+  return history.index > 0 ? { ...history, index: history.index - 1 } : history;
+}
+export function validProviderQueueHistory(value: unknown): value is QueuePageHistory {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const history = value as QueuePageHistory;
+  return (
+    Object.keys(history).every((key) => ['addresses', 'index', 'truncated'].includes(key)) &&
+    Array.isArray(history.addresses) &&
+    history.addresses.length > 0 &&
+    history.addresses.length <= providerQueueHistoryLimit &&
+    history.addresses.every((cursor) => cursor === undefined || (typeof cursor === 'string' && cursor.length <= 4096)) &&
+    Number.isSafeInteger(history.index) &&
+    history.index >= 0 &&
+    history.index < history.addresses.length &&
+    typeof history.truncated === 'boolean'
+  );
+}
+
+export type ProviderQueueReturnVisit = {
+  id: string;
+  scope: QueueScope;
+  contextLabel: string;
+  history: QueuePageHistory;
+  candidate: { subject: string; property: string; candidate: string };
+  session?: string;
+};
+type StoredProviderQueueReturn = {
+  source: ProviderSessionSource;
+  admission: ProviderAdmission;
+  visit: ProviderQueueReturnVisit;
+  stop: () => void;
+};
+let storedProviderQueueReturn: StoredProviderQueueReturn | undefined;
+function clearStoredProviderQueueReturn(id?: string) {
+  if (!storedProviderQueueReturn || (id && storedProviderQueueReturn.visit.id !== id)) return;
+  const stored = storedProviderQueueReturn;
+  storedProviderQueueReturn = undefined;
+  stored.stop();
+}
+export function saveProviderQueueReturn(
+  source: ProviderSessionSource,
+  admission: ProviderAdmission,
+  visit: Omit<ProviderQueueReturnVisit, 'id'>,
+): ProviderQueueReturnVisit | undefined {
+  clearStoredProviderQueueReturn();
+  if (
+    !source.current(admission) ||
+    !validQueueScope(visit.scope) ||
+    !validProviderQueueHistory(visit.history) ||
+    !uuid.test(visit.candidate.subject) ||
+    !uuid.test(visit.candidate.candidate) ||
+    !visit.candidate.property ||
+    visit.candidate.property.length > 256 ||
+    (visit.session !== undefined && visit.session.length > 16384)
+  )
+    return undefined;
+  const saved: ProviderQueueReturnVisit = { ...visit, id: crypto.randomUUID() };
+  const stop = source.subscribe(() => {
+    if (storedProviderQueueReturn?.visit.id === saved.id && !source.current(admission))
+      clearStoredProviderQueueReturn(saved.id);
+  });
+  storedProviderQueueReturn = { source, admission, visit: saved, stop };
+  return saved;
+}
+function currentProviderQueueReturn(source: ProviderSessionSource, admission: ProviderAdmission) {
+  const stored = storedProviderQueueReturn;
+  if (!stored) return undefined;
+  if (stored.source !== source || stored.admission !== admission || !source.current(admission)) {
+    clearStoredProviderQueueReturn(stored.visit.id);
+    return undefined;
+  }
+  return stored;
+}
+export function peekProviderQueueReturn(source: ProviderSessionSource, admission: ProviderAdmission) {
+  return currentProviderQueueReturn(source, admission)?.visit;
+}
+export function takeProviderQueueReturn(
+  source: ProviderSessionSource,
+  admission: ProviderAdmission,
+  id: string,
+) {
+  const stored = currentProviderQueueReturn(source, admission);
+  if (!stored || stored.visit.id !== id) return undefined;
+  clearStoredProviderQueueReturn(id);
+  return stored.visit;
+}
+export function providerQueueReturnForReview(
+  source: ProviderSessionSource,
+  admission: ProviderAdmission,
+  address: { subject: string; property: string; candidate: string; context?: string },
+) {
+  const visit = peekProviderQueueReturn(source, admission);
+  return visit &&
+    visit.candidate.subject === address.subject &&
+    visit.candidate.property === address.property &&
+    visit.candidate.candidate === address.candidate &&
+    visit.scope.context === address.context
+    ? visit
+    : undefined;
+}
 type QueueResponse = NonNullable<Awaited<ReturnType<KernelClient['review-candidates']['get']>>['data']>;
 type NativeQueuePage = Extract<QueueResponse, { candidates: unknown }>;
 export type QueueRow = Omit<NativeQueuePage['candidates'][number], 'candidate'> & { candidate: Candidate };

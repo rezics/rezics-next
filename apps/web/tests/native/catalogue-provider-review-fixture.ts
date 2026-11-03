@@ -82,7 +82,12 @@ async function waitForContextDirectory(
 }
 
 /** Ordinary imported candidates and a named Context through admitted kernel APIs. */
-export async function createCatalogueProviderReviewFixture(): Promise<CatalogueProviderReviewFixture> {
+export async function createCatalogueProviderReviewFixture(
+  options: { bookCount?: number } = {},
+): Promise<CatalogueProviderReviewFixture> {
+  const bookCount = options.bookCount ?? 4;
+  if (!Number.isSafeInteger(bookCount) || bookCount < 1 || bookCount > 100)
+    throw new Error('Provider review fixture book count must be between 1 and 100');
   const lifecycle = currentNativeLifecycle();
   if (!lifecycle) throw new Error('Catalogue provider review fixture requires an active native test lifecycle');
   lifecycle.assertOpen('start catalogue provider review fixture');
@@ -142,10 +147,22 @@ export async function createCatalogueProviderReviewFixture(): Promise<CatalogueP
       body: { labels: { en: label } },
       status: 201,
     });
+    await nativeJson(stack, 'governor', '/v1/grants', {
+      method: 'POST',
+      key: crypto.randomUUID(),
+      body: {
+        resource: { route: 0, id: createdContext.context.id },
+        subject: { kind: 'account', id: alice.accountId },
+        actions: ['context:accept', 'context:adopt'],
+        valid: '(,)',
+      },
+      status: 201,
+    });
     await waitForContextDirectory(stack, 'alice', `olrev${token}`, createdContext.context.id);
     const languages = ['en', 'ja', 'fr', 'de'] as const;
     const books: ProviderReviewBook[] = [];
-    for (const [index, language] of languages.entries()) {
+    for (let index = 0; index < bookCount; index++) {
+      const language = languages[index % languages.length]!;
       const title = `olrev${token} book ${index + 1}`;
       const externalId = `OL${token}${index}W`;
       const origin = source(externalId);
