@@ -109,12 +109,12 @@ export function valueDiscriminator(value: unknown): string {
   return canonicalJson(record);
 }
 
-function operationKey(operation: Record<string, unknown>): string {
+function operationFamily(operation: Record<string, unknown>): string {
   const field = typeof operation.fieldGroup === 'string' ? operation.fieldGroup : 'unknown';
   if (operation.operation === 'create') return `create:${field}`;
   if (operation.operation === 'retract') return `retract:${field}`;
   const property = propertyId(operation.property) ?? 'unknown';
-  return `propose:${field}:${property}:${valueDiscriminator(operation.value)}`;
+  return `propose:${field}:${property}`;
 }
 
 function itemKey(value: unknown): string | null {
@@ -251,8 +251,30 @@ function diffOperations(buffer: PartBuffer, left: unknown, right: unknown): void
   }
   const leftUsed = new Uint8Array(leftRecords.length);
   const rightUsed = new Uint8Array(rightRecords.length);
-  const leftKeys = leftRecords.map((item) => operationKey(item.value!));
-  const rightKeys = rightRecords.map((item) => operationKey(item.value!));
+  const leftKeys = leftRecords.map((item) => operationFamily(item.value!));
+  const rightKeys = rightRecords.map((item) => operationFamily(item.value!));
+  const pairChanged = (i: number, j: number) => {
+    leftUsed[i] = 1;
+    rightUsed[j] = 1;
+    const leftOp = leftRecords[i]!.value!;
+    const rightOp = rightRecords[j]!.value!;
+    const address = `op/${leftKeys[i]}/${i}`;
+    if (unresolved(leftOp) || unresolved(rightOp)) {
+      emit(
+        buffer,
+        `${address}/target`,
+        'target',
+        unresolved(leftOp) ? 'unresolved' : 'present',
+        unresolved(rightOp) ? 'unresolved' : 'present',
+      );
+    }
+    diffValue(buffer, `${address}/value`, 'fact', leftOp.value, rightOp.value);
+    diffValue(buffer, `${address}/qualifiers`, 'qualifier', leftOp.qualifiers, rightOp.qualifiers);
+    diffValue(buffer, `${address}/references`, 'reference', leftOp.references, rightOp.references);
+    diffValue(buffer, `${address}/labels`, 'term', leftOp.labels, rightOp.labels);
+    if (typeof leftOp.subjectType === 'string' || typeof rightOp.subjectType === 'string')
+      emit(buffer, `${address}/subjectType`, 'fact', leftOp.subjectType, rightOp.subjectType);
+  };
   for (let i = 0; i < leftRecords.length; i++) {
     for (let j = 0; j < rightRecords.length; j++) {
       if (rightUsed[j] || leftKeys[i] !== rightKeys[j]) continue;
@@ -264,27 +286,15 @@ function diffOperations(buffer: PartBuffer, left: unknown, right: unknown): void
   }
   for (let i = 0; i < leftRecords.length; i++) {
     if (leftUsed[i]) continue;
-    let match = -1;
-    for (let j = 0; j < rightRecords.length; j++) {
-      if (rightUsed[j] || leftKeys[i] !== rightKeys[j]) continue;
-      match = j;
-      break;
-    }
-    if (match === -1) continue;
-    leftUsed[i] = 1;
-    rightUsed[match] = 1;
-    const leftOp = leftRecords[i]!.value!;
-    const rightOp = rightRecords[match]!.value!;
-    const address = `op/${leftKeys[i]}/${i}`;
-    if (unresolved(leftOp) || unresolved(rightOp)) {
-      emit(buffer, `${address}/target`, 'target', unresolved(leftOp) ? 'unresolved' : 'present', unresolved(rightOp) ? 'unresolved' : 'present');
-    }
-    diffValue(buffer, `${address}/value`, 'fact', leftOp.value, rightOp.value);
-    diffValue(buffer, `${address}/qualifiers`, 'qualifier', leftOp.qualifiers, rightOp.qualifiers);
-    diffValue(buffer, `${address}/references`, 'reference', leftOp.references, rightOp.references);
-    diffValue(buffer, `${address}/labels`, 'term', leftOp.labels, rightOp.labels);
-    if (typeof leftOp.subjectType === 'string' || typeof rightOp.subjectType === 'string')
-      emit(buffer, `${address}/subjectType`, 'fact', leftOp.subjectType, rightOp.subjectType);
+    const sameFamily = rightRecords
+      .map((item, j) => j)
+      .filter((j) => !rightUsed[j] && rightKeys[j] === leftKeys[i]);
+    if (sameFamily.length !== 1) continue;
+    const remainingLeft = leftRecords
+      .map((item, index) => index)
+      .filter((index) => !leftUsed[index] && leftKeys[index] === leftKeys[i]);
+    if (remainingLeft.length !== 1) continue;
+    pairChanged(i, sameFamily[0]!);
   }
   for (let i = 0; i < leftRecords.length; i++) {
     if (leftUsed[i]) continue;

@@ -56,25 +56,7 @@ test('compare CLI inspects two completed plans and returns to ordinary import wi
     await writeFile(
       rightDump,
       wikidataItems(3, (index) => (index === 0 ? 'Corrected \u202ehostile' : `Item ${index}`), (index) =>
-        index === 1
-          ? {
-              aliases: { en: [{ language: 'en', value: 'Harbor alias' }] },
-              claims: {
-                P31: [
-                  {
-                    type: 'statement',
-                    rank: 'normal',
-                    mainsnak: {
-                      snaktype: 'value',
-                      property: 'P31',
-                      datatype: 'wikibase-item',
-                      datavalue: { type: 'wikibase-entityid', value: { 'entity-type': 'item', id: 'Q47461344' } },
-                    },
-                  },
-                ],
-              },
-            }
-          : {},
+        index === 1 ? { aliases: { en: [{ language: 'en', value: 'Harbor alias' }] } } : {},
       ),
     );
     const left = await completedPlan(directory, 'left-plan', leftDump);

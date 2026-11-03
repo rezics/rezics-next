@@ -421,7 +421,7 @@ export function admitComparablePlans(left: PreviewPlan, right: PreviewPlan): voi
   const leftBaseline = left.baselineId;
   const rightBaseline = right.baselineId;
   if (leftBaseline === null && rightBaseline === null) return;
-  if (leftBaseline !== rightBaseline)
+  if (leftBaseline !== rightBaseline || left.baselinePresent !== right.baselinePresent)
     throw new PlanComparisonFailure(
       'Plans capture different baselines; a fresh common capture is required before comparing refresh alternatives.',
       2,
