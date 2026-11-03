@@ -24,22 +24,24 @@ export const exportSections = [
   'malEvidence',
 ] as const;
 export const exportSectionsV2 = [...exportSections, 'annotations', 'provenance', 'journals'] as const;
-export const exportSectionsV3 = [
-  ...exportSectionsV2,
+export const exportSectionsV3 = [...exportSectionsV2] as const;
+export const exportSectionsV4 = [
+  ...exportSectionsV3,
   'vndbUploads',
   'vndbEvidence',
   'anilistUploads',
   'anilistEvidence',
 ] as const;
-export type LibraryExportVersion = 1 | 2 | 3;
+export type LibraryExportVersion = 1 | 2 | 3 | 4;
 export type LibraryExportSectionV1 = (typeof exportSections)[number];
 export type LibraryExportSectionV2 = (typeof exportSectionsV2)[number];
 export type LibraryExportSectionV3 = (typeof exportSectionsV3)[number];
+export type LibraryExportSectionV4 = (typeof exportSectionsV4)[number];
 /** The archive recovery consumer shares the installed V1 and V2 section vocabulary. */
 export type LibraryExportSection = LibraryExportSectionV2;
 
 export function sectionsForVersion(version: LibraryExportVersion) {
-  return version === 1 ? exportSections : version === 2 ? exportSectionsV2 : exportSectionsV3;
+  return version === 1 ? exportSections : version === 2 ? exportSectionsV2 : version === 3 ? exportSectionsV3 : exportSectionsV4;
 }
 
 type Capture = { export_id: string; created_at: string; expires_at: string };
@@ -69,10 +71,16 @@ const v2Omissions = {
 
 const v3Omissions = {
   ...v2Omissions,
+  reimport:
+    'version 1 archive recovery plus reviewed version 2 annotations and journal dates/reflection; version 3 manifests, including assessments, and provenance are unsupported',
+} as const;
+
+const v4Omissions = {
+  ...v2Omissions,
   personalImportEvidence:
     'retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded',
   reimport:
-    'version 3 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
+    'version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution',
 } as const;
 
 export type LibraryExportManifestV1 = {
@@ -113,7 +121,20 @@ export type LibraryExportManifestV3 = {
   omissions: typeof v3Omissions;
 };
 
-export type LibraryExportManifest = LibraryExportManifestV1 | LibraryExportManifestV2 | LibraryExportManifestV3;
+export type LibraryExportManifestV4 = {
+  format: typeof LIBRARY_EXPORT_FORMAT;
+  version: 4;
+  coverage: 'private-library-owner-facts-v4';
+  exportId: string;
+  capturedAt: string;
+  expiresAt: string;
+  privacy: 'private';
+  completeness: 'supported-native-facts';
+  sections: [...typeof exportSectionsV4];
+  omissions: typeof v4Omissions;
+};
+
+export type LibraryExportManifest = LibraryExportManifestV1 | LibraryExportManifestV2 | LibraryExportManifestV3 | LibraryExportManifestV4;
 export type LibraryExportFinalManifestV1 = LibraryExportManifestV1 & {
   fullExport: false;
   rows: number;
@@ -131,14 +152,22 @@ export type LibraryExportFinalManifestV3 = LibraryExportManifestV3 & {
   recordBytes: number;
   sectionTotals: Record<LibraryExportSectionV3, { rows: number; recordBytes: number }>;
 };
+export type LibraryExportFinalManifestV4 = LibraryExportManifestV4 & {
+  fullExport: false;
+  rows: number;
+  recordBytes: number;
+  sectionTotals: Record<LibraryExportSectionV4, { rows: number; recordBytes: number }>;
+};
 export type LibraryExportFinalManifest =
   | LibraryExportFinalManifestV1
   | LibraryExportFinalManifestV2
-  | LibraryExportFinalManifestV3;
+  | LibraryExportFinalManifestV3
+  | LibraryExportFinalManifestV4;
 
 export function libraryExportManifest(capture: Capture & { format_version?: 1 }): LibraryExportManifestV1;
 export function libraryExportManifest(capture: Capture & { format_version: 2 }): LibraryExportManifestV2;
 export function libraryExportManifest(capture: Capture & { format_version: 3 }): LibraryExportManifestV3;
+export function libraryExportManifest(capture: Capture & { format_version: 4 }): LibraryExportManifestV4;
 export function libraryExportManifest(
   capture: Capture & { format_version?: LibraryExportVersion },
 ): LibraryExportManifest;
@@ -169,12 +198,19 @@ export function libraryExportManifest(
       sections: [...exportSectionsV2],
       omissions: v2Omissions,
     };
-  return {
+  if (capture.format_version === 3) return {
     ...common,
     version: 3,
     coverage: 'private-library-owner-facts-v3',
     sections: [...exportSectionsV3],
     omissions: v3Omissions,
+  };
+  return {
+    ...common,
+    version: 4,
+    coverage: 'private-library-owner-facts-v4',
+    sections: [...exportSectionsV4],
+    omissions: v4Omissions,
   };
 }
 

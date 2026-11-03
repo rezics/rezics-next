@@ -4,10 +4,10 @@ import {
   LIBRARY_EXPORT_LIMITS,
   sectionsForVersion,
   type LibraryExportSectionV1,
-  type LibraryExportSectionV3,
+  type LibraryExportSectionV4,
   type LibraryExportVersion,
 } from './library-export-format.ts';
-export { exportSections, exportSectionsV2, exportSectionsV3 } from './library-export-format.ts';
+export { exportSections, exportSectionsV2, exportSectionsV3, exportSectionsV4 } from './library-export-format.ts';
 
 type JournalDate = { year: number } | { year: number; month: number } | { year: number; month: number; day: number };
 type PrivacyFact =
@@ -123,7 +123,7 @@ export type ExportSourcePage = {
 };
 
 /** Each indexed selection fetches P+1 bounded rows so a full page can seek without an empty follow-up page. */
-const queries: Partial<Record<LibraryExportSectionV3, string>> = {
+const queries: Partial<Record<LibraryExportSectionV4, string>> = {
   entries: `SELECT subject_id::text AS key, subject_id, requested_subject_id, incarnation_id, state,
     revision, library_profile_pin, created_at::text, updated_at::text, activity_at::text, finished_at::text
     FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id > $3::uuid
@@ -245,7 +245,7 @@ async function bounded(client: Pick<PoolClient, 'query'>, sql: string, args: unk
   ).rows;
 }
 
-function v1Direct(section: LibraryExportSectionV3, version: LibraryExportVersion) {
+function v1Direct(section: LibraryExportSectionV4, version: LibraryExportVersion) {
   return version === 1 ? v1DirectSections.has(section) : Object.hasOwn(queries, section);
 }
 
@@ -264,13 +264,15 @@ export async function readExportSourcePage(
       : {}),
   };
   const sections = sectionsForVersion(version);
-  const section = sections[seek.section] as LibraryExportSectionV3 | undefined;
+  const section = sections[seek.section] as LibraryExportSectionV4 | undefined;
   if (!section) throw new TypeError('Invalid library export section cursor');
   const fetchRows = version === 1 ? LIBRARY_EXPORT_LIMITS.pageRows : FETCH_ROWS;
 
   let rows: { value: SourceRow | null }[];
   if (v1Direct(section, version)) {
-    const sourceSql = version === 3 && section === 'journals' ? journalQueryV3 : queries[section];
+    const sourceSql = version >= 3 && section === 'journals' ? journalQueryV3
+      : version === 4 && section === 'malImports' ? queries.malImports!.replace("(document->>'canceled')::boolean", 'export_cancelled')
+      : queries[section];
     if (!sourceSql) throw new TypeError('Unsupported library export section');
     const sql = version === 1 ? sourceSql.replaceAll(`LIMIT ${FETCH_ROWS}`, `LIMIT ${fetchRows}`) : sourceSql;
     const after =
@@ -331,6 +333,9 @@ export async function readExportSourcePage(
         ? `SELECT ordinal::text AS key,import_id AS upload_id,ordinal,export_source AS evidence
            FROM library.list_import_anilist WHERE route=$1 AND import_id=$2 AND account_id=$4
              AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
+        : mal && version === 4
+          ? `SELECT ordinal::text AS key,upload_id,ordinal,evidence FROM library.list_import_mal_row
+           WHERE route=$1 AND upload_id=$2 AND account_id=$4 AND ordinal>$3::integer ORDER BY ordinal LIMIT ${fetchRows}`
         : mal
           ? `SELECT i::text AS key,id AS upload_id,i AS ordinal,document->'rows'->i AS evidence
            FROM library.list_import_mal CROSS JOIN LATERAL generate_series($3::integer+1,
@@ -401,8 +406,8 @@ export async function readExportSourcePage(
       data.entryIncarnationId = entry?.entryIncarnationId ?? null;
       data.libraryProfilePin = entry?.libraryProfilePin ?? null;
     }
-    if (section === 'malEvidence' || (version === 3 && section.endsWith('Evidence')))
-      data.evidence = publicEvidence(data.evidence, version === 3);
+    if (section === 'malEvidence' || (version === 4 && section.endsWith('Evidence')))
+      data.evidence = publicEvidence(data.evidence, version === 4);
     if (section !== 'annotations' && section !== 'provenance' && section !== 'journals') {
       for (const field of ['subject_id', 'requested_subject_id', 'version_subject_id']) {
         const value = data[field];

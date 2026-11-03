@@ -1148,6 +1148,23 @@ $$;
 
 
 --
+-- Name: index_mal_import_rows(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.index_mal_import_rows() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='UPDATE' AND NEW.document->'rows' IS NOT DISTINCT FROM OLD.document->'rows' THEN RETURN NULL; END IF;
+  DELETE FROM library.list_import_mal_row WHERE route=NEW.route AND account_id=NEW.account_id AND upload_id=NEW.id;
+  INSERT INTO library.list_import_mal_row
+    SELECT NEW.route,NEW.account_id,NEW.id,(ordinality-1)::integer,evidence
+    FROM jsonb_array_elements(NEW.document->'rows') WITH ORDINALITY AS r(evidence,ordinality);
+  RETURN NULL;
+END; $$;
+
+
+--
 -- Name: index_vndb_import_rows(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -3803,10 +3820,10 @@ CREATE TABLE library.library_export (
     created_at timestamp with time zone NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     state text NOT NULL,
-    format_version smallint DEFAULT 1 NOT NULL,
+    format_version smallint DEFAULT 4 NOT NULL,
     CONSTRAINT library_export_check CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
     CONSTRAINT library_export_check1 CHECK ((expires_at = (created_at + '00:15:00'::interval))),
-    CONSTRAINT library_export_format_version_check CHECK ((format_version = ANY (ARRAY[1, 2, 3]))),
+    CONSTRAINT library_export_format_version_check CHECK ((format_version = ANY (ARRAY[1, 2, 3, 4]))),
     CONSTRAINT library_export_route_check CHECK (((route >= 0) AND (route <= 65535))),
     CONSTRAINT library_export_state_check CHECK ((state = ANY (ARRAY['collecting'::text, 'ready'::text, 'stale'::text, 'cancelled'::text, 'expired'::text, 'limit'::text])))
 );
@@ -3860,6 +3877,7 @@ CREATE TABLE library.list_import_mal (
     id uuid NOT NULL,
     document jsonb NOT NULL,
     expires_at timestamp with time zone NOT NULL,
+    export_cancelled boolean GENERATED ALWAYS AS (((document ->> 'canceled'::text))::boolean) STORED,
     CONSTRAINT list_import_mal_document_check CHECK ((octet_length((document)::text) <= 50331648)),
     CONSTRAINT list_import_mal_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
@@ -5142,6 +5160,20 @@ CREATE TABLE library.vndb_import (
     CONSTRAINT vndb_import_rows_check CHECK (((jsonb_typeof(rows) = 'array'::text) AND (jsonb_array_length(rows) <= 5000) AND (octet_length((rows)::text) <= 16777216))),
     CONSTRAINT vndb_import_state_check CHECK ((state = ANY (ARRAY['active'::text, 'cancelled'::text]))),
     CONSTRAINT vndb_import_xml_check CHECK ((octet_length(xml) <= 2097152))
+);
+
+
+--
+-- Name: list_import_mal_row; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.list_import_mal_row (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    upload_id uuid NOT NULL,
+    ordinal integer NOT NULL,
+    evidence jsonb NOT NULL,
+    CONSTRAINT list_import_mal_row_ordinal_check CHECK (((ordinal >= 0) AND (ordinal <= 499)))
 );
 
 
@@ -6555,6 +6587,14 @@ ALTER TABLE ONLY library.vndb_import
 
 ALTER TABLE ONLY library.vndb_label_adoption
     ADD CONSTRAINT vndb_label_adoption_pkey PRIMARY KEY (route, account_id, upload_id);
+
+
+--
+-- Name: list_import_mal_row list_import_mal_row_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_mal_row
+    ADD CONSTRAINT list_import_mal_row_pkey PRIMARY KEY (route, account_id, upload_id, ordinal);
 
 
 --
@@ -8219,6 +8259,13 @@ CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.vn
 
 
 --
+-- Name: list_import_mal_row export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER export_owner_fence AFTER INSERT OR DELETE OR UPDATE ON library.list_import_mal_row FOR EACH ROW EXECUTE FUNCTION library.advance_native_source_fence();
+
+
+--
 -- Name: vndb_import_row export_owner_fence; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -8258,6 +8305,13 @@ CREATE TRIGGER identity_scope_effect_immutable BEFORE DELETE OR UPDATE ON librar
 --
 
 CREATE TRIGGER identity_scope_seal_immutable BEFORE DELETE OR UPDATE ON library.identity_scope_seal FOR EACH ROW EXECUTE FUNCTION library.guard_identity_scope_evidence();
+
+
+--
+-- Name: list_import_mal index_parsed_rows; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER index_parsed_rows AFTER INSERT OR UPDATE OF document ON library.list_import_mal FOR EACH ROW EXECUTE FUNCTION library.index_list_import_mal_rows();
 
 
 --
@@ -9266,6 +9320,14 @@ ALTER TABLE ONLY library.type_preparation_slot
 
 ALTER TABLE ONLY library.vndb_label_adoption
     ADD CONSTRAINT vndb_label_adoption_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.vndb_import(route, account_id, upload_id) ON DELETE CASCADE;
+
+
+--
+-- Name: list_import_mal_row list_import_mal_row_route_account_id_upload_id_fkey; Type: FK CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.list_import_mal_row
+    ADD CONSTRAINT list_import_mal_row_route_account_id_upload_id_fkey FOREIGN KEY (route, account_id, upload_id) REFERENCES library.list_import_mal(route, account_id, id) ON DELETE CASCADE;
 
 
 --
