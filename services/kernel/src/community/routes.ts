@@ -2455,7 +2455,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           404: memberPageNotFound,
           403: memberPageForbidden,
           503: memberPageUnavailable,
-          400: problemSchema('invalid_request', 'invalid_cursor', 'stale_cursor'),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          409: problemSchema('stale_cursor'),
         },
         detail: {
           operationId: 'realm.members',
