@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { projectSourceClassification } from '@rezics/conversion';
+import { projectSourceClassification, type SourceClassificationProjection } from '@rezics/conversion';
 import { RunStore, type SourceProjection } from '../src/run-store.ts';
 
 test('staging retains only bounded, validated converter classification output', () => {
@@ -19,7 +19,7 @@ test('staging retains only bounded, validated converter classification output', 
       value: { kind: 'observation', confidence: 1 },
     });
     expect(classification.state).toBe('available');
-    const stage = (recordKey: string, sourceClassification: unknown) =>
+    const stage = (recordKey: string, sourceClassification: SourceClassificationProjection) =>
       store.stage(run, {
         row: {
           source: 'fixture',
@@ -40,9 +40,9 @@ test('staging retains only bounded, validated converter classification output', 
     };
     expect(read('authored-1')).toEqual(classification);
     expect(read('authored-2')).toEqual({ state: 'unavailable', reason: 'unadmitted' });
-    expect(() => stage('authored-3', { state: 'available', provenance: {}, value: { kind: 'clear' } })).toThrow(
-      'Invalid source classification projection',
-    );
+    expect(() =>
+      stage('authored-3', { state: 'available', provenance: {}, value: { kind: 'clear' } } as SourceClassificationProjection),
+    ).toThrow('Invalid source classification projection');
   } finally {
     store.close();
   }
