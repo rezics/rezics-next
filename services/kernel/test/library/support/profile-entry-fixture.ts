@@ -122,7 +122,7 @@ export async function compileEntryRelease(
       labels.libraryProfiles[profile.id] = libraryLabels(profile, locale);
     input.presentation[key] = JSON.stringify(labels);
   }
-  const release = compileCatalogue(input);
+  const release = await compileCatalogue(input);
   const game = gameUnits ? profileOf(release, 'ex:Parent') : null;
   if (game) {
     game.progress.allowed[0].units = gameUnits!.map((unit) => unitData(unit));
