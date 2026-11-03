@@ -2,18 +2,10 @@ import type { Pool, PoolClient } from 'pg';
 import { currentOperationalResources, type OperationalTransaction } from '../command/operational.ts';
 import type { NativeCollectionWork } from '../library/collection-source-work.ts';
 import type { WorkClient } from '../work/client.ts';
+import { OPERATIONAL_WORK_AXES } from './operational-work-axes.ts';
 
 /** The eight native axes. This allocation belongs only to the operational History producer. */
-export const OPERATIONAL_WORK_AXES = [
-  'candidateKeys',
-  'nativeRows',
-  'identityMetadataRows',
-  'emptySeeks',
-  'nativePoints',
-  'witnessKeys',
-  'statements',
-  'bytes',
-] as const;
+export { OPERATIONAL_WORK_AXES };
 export type OperationalWorkCost = Readonly<Record<(typeof OPERATIONAL_WORK_AXES)[number], number>>;
 const cost = (nativeRows: number, nativePoints: number, statements: number, bytes: number): OperationalWorkCost =>
   Object.freeze({

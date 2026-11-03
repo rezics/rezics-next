@@ -1,4 +1,5 @@
-import { OPERATIONAL_WORK_AXES, type OperationalWorkCost } from '../history/operational-work-budget.ts';
+import type { OperationalWorkCost } from '../history/operational-work-budget.ts';
+import { OPERATIONAL_WORK_AXES } from '../history/operational-work-axes.ts';
 
 export const SELECTED_AXES = [...OPERATIONAL_WORK_AXES, 'engineRequests'] as const;
 export type SelectedCost = OperationalWorkCost & Readonly<{ engineRequests: number }>;
