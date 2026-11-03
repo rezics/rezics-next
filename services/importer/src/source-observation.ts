@@ -86,7 +86,16 @@ export function observationDigest(
     attribution?: string;
   },
 ): string {
-  return sourceObservation(subjectId, SOURCE_OBSERVATION_PROVIDER, value).digest;
+  return sourceObservation(subjectId, SOURCE_OBSERVATION_PROVIDER, {
+    sourceRecordId: value.sourceRecordId,
+    count: value.count,
+    asOf: value.asOf,
+    ...(value.sourceAlias === undefined ? {} : { sourceAlias: value.sourceAlias }),
+    ...(value.scale === undefined ? {} : { scale: value.scale }),
+    ...(value.mean === undefined ? {} : { mean: value.mean }),
+    ...(value.licence === undefined ? {} : { licence: value.licence }),
+    ...(value.attribution === undefined ? {} : { attribution: value.attribution }),
+  }).digest;
 }
 
 export function intendedPayload(intended: IntendedObservation): Record<string, unknown> {

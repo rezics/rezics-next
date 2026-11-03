@@ -367,8 +367,7 @@ export function createImportTransport(options: ImportTransportOptions) {
 function statisticFigure(body: unknown, source: 'vndb', request: ImportSourceStatisticValue): ImportSourceStatisticFigure {
   const value = snapshot(body, RESPONSE_BYTES);
   ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
-  const row = value as Record<string, unknown>;
-  delete row.expectedObservation;
+  const { expectedObservation: _echo, ...row } = value as Record<string, unknown>;
   const observation = row.observation;
   const { expectedObservation: _expected, ...fields } = request as ImportSourceStatisticValue & {
     expectedObservation?: string | null;

@@ -114,7 +114,7 @@ test('32/64/128 VNDB observation intents stay O(N+A+R) with indexed pages and fi
               return run(...args);
             }) as typeof statement.run;
           }
-          expect(sql).not.toMatch(/FROM run_aggregate_operations(?!.*WHERE)/);
+          expect(sql.replace(/\s+/g, ' ')).not.toMatch(/FROM run_aggregate_operations(?! WHERE)/);
           return statement;
         }) as typeof database.prepare;
         return database;
