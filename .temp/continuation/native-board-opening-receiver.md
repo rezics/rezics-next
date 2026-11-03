@@ -35,22 +35,22 @@ acceptance:
   command:
     - bun
     - apps/web/scripts/focused.ts
-    - "--private-network"
-    - "--"
+    - '--private-network'
+    - '--'
     - bun
     - test
     - tests/board-native-opening.test.tsx
   placement: default
   tests:
-    - "Consume the installed typed Board page once and render current Board/community context, rules, five initial pins, twenty ordinary candidates, author/media context and admitted interactions without per-row enrichment or false count defaults."
-    - "Continue the ordinary source without repeating the initial pin cohort; preserve sparse empty continuation, sort semantics, same-input retry and explicit invalid-cursor restart."
-    - "Pass exact native targets and advice to existing reaction, reply, watch, pin and slow-mode owners; readability and successful transport never imply participation or moderation."
-    - "Retire context, media grants, interactions, actions, cohort, frontier and late effects on viewer, credentials, locale, route, exposure, source and connection replacement while preserving the actual-reader transfer boundary."
-    - "Cover current optional context failure, concealed identities, signed-out/nonparticipant/moderator advice, zero versus omitted reactions, denied actions, thread return, pin ABA, rank unavailable, and retry/restart focus."
-    - "At fixed cohorts of 1, 10 and 25 rows, record response-proportional consumer work with one native opening request per explicit read; keep Content physical growth and authority evidence separate."
-    - "Use authentic generated responses for populated, withheld and failed states; cover five pins plus twenty ordinary candidates, concealed and overlapping pin identities, repeated authors, continuation, empty-plus-next, exhaustion, all sorts, invalid cursor, optional context failure, denied actions, thread return, exact retry and late responses after viewer/session/locale/source replacement."
-    - "Add named stories for current opening, concealed optional context, zero/unknown interactions, sparse continuation, invalid-cursor restart, denied actions and unavailable retry. Review only these states at 390px and 1280px in light and dark themes, by keyboard and across all eight locales."
-    - "Measure selected cohorts 1/10/25 while varying unrelated Board size; report request count, rows, bytes and retained page state. Keep the independent-cache first-paint limit truthful."
+    - 'Consume the installed typed Board page once and render current Board/community context, rules, five initial pins, twenty ordinary candidates, author/media context and admitted interactions without per-row enrichment or false count defaults.'
+    - 'Continue the ordinary source without repeating the initial pin cohort; preserve sparse empty continuation, sort semantics, same-input retry and explicit invalid-cursor restart.'
+    - 'Pass exact native targets and advice to existing reaction, reply, watch, pin and slow-mode owners; readability and successful transport never imply participation or moderation.'
+    - 'Retire context, media grants, interactions, actions, cohort, frontier and late effects on viewer, credentials, locale, route, exposure, source and connection replacement while preserving the actual-reader transfer boundary.'
+    - 'Cover current optional context failure, concealed identities, signed-out/nonparticipant/moderator advice, zero versus omitted reactions, denied actions, thread return, pin ABA, rank unavailable, and retry/restart focus.'
+    - 'At fixed cohorts of 1, 10 and 25 rows, record response-proportional consumer work with one native opening request per explicit read; keep Content physical growth and authority evidence separate.'
+    - 'Use authentic generated responses for populated, withheld and failed states; cover five pins plus twenty ordinary candidates, concealed and overlapping pin identities, repeated authors, continuation, empty-plus-next, exhaustion, all sorts, invalid cursor, optional context failure, denied actions, thread return, exact retry and late responses after viewer/session/locale/source replacement.'
+    - 'Add named stories for current opening, concealed optional context, zero/unknown interactions, sparse continuation, invalid-cursor restart, denied actions and unavailable retry. Review only these states at 390px and 1280px in light and dark themes, by keyboard and across all eight locales.'
+    - 'Measure selected cohorts 1/10/25 while varying unrelated Board size; report request count, rows, bytes and retained page state. Keep the independent-cache first-paint limit truthful.'
   failing: true
 estimate:
   lines: 2400
