@@ -54,7 +54,7 @@ The consumer keeps its existing single retained upload per owner for seven days.
 apply accept at most 20 selected rows; cleanup and account-erasure steps remove at most 100 retained rows. Selected
 annotation and journal rows share the existing retained item table and lifecycle.
 
-The [merge owner's complete caller derivation](library-archive-merge.md#bounds-and-cost) charges every archive
+The [merge owner's complete caller derivation](library-archive-merge.md#bounds-and-verification) charges every archive
 operation and repeated caller authority/receipt read, producer pages (16 rows/120,000 bytes), consumer pages
 (100 rows plus lookahead), retained canonical operands, full simultaneous JSON serialization, and each native
 command's preparation, locks, receipts, History, export fences and summaries. Each apply attempt adds preflight,
