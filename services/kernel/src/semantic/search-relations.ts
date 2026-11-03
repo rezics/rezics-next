@@ -944,7 +944,7 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
         if (!home || !schemeHome || home.writeState === 'moved' || schemeHome.writeState === 'moved') return null;
         const runtime = await activeRelease(client);
         if (!runtime) return null;
-        const [row] = await readConceptObservation.run(client, {
+        const row = await readConceptObservation.run(client, {
           concept: selection.concept,
           scheme: selection.scheme,
           route,
@@ -1055,12 +1055,11 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           );
           const generation = graph.rows[0];
           if (!generation || !/^[0-9]+$/.test(generation.last_value)) return null;
-          const observation = await readConceptObservation.run(client, {
+          const root = await readConceptObservation.run(client, {
             concept: selection.concept,
             scheme: selection.scheme,
             route,
           });
-          const root = observation[0];
           if (!root) return null;
           const currentBinding = bind({
             runtime: current,
@@ -1077,10 +1076,10 @@ export function relationSource(pool: Pool, routeKey?: Uint8Array) {
           });
           const values = cursor
             ? {
-                after_route: Number(cursor[1]),
-                after_subject: cursor[2],
-                after_slot: cursor[3],
-                after_candidate: cursor[4],
+                after_route: Number(cursor[1]!),
+                after_subject: cursor[2]!,
+                after_slot: cursor[3]!,
+                after_candidate: cursor[4]!,
               }
             : {
                 after_route: -1,

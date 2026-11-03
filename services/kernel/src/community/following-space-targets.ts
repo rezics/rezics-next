@@ -30,13 +30,28 @@ export type FollowingSpaceTargetDependencies = Readonly<{
   clock: () => Date;
 }>;
 
-type Snapshot = Awaited<ReturnType<typeof followingTargets.run>>[number];
+type SnapshotRow = Awaited<ReturnType<typeof followingTargets.run>>[number];
+type Snapshot = SnapshotRow & {
+  space_id: string;
+  space_head_revision_id: string;
+  space_lifecycle_version: string;
+  title: string;
+};
 type ViewerResult = Awaited<ReturnType<typeof readViewerActions>>['resources'][number];
 type ViewerSuccess = Extract<ViewerResult, { viewerActions: readonly unknown[] }>;
 type Group = Readonly<{ spaceId: string; refs: readonly Readonly<{ type: string; id: string }>[] }>;
 
 function key(type: string, id: string) {
   return `${type}/${id}`;
+}
+
+function completeSnapshot(row: SnapshotRow): row is Snapshot {
+  return (
+    typeof row.space_id === 'string' &&
+    typeof row.space_head_revision_id === 'string' &&
+    typeof row.space_lifecycle_version === 'string' &&
+    typeof row.title === 'string'
+  );
 }
 
 function sameSpace(current: Snapshot | undefined, expected: Snapshot): boolean {
@@ -72,7 +87,7 @@ async function pageSnapshot(
     ids: selected.map(({ id }) => id),
     at,
   });
-  return new Map(rows.map((row) => [row.space_id, row]));
+  return new Map(rows.filter(completeSnapshot).map((row) => [row.space_id, row]));
 }
 
 function spaceResource(
@@ -185,7 +200,7 @@ export async function followingSpaceTargets(
         at,
       }),
     );
-    for (const row of rows) snapshots.set(row.space_id, row);
+    for (const row of rows) if (completeSnapshot(row)) snapshots.set(row.space_id, row);
   }
 
   const expectedByRealm = new Map<string, Snapshot>();
