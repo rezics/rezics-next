@@ -15,6 +15,7 @@ import { CollectionReadActions, CollectionReadMembers } from './collection-page'
 import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
+import { BulkFilteredAdd } from './bulk-filtered-add-view';
 import { isOrdinarySavedQuery, RuleEditLink } from './saved-query-results';
 import { SavedQueryManagement } from './saved-query-management';
 import { SavedFilterReviewEntry, SavedFilterReviewScopeBoundary } from './saved-filter-review';
@@ -215,6 +216,12 @@ function DynamicCollectionPageLifetime({
           empty={!current.preparing && current.members.length === 0 && !laterPage && !current.next}
           emptyLabel={empty}
           {...(current.unavailable !== undefined ? { unavailable: current.unavailable } : {})}
+        />
+        <BulkFilteredAdd
+          source={{ id: current.id, ...(current.filter === undefined ? {} : { filter: current.filter }) }}
+          address={JSON.stringify([current.id, current.cursor, search, queryKey])}
+          disabled={!membersReady || (current.filterIgnored?.length ?? 0) > 0}
+          isCurrent={() => active.current}
         />
         {membersReady && current.members.length === 0 && (laterPage || current.next) ? (
           <p role="status" className="text-muted-foreground">

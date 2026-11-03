@@ -18,6 +18,7 @@ type Snapshot = {
   csrfToken: string;
   admitted: boolean;
   canLabel: boolean;
+  operations: readonly string[] | undefined;
 };
 let nextGeneration = 0;
 const identity = (subject: string | null): Identity => ({
@@ -32,6 +33,7 @@ const serverSnapshot: Snapshot = {
   csrfToken: '',
   admitted: false,
   canLabel: false,
+  operations: undefined,
 };
 
 /** Owning composition only: the shared lifetime supplies the actual enrolled exposure observation. */
@@ -100,6 +102,7 @@ function ownerStore(client: QueryClient) {
         csrfToken: csrf ?? '',
         admitted: !!subject && operationIsAdmitted('collection.get', groups),
         canLabel: !!subject && operationIsAdmitted('library_label.list', groups),
+        operations: groups,
       };
     }
     return snapshot;
@@ -163,6 +166,8 @@ export function useCollectionOwnerCurrent(address: string, _withLabels = false) 
     isCurrent,
     isOwnerCurrent: () => store.owns(snapshot) && getLocale() === locale,
     canLabelCurrent: () => isCurrent() && snapshot.canLabel,
+    operationCurrent: (operation: Parameters<typeof operationIsAdmitted>[0]) =>
+      isCurrent() && operationIsAdmitted(operation, snapshot.operations),
     credential: () => (isCurrent() ? snapshot.csrfToken || null : null),
     csrfToken: snapshot.csrfToken,
     generation: snapshot.identity.generation,

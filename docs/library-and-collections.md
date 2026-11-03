@@ -436,6 +436,9 @@ Decision: Web bulk add captures only the loaded selected canonical Subjects in f
 Decision: Collection placement browsing retains the current page plus one previous cursor; Previous steps back once, and Restart explicitly rereads page one, so deep browsing never stores cursor history. The [Web placement journey](../apps/web/src/library/collection-placement-journey.md) owns bounded destination/anchor browsing, exact occurrence review, native transfer recovery and destination-only bulk-add reuse.
 
 Decision: Web selected occurrence-removal review captures loaded selected member IDs in first-selection order; whole-filtered removal instead uses native complete query capture and reviews one stored occurrence page at a time, preserving duplicate Subjects, native order and the captured source independently of later filter edits.
+Decision: Web occurrence-removal review captures only loaded selected member IDs in first-selection order, retaining duplicate Subjects and the source Collection independently of later edits.
+Decision: Whole-filtered Web add uses an explicit writable curated destination and one native query capture, separate from loaded selection; a new destination or predicate requires a new review, while preparation and uncertain retries keep the original request and confirmation keys.
+
 Decision: Inline bulk add recovery reads one native outcome page at a time; a new confirmation uses the preview's captured sender, credential and headers with its own key, and uncertain retries retain that entire command.
 
 Web's public download controls admit a detached first-page capture of viewer, native metadata revision and exact

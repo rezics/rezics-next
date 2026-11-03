@@ -83,6 +83,7 @@ import {
 import { FollowTargetControl } from './follow-target-control';
 import { collectionPublicItemList } from './collection-public-document';
 import { CollectionExport } from './collection-export';
+import { BulkFilteredAdd } from './bulk-filtered-add-view';
 import {
   BulkOccurrenceRemoveJourney,
   bulkOccurrenceRemoveRestoreAvailable,
@@ -1882,6 +1883,12 @@ function CollectionPageLifetime({
           unavailable={page.memberState === 'unavailable'}
           emptyLabel={m.library_collection_empty()}
         />
+        {!editing ? <BulkFilteredAdd
+          source={{ id: page.id, ...(page.filter === undefined ? {} : { filter: page.filter }) }}
+          address={JSON.stringify([page.id, cursor, search, queryKey])}
+          disabled={page.filterStatus !== undefined || (page.filterIgnored?.length ?? 0) > 0 || (page.memberState ?? 'ready') !== 'ready'}
+          isCurrent={() => current()}
+        /> : null}
         <section aria-label={m.library_collection_members()}>
           <h2 className="sr-only">{m.library_collection_members()}</h2>
           {editing && boundaryAdmitted ? (
