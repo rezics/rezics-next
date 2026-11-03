@@ -33,14 +33,15 @@ const moderationFiles = [
 
 type TestCounts = { pass: number | null; fail: number | null; skip: number | null };
 type ProcSample = { start: string; rss: number; highWater: number };
-type ProcessPeak = { rssBytes: number; processCount: number };
-type CgroupMetrics = { peakBytes: number; oomEvents: number };
+type ProcessPeak = { sampledRssBytes: number; highWaterBoundBytes: number; processCount: number };
+type CgroupMetrics = { currentBytes: number; oomEvents: number };
 type RunResult = {
   command: string[];
   exitCode: number | null;
   signal: string | null;
   durationMs: number;
   peakRssBytes: number | null;
+  rssHighWaterBoundBytes: number | null;
   peakCgroupBytes: number | null;
   counts: TestCounts;
   failure?: string;
@@ -109,7 +110,8 @@ function readChildren(pid: number): number[] {
 
 function createProcessSampler(rootPid: number): () => ProcessPeak | null {
   const known = new Map<number, ProcSample>();
-  let peakRssBytes = 0;
+  let peakSampledRssBytes = 0;
+  let peakHighWaterBoundBytes = 0;
   let peakProcessCount = 0;
   return () => {
     const queue = [rootPid, ...known.keys()];
@@ -130,9 +132,14 @@ function createProcessSampler(rootPid: number): () => ProcessPeak | null {
     if (!current.has(rootPid) && known.size === 0) return null;
     const rssBytes = [...current.values()].reduce((sum, sample) => sum + sample.rss, 0);
     const highWaterBound = [...known.values()].reduce((sum, sample) => sum + sample.highWater, 0);
-    peakRssBytes = Math.max(peakRssBytes, rssBytes, highWaterBound);
+    peakSampledRssBytes = Math.max(peakSampledRssBytes, rssBytes);
+    peakHighWaterBoundBytes = Math.max(peakHighWaterBoundBytes, highWaterBound);
     peakProcessCount = Math.max(peakProcessCount, current.size);
-    return { rssBytes: peakRssBytes, processCount: peakProcessCount };
+    return {
+      sampledRssBytes: peakSampledRssBytes,
+      highWaterBoundBytes: peakHighWaterBoundBytes,
+      processCount: peakProcessCount,
+    };
   };
 }
 
@@ -151,12 +158,12 @@ function readCgroupMetrics(): CgroupMetrics | null {
   const directory = cgroupDirectory();
   if (!directory) return null;
   try {
-    const peakBytes = Number(readFileSync(`${directory}/memory.peak`, 'utf8').trim());
+    const currentBytes = Number(readFileSync(`${directory}/memory.current`, 'utf8').trim());
     const events = readFileSync(`${directory}/memory.events`, 'utf8');
     const eventCount = (name: string) => Number(events.match(new RegExp(`^${name}\\s+(\\d+)$`, 'mu'))?.[1] ?? 0);
     const oomEvents = eventCount('oom') + eventCount('oom_kill') + eventCount('oom_group_kill');
-    if (!Number.isSafeInteger(peakBytes) || peakBytes < 0 || !Number.isSafeInteger(oomEvents)) return null;
-    return { peakBytes, oomEvents };
+    if (!Number.isSafeInteger(currentBytes) || currentBytes < 0 || !Number.isSafeInteger(oomEvents)) return null;
+    return { currentBytes, oomEvents };
   } catch {
     return null;
   }
@@ -203,8 +210,9 @@ function printResult(result: RunResult): void {
     `exit=${result.exitCode === null ? 'not-started' : result.exitCode}`,
     `signal=${result.signal ?? 'none'}`,
     `duration_ms=${result.durationMs}`,
-    `peak_rss_bytes=${result.peakRssBytes ?? 'unavailable'}`,
-    `peak_cgroup_bytes=${result.peakCgroupBytes ?? 'unavailable'}`,
+    `peak_rss_sampled_bytes=${result.peakRssBytes ?? 'unavailable'}`,
+    `rss_high_water_bound_bytes=${result.rssHighWaterBoundBytes ?? 'unavailable'}`,
+    `peak_cgroup_sampled_bytes=${result.peakCgroupBytes ?? 'unavailable'}`,
     `tests=${result.counts.pass === null ? 'unknown' : result.counts.pass}`,
     `failed=${result.counts.fail === null ? 'unknown' : result.counts.fail}`,
     `skipped=${result.counts.skip === null ? 'unknown' : result.counts.skip}`,
@@ -241,13 +249,14 @@ async function runCommand(
     signal: null,
     durationMs: 0,
     peakRssBytes: null,
-    peakCgroupBytes: initialCgroup?.peakBytes ?? null,
+    rssHighWaterBoundBytes: null,
+    peakCgroupBytes: initialCgroup?.currentBytes ?? null,
     counts: testCounts,
   };
   if (receivedSignal) result.failure = `interrupted by ${receivedSignal}`;
   else if (performance.now() >= overallDeadline) result.failure = 'overall deadline expired before command start';
-  else if (initialCgroup && initialCgroup.peakBytes >= memoryLimitBytes)
-    result.failure = `cgroup peak before command already reached ${memoryLimitBytes} bytes`;
+  else if (initialCgroup && initialCgroup.currentBytes >= memoryLimitBytes)
+    result.failure = `cgroup usage before command reached ${memoryLimitBytes} bytes`;
   if (result.failure) {
     result.durationMs = Math.round(performance.now() - started);
     printResult(result);
@@ -278,21 +287,29 @@ async function runCommand(
   const output = Promise.all([drain(child.stdout, testCounts), drain(child.stderr, testCounts)]);
   const deadline = Math.min(performance.now() + perCommandDeadlineMs, overallDeadline);
   let peakRssBytes: number | null = null;
-  let peakCgroupBytes = initialCgroup?.peakBytes ?? null;
+  let rssHighWaterBoundBytes: number | null = null;
+  let peakCgroupBytes = initialCgroup?.currentBytes ?? null;
   let failure: string | undefined;
 
   while (exitCode === undefined) {
     const sampled = sampleTree();
-    if (sampled) peakRssBytes = Math.max(peakRssBytes ?? 0, sampled.rssBytes);
+    if (sampled) {
+      peakRssBytes = Math.max(peakRssBytes ?? 0, sampled.sampledRssBytes);
+      rssHighWaterBoundBytes = Math.max(rssHighWaterBoundBytes ?? 0, sampled.highWaterBoundBytes);
+    }
     const cgroup = readCgroupMetrics();
     if (cgroup) {
-      peakCgroupBytes = Math.max(peakCgroupBytes ?? 0, cgroup.peakBytes);
+      peakCgroupBytes = Math.max(peakCgroupBytes ?? 0, cgroup.currentBytes);
       if (initialCgroup && cgroup.oomEvents > initialCgroup.oomEvents) failure = 'cgroup recorded an OOM event';
     }
     if (!peakRssBytes && !cgroup) failure = 'physical RSS measurement is unavailable';
-    if ((peakRssBytes ?? 0) >= memoryLimitBytes) failure = `process-tree RSS reached ${memoryLimitBytes} bytes`;
+    if (
+      (peakRssBytes ?? 0) >= memoryLimitBytes ||
+      (rssHighWaterBoundBytes ?? 0) >= memoryLimitBytes
+    )
+      failure = `process-tree RSS reached ${memoryLimitBytes} bytes`;
     if ((peakCgroupBytes ?? 0) >= memoryLimitBytes)
-      failure = `cgroup memory peak reached ${memoryLimitBytes} bytes`;
+      failure = `sampled cgroup usage reached ${memoryLimitBytes} bytes`;
     if (receivedSignal) failure = `interrupted by ${receivedSignal}`;
     if (performance.now() >= deadline) failure = 'command deadline expired';
     if (failure) {
@@ -314,10 +331,14 @@ async function runCommand(
   activePid = undefined;
   result.signal = child.signalCode == null ? null : String(child.signalCode);
   const finalTree = sampleTree();
-  if (finalTree) peakRssBytes = Math.max(peakRssBytes ?? 0, finalTree.rssBytes);
+  if (finalTree) {
+    peakRssBytes = Math.max(peakRssBytes ?? 0, finalTree.sampledRssBytes);
+    rssHighWaterBoundBytes = Math.max(rssHighWaterBoundBytes ?? 0, finalTree.highWaterBoundBytes);
+  }
   const finalCgroup = readCgroupMetrics();
-  if (finalCgroup) peakCgroupBytes = Math.max(peakCgroupBytes ?? 0, finalCgroup.peakBytes);
+  if (finalCgroup) peakCgroupBytes = Math.max(peakCgroupBytes ?? 0, finalCgroup.currentBytes);
   result.peakRssBytes = peakRssBytes;
+  result.rssHighWaterBoundBytes = rssHighWaterBoundBytes;
   result.peakCgroupBytes = peakCgroupBytes;
   result.durationMs = Math.round(performance.now() - started);
   if (failure) result.failure = failure;
@@ -333,6 +354,7 @@ async function runCommand(
     result.failure = `expected one selected test to pass, received ${testCounts.pass}`;
   else if (
     (peakRssBytes ?? 0) >= memoryLimitBytes ||
+    (rssHighWaterBoundBytes ?? 0) >= memoryLimitBytes ||
     (peakCgroupBytes ?? 0) >= memoryLimitBytes
   )
     result.failure = `resource peak reached ${memoryLimitBytes} bytes`;
