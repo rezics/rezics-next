@@ -152,6 +152,108 @@ CREATE TABLE rating.aggregate_component (
 
 
 --
+-- Name: classification_aggregate; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.classification_aggregate (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    association_id uuid NOT NULL,
+    binding_hash bytea NOT NULL,
+    support_count integer NOT NULL,
+    oppose_count integer NOT NULL,
+    false_positive_count integer NOT NULL,
+    generation bigint NOT NULL,
+    as_of timestamp with time zone NOT NULL,
+    CONSTRAINT classification_aggregate_binding_hash_check CHECK ((octet_length(binding_hash) = 32)),
+    CONSTRAINT classification_aggregate_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT classification_aggregate_check1 CHECK ((route = ((get_byte(uuid_send(association_id), 10) * 256) + get_byte(uuid_send(association_id), 11)))),
+    CONSTRAINT classification_aggregate_check2 CHECK ((false_positive_count <= (support_count + oppose_count))),
+    CONSTRAINT classification_aggregate_false_positive_count_check CHECK ((false_positive_count >= 0)),
+    CONSTRAINT classification_aggregate_generation_check CHECK ((generation > 0)),
+    CONSTRAINT classification_aggregate_oppose_count_check CHECK ((oppose_count >= 0)),
+    CONSTRAINT classification_aggregate_support_count_check CHECK ((support_count >= 0))
+);
+
+
+--
+-- Name: classification_ballot; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.classification_ballot (
+    route integer NOT NULL,
+    actor_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    association_id uuid NOT NULL,
+    binding_hash bytea NOT NULL,
+    assessment text,
+    false_positive boolean NOT NULL,
+    revision bigint NOT NULL,
+    eligibility_generation bigint NOT NULL,
+    eligible boolean NOT NULL,
+    CONSTRAINT classification_ballot_assessment_check CHECK ((assessment = ANY (ARRAY['support'::text, 'oppose'::text]))),
+    CONSTRAINT classification_ballot_binding_hash_check CHECK ((octet_length(binding_hash) = 32)),
+    CONSTRAINT classification_ballot_check CHECK ((route = ((get_byte(uuid_send(actor_id), 10) * 256) + get_byte(uuid_send(actor_id), 11)))),
+    CONSTRAINT classification_ballot_check1 CHECK (((get_byte(uuid_send(subject_id), 10) = get_byte(uuid_send(association_id), 10)) AND (get_byte(uuid_send(subject_id), 11) = get_byte(uuid_send(association_id), 11)))),
+    CONSTRAINT classification_ballot_check2 CHECK (((assessment IS NOT NULL) OR (NOT false_positive))),
+    CONSTRAINT classification_ballot_eligibility_generation_check CHECK ((eligibility_generation > 0)),
+    CONSTRAINT classification_ballot_revision_check CHECK ((revision > 0))
+);
+
+
+--
+-- Name: classification_ballot_actor; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.classification_ballot_actor (
+    route integer NOT NULL,
+    actor_id uuid NOT NULL,
+    eligible boolean NOT NULL,
+    generation bigint NOT NULL,
+    tombstoned boolean NOT NULL,
+    cleanup_pending boolean NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    CONSTRAINT classification_ballot_actor_check CHECK ((route = ((get_byte(uuid_send(actor_id), 10) * 256) + get_byte(uuid_send(actor_id), 11)))),
+    CONSTRAINT classification_ballot_actor_check1 CHECK (((NOT eligible) OR (NOT tombstoned))),
+    CONSTRAINT classification_ballot_actor_generation_check CHECK ((generation > 0)),
+    CONSTRAINT classification_ballot_actor_source_epoch_check CHECK ((source_epoch >= 0)),
+    CONSTRAINT classification_ballot_actor_source_position_check CHECK ((source_position >= 0))
+);
+
+
+--
+-- Name: classification_contribution; Type: TABLE; Schema: rating; Owner: -
+--
+
+CREATE TABLE rating.classification_contribution (
+    route integer NOT NULL,
+    subject_id uuid NOT NULL,
+    association_id uuid NOT NULL,
+    binding_hash bytea NOT NULL,
+    actor_route integer NOT NULL,
+    actor_id uuid NOT NULL,
+    assessment text,
+    false_positive boolean NOT NULL,
+    revision bigint NOT NULL,
+    source_epoch integer NOT NULL,
+    source_position bigint NOT NULL,
+    eligibility_generation bigint NOT NULL,
+    eligible boolean NOT NULL,
+    CONSTRAINT classification_contribution_assessment_check CHECK ((assessment = ANY (ARRAY['support'::text, 'oppose'::text]))),
+    CONSTRAINT classification_contribution_binding_hash_check CHECK ((octet_length(binding_hash) = 32)),
+    CONSTRAINT classification_contribution_check CHECK ((route = ((get_byte(uuid_send(subject_id), 10) * 256) + get_byte(uuid_send(subject_id), 11)))),
+    CONSTRAINT classification_contribution_check1 CHECK ((route = ((get_byte(uuid_send(association_id), 10) * 256) + get_byte(uuid_send(association_id), 11)))),
+    CONSTRAINT classification_contribution_check2 CHECK ((actor_route = ((get_byte(uuid_send(actor_id), 10) * 256) + get_byte(uuid_send(actor_id), 11)))),
+    CONSTRAINT classification_contribution_check3 CHECK (((assessment IS NOT NULL) OR (NOT false_positive))),
+    CONSTRAINT classification_contribution_eligibility_generation_check CHECK ((eligibility_generation > 0)),
+    CONSTRAINT classification_contribution_revision_check CHECK ((revision > 0)),
+    CONSTRAINT classification_contribution_source_epoch_check CHECK ((source_epoch > 0)),
+    CONSTRAINT classification_contribution_source_position_check CHECK ((source_position > 0))
+);
+
+
+--
 -- Name: erasure_page; Type: TABLE; Schema: rating; Owner: -
 --
 
@@ -669,6 +771,38 @@ ALTER TABLE ONLY rating.aggregate_component
 
 
 --
+-- Name: classification_aggregate classification_aggregate_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.classification_aggregate
+    ADD CONSTRAINT classification_aggregate_pkey PRIMARY KEY (route, subject_id, association_id, binding_hash);
+
+
+--
+-- Name: classification_ballot_actor classification_ballot_actor_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.classification_ballot_actor
+    ADD CONSTRAINT classification_ballot_actor_pkey PRIMARY KEY (route, actor_id);
+
+
+--
+-- Name: classification_ballot classification_ballot_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.classification_ballot
+    ADD CONSTRAINT classification_ballot_pkey PRIMARY KEY (route, actor_id, subject_id, association_id);
+
+
+--
+-- Name: classification_contribution classification_contribution_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
+--
+
+ALTER TABLE ONLY rating.classification_contribution
+    ADD CONSTRAINT classification_contribution_pkey PRIMARY KEY (route, subject_id, association_id, actor_route, actor_id);
+
+
+--
 -- Name: erasure_page erasure_page_pkey; Type: CONSTRAINT; Schema: rating; Owner: -
 --
 
@@ -875,6 +1009,13 @@ CREATE INDEX aggregate_component_target_population_idx ON rating.aggregate_compo
 
 
 --
+-- Name: classification_ballot_cleanup_idx; Type: INDEX; Schema: rating; Owner: -
+--
+
+CREATE INDEX classification_ballot_cleanup_idx ON rating.classification_ballot USING btree (route, actor_id, eligibility_generation, subject_id, association_id) WHERE (assessment IS NOT NULL);
+
+
+--
 -- Name: erasure_page_pending_idx; Type: INDEX; Schema: rating; Owner: -
 --
 
@@ -1075,76 +1216,6 @@ ALTER TABLE ONLY rating.vote
 
 
 --
-CREATE TABLE rating.classification_ballot_actor (
-    route integer NOT NULL,
-    actor_id uuid NOT NULL,
-    eligible boolean NOT NULL,
-    generation bigint NOT NULL CHECK (generation > 0),
-    tombstoned boolean NOT NULL,
-    cleanup_pending boolean NOT NULL,
-    source_epoch integer NOT NULL CHECK (source_epoch >= 0),
-    source_position bigint NOT NULL CHECK (source_position >= 0),
-    CONSTRAINT classification_ballot_actor_pkey PRIMARY KEY (route, actor_id),
-    CONSTRAINT classification_ballot_actor_route_check CHECK (route = (get_byte(uuid_send(actor_id), 10) * 256 + get_byte(uuid_send(actor_id), 11))),
-    CONSTRAINT classification_ballot_actor_check CHECK ((NOT eligible) OR (NOT tombstoned))
-);
-
-CREATE TABLE rating.classification_ballot (
-    route integer NOT NULL,
-    actor_id uuid NOT NULL,
-    subject_id uuid NOT NULL,
-    association_id uuid NOT NULL,
-    binding_hash bytea NOT NULL CHECK (octet_length(binding_hash) = 32),
-    assessment text CHECK (assessment = ANY (ARRAY['support'::text, 'oppose'::text])),
-    false_positive boolean NOT NULL,
-    revision bigint NOT NULL CHECK (revision > 0),
-    eligibility_generation bigint NOT NULL CHECK (eligibility_generation > 0),
-    eligible boolean NOT NULL,
-    CONSTRAINT classification_ballot_pkey PRIMARY KEY (route, actor_id, subject_id, association_id),
-    CONSTRAINT classification_ballot_route_check CHECK (route = (get_byte(uuid_send(actor_id), 10) * 256 + get_byte(uuid_send(actor_id), 11))),
-    CONSTRAINT classification_ballot_association_route_check CHECK ((get_byte(uuid_send(subject_id), 10) = get_byte(uuid_send(association_id), 10)) AND (get_byte(uuid_send(subject_id), 11) = get_byte(uuid_send(association_id), 11))),
-    CONSTRAINT classification_ballot_check CHECK ((assessment IS NOT NULL) OR (NOT false_positive))
-);
-
-CREATE INDEX classification_ballot_cleanup_idx ON rating.classification_ballot USING btree (route, actor_id, eligibility_generation, subject_id, association_id) WHERE (assessment IS NOT NULL);
-
-CREATE TABLE rating.classification_aggregate (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    association_id uuid NOT NULL,
-    binding_hash bytea NOT NULL CHECK (octet_length(binding_hash) = 32),
-    support_count integer NOT NULL CHECK (support_count >= 0),
-    oppose_count integer NOT NULL CHECK (oppose_count >= 0),
-    false_positive_count integer NOT NULL CHECK (false_positive_count >= 0),
-    generation bigint NOT NULL CHECK (generation > 0),
-    as_of timestamp with time zone NOT NULL,
-    CONSTRAINT classification_aggregate_pkey PRIMARY KEY (route, subject_id, association_id, binding_hash),
-    CONSTRAINT classification_aggregate_subject_route_check CHECK (route = (get_byte(uuid_send(subject_id), 10) * 256 + get_byte(uuid_send(subject_id), 11))),
-    CONSTRAINT classification_aggregate_association_route_check CHECK (route = (get_byte(uuid_send(association_id), 10) * 256 + get_byte(uuid_send(association_id), 11))),
-    CONSTRAINT classification_aggregate_check CHECK (false_positive_count <= (support_count + oppose_count))
-);
-
-CREATE TABLE rating.classification_contribution (
-    route integer NOT NULL,
-    subject_id uuid NOT NULL,
-    association_id uuid NOT NULL,
-    binding_hash bytea NOT NULL CHECK (octet_length(binding_hash) = 32),
-    actor_route integer NOT NULL,
-    actor_id uuid NOT NULL,
-    assessment text CHECK (assessment = ANY (ARRAY['support'::text, 'oppose'::text])),
-    false_positive boolean NOT NULL,
-    revision bigint NOT NULL CHECK (revision > 0),
-    source_epoch integer NOT NULL CHECK (source_epoch > 0),
-    source_position bigint NOT NULL CHECK (source_position > 0),
-    eligibility_generation bigint NOT NULL CHECK (eligibility_generation > 0),
-    eligible boolean NOT NULL,
-    CONSTRAINT classification_contribution_pkey PRIMARY KEY (route, subject_id, association_id, actor_route, actor_id),
-    CONSTRAINT classification_contribution_subject_route_check CHECK (route = (get_byte(uuid_send(subject_id), 10) * 256 + get_byte(uuid_send(subject_id), 11))),
-    CONSTRAINT classification_contribution_association_route_check CHECK (route = (get_byte(uuid_send(association_id), 10) * 256 + get_byte(uuid_send(association_id), 11))),
-    CONSTRAINT classification_contribution_actor_route_check CHECK (actor_route = (get_byte(uuid_send(actor_id), 10) * 256 + get_byte(uuid_send(actor_id), 11))),
-    CONSTRAINT classification_contribution_check CHECK ((assessment IS NOT NULL) OR (NOT false_positive))
-);
-
 -- PostgreSQL database dump complete
 --
 
