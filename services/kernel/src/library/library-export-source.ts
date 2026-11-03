@@ -1,4 +1,6 @@
 import type { PoolClient } from 'pg';
+import { exportSections, LIBRARY_EXPORT_LIMITS } from './library-export-format.ts';
+export { exportSections } from './library-export-format.ts';
 
 /** Fixed owner projections. No transaction, custody, output or capability columns enter this format. */
 const queries = {
@@ -44,7 +46,6 @@ const queries = {
     FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND expires_at>$4::timestamptz
       AND id>$3::uuid ORDER BY id LIMIT 16`,
 } as const;
-export const exportSections = [...Object.keys(queries), 'units', 'history', 'occurrences', 'malEvidence'] as const;
 export type ExportRecord = Record<string, unknown>;
 export type ExportSeek = {
   section: number;
@@ -171,8 +172,8 @@ export async function readExportSourcePage(
     }
     const record = { section, ...data };
     const bytes = Buffer.byteLength(JSON.stringify(record), 'utf8');
-    if (pageBytes + bytes > 120_000 && records.length) break;
-    if (bytes > 120_000) {
+    if (pageBytes + bytes > LIBRARY_EXPORT_LIMITS.pageBytes && records.length) break;
+    if (bytes > LIBRARY_EXPORT_LIMITS.pageBytes) {
       oversized = true;
       break;
     }

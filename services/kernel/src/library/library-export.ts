@@ -15,6 +15,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkClient } from '../work/client.ts';
 import { createLibraryCommandRunner } from './command-support.ts';
 import { exportSections, initialExportSeek, readExportSourcePage, type ExportSeek } from './library-export-source.ts';
+import { libraryExportManifest as manifest, LIBRARY_EXPORT_LIMITS } from './library-export-format.ts';
 
 export type LibraryExportDependencies = {
   pool: Pool;
@@ -98,27 +99,6 @@ function seekOf(
   )
     throw new ProblemError('invalid_cursor');
   return { section, parent, after, rows, bytes };
-}
-function manifest(capture: Capture) {
-  return {
-    format: 'https://rezics.com/formats/library-export' as const,
-    version: 1 as const,
-    exportId: capture.export_id,
-    capturedAt: capture.created_at,
-    expiresAt: capture.expires_at,
-    privacy: 'private' as const,
-    completeness: 'supported-native-facts' as const,
-    sections: [...exportSections],
-    omissions: {
-      trash: 'excluded; current live facts and retained session history only',
-      providerIdentifiers: 'stored personal import evidence only; no shared custody scan or inferred identifiers',
-      personalImportEvidence:
-        'retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded',
-      commerce: 'excluded; orders and financial evidence use Commerce retention/export policy',
-      publication: 'excluded; stored rules only, no dynamic evaluation or working publication output',
-      reimport: 'unavailable; this format does not promise an installed re-import endpoint',
-    },
-  };
 }
 function status(deps: LibraryExportDependencies, accountId: string, capture: Capture) {
   return {
@@ -320,7 +300,11 @@ export function createLibraryExport(deps: LibraryExportDependencies) {
           };
         const seek = seekOf(deps, accountId, capture, token, now);
         const page = await readExportSourcePage(tx, route, accountId, seek, capture.created_at);
-        if (page.oversized || page.seek.rows > 100_000 || page.seek.bytes > 32 * 1024 * 1024) {
+        if (
+          page.oversized ||
+          page.seek.rows > LIBRARY_EXPORT_LIMITS.records ||
+          page.seek.bytes > LIBRARY_EXPORT_LIMITS.recordBytes
+        ) {
           await tx.query(`UPDATE library.library_export SET state='limit' WHERE route=$1 AND account_id=$2`, [
             route,
             accountId,

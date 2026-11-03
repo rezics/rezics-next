@@ -446,6 +446,13 @@ Focused native HTTP cases cover two owners, independent facts, paging, stale edi
 barriers. Full integration acceptance remains deferred. Installed Bangumi and unexpired MAL row evidence preserve stored provider identifiers;
 raw XML and review/apply capabilities are excluded; no Web export page or re-import compatibility is claimed.
 
+[Personal archive validation and remaining merge journey](../library-archive-merge.md) share the installed v1
+producer vocabulary and bounds. An inert bounded decoder checks completed artifacts and reports explicit
+entry/label/assignment mapping coverage and retained unsupported sections. Its focused cases include a decode of
+actual native export records. No archive-consumer HTTP methods, native merge effects or integrating Web interface
+are installed by this preparatory slice. Native review/apply, journal, cancellation, retention/erasure and composed
+cost/growth evidence remain pending; the existing export's evidence status is unchanged.
+
 ## Evidence stage
 
 Specification, native driver, implementation exposure, user-case acceptance at a recorded revision, and promotion

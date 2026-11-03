@@ -11,6 +11,7 @@ import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { parseBangumiUpload } from '../../src/library/list-import-bangumi-model.ts';
 import { parseMal } from '../../src/library/list-import-mal-parser.ts';
+import { decodeLibraryArchive } from '../../src/library/library-archive.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 let workClient: WorkClient;
 let db: GrowthDatabase, app: ReturnType<typeof createKernel>;
@@ -168,6 +169,15 @@ test('native owner export streams independent persisted facts, preserves dates, 
   expect(sections.bangumiEvidence?.[0]?.evidence.source).toMatchObject({ subject_id: 42, type: 99 });
   expect(sections.malEvidence?.[0]?.evidence.identifier.value).toBe('17');
   expect(sections.malEvidence?.[0]?.evidence.dates.started.precision).toBe('year');
+  const decoded = decodeLibraryArchive(Buffer.from(JSON.stringify({ manifest: final.manifest, records })));
+  expect(decoded.records).toEqual(records);
+  expect(decoded.coverage.find((s) => s.section === 'entries')).toMatchObject({
+    rows: 18, capture: 'present', treatment: 'requires-explicit-mapping',
+  });
+  expect(decoded.coverage.find((s) => s.section === 'sessions')).toMatchObject({
+    rows: 2, capture: 'present', treatment: 'retained-unsupported',
+  });
+  expect(decoded.fullRestoration).toBe(false);
   expect((await get(`/v1/libraryExports/${id}`)).state).toBe('ready');
   await sql`UPDATE library.collection_member SET note='edited' WHERE route=${route} AND collection_id=${collection}`;
   expect(await get(firstPath)).toMatchObject({ state: 'stale', records: [], manifest: null });
