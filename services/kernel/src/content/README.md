@@ -1985,3 +1985,78 @@ released before another home or disclosure work. Generation/revision/native home
 and disclosure dependencies are rechecked after pages; changes refuse the page. Deadlines
 and exact LeafOptions reach both capabilities; bigint positions and epochs remain lossless.
 Production lifecycle registration belongs to live maintenance.
+
+## Realm Subject live lifecycle and ancestor observations
+
+`realm-subject-lifecycle.ts` is the Content producer for the existing candidate writer and census. The default Content
+effect validates each original CloudEvent against its registered schema, exact outbox slot and receipt, then releases
+the source home before reading the committed opening thread, first post, head revision and board. Revision events
+also prove that the revision row was recorded by the receipt transaction. Event `subjectIds` and the
+`subject_thread` projection are never membership evidence. Opening revisions for discussions and reviews are read
+from their native rows; replies do not contribute opening links.
+
+The effect fences the exact thread with its source partition epoch and position, writes the current opening links
+through `createRealmSubjectCandidates`, and marks removed links inactive. The writer makes duplicate events
+idempotent, ignores an event older than the thread fence and rejects a delayed census baseline after any live write.
+Post and thread takedown, restoration and post restoration reread the exact current native target before changing
+candidate state. The existing default worker owns delivery and keeps a source event open until this effect and its
+durable handoff succeed.
+
+Captured-cut work runs on the Content maintenance queue. The minute schedule advances at most 16 route pages per
+invocation, with at most 32 census steps per route page; its singleton route cursor and each census route's cut,
+generation, keyset and ordinal survive retries. Identity changes enqueue one durable keyed repair and continue in
+32-candidate pages. A page that has not finished, has an unavailable mapping, or loses its native home leaves
+maintenance unavailable. A scope event is only an invalidation wake and never advances census coverage.
+
+`realm-subject-scope.ts` observes the exact current Realm and Space rows plus monotone invalidation generations. Realm
+revision/lifecycle and Space revision/lifecycle are re-read on every observation. Board creation or board takedown
+advances the owning Realm's board-set generation, invalidating observations that include either discussion or review
+threads without descendant candidate fanout. Realm and Space lifecycle or revision events advance their own
+generations. Reader bans and grants remain current disclosure checks and cause no population-wide fanout.
+
+Decision: ancestor scope changes advance a monotone Realm/Space/board-set generation; they do not fan out through descendant candidate rows.
+
+Production worker composition is live: `registerContent` mounts the effect, and Content work registers the identity
+continuation workflow and bounded census schedule. `createRealmSubjectLifecycle` exposes the maintenance and scope
+capabilities consumed by `createRealmSubjectSource`. The current `realm-subject-disclosure.ts` exports only its
+prepared evaluator, not the source adapter required by `RealmSubjectDisclosure`; inject that delivered adapter when
+it lands. Until then `createRealmSubjectSource` remains unavailable/preparing and this lifecycle cannot claim a
+ready population. The factory and disclosure owners remain the sole owners of their writer and reader contracts.
+
+### Lifecycle operation bounds
+
+#### Live source event
+
+- **Touches:** one indexed outbox event and receipt, one current opening/revision read, one board point, at most 100
+  identity mappings per released batch, one fence and at most 256 indexed candidate writes (128 current plus 128
+  previous subject IDs).
+- **Bound:** subject arrays are schema-capped at 128; each identity read is capped at 100; each candidate update uses
+  its exact Realm/original/thread key. No per-event Realm, board or Subject scan is performed.
+- **Growth check:** `test/content/realm-subject-lifecycle.test.ts` covers default-worker delivery, revision withdrawal,
+  stale replay and native takedown/restoration.
+
+#### Identity continuation
+
+- **Touches:** one indexed original-ID candidate page, one exact mapping batch, up to 32 fences and candidate updates,
+  and one cursor update.
+- **Bound:** fixed 32-row keyset pages; each durable workflow completes one page and hands the next key to a new
+  workflow identity. Sparse and duplicate pages are safe to replay.
+- **Growth check:** `test/content/realm-subject-lifecycle.test.ts` covers duplicate and late source delivery; the
+  census/disclosure owner tests retain their independent storage bounds.
+
+#### Captured census continuation
+
+- **Touches:** one route cut/cursor, at most 32 exact thread-keyset steps, and at most 32 original candidate writes.
+- **Bound:** the schedule commits at most 16 route pages per invocation and the next route is durable. Empty routes
+  advance one route at a time; filtered pages do not imply global completion.
+- **Growth check:** `test/content/realm-subject-lifecycle.test.ts` crosses a captured cut with a live thread event and
+  verifies that the live row survives census completion.
+
+#### Ancestor scope observation
+
+- **Touches:** one Realm point, one Space point, two indexed generation reads; invalidation performs one exact event
+  insert and one generation upsert.
+- **Bound:** constant point/page work per observation or invalidation, independent of descendant thread count. Each
+  generation changes only once for a repeated event key.
+- **Growth check:** `test/content/realm-subject-lifecycle.test.ts` observes a board-set reduction invalidate the same
+  Realm cut containing discussion and review witnesses.

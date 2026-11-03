@@ -42,6 +42,15 @@ import { registerAccountErasureWork } from './account-erasure.ts';
 import { createSubjectThreadEffect } from './subject-thread-index.ts';
 import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
 import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
+import {
+  createRealmSubjectLifecycle,
+  REALM_SUBJECT_CENSUS_PAGE,
+  REALM_SUBJECT_CENSUS_SCHEDULE,
+  REALM_SUBJECT_CENSUS_WORKFLOW,
+  REALM_SUBJECT_IDENTITY_WORKFLOW,
+  realmSubjectIdentityWorkflowId,
+  type RealmSubjectIdentityWork,
+} from './realm-subject-lifecycle.ts';
 import type { MediaStorage } from './media-storage.ts';
 import {
   CONTENT_QUEUES,
@@ -132,11 +141,53 @@ async function registerWork(
 ): Promise<void> {
   const { storage } = options;
   registerReviewDiscoveryWork(context);
+  const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
   if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage);
   const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }
+  const realmSubjectIdentityPage = DBOS.registerStep(
+    async (work: RealmSubjectIdentityWork) => realmSubject.identityPage(work, Date.now() + 30_000),
+    { name: 'content.realmSubject.identity.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (work: RealmSubjectIdentityWork) => {
+      const page = await realmSubjectIdentityPage(work);
+      if (page.state === 'unknown') throw new Error('Realm Subject identity page is unavailable');
+      if (page.state === 'more') {
+        if (!page.after) throw new Error('Realm Subject identity continuation has no key');
+        await context.client.enqueue(
+          {
+            applicationName: WORK_APPLICATION,
+            workflowName: REALM_SUBJECT_IDENTITY_WORKFLOW,
+            queueName: 'maintenance',
+            workflowID: realmSubjectIdentityWorkflowId(work, page.after),
+            workflowIDReusePolicy: 'return-existing',
+          },
+          work,
+        );
+      }
+    },
+    { name: REALM_SUBJECT_IDENTITY_WORKFLOW },
+  );
+  const realmSubjectCensusPage = DBOS.registerStep(
+    async () => {
+      const cursor = await realmSubject.sweepCursor(Date.now() + 30_000);
+      if (cursor.complete) return { state: 'complete' as const };
+      return realmSubject.sweep(cursor.route, REALM_SUBJECT_CENSUS_PAGE, Date.now() + 30_000);
+    },
+    { name: 'content.realmSubject.census.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async () => {
+      // Sixteen route pages per invocation keep the scheduled source walk finite.
+      for (let page = 0; page < 16; page++) {
+        if ((await realmSubjectCensusPage()).state === 'complete') return;
+      }
+    },
+    { name: REALM_SUBJECT_CENSUS_WORKFLOW },
+  );
   const purge = DBOS.registerStep(
     async (input: ContentWorkInput) => {
       validateInput(input);
@@ -376,6 +427,14 @@ async function registerWork(
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
+    {
+      scheduleName: REALM_SUBJECT_CENSUS_SCHEDULE,
+      workflowName: REALM_SUBJECT_CENSUS_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
     {
       scheduleName: CONTENT_COLLECTION_SCHEDULE,
       workflowName: CONTENT_WORKFLOWS.collect,

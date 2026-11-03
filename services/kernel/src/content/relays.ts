@@ -18,6 +18,11 @@ import { createMentionNoticeEffect } from './mention-notices.ts';
 import { createReplyNoticeEffect } from './reply-notices.ts';
 import readOutboxEvent from './read-outbox-event-index.sql';
 import {
+  createRealmSubjectLifecycle,
+  REALM_SUBJECT_IDENTITY_WORKFLOW,
+  realmSubjectIdentityWorkflowId,
+} from './realm-subject-lifecycle.ts';
+import {
   CONTENT_QUEUES,
   CONTENT_WORKFLOWS,
   MEDIA_WORK_EVENTS,
@@ -190,6 +195,21 @@ function enqueueSubjectReactionMergeEffect(pool: Pool, client: WorkClient): Effe
 /** Add once through WorkContext.addEffects before the sole worker is launched.
  * This static list owns no runner, workflow registration or checkpoint. */
 export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
+  const realmSubject = createRealmSubjectLifecycle({
+    pool,
+    enqueueIdentity: async (work) => {
+      await client.enqueue(
+        {
+          applicationName: WORK_APPLICATION,
+          workflowName: REALM_SUBJECT_IDENTITY_WORKFLOW,
+          queueName: 'maintenance',
+          workflowID: realmSubjectIdentityWorkflowId(work),
+          workflowIDReusePolicy: 'return-existing',
+        },
+        work,
+      );
+    },
+  });
   return [
     createBoardEffect(pool),
     createReportEffect(pool),
@@ -200,6 +220,7 @@ export function contentEffects(pool: Pool, client: WorkClient): Effect[] {
     enqueueEffect(pool, client, 'content_author_erasure', [authorRequested], 'authorErase'),
     enqueueEffect(pool, client, 'content_url_import', [importRequested], 'importFromUrl'),
     enqueueSubjectReactionMergeEffect(pool, client),
+    realmSubject.effect,
   ];
 }
 
