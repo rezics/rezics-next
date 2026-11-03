@@ -184,7 +184,7 @@ function invalidReason(
  */
 export function harvestContinuations(
   store: WorkerStore,
-  settings: Pick<Settings, 'stateDirectory' | 'riskAreasFile'>,
+  settings: Pick<Settings, 'stateDirectory' | 'riskAreasFile' | 'policy'>,
   task: Task,
   ref: AttemptRef,
 ): ContinuationHarvest {
