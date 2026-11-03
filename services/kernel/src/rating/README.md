@@ -513,14 +513,20 @@ messaging.
   current caption head and one lifecycle head per raw question. A Realm selection reads its generation in that same
   transaction and again after the final native Access check. Every selection performs current caller qualification
   before and after the bounded question snapshot; Access preparation/evaluation and its foreign pools stay outside
-  the question-home transaction.
-- **Bound:** At most 21 raw question rows and 21 current caption/lifecycle head joins, 20 returned active definitions,
+  the question-home transaction. The Realm path owns two `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`,
+  `SET LOCAL statement_timeout`, `COMMIT` sequences and two partition bindings; Global owns one sequence and binding.
+  Native authority SQL, deadline controls and unsuccessful attempts also count toward the complete request cost.
+- **Bound:** At most 21 materialized raw question rows and 21 current caption/lifecycle head joins, 20 returned active definitions,
   two Realm generation point reads and two caller qualifications. Retired rows consume raw-key progress but never
   fill a page; empty pages still receive both caller qualifications. Global selection uses generation `0` and the
-  same two caller qualifications. Caption history, vote history and catalogue counts are not read.
+  same two caller qualifications. Admitted definitions retain the schema's 2,000-code-point meaning and 200-code-point
+  current/canonical caption limits; UTF-8 retention and JSON escaping must be charged separately. Physical rows
+  visited by native plans and all foreign work still require observation. Caption history, vote history and catalogue
+  counts are not read. This bound makes no claim about invisible MVCC work.
 - **Growth check:** `test/rating/growth-question-directory.test.ts` measures the Global keyset path at its recorded
   64/512/4096 scales; `test/rating/question-directory-currentness.test.ts` exercises current Access revocation,
-  retirement during final preparation, corrected captions and empty-page Global denial. Independent selected
+  retirement during final preparation, mounted client creation/caption commands, sparse empty continuations,
+  explicit restart, same-input operational retry and empty-page Global denial. Independent selected
   identity/source/authority growth, 256/1024/4096 physical plans, serialized-byte and registered-runner accounting
   remain part of the controller's original-journey acceptance.
 
