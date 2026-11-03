@@ -26,6 +26,7 @@ type Phase =
   | 'stale'
   | 'failed'
   | 'complete'
+  | 'expired'
   | 'cancelling'
   | 'cancelled';
 export type RecoveryApplyOutcome = 'complete' | 'uncertain' | 'recoverable' | 'stale' | 'failed';
@@ -53,6 +54,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   #visitDeadline: number;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #retired = false;
+  #evidenceExpired = false;
   #pending = new Map<Channel, Pending>();
   #selection = new RecoverySelection<Choice>();
   #upload: Readonly<{ id: string; metadata: Upload }> | null = null;
@@ -75,19 +77,20 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
 
   #armDeadline() {
     clearTimeout(this.#timer);
+    const deadline = this.#evidenceExpired ? this.#visitDeadline : this.#deadline;
     // Native retention is seven days. Longer credential deadlines need bounded timer slices.
     this.#timer = setTimeout(
       () => {
-        if (this.#now() >= this.#deadline) this.retire();
-        else this.#armDeadline();
+        if (this.#live()) this.#armDeadline();
       },
-      Math.min(this.#deadline - this.#now(), 2_147_483_647),
+      Math.min(deadline - this.#now(), 2_147_483_647),
     );
   }
 
   #live() {
-    if (!this.#retired && (!sameBinding(this.#binding, this.#currentBinding()) || this.#now() >= this.#deadline))
+    if (!this.#retired && (!sameBinding(this.#binding, this.#currentBinding()) || this.#now() >= this.#visitDeadline))
       this.retire();
+    if (!this.#retired && !this.#evidenceExpired && this.#now() >= this.#deadline) this.#expireEvidence();
     return !this.#retired;
   }
 
@@ -122,15 +125,27 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
     return true;
   }
 
-  #clearPrivate() {
+  #clearEvidence() {
     this.#abortAll();
     this.#upload = null;
     this.#page = null;
-    this.#results = null;
     this.#selection.clear();
     this.#review = null;
     this.#original = null;
+  }
+
+  #clearPrivate() {
+    this.#clearEvidence();
+    this.#results = null;
     this.#phase = 'idle';
+  }
+
+  #expireEvidence() {
+    this.#clearEvidence();
+    this.#evidenceExpired = true;
+    this.#phase = 'expired';
+    // Accepted native outcomes survive evidence expiry, but never the session binding.
+    this.#armDeadline();
   }
 
   retire(): void {
@@ -143,6 +158,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
   startUpload(): RecoveryRequest {
     this.#requireLive();
     this.#clearPrivate();
+    this.#evidenceExpired = false;
     this.#deadline = this.#visitDeadline;
     this.#armDeadline();
     return this.#begin('upload');
@@ -162,6 +178,7 @@ export class ArchiveRecoveryVisit<Upload, Row, Choice, Confirm, Result, PageCont
 
   #requireUpload() {
     this.#requireLive();
+    if (this.#evidenceExpired) throw new Error('evidence_expired');
     if (!this.#upload) throw new Error('upload_required');
   }
 

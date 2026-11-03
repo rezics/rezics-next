@@ -11,13 +11,12 @@ Decision: keep production file selection disabled until generated merge methods 
 are both available; the transport-neutral visit seam never claims artifact admission or native results. Explain scope
 and keep the person's completed file on their device.
 
-The server mounts `libraryArchiveMergeRoutes` and includes it in its source composition. However, the installed
-`packages/client/src/kernel/http/kernel.d.ts` omits that composition member and there is no generated archive merge
-route declaration. `KernelClient` therefore does not expose `libraryArchiveMerges`. Eden's runtime proxy is not a
-capability probe: arbitrary property access can manufacture methods. Web must not cast that proxy to a handwritten
-interface or treat the decoder as an HTTP method.
+The server mounts `libraryArchiveMergeRoutes`, and the generated client composition now includes that member and
+its route declaration. `KernelClient` exposes `libraryArchiveMerges`, including raw upload. Eden's runtime proxy is
+not a capability probe: arbitrary property access can manufacture methods. Web must not cast that proxy to a
+handwritten interface or treat the decoder as an HTTP method.
 
-There is a second native continuation. `PATCH /:id/review` returns only `{ordinal,status}`; preview returns the saved
+Immutable confirmation remains a native continuation. `PATCH /:id/review` returns only `{ordinal,status}`; preview returns the saved
 review without `review_revision`. `POST /:id/apply` accepts only `{ordinals}`. Although the native journal binds a
 command to the stored review revision and current entry incarnation/revision, another review can replace that
 stored decision between Web confirmation and apply. Web cannot express which reviewed effects the person confirmed.
@@ -48,8 +47,8 @@ not an illustrative Web fixture.
 | Native evidence retention                                  | Seven days from upload                                                    |
 | Export capture lifetime                                    | Fifteen minutes; an expired completed capture remains historical evidence |
 
-The decoder validates the final manifest, fourteen declared sections, overall `rows` and compact `recordBytes`.
-Version 1 has no declared per-section counts. Native coverage computes `present`/`empty` counts and distinguishes
+The decoder validates the final manifest, fourteen V1 or seventeen V2 declared sections, overall `rows` and compact
+`recordBytes`. Version 1 has no declared per-section counts; V2 validates declared per-section totals. Native coverage computes `present`/`empty` counts and distinguishes
 `requires-explicit-mapping` from `retained-unsupported`. The Web continuation must show actual native inventory,
 overall totals and omissions, explaining computed counts separately from manifest declarations.
 
@@ -68,8 +67,10 @@ unsupported sections cannot enter that selection. `archive-entry-recovery/visit.
 one projected page of at most one hundred rows, that selection, one confirmed operand and one result page.
 It copies and freezes JSON values, replaces pages, invalidates review on choice changes, preserves exact original
 uncertain operands and keeps acknowledged receipts during cancellation. Stale admission retains choices as context
-and requires a fresh review. Viewer, credential/CSRF epoch, source, route, replacement and deadline retire private
-callbacks. The mounted adapter must provide the current binding reader and retire the visit on unmount and session
+and requires a fresh review. Viewer, credential/CSRF epoch, source, route, replacement and visit deadline retire private
+callbacks. Decision: evidence expiry clears upload, preview, selection and replay operands while retaining accepted
+native result pages until session retirement, explicit upload replacement or unmount; expiry grants no retry permission.
+The mounted adapter must provide the current binding reader and retire the visit on unmount and session
 events; no private state is connected to the unavailable page yet.
 
 These modules define local custody rather than a handwritten HTTP client or a native review-version schema.

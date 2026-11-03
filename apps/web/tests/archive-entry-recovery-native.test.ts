@@ -36,8 +36,8 @@ function fixture(unrelatedRows = 64) {
     replace: (value: RecoveryBinding | null) => {
       current = value;
     },
-    expire: () => {
-      now = 9_000;
+    expire: (deadline = 9_000) => {
+      now = deadline;
     },
   };
 }
@@ -169,7 +169,7 @@ test('Native recoverable effects keep original operands; terminal failure requir
   }
 });
 
-test('Account, credential, CSRF, source, route, deadline and upload replacement retire private callbacks', () => {
+test('Account, credential, CSRF, source, route, expiry and upload replacement retire private callbacks', () => {
   for (const changed of [null, ...Object.keys(binding).map((key) => ({ ...binding, [key]: 'replacement' }))]) {
     const { visit, replace } = fixture();
     const pending = visit.startPage();
@@ -188,6 +188,30 @@ test('Account, credential, CSRF, source, route, deadline and upload replacement 
   expect(visit.admitPage(pending, page([]))).toBe(false);
   visit.admitUpload(replacement, 'replacement', { unrelatedRows: 512 }, 9_000);
   expire();
-  expect(visit.state).toBeNull();
-  expect(() => visit.startUpload()).toThrow('retired_visit');
+  expect(visit.state?.phase).toBe('expired');
+  expect(visit.state?.upload).toBeNull();
+  expect(() => visit.startPage()).toThrow('evidence_expired');
+  visit.retire();
+});
+
+test('Evidence expiry keeps accepted outcomes, refuses replay and clears receipts on session retirement', () => {
+  for (const retire of ['account', 'deadline', 'unmount'] as const) {
+    const { visit, expire, replace } = fixture();
+    visit.choose(1, 'entries', { action: 'preserve' });
+    visit.admitReview(visit.startReview(), { identity: 'original', operands: [{ ordinal: 1, revision: 2 }] });
+    const apply = visit.startApply();
+    const acknowledged = page([{ ordinal: 1, status: 'acknowledged' }]);
+    visit.settleApply(apply.request, 'recoverable', acknowledged);
+    const pending = visit.startResults();
+    expire();
+    expect(visit.state).toMatchObject({ phase: 'expired', upload: null, page: null, choices: [], review: null });
+    expect(visit.state?.results).toEqual(acknowledged);
+    expect(visit.admitResults(pending, page([]))).toBe(false);
+    expect(pending.signal.aborted).toBe(true);
+    expect(() => visit.startApply()).toThrow('evidence_expired');
+    if (retire === 'account') replace(null);
+    if (retire === 'deadline') expire(10_000);
+    if (retire === 'unmount') visit.retire();
+    expect(visit.state).toBeNull();
+  }
 });
