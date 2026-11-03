@@ -144,7 +144,8 @@ export type ImporterOptions = {
   identifierLookup?: ImportIdentifierLookup;
   /** Admitted classification facts and authentic Semantic association; public dump fields never populate this. */
   classificationAdmission?: {
-    facts?(input: { owner: Owner; subject: string; conversion: ImportConversion }): unknown;
+    /** Source-side facts; a native subject is optional and never invents an association. */
+    facts?(input: { owner: Owner; conversion: ImportConversion; subject?: string }): unknown;
     association?(input: {
       owner: Owner;
       subject: string;
@@ -321,12 +322,15 @@ export class Importer {
     );
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
       throw new Error('Persisted source conversion differs from its registered projection');
-    const classification = result.sourceClassification
+    const produced = result.sourceClassification
       ? validateSourceClassificationProjection(result.sourceClassification)
       : undefined;
-    if (!isDeepStrictEqual(classification, staged.projection.sourceClassification))
+    const registered = staged.projection.sourceClassification;
+    if (produced !== undefined && !isDeepStrictEqual(produced, registered))
       throw new Error('Persisted source classification differs from its registered projection');
-    return result;
+    return produced === undefined && registered !== undefined
+      ? { ...result, sourceClassification: registered }
+      : result;
   }
 
   private async stageCapture(
@@ -417,15 +421,27 @@ export class Importer {
         return;
       }
       this.options.observer?.onStagingConversion?.(record.key);
-      const conversion = registration.convert(
-        { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
-        { source: registration.source },
-      );
+      const input = {
+        external_id: record.key,
+        record_revision: record.revision ?? 'unversioned',
+        record: record.payload,
+      };
+      let conversion = registration.convert(input, { source: registration.source });
       const ignored = 'outcome' in conversion && conversion.outcome === 'ignored';
       if (ignored) {
         if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
         skipped++;
         options.progress?.onSkipped?.(1);
+      } else {
+        const facts = this.options.classificationAdmission?.facts?.({
+          owner: { source: registration.source, external_id: record.key },
+          conversion,
+        });
+        if (facts !== undefined)
+          conversion = registration.convert(input, {
+            source: registration.source,
+            sourceClassification: facts,
+          });
       }
       buffered.push({
         conversion,
