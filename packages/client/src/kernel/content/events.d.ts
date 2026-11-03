@@ -131,6 +131,10 @@ export declare const CONTENT_EVENTS: {
         takenDownAt: Type.TOptional<Type.TString>;
         takedownId: Type.TOptional<Type.TString>;
     }>;
+    readonly 'com.rezics.content.board.slow-mode.changed.v1': Type.TObject<{
+        boardId: Type.TString;
+        intervalSeconds: Type.TInteger;
+    }>;
     readonly 'com.rezics.content.feed.indexed.v1': Type.TObject<{}>;
     readonly 'com.rezics.content.feed.delivered.v1': Type.TObject<{}>;
     readonly 'com.rezics.content.feed.erased.v1': Type.TObject<{}>;

@@ -290,6 +290,11 @@ export declare const PROBLEMS: {
         readonly title: 'Dependency Unavailable';
         readonly retryable: true;
     };
+    readonly board_slow_mode: {
+        readonly status: 429;
+        readonly title: 'Board Posting Interval';
+        readonly retryable: true;
+    };
     readonly rate_limited: {
         readonly status: 429;
         readonly title: 'Request Budget Exhausted';

@@ -9285,6 +9285,229 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
 } & {
     v1: {
         boards: {
+            ":id": {
+                slowMode: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                intervalSeconds: number;
+                                retryAt: string | null;
+                                exempt: boolean;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        boards: {
+            ":id": {
+                slowMode: {
+                    put: {
+                        body: {
+                            intervalSeconds: number;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                intervalSeconds: number;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            413: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            429: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
+                            };
+                            500: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        boards: {
             get: {
                 body: unknown;
                 params: {};
@@ -9516,6 +9739,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
+                        readonly retryAt?: string;
+                        readonly intervalSeconds?: number;
                     };
                     500: Response | {
                         type: unknown;
@@ -9679,6 +9904,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -9986,6 +10213,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                         request_id: string;
                         detail: unknown;
                         errors: unknown;
+                        readonly retryAt?: string;
+                        readonly intervalSeconds?: number;
                     };
                     500: Response | {
                         type: unknown;
@@ -10269,6 +10498,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -10717,6 +10948,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -10838,6 +11071,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                             request_id: string;
                             detail: unknown;
                             errors: unknown;
+                            readonly retryAt?: string;
+                            readonly intervalSeconds?: number;
                         };
                         500: Response | {
                             type: unknown;
@@ -11008,6 +11243,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -11541,6 +11778,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                         request_id: string;
                                         detail: unknown;
                                         errors: unknown;
+                                        readonly retryAt?: string;
+                                        readonly intervalSeconds?: number;
                                     };
                                     500: Response | {
                                         type: unknown;
@@ -12314,6 +12553,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -12436,6 +12677,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -12562,6 +12805,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -12704,7 +12949,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
-        }>;
+        } & Omit<{
+            readonly retryAt: import("typebox").TOptional<import("typebox").TString>;
+            readonly intervalSeconds: import("typebox").TOptional<import("typebox").TInteger>;
+        }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -12834,6 +13082,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             request_id: string;
             detail: unknown;
             errors: unknown;
+            readonly retryAt?: string;
+            readonly intervalSeconds?: number;
         };
         503: {
             type: unknown;
@@ -12936,6 +13186,8 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
             request_id: string;
             detail: unknown;
             errors: unknown;
+            readonly retryAt?: string;
+            readonly intervalSeconds?: number;
         };
         503: {
             type: unknown;
@@ -13063,7 +13315,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
-            }>;
+            } & Omit<{
+                readonly retryAt: import("typebox").TOptional<import("typebox").TString>;
+                readonly intervalSeconds: import("typebox").TOptional<import("typebox").TInteger>;
+            }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
             503: import("typebox").TObject<{
                 type: import("typebox").TSchema;
                 title: import("typebox").TSchema;
@@ -13255,7 +13510,10 @@ export declare function contentRoutes(app: ReturnType<typeof definitionRoutes>, 
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
-        }>;
+        } & Omit<{
+            readonly retryAt: import("typebox").TOptional<import("typebox").TString>;
+            readonly intervalSeconds: import("typebox").TOptional<import("typebox").TInteger>;
+        }, "code" | "detail" | "effect_status" | "errors" | "instance" | "request_id" | "retryable" | "status" | "title" | "type">>;
         503: import("typebox").TObject<{
             type: import("typebox").TSchema;
             title: import("typebox").TSchema;
@@ -13438,6 +13696,8 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
@@ -13560,6 +13820,8 @@ export declare function subjectReactionRoutes(routes: ReturnType<typeof createAp
                                 request_id: string;
                                 detail: unknown;
                                 errors: unknown;
+                                readonly retryAt?: string;
+                                readonly intervalSeconds?: number;
                             };
                             500: Response | {
                                 type: unknown;
