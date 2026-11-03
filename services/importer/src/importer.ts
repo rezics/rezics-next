@@ -1741,11 +1741,15 @@ export class Importer {
       // A resolved entry belongs to this run's immutable command plan. If another
       // record taught a binding after that entry resolved, the next input pass refreshes it.
       if (recordState.resolved) return { kind: recordState.kind ?? 'unchanged', deferredCover: false };
-      if (isDeepStrictEqual(acknowledged, row) && prior === ownReferences.signature) {
+      if (
+        isDeepStrictEqual(acknowledged, row) &&
+        prior === ownReferences.signature &&
+        !this.options.classificationAdmission
+      ) {
         return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
       }
       store.stageReferenceSignature(run, row.recordKey, ownReferences.signature);
-    } else if (isDeepStrictEqual(acknowledged, row)) {
+    } else if (isDeepStrictEqual(acknowledged, row) && !this.options.classificationAdmission) {
       return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
     }
     const candidates = this.current(owner);
