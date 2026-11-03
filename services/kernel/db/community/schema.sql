@@ -2327,6 +2327,13 @@ CREATE INDEX realm_member_reservation ON community.realm_member USING btree (rou
 
 
 --
+-- Name: realm_membership_proof_published_current; Type: INDEX; Schema: community; Owner: -
+--
+
+CREATE INDEX realm_membership_proof_published_current ON community.realm_membership_proof USING btree (route, realm_id, account_id, transaction_id) WHERE (outcome = 'published'::text);
+
+
+--
 -- Name: space_discovery_dependency_install_pending; Type: INDEX; Schema: community; Owner: -
 --
 
