@@ -177,13 +177,13 @@ export async function readBoardSlowMode(
         ? await client.query<{ retry_at: string }>(
             `SELECT ceil(extract(epoch FROM (posted_at + $4::integer * interval '1 second')) * 1000)::bigint::text AS retry_at
            FROM content.board_slow_actor WHERE route=$1 AND board_id=$2 AND actor_key=$3
-             AND posted_at + $4::integer * interval '1 second' > $5::timestamptz`,
+             AND posted_at + $4::integer * interval '1 second' > coalesce($5::timestamptz, clock_timestamp())`,
             [
               board.route,
               board.id,
               actorKey(deps, boardId, actor),
               intervalSeconds,
-              (deps.clock?.() ?? new Date()).toISOString(),
+              deps.clock?.().toISOString() ?? null,
             ],
           )
         : null;

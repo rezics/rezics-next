@@ -21,7 +21,7 @@ import {
 import { createContentSystem, type ContentSystem } from './support/system.ts';
 import {
   clearRealmMediaPressure,
-  createNativeRealmAssetHome,
+  createRealmAssetHome as createNativeRealmAssetHome,
   createRealmAsset,
   nativeContentRequest,
   REALM_COLLECTION_BASE,

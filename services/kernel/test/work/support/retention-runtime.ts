@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { systemClock } from '../../../src/clock.ts';
+import { createPool } from '../../../src/database/pool.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createWorkClient } from '../../../src/work/client.ts';
 import { WORK_QUEUES } from '../../../src/work/queues.ts';
@@ -6,7 +8,8 @@ import type { WorkContext } from '../../../src/work/registry.ts';
 import { workflowRetentionWorkModule } from '../../../src/work/retention.ts';
 
 const [application, mode] = process.argv.slice(2);
-assert(application?.startsWith('retention-recovery:'));
+if (application === undefined || !application.startsWith('retention-recovery:'))
+  throw new Error('A retention-recovery application is required');
 const databaseUrl = process.env.DATABASE_URL!;
 const client = await createWorkClient(databaseUrl);
 let selections = 0;
@@ -49,10 +52,18 @@ DBOS.setConfig({
   listenQueues: [application],
   logLevel: 'warn',
 });
+const unexpectedCapability = () => {
+  throw new Error('Retention fixture requested an unrelated worker capability');
+};
 await workflowRetentionWorkModule.register({
+  pool: createPool(databaseUrl),
+  clock: systemClock,
+  getAuthorization: unexpectedCapability,
+  addEffects: unexpectedCapability,
+  addService: unexpectedCapability,
   client: isolated,
   queues: WORK_QUEUES,
   env: { KERNEL_WORKFLOW_RETENTION_DAYS: mode === 'recover' ? '7' : '30' },
-} as WorkContext);
+} satisfies WorkContext);
 await DBOS.launch();
 console.log('ready');

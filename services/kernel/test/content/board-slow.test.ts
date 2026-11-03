@@ -8,7 +8,7 @@ setDefaultTimeout(180_000);
 let f: Awaited<ReturnType<typeof postPublicationFixture>>;
 let threads: Awaited<ReturnType<typeof f.thread>>[];
 const input = { body: fromPlainText('An ordinary post'), licence: 'MIT' };
-const key = () => crypto.randomUUID();
+const key = (): string => crypto.randomUUID();
 const path = () => `/v1/boards/${f.board.id}/slowMode`;
 async function moderator(method: string, body?: unknown, requestKey = key()) {
   const response = await f.system.kernel.handle(

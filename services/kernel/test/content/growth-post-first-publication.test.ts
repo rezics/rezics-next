@@ -19,7 +19,7 @@ type Fixture = Awaited<ReturnType<typeof growthPostFirstPublicationFixture>>;
 
 function writes(records: readonly SqlExecution[]) {
   return records.filter((r) =>
-    [insertRevision.sql, updateHead.sql, publishOpeningThread.sql, fence.sql].includes(r.statement),
+    new Set<string>([insertRevision.sql, updateHead.sql, publishOpeningThread.sql, fence.sql]).has(r.statement),
   );
 }
 
