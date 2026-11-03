@@ -71,8 +71,8 @@ const applyResult: Awaited<ReturnType<Service['apply']>> = {uploadId:'01900000-0
 // DELETE /v1/libraryImports/vndb/{uploadId} => 200 {uploadId:UUID,state:"deleted"}
 ```
 
-The catalogue dependency notification is explicitly classified as coordinate-only history; native command and
-Record account associations remain independently guarded. This closes the existing producer admission seam.
+Catalogue dependency history keeps the conservative account-bearing classification when duplicate declarations
+conflict; native command and Record account associations remain independently guarded.
 
 Read references: `legacy-final:services/main/src/modules/library-import/formats/vndb.ts`, its contract/bounds/XML
 helpers and `csv.ts#sourceDate`; native entry/profile/identifier contracts; `.reference/INDEX.md` (no VNDB entry).
