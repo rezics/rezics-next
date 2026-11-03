@@ -62,6 +62,11 @@ beforeAll(async () => {
   });
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'voter0', 'subject:create');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
+  const accountProbe = await database.admin.query(
+    'SELECT route, account_id, kind, state, minimum_authn_epoch, authn_fenced FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(accounts.voter0), accounts.voter0],
+  );
+  console.info('classification ballot auth probe', accountProbe.rows[0]);
 });
 
 afterAll(async () => {
