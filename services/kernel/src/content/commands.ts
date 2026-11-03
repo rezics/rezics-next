@@ -260,13 +260,9 @@ async function probeSlowModeReplay(
   authorization: CommandAuthorization,
 ): Promise<CommandOutcome<ContentCommandValue> | null> {
   try {
-    return await runCommand<ContentCommandValue>(
-      pool,
-      { ...commandOptions, authorization },
-      async () => {
-        throw SLOW_MODE_REPLAY_PROBE;
-      },
-    );
+    return await runCommand<ContentCommandValue>(pool, { ...commandOptions, authorization }, async () => {
+      throw SLOW_MODE_REPLAY_PROBE;
+    });
   } catch (error) {
     if (error === SLOW_MODE_REPLAY_PROBE) return null;
     throw error;
@@ -769,105 +765,101 @@ export async function createThread(
   try {
     const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
     if (replay) return replay;
-    const outcome = await runCommand(
-      dependencies.pool,
-      { ...commandOptions, authorization },
-      async (tx, command) => {
-        slow.assertAllowed(command.time);
-        if (
-          typeof body.title !== 'string' ||
-          body.title.trim().length === 0 ||
-          (body.visibility !== 'published' && body.visibility !== 'draft' && body.visibility !== 'protected') ||
-          (threadKind !== 'discussion' && threadKind !== 'review')
-        )
-          throw new InvalidDocumentError();
-        const isReview = threadKind === 'review';
-        if (isReview && (body.subjectIds.length !== 1 || routeOf(body.subjectIds[0]!) === null))
-          throw new InvalidDocumentError('A review must name exactly one subject');
-        if (!isReview && body.voteCitation !== undefined) throw new InvalidDocumentError();
-        // Validate the entire opening before inserting either member of the
-        // deferred thread/post cycle. Keep validation after authorized replay.
-        const validated = document(body.body, body.licence, body.subjectIds);
-        const citation = isReview
-          ? await currentReviewCitation(tx, author.accountId, body.subjectIds[0]!, body.voteCitation)
-          : null;
-        const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
-        const at = authoritativeTimeValue(command.time);
-        await insertThread.run(tx, {
-          route: target.route,
-          thread_id: value.threadId,
-          author_id: author.accountId,
-          board_id: body.boardId,
-          kind: threadKind,
-          review_subject_id: isReview ? body.subjectIds[0]! : null,
-          title: body.title,
-          visibility: body.visibility,
-          transaction_id: command.transactionId,
-          first_post_id: value.itemId,
-          at,
-        });
-        await insertPost.run(tx, {
-          route: target.route,
-          thread_id: value.threadId,
-          post_id: value.itemId,
-          parent_id: null,
-          author_id: author.accountId,
-          revision_id: value.revisionId,
-          visibility: body.visibility,
-          transaction_id: command.transactionId,
-          at,
-        });
-        const subjectIds = await appendRevision(
-          tx,
-          value,
-          validated,
-          body.boardId,
+    const outcome = await runCommand(dependencies.pool, { ...commandOptions, authorization }, async (tx, command) => {
+      slow.assertAllowed(command.time);
+      if (
+        typeof body.title !== 'string' ||
+        body.title.trim().length === 0 ||
+        (body.visibility !== 'published' && body.visibility !== 'draft' && body.visibility !== 'protected') ||
+        (threadKind !== 'discussion' && threadKind !== 'review')
+      )
+        throw new InvalidDocumentError();
+      const isReview = threadKind === 'review';
+      if (isReview && (body.subjectIds.length !== 1 || routeOf(body.subjectIds[0]!) === null))
+        throw new InvalidDocumentError('A review must name exactly one subject');
+      if (!isReview && body.voteCitation !== undefined) throw new InvalidDocumentError();
+      // Validate the entire opening before inserting either member of the
+      // deferred thread/post cycle. Keep validation after authorized replay.
+      const validated = document(body.body, body.licence, body.subjectIds);
+      const citation = isReview
+        ? await currentReviewCitation(tx, author.accountId, body.subjectIds[0]!, body.voteCitation)
+        : null;
+      const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
+      const at = authoritativeTimeValue(command.time);
+      await insertThread.run(tx, {
+        route: target.route,
+        thread_id: value.threadId,
+        author_id: author.accountId,
+        board_id: body.boardId,
+        kind: threadKind,
+        review_subject_id: isReview ? body.subjectIds[0]! : null,
+        title: body.title,
+        visibility: body.visibility,
+        transaction_id: command.transactionId,
+        first_post_id: value.itemId,
+        at,
+      });
+      await insertPost.run(tx, {
+        route: target.route,
+        thread_id: value.threadId,
+        post_id: value.itemId,
+        parent_id: null,
+        author_id: author.accountId,
+        revision_id: value.revisionId,
+        visibility: body.visibility,
+        transaction_id: command.transactionId,
+        at,
+      });
+      const subjectIds = await appendRevision(
+        tx,
+        value,
+        validated,
+        body.boardId,
+        mediaIds,
+        command.transactionId,
+        command.time,
+        citation,
+      );
+      inserted.set(tx, command.transactionId);
+      for (const entry of entries) await initializeResourceGrants(tx, entry);
+      if (mediaIds.length)
+        await claimMedia(tx, {
           mediaIds,
-          command.transactionId,
-          command.time,
-          citation,
-        );
-        inserted.set(tx, command.transactionId);
-        for (const entry of entries) await initializeResourceGrants(tx, entry);
-        if (mediaIds.length)
-          await claimMedia(tx, {
-            mediaIds,
-            containerId: value.threadId,
-            author,
-            itemId: value.itemId,
-            revisionId: value.revisionId,
-            boardId: body.boardId,
-          });
-        await slow.claim(tx, command.time, {
-          targetPostId: value.itemId,
+          containerId: value.threadId,
+          author,
+          itemId: value.itemId,
           revisionId: value.revisionId,
-          transactionId: command.transactionId,
-          postedAt: at,
+          boardId: body.boardId,
         });
-        const created = result(
-          value,
-          actor,
-          'thread',
-          {
-            placeId: threadPlaceId,
-            kind: threadKind,
-            subjectIds,
-            activityAt: eventActivityAt(command.time),
-          },
-          body.visibility === 'published',
-        );
-        const qualified = discovery.get(command.time);
-        const deltas = qualified
-          ? await appendDiscoveryStart(tx, {
-              threadId: value.threadId,
-              boardId: body.boardId,
-              binding: qualified.binding,
-              time: command.time,
-            })
-          : [];
-        return { value: created.value, events: [...created.events, ...deltas] };
-      },
-    );
+      await slow.claim(tx, command.time, {
+        targetPostId: value.itemId,
+        revisionId: value.revisionId,
+        transactionId: command.transactionId,
+        postedAt: at,
+      });
+      const created = result(
+        value,
+        actor,
+        'thread',
+        {
+          placeId: threadPlaceId,
+          kind: threadKind,
+          subjectIds,
+          activityAt: eventActivityAt(command.time),
+        },
+        body.visibility === 'published',
+      );
+      const qualified = discovery.get(command.time);
+      const deltas = qualified
+        ? await appendDiscoveryStart(tx, {
+            threadId: value.threadId,
+            boardId: body.boardId,
+            binding: qualified.binding,
+            time: command.time,
+          })
+        : [];
+      return { value: created.value, events: [...created.events, ...deltas] };
+    });
     try {
       await slow.finish(outcome);
     } catch {
@@ -910,29 +902,25 @@ export async function createPost(
   );
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(actor, [{ resource: target, type: 'content.post' }], inserted);
-  const baseAuthorization =
-    parentCreationAuthorization({
-      access: dependencies.access,
-      actor,
-      action: 'post:create',
-      parent: { resource: container.resource, validate: container.validate },
-      context: {
-        pool: dependencies.pool,
-        deadline: context.deadline,
-        resource: target,
-        creation: entries[0]!.creation,
-        manifest: createResourceCreationManifest(entries),
-      },
-    });
+  const baseAuthorization = parentCreationAuthorization({
+    access: dependencies.access,
+    actor,
+    action: 'post:create',
+    parent: { resource: container.resource, validate: container.validate },
+    context: {
+      pool: dependencies.pool,
+      deadline: context.deadline,
+      resource: target,
+      creation: entries[0]!.creation,
+      manifest: createResourceCreationManifest(entries),
+    },
+  });
   const preflightAuthorization = container.wrap(baseAuthorization, false);
   const authorization = container.wrap(baseAuthorization, true);
   try {
     const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
     if (replay) return replay;
-    const outcome = await runCommand(
-      dependencies.pool,
-      { ...commandOptions, authorization },
-      async (tx, command) => {
+    const outcome = await runCommand(dependencies.pool, { ...commandOptions, authorization }, async (tx, command) => {
       container.slow.assertAllowed(command.time);
       if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
       if (
@@ -993,8 +981,7 @@ export async function createPost(
         },
         visibility === 'published',
       );
-      },
-    );
+    });
     try {
       await container.slow.finish(outcome);
     } catch {
@@ -1031,23 +1018,19 @@ export async function revisePost(
     true,
     commandOptions.receipt,
   );
-  const baseAuthorization =
-    resourceAuthorization({
-      access: dependencies.access,
-      actor,
-      action: 'post:revise',
-      anchor: { resource: container.resource, validate: container.validate },
-      context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(r) },
-    });
+  const baseAuthorization = resourceAuthorization({
+    access: dependencies.access,
+    actor,
+    action: 'post:revise',
+    anchor: { resource: container.resource, validate: container.validate },
+    context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(r) },
+  });
   const preflightAuthorization = container.wrap(baseAuthorization, false);
   const authorization = container.wrap(baseAuthorization, true);
   try {
     const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
     if (replay) return replay;
-    const outcome = await runCommand(
-      dependencies.pool,
-      { ...commandOptions, authorization },
-      async (tx, command) => {
+    const outcome = await runCommand(dependencies.pool, { ...commandOptions, authorization }, async (tx, command) => {
       container.slow.assertAllowed(command.time);
       const previous = container.current.posts[0]!;
       const threadSecurityRevision = container.current.thread.security_revision;
@@ -1168,8 +1151,7 @@ export async function revisePost(
         },
         firstPublication,
       );
-      },
-    );
+    });
     try {
       await container.slow.finish(outcome);
     } catch {

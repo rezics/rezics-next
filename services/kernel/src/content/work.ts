@@ -449,12 +449,7 @@ async function registerWork(
   );
   const boardSlowRetentionPage = DBOS.registerStep(
     async (cutoff: string) =>
-      pruneBoardSlowModeHistoryPage(
-        context.pool,
-        BOARD_SLOW_RECOVERY_PAGE_SIZE,
-        cutoff,
-        Date.now() + 120_000,
-      ),
+      pruneBoardSlowModeHistoryPage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, cutoff, Date.now() + 120_000),
     { name: 'content.board-slow.retention.page', ...retry },
   );
   DBOS.registerWorkflow(

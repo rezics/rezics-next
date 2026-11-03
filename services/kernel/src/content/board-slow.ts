@@ -69,7 +69,8 @@ type PermitPlan =
 type PermitState = 'reserved' | 'in_flight' | 'reconciling' | 'complete' | 'cancelled' | 'pruning';
 type TicketState = 'reserved' | 'committed' | 'replayed' | 'cancelled';
 
-type PermitRow = PermitReference & Readonly<{ state: PermitState; updatedAt: string; recoveryFromState: string | null }>;
+type PermitRow = PermitReference &
+  Readonly<{ state: PermitState; updatedAt: string; recoveryFromState: string | null }>;
 
 type TicketRow = Readonly<{
   generation: string;
@@ -100,9 +101,7 @@ function actorKey(deps: ContentCommandDependencies, actor: Actor): Buffer {
 /** Rows written before board-home reservations used this board-scoped digest. */
 function legacyActorKey(routeKey: Uint8Array, boardId: string, actor: Actor): Buffer {
   if (actor.kind !== 'account') throw new GrantDeniedError();
-  return createHmac('sha256', routeKey)
-    .update(`content.board.slow-mode\n${boardId}\n${actor.accountId}`)
-    .digest();
+  return createHmac('sha256', routeKey).update(`content.board.slow-mode\n${boardId}\n${actor.accountId}`).digest();
 }
 
 function legacyActorKeyForAccount(routeKey: Uint8Array, boardId: string, accountId: string): Buffer {
@@ -122,9 +121,7 @@ function commandKey(
 ): Buffer {
   const key = actorKey(deps, actor).toString('hex');
   return createHmac('sha256', deps.routeKey)
-    .update(
-      `content.board.slow-mode.command\n${boardId}\n${threadRoute}\n${receipt.kind}\n${key}\n${receipt.key}`,
-    )
+    .update(`content.board.slow-mode.command\n${boardId}\n${threadRoute}\n${receipt.kind}\n${key}\n${receipt.key}`)
     .digest();
 }
 
@@ -142,11 +139,7 @@ function sameDigest(actual: Uint8Array, expected: Uint8Array): boolean {
   return Buffer.from(actual).equals(Buffer.from(expected));
 }
 
-async function serializable<T>(
-  pool: Pool,
-  deadline: number,
-  action: (client: AccessClient) => Promise<T>,
-): Promise<T> {
+async function serializable<T>(pool: Pool, deadline: number, action: (client: AccessClient) => Promise<T>): Promise<T> {
   return withConnection(pool, async (connection) => {
     const client = deadlineClient(connection, deadline);
     await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
@@ -319,10 +312,11 @@ async function reserveOnBoardHome(
            WHERE route=$1 AND board_id=$2 AND actor_key=$3`,
           [board.route, board.id, key, legacy.rows[0].posted_at],
         );
-        await client.query(
-          `DELETE FROM content.board_slow_actor WHERE route=$1 AND board_id=$2 AND actor_key=$3`,
-          [board.route, board.id, legacyKey],
-        );
+        await client.query(`DELETE FROM content.board_slow_actor WHERE route=$1 AND board_id=$2 AND actor_key=$3`, [
+          board.route,
+          board.id,
+          legacyKey,
+        ]);
       }
     }
     const actorResult = await client.query<{
@@ -588,10 +582,10 @@ async function finalizePermit(
   deadline = defaultDeadline(),
 ): Promise<void> {
   await serializable(pool, deadline, async (client) => {
-    await client.query(
-      `SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`,
-      [reference.boardRoute, reference.boardId],
-    );
+    await client.query(`SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`, [
+      reference.boardRoute,
+      reference.boardId,
+    ]);
     const result = await client.query<{ state: PermitState; recovery_from_state: string | null }>(
       `SELECT state,recovery_from_state FROM content.board_slow_permit
        WHERE route=$1 AND board_id=$2 AND actor_key=$3 AND command_key=$4
@@ -821,16 +815,7 @@ export function boardSlowAdmission(
       });
       let reserved: Awaited<ReturnType<typeof reserveOnBoardHome>>;
       try {
-        reserved = await reserveOnBoardHome(
-          deps,
-          actor,
-          boardId,
-          threadRoute,
-          receipt,
-          time,
-          check,
-          context.deadline,
-        );
+        reserved = await reserveOnBoardHome(deps, actor, boardId, threadRoute, receipt, time, check, context.deadline);
       } catch (error) {
         if (!admissionConflict(error)) throw error;
         latest = { kind: 'blocked', error: new BoardSlowAdmissionUnavailableError() };
@@ -907,14 +892,7 @@ export function boardSlowAdmission(
       const plan = latest;
       if (plan?.kind === 'permit') reference = plan.reference;
       else if (lastBoardId) {
-        const permit = await readCommandPermit(
-          deps,
-          actor,
-          lastBoardId,
-          threadRoute,
-          receipt,
-          context.deadline,
-        );
+        const permit = await readCommandPermit(deps, actor, lastBoardId, threadRoute, receipt, context.deadline);
         if (permit && sameDigest(permit.requestDigest, receipt.digest)) reference = permit;
       }
       if (!reference) return;
@@ -972,7 +950,9 @@ export async function setBoardSlowMode(
       receipt: {
         kind: 'content.board.slow-mode.set',
         key: context.idempotencyKey,
-        digest: createHash('sha256').update(canonicalize([boardId, intervalSeconds])!).digest(),
+        digest: createHash('sha256')
+          .update(canonicalize([boardId, intervalSeconds])!)
+          .digest(),
       },
     },
     async (tx) => {
@@ -1180,8 +1160,7 @@ export async function eraseBoardSlowModeAccountPage(
     if (reference.generation !== candidate.generation) continue;
     if (reference.state === 'reserved' || reference.state === 'in_flight' || reference.state === 'reconciling') {
       const state = await resolvePermit(pool, reference, deadline, true);
-      if (state === 'busy' || state === 'unknown')
-        return { removed, more: true, pending: true };
+      if (state === 'busy' || state === 'unknown') return { removed, more: true, pending: true };
       if (state === 'stale') continue;
     }
     await serializable(pool, deadline, async (client) => {
@@ -1192,10 +1171,10 @@ export async function eraseBoardSlowModeAccountPage(
       );
     });
     const deleted = await serializable(pool, deadline, async (client) => {
-      await client.query(
-        `SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`,
-        [reference.boardRoute, reference.boardId],
-      );
+      await client.query(`SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`, [
+        reference.boardRoute,
+        reference.boardId,
+      ]);
       await client.query(
         `SELECT 1 FROM content.board_slow_actor
          WHERE route=$1 AND board_id=$2 AND actor_key=$3 FOR UPDATE`,
@@ -1245,10 +1224,10 @@ export async function eraseBoardSlowModeAccountPage(
   });
   for (const actor of actors) {
     await serializable(pool, deadline, async (client) => {
-      await client.query(
-        `SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`,
-        [actor.route, actor.board_id],
-      );
+      await client.query(`SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`, [
+        actor.route,
+        actor.board_id,
+      ]);
       await client.query(
         `DELETE FROM content.board_slow_actor a
          WHERE route=$1 AND board_id=$2 AND actor_key=$3
@@ -1324,10 +1303,10 @@ export async function pruneBoardSlowModeHistoryPage(
   });
   for (const actor of actors) {
     await serializable(pool, deadline, async (client) => {
-      await client.query(
-        `SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`,
-        [actor.route, actor.board_id],
-      );
+      await client.query(`SELECT 1 FROM content.board_slow_mode WHERE route=$1 AND board_id=$2 FOR UPDATE`, [
+        actor.route,
+        actor.board_id,
+      ]);
       await client.query(
         `DELETE FROM content.board_slow_actor a
          WHERE route=$1 AND board_id=$2 AND actor_key=$3

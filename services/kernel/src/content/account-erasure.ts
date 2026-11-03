@@ -25,7 +25,16 @@ import { eraseBoardSlowModeAccountPage } from './board-slow.ts';
 
 const workflow = 'content.account-erasure.step';
 const retentionWorkflow = 'content.account-erasure.retention';
-type Phase = 'close' | 'slow-mode' | 'authored' | 'uploads' | 'reactions' | 'moderation' | 'notices' | 'proof' | 'complete';
+type Phase =
+  | 'close'
+  | 'slow-mode'
+  | 'authored'
+  | 'uploads'
+  | 'reactions'
+  | 'moderation'
+  | 'notices'
+  | 'proof'
+  | 'complete';
 type Progress = {
   step: string;
   phase: Exclude<Phase, 'close'>;
@@ -438,14 +447,9 @@ export function createAccountErasureEffect(context: Pick<WorkContext, 'client'>)
 }
 
 /** Registers the content participant and its expiry purge as durable platform work. */
-export function registerAccountErasureWork(
-  context: WorkContext,
-  storage: MediaStorage,
-  routeKey: Uint8Array,
-): void {
+export function registerAccountErasureWork(context: WorkContext, storage: MediaStorage, routeKey: Uint8Array): void {
   const run = DBOS.registerStep(
-    async (accountId: string, expectedStep: number) =>
-      step(context.pool, storage, routeKey, accountId, expectedStep),
+    async (accountId: string, expectedStep: number) => step(context.pool, storage, routeKey, accountId, expectedStep),
     { name: 'content.account-erasure.run', retriesAllowed: true, maxAttempts: 10, intervalSeconds: 1 },
   );
   DBOS.registerWorkflow(
