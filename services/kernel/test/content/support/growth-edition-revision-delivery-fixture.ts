@@ -29,7 +29,10 @@ export type Selection = {
 };
 export type DeliveryAxis = 'unrelated' | 'source-history' | 'recipient-grants' | 'publisher-grants';
 export const deliveryAxes: readonly DeliveryAxis[] = [
-  'unrelated', 'source-history', 'recipient-grants', 'publisher-grants',
+  'unrelated',
+  'source-history',
+  'recipient-grants',
+  'publisher-grants',
 ];
 
 /** All selected identities, bindings, grants, receipts and publication are native commands.
@@ -40,13 +43,18 @@ export async function growthEditionRevisionDeliveryFixture() {
   let auth: Awaited<ReturnType<typeof nativeFixture>> | undefined;
   let observer: ReturnType<typeof observeSql> | undefined;
   let closing: Promise<void> | undefined;
-  const close = () => closing ??= (async () => {
-    try {
-      await observer?.close();
-    } finally {
-      try { await auth?.close(); } finally { await db.close(); }
-    }
-  })();
+  const close = () =>
+    (closing ??= (async () => {
+      try {
+        await observer?.close();
+      } finally {
+        try {
+          await auth?.close();
+        } finally {
+          await db.close();
+        }
+      }
+    })());
   try {
     auth = await nativeFixture(db.pool, () => db.openPool({ max: 4 }));
     const native = auth;
@@ -70,7 +78,10 @@ export async function growthEditionRevisionDeliveryFixture() {
     async function person(label: string): Promise<Person> {
       const registered = await native.person(`edition_${label}_${randomUUID().replaceAll('-', '')}`);
       const signed = await native.request('/signin', {
-        account_id: registered.accountId, password, client_id: clientId, scope: scopes,
+        account_id: registered.accountId,
+        password,
+        client_id: clientId,
+        scope: scopes,
       });
       expect(signed.status).toBe(200);
       const issued = await native.request('/token', {}, cookies(signed));
@@ -84,18 +95,27 @@ export async function growthEditionRevisionDeliveryFixture() {
     await bootstrapRelease(db.pool, bundledRelease);
 
     function wire(
-      person: Person | null, path: string, method = 'GET', body?: unknown,
-      version?: string, headers: Record<string, string> = {}, mutation = false,
+      person: Person | null,
+      path: string,
+      method = 'GET',
+      body?: unknown,
+      version?: string,
+      headers: Record<string, string> = {},
+      mutation = false,
     ) {
-      return (mutation ? mutationApp : app).handle(new Request(`https://edition.test${path}`, {
-        method,
-        headers: {
-          ...(person ? { authorization: `Bearer ${person.bearer}` } : {}),
-          'content-type': 'application/json', 'idempotency-key': JSON.stringify(randomUUID()),
-          ...(version ? { 'if-match': JSON.stringify(version) } : {}), ...headers,
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      }));
+      return (mutation ? mutationApp : app).handle(
+        new Request(`https://edition.test${path}`, {
+          method,
+          headers: {
+            ...(person ? { authorization: `Bearer ${person.bearer}` } : {}),
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(randomUUID()),
+            ...(version ? { 'if-match': JSON.stringify(version) } : {}),
+            ...headers,
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
     }
     async function value<T>(response: Promise<Response>, status: number): Promise<T> {
       const result = await response;
@@ -103,33 +123,76 @@ export async function growthEditionRevisionDeliveryFixture() {
       expect({ status: result.status, error: result.status === status ? null : text }).toEqual({ status, error: null });
       return JSON.parse(text) as T;
     }
-    const scheme = (await value<{ subject: { id: string } }>(wire(publisher, '/v1/subjects', 'POST', {
-      type: 'skos:ConceptScheme', labels: { en: 'Delivery growth topics' },
-    }), 201)).subject.id;
-    const subjectId = (await value<{ subject: { id: string } }>(wire(publisher, '/v1/subjects', 'POST', {
-      type: 'skos:Concept', labels: { en: 'Pinned delivery source' },
-      statements: { 'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme } }] },
-    }), 201)).subject.id;
-    const spaceId = (await value<{ space: { spaceId: string } }>(
-      wire(publisher, '/v1/spaces', 'POST', { title: 'Delivery space' }), 201,
-    )).space.spaceId;
-    const realm = (await value<{ realm: { realmId: string; headRevisionId: string } }>(
-      wire(publisher, '/v1/realms', 'POST', {
-        spaceId, title: 'Protected delivery realm', visibility: 'protected', contextId: GLOBAL_CONTEXT,
-      }), 201,
-    )).realm;
-    await value(wire(publisher, `/v1/realms/${realm.realmId}/boardScheme`, 'PUT',
-      { schemeId: scheme }, realm.headRevisionId), 200);
-    const boardId = (await value<{ board: { id: string } }>(
-      wire(publisher, `/v1/realms/${realm.realmId}/boards`, 'POST', {
-        conceptId: subjectId, title: 'Protected delivery board', visibility: 'protected',
-      }), 201,
-    )).board.id;
+    const scheme = (
+      await value<{ subject: { id: string } }>(
+        wire(publisher, '/v1/subjects', 'POST', {
+          type: 'skos:ConceptScheme',
+          labels: { en: 'Delivery growth topics' },
+        }),
+        201,
+      )
+    ).subject.id;
+    const subjectId = (
+      await value<{ subject: { id: string } }>(
+        wire(publisher, '/v1/subjects', 'POST', {
+          type: 'skos:Concept',
+          labels: { en: 'Pinned delivery source' },
+          statements: {
+            'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: scheme } }],
+          },
+        }),
+        201,
+      )
+    ).subject.id;
+    const spaceId = (
+      await value<{ space: { spaceId: string } }>(
+        wire(publisher, '/v1/spaces', 'POST', { title: 'Delivery space' }),
+        201,
+      )
+    ).space.spaceId;
+    const realm = (
+      await value<{ realm: { realmId: string; headRevisionId: string } }>(
+        wire(publisher, '/v1/realms', 'POST', {
+          spaceId,
+          title: 'Protected delivery realm',
+          visibility: 'protected',
+          contextId: GLOBAL_CONTEXT,
+        }),
+        201,
+      )
+    ).realm;
+    await value(
+      wire(publisher, `/v1/realms/${realm.realmId}/boardScheme`, 'PUT', { schemeId: scheme }, realm.headRevisionId),
+      200,
+    );
+    const boardId = (
+      await value<{ board: { id: string } }>(
+        wire(publisher, `/v1/realms/${realm.realmId}/boards`, 'POST', {
+          conceptId: subjectId,
+          title: 'Protected delivery board',
+          visibility: 'protected',
+        }),
+        201,
+      )
+    ).board.id;
     async function grant(id: string, person: Person, actions: readonly string[], revoke = false, mutation = false) {
-      await value(wire(publisher, `/v1/grants${revoke ? ':revoke' : ''}`, 'POST', {
-        resource: { route: routeOf(id)!, id }, subject: { kind: 'account', id: person.accountId },
-        actions, valid: '[2025-01-01T00:00:00Z,)',
-      }, undefined, {}, mutation), revoke ? 200 : 201);
+      await value(
+        wire(
+          publisher,
+          `/v1/grants${revoke ? ':revoke' : ''}`,
+          'POST',
+          {
+            resource: { route: routeOf(id)!, id },
+            subject: { kind: 'account', id: person.accountId },
+            actions,
+            valid: '[2025-01-01T00:00:00Z,)',
+          },
+          undefined,
+          {},
+          mutation,
+        ),
+        revoke ? 200 : 201,
+      );
     }
     await grant(realm.realmId, buyer, ['realm:read']);
     await grant(boardId, buyer, ['board:read']);
@@ -138,27 +201,58 @@ export async function growthEditionRevisionDeliveryFixture() {
     const bytes = Buffer.from(serializeDocument(body));
     const digest = createHash('sha256').update(bytes).digest('hex');
     async function selection(): Promise<Selection> {
-      const thread = (await value<{ thread: { id: string; firstPost: Post } }>(
-        wire(publisher, '/v1/threads', 'POST', {
-          title: 'Native delivery ancestry', body: fromPlainText('Opening ancestor'), licence: 'CC0-1.0',
-          subjectIds: [subjectId], boardId, visibility: 'published',
-        }), 201,
-      )).thread;
-      const parent = (await value<{ post: Post }>(wire(publisher, `/v1/threads/${thread.id}/posts`, 'POST', {
-        parentId: thread.firstPost.id, body: fromPlainText('Independent parent'), licence: 'CC0-1.0',
-      }), 201)).post;
-      const post = (await value<{ post: Post }>(wire(publisher, `/v1/threads/${thread.id}/posts`, 'POST', {
-        parentId: parent.id, body, licence: 'CC0-1.0', subjectIds: [subjectId],
-      }), 201)).post;
-      const draft = await value<{ editionId: string }>(wire(publisher, '/v1/contentEditions', 'POST', {
-        postId: post.id, revisionId: post.revisionId, targetSubjectId: subjectId,
-      }), 201);
+      const thread = (
+        await value<{ thread: { id: string; firstPost: Post } }>(
+          wire(publisher, '/v1/threads', 'POST', {
+            title: 'Native delivery ancestry',
+            body: fromPlainText('Opening ancestor'),
+            licence: 'CC0-1.0',
+            subjectIds: [subjectId],
+            boardId,
+            visibility: 'published',
+          }),
+          201,
+        )
+      ).thread;
+      const parent = (
+        await value<{ post: Post }>(
+          wire(publisher, `/v1/threads/${thread.id}/posts`, 'POST', {
+            parentId: thread.firstPost.id,
+            body: fromPlainText('Independent parent'),
+            licence: 'CC0-1.0',
+          }),
+          201,
+        )
+      ).post;
+      const post = (
+        await value<{ post: Post }>(
+          wire(publisher, `/v1/threads/${thread.id}/posts`, 'POST', {
+            parentId: parent.id,
+            body,
+            licence: 'CC0-1.0',
+            subjectIds: [subjectId],
+          }),
+          201,
+        )
+      ).post;
+      const draft = await value<{ editionId: string }>(
+        wire(publisher, '/v1/contentEditions', 'POST', {
+          postId: post.id,
+          revisionId: post.revisionId,
+          targetSubjectId: subjectId,
+        }),
+        201,
+      );
       await value(wire(publisher, `/v1/contentEditions/${draft.editionId}:publish`, 'POST', {}, '1'), 200);
       await grant(draft.editionId, buyer, ['edition:read']);
       await grant(draft.editionId, outsider, ['edition:read']);
       expect(post.sha256).toBe(digest);
       return {
-        threadId: thread.id, ancestors: [parent.id, thread.firstPost.id], post, editionId: draft.editionId, bytes,
+        threadId: thread.id,
+        ancestors: [parent.id, thread.firstPost.id],
+        post,
+        editionId: draft.editionId,
+        bytes,
         expected: { editionId: draft.editionId, revisionId: post.revisionId, sha256: digest, licence: 'CC0-1.0', body },
       };
     }
@@ -174,22 +268,46 @@ export async function growthEditionRevisionDeliveryFixture() {
     function pressure(): Population {
       const route = routeOf(unrelated.post.id)!;
       return {
-        name: 'Unrelated edition and revision delivery pressure', hotPartition: partitionOf(route), hotShare: 1,
+        name: 'Unrelated edition and revision delivery pressure',
+        hotPartition: partitionOf(route),
+        hotShare: 1,
         rows() {
           const revisionId = newId(route);
           return {
-            'content.revision': [{
-              route, thread_id: unrelated.threadId, post_id: unrelated.post.id, revision_id: revisionId,
-              body: bytes, body_sha256: Buffer.from(digest, 'hex'), search_text: 'unrelated revision',
-              licence: 'CC0-1.0', subject_ids: [subjectId], board_id: boardId, availability: 'available',
-              recorded_transaction_id: randomUUID(), media_ids: [],
-            }],
-            'content.edition': [{
-              route, edition_id: newId(route), creator_account_id: publisher.accountId, target_subject_id: subjectId,
-              thread_id: unrelated.threadId, post_id: unrelated.post.id, revision_id: revisionId,
-              body_sha256: Buffer.from(digest, 'hex'), licence: 'CC0-1.0', state: 'draft', security_revision: 1,
-              recorded_transaction_id: randomUUID(), created_at: new Date(),
-            }],
+            'content.revision': [
+              {
+                route,
+                thread_id: unrelated.threadId,
+                post_id: unrelated.post.id,
+                revision_id: revisionId,
+                body: bytes,
+                body_sha256: Buffer.from(digest, 'hex'),
+                search_text: 'unrelated revision',
+                licence: 'CC0-1.0',
+                subject_ids: [subjectId],
+                board_id: boardId,
+                availability: 'available',
+                recorded_transaction_id: randomUUID(),
+                media_ids: [],
+              },
+            ],
+            'content.edition': [
+              {
+                route,
+                edition_id: newId(route),
+                creator_account_id: publisher.accountId,
+                target_subject_id: subjectId,
+                thread_id: unrelated.threadId,
+                post_id: unrelated.post.id,
+                revision_id: revisionId,
+                body_sha256: Buffer.from(digest, 'hex'),
+                licence: 'CC0-1.0',
+                state: 'draft',
+                security_revision: 1,
+                recorded_transaction_id: randomUUID(),
+                created_at: new Date(),
+              },
+            ],
           };
         },
       };
@@ -202,20 +320,33 @@ export async function growthEditionRevisionDeliveryFixture() {
       for (let i = previous; i < scale; i++) {
         const key = randomUUID();
         if (axis === 'source-history') {
-          const outcome = await revisePost({ pool: db.pool, access: app.testAccess, routeKey: testRouteKey() }, actor, {
-            threadId: selected.threadId, itemId: selected.post.id, expectedRevisionId: head,
-            body: fromPlainText(`Later head ${i}; never the pinned body`),
-          }, { idempotencyKey: key, requestId: key, deadline: Date.now() + 10_000 });
+          const outcome = await revisePost(
+            { pool: db.pool, access: app.testAccess, routeKey: testRouteKey() },
+            actor,
+            {
+              threadId: selected.threadId,
+              itemId: selected.post.id,
+              expectedRevisionId: head,
+              body: fromPlainText(`Later head ${i}; never the pinned body`),
+            },
+            { idempotencyKey: key, requestId: key, deadline: Date.now() + 10_000 },
+          );
           head = outcome.value.revisionId;
         } else {
           const start = new Date(Date.UTC(2000, 0, 1) + i * 2000).toISOString();
           const end = new Date(Date.UTC(2000, 0, 1) + i * 2000 + 1000).toISOString();
           const recipient = axis === 'recipient-grants';
           const id = recipient ? selected.editionId : selected.post.id;
-          await grants.create({ pool: db.pool, actor, deadline: Date.now() + 10_000 }, {
-            resource: { route: routeOf(id)!, id }, subject: { kind: 'account', id: recipient ? buyer.accountId : publisher.accountId },
-            actions: [recipient ? 'edition:read' : 'post:revise'], valid: `[${start},${end})`, key,
-          });
+          await grants.create(
+            { pool: db.pool, actor, deadline: Date.now() + 10_000 },
+            {
+              resource: { route: routeOf(id)!, id },
+              subject: { kind: 'account', id: recipient ? buyer.accountId : publisher.accountId },
+              actions: [recipient ? 'edition:read' : 'post:revise'],
+              valid: `[${start},${end})`,
+              key,
+            },
+          );
         }
       }
     }
@@ -234,8 +365,26 @@ export async function growthEditionRevisionDeliveryFixture() {
       expect(rows.rows).toEqual([]);
     }
     return {
-      db, native, app, publisher, buyer, outsider, realmId: realm.realmId, spaceId, boardId, subjectId,
-      selected, wire, value, selection, grow, grant, pinned, noPostGrant, observe, close,
+      db,
+      native,
+      app,
+      publisher,
+      buyer,
+      outsider,
+      realmId: realm.realmId,
+      spaceId,
+      boardId,
+      subjectId,
+      selected,
+      wire,
+      value,
+      selection,
+      grow,
+      grant,
+      pinned,
+      noPostGrant,
+      observe,
+      close,
     };
   } catch (error) {
     await close();
@@ -244,10 +393,13 @@ export async function growthEditionRevisionDeliveryFixture() {
 }
 
 export function permissionExecutions(records: readonly SqlExecution[], actor: string, action: string, id: string) {
-  return records.filter((row) => row.statement === permission.sql &&
-    row.parameters[permission.params.indexOf('actor_id')] === actor &&
-    row.parameters[permission.params.indexOf('action')] === action &&
-    permissionResourceId(row, permission.params) === id);
+  return records.filter(
+    (row) =>
+      row.statement === permission.sql &&
+      row.parameters[permission.params.indexOf('actor_id')] === actor &&
+      row.parameters[permission.params.indexOf('action')] === action &&
+      permissionResourceId(row, permission.params) === id,
+  );
 }
 
 /** Select a released boundary before the snapshot containing the last actual guard.
@@ -261,5 +413,8 @@ export function finalGuardBoundary(records: readonly SqlExecution[], actor: stri
   const before = records.slice(0, index);
   const boundary = before.findLastIndex((row) => row.statement === begin && row.connectionId === last.connectionId);
   if (boundary < 0) throw new Error(`Native final guard snapshot absent: ${action}`);
-  return { statement: begin, occurrence: records.slice(0, boundary + 1).filter((row) => row.statement === begin).length };
+  return {
+    statement: begin,
+    occurrence: records.slice(0, boundary + 1).filter((row) => row.statement === begin).length,
+  };
 }

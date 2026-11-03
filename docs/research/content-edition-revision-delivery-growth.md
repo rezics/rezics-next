@@ -37,12 +37,12 @@ absence of a newly written post grant does not prove the unavailable protected-s
 Each axis starts with a fresh fixture and uses 256, 1024 and 4096 additions, preserving one selected exact revision,
 canonical body, licence, subject, scopes and three-post chain. There is no page, entitlement enumeration or byte copy.
 
-| Axis | Producer outside observation | Fixed selected operand |
-| --- | --- | --- |
-| Unrelated editions/revisions | Shared `seed` helper; draft edition pointers and revision rows on a separate native post in the selected partition | Selected edition, revision, provenance and publication untouched |
-| Selected source history | Production `revisePost` with native authenticated publisher and head precondition | Original selected revision and body remain pinned despite different later heads |
-| Recipient grant history | Production grant commands; disjoint expired intervals on the selected edition | One current direct recipient `edition:read` grant |
-| Publisher grant history | Production grant commands; disjoint expired `post:revise` intervals on the selected source | Current native owner role and publication initiator |
+| Axis                         | Producer outside observation                                                                                       | Fixed selected operand                                                          |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Unrelated editions/revisions | Shared `seed` helper; draft edition pointers and revision rows on a separate native post in the selected partition | Selected edition, revision, provenance and publication untouched                |
+| Selected source history      | Production `revisePost` with native authenticated publisher and head precondition                                  | Original selected revision and body remain pinned despite different later heads |
+| Recipient grant history      | Production grant commands; disjoint expired intervals on the selected edition                                      | One current direct recipient `edition:read` grant                               |
+| Publisher grant history      | Production grant commands; disjoint expired `post:revise` intervals on the selected source                         | Current native owner role and publication initiator                             |
 
 Only unrelated pressure uses bulk rows. Selected history and grants use native command transactions, receipts and
 outbox producers. Their command envelope is setup, separately named here, not byte-read cost. Source cleanup uses
