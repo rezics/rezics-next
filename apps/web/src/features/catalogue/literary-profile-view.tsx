@@ -627,6 +627,7 @@ function LiteraryProfileLive({
   const [reuse, setReuse] = useState<LiteraryReuseState | null>(null);
   const [focusCopy, setFocusCopy] = useState<{ holder: string; index: number; nonce: number }>();
   const [createdId, setCreatedId] = useState<string>();
+  const expectedCreateType = useRef<string>();
   // Keep independently entered facts when switching Types; only the currently chosen Type is submitted.
   const latest = useRef(drafts);
   latest.current = drafts;
@@ -646,8 +647,8 @@ function LiteraryProfileLive({
       target.focus();
     }
   }
-  function admitReader(id: string, reader: CreatedReader): CreatedReader {
-    return literaryAdmitCreatedReader(reader, id);
+  function admitReader(id: string, reader: CreatedReader, expectedType: string): CreatedReader {
+    return literaryAdmitCreatedReader(reader, id, expectedType);
   }
   const heading = (
     <header className="space-y-3">
@@ -727,12 +728,18 @@ function LiteraryProfileLive({
               };
             },
             submit: async (command) => {
+              expectedCreateType.current = command.item.type;
               const result = await transport.submit(command);
               if (!lifetime.active()) return { ok: false as const, reason: 'denied' as const };
               if (!result.ok) return result;
-              return { ...result, reader: admitReader(result.id, result.reader) };
+              return { ...result, reader: admitReader(result.id, result.reader, command.item.type) };
             },
-            read: async (created) => admitReader(created, await transport.read(created)),
+            read: async (created) => {
+              const expectedType = expectedCreateType.current;
+              return expectedType
+                ? admitReader(created, await transport.read(created), expectedType)
+                : { state: 'stale' as const };
+            },
           }}
           profile={{
             scope: 'literary',

@@ -54,10 +54,11 @@ export function literaryCreateFactsRead(release: Release, type: string): FactsCu
   } as FactsCurrent;
 }
 
-export function literaryAdmitCreatedReader(reader: CreatedReader, id: string): CreatedReader {
+export function literaryAdmitCreatedReader(reader: CreatedReader, id: string, expectedType: string): CreatedReader {
   if (reader.state !== 'ready') return reader;
   const identity = reader.identity;
-  if (!identity || identity.id !== id || !isLiteraryType(identity.type)) return { state: 'stale' };
+  if (!identity || identity.id !== id || !isLiteraryType(identity.type) || identity.type !== expectedType)
+    return { state: 'stale' };
   return reader;
 }
 

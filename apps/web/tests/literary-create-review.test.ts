@@ -41,14 +41,27 @@ test('Literary creation admits native identity, keeps initial rank, and reuses r
     href: '/en/subjects/00000000-0000-4000-8000-00000000b001/book',
     identity: { id: '00000000-0000-4000-8000-00000000b001', type: 'schema:Book', label: 'Book' },
   };
-  expect(literaryAdmitCreatedReader(ready, ready.identity.id)).toEqual(ready);
-  expect(literaryAdmitCreatedReader(ready, '00000000-0000-4000-8000-00000000b002')).toEqual({ state: 'stale' });
+  expect(literaryAdmitCreatedReader(ready, ready.identity.id, 'schema:Book')).toEqual(ready);
+  expect(literaryAdmitCreatedReader(ready, '00000000-0000-4000-8000-00000000b002', 'schema:Book')).toEqual({
+    state: 'stale',
+  });
+  const otherLiteraryType = { ...ready, identity: { ...ready.identity, type: 'schema:BookSeries' } };
+  expect(literaryAdmitCreatedReader(otherLiteraryType, ready.identity.id, 'schema:Book')).toEqual({ state: 'stale' });
+  expect(literaryAdmitCreatedReader(otherLiteraryType, ready.identity.id, 'schema:BookSeries')).toEqual(otherLiteraryType);
   expect(
-    literaryAdmitCreatedReader({ ...ready, identity: { ...ready.identity, type: 'schema:Person' } }, ready.identity.id),
+    literaryAdmitCreatedReader(
+      { ...ready, identity: { ...ready.identity, type: 'schema:Person' } },
+      ready.identity.id,
+      'schema:Book',
+    ),
   ).toEqual({ state: 'stale' });
-  expect(literaryAdmitCreatedReader({ state: 'unavailable' }, ready.identity.id)).toEqual({ state: 'unavailable' });
-  expect(literaryAdmitCreatedReader({ state: 'concealed' }, ready.identity.id)).toEqual({ state: 'concealed' });
-  expect(literaryAdmitCreatedReader({ state: 'denied' }, ready.identity.id)).toEqual({ state: 'denied' });
+  expect(literaryAdmitCreatedReader({ state: 'unavailable' }, ready.identity.id, 'schema:Book')).toEqual({
+    state: 'unavailable',
+  });
+  expect(literaryAdmitCreatedReader({ state: 'concealed' }, ready.identity.id, 'schema:Book')).toEqual({
+    state: 'concealed',
+  });
+  expect(literaryAdmitCreatedReader({ state: 'denied' }, ready.identity.id, 'schema:Book')).toEqual({ state: 'denied' });
 
   const prepared = literaryInitialItem(
     release,
