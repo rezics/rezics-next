@@ -5104,5 +5104,14 @@
   "collection_discovery_retry": "再試行",
   "collection_discovery_restart": "最初から見る",
   "collection_discovery_restart_required": "この続きは利用できません。最初のページからやり直してください。",
-  "collection_discovery_more": "さらに表示"
+  "collection_discovery_more": "さらに表示",
+  "inbox_kind_thread_activity": "ウォッチ中のスレッドの更新",
+  "inbox_kind_board_activity": "ウォッチ中の掲示板の更新",
+  "inbox_kind_unknown": "通知",
+  "inbox_thread_activity_text": "ウォッチ中のスレッドの更新です。",
+  "inbox_board_activity_text": "ウォッチ中の掲示板で新しく公開されたスレッドです。返信、編集、過去のスレッドは掲示板の更新通知の対象外です。",
+  "inbox_notification_preferences": "通知設定",
+  "settings_watch_notifications_heading": "ウォッチの通知",
+  "settings_watch_notifications_support": "ウォッチの通知はサイト内のみです。対応する受信設定がある場合は下に表示されます。未対応の設定は利用できません。",
+  "settings_watch_notifications_mandatory": "モデレーション結果の通知は必須で、無効にできません。"
 }

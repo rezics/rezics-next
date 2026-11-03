@@ -5104,5 +5104,14 @@
   "collection_discovery_retry": "重试",
   "collection_discovery_restart": "从头开始",
   "collection_discovery_restart_required": "此续页已失效。请从第一页重新开始。",
-  "collection_discovery_more": "更多合集"
+  "collection_discovery_more": "更多合集",
+  "inbox_kind_thread_activity": "关注讨论串的动态",
+  "inbox_kind_board_activity": "关注版块的动态",
+  "inbox_kind_unknown": "通知",
+  "inbox_thread_activity_text": "你关注的讨论串有更新。",
+  "inbox_board_activity_text": "你关注的版块有新发布的讨论串。回复、编辑和较早的讨论串不会触发版块动态通知。",
+  "inbox_notification_preferences": "通知偏好设置",
+  "settings_watch_notifications_heading": "关注通知",
+  "settings_watch_notifications_support": "关注通知仅在站内提供。支持的接收选项会显示在下方；尚未支持的关注设置目前不可用。",
+  "settings_watch_notifications_mandatory": "管理处理结果为必要通知，无法关闭。"
 }

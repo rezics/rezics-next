@@ -5104,5 +5104,14 @@
   "collection_discovery_retry": "Erneut versuchen",
   "collection_discovery_restart": "Neu starten",
   "collection_discovery_restart_required": "Diese Fortsetzung ist nicht mehr verfügbar. Beginne wieder auf der ersten Seite.",
-  "collection_discovery_more": "Weitere Collections"
+  "collection_discovery_more": "Weitere Collections",
+  "inbox_kind_thread_activity": "Aktivität in beobachtetem Thema",
+  "inbox_kind_board_activity": "Aktivität im beobachteten Forum",
+  "inbox_kind_unknown": "Benachrichtigung",
+  "inbox_thread_activity_text": "Neuigkeiten in einem Thema, das du beobachtest.",
+  "inbox_board_activity_text": "Neu veröffentlichte Themen in einem Forum, das du beobachtest. Antworten, Änderungen und ältere Themen lösen keine Forenbenachrichtigung aus.",
+  "inbox_notification_preferences": "Benachrichtigungseinstellungen",
+  "settings_watch_notifications_heading": "Benachrichtigungen für Beobachtungen",
+  "settings_watch_notifications_support": "Diese Benachrichtigungen erscheinen nur auf der Website. Verfügbare Zustelloptionen stehen unten; nicht unterstützte Einstellungen sind nicht verfügbar.",
+  "settings_watch_notifications_mandatory": "Moderationsergebnisse sind verpflichtende Benachrichtigungen und können nicht abgeschaltet werden."
 }

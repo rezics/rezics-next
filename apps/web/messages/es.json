@@ -5104,5 +5104,14 @@
   "collection_discovery_retry": "Reintentar",
   "collection_discovery_restart": "Volver al inicio",
   "collection_discovery_restart_required": "Esta continuación ya no está disponible. Empieza desde la primera página.",
-  "collection_discovery_more": "Más colecciones"
+  "collection_discovery_more": "Más colecciones",
+  "inbox_kind_thread_activity": "Actividad de un hilo seguido",
+  "inbox_kind_board_activity": "Actividad de un foro seguido",
+  "inbox_kind_unknown": "Notificación",
+  "inbox_thread_activity_text": "Novedades en un hilo que sigues.",
+  "inbox_board_activity_text": "Hilos nuevos publicados en un foro que sigues. Las respuestas, ediciones e hilos anteriores no generan avisos de actividad del foro.",
+  "inbox_notification_preferences": "Preferencias de notificaciones",
+  "settings_watch_notifications_heading": "Notificaciones de seguimiento",
+  "settings_watch_notifications_support": "Estos avisos solo se reciben en el sitio. Los controles de entrega disponibles aparecen abajo; los ajustes no compatibles no están disponibles.",
+  "settings_watch_notifications_mandatory": "Las notificaciones de moderación son obligatorias y no se pueden desactivar."
 }

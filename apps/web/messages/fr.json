@@ -5104,5 +5104,14 @@
   "collection_discovery_retry": "Réessayer",
   "collection_discovery_restart": "Recommencer",
   "collection_discovery_restart_required": "Cette suite n’est plus disponible. Reprenez depuis la première page.",
-  "collection_discovery_more": "Plus de collections"
+  "collection_discovery_more": "Plus de collections",
+  "inbox_kind_thread_activity": "Activité d’une discussion suivie",
+  "inbox_kind_board_activity": "Activité d’un forum suivi",
+  "inbox_kind_unknown": "Notification",
+  "inbox_thread_activity_text": "Des nouvelles dans une discussion que vous suivez.",
+  "inbox_board_activity_text": "Nouvelles discussions publiées dans un forum que vous suivez. Les réponses, modifications et anciennes discussions ne déclenchent pas d’avis d’activité du forum.",
+  "inbox_notification_preferences": "Préférences de notification",
+  "settings_watch_notifications_heading": "Notifications de suivi",
+  "settings_watch_notifications_support": "Ces avis apparaissent uniquement sur le site. Les options de réception disponibles figurent ci-dessous ; les réglages non pris en charge sont indisponibles.",
+  "settings_watch_notifications_mandatory": "Les notifications de modération sont obligatoires et ne peuvent pas être désactivées."
 }

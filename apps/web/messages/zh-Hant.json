@@ -5104,5 +5104,14 @@
   "collection_discovery_retry": "重試",
   "collection_discovery_restart": "重新開始",
   "collection_discovery_restart_required": "此續頁已失效。請從第一頁重新開始。",
-  "collection_discovery_more": "更多合集"
+  "collection_discovery_more": "更多合集",
+  "inbox_kind_thread_activity": "關注討論串的動態",
+  "inbox_kind_board_activity": "關注看板的動態",
+  "inbox_kind_unknown": "通知",
+  "inbox_thread_activity_text": "你關注的討論串有更新。",
+  "inbox_board_activity_text": "你關注的看板有新發佈的討論串。回覆、編輯和較早的討論串不會觸發看板動態通知。",
+  "inbox_notification_preferences": "通知偏好設定",
+  "settings_watch_notifications_heading": "關注通知",
+  "settings_watch_notifications_support": "關注通知僅在站內提供。支援的接收選項會顯示於下方；尚未支援的關注設定目前無法使用。",
+  "settings_watch_notifications_mandatory": "管理處理結果為必要通知，無法關閉。"
 }

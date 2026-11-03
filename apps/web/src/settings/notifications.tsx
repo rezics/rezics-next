@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@rezi
 import { Field, FieldContent, FieldGroup, FieldLabel, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
+import { WatchNotificationGuide } from './watch-notification-guide';
 import { readSettingsPage, saveNotifications } from './actions';
 import {
   NotificationEditor,
@@ -22,6 +23,7 @@ const preferenceActionClassName = 'h-auto min-h-11 min-w-11 max-w-full py-2 whit
 export function notificationName(kind: string): string {
   if (kind === 'reply') return m.settings_notification_reply();
   if (kind === 'mention') return m.settings_notification_mention();
+  if (kind === 'board_activity') return m.inbox_kind_board_activity();
   return kind
     .split(/[_-]+/)
     .filter(Boolean)
@@ -108,6 +110,7 @@ export function NotificationsCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="min-w-0 space-y-4">
+        <WatchNotificationGuide />
         <div role="group" aria-label={m.settings_notifications_heading()} className="space-y-4">
           <FieldGroup>
             <div className="flex flex-col gap-3">

@@ -13,14 +13,17 @@ import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { threadLocation } from '../threads/thread-href';
+import { unavailableInboxWatch, type InboxWatchBinding } from './watch-notices';
 
 export const INBOX_PAGE_SIZE = 20;
 /** One private list read, one batched author read, and at most one target read per notice. */
 export const INBOX_PAGE_KERNEL_READ_CEILING = 2 + INBOX_PAGE_SIZE;
 
 type NoticeRead = Awaited<ReturnType<ReturnType<KernelClient['accounts']>['notifications']['get']>>;
-type NoticePage = NonNullable<NoticeRead['data']>;
-export type InboxNotice = NoticePage['items'][number];
+type NativeNotice = NonNullable<NoticeRead['data']>['items'][number];
+/** watch is a local presentation category, never a new native kind. */
+export type InboxNotice = Omit<NativeNotice, 'kind'> & { kind: string; watch?: 'thread' | 'board' };
+type NoticePage = { items: InboxNotice[]; next: string | null };
 type ResolvedNotice = InboxNotice & {
   href?: string;
   text: string;
@@ -29,9 +32,14 @@ type ResolvedNotice = InboxNotice & {
 };
 export type ResolvedInboxPage = { items: ResolvedNotice[]; next: string | null };
 export type InboxReads = {
-  post: (threadId: string, postId: string) => Promise<{ title?: string; href?: string; text?: string } | null>;
+  post: (
+    threadId: string,
+    postId: string,
+  ) => Promise<{ title?: string; href?: string; text?: string; id?: string; threadId?: string } | null>;
   decision: (id: string) => Promise<{ statement: string; href?: string } | null>;
   report: (id: string) => Promise<{ outcome: string; href?: string } | null>;
+  /** Until Content releases a watch binding, thread-only watch targets remain unavailable. */
+  thread?: (id: string) => Promise<{ id: string; title: string } | null>;
 };
 
 export type NativeInboxFailure = {
@@ -105,11 +113,15 @@ function noticeId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
 }
 
-function validNotice(value: unknown): value is InboxNotice {
+function validNotice(value: unknown, watch = false): value is InboxNotice {
   if (
     !isRecord(value) ||
     !noticeId(value.id) ||
-    (value.kind !== 'reply' && value.kind !== 'mention' && value.kind !== 'moderation_decision') ||
+    (watch
+      ? typeof value.kind !== 'string' ||
+        !value.kind ||
+        ['reply', 'mention', 'moderation_decision'].includes(value.kind)
+      : value.kind !== 'reply' && value.kind !== 'mention' && value.kind !== 'moderation_decision') ||
     typeof value.createdAt !== 'string' ||
     !Number.isFinite(Date.parse(value.createdAt)) ||
     new Date(value.createdAt).toISOString() !== value.createdAt ||
@@ -120,6 +132,14 @@ function validNotice(value: unknown): value is InboxNotice {
     if (value[field] !== null && !noticeId(value[field])) return false;
   }
   if (value.postId !== null && value.threadId === null) return false;
+  if (watch) {
+    return (
+      (value.watch === 'thread' || value.watch === 'board') &&
+      value.threadId !== null &&
+      value.decisionId === null &&
+      value.reportId === null
+    );
+  }
   if (value.kind === 'moderation_decision') {
     // Actioned reports can carry both report and decision IDs. Decisions can also retain post/thread IDs.
     return value.actorId === null && (value.reportId !== null || value.decisionId !== null);
@@ -127,20 +147,50 @@ function validNotice(value: unknown): value is InboxNotice {
   return value.threadId !== null && value.postId !== null && value.decisionId === null && value.reportId === null;
 }
 
-function validNoticePage(value: unknown): value is NoticePage {
-  return (
-    isRecord(value) &&
-    Array.isArray(value.items) &&
-    value.items.length <= INBOX_PAGE_SIZE &&
-    (value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096)) &&
-    value.items.every(validNotice)
-  );
+/** A rejected row fails the whole page; no filtering can claim a partial successful read. */
+export function decodeInboxPage(value: unknown, binding: InboxWatchBinding = unavailableInboxWatch): NoticePage {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.items) ||
+    value.items.length > INBOX_PAGE_SIZE ||
+    !(value.next === null || (typeof value.next === 'string' && value.next.length > 0 && value.next.length <= 4096))
+  )
+    throw new InboxReadError({ status: 200 });
+  const items = value.items.map((item): InboxNotice => {
+    if (validNotice(item)) return projectNotice(item);
+    // Only the installed owner adapter knows the native watch kinds and wire fields.
+    // A malformed existing native kind must never be rescued as a watch notice.
+    if (isRecord(item) && ['reply', 'mention', 'moderation_decision'].includes(String(item.kind)))
+      throw new InboxReadError({ status: 200 });
+    const watch = binding.decode(item);
+    if (!validNotice(watch, true)) throw new InboxReadError({ status: 200 });
+    return projectNotice(watch, true);
+  });
+  return { items, next: value.next as string | null };
 }
+
+/** Native extensions cannot smuggle stale presentation or actor fields through the private response. */
+function projectNotice(item: InboxNotice, includeWatch = false): InboxNotice {
+  return {
+    id: item.id,
+    kind: item.kind,
+    createdAt: item.createdAt,
+    unread: item.unread,
+    actorId: item.actorId,
+    threadId: item.threadId,
+    postId: item.postId,
+    decisionId: item.decisionId,
+    reportId: item.reportId,
+    ...(includeWatch && item.watch ? { watch: item.watch } : {}),
+  };
+}
+
+type CurrentTarget = { href?: string; text: string; identity?: { id: string; threadId: string } };
 
 /** Resolves thin notice identities through their existing owner reads, once per distinct target. */
 export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Promise<ResolvedInboxPage> {
-  const cache = new Map<string, Promise<{ href?: string; text: string } | null>>();
-  const resolve = (key: string, read: () => Promise<{ href?: string; text: string } | null>) => {
+  const cache = new Map<string, Promise<CurrentTarget | null>>();
+  const resolve = (key: string, read: () => Promise<CurrentTarget | null>) => {
     let result = cache.get(key);
     if (!result) {
       result = read().catch((error: unknown) => {
@@ -153,8 +203,8 @@ export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Pr
   };
   const items = await Promise.all(
     page.items.map(async (notice): Promise<ResolvedNotice> => {
-      let target: { href?: string; text: string } | null = null;
-      if (notice.reportId) {
+      let target: CurrentTarget | null = null;
+      if (!notice.watch && notice.reportId) {
         target = await resolve(`report:${notice.reportId}`, async () => {
           const report = await reads.report(notice.reportId!);
           return report
@@ -178,12 +228,29 @@ export async function resolveInboxItems(page: NoticePage, reads: InboxReads): Pr
             ? {
                 href: post.href ?? threadLocation(getLocale(), { id: notice.threadId! }, undefined, notice.postId!),
                 text: post.text ?? post.title ?? '',
+                ...(post.id && post.threadId ? { identity: { id: post.id, threadId: post.threadId } } : {}),
               }
             : null;
         });
+      } else if (notice.watch && notice.threadId && reads.thread) {
+        target = await resolve(`thread:${notice.threadId}`, async () => {
+          const thread = await reads.thread!(notice.threadId!);
+          if (!thread) return null;
+          if (thread.id !== notice.threadId || !noticeId(thread.id) || typeof thread.title !== 'string')
+            throw new InboxReadError({ status: 200 });
+          return { text: thread.title, href: threadLocation(getLocale(), thread) };
+        });
       }
+      if (
+        notice.watch &&
+        notice.postId &&
+        target &&
+        (target.identity?.id !== notice.postId || target.identity.threadId !== notice.threadId)
+      )
+        throw new InboxReadError({ status: 200 });
       return {
-        ...notice,
+        ...projectNotice(notice, true),
+        ...(!target ? { actorId: null } : {}),
         ...(target?.href ? { href: target.href } : {}),
         text: target?.text ?? '',
         unavailable: !target,
@@ -221,14 +288,20 @@ function failTargetRead(result: ReadResult): boolean {
   throw new InboxReadError(failure);
 }
 
-async function readNoticePage(client: InboxKernelClient, accountId: string, authorization: string, cursor?: string) {
+async function readNoticePage(
+  client: InboxKernelClient,
+  accountId: string,
+  authorization: string,
+  cursor: string | undefined,
+  binding: InboxWatchBinding,
+) {
   const result = await client.accounts({ accountId }).notifications.get({
     query: { limit: INBOX_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
     headers: authHeaders(authorization),
   });
-  if (result.error || result.status !== 200 || !validNoticePage(result.data))
+  if (result.error || result.status !== 200)
     throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
-  return result.data;
+  return decodeInboxPage(result.data, binding);
 }
 
 async function currentInboxReads(client: InboxKernelClient, authorization: string): Promise<InboxReads> {
@@ -237,17 +310,18 @@ async function currentInboxReads(client: InboxKernelClient, authorization: strin
       const result = await client.posts({ id: postId }).get({ headers: authHeaders(authorization) });
       if (failTargetRead(result)) return null;
       const data = result.data as
-        | { post?: { threadId?: string; availability?: string; removed?: boolean; body?: unknown } }
+        | { post?: { id?: string; threadId?: string; availability?: string; removed?: boolean; body?: unknown } }
         | undefined;
       if (
         result.error ||
         !data?.post ||
         data.post.threadId !== threadId ||
+        (data.post.id !== undefined && data.post.id !== postId) ||
         data.post.availability === 'erased' ||
         data.post.removed === true
       )
         return null;
-      return { text: postText(data.post) };
+      return { text: postText(data.post), id: data.post.id, threadId: data.post.threadId };
     },
     decision: async (id) => {
       const result = await client['moderation-decisions']({ id }).get({ headers: authHeaders(authorization) });
@@ -301,11 +375,16 @@ export async function loadInboxPage(
   accountId: string,
   authorization: string,
   cursor?: string,
+  binding: InboxWatchBinding = unavailableInboxWatch,
 ): Promise<ResolvedInboxPage> {
   const typedClient = client as unknown as InboxKernelClient;
-  const page = await readNoticePage(typedClient, accountId, authorization, cursor);
-  const resolved = await resolveInboxItems(page, await currentInboxReads(typedClient, authorization));
-  const authorIds = resolved.items.flatMap((item) => (item.actorId ? [item.actorId] : []));
+  const page = await readNoticePage(typedClient, accountId, authorization, cursor, binding);
+  const reads = await currentInboxReads(typedClient, authorization);
+  const resolved = await resolveInboxItems(page, {
+    ...reads,
+    thread: (id) => binding.readThread(id, { client, authorization }),
+  });
+  const authorIds = resolved.items.flatMap((item) => (!item.unavailable && item.actorId ? [item.actorId] : []));
   const authors = await readPageAuthors(client, authorIds);
   const items = resolved.items.map((item) => {
     const author = authors?.[item.actorId ?? ''] as { displayName?: string | null; handle?: string | null } | undefined;

@@ -5104,5 +5104,14 @@
   "collection_discovery_retry": "다시 시도",
   "collection_discovery_restart": "처음부터 보기",
   "collection_discovery_restart_required": "이 페이지 이어보기는 더 이상 사용할 수 없습니다. 첫 페이지부터 다시 시작하세요.",
-  "collection_discovery_more": "더 보기"
+  "collection_discovery_more": "더 보기",
+  "inbox_kind_thread_activity": "관심 스레드 활동",
+  "inbox_kind_board_activity": "관심 게시판 활동",
+  "inbox_kind_unknown": "알림",
+  "inbox_thread_activity_text": "관심 스레드의 업데이트입니다.",
+  "inbox_board_activity_text": "관심 게시판에 새로 공개된 스레드입니다. 답글, 편집 및 이전 스레드는 게시판 활동 알림을 보내지 않습니다.",
+  "inbox_notification_preferences": "알림 환경설정",
+  "settings_watch_notifications_heading": "관심 대상 알림",
+  "settings_watch_notifications_support": "관심 대상 알림은 사이트 내에서만 제공됩니다. 지원되는 수신 설정은 아래에 표시되며, 지원되지 않는 설정은 사용할 수 없습니다.",
+  "settings_watch_notifications_mandatory": "운영 조치 결과 알림은 필수이며 끌 수 없습니다."
 }

@@ -5165,5 +5165,14 @@
   "collection_discovery_retry": "Retry",
   "collection_discovery_restart": "Start over",
   "collection_discovery_restart_required": "This continuation is no longer available. Start from the first page.",
-  "collection_discovery_more": "More Collections"
+  "collection_discovery_more": "More Collections",
+  "inbox_kind_thread_activity": "Watched thread activity",
+  "inbox_kind_board_activity": "Watched board activity",
+  "inbox_kind_unknown": "Notification",
+  "inbox_thread_activity_text": "Updates in a thread you watch.",
+  "inbox_board_activity_text": "New published threads on a board you watch. Replies, edits and older threads do not trigger board activity notices.",
+  "inbox_notification_preferences": "Notification preferences",
+  "settings_watch_notifications_heading": "Watch notifications",
+  "settings_watch_notifications_support": "Watch notices are in-app only. Available delivery controls appear below when supported; unsupported watch settings are unavailable.",
+  "settings_watch_notifications_mandatory": "Moderation outcomes are mandatory and cannot be turned off."
 }

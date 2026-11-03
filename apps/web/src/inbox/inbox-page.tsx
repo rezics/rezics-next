@@ -4,7 +4,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
-import { Flag, Gavel, MessageCircleReply } from 'lucide-react';
+import { Bell, Flag, Gavel, MessageCircleReply } from 'lucide-react';
 import { inboxPageQuery, inboxViewerQueryKey, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
 import { inboxViewerCsrfToken, useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { InboxEntryState, retryInboxSession } from './inbox-entry-state';
@@ -29,8 +29,12 @@ import {
 } from './inbox-read';
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
+  if (item.watch === 'thread') return m.inbox_kind_thread_activity();
+  if (item.watch === 'board') return m.inbox_kind_board_activity();
   if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
-  return item.kind === 'mention' ? m.inbox_kind_mention() : m.inbox_kind_reply();
+  if (item.kind === 'mention') return m.inbox_kind_mention();
+  if (item.kind === 'reply') return m.inbox_kind_reply();
+  return m.inbox_kind_unknown();
 }
 
 function accessRefused(failure: NativeInboxFailure | undefined) {
@@ -65,15 +69,23 @@ export function InboxRows({
           const actorId = item.unavailable ? null : item.actorId;
           const actor =
             (!item.unavailable && item.actorName) ||
-            (item.actorId ? m.inbox_actor_unknown() : m.inbox_actor_moderation());
+            (!item.unavailable && (item.reportId || item.kind === 'moderation_decision')
+              ? m.inbox_actor_moderation()
+              : m.inbox_actor_unknown());
           const kind = kindLabel(item);
           const text = item.unavailable ? m.inbox_unavailable_item() : item.text;
+          const explanation =
+            item.watch === 'thread'
+              ? m.inbox_thread_activity_text()
+              : item.watch === 'board'
+                ? m.inbox_board_activity_text()
+                : undefined;
           const readState = item.unread ? m.inbox_notice_unread() : m.inbox_notice_read();
           const date = exactDate.format(new Date(item.createdAt));
           const destinationProps = href ? { href } : {};
           const primaryLinkLabelProps = href
             ? ({
-                primaryLinkLabel: [text, actor, kind, readState, date].join('. '),
+                primaryLinkLabel: [text, actor, kind, explanation, readState, date].filter(Boolean).join('. '),
               } satisfies Pick<ContentItemProps, 'primaryLinkLabel'>)
             : {};
           const visual = actorId ? (
@@ -86,7 +98,9 @@ export function InboxRows({
               aria-hidden="true"
               className="mt-1 shrink-0 text-muted-foreground"
             >
-              {item.reportId ? (
+              {item.watch ? (
+                <Bell aria-hidden="true" size={18} />
+              ) : item.reportId ? (
                 <Flag aria-hidden="true" size={18} />
               ) : item.kind === 'moderation_decision' ? (
                 <Gavel aria-hidden="true" size={18} />
@@ -99,6 +113,7 @@ export function InboxRows({
             <ContentItem
               key={item.id}
               title={text}
+              {...(explanation ? { preview: <p>{explanation}</p> } : {})}
               {...destinationProps}
               {...primaryLinkLabelProps}
               headingLevel={2}
@@ -145,6 +160,17 @@ export function InboxRows({
   );
 }
 
+export function InboxPreferencesLink() {
+  return (
+    <a
+      className="mt-3 inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+      href={`/${getLocale()}/settings#notifications`}
+    >
+      {m.inbox_notification_preferences()}
+    </a>
+  );
+}
+
 export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {}) {
   const { state, csrfToken, viewer, sessionRead } = useInboxViewer();
   if (viewer)
@@ -159,6 +185,7 @@ export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {})
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
       <h1 className="font-display text-3xl font-semibold tracking-tight">{m.inbox_heading()}</h1>
+      <InboxPreferencesLink />
       <InboxEntryState state={state} sessionRead={sessionRead} />
     </div>
   );
@@ -429,6 +456,7 @@ export function ViewerInboxPage({
       <h1 id={boundaryId} ref={boundary} tabIndex={-1} className="font-display text-3xl font-semibold tracking-tight">
         {m.inbox_heading()}
       </h1>
+      <InboxPreferencesLink />
       <p role="status" aria-atomic="true" className="sr-only">
         {continuationMessage}
       </p>
