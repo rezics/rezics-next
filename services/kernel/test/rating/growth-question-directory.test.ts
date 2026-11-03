@@ -126,62 +126,58 @@ function assertNativeEvidence(
   assertGrowthAccessPaths(name, samples, relationNames);
 }
 
-test(
-  'rating-question directory pages retain bounded native Access work across catalogue and authority history growth',
-  async () => {
-    const fixture = await createGrowthQuestionDirectoryFixture();
-    try {
-      for (const scenario of scenarios) {
-        for (const axis of axes) {
-          await fixture.reset();
-          // Setup fixes the selected neighbourhood, signed page position and authority state outside observation.
-          const prepared = await prepareScenario(fixture, scenario);
-          const name = `rating question directory ${scenario} under ${axis}`;
-          const report = await checkGrowth(fixture.database, {
-            name,
-            scales: QUESTION_DIRECTORY_SCALES,
-            repetitions: 2,
-            bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-            grow: async (_database, scale, previous) => {
-              if (axis === 'unrelated-catalogue')
-                await fixture.seedQuestionRange(
-                  unrelatedPrefix[scenario],
-                  previous + 1,
-                  scale,
-                  `Unrelated ${scenario} question `,
-                );
-              else await fixture.seedClosedDenialHistory(previous + 1, scale);
-            },
-            operation: async () => {
-              // Selection and completion use one real HTTP request in the measured operation. Repeated
-              // checkGrowth samples replay this same signed position and viewer credential.
-              if (scenario === 'first') {
-                const result = await page(await fixture.request('/v1/rating-questions'));
-                expect(result.ratingQuestions).toEqual(prepared.expected);
-                expect(result.next).toEqual(expect.any(String));
-                return result;
-              }
-
-              const response = await fixture.request(pagePath(prepared.cursor!));
-              if (scenario === 'denied-current-authority') {
-                await problem(response, 404, 'not_found');
-                return response.status;
-              }
-              const result = await page(response);
-              if (scenario === 'terminal-empty') expect(result).toEqual({ ratingQuestions: [], next: null });
-              else {
-                expect(result.ratingQuestions).toEqual(prepared.expected);
-                expect(result.next).toEqual(expect.any(String));
-              }
+test('rating-question directory pages retain bounded native Access work across catalogue and authority history growth', async () => {
+  const fixture = await createGrowthQuestionDirectoryFixture();
+  try {
+    for (const scenario of scenarios) {
+      for (const axis of axes) {
+        await fixture.reset();
+        // Setup fixes the selected neighbourhood, signed page position and authority state outside observation.
+        const prepared = await prepareScenario(fixture, scenario);
+        const name = `rating question directory ${scenario} under ${axis}`;
+        const report = await checkGrowth(fixture.database, {
+          name,
+          scales: QUESTION_DIRECTORY_SCALES,
+          repetitions: 2,
+          bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+          grow: async (_database, scale, previous) => {
+            if (axis === 'unrelated-catalogue')
+              await fixture.seedQuestionRange(
+                unrelatedPrefix[scenario],
+                previous + 1,
+                scale,
+                `Unrelated ${scenario} question `,
+              );
+            else await fixture.seedClosedDenialHistory(previous + 1, scale);
+          },
+          operation: async () => {
+            // Selection and completion use one real HTTP request in the measured operation. Repeated
+            // checkGrowth samples replay this same signed position and viewer credential.
+            if (scenario === 'first') {
+              const result = await page(await fixture.request('/v1/rating-questions'));
+              expect(result.ratingQuestions).toEqual(prepared.expected);
+              expect(result.next).toEqual(expect.any(String));
               return result;
-            },
-          });
-          assertNativeEvidence(scenario, name, report.samples);
-        }
+            }
+
+            const response = await fixture.request(pagePath(prepared.cursor!));
+            if (scenario === 'denied-current-authority') {
+              await problem(response, 404, 'not_found');
+              return response.status;
+            }
+            const result = await page(response);
+            if (scenario === 'terminal-empty') expect(result).toEqual({ ratingQuestions: [], next: null });
+            else {
+              expect(result.ratingQuestions).toEqual(prepared.expected);
+              expect(result.next).toEqual(expect.any(String));
+            }
+            return result;
+          },
+        });
+        assertNativeEvidence(scenario, name, report.samples);
       }
-    } finally {
-      await fixture.close();
     }
-  },
-  1_800_000,
-);
+  } finally {
+    await fixture.close();
+  }
+}, 1_800_000);

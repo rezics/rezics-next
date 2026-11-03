@@ -84,11 +84,7 @@ export async function createGrowthQuestionDirectoryFixture() {
   for (const principal of Object.keys(accountIds) as (keyof typeof accountIds)[])
     tokens.set(principal, await credential(principal, 'rating-question-directory', 'subject:read realm:read'));
 
-  async function request(
-    path: string,
-    principal: DirectoryPrincipal = 'reader',
-    bearer?: string,
-  ): Promise<Response> {
+  async function request(path: string, principal: DirectoryPrincipal = 'reader', bearer?: string): Promise<Response> {
     return app.handle(
       new Request(`http://kernel.test${path}`, {
         headers: {

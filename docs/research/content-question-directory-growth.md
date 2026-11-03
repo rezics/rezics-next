@@ -14,11 +14,11 @@ The test fixes the selected question neighbourhood and limit 20, then grows one 
 
 ## Execution record
 
-| Path | Unrelated catalogue axis | Closed authority-history axis |
-| --- | --- | --- |
-| First page | 64 / 512 / 4,096: not measured | 64 / 512 / 4,096: not measured |
+| Path                                    | Unrelated catalogue axis       | Closed authority-history axis  |
+| --------------------------------------- | ------------------------------ | ------------------------------ |
+| First page                              | 64 / 512 / 4,096: not measured | 64 / 512 / 4,096: not measured |
 | Deep continuation with current metadata | 64 / 512 / 4,096: not measured | 64 / 512 / 4,096: not measured |
-| Terminal empty continuation | 64 / 512 / 4,096: not measured | 64 / 512 / 4,096: not measured |
-| Current-authority denial | 64 / 512 / 4,096: not measured | 64 / 512 / 4,096: not measured |
+| Terminal empty continuation             | 64 / 512 / 4,096: not measured | 64 / 512 / 4,096: not measured |
+| Current-authority denial                | 64 / 512 / 4,096: not measured | 64 / 512 / 4,096: not measured |
 
 The controller launch defers native and acceptance execution. No native assertions were reached and no three-scale observations are claimed. The command above is authored but was not run on this source; the reviewed base is recorded for provenance. Type checking and authored test code are not native growth evidence. No product implementation, schema, second metadata reader or feed-source activation is included.
