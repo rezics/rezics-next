@@ -180,10 +180,7 @@ export function normalizeRealmRatingHit(hit: RealmRatingHit, context: RealmRatin
   )
     throw notReady();
   const figure = hit.figure;
-  if (
-    hit.suppressed !== undefined &&
-    (hit.suppressed !== true || (hit.ratingPhase === 'unscored' && figure !== null))
-  )
+  if (hit.suppressed !== undefined && (hit.suppressed !== true || (hit.ratingPhase === 'unscored' && figure !== null)))
     throw notReady();
   if (figure !== null) {
     if (
@@ -378,7 +375,8 @@ export async function readRealmRatingOrder(options: {
           const current = { after: hit.sort, ratingPhase: hit.ratingPhase };
           const priorPhase = ids.get(hit.id);
           const duplicatePhase = priorPhase === 'scored' && hit.ratingPhase === 'unscored' && hit.suppressed === true;
-          if ((previous && compare(previous, current) >= 0) || (priorPhase !== undefined && !duplicatePhase)) throw notReady();
+          if ((previous && compare(previous, current) >= 0) || (priorPhase !== undefined && !duplicatePhase))
+            throw notReady();
           if (positions.has(hit.partition) && positions.get(hit.partition) !== hit.position) throw notReady();
           positions.set(hit.partition, hit.position);
           ids.set(hit.id, hit.ratingPhase);

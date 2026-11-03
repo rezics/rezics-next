@@ -153,7 +153,11 @@ export async function encodeRatingCursor(
   cursor: { generation: number; phase: RatingPhase; after: readonly SearchSortValue[] },
   now = Date.now(),
 ): Promise<string> {
-  if (!validContext(context) || !cursor || !validPosition(context.priorEpoch, cursor.phase, cursor.after, !!context.realm))
+  if (
+    !validContext(context) ||
+    !cursor ||
+    !validPosition(context.priorEpoch, cursor.phase, cursor.after, !!context.realm)
+  )
     throw new TypeError('Invalid rating cursor');
   const frontier = context.realm ? [encryptFrontier(ring, context, cursor.phase, cursor.after)] : cursor.after;
   return encodeSearchCursor(

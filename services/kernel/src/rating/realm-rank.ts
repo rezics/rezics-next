@@ -102,19 +102,23 @@ export interface RealmRankOrderSource {
     }>,
     observation: RealmRankOrderObservation,
     context: { deadline: number },
-  ): Promise<Readonly<{
-    partition: number;
-    epoch: number;
-    position: bigint;
-    generation: string;
-    candidates: readonly RealmRankOrderCandidate[];
-  }>>;
+  ): Promise<
+    Readonly<{
+      partition: number;
+      epoch: number;
+      position: bigint;
+      generation: string;
+      candidates: readonly RealmRankOrderCandidate[];
+    }>
+  >;
   proveFigures(
     actor: Actor,
     input: Readonly<{ realmId: string; questionId: string; partition: number; subjectIds: readonly string[] }>,
     observation: RealmRankOrderObservation,
     context: { deadline: number },
-  ): Promise<Readonly<{ partition: number; epoch: number; position: bigint; figures: readonly RealmRankFigureProof[] }>>;
+  ): Promise<
+    Readonly<{ partition: number; epoch: number; position: bigint; figures: readonly RealmRankFigureProof[] }>
+  >;
 }
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing };
 type Row = Omit<RealmRankCandidate, 'count' | 'mean' | 'score' | 'asOf'> & {
@@ -474,7 +478,8 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
         `SELECT last_value::text,is_called FROM rating.realm_rank_publication_generation`,
       );
       const generation = publication.rows[0];
-      if (!generation || !/^[0-9]+$/.test(generation.last_value)) throw new Error('Rank publication generation is unavailable');
+      if (!generation || !/^[0-9]+$/.test(generation.last_value))
+        throw new Error('Rank publication generation is unavailable');
       return {
         question: ratingQuestionView(question),
         questionIdentity,
@@ -511,7 +516,9 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
           result.rows.length > 4096 ||
           result.rows.some(
             ({ partition }, index) =>
-              !Number.isInteger(partition) || partition < 0 || partition > 4095 ||
+              !Number.isInteger(partition) ||
+              partition < 0 ||
+              partition > 4095 ||
               (index > 0 && partition <= result.rows[index - 1]!.partition),
           )
         )
@@ -587,7 +594,8 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
           generation: current,
           candidates: rows.rows.map((row) => {
             const securityRevision = Number(row.securityRevision);
-            if (!Number.isSafeInteger(securityRevision) || securityRevision < 0) throw new Error('Invalid subject revision');
+            if (!Number.isSafeInteger(securityRevision) || securityRevision < 0)
+              throw new Error('Invalid subject revision');
             return {
               ...row,
               count: Number(row.count),
@@ -622,7 +630,8 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
         throw new ProblemError('invalid_request');
       return observe(deps.pool, input.partition, deadline, async (client, epoch, home) => {
         if (observation.priorUpdating) throw new ProblemError('index_not_ready');
-        if (pairs.length === 0) return { partition: input.partition, epoch, position: BigInt(home.position), figures: [] };
+        if (pairs.length === 0)
+          return { partition: input.partition, epoch, position: BigInt(home.position), figures: [] };
         const result = await client.query<{
           subjectId: string;
           count: string | null;
@@ -655,7 +664,13 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
              ON rank.partition_no=$5 AND rank.question_id=$3 AND rank.population_id=$4
             AND rank.subject_id=requested.subject_id
            ORDER BY requested.subject_id`,
-          [pairs.map(({ subjectId }) => subjectId), pairs.map(({ route }) => route), input.questionId, input.realmId, input.partition],
+          [
+            pairs.map(({ subjectId }) => subjectId),
+            pairs.map(({ route }) => route),
+            input.questionId,
+            input.realmId,
+            input.partition,
+          ],
         );
         if (
           result.rows.length !== pairs.length ||
@@ -675,21 +690,21 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
             row.rankGeneration === observation.priorGeneration &&
             row.rankScore !== null;
           const eligibleFigure =
-            eligibleByPrior &&
-            figureIdentityMatches &&
-            count !== null &&
-            count >= 5 &&
-            row.score !== null;
+            eligibleByPrior && figureIdentityMatches && count !== null && count >= 5 && row.score !== null;
           if (currentRank !== eligibleFigure) throw new Error('Figure and ordered-rank publication disagree');
           const scored = currentRank && eligibleFigure;
-          if (count !== null && (!Number.isSafeInteger(count) || count < 0))
-            throw new Error('Invalid figure count');
+          if (count !== null && (!Number.isSafeInteger(count) || count < 0)) throw new Error('Invalid figure count');
           if (row.mean !== null && !Number.isFinite(Number(row.mean))) throw new Error('Invalid figure mean');
           if (row.score !== null && !Number.isFinite(Number(row.score))) throw new Error('Invalid figure score');
           if (row.revision !== null && !/^[1-9][0-9]{0,18}$/.test(row.revision))
             throw new Error('Invalid figure revision');
           const figure =
-            count === null || count < 5 || !figureIdentityMatches || row.mean === null || row.revision === null || !row.asOf
+            count === null ||
+            count < 5 ||
+            !figureIdentityMatches ||
+            row.mean === null ||
+            row.revision === null ||
+            !row.asOf
               ? null
               : {
                   subjectId: row.subjectId,
@@ -700,11 +715,7 @@ export function createRealmRankOrderSource(deps: Dependencies): RealmRankOrderSo
                   revision: row.revision,
                   asOf: row.asOf.toISOString(),
                 };
-          if (
-            row.pending ||
-            observation.priorUpdating ||
-            (scored && figure === null)
-          )
+          if (row.pending || observation.priorUpdating || (scored && figure === null))
             throw new Error('Selected figure publication is incomplete');
           return {
             subjectId: row.subjectId,

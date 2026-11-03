@@ -76,7 +76,11 @@ async function capture(deps: Dependencies, query: RealmRatingQuery): Promise<Cap
   const { actor, access } = actorFor(query);
   const ranks = createRealmRankOrderSource({ pool: deps.pool, access, tokens: deps.tokens });
   const [observation, release, canonicalGeneration, inventory] = await Promise.all([
-    ranks.observe(actor, { realmId: query.populationId, questionId: STANDARD_QUESTION_ID }, { deadline: query.deadline }),
+    ranks.observe(
+      actor,
+      { realmId: query.populationId, questionId: STANDARD_QUESTION_ID },
+      { deadline: query.deadline },
+    ),
     activeRelease(deps.pool),
     readSearchCanonicalGeneration(deps.pool),
     subjectGenerations(deps.search, deps.prefix),
@@ -181,10 +185,17 @@ async function matchingIds(
   );
   if (response.status < 200 || response.status >= 300) throw notReady();
   assertCompleteSearch(response.body);
-  if (!record(response.body) || !record(response.body.hits) || !Array.isArray(response.body.hits.hits)) throw notReady();
+  if (!record(response.body) || !record(response.body.hits) || !Array.isArray(response.body.hits.hits))
+    throw notReady();
   const matched = new Set<string>();
   for (const hit of response.body.hits.hits) {
-    if (!record(hit) || typeof hit._id !== 'string' || hit._index !== target || !ids.includes(hit._id) || matched.has(hit._id))
+    if (
+      !record(hit) ||
+      typeof hit._id !== 'string' ||
+      hit._index !== target ||
+      !ids.includes(hit._id) ||
+      matched.has(hit._id)
+    )
       throw notReady();
     matched.add(hit._id);
   }
@@ -218,7 +229,10 @@ function readUnscoredHits(
       Number(securityRevision) < 0 ||
       !Array.isArray(sort) ||
       sort.length !== 2 ||
-      !(sort[0] === null || (typeof sort[0] === 'string' && sort[0].length <= MAX_NAME_LENGTH && sort[0].isWellFormed())) ||
+      !(
+        sort[0] === null ||
+        (typeof sort[0] === 'string' && sort[0].length <= MAX_NAME_LENGTH && sort[0].isWellFormed())
+      ) ||
       sort[1] !== id ||
       seen.has(id)
     )
@@ -284,11 +298,7 @@ export function createRealmRatingNativeSource(deps: Dependencies): RealmRatingSo
               subjectId: String(request.after.at(-1)),
             }
           : null;
-      if (
-        after &&
-        (!Number.isFinite(Number(after.score)) || routeOf(after.subjectId) === null)
-      )
-        throw notReady();
+      if (after && (!Number.isFinite(Number(after.score)) || routeOf(after.subjectId) === null)) throw notReady();
       const pages = await boundedMap(partitions, 8, async (partition) =>
         ranks.readScoredPartition(
           actor,
