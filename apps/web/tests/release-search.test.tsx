@@ -299,7 +299,11 @@ test('the release page localizes controls and distinguishes loading, unavailable
 
 test('platform and producer operands use contextual selections while URLs retain their subject IDs', () => {
   for (const locale of locales) {
-    const parsed = parseReleaseSearch({ subtype: releaseType, platform: releaseId, developer: releaseId }, bundledRelease, locale);
+    const parsed = parseReleaseSearch(
+      { subtype: releaseType, platform: releaseId, developer: releaseId },
+      bundledRelease,
+      locale,
+    );
     const html = renderToStaticMarkup(
       createElement(ReleaseSearchPage, {
         locale,
@@ -318,6 +322,8 @@ test('platform and producer operands use contextual selections while URLs retain
     expect(html).toContain('Example Studio');
     expect(html).toContain(`<input type="hidden" name="platform" value="${releaseId}"/>`);
     expect(html).toContain(`<input type="hidden" name="developer" value="${releaseId}"/>`);
-    expect(html).not.toContain(`type="search" autoComplete="off" placeholder="${m.search_placeholder({}, { locale })}" value="${releaseId}"`);
+    expect(html).not.toContain(
+      `type="search" autoComplete="off" placeholder="${m.search_placeholder({}, { locale })}" value="${releaseId}"`,
+    );
   }
 });

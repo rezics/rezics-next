@@ -6,7 +6,11 @@ import { PageHeading } from '../shell/page-heading';
 import { DiscoveryResults } from './discovery-results';
 import type { DiscoveryState } from './discovery';
 import { localizedLabel } from './results';
-import { HEADER_SUGGESTION_LIMIT, loadGlobalHeaderSuggestions, readHeaderSuggestions } from './header-search/suggestions';
+import {
+  HEADER_SUGGESTION_LIMIT,
+  loadGlobalHeaderSuggestions,
+  readHeaderSuggestions,
+} from './header-search/suggestions';
 import type { SuggestionResult } from './suggestions';
 import {
   releaseSearchHref,
@@ -135,7 +139,11 @@ function ReleaseSearchSubjectPicker({
         {help}
       </span>
       {selection && (
-        <div role="group" aria-label={label} className="flex flex-wrap items-center gap-2 rounded-md border p-2 font-normal">
+        <div
+          role="group"
+          aria-label={label}
+          className="flex flex-wrap items-center gap-2 rounded-md border p-2 font-normal"
+        >
           <span>{selection.label ?? m.search_suggestions_unavailable({}, options)}</span>
           {selection.type && <span className="text-muted-foreground">{selection.type}</span>}
           <code className="text-xs text-muted-foreground">{selection.id}</code>
@@ -148,7 +156,12 @@ function ReleaseSearchSubjectPicker({
         {statusText}
       </p>
       {status === 'ready' && suggestions && (
-        <ul id={listId} role="listbox" aria-label={m.header_search_suggestions({}, options)} className="rounded-md border">
+        <ul
+          id={listId}
+          role="listbox"
+          aria-label={m.header_search_suggestions({}, options)}
+          className="rounded-md border"
+        >
           {suggestions.subjects.slice(0, HEADER_SUGGESTION_LIMIT).map((subject, index) => {
             const subjectLabel = localizedLabel(subject.labels, locale);
             const typeLabel = localizedLabel(suggestions.types[subject.type] ?? {}, locale);
