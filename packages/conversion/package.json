@@ -6,7 +6,8 @@
     "./bangumi": "./src/bangumi.ts",
     "./vndb": "./src/vndb.ts",
     "./open-library": "./src/open-library.ts",
-    "./wikidata": "./src/wikidata.ts"
+    "./wikidata": "./src/wikidata.ts",
+    "./cross-media-entities": "./src/cross-media-entities.ts"
   },
   "scripts": {
     "check": "bun check --no-script -p tsconfig.json && bun test",

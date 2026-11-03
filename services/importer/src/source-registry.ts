@@ -16,6 +16,13 @@ import {
   convertOpenLibrary,
   type OpenLibraryConversion,
 } from '@rezics/conversion/open-library';
+import {
+  converter_revision as crossMediaRevision,
+  convertCrossMediaEntity,
+  crossMediaEntityKind,
+  bangumiRecordUrl,
+  vndbRecordUrl,
+} from '@rezics/conversion/cross-media-entities';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
 import type {
@@ -75,18 +82,19 @@ function describeSourceRecord(kind: SourceId, id: string): ImportSourceRecord {
   const cc0 = { id: 'CC0-1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' };
   switch (kind) {
     case 'bangumi':
-      if (!/^[1-9][0-9]*$/.test(id)) throw new TypeError('Invalid Bangumi record identity');
+      if (!/^(?:(?:character|person|episode):)?[1-9][0-9]*$/.test(id))
+        throw new TypeError('Invalid Bangumi record identity');
       return {
         name: 'Bangumi',
-        url: `https://bgm.tv/subject/${id}`,
+        url: bangumiRecordUrl(id),
         licence: { id: 'CC-BY-SA-3.0', url: 'https://creativecommons.org/licenses/by-sa/3.0/' },
         attribution: 'Bangumi contributors',
       };
     case 'vndb':
-      if (!/^v[1-9][0-9]*$/.test(id)) throw new TypeError('Invalid VNDB record identity');
+      if (!/^[vcsrp][1-9][0-9]*$/.test(id)) throw new TypeError('Invalid VNDB record identity');
       return {
         name: 'VNDB',
-        url: `https://vndb.org/${id}`,
+        url: vndbRecordUrl(id),
         licence: { id: 'ODbL-1.0', url: 'https://opendatacommons.org/licenses/odbl/1-0/' },
         attribution: 'VNDB (database: ODbL-1.0; permitted metadata contents: DbCL-1.0)',
       };
@@ -187,6 +195,13 @@ export function createSourceRegistration(
     describeSourceRecord: (externalId) => describeSourceRecord(sourceKind, externalId),
     convert(input, context) {
       if (context.source !== source) throw new TypeError('Conversion context source differs from registration');
+      if (converterRevision === crossMediaRevision && (sourceKind === 'bangumi' || sourceKind === 'vndb')) {
+        const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record);
+        if (kind) {
+          const entity = convertCrossMediaEntity(input, context, { converterRevision, sourceKind });
+          return { ...entity, normalized: entity.normalizedRecord, coverAssets: [], mediaImportIntents: [] };
+        }
+      }
       const result = native.convert(input, context, { converterRevision });
       return addAliases(result, source);
     },
