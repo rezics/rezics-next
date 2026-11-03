@@ -92,9 +92,7 @@ function expectPageBudget(evidence: PlanEvidence, size: number, outputSize: numb
     expect(evidence.pageCost.engineIteratorSteps).toBeGreaterThan(0);
   }
   expect(evidence.pageCost.engineSearches).toBeLessThanOrEqual(evidence.snapshot === 'pit' ? 6 : 2);
-  expect(evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints).toBeLessThanOrEqual(
-    16 + 8 * candidates,
-  );
+  expect(evidence.pageCost.accessPoints + evidence.pageCost.dependencyPoints).toBeLessThanOrEqual(16 + 8 * candidates);
   expect(evidence.pageCost.outputSlots).toBeLessThanOrEqual(outputSize);
   expectCost(evidence.preparationCost);
 }
@@ -129,8 +127,7 @@ async function nativePlan(filterDocument: FilterDocument, snapshot: 'pit' | 'pre
         capture = await bound.operations.capture(request, context);
         continue;
       }
-      if (capture.status !== 'captured')
-        throw new Error(`Native public plan unavailable: ${JSON.stringify(capture)}`);
+      if (capture.status !== 'captured') throw new Error(`Native public plan unavailable: ${JSON.stringify(capture)}`);
       expect(capture.queried.snapshot.kind).toBe(snapshot);
       pageCosts.push(capture.cost);
       const result = await bound.operations.query(capture.queried, context);
@@ -271,9 +268,7 @@ test('released long-harem book plan keeps native work bounded as sparse Books gr
     const candidates = sample.counted?.candidates?.value;
     expect(candidates).toBeGreaterThan(0);
     expect(sample.cost.rows + (sample.cost.backgroundRows ?? 0)).toBeLessThanOrEqual(64 + 16 * candidates!);
-    expect(sample.cost.blocks + (sample.cost.backgroundBlocks ?? 0)).toBeLessThanOrEqual(
-      6 * (64 + 16 * candidates!),
-    );
+    expect(sample.cost.blocks + (sample.cost.backgroundBlocks ?? 0)).toBeLessThanOrEqual(6 * (64 + 16 * candidates!));
     expect(sample.cost.requestBytes).toBeDefined();
     expect(sample.cost.responseBytes).toBeDefined();
   }
