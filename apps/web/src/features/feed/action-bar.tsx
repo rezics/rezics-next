@@ -62,6 +62,42 @@ export function feedFeedbackEntries(locale: string, signedIn: boolean, href: str
   );
 }
 
+/** Bind a supplied native snapshot to this displayed visit; readability alone supplies no reaction slot. */
+function homeFeedReaction(
+  item: FeedItem,
+  signedIn: boolean,
+  origin: FeedReaction['reactionOrigin'],
+  sourceWatermark: FeedReaction['sourceWatermark'],
+): FeedReaction | undefined {
+  const summary = item.summary;
+  if (!origin?.isCurrent() || !('reactionTarget' in summary) || !summary.reactionTarget || !summary.reactions) return;
+  const target = summary.reactionTarget;
+  const destination = item.destination;
+  if (
+    item.key.owner !== 'content' ||
+    item.key.kind !== target.targetKind ||
+    item.key.id !== target.targetId ||
+    summary.id !== target.targetId ||
+    (target.targetKind === 'thread'
+      ? destination.kind !== 'thread' || destination.id !== target.targetId
+      : destination.kind !== 'post' ||
+        destination.id !== target.targetId ||
+        destination.postId !== target.targetId ||
+        !('threadId' in summary) ||
+        destination.threadId !== summary.threadId) ||
+    (signedIn && summary.viewerReaction === undefined)
+  )
+    return;
+  return {
+    target: { kind: target.targetKind, id: target.targetId },
+    counts: summary.reactions,
+    value: signedIn ? (summary.viewerReaction ?? null) : null,
+    personalReady: !signedIn || summary.viewerReaction !== undefined,
+    reactionOrigin: origin,
+    ...(sourceWatermark === undefined ? {} : { sourceWatermark }),
+  };
+}
+
 /** Consume only the generated feed contract. No invented reaction fields and no per-row point reads. */
 export function HomeFeedActions({
   item,
@@ -70,13 +106,15 @@ export function HomeFeedActions({
   children,
   verification,
   origin,
+  reactionsAsOf,
 }: {
   item: FeedItem;
   locale: string;
   signedIn: boolean;
   children?: ReactNode;
   verification?: VerificationConfig | undefined;
-  origin?: FeedActionBarProps['origin'];
+  origin?: FeedReaction['reactionOrigin'];
+  reactionsAsOf?: FeedReaction['sourceWatermark'];
 }) {
   const href = homeFeedDestination(item, locale);
   const kind = item.destination.kind;
@@ -97,6 +135,7 @@ export function HomeFeedActions({
       signedIn={signedIn}
       plain={kind === 'post'}
       origin={origin}
+      reaction={homeFeedReaction(item, signedIn, origin, reactionsAsOf)}
       overflow={
         target && verification && href ? (
           <PostActions

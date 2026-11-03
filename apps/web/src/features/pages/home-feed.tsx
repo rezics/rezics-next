@@ -220,7 +220,7 @@ export function HomeFeed({
         }}
         getItemKey={(item) => item.id}
         itemPresentation={(item) => {
-          const presentation = homeFeedItemPresentation(item, locale);
+          const presentation = homeFeedItemPresentation(item, locale, reactions.origin.key);
           return {
             ...presentation,
             actions: (
@@ -231,6 +231,7 @@ export function HomeFeed({
                 signedIn={signedIn}
                 verification={verification}
                 origin={reactions.origin}
+                reactionsAsOf={page?.reactionsAsOf}
               >
                 {presentation.actions}
               </HomeFeedActions>

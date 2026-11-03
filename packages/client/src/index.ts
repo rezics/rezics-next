@@ -143,6 +143,10 @@ export type SubjectRead = SubjectRoutes[':id']['get']['response'][200];
 export type FeedPage = Routes['feedItems']['get']['response'][200];
 export type FeedItem = FeedPage['feedItems'][number];
 export type FeedContentItem = Extract<FeedItem, { source: 'following'; key: { owner: 'content' } }>;
+export type FeedReviewContext = NonNullable<FeedContentItem['summary']['reviewContext']>;
+export type FeedParentContext = NonNullable<
+  Extract<FeedContentItem, { destination: { kind: 'post' } }>['summary']['parentContext']
+>;
 
 export const SESSION_HEADER: typeof KernelSessionHeader = 'rezics-session-token';
 
