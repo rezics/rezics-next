@@ -2136,7 +2136,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           409: problemSchema('stale_cursor'),
         },
         detail: {
-          operationId: 'realm.publicationShelf',
+          operationId: 'realm.publication_shelf',
           'x-exposure': 'public',
           'x-action': 'realm:read',
           'x-resource-types': ['community.realm'],

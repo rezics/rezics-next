@@ -192,7 +192,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         query: ReporterHistoryQuerySchema,
         response: { 200: withHeaders(strictContentSchema(ReporterHistoryPageSchema), privateHeaders), ...readFailures },
         detail: {
-          operationId: 'report.ownHistory',
+          operationId: 'report.own_history',
           'x-exposure': 'public',
           'x-action': 'account:read',
           description:
