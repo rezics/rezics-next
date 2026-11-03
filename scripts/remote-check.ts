@@ -569,18 +569,76 @@ export function parseCommandPhases(contents: string): { durations: Record<string
 }
 let pinnedBun: { version: string; revision: string } | undefined;
 
+/** Resolve an installed pinned package through normal ancestor lookup, without installing into frozen source. */
+export function repositoryBun(root: string): { binary: string; version: string; revision: string } {
+  const manifest = join(root, 'package.json');
+  const pin = JSON.parse(readFileSync(manifest, 'utf8')).packageManager as unknown;
+  if (typeof pin !== 'string' || !/^bun@\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/.test(pin))
+    throw new Error(`pinned Bun: ${manifest} packageManager must pin an exact Bun version`);
+  const version = pin.slice(4);
+  let packagePath: string;
+  try {
+    packagePath = Bun.resolveSync('bun/package.json', root);
+  } catch {
+    throw new Error(
+      `pinned Bun: absent installed package for ${pin}; producer=${root}; install dependencies in the launch checkout, not the frozen source`,
+    );
+  }
+  const installed = JSON.parse(readFileSync(packagePath, 'utf8')) as { version?: string };
+  // npm adds build metadata to canary package versions; packageManager may omit that metadata.
+  if (installed.version !== version && !(!version.includes('+') && installed.version?.split('+')[0] === version))
+    throw new Error(
+      `pinned Bun: package identity mismatch for ${pin}; package=${packagePath}; installed=${installed.version}`,
+    );
+  const binary = join(dirname(packagePath), 'bin/bun.exe');
+  if (!existsSync(binary)) throw new Error(`pinned Bun: absent binary for ${pin}; binary=${binary}; producer=${root}`);
+  let output: string;
+  try {
+    const result = Bun.spawnSync(
+      [binary, '--eval', 'console.log(JSON.stringify({version:Bun.version,revision:Bun.revision}))'],
+      {
+        timeout: 5_000,
+        env: {},
+      },
+    );
+    if (result.exitCode !== 0)
+      throw new Error(
+        `exit=${result.exitCode}; signal=${result.signalCode}; stderr=${result.stderr.toString().trim().slice(0, 1024)}`,
+      );
+    output = result.stdout.toString().trim();
+  } catch (error) {
+    throw new Error(
+      `pinned Bun: execution failed for ${pin}; binary=${binary}; producer=${root}; ${error instanceof Error ? error.message : error}`,
+    );
+  }
+  let identity: { version?: unknown; revision?: unknown };
+  try {
+    identity = JSON.parse(output);
+    if (
+      !identity ||
+      typeof identity !== 'object' ||
+      typeof identity.version !== 'string' ||
+      typeof identity.revision !== 'string' ||
+      !/^[a-f0-9]{40}$/.test(identity.revision)
+    )
+      throw new Error();
+  } catch {
+    throw new Error(
+      `pinned Bun: malformed runtime identity for ${pin}; binary=${binary}; output=${JSON.stringify(output.slice(0, 1024))}`,
+    );
+  }
+  // Bun.version reports the release base even for the exact dated canary npm package.
+  if (identity.version !== version && identity.version !== version.split(/[+-]/)[0])
+    throw new Error(
+      `pinned Bun: runtime identity mismatch for ${pin}; binary=${binary}; version=${identity.version}; revision=${identity.revision}`,
+    );
+  return { binary, version, revision: identity.revision as string };
+}
+
 /** Resolve the repository-pinned Bun only when a remote run is actually generated. */
 function getPinnedBun(): { version: string; revision: string } {
   if (pinnedBun) return pinnedBun;
-  const repositoryPackage = JSON.parse(readFileSync(join(import.meta.dir, '../package.json'), 'utf8')) as {
-    packageManager?: string;
-  };
-  const version = repositoryPackage.packageManager?.startsWith('bun@') ? repositoryPackage.packageManager.slice(4) : '';
-  const binary = join(import.meta.dir, '../node_modules/.bin/bun');
-  if (!existsSync(binary)) throw new Error('Could not read pinned Bun revision; run bun install first');
-  const result = Bun.spawnSync([binary, '--eval', 'console.log(Bun.revision)'], { timeout: 5_000 });
-  if (result.exitCode !== 0) throw new Error('Could not read pinned Bun revision; run bun install first');
-  pinnedBun = { version, revision: result.stdout.toString().trim() };
+  pinnedBun = repositoryBun(resolve(import.meta.dir, '..'));
   return pinnedBun;
 }
 

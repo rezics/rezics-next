@@ -50,6 +50,7 @@ import {
   returnsProbe,
   readHosts,
   runScript,
+  repositoryBun,
   remoteLaunch,
   MAX_REMOTE_LAUNCH_BYTES,
   selectSlotClass,
@@ -80,7 +81,7 @@ function generatedHostRun(): string {
   return runScript('cache-test', '/srv/rezics-check/runs/cache-test', '.', ['true'], 'check-a');
 }
 
-test('importing remote-check.ts in a checkout without node_modules starts no process and does not throw', () => {
+test('a frozen producer imports without launches and discovers its launch checkout pinned package without candidate dependencies', () => {
   const checkout = mkdtempSync(join(root, 'import-without-deps-'));
   mkdirSync(join(checkout, 'scripts/check-host'), { recursive: true });
   copyFileSync(remoteCheck, join(checkout, 'scripts/remote-check.ts'));
@@ -90,10 +91,13 @@ test('importing remote-check.ts in a checkout without node_modules starts no pro
     process.execPath,
     [
       '--eval',
-      `Bun.spawn = Bun.spawnSync = () => { throw new Error('import started a process'); };
+      `const spawn = Bun.spawn, spawnSync = Bun.spawnSync;
+       Bun.spawn = Bun.spawnSync = () => { throw new Error('import started a process'); };
        const module = await import(${JSON.stringify(join(checkout, 'scripts/remote-check.ts'))});
-       try { module.runScript('test', '/run', '.', ['true'], 'host'); process.exit(1); }
-       catch (error) { if (!error.message.includes('bun install')) throw error; }`,
+       Bun.spawn = spawn; Bun.spawnSync = spawnSync;
+       const script = module.runScript('test', '/run', '.', ['true'], 'host');
+       const expected = module.repositoryBun(${JSON.stringify(repository)});
+       if (!script.includes('expected_revision=' + expected.revision)) throw new Error('lost runtime binding');`,
     ],
     {
       cwd: checkout,
@@ -103,6 +107,31 @@ test('importing remote-check.ts in a checkout without node_modules starts no pro
   );
   expect(result.status, result.stderr).toBe(0);
   expect(result.stderr).toBe('');
+  expect(existsSync(join(checkout, 'node_modules'))).toBe(false);
+});
+
+test('pinned runtime diagnostics distinguish absent, failed, malformed and mismatched identities', () => {
+  const checkout = mkdtempSync(join(root, 'runtime-identity-'));
+  writeFileSync(join(checkout, 'package.json'), JSON.stringify({ packageManager: 'bun@1.2.3' }));
+  const installed = join(checkout, 'node_modules/bun');
+  mkdirSync(join(installed, 'bin'), { recursive: true });
+  writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'bun', version: '1.2.3' }));
+  const binary = join(installed, 'bin/bun.exe');
+  expect(() => repositoryBun(checkout)).toThrow('absent binary');
+  const cases = [
+    ['echo failed >&2; exit 7', 'execution failed'],
+    ['echo not-json', 'malformed runtime identity'],
+    [`echo '{"version":"1.2.3","revision":"invalid"}'`, 'malformed runtime identity'],
+    [`echo '{"version":"1.2.4","revision":"${'a'.repeat(40)}"}'`, 'runtime identity mismatch'],
+  ];
+  for (const [body, diagnostic] of cases) {
+    writeFileSync(binary, `#!/bin/sh\n${body}\n`);
+    chmodSync(binary, 0o755);
+    expect(() => repositoryBun(checkout)).toThrow(diagnostic!);
+    expect(() => repositoryBun(checkout)).toThrow(binary);
+  }
+  writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'bun', version: '1.2.4' }));
+  expect(() => repositoryBun(checkout)).toThrow('package identity mismatch');
 });
 
 // Execute the generated runtime setup with a local host root and a registry archive served by a curl fixture.
