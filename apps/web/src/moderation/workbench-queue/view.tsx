@@ -29,7 +29,7 @@ export type WorkbenchViewProps = {
       Pick<WorkbenchRead, 'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal'>
     >;
   onSearch: (search: WorkbenchSearch) => void;
-  onRetry?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onRetry?: (event?: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: () => void;
   selection?: ReportsBulkAction;
   onAction?: ReportQueueAction;

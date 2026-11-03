@@ -26,7 +26,7 @@ export function WorkbenchAppeal({
   page: Parameters<typeof workbenchAppealFromPage>[0];
   queueHref: string;
   isCurrent?: () => boolean;
-  onRetry?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onRetry?: (event?: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: () => void;
   onUnresolvedChange?: (unresolved: boolean) => void;
 }) {
@@ -141,7 +141,7 @@ export function WorkbenchAppealStatus({
 }: {
   state: 'denied' | 'unavailable' | 'stale' | 'empty';
   queueHref: string;
-  onRetry?: (event: MouseEvent<HTMLButtonElement>) => void;
+  onRetry?: (event?: MouseEvent<HTMLButtonElement>) => void;
   onRestart?: () => void;
 }) {
   const message =

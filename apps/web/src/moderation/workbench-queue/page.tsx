@@ -95,12 +95,12 @@ export function WorkbenchPage({
     if (!isCurrent() || unresolved.current || readingRef.current) return;
     await onRefresh?.();
   }
-  async function retryInspection(event: MouseEvent<HTMLButtonElement>) {
+  async function retryInspection(event?: MouseEvent<HTMLButtonElement>) {
     if (!isCurrent() || unresolved.current || readingRef.current) return;
     recovery.current?.cancel();
-    const control = event.currentTarget;
+    const control = event?.currentTarget;
     const handoff = {
-      focus: event.detail === 0 && document.activeElement === control,
+      focus: event?.detail === 0 && document.activeElement === control,
       cancel() {
         handoff.focus = false;
         document.removeEventListener('pointerdown', cancel, true);
@@ -196,7 +196,7 @@ export function WorkbenchPage({
           refreshBlocked={refreshBlocked || reading}
           onRestart={() => onSearch(workbenchWithoutContinuation(search))}
           {...(!reading && search.queue === 'appeals' && search.case
-            ? { onRetry: (event: MouseEvent<HTMLButtonElement>) => void retryInspection(event) }
+            ? { onRetry: (event?: MouseEvent<HTMLButtonElement>) => void retryInspection(event) }
             : !reading && onRetry
               ? {
                   onRetry: () => {
