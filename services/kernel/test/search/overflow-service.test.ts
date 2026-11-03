@@ -17,6 +17,7 @@ import {
   type SubjectSource,
 } from '../../src/search/source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createFakeSource } from './support/fake-source.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -160,6 +161,7 @@ async function deployment(entries: IndexedSubject[]) {
   const kernel = createKernel({
     pool,
     routeKey: new Uint8Array(32).fill(13),
+    receiptKeys: testReceiptKeys(),
     search: service,
     access: {
       async authenticate() {
