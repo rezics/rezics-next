@@ -62,9 +62,7 @@ exact concept; `includeChildren:true` matches the selected concept and its compl
 optional qualifiers constrain that same statement. Include and exclude use the surrounding `and`/`or`/`not` grammar;
 one leaf represents one concept so each selection can toggle descendants independently.
 
-Decision: represent a concept as a one-value statement plus selected-scheme metadata, and use
-`includeChildren:true` for descendants so Boolean inclusion/exclusion and same-statement qualifiers keep the existing
-grammar.
+Decision: represent each concept as a one-value statement plus selected-scheme metadata; `includeChildren:true` selects the complete retained descendant closure while Boolean composition and same-statement qualifiers stay in the existing grammar.
 
 When released saved-filter metadata has no localized label, identify the authored `{saved: id}` reference by its exact ID.
 An empty editor group is a repair state: keep it visible and prevent applying until a child is restored or the group is explicitly removed.
