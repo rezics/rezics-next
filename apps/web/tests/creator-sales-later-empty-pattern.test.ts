@@ -8,9 +8,7 @@ import { setLocale } from '../src/paraglide/runtime.js';
 
 const laterCursor = 'story-signed-current';
 const show = (state: Parameters<typeof creatorSalesStoryPage>[0], cursor?: string) =>
-  renderToString(
-    createElement(CreatorSalesPage, { page: creatorSalesStoryPage(state), locale: 'en', cursor }),
-  );
+  renderToString(createElement(CreatorSalesPage, { page: creatorSalesStoryPage(state), locale: 'en', cursor }));
 
 test('A later empty ready Sales page keeps original cursor destinations and is not preparing', () => {
   setLocale('en', { reload: false });
