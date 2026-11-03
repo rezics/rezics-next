@@ -166,9 +166,18 @@ test('selected native Realm traverses scored ties, zero, below-threshold and abs
   expect(seen).toEqual([1, 2, 3, 4, 5, 6].map(id));
   expect(new Set(seen).size).toBe(seen.length);
   const unscored = fixture(null);
+  // A known ineligible current prior makes even retained published scores unscored.
+  Object.assign(unscored.hits[0]!.figure!, { score: 9, priorEpoch: 16 });
   expect((await unscored.run(undefined, 100)).subjects.map((subject) => subject.id)).toEqual(
     [1, 2, 4, 5, 6, 3].map(id),
   );
+  const stale = fixture();
+  const old = stale.hits.shift()!;
+  old.figure!.priorEpoch = 16;
+  old.ratingPhase = 'unscored';
+  old.sort = ['A', old.id];
+  stale.hits.splice(3, 0, old);
+  expect((await stale.run(undefined, 100)).subjects.map((subject) => subject.id)).toEqual([2, 3, 4, 1, 5, 6].map(id));
 });
 
 test('current population, frozen prior, figure revision and Realm authority invalidate continuation', async () => {

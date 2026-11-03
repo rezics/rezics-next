@@ -136,15 +136,15 @@ export function normalizeRealmRatingHit(hit: RealmRatingHit, context: RealmRatin
       BigInt(figure.revision) > 9_223_372_036_854_775_807n ||
       typeof figure.asOf !== 'string' ||
       !Number.isFinite(Date.parse(figure.asOf)) ||
-      figure.priorEpoch !== context.priorEpoch ||
+      !(figure.priorEpoch === null || (Number.isSafeInteger(figure.priorEpoch) && figure.priorEpoch > 0)) ||
       (figure.count < hit.threshold && (figure.mean !== null || figure.score !== null)) ||
-      (figure.score !== null && (figure.mean === null || context.priorEpoch === null)) ||
-      (figure.count >= hit.threshold &&
-        (figure.mean === null || (context.priorEpoch !== null && figure.score === null)))
+      (figure.score !== null && (figure.mean === null || figure.priorEpoch === null)) ||
+      (figure.count >= hit.threshold && figure.mean === null)
     )
       throw notReady();
   }
-  const scored = figure !== null && context.priorEpoch !== null && figure.score !== null;
+  const scored = figure !== null && context.priorEpoch !== null &&
+    figure.priorEpoch === context.priorEpoch && figure.score !== null;
   const expectedPhase = scored ? 'scored' : 'unscored';
   const tuple = hit.sort;
   const name = tuple?.[scored ? 1 : 0];
