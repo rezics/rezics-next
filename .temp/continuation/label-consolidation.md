@@ -1,23 +1,24 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "services/kernel/src/library/**",
-    "services/kernel/db/library/**",
-    "services/kernel/test/library/**",
-    "services/kernel/src/http/kernel.ts",
-    "packages/client/src/kernel/library*",
-    "docs/library-and-collections.md",
-    "docs/goals/library.capabilities.md",
-    "docs/library-label-consolidation.md"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "waiting": [],
-  "estimate": {"lines": 2200, "files": 12},
-  "after": []
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'services/kernel/src/library/**',
+      'services/kernel/db/library/**',
+      'services/kernel/test/library/**',
+      'services/kernel/src/http/kernel.ts',
+      'packages/client/src/kernel/library*',
+      'docs/library-and-collections.md',
+      'docs/goals/library.capabilities.md',
+      'docs/library-label-consolidation.md',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'estimate': { 'lines': 2200, 'files': 12 },
+  'after': [],
 }
 ---
 
