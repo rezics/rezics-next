@@ -14,6 +14,7 @@ import { linkProjection } from '../../src/semantic/links.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { createRealAccess } from '../semantic/real-access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -333,6 +334,7 @@ beforeAll(async () => {
     access: realAccess.access,
     writeRate: realAccess.writeRate,
     requestDeadlineMs: 30_000,
+    receiptKeys: testReceiptKeys(),
   });
   await bootstrapRelease(pool, bundledRelease);
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
