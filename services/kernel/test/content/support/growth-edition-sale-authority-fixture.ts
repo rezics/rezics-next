@@ -16,7 +16,10 @@ import { testReceiptKeys } from '../../support/receipt-keys.ts';
 import { createNativeContentSystem, type NativeContentSystem } from '../support/native-system.ts';
 
 export const SALE_AUTHORITY_GROWTH_SCALES = [256, 1024, 4096] as const;
-export type SaleAuthorityAxis = 'edition-publication-receipts' | 'source-revision-subjects' | 'publisher-consent-grants';
+export type SaleAuthorityAxis =
+  | 'edition-publication-receipts'
+  | 'source-revision-subjects'
+  | 'publisher-consent-grants';
 export type SaleAuthorityRead = 'mechanical' | 'caller';
 
 type EditionRow = {
@@ -145,7 +148,10 @@ export type SaleAuthorityGrowthFixture = {
   readonly authority: SaleAuthority;
   readonly provenance: SaleAuthorityProvenance;
   readonly close: () => Promise<void>;
-  readonly read: (variant: SaleAuthorityRead, actor?: AccountActor) => Promise<{
+  readonly read: (
+    variant: SaleAuthorityRead,
+    actor?: AccountActor,
+  ) => Promise<{
     readonly value: SaleAuthority | null;
     readonly trace: SaleAuthorityTrace;
   }>;
@@ -206,10 +212,9 @@ async function nativeRequest<T extends Record<string, unknown>>(
 }
 
 async function governanceBearer(native: NativeContentSystem): Promise<string> {
-  const identity = await native.database.authPool.query<{ id: string }>(
-    'SELECT id FROM public."user" WHERE email=$1',
-    ['governance@content.test'],
-  );
+  const identity = await native.database.authPool.query<{ id: string }>('SELECT id FROM public."user" WHERE email=$1', [
+    'governance@content.test',
+  ]);
   const accountId = identity.rows[0]?.id;
   if (!accountId) throw new Error('Native governance identity was not provisioned by Auth');
   return (
@@ -254,8 +259,13 @@ async function provenance(
       `SELECT epoch,position::text FROM editorial.write_basis
         WHERE partition_no=$1 AND transaction_id=$2 AND principal_kind='account'
           AND principal_id=$3 AND client_id=$4 AND requested_by IS NOT DISTINCT FROM $5`,
-      [partition, publication.recorded_transaction_id, publication.initiator_account_id,
-        publication.actor_client_id, publication.actor_requested_by],
+      [
+        partition,
+        publication.recorded_transaction_id,
+        publication.initiator_account_id,
+        publication.actor_client_id,
+        publication.actor_requested_by,
+      ],
     )
   ).rows[0];
   const receipt = (
@@ -289,7 +299,9 @@ async function provenance(
     )
   ).rows[0];
   if (!basis || !receipt || !revision || !roleGrant)
-    throw new Error('Native edition publication lacks its original write basis, receipt, source revision or seller grant');
+    throw new Error(
+      'Native edition publication lacks its original write basis, receipt, source revision or seller grant',
+    );
   return { edition, publication, revision, receipt, roleGrant, epoch: basis.epoch, position: basis.position };
 }
 
@@ -635,9 +647,7 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
       content: {
         readConsent: async ({ actorAccountId, clientId }) => {
           active?.consents.push({ actorAccountId, clientId });
-          return (
-            await capture(authDb, () => currentConsent.readCurrentConsent({ actorAccountId, clientId }))
-          ).value;
+          return (await capture(authDb, () => currentConsent.readCurrentConsent({ actorAccountId, clientId }))).value;
         },
       },
     });
@@ -697,11 +707,10 @@ export async function createSaleAuthorityGrowthFixture(templateUrl: string): Pro
                   editionId,
                   { deadline },
                 )
-              : await readContentEditionSaleAuthority(
-                  { pool: appDb.pool, access: measuredAccess },
-                  editionId,
-                  { actor, deadline },
-                );
+              : await readContentEditionSaleAuthority({ pool: appDb.pool, access: measuredAccess }, editionId, {
+                  actor,
+                  deadline,
+                });
           return {
             value,
             trace: {
@@ -769,4 +778,3 @@ export async function reportProvisionedOrigins(fixture: SaleAuthorityGrowthFixtu
   )
     throw new Error('Native edition, original publication receipt, exact source revision and seller grant do not bind');
 }
-

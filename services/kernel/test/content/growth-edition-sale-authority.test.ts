@@ -2,11 +2,7 @@ import { createHash } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
 import { readContentEditionMechanicalSaleAuthority } from '../../src/content/edition-sale.ts';
-import {
-  assertGrowthAccessPaths,
-  checkGrowth,
-  type GrowthReport,
-} from '../support/growth.ts';
+import { assertGrowthAccessPaths, checkGrowth, type GrowthReport } from '../support/growth.ts';
 import {
   createSaleAuthorityGrowthFixture,
   reportProvisionedOrigins,
