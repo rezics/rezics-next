@@ -33,4 +33,5 @@ JOIN community.realm_revision rr
 JOIN community.space_revision sr
   ON sr.route = i.route AND sr.space_id = s.space_id AND sr.revision_id = s.head_revision_id
 LEFT JOIN head h ON true
-WHERE rr.created_at <= i.at AND sr.created_at <= i.at;
+WHERE rr.created_at <= i.at AND sr.created_at <= i.at
+LIMIT 1;
