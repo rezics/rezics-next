@@ -231,6 +231,9 @@ export async function participantFixture() {
 async function worker() {
   const db = await openGrowthDatabase();
   const client = await createWorkClient(db.url, db.pool);
+  // Polling belongs to the observer, not to the registered executor's cost.
+  // Its administrative pool never substitutes a workflow result or effect.
+  const observer = await createWorkClient(db.url, db.admin);
   const enqueue = client.enqueue.bind(client);
   const held = new Set<string>();
   const endpoint = process.env.CONTENT_TEST_STORAGE!;
@@ -279,13 +282,13 @@ async function worker() {
       `SELECT workflow_id FROM core.history_event_consumer WHERE partition_no=$1 AND position>$2 ORDER BY position,event_seq,consumer`,
       [partition, before],
     );
-    for (const job of jobs.rows) await client.retrieveWorkflow(job.workflow_id).getResult();
+    for (const job of jobs.rows) await observer.retrieveWorkflow(job.workflow_id).getResult();
     // A post-erased effect enqueues physical revision cleanup separately.
     const purges = await db.pool.query<{ id: string }>(
       `SELECT id::text FROM core.outbox WHERE partition_no=$1 AND position>$2 AND type='com.rezics.content.post.erased.v1'`,
       [partition, before],
     );
-    for (const event of purges.rows) await client.retrieveWorkflow(`content.erasePost:${event.id}`).getResult();
+    for (const event of purges.rows) await observer.retrieveWorkflow(`content.erasePost:${event.id}`).getResult();
   }
   async function relayAll() {
     const parts = await db.pool.query<{ partition_no: number }>('SELECT partition_no FROM core.partition WHERE position>0');
@@ -296,14 +299,14 @@ async function worker() {
     const id = workflowId(item, phase, step);
     assert(held.has(id), `Registered continuation missing: ${id}`);
     await client.setWorkflowDelay(id, 0);
-    const handle = client.retrieveWorkflow(id);
+    const handle = observer.retrieveWorkflow(id);
     if (delayed) {
       // Observe the actual durable sleep before cancelling this test-owned
       // sleeper. Settlement resumes the persisted next step, as the native
       // account-erasure regression fixture does; no ten-minute TTL is shortened.
       const deadline = Date.now() + 30_000;
       for (;;) {
-        const steps = (await client.listWorkflowSteps(id)) ?? [];
+        const steps = (await observer.listWorkflowSteps(id)) ?? [];
         if (steps.some((entry) => entry.name !== 'content.account-erasure.run')) break;
         assert(Date.now() < deadline, `Native pending sleep was not recorded: ${id}`);
         await Bun.sleep(25);
@@ -311,7 +314,7 @@ async function worker() {
       await client.cancelWorkflow(id);
       await assert.rejects(handle.getResult());
     } else await handle.getResult();
-    const steps = (await client.listWorkflowSteps(id)) ?? [];
+    const steps = (await observer.listWorkflowSteps(id)) ?? [];
     const native = steps.filter((entry) => entry.name === 'content.account-erasure.run');
     assert.equal(native.length, 1);
     assert.equal(native[0]!.error, null);
@@ -476,8 +479,8 @@ async function worker() {
       const id = `growth-collection:${item.person.accountId}`;
       const handle = await enqueue({ workflowName: 'content.collect.partition', queueName: 'maintenance', workflowID: id },
         partitionOf(home(item.mediaId!)));
-      await handle.getResult();
-      const steps = (await client.listWorkflowSteps(id))!;
+      await observer.retrieveWorkflow(handle.workflowID).getResult();
+      const steps = (await observer.listWorkflowSteps(id))!;
       const batches = steps.filter((entry) => entry.name === 'content.collect.step');
       assert.equal(batches.length, 1);
       assert.deepEqual(batches[0]!.output, { partition: partitionOf(home(item.mediaId!)), examined: 1, collected: 1, complete: true });
@@ -499,8 +502,8 @@ async function worker() {
         sequence: row.position.padStart(19, '0'), time: row.recorded_at.toISOString(), data: row.data, datacontenttype: 'application/json' };
       const id = `growth-replay:${item.person.accountId}`;
       const handle = await enqueue({ workflowName: 'effect', queueName: 'effects', workflowID: id }, 'content_account_erasure', event);
-      await handle.getResult();
-      const steps = (await client.listWorkflowSteps(id))!;
+      await observer.retrieveWorkflow(handle.workflowID).getResult();
+      const steps = (await observer.listWorkflowSteps(id))!;
       assert.equal(steps.filter((entry) => entry.name === 'effect.run').length, 1);
       assert.equal((await client.getWorkflow(workflowId(item, 'close', 0)))?.status, 'SUCCESS');
       assert.deepEqual(await acknowledgement(item), before);
@@ -514,8 +517,8 @@ async function worker() {
       const id = `content-account-erasure:${item.person.accountId}:retention:${item.dueAt}`;
       assert(held.has(id));
       await client.setWorkflowDelay(id, 0);
-      await client.retrieveWorkflow(id).getResult();
-      const steps = (await client.listWorkflowSteps(id))!;
+      await observer.retrieveWorkflow(id).getResult();
+      const steps = (await observer.listWorkflowSteps(id))!;
       assert.equal(steps.filter((entry) => entry.name === 'content.account-erasure.retention-page').length, 1);
       assert.equal((await db.pool.query('SELECT statement FROM content.moderation_decision WHERE route=$1 AND decision_id=$2',
         [home(item.decisionId!), item.decisionId])).rows[0].statement, '');
@@ -594,7 +597,9 @@ async function worker() {
       const status = await client.getWorkflow(id);
       if (status?.status === 'ENQUEUED' || status?.status === 'PENDING') await client.cancelWorkflow(id);
     }
-    try { await runtime.shutdown(); } finally { try { await client.close(); } finally { await db.close(); } }
+    try { await runtime.shutdown(); } finally {
+      try { await client.close(); } finally { try { await observer.close(); } finally { await db.close(); } }
+    }
   }
 }
 
