@@ -1,11 +1,10 @@
-import { resourceRoleCatalogue } from '../../../src/access/resource-roles.ts';
-import { createRealmRankSource, type RealmRankRequest } from '../../../src/rating/realm-rank.ts';
+import { createFigureFixture } from './figure-fixture.ts';
+import type { RealmRankRequest } from '../../../src/rating/realm-rank.ts';
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import type { Actor } from '../../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { communityFixtureRuntime } from '../../community/community-driver.ts';
 import { settle } from '../../support/growth.ts';
-import { createFigureFixture } from './figure-fixture.ts';
 
 export const REALM_RANK_SCALES = [256, 1024, 4096] as const;
 export const RANK_PAGE_SIZE = 64;
@@ -18,6 +17,8 @@ export async function createGrowthRealmRankSourceFixture() {
   const fixture = await createFigureFixture({ subjects: 12, partitions: 1 });
   try {
     const { system } = communityFixtureRuntime();
+    const { resourceRoleCatalogue } = await import('../../../src/access/resource-roles.ts');
+    const { createRealmRankSource } = await import('../../../src/rating/realm-rank.ts');
     for (const subject of fixture.subjectIds)
       for (const voter of fixture.realmMembers) await fixture.vote(subject, voter, 10);
     await fixture.drain();
@@ -169,13 +170,13 @@ export async function createGrowthRealmRankSourceFixture() {
       let cursor: string | undefined;
       for (let offset = 0; offset < ids.length; offset += RANK_PAGE_SIZE) {
         await refresh();
-        if (offset === ids.length - 128) cursors.deep = cursor;
-        if (offset === ids.length - 64) cursors.withheld = cursor;
+        if (offset === ids.length - 128) cursors.deep = cursor!;
+        if (offset === ids.length - 64) cursors.withheld = cursor!;
         const result = await page({ ...request, ...(cursor ? { cursor } : {}) });
         if (!result.next) throw new Error('Full consumed batch lost its continuation');
         cursor = result.next;
       }
-      cursors.terminal = cursor;
+      cursors.terminal = cursor!;
       await refresh();
       // Fixed native authority expansion; no fake memberships, reader or disclosure flags.
       const inverse = await database.admin.query(
