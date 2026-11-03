@@ -10,7 +10,11 @@ const fixture = await standingFixture();
 afterAll(() => fixture.close());
 
 const routeKey = new Uint8Array(32).fill(73);
-const request = () => ({ idempotencyKey: Bun.randomUUIDv7(), deadline: Date.now() + 30_000, requestId: Bun.randomUUIDv7() });
+const request = () => ({
+  idempotencyKey: Bun.randomUUIDv7(),
+  deadline: Date.now() + 30_000,
+  requestId: Bun.randomUUIDv7(),
+});
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 
 test('public review discovery refreshes the same thread and omits protected or removed reviews', async () => {
@@ -45,14 +49,18 @@ test('public review discovery refreshes the same thread and omits protected or r
     );
   const published = await create(author, subjectId, 'Current review excerpt.');
   const partition = partitionOf(routeOf(published.value.threadId)!);
-  const source = createReviewDiscoverySource(
-    { pool: fixture.pool, access: fixture.access, tokens },
-    () => ({ actor: { kind: 'anonymous' }, deadline: Date.now() + 30_000 }),
-  );
+  const source = createReviewDiscoverySource({ pool: fixture.pool, access: fixture.access, tokens }, () => ({
+    actor: { kind: 'anonymous' },
+    deadline: Date.now() + 30_000,
+  }));
 
   const first = await source.read(partition, [published.value.threadId]);
   expect(first.reviews.map((item) => item.id)).toEqual([published.value.threadId]);
-  expect(first.reviews[0]).toMatchObject({ subjectId, title: 'A public review title', excerpt: 'Current review excerpt.' });
+  expect(first.reviews[0]).toMatchObject({
+    subjectId,
+    title: 'A public review title',
+    excerpt: 'Current review excerpt.',
+  });
   expect((await source.hydrate(partition, [published.value.threadId])).reviews[0]).toMatchObject({
     authorId: author.accountId,
     excerpt: 'Current review excerpt.',
@@ -90,10 +98,16 @@ test('public review discovery refreshes the same thread and omits protected or r
   await revisePost(
     { pool: fixture.pool, access: fixture.access, routeKey },
     author,
-    { threadId: published.value.threadId, itemId: published.value.itemId, body: fromPlainText('Revised review excerpt.') } as never,
+    {
+      threadId: published.value.threadId,
+      itemId: published.value.itemId,
+      body: fromPlainText('Revised review excerpt.'),
+    } as never,
     request(),
   );
-  expect((await source.read(partition, [published.value.threadId])).reviews[0]?.excerpt).toBe('Revised review excerpt.');
+  expect((await source.read(partition, [published.value.threadId])).reviews[0]?.excerpt).toBe(
+    'Revised review excerpt.',
+  );
 
   await fixture.grant(author.accountId, 'post:erase', {
     route: routeOf(published.value.itemId)!,
