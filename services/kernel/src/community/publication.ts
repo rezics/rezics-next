@@ -32,7 +32,7 @@ import readHead from './publication-read.sql';
 
 export type PublicationDependencies = SpaceDependencies;
 export type PublicationContext = Readonly<{ idempotencyKey: string; deadline: number }>;
-export type PublicationReadContext = Readonly<{ actor: Actor; deadline: number }>;
+export type PublicationReadContext = Readonly<{ actor: Actor; deadline: number; languages?: readonly string[] }>;
 export type PublicationInput = Readonly<{ realmId: string; subjectId: string; expectedHead?: string }>;
 export type PublicationVerdict = 'adopt' | 'reject' | 'withdraw';
 export type PublicationResult = Readonly<{

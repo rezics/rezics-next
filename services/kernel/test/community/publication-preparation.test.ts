@@ -5,6 +5,7 @@ import readSlot from '../../src/community/publication-preparation-read.sql';
 import { readPublicationPreparation } from '../../src/community/publication-preparation.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import reference from '../../src/semantic/read-subject-reference.sql';
+import summaryRead from '../../src/semantic/summaries-read.sql';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { closeCommunityDrivers, communityFixtureRuntime, createCommunityDriver } from './community-driver.ts';
 
@@ -82,7 +83,10 @@ test('one selected native slot exposes absent, adopted and terminal heads withou
   expect(empty.subject).toEqual({
     originalId: people.subject.id,
     currentId: people.subject.id,
-    presentation: { state: 'unavailable' },
+    presentation: {
+      label: { state: 'available', value: 'Fixture subject', language: 'en' },
+      cover: { state: 'empty' },
+    },
   });
   expect(empty.realm).toMatchObject({
     realmId,
@@ -241,6 +245,42 @@ test('readability, management and membership never confer publication authority;
   expect((await prepared(realmId)).current).toBeNull();
   expect((await driver.suspend(people.outsider)).status).toBe(200);
   expect([401, 404]).toContain((await inspect(realmId, people.outsider)).status);
+});
+
+test('optional presentation failure stays unavailable while native command advice remains current', async () => {
+  const realmId = await realm();
+  const observer = observeSql(runtime.system.database.pool);
+  observer.armFault({ match: { statement: summaryRead.sql }, boundary: 'before', error: new AccessUnavailableError('overloaded') });
+  try {
+    const result = await inspect(realmId);
+    expect(result.status).toBe(200);
+    const value = (await result.json()) as { preparation: Preparation };
+    expect(value.preparation.subject.presentation).toEqual({
+      label: { state: 'unavailable' },
+      cover: { state: 'unavailable' },
+    });
+    expect(value.preparation.commands.publish.subjectId).toBe(people.subject.id);
+  } finally {
+    await observer.close();
+  }
+});
+
+test('a source change during current label and cover hydration withholds the composed observation', async () => {
+  const realmId = await realm();
+  const observer = observeSql(runtime.system.database.pool);
+  const barrier = observer.hold({ statement: summaryRead.sql }, 'after');
+  const pending = inspect(realmId);
+  try {
+    await barrier.entered;
+    expect((await driver.subjectCommand('edit', people.subjectOwner, people.subject.id, key())).status).toBe(201);
+  } finally {
+    barrier.release();
+  }
+  try {
+    expect((await pending).status).toBe(503);
+  } finally {
+    await observer.close();
+  }
 });
 
 test('a selected Subject edit or competing decision during preparation withholds stale state', async () => {

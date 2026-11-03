@@ -7,6 +7,7 @@ import { accessCheck, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import type { SessionComponent } from '../tokens/session.ts';
+import { readSubjectSummaryObservation, type SubjectSummary } from '../semantic/summaries.ts';
 import { spaceReadEligibility } from './space.ts';
 import { realmReadEligibility } from './realm.ts';
 import type { PublicationDependencies, PublicationReadContext, PublicationVerdict } from './publication.ts';
@@ -26,6 +27,47 @@ const command = t.Object(
   },
   closed,
 );
+const presentationLabel = t.Union([
+  t.Object({ state: t.Literal('available'), value: t.String({ maxLength: 4096 }), language: t.String({ maxLength: 64 }) }, closed),
+  t.Object({ state: t.Literal('empty') }, closed),
+  t.Object({ state: t.Literal('concealed') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
+const presentationCover = t.Union([
+  t.Object(
+    {
+      state: t.Literal('available'),
+      value: t.Object(
+        {
+          media: id,
+          width: t.Integer({ minimum: 1 }),
+          height: t.Integer({ minimum: 1 }),
+          placeholder: t.Object({ thumbhash: t.String({ maxLength: 44 }), color: t.String({ pattern: '^#[0-9a-f]{6}$' }) }, closed),
+          variants: t.Array(
+            t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
+            { maxItems: 12 },
+          ),
+          focalPoint: t.Union([t.Object({ x: t.Number(), y: t.Number() }, closed), t.Null()]),
+          credit: t.Object(
+            {
+              rightsHolder: t.String({ maxLength: 1024 }),
+              via: t.Object({ name: t.String({ maxLength: 1024 }), url: t.String({ maxLength: 1024 }) }, closed),
+              license: t.String({ maxLength: 128 }),
+              obligations: t.Array(t.String({ maxLength: 8192 }), { maxItems: 2048 }),
+            },
+            closed,
+          ),
+        },
+        closed,
+      ),
+    },
+    closed,
+  ),
+  t.Object({ state: t.Literal('empty') }, closed),
+  t.Object({ state: t.Literal('concealed') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
+const presentation = t.Object({ label: presentationLabel, cover: presentationCover }, closed);
 
 export const PublicationPreparationSchema = t.Object(
   {
@@ -43,9 +85,7 @@ export const PublicationPreparationSchema = t.Object(
       {
         originalId: id,
         currentId: id,
-        // The bounded reference owner is installed. Full display hydration has a
-        // separate owner seam; unavailable never means concealed or an empty label.
-        presentation: t.Object({ state: t.Literal('unavailable') }, closed),
+        presentation,
       },
       closed,
     ),
@@ -176,7 +216,37 @@ function destination(href: string, subjectId: string, head: string | null) {
   };
 }
 
-function response(realmId: string, subjectId: string, currentId: string, row: Row, actor: Account) {
+function presentationValue(summary: SubjectSummary | null, coverState: 'available' | 'absent' | 'concealed' | undefined) {
+  if (!summary) return { label: { state: 'concealed' as const }, cover: { state: 'concealed' as const } };
+  const label = summary.label
+    ? summary.label.value.length <= 4096 && summary.label.language.length <= 64
+      ? { state: 'available' as const, value: summary.label.value, language: summary.label.language }
+      : { state: 'unavailable' as const }
+    : { state: 'empty' as const };
+  return {
+    label,
+    cover:
+      coverState === 'available' && summary.cover
+        ? { state: 'available' as const, value: summary.cover }
+        : coverState === 'absent'
+          ? { state: 'empty' as const }
+          : { state: 'concealed' as const },
+  };
+}
+
+function unavailablePresentation() {
+  return { label: { state: 'unavailable' as const }, cover: { state: 'unavailable' as const } };
+}
+type SubjectPresentation = ReturnType<typeof presentationValue> | ReturnType<typeof unavailablePresentation>;
+
+function response(
+  realmId: string,
+  subjectId: string,
+  currentId: string,
+  row: Row,
+  actor: Account,
+  subjectPresentation: SubjectPresentation,
+) {
   const base = `/v1/realms/${realmId}/publications`;
   const head = row.publication_id;
   if (row.verdict !== null && !['adopt', 'reject', 'withdraw'].includes(row.verdict))
@@ -194,7 +264,7 @@ function response(realmId: string, subjectId: string, currentId: string, row: Ro
     subject: {
       originalId: subjectId,
       currentId,
-      presentation: { state: 'unavailable' as const },
+      presentation: subjectPresentation,
     },
     current:
       head === null
@@ -239,15 +309,39 @@ export async function readPublicationPreparation(
   if (!before) return null;
   const subject = await preparePublicationSubject(deps, subjectId, context);
   if (!subject) return null;
-  // No origin checkout is held while Subject reference and Access evidence run.
+  // No origin checkout is held while current Subject, label and Content media
+  // observations run. Optional display failures do not change command advice.
+  let subjectPresentation = unavailablePresentation();
+  let summaryObservation: Awaited<ReturnType<typeof readSubjectSummaryObservation>> | undefined;
+  try {
+    summaryObservation = await readSubjectSummaryObservation(
+      {
+        pool: deps.pool,
+        routeKey: deps.routeKey,
+        access: deps.access,
+        actor,
+        deadline: context.deadline,
+      },
+      [subject.currentId],
+      { languages: context.languages ?? [] },
+    );
+    subjectPresentation = presentationValue(
+      summaryObservation.summaries.get(subject.currentId) ?? null,
+      summaryObservation.covers.get(subject.currentId),
+    );
+  } catch {
+    // A missing optional display dependency is explicit and carries no stale
+    // label, media identifier, descriptor or rights metadata.
+  }
   const checks = await realmChecks(deps, realmId, context, before.row.space_id);
   if (!(await subject.current())) throw new AccessUnavailableError('contention');
+  if (summaryObservation && !(await summaryObservation.current())) throw new AccessUnavailableError('contention');
   const after = await observe(deps, realmId, subjectId, context, checks);
   if (!after) return null;
   if (!same(before, after)) throw new AccessUnavailableError('contention');
   requireAccessDeadline(context.deadline);
   return {
-    preparation: response(realmId, subjectId, subject.currentId, after.row, actor),
-    components: [after.component, ...subject.components],
+    preparation: response(realmId, subjectId, subject.currentId, after.row, actor, subjectPresentation),
+    components: [after.component, ...subject.components, ...(summaryObservation?.components ?? [])],
   };
 }

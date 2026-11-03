@@ -62,13 +62,21 @@ export type SummaryReaderDependencies = {
 type SummaryAuthorize = SummaryDependencies['authorize'];
 type Batches = readonly (readonly string[])[];
 type SummarySources = readonly Readonly<{ partition: number; epoch: number; position: bigint }>[];
-type ObserveSummaries = (sources: SummarySources, batches: Batches, disclosed: ReadonlySet<string>) => void;
+export type SummaryCoverState = 'available' | 'absent' | 'concealed';
+type ObserveSummaries = (
+  sources: SummarySources,
+  batches: Batches,
+  disclosed: ReadonlySet<string>,
+  covers: ReadonlyMap<string, SummaryCoverState>,
+) => void;
 
 /** Internal composition, never a browser-supplied witness or a cached allow.
  * Each component is an independent native home position, as in Subject reads.
  */
 export type SubjectSummaryObservation = Readonly<{
   summaries: ReadonlyMap<string, SubjectSummary | null>;
+  covers: ReadonlyMap<string, SummaryCoverState>;
+  components: SummarySources;
   current: () => Promise<boolean>;
 }>;
 const preparations = new WeakMap<SummaryAuthorize, (batches: Batches) => Promise<SummaryAuthorize>>();
@@ -141,13 +149,17 @@ export async function readSubjectSummaryObservation(
   let sources: SummarySources = [];
   let batches: Batches = [];
   let disclosed: ReadonlySet<string> = new Set();
-  const summaries = await readSummaryBatch(deps, ids, languages, (observed, selected, visible) => {
+  let covers: ReadonlyMap<string, SummaryCoverState> = new Map();
+  const summaries = await readSummaryBatch(deps, ids, languages, (observed, selected, visible, states) => {
     sources = observed;
     batches = selected;
     disclosed = visible;
-  });
+    covers = states;
+  }, boundedLabelLanguages(languages));
   return {
     summaries,
+    covers,
+    components: sources,
     async current() {
       requireAccessDeadline(deps.deadline);
       // Reprepare native disclosure outside the source snapshot. The same
@@ -202,6 +214,7 @@ async function readSummaryBatch(
   ids: readonly string[],
   languages: readonly string[],
   observe?: ObserveSummaries,
+  labelLanguages?: readonly string[],
 ): Promise<Map<string, SubjectSummary | null>> {
   if (!(deps.routeKey instanceof Uint8Array) || deps.routeKey.byteLength < 32)
     throw new TypeError('Subject summaries require the server route key');
@@ -261,6 +274,7 @@ async function readSummaryBatch(
             Boolean(prepare),
             'access' in deps,
             observe,
+            labelLanguages,
           );
         },
         deadline,
@@ -273,6 +287,23 @@ async function readSummaryBatch(
   throw new AccessUnavailableError('contention');
 }
 
+/** Keep composed presentation reads to a fixed set of exact language keys.
+ * Include bounded RFC 4647 fallbacks and English; the owner adds the source
+ * language separately, so a reader never materializes every label language.
+ */
+function boundedLabelLanguages(languages: readonly string[]): string[] {
+  const selected = new Set<string>(['en']);
+  for (const language of languages.slice(0, 16)) {
+    const parts = language.toLowerCase().split('-');
+    while (parts.length && selected.size < 64) {
+      selected.add(parts.join('-'));
+      parts.pop();
+      if (parts.at(-1)?.length === 1) parts.pop();
+    }
+  }
+  return [...selected].slice(0, 64);
+}
+
 async function projectSummaries(
   storage: SummaryDependencies & { deadline: number },
   ids: readonly string[],
@@ -281,6 +312,7 @@ async function projectSummaries(
   needsPreparation: boolean,
   releaseHome: boolean,
   observe?: ObserveSummaries,
+  labelLanguages?: readonly string[],
 ): Promise<Map<string, SubjectSummary | null>> {
   const deps = storage;
   const results = new Map<string, SubjectSummary | null>(ids.map((id) => [id, null]));
@@ -313,7 +345,11 @@ async function projectSummaries(
         await readRepresentativeEditions.run(storage.client, { partition_no: partition, subjects })
       ).map((row) => ({ id: row.id, slot_id: row.slot_id, ordinal: Number(row.ordinal) }));
       const summaryParameters = { ...parameters, representatives };
-      const found = (await readSummaries.run(storage.client, summaryParameters)) as Row[];
+      const found = (await readSummaries.run(storage.client, {
+        ...summaryParameters,
+        bounded_labels: labelLanguages !== undefined,
+        label_languages: labelLanguages ?? [],
+      })) as Row[];
       for (const row of found) if (await storage.authorize(storage.client, row.id, batch)) rows.set(row.id, row);
     }
     return rows;
@@ -410,6 +446,9 @@ async function projectSummaries(
     }
   }
   requireAccessDeadline(deadline);
+  const coverStates = new Map<string, SummaryCoverState>(
+    ids.map((id) => [id, subjects.has(id) ? 'absent' : 'concealed']),
+  );
   for (const [id, mediaId] of covers) {
     if (deps.maySeeCover?.(mediaId, id) === false) continue;
     const reference = media.get(mediaId);
@@ -435,7 +474,9 @@ async function projectSummaries(
       focalPoint: reference.focalPoint ?? null,
       credit: reference.credit,
     };
+    if (results.has(id)) coverStates.set(id, 'available');
   }
+  for (const id of ids) if (covers.has(id) && coverStates.get(id) !== 'available') coverStates.set(id, 'concealed');
   if (observe) {
     const sourceHomes = [...new Set([...partitions, ...homes.keys()])];
     observe(
@@ -446,6 +487,7 @@ async function projectSummaries(
       })),
       [[...results.keys()], [...new Set(representatives.values())].filter((id) => !subjects.has(id))],
       new Set([...subjects.keys(), ...editions.keys()]),
+      coverStates,
     );
   }
   return results;

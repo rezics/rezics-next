@@ -116,6 +116,7 @@ import {
   RealmVotesSchema as votes,
 } from './schemas.ts';
 import { PublicationPreparationResponseSchema, readPublicationPreparation } from './publication-preparation.ts';
+import { languageRanges } from '../semantic/language.ts';
 import {
   listPublications,
   publish,
@@ -2155,10 +2156,14 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           security: writeSecurity,
         },
       },
-      async ({ params: { realmId, subjectId }, actor, admission, job, session, set }) => {
+      async ({ params: { realmId, subjectId }, actor, admission, job, session, set, request }) => {
         set.headers['cache-control'] = 'private, no-store';
         const result = await admission.run('normal', job, () =>
-          readPublicationPreparation(realmDependencies(), realmId, subjectId, { actor, deadline: job.deadline }),
+          readPublicationPreparation(realmDependencies(), realmId, subjectId, {
+            actor,
+            deadline: job.deadline,
+            languages: languageRanges(request.headers.get('accept-language')),
+          }),
         );
         if (!result) throw new ProblemError('not_found');
         for (const component of result.components) session.record(component);
