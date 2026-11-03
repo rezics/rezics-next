@@ -75,9 +75,8 @@ test('composes members without fusing a missing trailing newline and matches sin
     const works = row(workSource);
     const editions = row(editionSource);
     const manifest = await writeSet(root, { authors: row(author), works, editions });
-    const fused = await collect(`${works}${editions}\n`);
+    await expect(collect(`${works}${editions}\n`)).rejects.toThrow();
     const separated = await collect(`${works}\n${editions}\n`);
-    expect(fused).not.toEqual(separated);
     const { records, stream } = await drain(root, manifest);
     expect(records.map((record) => record.key)).toEqual(separated);
     expect(stream.digestHex()).toMatch(/^[a-f0-9]{64}$/);
@@ -262,7 +261,15 @@ test('same generation resolves an edition work link for both member orders', asy
         handleCount: handles,
       });
       const host = native();
-      const importer = new Importer({ path: join(root, `${order.join('-')}.sqlite`), transport: host.transport });
+      const importer = new Importer({
+        path: join(root, `${order.join('-')}.sqlite`),
+        transport: host.transport,
+        mediaResolver: {
+          async resolve() {
+            return { status: 'rejected' };
+          },
+        },
+      });
       const registration = createSourceRegistration('openlibrary', { source: `books-${order[0]}` });
       try {
         expect((await importer.runDumpSet(registration, stream.records)).status).toBe('committed');
