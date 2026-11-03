@@ -582,7 +582,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           409: conflict,
           503: unavailable,
         },
-        detail: detail('progress_session.journal.read', 'progress_session:read'),
+        detail: detail('progress_session.readJournal', 'progress_session:read'),
       },
       async ({ params, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
@@ -609,7 +609,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           503: unavailable,
         },
         detail: {
-          ...detail('progress_session.journal.update', 'progress_session:update'),
+          ...detail('progress_session.updateJournal', 'progress_session:update'),
           'x-body-limit': MAX_JOURNAL_PATCH_BODY_BYTES,
         },
       },
