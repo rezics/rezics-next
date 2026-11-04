@@ -22,7 +22,7 @@ import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
 import { subjectHref } from '../../subject/subject-href';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
-import type { NativeOperationAvailability } from '../../subject/candidates';
+import { candidateContext, type NativeOperationAvailability } from '../../subject/candidates';
 import { DefinitionGuideLink } from './definition-guide-view';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { EditorFailure, PartValue, StatementFields, StatementViolationLinks } from './statement-editor-view';

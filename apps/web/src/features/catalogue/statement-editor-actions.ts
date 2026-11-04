@@ -89,7 +89,7 @@ export const readCorrectionReview = createServerFn({ method: 'POST', strict: fal
     const locale = requestLocale() ?? 'en';
     return {
       ...result,
-      actions: form.actions,
+      ...(form.actions ? { actions: form.actions } : {}),
       fields: [
         {
           id: data.property,
