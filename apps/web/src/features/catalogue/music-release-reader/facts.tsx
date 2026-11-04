@@ -163,7 +163,7 @@ export function MusicReleaseFacts({
 export function MusicReleaseSlot({ row, page, locale }: { row: Ready['rows'][number]; page: Ready; locale: string }) {
   const o = { locale: locale as never };
   const slotKey = page.stream?.slotKey;
-  const slots = row.statement?.qualifiers.filter((snak) => snak.property.id === slotKey) ?? [];
+  const slots = row.statement?.qualifiers.filter((snak) => snak.property.id === slotKey || snak.property.id === 'schema:position') ?? [];
   if (!slots.length) return null;
   return (
     <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-sm [overflow-wrap:anywhere]">
@@ -201,6 +201,11 @@ export function MusicReleaseOccurrenceFacts({
   const summary = row.summary;
   const type = summary ? page.types[summary.type] : undefined;
   const statement = row.statement;
+  const assertionRelated = stream.direction === 'inverse'
+    ? { [page.identity.id]: { type: page.public.subject.type, labels: page.public.subject.labels } }
+    : summary
+      ? { [summary.id]: { type: summary.type, labels: summary.label ? { [summary.label.language]: summary.label.value } : {} } }
+      : {};
   const targetHref = summary
     ? contextHref(subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href, realm)
     : undefined;
@@ -268,10 +273,11 @@ export function MusicReleaseOccurrenceFacts({
           <section className="min-w-0 space-y-3" aria-label={m.music_release_assertion({}, o)}>
             <h4 className="font-semibold">{m.music_release_assertion({}, o)}</h4>
             <p className="text-sm text-muted-foreground">{m.music_release_assertion_scope({}, o)}</p>
+            <p className="text-sm text-muted-foreground">{m.music_release_assertion_target({}, o)}</p>
             <CandidateValue
               snak={statement}
-              // A withheld summary must not be recreated from a related label or its raw item value.
-              related={statement.value.type === 'value' ? {} : row.related}
+              // Only the admitted edition or this row's disclosed summary can name the assertion endpoint.
+              related={assertionRelated}
               locale={locale}
             />
             <h5 className="font-medium">{m.music_release_qualifiers({}, o)}</h5>
@@ -371,7 +377,7 @@ export function MusicReleaseOccurrenceFacts({
           </div>
           {summary ? (
             <div>
-              <dt className="text-muted-foreground">{m.album_tracks_target({}, o)}</dt>
+              <dt className="text-muted-foreground">{m.music_release_destination({}, o)}</dt>
               <dd>{summary.id}</dd>
             </div>
           ) : null}
