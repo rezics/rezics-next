@@ -160,15 +160,15 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Reload');
     expect(host.textContent).toContain('current account access does not allow changes');
     expect(host.textContent).toContain('Current account access does not allow this retained operation');
-    const reviewedSave = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    const reviewedSave = () => [...host.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent === 'Save reviewed choices' && !button.closest('[hidden]'),
     )!;
-    expect(reviewedSave.disabled).toBe(true);
+    expect(reviewedSave().disabled).toBe(true);
     await click('Save reviewed choices');
     expect(calls).toHaveLength(1);
     currentReadPage = currentPage;
     await click('Reload');
-    expect(reviewedSave.disabled).toBe(false);
+    expect(reviewedSave().disabled).toBe(false);
     await click('Save reviewed choices');
     expect(calls[1]!.notifications).toEqual({ reply: false });
     await click('Restore defaults');
@@ -204,15 +204,15 @@ test('native kind forms own each field once; hydration retains choices and recov
     refuseNextReset = true;
     await click('Restore defaults');
     expect(host.textContent).toContain('Current account access does not allow this retained operation');
-    const reviewedRestore = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    const reviewedRestore = () => [...host.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.textContent === 'Restore defaults' && !button.closest('[hidden]'),
     )!;
-    expect(reviewedRestore.disabled).toBe(true);
+    expect(reviewedRestore().disabled).toBe(true);
     await click('Restore defaults');
     expect(calls).toHaveLength(8);
     currentReadPage = currentPage;
     await click('Reload');
-    expect(reviewedRestore.disabled).toBe(false);
+    expect(reviewedRestore().disabled).toBe(false);
     await click('Restore defaults');
     expect(calls).toHaveLength(9);
     expect(calls[8]!.notifications).toBeNull();
