@@ -1,5 +1,5 @@
 import { realmReadingReturn } from '../../community/realm-reading-return';
-import { workFranchiseReturn } from '../catalogue/work-franchise-reading/navigation';
+import { workFranchiseReturn, workFranchiseFragment, type WorkFranchiseReturn } from '../catalogue/work-franchise-reading/navigation';
 import { subjectHref } from '../../subject/subject-href';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
@@ -109,6 +109,24 @@ export function workTagReturnHref(
   return subjectVisitReturn(`${source.pathname}${source.search}${source.hash}`, locale) ?? fallback;
 }
 
+/** Preserve the actual supported work region through the same validators used by destination routes. */
+export function workFranchiseReturnHref(
+  currentHref: string | undefined,
+  fallbackHref: string,
+  locale: string,
+  selection?: WorkFranchiseReturn,
+): string {
+  const fallback = subjectVisitReturn(`${fallbackHref.split('#')[0]}#work-franchise`, locale);
+  if (!fallback) return fallbackHref;
+  const base = new URL(fallback, 'https://rezics.invalid');
+  const accepted = subjectVisitReturn(currentHref, locale);
+  const source = accepted ? new URL(accepted, base) : base;
+  if (!subjectDestination.test(source.pathname) || source.pathname.split('/')[3] !== base.pathname.split('/')[3])
+    return fallback;
+  source.hash = selection ? workFranchiseFragment(selection) : '#work-franchise';
+  return subjectVisitReturn(`${source.pathname}${source.search}${source.hash}`, locale) ?? fallback;
+}
+
 /** Concept work-tag journeys share Subject visit validation; graph-only origins keep their separate contract. */
 export function workTagOriginatingReturn(value: unknown, locale?: string): string | undefined {
   const accepted = subjectVisitReturn(value, locale);
@@ -125,6 +143,7 @@ export type ConnectionReturnWindow = {
   reading?: string;
   focus?: string;
   holder?: string;
+  control?: 'browse' | 'evidence';
   history?: { cursor?: string; reading: string; page: number }[];
   index?: number;
 };
@@ -249,7 +268,7 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
   const keys = [...params.keys()];
   if (
     new Set(keys).size !== keys.length ||
-    keys.some((key) => !['stream', 'cursor', 'reading', 'focus', 'holder', 'history', 'index'].includes(key))
+    keys.some((key) => !['stream', 'cursor', 'reading', 'focus', 'holder', 'control', 'history', 'index'].includes(key))
   )
     return;
   const stream = params.get('stream');
@@ -257,6 +276,7 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
   let cursor = params.get('cursor');
   const focus = params.get('focus');
   const holder = params.get('holder');
+  const control = params.get('control');
   const rawHistory = params.get('history');
   const rawIndex = params.get('index');
   let history: ConnectionReturnWindow['history'];
@@ -316,7 +336,8 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
     (cursor !== null && (!cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
     (focus !== null && !new RegExp(`^${uuid}$`).test(focus)) ||
     (holder !== null && (!focus || !new RegExp(`^${uuid}$`).test(holder))) ||
-    (focus !== null && !holder)
+    (focus !== null && !holder) ||
+    (control !== null && (!focus || (control !== 'browse' && control !== 'evidence')))
   )
     return;
   return {
@@ -324,6 +345,7 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
     ...(reading ? { reading } : {}),
     ...(cursor ? { cursor } : {}),
     ...(focus ? { focus, holder: holder! } : {}),
+    ...(control ? { control: control as 'browse' | 'evidence' } : {}),
     ...(history && index !== undefined ? { history, index } : {}),
   };
 }
@@ -341,6 +363,7 @@ export function connectionWindowFragment(window: ConnectionReturnWindow): string
     if (window.focus && window.holder) {
       params.set('focus', window.focus);
       params.set('holder', window.holder);
+      if (window.control) params.set('control', window.control);
     }
     return `#connections?${params}`;
   };
@@ -539,7 +562,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const fragment = url.hash === '' ? '#connections' : url.hash;
     if (
       fragment !== '#literary-reader' &&
-      !(subject && !subject[2] && workFranchiseReturn(fragment)) &&
+      !(subject && (fragment === '#work-franchise' || workFranchiseReturn(fragment))) &&
       fragment !== '#connections' &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&

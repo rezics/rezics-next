@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react';
+import { useId, useLayoutEffect, useRef } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { CandidateValue } from '../data';
@@ -7,6 +7,9 @@ import type { Item, OverviewValue } from '../overview';
 import { isRecord, pageText, spoilerLevel, type Snak } from '../shared';
 import { SpoilerGate } from '../values';
 import { ValueExplanationEntry } from '../../catalogue/value-explanation-entry';
+import type { WorkReturnFocus } from './return';
+import { withSubjectVisitReturn } from '../subject-visit-navigation';
+import type { PageLink } from '../shared';
 import type { DirectedWorkRelation } from './model';
 
 export function kindLabel(kind: DirectedWorkRelation['kind'], locale: string) {
@@ -34,6 +37,8 @@ export function WorkRelation({
   label,
   returnHref,
   connectionsHref,
+  returnToFor,
+  restoreFocus,
 }: {
   relation: DirectedWorkRelation;
   item: Item;
@@ -41,13 +46,27 @@ export function WorkRelation({
   label: string;
   returnHref?: string;
   connectionsHref?: string;
+  returnToFor?: ((focus: 'browse' | 'evidence') => string) | undefined;
+  restoreFocus?: WorkReturnFocus | undefined;
 }) {
   const heading = useId();
   const explanation = useRef<HTMLDetailsElement>(null);
+  const browse = useRef<HTMLDivElement>(null);
+  const evidence = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (!restoreFocus?.current()) return;
+    const target = restoreFocus.control === 'evidence' ? evidence.current : browse.current?.querySelector<HTMLElement>('a');
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    restoreFocus.complete();
+  }, [restoreFocus]);
   const o = { locale: value.locale as never };
   const holderLabel = relation.direction === 'in' ? relation.label : (value.subjectLabel ?? value.unlabelled);
   const holderHref = subjectHref({ id: relation.holder, label: holderLabel }, value.locale).href;
-  const Link = value.link;
+  const BaseLink = value.link;
+  const evidenceReturn = returnToFor?.('evidence') ?? returnHref;
+  const Link: PageLink = (props) => <BaseLink {...props} href={evidenceReturn
+    ? withSubjectVisitReturn(props.href, evidenceReturn, value.locale) : props.href} />;
   const metadata: unknown = Reflect.get(relation.statement, 'rezics');
   const related = {
     ...relation.related,
@@ -84,6 +103,7 @@ export function WorkRelation({
         {label} · {relation.direction === 'in' ? m.subject_connections_in({}, o) : m.subject_connections_out({}, o)}
       </p>
       <p className="text-sm text-muted-foreground">{kindLabel(relation.kind, value.locale)}</p>
+      <div ref={browse} data-work-action="browse">
       <CoverList
         items={[
           {
@@ -98,6 +118,7 @@ export function WorkRelation({
         value={value}
         label={label}
       />
+      </div>
       {relation.statement.qualifiers.length > 0 && (
         <section className="space-y-2" aria-label={m.value_qualifiers({}, o)}>
           <h5 className="font-medium">{m.value_qualifiers({}, o)}</h5>
@@ -115,7 +136,7 @@ export function WorkRelation({
           explanation.current.querySelector('summary')?.focus();
         }}
       >
-        <summary className={`${action} cursor-pointer`}>{m.value_why({}, o)}</summary>
+        <summary ref={evidence} data-work-action="evidence" className={`${action} cursor-pointer`}>{m.value_why({}, o)}</summary>
         <h4 id={heading} className="font-semibold">
           {label}
         </h4>
@@ -177,7 +198,7 @@ export function WorkRelation({
           </Link>
           <ValueExplanationEntry
             link={Link}
-            {...(returnHref ? { returnTo: returnHref } : {})}
+            {...(evidenceReturn ? { returnTo: evidenceReturn } : {})}
             id={relation.holder}
             title={holderLabel}
             property={relation.property}

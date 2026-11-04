@@ -649,6 +649,7 @@ export function SubjectPage({
     read && !page.account
       ? subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale)
       : undefined;
+  const workWindows = useMemo(() => profileRelationWindows(page), [page]);
   const workReturn = workAddress ? contextHref(workAddress.href, realm) : undefined;
   const workRelationsHref =
     workAddress && page.views?.includes('relations') ? subjectUrlForView(workAddress, 'relations') : undefined;
@@ -858,7 +859,7 @@ export function SubjectPage({
                 descriptorState={page.catalogue?.state}
                 digest={page.catalogue?.digest}
                 directions={page.catalogue?.directions}
-                windows={profileRelationWindows(page)}
+                windows={workWindows}
                 reader={reader ?? defaultReader}
                 view={view}
                 realm={realm}
@@ -910,11 +911,12 @@ export function SubjectPage({
             {overview && read && !page.account && showcaseWork && workReturn ? (
               <WorkFranchiseOverview
                 subject={read.subject}
-                windows={profileRelationWindows(page)}
+                windows={workWindows}
                 related={read.related}
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
                 locale={locale}
                 returnTo={workReturn}
+                currentHref={currentHref}
                 {...(workRelationsHref ? { relationsHref: workRelationsHref } : {})}
                 readerSpoiler={reader?.spoilerLevel ?? 0}
                 link={ContextLink}
@@ -932,7 +934,7 @@ export function SubjectPage({
                 continuation={page.continuation}
                 viewer={page.requestedReader ?? null}
                 definitions={relations ?? EMPTY_RELATION_DEFINITIONS}
-                windows={profileRelationWindows(page)}
+                windows={workWindows}
                 reader={reader ?? defaultReader}
                 link={ContextLink}
               />
