@@ -3,7 +3,7 @@ import { subjectHref } from '../../../subject/subject-href';
 import type { Subject } from '../../../subject/types';
 import type { RelationDefinition } from '../../../subject/relations';
 import type { Reader } from '../../../subject/reader';
-import { m } from '../../paraglide/messages.js';
+import { m } from '../../../paraglide/messages.js';
 import { sectionClass } from '../../pages/overview';
 import { pageText, PlainLink, linkClass, linkColor, type PageLink } from '../../pages/shared';
 import type { ProfileRelationWindow } from '../../pages/views';
