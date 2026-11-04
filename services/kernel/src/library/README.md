@@ -2377,6 +2377,40 @@ continues to use its exact retained vocabulary pins and current source admission
 - Bound: `O(limit)` rows and statements per page, independent of the account's copies of other subjects and other accounts' copies of the same subject. `B` is `O(L(N)+limit)`. The page uses one statement or two with the maximum-limit probe, plus the admit and the partition read.
 - Growth check: `test/library/copies.test.ts`: `subject-filtered copy page keeps statement counts equal at three scales of unrelated copies` keeps statements and rows constant and blocks logarithmic at 1, 8 and 64, with no sequential scan on `library.copy`.
 
+### Copy inventory by native kind and status
+
+`GET /v1/copies` accepts optional exact `kind` and `status` identifiers. Either predicate may be used alone or with
+the other predicate; every tuple is supported both with and without exact `subjectId`. The page predicates reach
+their leading owner/predicate/order indexes before keyset lookahead and `LIMIT`. An omitted operand preserves the
+existing population. Non-string, malformed or unknown query operands are refused as invalid requests; a well-formed
+unknown identifier is an exact query with an empty result. No filter infers a write or changes a copy.
+
+The cursor binds account ID and authentication lifetime, client/requesting actor, route, exact Subject/kind/status
+tuple, fixed `(created_at, copy_id)` ascending order and the native partition epoch. Timestamp and Copy ID remain a
+deterministic tie-breaker. A changed native basis is stale; a cursor from another account or predicate is invalid.
+Edits keep current-keyset behavior: a page is read from the current rows, not a hidden snapshot or a page-refill loop.
+
+Filter choices are bounded distinct seeks over the owner's live native values, not a Copy collection or per-row
+Subject/profile hydration. Up to 64 kind IDs and 64 status IDs are returned. Each label uses a deterministic
+representative row's exact retained accepting profile pin; the current profile never renames an old value. A readable
+pin without that ID is marked `unsupported`; a missing or unreadable pin is marked `unavailable`. Empty arrays with
+`state: available` are a real empty vocabulary; an over-limit or failed vocabulary read is `unavailable`, never an
+empty result. Filters and option labels grant no action. Existing current `statusEditing` evidence and exact command
+operands, revision and idempotency key remain the only action authority.
+
+Decision: all optional Subject/kind/status tuples use native indexes, and labels come from the earliest retained copy's
+exact profile pin with an explicit unavailable marker when that meaning cannot be read.
+
+- Bound: each native snapshot returns at most `limit + 1` page keys and one optional limit-1 lookahead, plus at most
+  65 bounded distinct seeks per option dimension. The request reads the page/options twice around exact profile
+  meaning observations, under the same live deadline; cursors, rows, option keys and partition epoch must still match.
+  At most 128 deduplicated pinned releases are read, option serialization is capped at 65,536 UTF-8 bytes, and no
+  Subject hydration is performed for option rows. Include both snapshots, authorization checks, raw keys, lookahead,
+  profile observations, negative reads, serialization and cleanup in the caller price.
+- Growth check: `test/library/copy-inventory-growth.test.ts` varies matching and nonmatching retained copies separately
+  at 64, 512 and 4096, across owner, same-partition foreign and other-partition pools, while holding profile meanings
+  fixed. The controller owns execution.
+
 ### Follow
 
 The retained native inputs are `test/library/follow-counts-outcomes.test.ts`,

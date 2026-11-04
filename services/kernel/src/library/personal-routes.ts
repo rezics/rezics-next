@@ -112,6 +112,26 @@ const pageQuery = {
   cursor: t.Optional(t.String({ maxLength: 4096 })),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 };
+const copyInventoryChoiceSchema = t.Object(
+  {
+    id: libraryVocabularyIdSchema,
+    label: t.String({ maxLength: 256 }),
+    labelLanguage: t.Optional(t.String()),
+    meaning: t.Union([t.Literal('available'), t.Literal('unsupported'), t.Literal('unavailable')]),
+  },
+  closed,
+);
+const copyInventoryFacetSchema = t.Object(
+  {
+    state: t.Union([t.Literal('available'), t.Literal('unavailable')]),
+    choices: t.Array(copyInventoryChoiceSchema, { maxItems: 64 }),
+  },
+  closed,
+);
+const copyInventorySchema = t.Object(
+  { kinds: copyInventoryFacetSchema, statuses: copyInventoryFacetSchema },
+  closed,
+);
 const entrySchema = t.Object(
   {
     subjectId: id,
@@ -1240,12 +1260,21 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
     .get(
       '/v1/copies',
       {
-        query: t.Object({ ...pageQuery, subjectId: t.Optional(t.String({ format: 'uuid' })) }, closed),
+        query: t.Object(
+          {
+            ...pageQuery,
+            subjectId: t.Optional(t.String({ format: 'uuid' })),
+            kind: t.Optional(libraryVocabularyIdSchema),
+            status: t.Optional(libraryVocabularyIdSchema),
+          },
+          closed,
+        ),
         response: {
           200: t.Object(
             {
               copies: t.Array(embedded(copySchema, { ...subjectFields, context: t.Optional(copyListContextSchema) })),
               next: nullable,
+              filterOptions: copyInventorySchema,
             },
             closed,
           ),
@@ -1257,11 +1286,16 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       async ({ actor, query, admission, job, request }) => {
         account(actor);
         const pageQuery = basicQuery(query);
+        const languages = languageRanges(request.headers.get('accept-language'));
         const readPage = () =>
-          admission.run('normal', job, () => command(() => copies().listCopiesWithObservation(actor, pageQuery)));
+          admission.run('normal', job, () => command(() => copies().listCopiesWithObservation(actor, pageQuery, languages)));
         const result = await readPage();
         if (query.view !== 'FULL' || result.copies.length === 0)
-          return fullView(config(), actor, query.view, { copies: result.copies.map(copyView), next: result.next });
+          return fullView(config(), actor, query.view, {
+            copies: result.copies.map(copyView),
+            next: result.next,
+            filterOptions: result.filterOptions,
+          });
 
         const copiesPage = await attachCopyListContext(
           { ...config(), actor, deadline: job.deadline },
@@ -1273,13 +1307,14 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               if (
                 JSON.stringify(current.copies) !== JSON.stringify(result.copies) ||
                 Boolean(current.next) !== Boolean(result.next) ||
+                JSON.stringify(current.filterOptions) !== JSON.stringify(result.filterOptions) ||
                 current.accountEpoch !== result.accountEpoch
               )
                 throw new ProblemError('semantic_not_ready');
             },
           },
         );
-        return { copies: copiesPage, next: result.next };
+        return { copies: copiesPage, next: result.next, filterOptions: result.filterOptions };
       },
     )
     .get(
