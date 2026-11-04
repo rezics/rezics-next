@@ -374,7 +374,9 @@ test('a retry with the same key and a new token returns the same account', async
   expect((await pool.query('SELECT id,email FROM "user" WHERE id=$1', [accountId])).rows).toEqual([
     { id: accountId, email: original.email },
   ]);
-  expect((await pool.query('SELECT id FROM "user" WHERE email=$1', [`changed-${original.email}`])).rows).toHaveLength(0);
+  expect((await pool.query('SELECT id FROM "user" WHERE email=$1', [`changed-${original.email}`])).rows).toHaveLength(
+    0,
+  );
 });
 
 test('signup answers 503 when Turnstile configuration is absent', async () => {
@@ -419,9 +421,7 @@ test('a taken handle refuses without account effects and a corrected new request
     expect(staged[0].expired_at).not.toBeNull();
 
     const correctedKey = `${key}-corrected`;
-    const corrected = await signup(
-      body(correctedKey, { handle: `${input.handle}-corrected`, email: input.email }),
-    );
+    const corrected = await signup(body(correctedKey, { handle: `${input.handle}-corrected`, email: input.email }));
     expect(corrected.status).toBe(201);
     expect(await corrected.json()).toEqual({ accountId: `signup-account-${correctedKey}` });
     expect(accounts.has(accountId)).toBe(false);

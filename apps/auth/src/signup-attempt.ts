@@ -1,4 +1,10 @@
-import { createSignupKey, normalizeSignupHandle, type SignupBody, type SignupFailure, type SignupSubmission } from './signup';
+import {
+  createSignupKey,
+  normalizeSignupHandle,
+  type SignupBody,
+  type SignupFailure,
+  type SignupSubmission,
+} from './signup';
 
 export type SignupDraft = { handle: string; email: string; password: string; confirmation: string };
 
@@ -51,7 +57,10 @@ export class SignupAttemptController {
   #phase: SignupAttemptPhase;
   #listeners = new Set<(phase: SignupAttemptPhase) => void>();
 
-  constructor(readonly journeyId: number, key = createSignupKey()) {
+  constructor(
+    readonly journeyId: number,
+    key = createSignupKey(),
+  ) {
     this.#phase = { kind: 'draft', key, values: emptyDraft() };
   }
 
@@ -156,12 +165,12 @@ export class SignupAttemptController {
       return { kind: 'refused', failure };
     }
 
-    const retrySeconds = failure.kind === 'rate-limited' && failure.retryAfter !== null
-      ? Number(failure.retryAfter)
-      : Number.NaN;
-    const retryAt = Number.isSafeInteger(retrySeconds) && retrySeconds >= 0
-      ? Math.min(Number.MAX_SAFE_INTEGER, Date.now() + retrySeconds * 1000)
-      : null;
+    const retrySeconds =
+      failure.kind === 'rate-limited' && failure.retryAfter !== null ? Number(failure.retryAfter) : Number.NaN;
+    const retryAt =
+      Number.isSafeInteger(retrySeconds) && retrySeconds >= 0
+        ? Math.min(Number.MAX_SAFE_INTEGER, Date.now() + retrySeconds * 1000)
+        : null;
     this.#set({
       kind: 'uncertain',
       attempt,

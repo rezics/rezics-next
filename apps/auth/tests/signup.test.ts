@@ -456,7 +456,12 @@ test(
       const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
       expect(signIns).toHaveLength(1);
       expect(calls.indexOf(signIns[0]!)).toBeGreaterThan(calls.indexOf(registration));
-      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
+      expect(JSON.parse(signIns[0]!.body)).toEqual({
+        email: email.toLowerCase(),
+        password,
+        client_id: 'login',
+        scope: [],
+      });
       expect(page.url()).not.toContain(accountId);
       expect(decodeURIComponent(page.url())).not.toContain(accountId);
       assertSecret(page, urls);
@@ -547,7 +552,12 @@ test(
       expect(second.password).toBe(password);
       const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
       expect(signIns).toHaveLength(1);
-      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
+      expect(JSON.parse(signIns[0]!.body)).toEqual({
+        email: email.toLowerCase(),
+        password,
+        client_id: 'login',
+        scope: [],
+      });
     } finally {
       releaseFirstRequest();
       await page.context().close();
@@ -622,7 +632,12 @@ test(
       expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
       const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
       expect(signIns).toHaveLength(1);
-      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
+      expect(JSON.parse(signIns[0]!.body)).toEqual({
+        email: email.toLowerCase(),
+        password,
+        client_id: 'login',
+        scope: [],
+      });
       expect(signupCalls()).toHaveLength(0);
     } finally {
       await page.context().close();
@@ -676,7 +691,12 @@ test(
       const registrations = signupCalls();
       expect(registrations).toHaveLength(2);
       const first = JSON.parse(registrations[0]!.body) as { key: string; handle: string; email: string };
-      const second = JSON.parse(registrations[1]!.body) as { key: string; handle: string; email: string; password: string };
+      const second = JSON.parse(registrations[1]!.body) as {
+        key: string;
+        handle: string;
+        email: string;
+        password: string;
+      };
       expect(first.handle).toBe(handle.toLowerCase());
       expect(second.key).not.toBe(first.key);
       expect(second.handle).toBe('reader_2');
@@ -684,7 +704,12 @@ test(
       expect(second.password).toBe(password);
       const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
       expect(signIns).toHaveLength(1);
-      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
+      expect(JSON.parse(signIns[0]!.body)).toEqual({
+        email: email.toLowerCase(),
+        password,
+        client_id: 'login',
+        scope: [],
+      });
 
       const links = await page.getByRole('link').evaluateAll((elements) =>
         elements.map((element) => ({
@@ -725,9 +750,14 @@ test(
       expect(alertText).toMatch(/sign in/i);
       expect(alertText).toMatch(/recover/i);
       expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
-      const links = await page.getByRole('link').evaluateAll((elements) =>
-        elements.map((element) => ({ href: (element as HTMLAnchorElement).href, text: element.textContent?.trim() ?? '' })),
-      );
+      const links = await page
+        .getByRole('link')
+        .evaluateAll((elements) =>
+          elements.map((element) => ({
+            href: (element as HTMLAnchorElement).href,
+            text: element.textContent?.trim() ?? '',
+          })),
+        );
       for (const link of links.filter((value) => ['/login', '/recovery'].includes(new URL(value.href).pathname))) {
         expect(new URL(link.href).origin).toBe(origin);
         expect(new URL(link.href).search).toBe(`?${authorizationQuery}`);

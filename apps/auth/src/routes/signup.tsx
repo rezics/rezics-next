@@ -1,15 +1,7 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
 import { Field } from '@rezics/ui/shadcn/field';
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type MouseEvent,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -35,8 +27,7 @@ import {
 } from '../signup-attempt';
 import { SignupCredentials, signupCredentialFieldIds, type SignupCredentialErrors } from '../signup-credentials';
 
-const { handle: handleId, password: passwordId, confirmation: confirmationId } =
-  signupCredentialFieldIds;
+const { handle: handleId, password: passwordId, confirmation: confirmationId } = signupCredentialFieldIds;
 const turnstileErrorId = 'signup-turnstile-error';
 const uncertainPanelId = 'signup-uncertain-panel';
 
@@ -120,7 +111,11 @@ function SignupPage() {
   const { history } = router;
   const page = Route.useLoaderData();
   const pageKey =
-    page.kind === 'already-signed-in' ? `account:${page.viewer.account_id}` : page.kind === 'registration' ? 'registration' : null;
+    page.kind === 'already-signed-in'
+      ? `account:${page.viewer.account_id}`
+      : page.kind === 'registration'
+        ? 'registration'
+        : null;
   const sequence = useRef(0);
   const currentJourney = useRef<SignupJourney | null>(null);
   const replaceJourney = useRef<() => void>(() => {});
@@ -295,7 +290,9 @@ function SignupPageState({
             </ErrorAlert>
           ) : (
             <ErrorAlert>
-              <p>{page.reason === 'verification' ? m.auth_signup_turnstile_failed() : m.auth_signup_page_unavailable()}</p>
+              <p>
+                {page.reason === 'verification' ? m.auth_signup_turnstile_failed() : m.auth_signup_page_unavailable()}
+              </p>
             </ErrorAlert>
           )}
           <Button type="button" onClick={() => void router.invalidate()}>
@@ -321,7 +318,12 @@ function SignupPageState({
 function isCompletionPhase(
   phase: SignupAttemptPhase,
 ): phase is Extract<SignupAttemptPhase, { kind: 'created' | 'signing-in' | 'sign-in-failed' | 'signed-in' }> {
-  return phase.kind === 'created' || phase.kind === 'signing-in' || phase.kind === 'sign-in-failed' || phase.kind === 'signed-in';
+  return (
+    phase.kind === 'created' ||
+    phase.kind === 'signing-in' ||
+    phase.kind === 'sign-in-failed' ||
+    phase.kind === 'signed-in'
+  );
 }
 
 function SignupAuthLinks({ query, follow }: { query: string; follow: (event: MouseEvent<HTMLAnchorElement>) => void }) {
@@ -656,10 +658,16 @@ function SignupForm({
               </Button>
             </div>
           ) : null}
-          {turnstileError ? <p id={turnstileErrorId} role="alert">{turnstileError}</p> : null}
+          {turnstileError ? (
+            <p id={turnstileErrorId} role="alert">
+              {turnstileError}
+            </p>
+          ) : null}
         </Field>
         {phase.kind === 'dispatched' ? (
-          <p role="status" aria-busy="true">{m.auth_signup_creating()}</p>
+          <p role="status" aria-busy="true">
+            {m.auth_signup_creating()}
+          </p>
         ) : phase.kind === 'draft' ? (
           <Button type="submit" aria-busy={false}>
             {m.auth_signup_heading()}
