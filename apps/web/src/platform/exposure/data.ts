@@ -215,6 +215,25 @@ export async function loadExposure(
   return { status: current.status, discovery };
 }
 
+export async function readExposureBound(
+  query: ExposureQuery,
+  dependencies: {
+    prepare(): Promise<Request>;
+    credential(request: Request): string | null;
+    subject(request: Request): string | null;
+    configured: boolean;
+    read(authorization: string, query: ExposureQuery): Promise<Page>;
+  },
+): Promise<ExposureReaderEnvelope> {
+  const request = await dependencies.prepare();
+  const sessionSubject = dependencies.subject(request) ?? null;
+  const authorization = dependencies.credential(request);
+  if (!authorization) return { page: { status: 'signed-out', discovery: { status: 'unavailable' } }, sessionSubject };
+  if (!dependencies.configured)
+    return { page: { status: 'unavailable', discovery: { status: 'unavailable' } }, sessionSubject };
+  return { page: await dependencies.read(authorization, query), sessionSubject };
+}
+
 /** A private native source page can supply selections independently of public discovery. */
 export function hasExposureGroup(page: Extract<Page, { status: 'ready' }>, group: string): boolean {
   return page.current.exposureGroups.some((row) => row.group === group);
