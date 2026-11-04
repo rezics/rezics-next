@@ -1186,21 +1186,5 @@ platform, genre, player-count, summary or cover ownership.
 
 ## Bangumi Game publication date
 
-`bangumi@13` reads only one unqualified `发行日期` occurrence from the pinned
-Game infobox. The accepted scalar grammar is the strict Gregorian `YYYY`,
-`YYYY-MM` or `YYYY-MM-DD` form; its native time representation retains source
-precision. Type-4 top-level `date`, qualified dates and duplicate fields remain
-unavailable. Other Game fields stay on their current paths.
+[Touches, Bound and Growth check](bangumi-game-publication.md).
 
-- Touches: ordinary `bangumi@13` and selected-family
-  `cross-media-entities@11+bangumi@13` publication for one source-bound
-  VideoGame, with the exact Bangumi subject citation.
-- Bound: one shared pass visits at most 64 top-level infobox fields and retains
-  at most 16 source-free omission diagnostics within existing infobox,
-  projection and command limits. No recursive wiki evaluation or linked-page
-  fetch is used.
-- Growth check: `services/importer/tests/bangumi-game-publication.test.ts`
-  covers ordinary and selected-family proposals, qualified omission and a
-  corrected partial date. The native review/adoption and read scenario is
-  `services/kernel/test/imports/bangumi-game-publication.test.ts`; execution
-  remains controller-owned.

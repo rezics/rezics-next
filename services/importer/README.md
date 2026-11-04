@@ -2320,15 +2320,12 @@ for these source Concepts.
 
 ### Bangumi TVAnime bounded profile conversion
 
-Current `bangumi@13` retains the exact-template TVAnime names, original-run and
-work-evidence projections while adding the official website mapping. Ordinary
-registration and selected-family rows share the bounded pure conversion; the
-selected-family registration uses
-`cross-media-entities@11+bangumi@13`. Existing source metadata admission,
-citations, journal, independent review/adoption, current-read flow and exact
-Bangumi alias/key remain in use. No additional publisher or identity lookup is
-involved. A source without a provider revision remains `unversioned`; semantic
-digests still include the bounded infobox projection.
+`bangumi@13` includes TVAnime names, original-run, work evidence and official
+websites. Ordinary and selected-family registration share bounded conversion;
+selected envelopes use `cross-media-entities@11+bangumi@13`. The existing journal
+preserves exact alias/key, source admission, citations, independent
+review/adoption and current reads. Unversioned rows retain the bounded infobox
+digest; no publisher or identity lookup is added.
 
 - Touches: one selected TVAnime record, at most 24 name facts, 32 website facts,
   existing original-run/work-evidence facts and 16 bounded diagnostics. Every
@@ -2776,25 +2773,5 @@ projections, so this delivery claims no page/index acceptance.
 
 ### Bangumi Game first publication date
 
-Ordinary `bangumi@13` registration and the selected-family seed read only the
-pinned Game infobox `发行日期` field. One strict Gregorian `YYYY`, `YYYY-MM` or
-`YYYY-MM-DD` value becomes a cited `schema:datePublished` proposal on the
-acknowledged VideoGame, retaining source precision. Type-4 top-level `date`,
-qualified values, qualified field names and duplicates stay unavailable; names
-and other Game fields remain useful. Selected-family Bangumi source envelopes
-use `cross-media-entities@11+bangumi@13` and keep the existing
-`bangumi_cross_media` alias. A corrected source refresh proposes a new date on
-the same UUID; it does not alter old sealed commands or another contributor's
-adopted facts.
+[Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
 
-- Touches: one bounded source record and at most one first-publication
-  candidate; independent names and other valid source facts remain usable.
-- Bound: one shared Game-field pass visits at most 64 fields, 16 combined
-  diagnostic entries, the existing 65,536
-  character infobox and 64 KiB projected record/command envelopes. No recursive
-  wiki evaluation or linked-page fetch is performed.
-- Growth check: `services/importer/tests/bangumi-game-publication.test.ts`
-  covers ordinary registration, selected-family refresh and same-UUID identity.
-  `services/kernel/test/imports/bangumi-game-publication.test.ts` covers
-  independent adoption, current read and facts fencing; its native execution
-  remains controller-owned.

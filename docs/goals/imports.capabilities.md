@@ -1311,7 +1311,7 @@ explicit `0` is a stated zero.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-The original-run mapping was introduced in `bangumi@8`; current `bangumi@13`
+Current `bangumi@13`
 continues to convert pinned TVAnime `放送开始`, `播放结束` and `话数` through
 ordinary Bangumi registration and selected-family rows, preserving the
 `bangumi@9` player-count mapping and earlier name extraction. Native read is on
@@ -1339,7 +1339,7 @@ the whole occurrence.
 Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
 unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
 
-The player-count mapping was introduced in `bangumi@9`; current `bangumi@13`
+Current `bangumi@13`
 continues to convert pinned Game `游玩人数` through ordinary Bangumi
 registration and selected-family rows, preserving the `bangumi@8` original-run
 mapping. Native read is on the acknowledged VideoGame.
@@ -1597,7 +1597,7 @@ and cover rights keep their existing owners.
 ## Bangumi Game platforms and software engine
 
 Decision: Game-template `平台` and `游戏引擎` bind through current reviewed Concept reads keyed by the released property plus the exact source item; no infobox-field scheme URI is minted. Engine items with version, platform or edition text are withheld whole because `wdt:P408` admits no qualifiers. Platform language is preserved only as `schema:inLanguage` when the labelled source tag is an admitted BCP 47 tag.
-Decision: Game environment admission stays on the combined `bangumi@11` revision so unchanged dumps offer the new facts; Game names, player-count mapping, TVAnime work evidence and book grain stay on that revision.
+Decision: current `bangumi@13` includes Game environment, names and player count, TVAnime work evidence and book grain; selected envelopes use `cross-media-entities@11+bangumi@13`.
 
 A selected type-4 Game keeps top-level `subject.platform` as the profile selector. Infobox platform and engine items become `schema:gamePlatform` and `wdt:P408` on that VideoGame after an independent current read of each configured Concept. Missing, concealed and wrong-source bindings remain distinct and withhold only the affected occurrence. Identity and sealed retry custody stay on the existing source fence. Names, dates, player count, staff, genre and websites retain their owners.
 
@@ -1607,33 +1607,5 @@ A selected type-4 Game keeps top-level `subject.platform` as the profile selecto
 
 ## Bangumi Game first publication date
 
-Decision: Game publication advances `bangumi@12` to `bangumi@13`, preserving Game names and TVAnime official websites.
+[Touches, Bound and Growth check](../../packages/conversion/bangumi-game-publication.md).
 
-Decision: accept only one unqualified strict ISO Gregorian `发行日期` value
-(`YYYY`, `YYYY-MM` or `YYYY-MM-DD`); type-4 top-level `date`, qualified,
-duplicate and unsupported occurrences remain unavailable. Selected-family
-Bangumi envelopes use `cross-media-entities@11+bangumi@13` so an unchanged
-selected row refreshes when either mapping changes.
-
-The pinned Game mapping already admits `schema:datePublished` on
-`schema:VideoGame` as the publication or first-release date with source
-precision. `bangumi@13` reads only that Game-template field. It uses the current
-Gregorian year/month/day parser, preserves the exact precision, and cites the
-exact Bangumi subject URL. Qualified platform, market, edition and region dates
-are withheld as a whole; no type-4 top-level fallback, release subject or work
-identity inference is added. Type-3/6 date and TVAnime original-run behavior
-remain on their existing paths.
-
-- Touches: one source-identified Bangumi Game and at most one cited
-  `schema:datePublished` candidate on its VideoGame.
-- Bound: one shared Game-field scan visits at most 64 top-level fields, at most
-  16 combined diagnostic entries, and the
-  existing 65,536-character infobox plus 64 KiB projected source/command
-  envelopes. The parser does not recursively evaluate wiki syntax or fetch a
-  linked page.
-- Growth check: `services/importer/tests/bangumi-game-publication.test.ts`
-  covers ordinary and selected-family proposals, qualified omission and a
-  corrected partial date. `services/kernel/test/imports/bangumi-game-publication.test.ts`
-  covers the acknowledged UUID, independent acceptance/adoption, exact current
-  value/citation and the facts fence. Native acceptance remains deferred to
-  integration.
