@@ -27,7 +27,11 @@ async function person(name: string) {
     scope: [...AUTH_MANAGEMENT_SCOPES.membership],
   });
   expect(signed.status).toBe(200);
-  return { ...registered, headers: cookies(signed) };
+  const headers = cookies(signed);
+  const token = await f.request('/token', {}, headers);
+  expect(token.status).toBe(200);
+  const { access_token: bearer } = (await token.json()) as { access_token: string };
+  return { ...registered, headers, bearer };
 }
 async function context(human: Awaited<ReturnType<typeof person>>) {
   const deadline = Date.now() + 10000;
