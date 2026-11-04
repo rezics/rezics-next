@@ -21,7 +21,10 @@ export function isSessionUnavailablePage(value: unknown): value is SessionUnavai
 }
 
 /** Avoid private reads when the request session is unresolved; preserve unrelated failures. */
-export async function loadPrivatePage<T>(access: SessionAccess, read: () => T | Promise<T>): Promise<T | SessionUnavailablePage> {
+export async function loadPrivatePage<T>(
+  access: SessionAccess,
+  read: () => T | Promise<T>,
+): Promise<T | SessionUnavailablePage> {
   const unavailable = sessionUnavailablePage(access.signInHref);
   if (access.state !== 'signed-in') return unavailable;
   try {

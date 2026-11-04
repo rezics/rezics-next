@@ -50,7 +50,10 @@ export function NotificationsLink({ pathname, badge }: { pathname: string; badge
 export function UnavailableAccountAction({ signIn }: { signIn: string }) {
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <span role="status" className="sr-only md:not-sr-only md:max-w-36 md:break-words md:text-xs md:text-muted-foreground">
+      <span
+        role="status"
+        className="sr-only md:not-sr-only md:max-w-36 md:break-words md:text-xs md:text-muted-foreground"
+      >
         {m.shell_account_unavailable()}
       </span>
       <a
