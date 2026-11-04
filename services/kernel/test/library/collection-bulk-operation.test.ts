@@ -6,11 +6,13 @@ import {
 } from '../../src/library/collection-bulk-operation.ts';
 import { expireCollectionBulkPage, runCollectionBulkPage } from '../../src/library/collection-bulk-work.ts';
 import { pageCollectionBulkManifest, readCollectionBulk } from '../../src/library/collection-bulk-store.ts';
-import { executeStatusTarget } from '../../src/library/bulk-contract.ts';
+import { executeCollectionAddTarget, executeStatusTarget } from '../../src/library/bulk-contract.ts';
 import { createInitiatorRestorer } from '../../src/access/durable-initiator.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { workStepDeadline } from '../../src/library/command-support.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 let f: NativeProfileFixture;
@@ -36,9 +38,9 @@ const dependencies = () => ({
     scopes: f.owner.actor.scopes,
   }),
 });
-async function entry() {
+async function entry(actor = f.owner.actor) {
   const subjectId = await f.createSubject('game');
-  const result = await f.commands.putEntry(f.owner.actor, subjectId, { state: 'planned' }, key());
+  const result = await f.commands.putEntry(actor, subjectId, { state: 'planned' }, key());
   return result.value.entry;
 }
 async function preview(subjectIds: string[], requestKey = key()) {
@@ -309,4 +311,205 @@ test('current authority loss prevents another effect and result disclosure', asy
     null,
     'authority_lost',
   ]);
+});
+
+test('filtered review pages never narrow the captured set; exact start replay keeps mixed outcomes', async () => {
+  await f.setLibraryOpen(false);
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+  const owner = await f.identity([...f.owner.actor.scopes, 'collection:create', 'collection:read', 'collection:update']);
+  await f.grantLibraryGate(owner.actor.accountId);
+  const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
+  const source = (
+    await collections.createCollection(owner.actor, { title: 'Filtered operation review', visibility: 'private' }, key())
+  ).value;
+  const captured: Awaited<ReturnType<typeof entry>>[] = [];
+  for (let n = 0; n < 25; n++) {
+    const value = await entry(owner.actor);
+    await collections.addMember(owner.actor, source.id, { subjectId: value.subjectId, note: `captured-${n}` }, key());
+    captured.push(value);
+  }
+  const excluded = await entry(owner.actor);
+  await f.commands.putEntry(
+    owner.actor,
+    excluded.subjectId,
+    { state: 'paused', revision: excluded.revision, incarnationId: excluded.incarnationId! },
+    key(),
+  );
+  await collections.addMember(owner.actor, source.id, { subjectId: excluded.subjectId, note: 'filtered out' }, key());
+  const created = await bulk.preview(
+    owner.actor,
+    {
+      action: 'set_status',
+      state: 'completed',
+      selection: { kind: 'query', sourceId: source.id, filter: '{ "state": "planned" }', sort: 'id' },
+    },
+    key(),
+  );
+  const operation = created.value.operation;
+  expect(operation).toMatchObject({ selectionSource: { id: source.id, filter: '{"state":"planned"}', sort: 'id' } });
+  expect(operation.counts).toMatchObject({ selectedSubjects: 25, targets: 25, pending: 25 });
+  const review = await bulk.outcomes(owner.actor, operation.id, { limit: 10 });
+  expect(review.outcomes).toHaveLength(10);
+  expect(review.next).not.toBeNull();
+  const replacementVisit = await f.send(owner.bearer, 'GET', `/v1/libraryOperations/${operation.id}`);
+  expect(replacementVisit.status).toBe(200);
+  expect((await replacementVisit.json()).operation.counts.targets).toBe(25);
+
+  const addedLater = await entry(owner.actor);
+  await collections.addMember(owner.actor, source.id, { subjectId: addedLater.subjectId, note: 'after review' }, key());
+  const stale = captured[7]!;
+  await f.commands.putEntry(
+    owner.actor,
+    stale.subjectId,
+    { state: 'paused', revision: stale.revision, incarnationId: stale.incarnationId! },
+    key(),
+  );
+  const confirmKey = key();
+  const started = await bulk.confirm(owner.actor, operation.id, confirmKey);
+  // The caller can retry the original uncertain start with the same native command key.
+  const replay = await bulk.confirm(owner.actor, operation.id, confirmKey);
+  expect(replay.transactionId).toBe(started.transactionId);
+  await runCollectionBulkPage(
+    {
+      ...dependencies(),
+      readConsent: async () => ({
+        actorAccountId: owner.actor.accountId,
+        clientId: owner.actor.clientId,
+        scopes: owner.actor.scopes,
+      }),
+    },
+    { route: operation.route, operationId: operation.id },
+  );
+
+  const conflict = await bulk.outcomes(owner.actor, operation.id, { state: 'conflict', limit: 1 });
+  expect(conflict.outcomes.map(({ subjectId, reason }) => [subjectId, reason])).toEqual([
+    [stale.subjectId, 'revision_mismatch'],
+  ]);
+  const applied = await bulk.outcomes(owner.actor, operation.id, { state: 'applied', limit: 20 });
+  expect(applied.outcomes).toHaveLength(20);
+  expect(applied.next).not.toBeNull();
+  const tail = await bulk.outcomes(owner.actor, operation.id, { state: 'applied', limit: 20, cursor: applied.next! });
+  expect(tail.outcomes).toHaveLength(4);
+  expect(tail.next).toBeNull();
+  expect((await bulk.get(owner.actor, operation.id)).operation.counts).toMatchObject({
+    targets: 25,
+    applied: 24,
+    conflict: 1,
+  });
+  expect((await f.commands.readEntry(owner.actor, addedLater.subjectId)).state).toBe('planned');
+});
+
+test('remote add receipt is recovered after cancellation, then results stay private and expire', async () => {
+  await f.setLibraryOpen(false);
+  expect((await f.send('steward', 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+  const owner = await f.identity([
+    ...f.owner.actor.scopes,
+    'collection:create',
+    'collection:read',
+    'collection:update',
+    'subject:read',
+  ]);
+  await f.grantLibraryGate(owner.actor.accountId);
+  const sourceRoute = routeOf(owner.actor.accountId)!;
+  const destinationRoute = sourceRoute < 65520 ? sourceRoute + 16 : sourceRoute - 16;
+  const destinationOwner = await f.identity(
+    ['collection:create', 'collection:read', 'collection:update'],
+    undefined,
+    destinationRoute,
+  );
+  const collections = createCollectionCommands({ pool: f.pool, access: f.access, clock });
+  const destination = (
+    await collections.createCollection(
+      destinationOwner.actor,
+      { title: 'Remote bulk destination', visibility: 'private' },
+      key(),
+    )
+  ).value;
+  const grants = createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant', clock });
+  await grants.create(
+    { pool: f.pool, actor: f.steward.actor, deadline: workStepDeadline() },
+    {
+      resource: { route: destinationRoute, id: destination.id },
+      subject: { kind: 'account', id: owner.actor.accountId },
+      actions: ['collection:read', 'collection:update'],
+      valid: '(,)',
+      key: key(),
+    },
+  );
+  const captured = await entry(owner.actor);
+  const created = await bulk.preview(
+    owner.actor,
+    {
+      action: 'add_to_collection',
+      collectionId: destination.id,
+      selection: { kind: 'explicit', targets: [{ subjectId: captured.subjectId }] },
+    },
+    key(),
+  );
+  const operationId = created.value.operation.id;
+  const persisted = await withConnection(f.pool, async (tx) => {
+    const locator = { route: sourceRoute, accountId: owner.actor.accountId, operationId };
+    const operation = (await readCollectionBulk(tx, locator))!;
+    const row = (await pageCollectionBulkManifest(tx, { ...locator, limit: 1 }))[0]!;
+    return { operation, row };
+  });
+  const runtime = {
+    ...dependencies(),
+    readInitiator: readCollectionBulkInitiator,
+    initiators: createInitiatorRestorer({ ...dependencies(), readOperation: readCollectionBulkInitiator }),
+  };
+  const command = {
+    source: persisted.operation.initiator.operation,
+    sourceDigest: persisted.operation.sourceDigest,
+    target: { ...persisted.row.target, operationId, ordinal: persisted.row.ordinal },
+    receipt: persisted.row.receipt,
+    identity: {
+      clientId: persisted.operation.initiator.actor.clientId,
+      requestedBy: persisted.operation.initiator.actor.requestedBy,
+    },
+    chunkIndex: 0,
+    deadline: workStepDeadline(),
+  };
+  const accepted = await executeCollectionAddTarget(runtime, command);
+  expect(accepted.kind).toBe('terminal');
+  expect(await executeCollectionAddTarget(runtime, command)).toEqual(accepted);
+  const checkpoint = await f.pool.query<{ state: string }>(
+    'SELECT state FROM library.bulk_target WHERE route=$1 AND operation_id=$2 AND ordinal=0',
+    [sourceRoute, operationId],
+  );
+  expect(checkpoint.rows[0]?.state).toBe('pending');
+
+  await bulk.cancel(owner.actor, operationId, key());
+  await runCollectionBulkPage(
+    {
+      ...dependencies(),
+      readConsent: async () => ({
+        actorAccountId: owner.actor.accountId,
+        clientId: owner.actor.clientId,
+        scopes: owner.actor.scopes,
+      }),
+    },
+    { route: sourceRoute, operationId },
+  );
+  const outcomes = await bulk.outcomes(owner.actor, operationId, {});
+  expect(outcomes.outcomes.map((row) => [row.state, row.reason])).toEqual([['applied', null]]);
+  const member = await f.pool.query<{ count: number }>(
+    `SELECT count(*)::integer AS count FROM library.collection_member
+     WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL`,
+    [destinationRoute, destination.id],
+  );
+  expect(member.rows[0]?.count).toBe(1);
+
+  await f.revokeIdentity(owner.actor.accountId);
+  await expect(bulk.get(owner.actor, operationId)).rejects.toThrow();
+  const expired = () => new Date(Date.now() + 49 * 3600000);
+  const expiry = { pool: f.pool, clock: expired };
+  await expireCollectionBulkPage(expiry, sourceRoute);
+  await expireCollectionBulkPage(expiry, sourceRoute);
+  const root = await f.pool.query(
+    'SELECT 1 FROM library.bulk_operation WHERE route=$1 AND operation_id=$2',
+    [sourceRoute, operationId],
+  );
+  expect(root.rowCount).toBe(0);
+  expect(member.rows[0]?.count).toBe(1);
 });

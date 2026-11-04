@@ -1,15 +1,20 @@
 import canonicalize from 'canonicalize';
+import { isDeepStrictEqual } from 'node:util';
+import { DurableInitiatorUnavailableError } from '../access/durable-initiator.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { PlatformClosedError } from '../access/gates/admission.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   authoritativeTimeValue,
+  CommandUnavailableError,
   noEffect,
   runCommand,
   type AuthoritativeTime,
   type CommandAttempt,
   type CommandTransaction,
 } from '../command/command.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { AccessClient, AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { addCollectionMemberIfAbsentNative, type CollectionBulkAddEffect } from './collections.ts';
@@ -36,6 +41,7 @@ type Prepared = {
 };
 
 class EvidenceMissingError extends Error {}
+class OperationStoppedError extends Error {}
 
 function capturedSubject(target: SubjectTarget): Omit<SubjectTarget, 'operationId' | 'ordinal'> {
   const { operationId: _operationId, ordinal: _ordinal, ...captured } = target;
@@ -108,12 +114,12 @@ async function verifyPersistedTarget(
     const operation = await readCollectionBulk(client as CommandTransaction, key);
     if (
       !operation ||
-      operation.phase !== 'applying' ||
       operation.sourceDigest !== command.sourceDigest ||
       operation.request.action !== 'add_to_collection' ||
       operation.request.collectionId !== command.target.collectionId
     )
       throw new EvidenceMissingError();
+    if (operation.phase !== 'applying') throw new OperationStoppedError();
     const ordinal = Number(command.target.ordinal);
     if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= 1_000) throw new EvidenceMissingError();
     const [row] = await pageCollectionBulkManifest(client as CommandTransaction, {
@@ -139,7 +145,7 @@ async function verifyPersistedTarget(
 
 function evidence(
   command: TargetCommand,
-  transactionId: string,
+  transactionId: string | null,
   effect: Pick<CollectionBulkAddEffect, 'state' | 'reason' | 'resultingMemberId'>,
 ): TargetEvidence {
   return {
@@ -152,6 +158,74 @@ function evidence(
     reason: effect.reason,
     resultingMemberId: effect.state === 'applied' ? effect.resultingMemberId : null,
   };
+}
+
+/** Recover a target-home command only from its exact persisted operation, manifest and native receipt. */
+export async function reconcileCollectionAddTarget(
+  dependencies: BulkDependencies,
+  command: TargetCommand,
+): Promise<AttemptResult | null> {
+  if (command.target.kind !== 'subject' || !command.target.collectionId)
+    return { kind: 'stop', reason: 'evidence_missing' };
+  const collectionRoute = routeOf(command.target.collectionId);
+  if (collectionRoute === null || collectionRoute === command.source.route) return null;
+  return withConnection(dependencies.pool, async (client) => {
+    const key = {
+      route: command.source.route,
+      accountId: command.receipt.principalId,
+      operationId: command.source.id,
+    };
+    const operation = await readCollectionBulk(client as CommandTransaction, key);
+    if (
+      !operation ||
+      operation.phase === 'preview' ||
+      operation.sourceDigest !== command.sourceDigest ||
+      operation.request.action !== 'add_to_collection' ||
+      operation.request.collectionId !== command.target.collectionId
+    )
+      return { kind: 'stop', reason: 'evidence_missing' };
+    const ordinal = Number(command.target.ordinal);
+    if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= 1_000)
+      return { kind: 'stop', reason: 'evidence_missing' };
+    const [manifest] = await pageCollectionBulkManifest(client as CommandTransaction, {
+      ...key,
+      after: ordinal - 1,
+      limit: 1,
+    });
+    if (
+      !manifest ||
+      manifest.ordinal !== command.target.ordinal ||
+      !sameJson(manifest.target, capturedSubject(command.target)) ||
+      !sameJson(manifest.receipt, command.receipt)
+    )
+      return { kind: 'stop', reason: 'evidence_missing' };
+    const found = await client.query<{ transactionId: string; digest: string; response: TargetEvidence }>(
+      `SELECT transaction_id AS "transactionId",encode(request_digest,'hex') AS digest,response
+        FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+          AND command_kind=$3 AND idempotency_key=ANY($4::text[]) AND payload_state='present' LIMIT 1`,
+      [
+        command.receipt.partition,
+        command.receipt.principalId,
+        command.receipt.commandKind,
+        nativeReceiptKeyCandidates(client, command.receipt.commandKind, command.receipt.principalId, command.receipt.key),
+      ],
+    );
+    const receipt = found.rows[0];
+    if (!receipt) return null;
+    const result = receipt.response;
+    if (
+      receipt.digest !== command.receipt.digest ||
+      !result ||
+      result.transactionId !== receipt.transactionId ||
+      result.operationId !== command.target.operationId ||
+      result.ordinal !== command.target.ordinal ||
+      result.sourceDigest !== command.sourceDigest ||
+      !isDeepStrictEqual(result.receipt, command.receipt) ||
+      !['applied', 'no_effect', 'conflict', 'denied', 'failed', 'cancelled'].includes(result.outcome)
+    )
+      return { kind: 'stop', reason: 'evidence_missing' };
+    return { kind: 'terminal', evidence: result };
+  });
 }
 
 /** Execute one exact captured subject add. Same-home effects and outcomes share one command;
@@ -358,8 +432,31 @@ export async function executeCollectionAddTarget(
       return { kind: 'stop', reason: 'evidence_missing' };
     return { kind: 'terminal', evidence: result.value };
   } catch (error) {
+    if (error instanceof OperationStoppedError) {
+      const prior = await reconcileCollectionAddTarget(dependencies, command);
+      return prior ?? { kind: 'stop', reason: 'execution_expired' };
+    }
     if (error instanceof EvidenceMissingError) return { kind: 'stop', reason: 'evidence_missing' };
-    if (error instanceof GrantDeniedError) return { kind: 'stop', reason: 'authority_lost' };
+    const refused =
+      error instanceof GrantDeniedError ||
+      error instanceof PlatformClosedError ||
+      error instanceof DurableInitiatorUnavailableError;
+    if (refused || error instanceof CommandUnavailableError) {
+      const prior = await reconcileCollectionAddTarget(dependencies, command);
+      if (prior) return prior;
+      if (refused && collectionRoute !== sourceRoute)
+        return {
+          kind: 'terminal',
+          evidence: evidence(command, null, {
+            state: 'denied',
+            reason: 'authority_lost',
+            resultingMemberId: null,
+          }),
+        };
+      return refused
+        ? { kind: 'stop', reason: 'authority_lost' }
+        : { kind: 'reconciling', receipt: command.receipt, reason: 'dependency_unavailable' };
+    }
     throw error;
   }
 }

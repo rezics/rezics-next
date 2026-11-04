@@ -1,5 +1,6 @@
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import type { CommandTransaction } from '../command/command.ts';
 import type { DurableInitiatorRecord } from '../access/durable-initiator.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -11,6 +12,8 @@ import type {
   OccurrenceTarget,
   ReceiptLocator,
   SubjectTarget,
+  TargetEvidence,
+  TargetState,
   TerminalOutcome,
 } from './bulk-contract.ts';
 
@@ -51,7 +54,7 @@ export type CollectionBulkManifestRow = {
   ordinal: string;
   target: CollectionBulkTarget;
   receipt: ReceiptLocator;
-  state: 'pending' | TerminalOutcome;
+  state: Extract<TargetState, 'pending' | 'reconciling'> | TerminalOutcome;
   reason: BulkReason | null;
   resultingMemberId: string | null;
 };
@@ -323,6 +326,113 @@ export async function pageCollectionBulkManifest(
   return rows.rows;
 }
 
+/** Persist an unknown native response without converting it to a refusal or failed effect. */
+export async function markCollectionBulkTargetReconciling(
+  tx: CommandTransaction,
+  input: CollectionBulkKey & { ordinal: number; reason: Extract<BulkReason, 'deadline' | 'dependency_unavailable'> },
+): Promise<boolean> {
+  key(input);
+  if (!Number.isSafeInteger(input.ordinal) || input.ordinal < 0 || input.ordinal >= COLLECTION_BULK_TARGET_LIMIT)
+    throw new RangeError('Invalid manifest ordinal');
+  await tx.query(
+    `SELECT operation_id FROM library.bulk_operation WHERE route=$1 AND operation_id=$2
+      AND account_id=$3 FOR UPDATE`,
+    [input.route, input.operationId, input.accountId],
+  );
+  const operation = await readCollectionBulk(tx, input);
+  if (!operation || operation.phase !== 'applying') return false;
+  const updated = await tx.query(
+    `UPDATE library.bulk_target SET state='reconciling',reason=$5
+      WHERE route=$1 AND operation_id=$2 AND account_id=$3 AND ordinal=$4
+        AND state IN ('pending','reconciling')`,
+    [input.route, input.operationId, input.accountId, input.ordinal, input.reason],
+  );
+  return updated.rowCount === 1;
+}
+
+/** A remote receipt has already committed. Store its exact result under the operation lock. */
+export async function acknowledgeCollectionBulkTarget(
+  tx: CommandTransaction,
+  input: CollectionBulkKey & { ordinal: number; evidence: TargetEvidence },
+): Promise<boolean> {
+  key(input);
+  if (!Number.isSafeInteger(input.ordinal) || input.ordinal < 0 || input.ordinal >= COLLECTION_BULK_TARGET_LIMIT)
+    throw new RangeError('Invalid manifest ordinal');
+  await tx.query(
+    `SELECT operation_id FROM library.bulk_operation WHERE route=$1 AND operation_id=$2
+      AND account_id=$3 FOR UPDATE`,
+    [input.route, input.operationId, input.accountId],
+  );
+  const operation = await readCollectionBulk(tx, input);
+  if (!operation || operation.phase === 'preview') return false;
+  const found = await tx.query<{
+    target: CollectionBulkTarget;
+    receipt: ReceiptLocator;
+    state: TargetState;
+    reason: BulkReason | null;
+    evidence: TargetEvidence | null;
+  }>(
+    `SELECT target,receipt,state,reason,evidence FROM library.bulk_target
+      WHERE route=$1 AND operation_id=$2 AND account_id=$3 AND ordinal=$4 FOR UPDATE`,
+    [input.route, input.operationId, input.accountId, input.ordinal],
+  );
+  const row = found.rows[0];
+  const evidence = input.evidence;
+  const collectionId = row?.target.collectionId;
+  const collectionRoute = collectionId ? routeOf(collectionId) : null;
+  const requestCollectionId = 'collectionId' in operation.request ? operation.request.collectionId : null;
+  const isRemoteAction =
+    (operation.request.action === 'add_to_collection' && row?.target.kind === 'subject') ||
+    (operation.request.action === 'remove_from_collection' && row?.target.kind === 'occurrence');
+  if (
+    !row ||
+    !isRemoteAction ||
+    collectionRoute === null ||
+    collectionRoute === input.route ||
+    collectionId !== requestCollectionId ||
+    evidence.operationId !== input.operationId ||
+    evidence.ordinal !== String(input.ordinal) ||
+    evidence.sourceDigest !== operation.sourceDigest ||
+    !isDeepStrictEqual(evidence.receipt, row.receipt)
+  )
+    throw new Error('Remote bulk result does not match its persisted target');
+
+  if (row.state !== 'pending' && row.state !== 'reconciling') {
+    if (row.evidence && isDeepStrictEqual(row.evidence, evidence)) return false;
+    const replaceableStop =
+      row.evidence === null &&
+      (row.state === 'cancelled' || row.state === 'denied') &&
+      ['authority_lost', 'cancel_requested', 'execution_expired', 'dependency_unavailable'].includes(row.reason ?? '');
+    if (!replaceableStop) throw new Error('A different terminal bulk result is already recorded');
+  }
+
+  const updated = await tx.query(
+    `UPDATE library.bulk_target SET state=$5,reason=$6,resulting_member_id=$7,evidence=$8::jsonb
+      WHERE route=$1 AND operation_id=$2 AND account_id=$3 AND ordinal=$4
+        AND (state IN ('pending','reconciling') OR (evidence IS NULL AND state IN ('denied','cancelled')))
+      RETURNING ordinal`,
+    [
+      input.route,
+      input.operationId,
+      input.accountId,
+      input.ordinal,
+      evidence.outcome,
+      evidence.reason,
+      evidence.resultingMemberId,
+      JSON.stringify(evidence),
+    ],
+  );
+  if (updated.rowCount !== 1) throw new Error('Remote bulk result acknowledgement lost its target');
+  await tx.query(
+    `UPDATE library.bulk_operation SET phase='completed' WHERE route=$1 AND operation_id=$2
+      AND account_id=$3 AND NOT EXISTS (SELECT 1 FROM library.bulk_target
+        WHERE route=$1 AND operation_id=$2 AND account_id=$3
+          AND state IN ('pending','reconciling') ORDER BY ordinal LIMIT 1)`,
+    [input.route, input.operationId, input.accountId],
+  );
+  return true;
+}
+
 export type ApplyCollectionBulkTarget = (
   tx: CommandTransaction,
   operation: CollectionBulkOperation,
@@ -357,19 +467,33 @@ export async function applyCollectionBulkTarget(
   );
   const row = found.rows[0];
   if (!row) return null;
-  if (row.state !== 'pending')
+  if (row.state !== 'pending' && row.state !== 'reconciling')
     return { state: row.state, reason: row.reason, resultingMemberId: row.resultingMemberId };
   if (row.target.kind === 'occurrence' && routeOf(row.target.collectionId) !== input.route)
     throw new RangeError('Remote occurrences require native receipt reconciliation in the Library worker');
-  const outcome: CollectionBulkOutcome =
-    Date.parse(input.now) >= Date.parse(operation.expiresAt)
-      ? { state: 'cancelled', reason: 'execution_expired' }
-      : await apply(tx, operation, row);
+  let outcome: CollectionBulkOutcome;
+  if (operation.phase === 'completed') {
+    const stop = (
+      await tx.query<{ state: 'denied' | 'cancelled'; reason: BulkReason | null }>(
+        `SELECT state,reason FROM library.bulk_target WHERE route=$1 AND operation_id=$2
+          AND state IN ('denied','cancelled') ORDER BY ordinal LIMIT 1`,
+        [input.route, input.operationId],
+      )
+    ).rows[0];
+    outcome = {
+      state: stop?.state === 'denied' ? 'denied' : 'cancelled',
+      reason: stop?.reason ?? 'cancel_requested',
+    };
+  } else if (Date.parse(input.now) >= Date.parse(operation.expiresAt)) {
+    outcome = { state: 'cancelled', reason: 'execution_expired' };
+  } else {
+    outcome = await apply(tx, operation, row);
+  }
   if (!['applied', 'no_effect', 'conflict', 'denied', 'failed', 'cancelled'].includes(outcome.state))
     throw new TypeError('Native effect must return a terminal outcome');
   await tx.query(
     `UPDATE library.bulk_target SET state=$5,reason=$6,resulting_member_id=$7
-    WHERE route=$1 AND operation_id=$2 AND account_id=$3 AND ordinal=$4 AND state='pending'`,
+    WHERE route=$1 AND operation_id=$2 AND account_id=$3 AND ordinal=$4 AND state IN ('pending','reconciling')`,
     [
       input.route,
       input.operationId,

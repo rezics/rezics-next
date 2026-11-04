@@ -1,7 +1,8 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
+import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, noEffect, runCommand } from '../command/command.ts';
+import { authoritativeTimeValue, CommandUnavailableError, noEffect, runCommand } from '../command/command.ts';
 import { shareAccount } from '../access/account-share.ts';
 import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
@@ -13,14 +14,17 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import { COMMAND_STEP_RETRIES } from '../work/retries.ts';
-import { ProblemError } from '../http/problem.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import {
   executeStatusTarget,
   executeCollectionAddTarget,
   executeCollectionRemoveTarget,
   executeLibraryRemovalTarget,
+  reconcileBulkTarget,
   type BulkDependencies,
   type BulkReason,
+  type OperationView,
+  type TargetEvidence,
   type TargetCommand,
 } from './bulk-contract.ts';
 import {
@@ -30,7 +34,13 @@ import {
   readCollectionBulkInitiator,
   type CollectionBulkInput,
 } from './collection-bulk-operation.ts';
-import { pageCollectionBulkManifest, readCollectionBulk, type CollectionBulkKey } from './collection-bulk-store.ts';
+import {
+  acknowledgeCollectionBulkTarget,
+  markCollectionBulkTargetReconciling,
+  pageCollectionBulkManifest,
+  readCollectionBulk,
+  type CollectionBulkKey,
+} from './collection-bulk-store.ts';
 import { workStepDeadline } from './command-support.ts';
 
 type Dependencies = {
@@ -91,7 +101,15 @@ async function closePending(deps: Pick<Dependencies, 'pool' | 'clock'>, key: Col
       const result = await tx.query(
         `WITH keys AS MATERIALIZED (
         SELECT ordinal FROM library.bulk_target WHERE route=$1 AND operation_id=$2 AND account_id=$3
-          AND state IN ('pending','reconciling') ORDER BY ordinal LIMIT 100)
+          AND state IN ('pending','reconciling')
+          AND (state='pending' OR CASE
+            WHEN target_kind='occurrence' THEN
+              get_byte(uuid_send(collection_id),10)*256+get_byte(uuid_send(collection_id),11)=route
+            WHEN target->>'collectionId' IS NULL THEN true
+            ELSE get_byte(uuid_send((target->>'collectionId')::uuid),10)*256+
+              get_byte(uuid_send((target->>'collectionId')::uuid),11)=route
+          END)
+          ORDER BY ordinal LIMIT 100)
         UPDATE library.bulk_target AS target SET state=$4,reason=$5 FROM keys
         WHERE target.route=$1 AND target.operation_id=$2 AND target.account_id=$3 AND target.ordinal=keys.ordinal`,
         [key.route, key.operationId, key.accountId, reason === 'authority_lost' ? 'denied' : 'cancelled', reason],
@@ -100,6 +118,149 @@ async function closePending(deps: Pick<Dependencies, 'pool' | 'clock'>, key: Col
         value: result.rowCount ?? 0,
         events: [{ type: BULK_CHANGED_EVENT, subject: key.accountId, data: { operationId: key.operationId } }],
       };
+    },
+  );
+  return result.value;
+}
+
+/** Source-side checkpoint for a committed remote Collection receipt. */
+export async function acknowledgeCollectionBulkOutcome(
+  deps: Pick<BulkDependencies, 'pool' | 'clock'>,
+  evidence: TargetEvidence,
+): Promise<OperationView | null> {
+  const route = routeOf(evidence.operationId);
+  if (route === null || routeOf(evidence.receipt.principalId) !== route)
+    throw new TypeError('Invalid bulk receipt owner');
+  const key = { route, accountId: evidence.receipt.principalId, operationId: evidence.operationId };
+  let live = false;
+  const result = await runCommand<OperationView | null>(
+    deps.pool,
+    {
+      partition: partitionOf(route),
+      deadline: workStepDeadline(),
+      clock: deps.clock,
+      authorization: {
+        action: 'library:bulk-accounting',
+        resource: { route, id: key.accountId },
+        denied: () => new Error('Bulk accounting fence unavailable'),
+        async authorize(tx) {
+          live = false;
+          try {
+            await shareAccount(tx, key.accountId);
+            live = true;
+          } catch (error) {
+            if (!(error instanceof LifecycleDeniedError)) throw error;
+          }
+          return 'execute';
+        },
+      },
+    },
+    async (tx) => {
+      if (!live) return noEffect(null);
+      const operation = await readCollectionBulk(tx, key);
+      const ordinal = Number(evidence.ordinal);
+      if (!operation || !Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal >= 1_000)
+        throw new Error('Remote bulk result has no retained operation');
+      const row = (
+        await tx.query<{
+          target: { kind: 'subject' | 'occurrence'; collectionId?: string };
+          receipt: TargetEvidence['receipt'];
+        }>(
+          `SELECT target,receipt FROM library.bulk_target
+            WHERE route=$1 AND operation_id=$2 AND account_id=$3 AND ordinal=$4`,
+          [route, evidence.operationId, key.accountId, ordinal],
+        )
+      ).rows[0];
+      const collectionId = row?.target.collectionId;
+      const collectionRoute = collectionId ? routeOf(collectionId) : null;
+      const isRemoteAction =
+        (operation.request.action === 'add_to_collection' && row?.target.kind === 'subject') ||
+        (operation.request.action === 'remove_from_collection' && row?.target.kind === 'occurrence');
+      if (
+        !row ||
+        !isRemoteAction ||
+        collectionRoute === null ||
+        collectionRoute === route ||
+        evidence.receipt.partition !== partitionOf(collectionRoute) ||
+        evidence.receipt.commandKind !== 'library.collectionBulk.target' ||
+        !isDeepStrictEqual(row.receipt, evidence.receipt)
+      )
+        throw new Error('Remote bulk result does not match its persisted target');
+      if (evidence.transactionId === null) {
+        if (evidence.outcome !== 'denied' || evidence.reason !== 'authority_lost')
+          throw new Error('Receipt-less bulk evidence is not an authority refusal');
+      } else {
+        const found = await tx.query<{ transactionId: string; digest: string; response: TargetEvidence }>(
+          `SELECT transaction_id AS "transactionId",encode(request_digest,'hex') AS digest,response
+            FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2
+              AND command_kind=$3 AND idempotency_key=ANY($4::text[]) AND payload_state='present' LIMIT 1`,
+          [
+            evidence.receipt.partition,
+            key.accountId,
+            evidence.receipt.commandKind,
+            nativeReceiptKeyCandidates(tx, evidence.receipt.commandKind, key.accountId, evidence.receipt.key),
+          ],
+        );
+        const receipt = found.rows[0];
+        if (
+          !receipt ||
+          receipt.digest !== evidence.receipt.digest ||
+          receipt.transactionId !== evidence.transactionId ||
+          !isDeepStrictEqual(receipt.response, evidence)
+        )
+          throw new Error('Remote bulk result does not match its original native receipt');
+      }
+      const changed = await acknowledgeCollectionBulkTarget(tx, { ...key, ordinal, evidence });
+      const view = (await collectionBulkView(tx, key)).operation;
+      return changed
+        ? {
+            value: view,
+            events: [{ type: BULK_CHANGED_EVENT, subject: key.accountId, data: { operationId: key.operationId } }],
+          }
+        : noEffect(view);
+    },
+  );
+  return result.value;
+}
+
+async function markReconciling(
+  deps: Pick<BulkDependencies, 'pool' | 'clock'>,
+  key: CollectionBulkKey,
+  ordinal: number,
+  reason: Extract<BulkReason, 'deadline' | 'dependency_unavailable'>,
+): Promise<boolean | null> {
+  let live = false;
+  const result = await runCommand<boolean | null>(
+    deps.pool,
+    {
+      partition: partitionOf(key.route),
+      deadline: workStepDeadline(),
+      clock: deps.clock,
+      authorization: {
+        action: 'library:bulk-accounting',
+        resource: { route: key.route, id: key.accountId },
+        denied: () => new Error('Bulk accounting fence unavailable'),
+        async authorize(tx) {
+          live = false;
+          try {
+            await shareAccount(tx, key.accountId);
+            live = true;
+          } catch (error) {
+            if (!(error instanceof LifecycleDeniedError)) throw error;
+          }
+          return 'execute';
+        },
+      },
+    },
+    async (tx) => {
+      if (!live) return noEffect(null);
+      const changed = await markCollectionBulkTargetReconciling(tx, { ...key, ordinal, reason });
+      return changed
+        ? {
+            value: true,
+            events: [{ type: BULK_CHANGED_EVENT, subject: key.accountId, data: { operationId: key.operationId } }],
+          }
+        : noEffect(false);
     },
   );
   return result.value;
@@ -131,22 +292,14 @@ export async function runCollectionBulkPage(deps: Dependencies, input: Collectio
   });
   if (!loaded || loaded.operation.phase === 'preview' || loaded.targets.length === 0) return false;
   const { key, operation, targets } = loaded;
-  if (operation.phase === 'completed' || Date.parse(operation.expiresAt) <= deps.clock().getTime()) {
-    const removed = await closePending(
-      deps,
-      key,
-      loaded.denied ? 'authority_lost' : operation.phase === 'completed' ? 'cancel_requested' : 'execution_expired',
-    );
-    return removed === 100;
-  }
   const runtime: BulkDependencies = {
     ...deps,
     readInitiator: readCollectionBulkInitiator,
     initiators: createInitiatorRestorer({ ...deps, readOperation: readCollectionBulkInitiator }),
   };
-  for (const row of targets) {
+  const commandFor = (row: (typeof targets)[number]): TargetCommand => {
     const target = { ...row.target, operationId: key.operationId, ordinal: row.ordinal };
-    const command: TargetCommand = {
+    return {
       source: operation.initiator.operation,
       sourceDigest: operation.sourceDigest,
       target,
@@ -158,6 +311,58 @@ export async function runCollectionBulkPage(deps: Dependencies, input: Collectio
       chunkIndex: Math.floor(Number(row.ordinal) / 100),
       deadline: workStepDeadline(),
     };
+  };
+  const isRemote = (command: TargetCommand) => {
+    const targetRoute =
+      command.target.kind === 'occurrence'
+        ? routeOf(command.target.collectionId)
+        : command.target.collectionId
+          ? routeOf(command.target.collectionId)
+          : key.route;
+    return targetRoute !== null && targetRoute !== key.route;
+  };
+  if (operation.phase === 'completed' || Date.parse(operation.expiresAt) <= deps.clock().getTime()) {
+    let unresolvedRemote = false;
+    for (const row of targets) {
+      const command = commandFor(row);
+      if (!isRemote(command)) continue;
+      const recovered = await reconcileBulkTarget(runtime, command);
+      if (recovered?.kind === 'terminal') {
+        if (!(await acknowledgeCollectionBulkOutcome(runtime, recovered.evidence))) return false;
+      } else if (recovered?.kind === 'reconciling') {
+        unresolvedRemote = true;
+        const marked = await markReconciling(
+          runtime,
+          key,
+          Number(command.target.ordinal),
+          recovered.reason === 'deadline' ? 'deadline' : 'dependency_unavailable',
+        );
+        if (marked === null) return false;
+        throw new CommandUnavailableError(
+          recovered.reason === 'deadline' ? 'deadline' : 'overloaded',
+          partitionOf(key.route),
+        );
+      } else if (recovered?.kind === 'stop' && recovered.reason === 'evidence_missing') {
+        throw new Error('Bulk effect evidence missing');
+      } else if (row.state === 'reconciling') {
+        unresolvedRemote = true;
+      }
+    }
+    const removed = await closePending(
+      deps,
+      key,
+      loaded.denied ? 'authority_lost' : operation.phase === 'completed' ? 'cancel_requested' : 'execution_expired',
+    );
+    if (unresolvedRemote) throw new CommandUnavailableError('overloaded', partitionOf(key.route));
+    return removed === 100;
+  }
+  for (const row of targets) {
+    const command = commandFor(row);
+    if (isRemote(command)) {
+      const marked = await markReconciling(runtime, key, Number(command.target.ordinal), 'dependency_unavailable');
+      if (marked === null) return false;
+      if (!marked) return true;
+    }
     const execute =
       operation.request.action === 'set_status'
         ? executeStatusTarget
@@ -169,10 +374,24 @@ export async function runCollectionBulkPage(deps: Dependencies, input: Collectio
     const result = await execute(runtime, command);
     if (result.kind === 'stop') {
       if (result.reason === 'evidence_missing') throw new Error('Bulk effect evidence missing');
+      if (isRemote(command) && row.state === 'reconciling')
+        throw new CommandUnavailableError('overloaded', partitionOf(key.route));
       await closePending(deps, key, result.reason === 'authority_lost' ? 'authority_lost' : 'execution_expired');
       return true;
     }
-    if (result.kind === 'reconciling') throw new ProblemError('dependency_unavailable');
+    if (result.kind === 'reconciling') {
+      await markReconciling(
+        runtime,
+        key,
+        Number(command.target.ordinal),
+        result.reason === 'deadline' ? 'deadline' : 'dependency_unavailable',
+      );
+      throw new CommandUnavailableError(
+        result.reason === 'deadline' ? 'deadline' : 'overloaded',
+        partitionOf(key.route),
+      );
+    }
+    if (isRemote(command) && !(await acknowledgeCollectionBulkOutcome(runtime, result.evidence))) return false;
   }
   return targets.length === 100;
 }

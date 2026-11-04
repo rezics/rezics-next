@@ -25,11 +25,17 @@ names an explicit source Collection and canonical Members filter/order, exhausts
 stable source revision and current viewer authority, and returns captured source operands to the operation client.
 The 64-KiB request, 100-page/10,000-candidate preparation bound and 1,000-effect bound are enforced; pending and
 unavailable sources remain typed. Status, Collection add, occurrence removal and Library removal all reuse their
-existing action admission, immutable manifest, executor and receipt behavior. Focused coverage is
-`services/kernel/test/library/collection-bulk-capture.test.ts` and the real route journey in
-`services/kernel/test/library/collection-bulk-operation.test.ts`, including multi-page duplicate membership.
-Whole native acceptance, original-replay and physical-cost evidence remain deferred to integration. Web retains
-its existing four interface owners and updates those flows against this operation contract.
+existing action admission, immutable manifest and target writer. Remote Collection results now retain the original
+target-home receipt until the source operation verifies and acknowledges it. Unknown responses stay reconcilable;
+retries keep the same receipt key and operands, and cancellation recovers late committed results before closing the
+remaining set. Result pages and state groups remain bounded and leave the confirmed manifest intact. Focused coverage
+is `services/kernel/test/library/collection-bulk-capture.test.ts` and the composed route scenarios in
+`services/kernel/test/library/collection-bulk-operation.test.ts`, including filtered review, source drift,
+same-key confirmation replay, mixed and paged results, remote receipt recovery, cancellation, credential fencing and
+expiry cleanup. Accounts erasure still has no account-home producer locator or late-disposition fence for
+target-home `bulk_effect` rows; this slice adds no effect ledger or remote receipt erasure claim. Whole native/frozen
+acceptance, retained 64/512/4096 growth, browser review, full-Kernel and heavy-placement checks remain controller
+work after integration. Web retains its existing four interface owners and uses this operation contract.
 
 Personal consumption statistics now have the mounted owner-only
 `GET /v1/libraryConsumptionSummary` and typed `libraryConsumptionSummary.get()` caller.

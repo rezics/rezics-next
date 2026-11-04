@@ -238,7 +238,9 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
   const stopReason = rows.rows.find(
     (row) => row.reason === 'authority_lost' || row.reason === 'cancel_requested' || row.reason === 'execution_expired',
   )?.reason;
-  const cancelled = operation.phase === 'completed' && (counts.pending > 0 || counts.cancelled > 0);
+  const reconcilingReason = rows.rows.find((row) => row.state === 'reconciling')?.reason ?? null;
+  const cancelled =
+    operation.phase === 'completed' && (counts.pending > 0 || counts.reconciling > 0 || counts.cancelled > 0);
   return {
     operation: {
       id: key.operationId,
@@ -249,7 +251,9 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
       collectionId: 'collectionId' in operation.request ? operation.request.collectionId : null,
       selectionSource: source,
       phase:
-        cancelled && stopReason === 'execution_expired'
+        counts.reconciling > 0
+          ? 'reconciling'
+          : cancelled && stopReason === 'execution_expired'
           ? 'expired'
           : stopReason === 'authority_lost'
             ? 'stopped'
@@ -276,11 +280,12 @@ export async function collectionBulkView(tx: CommandTransaction, key: Collection
       resultsExpireAt: operation.resultsExpireAt,
       finishedAt: null,
       reason:
-        stopReason === 'authority_lost' || stopReason === 'execution_expired' || stopReason === 'cancel_requested'
+        reconcilingReason ??
+        (stopReason === 'authority_lost' || stopReason === 'execution_expired' || stopReason === 'cancel_requested'
           ? stopReason
           : cancelled
             ? 'cancel_requested'
-            : null,
+            : null),
     },
   };
 }

@@ -35,6 +35,7 @@ import { readableSubjects } from './subject-anchor.ts';
 type Source = {
   accountId: string;
   initiator: DurableInitiatorRecord;
+  phase: string;
   expiresAt: string;
   resultsExpireAt: string;
   state: string;
@@ -47,7 +48,7 @@ type RemovalCommand = TargetCommand & {
 /** Only exact persisted occurrences enter this action. In particular, no Subject selection is evaluated here. */
 async function source(client: CommandTransaction, command: TargetCommand): Promise<Source | null> {
   const result = await client.query<Source>(
-    `SELECT o.account_id AS "accountId",o.initiator,o.expires_at::text AS "expiresAt",
+    `SELECT o.account_id AS "accountId",o.initiator,o.phase,o.expires_at::text AS "expiresAt",
       o.results_expire_at::text AS "resultsExpireAt",t.state
      FROM library.bulk_operation o JOIN library.bulk_target t USING(route,operation_id,account_id)
      WHERE o.route=$1 AND o.operation_id=$2 AND t.ordinal=$3 AND o.source_digest=$4
@@ -163,6 +164,9 @@ export async function executeCollectionRemoveTarget(
   const client = deadlineClient(deps.pool, deadline);
   const original = await source(client, command);
   if (!original) return { kind: 'stop', reason: 'evidence_missing' };
+  const prior = await committed(deps, client as CommandTransaction, command);
+  if (prior) return { kind: 'terminal', evidence: prior };
+  if (original.phase !== 'applying') return { kind: 'stop', reason: 'execution_expired' };
   if (Date.parse(original.resultsExpireAt) <= deps.clock().getTime())
     return { kind: 'stop', reason: 'execution_expired' };
   const target = command.target,
@@ -183,6 +187,13 @@ export async function executeCollectionRemoveTarget(
     resource: anchor.resource,
     denied: () => new GrantDeniedError(),
     async prepare(attempt) {
+      const currentSource = await source(client as CommandTransaction, command);
+      if (
+        !currentSource ||
+        currentSource.phase !== 'applying' ||
+        !['pending', 'reconciling'].includes(currentSource.state)
+      )
+        throw new RemovalReceiptMissing();
       const record = await deps.readInitiator(client, command.source, attempt.time);
       if (!record || !isDeepStrictEqual(record, original.initiator)) throw new DurableInitiatorUnavailableError();
       const actor = await deps.initiators.restoreInitiator(
@@ -240,10 +251,6 @@ export async function executeCollectionRemoveTarget(
         const at = authoritativeTimeValue(native.time);
         const outcome = (state: TargetEvidence['outcome'], reason: TargetEvidence['reason'] = null) =>
           evidence(command, native.transactionId, state, reason);
-        if (original.state !== 'pending' && original.state !== 'reconciling') throw new RemovalReceiptMissing();
-        if (!readable) return noEffect(outcome('denied', 'target_denied'));
-        if (Date.parse(at) >= Date.parse(original.expiresAt))
-          return noEffect(outcome('cancelled', 'execution_expired'));
         if (sameHome) {
           // Match the operation owner's lock order. Only this transaction may acknowledge a same-home effect.
           await tx.query(
@@ -255,8 +262,35 @@ export async function executeCollectionRemoveTarget(
             [command.source.route, command.source.id, target.ordinal],
           );
           const current = await source(tx, command);
-          if (!current) throw new Error('Captured removal source changed');
-          if (current.state !== 'pending') throw new RemovalReceiptMissing();
+          if (!current || current.phase !== 'applying') throw new RemovalReceiptMissing();
+          if (current.state !== 'pending' && current.state !== 'reconciling') throw new RemovalReceiptMissing();
+        }
+        if (original.state !== 'pending' && original.state !== 'reconciling') throw new RemovalReceiptMissing();
+        const settle = async (value: TargetEvidence) => {
+          if (!sameHome) return;
+          const updated = await tx.query(
+            `UPDATE library.bulk_target SET state=$4,reason=$5,evidence=$6::jsonb
+              WHERE route=$1 AND operation_id=$2 AND ordinal=$3
+                AND state IN ('pending','reconciling') RETURNING ordinal`,
+            [command.source.route, command.source.id, target.ordinal, value.outcome, value.reason, JSON.stringify(value)],
+          );
+          if (updated.rowCount !== 1) throw new Error('Captured removal target is no longer active');
+          await tx.query(
+            `UPDATE library.bulk_operation SET phase='completed' WHERE route=$1 AND operation_id=$2
+              AND NOT EXISTS(SELECT 1 FROM library.bulk_target WHERE route=$1 AND operation_id=$2
+                AND state IN ('pending','reconciling') ORDER BY ordinal LIMIT 1)`,
+            [command.source.route, command.source.id],
+          );
+        };
+        if (!readable) {
+          const value = outcome('denied', 'target_denied');
+          await settle(value);
+          return noEffect(value);
+        }
+        if (Date.parse(at) >= Date.parse(original.expiresAt)) {
+          const value = outcome('cancelled', 'execution_expired');
+          await settle(value);
+          return noEffect(value);
         }
         await assertCollectionOrderWritable(tx, route, target.collectionId);
         const parent = await readCollection(tx, route, target.collectionId);
@@ -275,14 +309,21 @@ export async function executeCollectionRemoveTarget(
           [route, target.collectionId, target.memberId, target.expected.addedAt],
         );
         const member = found.rows[0];
-        if (!member || member.deletionId) return noEffect(outcome('no_effect', 'missing_target'));
+        if (!member || member.deletionId) {
+          const value = outcome('no_effect', 'missing_target');
+          await settle(value);
+          return noEffect(value);
+        }
         if (
           member.subjectId !== target.subjectId ||
           !member.sameAdmission ||
           member.revision !== target.expected.memberRevision ||
           member.transactionId !== target.expected.transactionId
-        )
-          return noEffect(outcome('conflict', 'revision_mismatch'));
+        ) {
+          const value = outcome('conflict', 'revision_mismatch');
+          await settle(value);
+          return noEffect(value);
+        }
         // The native parent CAS and member lock protect the captured stamps through deletion. Sibling edits
         // use the current locked parent revision, rather than turning one removal into conflicts for its peers.
         await enterShelfWrite({ client: tx, route, accountId: parent.curatorAccountId });
@@ -307,20 +348,7 @@ export async function executeCollectionRemoveTarget(
         };
         if (parent.visibility === 'public')
           await recordPublicCollectionReduction(tx, route, target.collectionId, native.transactionId);
-        if (sameHome) {
-          const updated = await tx.query(
-            `UPDATE library.bulk_target SET state='applied',reason=NULL,evidence=$4::jsonb
-          WHERE route=$1 AND operation_id=$2 AND ordinal=$3 AND state='pending' RETURNING ordinal`,
-            [command.source.route, command.source.id, target.ordinal, JSON.stringify(value)],
-          );
-          if (updated.rowCount !== 1) throw new Error('Captured removal target is no longer pending');
-          await tx.query(
-            `UPDATE library.bulk_operation SET phase='completed' WHERE route=$1 AND operation_id=$2
-          AND NOT EXISTS(SELECT 1 FROM library.bulk_target WHERE route=$1 AND operation_id=$2
-          AND state IN ('pending','reconciling') ORDER BY ordinal LIMIT 1)`,
-            [command.source.route, command.source.id],
-          );
-        }
+        await settle(value);
         return {
           value,
           events: [
@@ -353,4 +381,15 @@ export async function executeCollectionRemoveTarget(
     if (refused) return { kind: 'terminal', evidence: evidence(command, null, 'denied', 'authority_lost') };
     return { kind: 'reconciling', receipt: command.receipt, reason: 'dependency_unavailable' };
   }
+}
+
+/** Private lookup for a remote target that committed before its operation checkpoint. */
+export async function reconcileCollectionRemoveTarget(
+  deps: BulkDependencies,
+  command: TargetCommand,
+): Promise<AttemptResult | null> {
+  if (!valid(command)) return { kind: 'stop', reason: 'evidence_missing' };
+  const client = deadlineClient(deps.pool, Math.min(command.deadline, Date.now() + BULK_COMMAND_DEADLINE_MS));
+  const prior = await committed(deps, client as CommandTransaction, command);
+  return prior ? { kind: 'terminal', evidence: prior } : null;
 }

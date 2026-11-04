@@ -218,6 +218,21 @@ async function recover(deps: BulkDependencies, command: TargetCommand) {
   );
 }
 
+/** Read only the exact owner-home removal receipt; never restore authority or issue another write. */
+export async function reconcileLibraryRemovalTarget(
+  deps: BulkDependencies,
+  command: TargetCommand,
+): Promise<AttemptResult | null> {
+  try {
+    validate(command);
+    const current = await recover(deps, command);
+    return current.evidence ? { kind: 'terminal', evidence: current.evidence } : null;
+  } catch (error) {
+    if (error instanceof MissingEvidence) return { kind: 'stop', reason: 'evidence_missing' };
+    throw error;
+  }
+}
+
 /** Captured expectation is compared under the ordinary owner and entry locks, at the actual effect. */
 async function remove(
   tx: CommandTransaction,
@@ -349,7 +364,7 @@ export async function executeLibraryRemovalTarget(
       },
       async (tx, context) => {
         const current = prepared.get(context.time)!.binding!;
-        if (current.evidence || current.phase !== 'applying' || current.state !== 'pending')
+        if (current.evidence || current.phase !== 'applying' || !['pending', 'reconciling'].includes(current.state))
           throw new MissingEvidence();
         if (Date.parse(authoritativeTimeValue(context.time)) >= Date.parse(current.expiresAt))
           throw new ExecutionExpired();

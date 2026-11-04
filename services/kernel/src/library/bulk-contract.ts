@@ -1,9 +1,13 @@
 /** Common bulk wire and executor contracts; native composition lives in collection-bulk-* modules. */
-import { executeCollectionRemoveTarget as removeCapturedOccurrence } from './collection-bulk-remove.ts';
+import { executeCollectionRemoveTarget as removeCapturedOccurrence, reconcileCollectionRemoveTarget } from './collection-bulk-remove.ts';
+import { reconcileCollectionAddTarget } from './collection-bulk-add.ts';
+import { reconcileLibraryRemovalTarget } from './collection-bulk-library-removal.ts';
 import type { Pool } from 'pg';
 import { createCollectionBulkOperations } from './collection-bulk-operation.ts';
 import { executeCollectionBulkStatus, reconcileCollectionBulkStatus } from './collection-bulk-status.ts';
-import { registerCollectionBulkWork } from './collection-bulk-work.ts';
+import { acknowledgeCollectionBulkOutcome, registerCollectionBulkWork } from './collection-bulk-work.ts';
+import { withConnection } from '../database/pool.ts';
+import { isDeepStrictEqual } from 'node:util';
 import type { KernelClock } from '../clock.ts';
 import type { AuthoritativeTime, CommandOutcome, CommandTransaction } from '../command/command.ts';
 import type {
@@ -17,6 +21,7 @@ import type { Access, AccountActor, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { WorkContext } from '../work/registry.ts';
 import type { EntryDeletion, EntryState } from './entry-model.ts';
+import { readCollectionBulk } from './collection-bulk-store.ts';
 
 export const BULK_PAGE_LIMIT = 100;
 export const BULK_SEGMENT_PAGES = 100;
@@ -397,16 +402,38 @@ export async function executeCollectionRemoveTarget(
  * cannot restore an initiator, issue personal effects or disclose target data.
  */
 export async function reconcileBulkTarget(
-  _dependencies: BulkDependencies,
-  _command: TargetCommand,
-): Promise<AttemptResult> {
-  return (await reconcileCollectionBulkStatus(_dependencies, _command)) ?? { kind: 'stop', reason: 'evidence_missing' };
+  dependencies: BulkDependencies,
+  command: TargetCommand,
+): Promise<AttemptResult | null> {
+  const key = {
+    route: command.source.route,
+    accountId: command.receipt.principalId,
+    operationId: command.source.id,
+  };
+  const operation = await withConnection(dependencies.pool, (client) => readCollectionBulk(client as CommandTransaction, key));
+  if (
+    !operation ||
+    operation.phase === 'preview' ||
+    operation.sourceDigest !== command.sourceDigest ||
+    !isDeepStrictEqual(operation.initiator.operation, command.source)
+  )
+    return { kind: 'stop', reason: 'evidence_missing' };
+  switch (operation.request.action) {
+    case 'set_status':
+      return reconcileCollectionBulkStatus(dependencies, command);
+    case 'add_to_collection':
+      return reconcileCollectionAddTarget(dependencies, command);
+    case 'remove_from_collection':
+      return reconcileCollectionRemoveTarget(dependencies, command);
+    case 'remove_from_library':
+      return reconcileLibraryRemovalTarget(dependencies, command);
+  }
 }
 export async function acknowledgeBulkOutcome(
-  _dependencies: BulkDependencies,
-  _evidence: TargetEvidence,
-): Promise<OperationView> {
-  throw new Error('Library bulk outcome transition is not implemented');
+  dependencies: BulkDependencies,
+  evidence: TargetEvidence,
+): Promise<OperationView | null> {
+  return acknowledgeCollectionBulkOutcome(dependencies, evidence);
 }
 export async function cancelBulkPage(_dependencies: BulkDependencies, _input: SegmentInput): Promise<Checkpoint> {
   throw new Error('Library bulk cancellation is not implemented');

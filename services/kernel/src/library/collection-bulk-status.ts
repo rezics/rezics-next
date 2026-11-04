@@ -50,7 +50,7 @@ export async function reconcileCollectionBulkStatus(
       bulkHash(row.receipt) !== bulkHash(command.receipt)
     )
       return { kind: 'stop', reason: 'evidence_missing' };
-    if (row.state === 'pending') return null;
+    if (row.state === 'pending' || row.state === 'reconciling') return null;
     if (!row.evidence) return { kind: 'stop', reason: 'evidence_missing' };
     const receipt = (
       await tx.query<{ transactionId: string; digest: string; evidence: TargetEvidence }>(

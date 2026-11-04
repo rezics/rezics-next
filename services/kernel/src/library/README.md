@@ -1473,6 +1473,25 @@ entry or occurrence changes yield their individual stale outcomes, while accepte
 never re-queries the selection or promises rollback across independent effects, and no cross-home confirmation cut
 is claimed.
 
+The native review identity and manifest are independent of result-page cursors: the Web phone and desktop flows can
+show different bounded pages without changing the confirmed population. A target written on a remote Collection home
+keeps its original target-home command receipt. The source worker then verifies that receipt against the stored
+operation, target and receipt locator before acknowledging the supplied result under the source operation lock.
+Unknown dispatches stay `reconciling`; a retry keeps the same target key and operands. Cancellation checks pending
+remote receipts before closing the remaining manifest, preserving a result that committed before the checkpoint.
+Outcome reads remain owner-authorized and page at most 20 rows (`limit + 1` for continuation); a state-filtered result
+group uses its own indexed page and does not narrow the operation.
+
+Cost includes the full target population: each reached row pays its current target authority and native-writer bounds,
+including unchanged, conflicting, refused and failed outcomes. A remote target adds one target-home dispatch/receipt
+and one source-home acknowledgement; recovery adds the bounded operation/manifest lookup and exact target-home
+receipt read before that acknowledgement. Each worker page examines at most 100 manifest rows. Every result group
+page performs the existing indexed `limit + 1` seek for at most 20 returned rows, and each terminal cleanup command
+examines/deletes at most 100 manifest rows before checking whether the root can be removed. No second target manifest
+or effect ledger is created. The existing `bulk_effect` table is not populated: Accounts' terminal erasure contract
+still lacks an account-home locator and late-disposition fence for target-home effects, so no remote receipt
+minimization or full account-erasure acknowledgement is claimed by this journey.
+
 `collection-bulk-capture.ts` follows every Members continuation, up to 100 pages and 10,000 candidate rows; it
 refuses the 1,001st unique Subject, while occurrence actions independently refuse the 1,001st captured target row.
 Requests are limited to 64 KiB and each operation stores at most 1,000 effects. Pending Members pages stay
