@@ -9114,5 +9114,6 @@
   "subject_short_description": "Description courte",
   "subject_synopsis_advice_refused": "L’avis de correction indique que cette action est refusée.",
   "subject_synopsis_advice_unavailable": "L’avis de correction est indisponible.",
-  "subject_synopsis_return": "Revenir à cette lecture"
+  "subject_synopsis_return": "Revenir à cette lecture",
+  "work_names_return": "Revenir aux noms fournis"
 }

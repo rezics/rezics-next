@@ -1,4 +1,5 @@
 import { SubjectArtworkSession } from '../catalogue/subject-artwork/session';
+import { supportsReleasedWorkNames } from '../catalogue/work-names/model';
 import { WorkNamesEntry } from '../catalogue/work-names/entry';
 import { GameProfileEntry } from '../catalogue/game-profile-entry';
 import { GameOverview } from '../catalogue/game-reader/entry';
@@ -145,6 +146,8 @@ export type SubjectPageData = {
     | { status: 'withheld' }
     | { status: 'unavailable' }
     | { status: 'denied' };
+  /** Optional current Terms operation advice, independent of public names and subject-level actions. */
+  termsAuthority?: import('../catalogue/subject-terms').TermsPageAuthority;
   reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
 };
 
@@ -308,7 +311,14 @@ export async function loadSubjectPage(
     if (typeof survivor === 'string' && survivor !== id) return { kind: 'redirect', id: survivor };
     if (options.realm && !result.data.context) throw new PageReadError('dependency_unavailable', 503);
     const { account: _account, ...page } = result.data;
-    return { kind: 'page', page: { ...page, subject: page.subject ?? null, requestedRealm: options.realm } };
+    // Read the existing mounted Terms authority resource once, alongside this page reading.
+    // An advice outage must never fail or conceal the admitted public page.
+    const reading = subjectBody(page as SubjectPageData);
+    const eligible = reading && page.catalogue?.state === 'released' && supportsReleasedWorkNames(reading.subject.type, page.catalogue.definitions);
+    const termsAuthority = eligible
+      ? await (await import('../catalogue/subject-terms-request')).readTermsPageAuthority(client, options.authorization ? 'signed-in' : 'signed-out', options.authorization)
+      : undefined;
+    return { kind: 'page', page: { ...page, subject: page.subject ?? null, requestedRealm: options.realm, ...(termsAuthority ? { termsAuthority } : {}) } };
   }
   throw problemError(result.error?.value, result.status, result.headers);
 }
@@ -866,6 +876,11 @@ export function SubjectPage({
                 source={page}
                 locale={locale}
                 context={page.context?.id ?? null}
+                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                releaseDigest={page.catalogue?.digest}
+                termsAuthority={page.termsAuthority}
+                expectedReader={page.requestedReader}
+                link={ContextLink}
                 sourcesHref={contextHref(`${workAddress.href}/sources`, realm)}
               />
             ) : null}

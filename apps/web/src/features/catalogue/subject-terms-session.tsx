@@ -9,16 +9,19 @@ import { SubjectTermsPage } from './subject-terms-page';
 import { loadCatalogueTerms, readCatalogueTermsAuthority, saveCatalogueTerms } from './subject-terms-actions';
 import { readCreateDefinitions } from './create-subject-actions';
 import { editorRequest } from './editor-request';
+import { NamesTermsReturn } from './work-names/navigation';
 import { m } from '../../paraglide/messages.js';
 
 export const SubjectTermsSession = candidateSession(function SubjectTermsSession({
   id,
   locale,
   returnToChanges,
+  via,
 }: {
   id: string;
   locale: string;
   returnToChanges?: boolean;
+  via?: string | undefined;
 }) {
   const work = useCatalogueLifetime('terms-transport');
   const { state, csrfToken, subject: reader } = useSession();
@@ -48,6 +51,7 @@ export const SubjectTermsSession = candidateSession(function SubjectTermsSession
   );
   return (
     <>
+      <NamesTermsReturn id={id} locale={locale} via={via} />
       {returnHref && (
         <div className="mx-auto w-full max-w-4xl px-6 pt-4">
           <Link

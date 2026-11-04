@@ -1,3 +1,4 @@
+import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import type { Subject } from '../../../subject/types';
 import { originalLanguage, originalTitle } from '../../../subject/language';
@@ -20,6 +21,10 @@ export type WorkNames =
 
 /** One projection of the admitted Subject terms. Spelling and roles survive exact duplicate grouping. */
 export function workNames(subject: Subject, locale: string): WorkNames {
+  try { return projectWorkNames(subject, locale); } catch { return { state: 'unavailable', bytes: 0 }; }
+}
+
+function projectWorkNames(subject: Subject, locale: string): WorkNames {
   const bytes = new TextEncoder().encode(JSON.stringify({ labels: subject.labels, aliases: subject.aliases })).length;
   if (bytes > WORK_NAMES_BYTES) return { state: 'unavailable', bytes };
   const groups = new Map<string, Map<string, WorkName>>();
@@ -55,4 +60,19 @@ export function supportsWorkNames(type: string, ancestors: readonly string[] = [
   return [type, ...ancestors].some((id) =>
     ['wd:Q689445', 'schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode', 'schema:Book'].includes(id),
   );
+}
+
+/** Summary.types carries only direct bases; the current admitted release supplies the complete ancestry. */
+export function supportsReleasedWorkNames(type: string, release?: Pick<Release, 'types'>): boolean {
+  if (!release?.types[type]) return false;
+  const seen = new Set<string>();
+  const pending = [type];
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (seen.has(id) || !release.types[id]) continue;
+    seen.add(id);
+    if (supportsWorkNames(id)) return true;
+    pending.push(...release.types[id]!.bases);
+  }
+  return false;
 }

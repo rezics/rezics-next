@@ -9206,5 +9206,6 @@
   "subject_short_description": "Short description",
   "subject_synopsis_advice_refused": "Correction advice says this action is refused.",
   "subject_synopsis_advice_unavailable": "Correction advice is unavailable.",
-  "subject_synopsis_return": "Return to this reading"
+  "subject_synopsis_return": "Return to this reading",
+  "work_names_return": "Return to supplied names"
 }

@@ -9114,5 +9114,6 @@
   "subject_short_description": "短い説明",
   "subject_synopsis_advice_refused": "訂正に関する案内では、この操作は拒否されています。",
   "subject_synopsis_advice_unavailable": "訂正に関する案内を利用できません。",
-  "subject_synopsis_return": "この読み取り位置に戻る"
+  "subject_synopsis_return": "この読み取り位置に戻る",
+  "work_names_return": "提供された名前に戻る"
 }

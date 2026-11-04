@@ -2197,8 +2197,57 @@ above that presentation budget it shows unavailable rather than a partial list a
 This is a Web admission limit, not evidence of a native producer bound. No requests are made per name or language.
 Session observation changes retire the reading until a replacement page source arrives.
 
-The remaining Terms return/focus handoff, current Terms action aggregate, native producer budget derivation and
-three-scale composition acceptance are a continuation; the public disclosure does not grant correction authority.
+The ordinary work disclosure checks the current admitted release descriptor and its ancestry; `summary.types`
+repeats the release descriptor's bases but does not establish that the descriptor is currently available. Missing
+or unsupported descriptors grant no work identity. The page aggregate includes the existing Global mounted Terms
+operation advice (`statement:propose`, `subject.terms`), independently of public disclosure. Advice distinguishes
+loading, failure, refusal and signed-out state. Only failed advice has one explicit refresh; replacing the page
+reading starts a new visit. It never retries the Subject or each language. Terms re-reads its original native
+candidate and authority and retains its existing draft/uncertain-command recovery.
+
+Decision: supplied-name return uses one bounded browser history value and the existing validated same-locale `via`
+address; filters stay out of URLs, and changed caller, Context or release refuses restoration.
+The shared handoff restores the expanded disclosure, mounted language groups, group/row window, filter and Terms
+focus anchor on both work and people names. Its binding includes Subject, actual Context, selected Realm, locale,
+release/revision and browser session-cache incarnation metadata; it contains no credentials or editing state.
+A returned fresh page may restore the view, but a mounted retired source object never becomes current again,
+including A-to-B-to-A, locale replacement and session refresh. Late copy and advice callbacks cannot update it.
+Ordinary browser history owns the value; there is no return registry, retained catalogue or former reading list.
+
+### Supplied names Cost
+
+The native input producers are `checkSubjectStructure` (`packages/definitions/src/validate.ts`: at most 512 total
+terms/statements, 250 UTF-16 units per text, 32 aliases per language) and `patchTerms`
+(`services/kernel/src/semantic/terms.ts`, validating the complete resulting term set). `FACT_LIMIT = 512` in
+`write-facts.ts` bounds one fact write; it does not by itself bound examined revision history. The native language
+pattern has no maximum tag length. `DEFAULT_BODY_LIMIT = 1,048,576` bounds ordinary HTTP input, not an aggregate
+Subject response or all import producers. `MAX_PAGE_READS = 16` and `MAX_PAGE_COST = 128` bound a composition plan's
+reads/Subject cost; `RELEASE_LIMITS.bytes = 4,194,304` bounds one released definition artifact, not the whole page.
+
+Let R be actual serialized UTF-8 page response bytes, T its labels/aliases bytes, E encoded name/language entries,
+and A the actual bounded-operation action-response bytes. The response producers `responseResult` in
+`services/kernel/src/presentation/reads.ts` and `respond` in `presentation/http/pages.ts` decode/serialize complete
+responses without a generic response-byte ceiling. Charge O(R) response decoding and O(T + E) admission/grouping,
+including temporary JSON/UTF-8 encodings, even when T exceeds the 262,144-byte presentation budget. Text JSON alone
+can use 1,500 bytes per 250-unit term through escaping; language keys add their actual encoded length. Consequently
+512 valid Japanese 250-unit names already exceed the presentation budget. Such an admitted response is unavailable
+as a whole, never a truncated list. Neither the presentation budget nor input/write limits prove a native SQL or
+whole-page byte bound; the complete response remains owned by the existing page reader.
+
+One work visit uses one page projection request plus one existing Terms authority request when signed in (zero for
+signed-out); the latter is included in the Web page aggregate. A people visit uses its existing one authority read.
+At most one explicit failed-advice refresh adds one action request and its A bytes. Opening Terms adds one original
+Subject projection, one current authority read and one definitions read under existing Terms recovery; charge their
+actual complete response bytes, not T alone. No grouping, opening, paging, filtering or copying adds requests.
+The exact Terms commands and drafts remain private editor-owned state and are not charged as names-return payloads.
+
+Names retain one admitted O(T + E) projection (T <= 262,144), a filter of at most 250 UTF-16 units, eight mounted groups
+and at most 24 rows each (192 rows). Copy state is per mounted control. Return decoding accepts at most 8,192 UTF-8
+bytes with eight group/window records and one fixed focus anchor; browser back and explicit return can each retain
+one such value in their navigation entries, with no traversal of obsolete entries. Three-scale composition cases
+at 64/512/4096 unrelated Subjects and obsolete history charge the same local projection, action refresh and handoff
+work. They establish no native examined-row bound or executed browser/visual result; native and browser acceptance
+remain integration-owned.
 
 ## Person and Character supplied names
 
@@ -2224,9 +2273,9 @@ bounded mounted-operation authority read once per visit and once per explicit re
 signed-out advice leave public names and Sources usable. The existing Terms owner reads its original Subject and
 retains its own candidate, command and draft state; the names projection is never a replacement edit payload.
 
-Decision: until the shared names-return handoff is delivered, people names use the existing page Context link adapter
-for Terms and Sources and do not promise restoration of a former group, filter or focus. That handoff and its exact
-return acceptance remain a continuation; public name expansion grants no editor permission.
+People names use the same bounded names-return handoff as work names, through the existing page Context link
+adapter for Terms and Sources. Their profile, local grouping/filtering/copying and original Terms recovery remain
+the consumer's existing presentation; the shared adapter grants no work type identity or correction authority.
 
 ## Choose a supplied work synopsis
 

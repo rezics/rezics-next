@@ -9114,5 +9114,6 @@
   "subject_short_description": "Kurzbeschreibung",
   "subject_synopsis_advice_refused": "Die Korrekturempfehlung lehnt diese Aktion ab.",
   "subject_synopsis_advice_unavailable": "Die Korrekturempfehlung ist nicht verfügbar.",
-  "subject_synopsis_return": "Zu dieser Lesestelle zurückkehren"
+  "subject_synopsis_return": "Zu dieser Lesestelle zurückkehren",
+  "work_names_return": "Zurück zu den angegebenen Namen"
 }
