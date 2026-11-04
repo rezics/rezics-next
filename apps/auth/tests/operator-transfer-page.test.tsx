@@ -166,10 +166,7 @@ test('uncertain execution retains its exact descriptor and read retry performs n
     phase: 'execute',
   });
   const commandCount = calls.filter(({ path }) => path.startsWith('/account-operations/')).length;
-  const readbackButtons = [...host.querySelectorAll('button')].filter(
-    (entry) => entry.textContent?.trim() === m.auth_transfer_readback(),
-  );
-  await flush(() => readbackButtons.at(-1)!.click());
+  await flush(() => button(host, m.auth_transfer_recovery_review()).click());
   expect(calls.filter(({ path }) => path.startsWith('/account-operations/')).length).toBe(commandCount);
   expect(host.textContent).toContain(m.auth_transfer_uncertain());
 });

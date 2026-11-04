@@ -187,3 +187,42 @@ test('retirement invalidates an imported file before caching and a missing unkno
   expect(page.host.querySelector('#transfer-request-file')).toBeNull();
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_source_unknown());
 });
+
+test('a released source reply after retirement cannot publish acknowledgement, read private state or replay execution', async () => {
+  const page = await mount({ ...saved, phase: 'approve', reference: undefined });
+  const original = () =>
+    reply({
+      kind: 'source',
+      relation: { previous: saved.request.previous, expectedVersion: saved.request.expectedVersion },
+      action: 'allowed',
+    });
+  await page.resolve(1, original());
+  await settle(() => page.host.querySelector<HTMLInputElement>('#transfer-confirm')!.click());
+  await page.choose(m.auth_transfer_submit());
+  await page.resolve(2, original());
+  await page.resolve(3, Response.json({ reference: 'source-approval', expiresAt: '2030-01-01T00:00:00Z' }));
+  expect(page.calls[4]!.path).toBe('/account-operations/execute');
+  const submitted = restoreTransferAttempt();
+  expect(submitted).toMatchObject({
+    phase: 'execute',
+    request: saved.request,
+    acceptance: saved.acceptance,
+    reference: 'source-approval',
+  });
+  await settle(() => {
+    hide();
+    privateHidden(page.host);
+  });
+  expect(page.host.textContent).toContain(m.auth_transfer_recovery_source_unknown());
+  await page.resolve(4, Response.json({ accountId: saved.request.previous.subjectAccountId }));
+  privateHidden(page.host);
+  expect(page.calls).toHaveLength(5);
+  expect(restoreTransferAttempt()).toEqual(submitted);
+  expect(page.host.textContent).not.toContain(m.auth_transfer_recovery_acknowledged());
+  await settle(show);
+  await page.resolve(5, reply({ kind: 'readiness' }));
+  await page.resolve(6, matching());
+  expect(page.host.textContent).toContain(m.auth_transfer_recovery_source_unknown());
+  expect(page.calls.filter(({ path }) => path === '/account-operations/execute')).toHaveLength(1);
+  expect(page.calls.filter(({ path }) => path === '/account-operations/approve')).toHaveLength(1);
+});
