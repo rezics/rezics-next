@@ -55,7 +55,10 @@ type Mode =
   | 'long'
   | 'uncertain'
   | 'selected'
-  | 'preparing';
+  | 'preparing'
+  | 'withdraw-only'
+  | 'identity-changed'
+  | 'question-changed';
 function sample(mode: Mode): OwnClassificationsPage {
   let row = structuredClone(available);
   if (mode === 'long' && row.state === 'available') {
@@ -63,6 +66,15 @@ function sample(mode: Mode): OwnClassificationsPage {
     row.target.label = 'A carefully qualified classification concept · '.repeat(20);
   }
   if (mode === 'read-only') row.actions = { state: 'read-only', set: null, clear: null, readback: path };
+  if (mode === 'withdraw-only') row.actions = { state: 'withdraw-only', set: null, clear: `${path}?expectedRevision=1`, readback: null };
+  if (mode === 'identity-changed' && row.state === 'available') {
+    row.subject.label = 'Current subject identity after replacement';
+    row.association.revision = 2;
+  }
+  if (mode === 'question-changed' && row.state === 'available') {
+    row.target.label = 'Current classification concept after question revision';
+    row.association.revision = 2;
+  }
   if (mode === 'withheld' || mode === 'binding-mismatch')
     row = {
       ...row,
@@ -140,7 +152,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Native source presentation with a supplied command adapter. These examples do not establish native execution or recorded-response verification.',
+          'Recorded native response shapes presented with a supplied command adapter. The examples show returned states; the Kernel journey separately exercises current Access and native writes.',
       },
     },
   },
@@ -161,6 +173,9 @@ export const Sparse: StoryType = { args: { mode: 'sparse' } };
 export const Withheld: StoryType = { args: { mode: 'withheld' } };
 export const BindingMismatch: StoryType = { args: { mode: 'binding-mismatch' } };
 export const ReadOnly: StoryType = { args: { mode: 'read-only' } };
+export const RevokedSet: StoryType = { args: { mode: 'withdraw-only' } };
+export const IdentityChanged: StoryType = { args: { mode: 'identity-changed' } };
+export const QuestionChanged: StoryType = { args: { mode: 'question-changed' } };
 export const Unavailable: StoryType = { args: { mode: 'unavailable' } };
 export const LongLocalized: StoryType = { args: { mode: 'long' } };
 
@@ -175,6 +190,16 @@ export const UncertainWithdrawal: StoryType = {
     await userEvent.click(canvas.getByRole('button', { name: m.own_classifications_readback() }));
     await expect(canvas.getByText(m.own_classifications_readback_separate())).toBeVisible();
     await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_retry() })).toBeEnabled();
+  },
+};
+
+export const WithheldClearRequiresPreparation: StoryType = {
+  args: { mode: 'withheld' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.subject_classification_assessment_inspect() }));
+    await expect(canvas.getByText(m.own_classifications_withheld())).toBeVisible();
+    await expect(canvas.getByRole('button', { name: m.subject_classification_assessment_withdraw() })).toBeVisible();
   },
 };
 export const Phone: StoryType = {

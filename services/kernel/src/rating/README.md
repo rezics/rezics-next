@@ -392,22 +392,21 @@ entry changes no shared writer or authorization contract.
 
 #### Management page Cost
 
-- **Touches:** the existing directory operation's two released native Realm observations, its bounded Realm-home
-  snapshot and final lifecycle generation probe; optionally one exact question observation and its Realm disclosure;
-  one native Access preparation/evaluation for manage advice; one final native Realm observation; and one final
-  Realm-home snapshot probing lifecycle generation and optionally the selected question, caption and lifecycle heads.
-  All authentication, Accounts, grants/roles, host and Realm eligibility work inside these calls remains chargeable;
-  no connection is held while preparing foreign authority. No Subject/vote or caption-history operation is invoked.
+- **Touches:** the paired directory observations and bounded Realm-home snapshot; optionally one exact selected question
+  observation and its Realm disclosure; native Access preparation/evaluation for current `realm:manage`; a final
+  Realm observation and Realm-home snapshot that recheck lifecycle generation plus exact selected metadata and heads.
+  Authentication, Accounts, grants/roles, host and Realm eligibility inside these calls remain chargeable, and no
+  connection stays open during foreign authority preparation. Caption history is a separate native operation.
 - **Bound:** fixed 20 consumed directory keys plus one unconsumed lookahead and at most one independently selected
-  question, read again by key after advice. Joins seek only those keys' caption/lifecycle heads. Meaning is at most
+  question, read again by key after advice. Joins seek only those keys' caption/lifecycle heads. Meaning stays at most
   2,000 code points, each caption 200, native scale integer 0..20, cursor 4,096 characters and response 1 MiB.
-  Before byte validation, those native row/field bounds limit retained bodies, view copies and serialization;
-  byte validation does not establish physical index or nested Access bounds. Native nested authorities and examined
-  blocks/prefixes remain part of the operation, rather than one constant-cost request.
-- **Growth check:** `test/rating/question-management-journey.test.ts` pins empty, 20-row continuation and exact retired
-  selection, independent caption/lifecycle revisions and current authority loss. Independent unrelated questions,
-  revisions, votes and authority at 256/1024/4096 with full nested physical accounting remain continuation work;
-  existing Global directory measurements do not establish this composition's native growth gate.
+  The 21st directory key is a native unconsumed lookahead. Byte validation limits retained bodies and serialization;
+  it does not establish physical index or nested Access bounds, so nested authorities and examined prefixes remain
+  chargeable growth inputs.
+- **Growth check:** `test/rating/question-management-journey.test.ts` pins empty and 20-row continuation, the exact
+  retired selection, independent caption/lifecycle heads, and loss of current authority. Independent unrelated
+  questions, revisions, votes and authority at 256/1024/4096 with full nested physical accounting remain outstanding;
+  Global directory measurements do not establish this composition's native growth result.
 
 ### Question caption maintenance
 
@@ -2115,5 +2114,5 @@ The retryable dependency failure returns no partial page or replacement cursor, 
 ### Cost: own classification page
 
 - Touches: Three released account-home snapshots verify the active account and actor lifecycle row. The current partial ballot index selects at most 21 raw keys; the optional selected key uses one primary-key lookup, and final actor-home verification probes at most 21 supplied keys. Current Semantic association reads are grouped by subject home and capped at 21 identities; at most 84 exact resolutions cover initial own disclosure, current set advice, aggregate advice and final own disclosure. Current summaries batch at most 42 supplied Subject ids by represented home. Native contribution reads use supplied-key joins capped at 21 identities per represented association home. Each admitted aggregate uses the two-pass source witness described in Cost: read aggregate; at most 21 selected aggregates participate.
-- Bound: Raw slots are fixed at 20 plus one continuation sentinel; one selected slot may be promoted separately. The response has at most 21 entries, at most 42 compact summaries, labels at most 2,000 characters, and a 1 MiB serialized body ceiling. No actor, subject, association-history or voter scan runs on the page request. Any unavailable nested read fails the whole request and preserves the caller's cursor frontier.
-- Growth check: `classification-ballot-own-page.test.ts` creates real Semantic associations and ballots, traverses more than one page and checks selected-item deduplication, stale revision, withdrawal and viewer isolation. Independent 256/1024/4096 unrelated-slot growth and strict physical-prefix plans remain controller native acceptance; they were deferred by this attempt's validation policy.
+- Bound: Raw slots stay fixed at 20 plus one continuation sentinel; one selected slot may be promoted separately. The response has at most 21 entries, at most 42 compact summaries, labels at most 2,000 characters and a 1 MiB serialized body ceiling. Cursor length remains 4,096. No actor, subject, association-history or voter scan runs on the page request. Any unavailable nested read fails the whole request and preserves the caller's cursor frontier.
+- Growth check: `test/rating/own-classification-journey.test.ts` uses production Kernel and real Access while independently growing unrelated ballots, associations, identity revisions and authority history at 256/1024/4096. The measured native prefixes, all participating SQL, backend, row and block evidence are asserted alongside empty/ready pages, selected promotion, sparse continuation, binding mismatch, read-only, withdraw-only preparation and same-key replay.
