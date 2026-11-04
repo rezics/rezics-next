@@ -6,6 +6,7 @@ import type { Owner } from './record-bindings.ts';
 import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
   crossMediaAliases,
+  emptyCrossMediaPlan,
   seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
@@ -198,18 +199,7 @@ export function vndbReleaseVocabularyAdmission(
 export async function planVndbReleaseFidelity(
   input: CrossMediaTables,
 ): Promise<CrossMediaPlan & { facts: VndbReleaseFacts }> {
-  const plan: CrossMediaPlan = {
-    records: { bangumi: [], vndb: [] },
-    entities: { bangumi: [], vndb: [] },
-    edges: [],
-    franchises: {
-      'steins-gate': { bangumi: [], vndb: [] },
-      clannad: { bangumi: [], vndb: [] },
-      fate: { bangumi: [], vndb: [] },
-    },
-    members: [],
-    gaps: [],
-  };
+  const plan: CrossMediaPlan = emptyCrossMediaPlan();
   const facts: VndbReleaseFacts = { works: new Map(), releases: new Map() };
   const gap = (table: string, record: Row, reason: string) => {
     plan.gaps.push({ source: 'vndb', fields: fieldsOf(table, record), record, reason });

@@ -11,6 +11,7 @@ import { converter_revision as entityRevision } from '@rezics/conversion/cross-m
 import { vndbAppearanceRoleSchemeUri } from '@rezics/conversion/vndb-vocabulary';
 import type { Owner } from './record-bindings.ts';
 import {
+  emptyCrossMediaPlan,
   seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
@@ -156,21 +157,7 @@ export type VndbCharacterTraitPlan = CrossMediaPlan & {
 };
 
 function emptyPlan(): VndbCharacterTraitPlan {
-  return {
-    records: { bangumi: [], vndb: [] },
-    entities: { bangumi: [], vndb: [] },
-    edges: [],
-    credits: [],
-    franchises: {
-      'steins-gate': { bangumi: [], vndb: [] },
-      clannad: { bangumi: [], vndb: [] },
-      fate: { bangumi: [], vndb: [] },
-    },
-    members: [],
-    gaps: [],
-    traits: [],
-    appearances: [],
-  };
+  return { ...emptyCrossMediaPlan(), traits: [], appearances: [] };
 }
 
 /** Select admitted character/work members and retain exact unsupported source fields. */
