@@ -334,7 +334,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
       await click(m.catalogue_create_add_language({}, options));
       await click(removeLanguage);
       expect(window.document.querySelector('[role="alertdialog"]')).toBeNull();
-      expect(control('terms-language').value).toBe('en');
+      expect(control('terms-language').value).toBe(locale);
       expect(window.document.activeElement).toBe(control('terms-language'));
       await replace('new-language', 'en-US');
       await click(m.catalogue_create_add_language({}, options));
