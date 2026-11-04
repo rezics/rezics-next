@@ -202,7 +202,7 @@ test('ordinary Wikidata acquisition retains complete values through independent 
     expect(fenced.status).toBe(200);
     const replay = await replayExchange(proposalExchange);
     expect(replay.status).toBe(200);
-    expect(replay.body).toEqual(proposalExchange.response.body);
+    expect(replay.body).toEqual(proposalExchange.response.body as BatchWriteResult);
     expect(await Promise.all(commands(first).map((c) => runtime.receipt(c.key)))).toEqual(receipts);
     expect((await publicRead()).subject.statements['schema:height'] ?? []).toEqual([]);
     const unknown = { ...proposal, key: randomUUID() };
