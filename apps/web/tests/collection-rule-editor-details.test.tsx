@@ -155,6 +155,7 @@ async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
             if (option) option.selected = true;
           }
         } else setValue?.call(select, values[0] ?? '');
+        expect([...select.selectedOptions].map((option) => option.value)).toEqual(values);
         select.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
       });
     },
