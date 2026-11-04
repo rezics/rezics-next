@@ -1359,6 +1359,7 @@ export function rebaseOnto(
 
 export type TrainOptions = {
   policy?: ControlPolicy | undefined;
+  configurationRevision?: string;
   mainCheckout: string;
   stateDirectory: string;
   worktreeRoot: string;
@@ -1414,6 +1415,36 @@ export type TrainOptions = {
   beforeIntegrationAdvance?: () => void;
   beforePromotionAdvance?: () => void;
 };
+
+export type TrainConfigurationValues = Pick<
+  TrainOptions,
+  | 'policy'
+  | 'integration'
+  | 'formatCommand'
+  | 'affectedTests'
+  | 'integrationChecks'
+  | 'derivedFiles'
+  | 'gateIdentity'
+  | 'mainBranch'
+  | 'integrationBranch'
+  | 'stabilizeBranch'
+  | 'supermanager'
+  | 'inboxDirectory'
+>;
+export type TrainConfigurationSnapshot = TrainConfigurationValues &
+  Pick<TrainOptions, 'runGate' | 'runTypecheck' | 'runControlPlaneGate'> & {
+    configurationRevision: string;
+  };
+export type TrainConfigurationReloader = () => TrainConfigurationSnapshot | Promise<TrainConfigurationSnapshot>;
+
+export function trainConfigurationRevision(configuration: TrainConfigurationValues): string {
+  const integrationChecks =
+    typeof configuration.integrationChecks === 'function'
+      ? configuration.integrationChecks()
+      : (configuration.integrationChecks ?? []);
+  const content = JSON.stringify({ ...configuration, integrationChecks });
+  return `sha256:${createHash('sha256').update(content).digest('hex')}`;
+}
 
 type PreparedLanding = {
   entry: LandingEntry;
@@ -1515,8 +1546,13 @@ export class MergeTrain {
     return policyGit(cwd, args, this.options.policy?.merge);
   }
 
-  private readonly workspaceFailures = new Map<number, GateOutcome[]>();
+  private workspaceFailures = new Map<number, GateOutcome[]>();
   constructor(private readonly options: TrainOptions) {}
+
+  private initializeLandingLog(logPath: string): void {
+    const revision = this.options.configurationRevision ?? trainConfigurationRevision(this.options);
+    writeFileSync(logPath, `Configuration revision: ${revision}\n`);
+  }
 
   private configuredLandingBoot(): IntegrationCheck | undefined {
     if (this.options.devLandingBoot !== undefined) {
@@ -1766,16 +1802,19 @@ export class MergeTrain {
    * pile up: 304 trains polling every 50 ms took the host to load 111. The owner drains the queue and checks its code
    * version before each request, and the host's sweep starts a train for any request left behind.
    */
-  async runWaiting(): Promise<void> {
-    await this.drainBoth(false);
+  async runWaiting(refreshConfiguration?: TrainConfigurationReloader): Promise<void> {
+    await this.drainBoth(false, refreshConfiguration);
   }
 
   /** Background pumps are best-effort: a current lease owner will see any request queued during shutdown. */
-  async pump(): Promise<void> {
-    await this.drainBoth(false);
+  async pump(refreshConfiguration?: TrainConfigurationReloader): Promise<void> {
+    await this.drainBoth(false, refreshConfiguration);
   }
 
-  private async drainBoth(failWhenInitiallyHeld: boolean): Promise<void> {
+  private async drainBoth(
+    failWhenInitiallyHeld: boolean,
+    refreshConfiguration?: TrainConfigurationReloader,
+  ): Promise<void> {
     let handOff: Promise<void> | undefined;
     const handOffOnce = () => {
       handOff ??= Promise.resolve(this.options.handOff?.());
@@ -1783,7 +1822,12 @@ export class MergeTrain {
     };
     const start = (lane: 'main' | 'dev') =>
       new Promise<void>((resolve, reject) => {
-        setTimeout(() => this.drain(lane, failWhenInitiallyHeld, handOffOnce).then(resolve, reject), 0);
+        const train = refreshConfiguration ? new MergeTrain({ ...this.options }) : this;
+        if (train !== this) train.workspaceFailures = this.workspaceFailures;
+        setTimeout(
+          () => train.drain(lane, failWhenInitiallyHeld, handOffOnce, refreshConfiguration).then(resolve, reject),
+          0,
+        );
       });
     // Start dev first: a strict run must not mistake its own main release's dev lease for another train.
     // Once dev has acquired its lane, later contention already uses the normal quiet return path.
@@ -1794,6 +1838,7 @@ export class MergeTrain {
     lane: 'main' | 'dev',
     failWhenInitiallyHeld: boolean,
     handOff: () => Promise<void>,
+    refreshConfiguration?: TrainConfigurationReloader,
   ): Promise<void> {
     const o = this.options;
     mkdirSync(o.stateDirectory, { recursive: true });
@@ -1831,6 +1876,8 @@ export class MergeTrain {
             await handOff();
             return;
           }
+          if (refreshConfiguration) Object.assign(o, await refreshConfiguration());
+          o.configurationRevision ??= trainConfigurationRevision(o);
           const entry = o.queue.nextBatch(1, [...deferred], lane)[0];
           if (!entry) break;
           processedEntry = true;
@@ -2059,7 +2106,7 @@ export class MergeTrain {
           const logPath = join(o.stateDirectory, `landing-${entry.id}.log`);
           logPaths.set(entry.id, logPath);
           memberStarted.set(entry.id, Date.now());
-          writeFileSync(logPath, '');
+          this.initializeLandingLog(logPath);
         }
         if (this.git(o.mainCheckout, 'symbolic-ref', 'HEAD') !== `refs/heads/${mainBranch}`)
           throw new Error('The main checkout must already have main checked out');
@@ -2861,7 +2908,7 @@ export class MergeTrain {
     let integratesIntoDev = integrationTarget !== 'main';
     const started = Date.now();
     const logPath = custody?.logPath ?? join(o.stateDirectory, `landing-${entry.id}.log`);
-    writeFileSync(logPath, '');
+    this.initializeLandingLog(logPath);
     const result: GateOutcome = {
       taskId: request.taskId,
       attempt: request.attempt,

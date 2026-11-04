@@ -162,6 +162,7 @@ the lane lease and recheck the control-plane version while they wait. Every proc
 `main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
 queue to current code before it can take another request. Pumps used by short commands still return quietly when
 another process holds the lane lease.
+Detached trains reload effective local train settings between landings; each landing log records the SHA-256 revision of the settings used for that landing.
 Failures return to the same profile and session, trigger one consultation, or reach the owning manager's inbox as
 described under [integration](#integration-promotion-culprit-isolation-and-attempt-fencing).
 A stale manager host restarts after finishing its active request and recovers persisted sessions. Restarts are limited to
