@@ -2296,11 +2296,11 @@ export async function seedCrossMedia(
     );
     const bangumiRegistration = createSourceRegistration('bangumi', {
       source: crossMediaAliases.bangumi,
-      converterRevision: entityRevision,
+      converterRevision: crossMediaBangumiRevision,
     });
     const credits = await deliverBangumiCreatorCredits({
       alias: crossMediaAliases.bangumi,
-      converterRevision: entityRevision,
+      converterRevision: crossMediaBangumiRevision,
       drafts: plan.credits,
       bindings,
       claim: (owner) => importer.session.bindings.claim(owner),
