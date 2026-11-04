@@ -319,7 +319,7 @@ test('native inbox keeps readable public notices, hides a revoked protected noti
         markSeen: { method: string; path: string };
       };
     }>;
-    const publicNotice = restoredItems.find((item) => item.target.postId === publicReply.id)!;
+    const publicNotice = restoredItems.find((item) => item.currentTarget.postId === publicReply.id)!;
     expect(publicNotice.currentActor).toMatchObject({ state: 'available', accountId: people.replier.id });
     expect(publicNotice.currentActor.displayName.length).toBeGreaterThan(0);
     expect(publicNotice.currentTarget).toMatchObject({
