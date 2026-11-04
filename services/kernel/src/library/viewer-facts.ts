@@ -1,5 +1,4 @@
 import type { Pool, PoolClient } from 'pg';
-import { t } from 'elysia';
 import { deadlineClient } from '../access/authenticate.ts';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -20,9 +19,17 @@ import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import viewerEntries from './viewer-facts-entries.sql';
 
-export const MAX_VIEWER_FACTS_ROWS = 100;
-export const MAX_VIEWER_FACTS_INPUT_BYTES = 16_384;
-export const MAX_VIEWER_FACTS_RESPONSE_BYTES = 65_536;
+import {
+  MAX_VIEWER_FACTS_ROWS,
+  MAX_VIEWER_FACTS_INPUT_BYTES,
+  MAX_VIEWER_FACTS_RESPONSE_BYTES,
+} from './viewer-facts-schema.ts';
+export {
+  MAX_VIEWER_FACTS_ROWS,
+  MAX_VIEWER_FACTS_INPUT_BYTES,
+  MAX_VIEWER_FACTS_RESPONSE_BYTES,
+  viewerFactsResponseSchema,
+} from './viewer-facts-schema.ts';
 export const VIEWER_FACTS_SCOPE = 'library_entry:read';
 
 type Dependencies = { pool: Pool; access: Access };
@@ -61,82 +68,6 @@ export type ViewerFactsPage =
       reason: 'identity' | 'currentness' | 'response_limit';
       retryable: boolean;
     }>;
-
-const closed = { additionalProperties: false } as const;
-const idSchema = t.String({ format: 'uuid' });
-const nullableStringSchema = t.Union([t.String(), t.Null()]);
-const viewerFactSchema = t.Object(
-  {
-    rowKey: t.String(),
-    subjectId: idSchema,
-    entry: t.Union([
-      t.Object(
-        {
-          state: t.Literal('present'),
-          incarnationId: t.Union([idSchema, t.Null()]),
-          entryState: nullableStringSchema,
-          revision: t.Integer({ minimum: 0 }),
-        },
-        closed,
-      ),
-      t.Object({ state: t.Literal('absent') }, closed),
-      t.Object({ state: t.Literal('unavailable'), reason: t.Literal('scope') }, closed),
-    ]),
-    vote: t.Union([
-      t.Object(
-        {
-          state: t.Literal('present'),
-          questionId: idSchema,
-          questionRevision: t.Integer({ minimum: 1 }),
-          units: t.Integer(),
-          revision: t.Integer({ minimum: 1 }),
-        },
-        closed,
-      ),
-      t.Object(
-        { state: t.Literal('absent'), questionId: idSchema, questionRevision: t.Integer({ minimum: 1 }) },
-        closed,
-      ),
-      t.Object(
-        { state: t.Literal('unavailable'), reason: t.Union([t.Literal('scope'), t.Literal('question')]) },
-        closed,
-      ),
-    ]),
-  },
-  closed,
-);
-
-/** Wire type for admitted Library and Collection rows; unavailable authority remains explicit and value-free. */
-export const viewerFactsResponseSchema = t.Union([
-  t.Object(
-    {
-      state: t.Literal('current'),
-      question: t.Union([
-        t.Object(
-          {
-            id: idSchema,
-            revision: t.Integer({ minimum: 1 }),
-            grain: t.String(),
-            scale: t.Object({ min: t.Integer(), max: t.Integer(), displayStep: t.Integer({ minimum: 1 }) }, closed),
-            meaning: t.String(),
-          },
-          closed,
-        ),
-        t.Null(),
-      ]),
-      rows: t.Array(viewerFactSchema, { maxItems: MAX_VIEWER_FACTS_ROWS }),
-    },
-    closed,
-  ),
-  t.Object(
-    {
-      state: t.Literal('unavailable'),
-      reason: t.Union([t.Literal('identity'), t.Literal('currentness'), t.Literal('response_limit')]),
-      retryable: t.Boolean(),
-    },
-    closed,
-  ),
-]);
 
 type MappingRecord = Readonly<{ subjectId: string; mapping: IdentityMapping }>;
 export type PreparedViewerFacts = Readonly<{
