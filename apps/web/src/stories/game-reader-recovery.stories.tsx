@@ -13,8 +13,8 @@ function RecoveryExample({ scenario = 'inspection' }: { scenario?: Scenario }) {
   const fixture = useMemo(() => {
     const example = gameExample('work', locale);
     if (scenario === 'missing-assertion') {
-      example.first.links[0]!.assertion = null;
-      example.first.links[0]!.summary = null;
+      delete example.first.links[0]!.assertion;
+      delete example.first.links[0]!.summary;
     }
     return example;
   }, [locale, scenario]);
