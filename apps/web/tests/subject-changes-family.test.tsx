@@ -18,7 +18,10 @@ let historyRead: (input: unknown) => Promise<ChangesRead> = async () => ({ kind:
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-mock.module('../src/session/state', () => ({ readSessionState: () => sessionRead() }));
+mock.module('../src/session/state', () => ({
+  readSessionState: () => sessionRead(),
+  readSessionIdentity: () => sessionRead(),
+}));
 mock.module('../src/features/catalogue/subject-changes-actions', () => ({
   loadSubjectChanges: (input: unknown) => historyRead(input),
   loadSubjectChange: async () => ({ kind: 'unavailable' }),

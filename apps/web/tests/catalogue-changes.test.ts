@@ -7,8 +7,7 @@ import {
   type CurrentOperationsRead,
 } from '../src/features/catalogue/subject-changes';
 
-// Consumer outcomes through the generated list client and normalized detail port.
-// A port example is not evidence that the unpublished producer endpoint is served.
+// Consumer outcomes through the generated list client and a deliberately bounded detail adapter.
 test('a reader follows paginated native subject revisions to a safe change explanation and current reading without inventing historical payload or leaking concealed details', async () => {
   const fixture = catalogueChangesFixture();
   const first = await fixture.transport.list();
@@ -24,7 +23,7 @@ test('a reader follows paginated native subject revisions to a safe change expla
     fixture.client,
     fixture.id,
     selected,
-    { session: last.session },
+    { authorization: 'Bearer story', session: last.session },
     async (_client, input) => ({
       kind: 'ready',
       detail: {
@@ -201,7 +200,10 @@ test('failed detail reads keep list and selection but discard prior detail; curr
       throw new Error('Detail transport unavailable');
     }),
   ).toEqual({ kind: 'missing', scope: 'subject' });
-  expect(changesState(initial, { type: 'detail', result: detail })).toEqual({ failure: detail });
+  expect(changesState(initial, { type: 'detail', result: detail })).toEqual({
+    failure: detail,
+    currentOperations: { state: 'unavailable' },
+  });
 });
 
 // Delivered native DTOs go through the generated endpoint and the production adapter.
