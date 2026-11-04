@@ -1,3 +1,4 @@
+import { operatorOpeningPageTransport, type OperatorOpeningPageAccess } from './operator-opening-page.ts';
 import {
   organizationDeletionReadTransport,
   type OrganizationDeletionAccess,
@@ -304,7 +305,11 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
                 service,
                 accountProfileReadTransport(
                   service,
-                  credentialEffectTransport(service, workflows.handler, options),
+                  operatorOpeningPageTransport(service, credentialEffectTransport(service, workflows.handler, options),
+                    (options.trustedAccess as typeof options.trustedAccess & Partial<OperatorOpeningPageAccess>)
+                      .readOperatorOpeningPage
+                      ? (options.trustedAccess as typeof options.trustedAccess & OperatorOpeningPageAccess)
+                      : undefined),
                   (options.trustedAccess as typeof options.trustedAccess & Partial<AccountProfileAccess>)
                     .readRenameAccountProfile
                     ? (options.trustedAccess as typeof options.trustedAccess & AccountProfileAccess)

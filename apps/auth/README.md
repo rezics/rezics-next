@@ -472,3 +472,7 @@ The policy costs one 16-byte random nonce and one header set per response, with 
 bundle and check Chromium hydration, policy violations and the real Turnstile script URL with an offline widget.
 
 Decision: automated creation asks Stay/Leave for meaningful input or unresolved review; Leave discards only unsent review, while a tab-local submitted marker preserves the original command for recovery. Caller replacement or permission loss revokes review without prompting.
+
+Decision: opening advice uses a dedicated native management observation; the exact manage-only client keeps identity labels undisclosed instead of acquiring read scope. The read remains advice, never an opening approval.
+
+The Auth host installs `POST /account-management/operators/opening-page` from the native account bindings. Its closed current response identifies the acting human, installed actor target, installed operator kind, reservation/version and supported `opening` action. Missing authority returns refused; missing infrastructure returns unavailable. A single ten-second deadline covers one authentication, two bounded native transfer-state reads and one full-key operator-kind read. The two relation observations must agree. The endpoint performs no command, approval or credential staging; submission still needs the existing fresh-human approval and opening command. Page consumption and public-label enrichment remain separate implementation work.
