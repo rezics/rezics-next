@@ -618,7 +618,8 @@ function vocabularyCommands(input: {
     source,
     subject: { type: input.nativeType, labels: input.labels },
   };
-  if (!input.subjectId) return [create];
+  const subjectId = input.subjectId;
+  if (!subjectId) return [create];
   const statements: BatchStatement[] = [
     {
       property: { id: 'schema:url' },
@@ -635,9 +636,9 @@ function vocabularyCommands(input: {
   }
   return statements.map((statement) => ({
     op: 'propose' as const,
-    key: `vndb-public-tag-vocabulary:${commandKey([JSON.stringify(source), input.subjectId, 'propose', JSON.stringify(statement)])}`,
+    key: `vndb-public-tag-vocabulary:${commandKey([JSON.stringify(source), subjectId, 'propose', JSON.stringify(statement)])}`,
     source,
-    subject: input.subjectId!,
+    subject: subjectId,
     statement,
   }));
 }
