@@ -414,7 +414,8 @@ export function SubjectOverview({
   const reactions = publicReactions ? { ...publicReactions, value: subjectReaction.ownReaction?.value ?? null } : null;
   const ratings = publicRatings;
   const returnTo = contextHref(useLocation().publicHref.split(/[?#]/, 1)[0]!, realm);
-  const nonce = useRouter().options.ssr?.nonce;
+  const router = useRouter();
+  const nonce = router.options.ssr?.nonce;
   const assessment = useClassificationAssessmentVisit({
     identity: null,
     locale,
@@ -469,6 +470,7 @@ export function SubjectOverview({
             <RatingsContext.Provider value={ratings}>
               <SubjectPage
                 page={page}
+                refreshCommunityAdvice={() => router.invalidate()}
                 returnTo={search.via}
                 fileSource={search.fileSource}
                 verification={verification}

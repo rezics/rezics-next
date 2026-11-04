@@ -34,8 +34,12 @@ test('installed native cards render through the generated reader and original ac
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
   const { readSubjectCommunity, composedCommunityRegion } = await import('../src/features/pages/subject-community');
-  const { SubjectCommunityRegion, SubjectCommunityContext, SubjectCommunityVerificationContext } =
-    await import('../src/features/pages/subject-community-view');
+  const {
+    SubjectCommunityRegion,
+    SubjectCommunityContext,
+    SubjectCommunityRefreshContext,
+    SubjectCommunityVerificationContext,
+  } = await import('../src/features/pages/subject-community-view');
   const { communitySubject, communityThread, communityThreadPage } =
     await import('../src/kernel/fake/subject-community');
   const { GLOBAL } = await import('../src/features/pages/subject-ratings');
@@ -89,6 +93,7 @@ test('installed native cards render through the generated reader and original ac
             { action: 'reaction:set', operationId: 'thread.set_reaction', state: 'available' },
             { action: 'reaction:set', operationId: 'thread.clear_reaction', state: 'available' },
             { action: 'thread:watch', operationId: 'thread.watch', state: 'available' },
+            { action: 'thread:watch', operationId: 'thread.unwatch', state: 'available' },
             { action: 'report:create', operationId: 'report.create', state: 'available' },
           ],
         },
@@ -159,6 +164,8 @@ test('installed native cards render through the generated reader and original ac
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   let actionCalls = 0;
+  let refreshCompletion: Promise<void> = Promise.resolve();
+  let refreshCurrentAdvice = async () => {};
   const show = () =>
     act(async () =>
       root.render(
@@ -167,6 +174,7 @@ test('installed native cards render through the generated reader and original ac
             value={{ sitekey: '', scriptUrl: 'https://verification.invalid' }}
           >
             <SubjectCommunityContext.Provider value={data}>
+            <SubjectCommunityRefreshContext.Provider value={refreshCurrentAdvice}>
               <SubjectCommunityRegion
                 id="native"
                 kind="review"
@@ -190,7 +198,7 @@ test('installed native cards render through the generated reader and original ac
                 preparedWatch={{
                   set: async () => {
                     actionCalls++;
-                    return { kind: 'unknown' };
+                    return { kind: 'confirmed' };
                   },
                   read: async () => {
                     actionCalls++;
@@ -198,6 +206,7 @@ test('installed native cards render through the generated reader and original ac
                   },
                 }}
               />
+            </SubjectCommunityRefreshContext.Provider>
             </SubjectCommunityContext.Provider>
           </SubjectCommunityVerificationContext.Provider>
         </QueryClientProvider>,
@@ -226,6 +235,31 @@ test('installed native cards render through the generated reader and original ac
     await act(async () => reveal.click());
     expect(host.querySelector('img')?.getAttribute('alt')).toBe('Original document image');
     expect(host.querySelector('[lang="fr"] [data-content-item-slot="preview"]')).not.toBeNull();
+    const watch = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === m.thread_watch_watch());
+    expect(watch).toBeDefined();
+    await act(async () => watch!.click());
+    expect(host.textContent).toContain(m.thread_watch_confirm_started());
+    const refresh = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === m.thread_watch_refresh_advice(),
+    );
+    expect(refresh).toBeDefined();
+    refreshCurrentAdvice = () => {
+      refreshCompletion = (async () => {
+        card.watch.watching = true;
+        data = await readSubjectCommunity(kernel, communitySubject.id, ['review'], true, undefined, 'reader');
+      })();
+      return refreshCompletion;
+    };
+    await act(async () => refresh!.click());
+    await refreshCompletion;
+    await show();
+    expect(host.querySelector('button')?.textContent).not.toBe(m.thread_watch_retry_exact());
+    const stop = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === m.thread_watch_stop());
+    expect(stop).toBeDefined();
+    await act(async () => stop!.click());
+    expect(host.textContent).toContain(m.thread_watch_confirm_stopped());
+    expect(actionCalls).toBe(2);
+    expect(requests).toHaveLength(2);
     (host.querySelector('h3 a') as HTMLElement).focus();
     post.revisionId = imageId;
     data = { ...data, regions: { review: project() } };
@@ -245,8 +279,8 @@ test('installed native cards render through the generated reader and original ac
         .click(),
     );
     expect(host.querySelector('img')).toBeNull();
-    expect(requests).toHaveLength(1);
-    expect(actionCalls).toBe(0);
+    expect(requests).toHaveLength(2);
+    expect(actionCalls).toBe(2);
   } finally {
     await act(async () => root.unmount());
     host.remove();

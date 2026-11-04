@@ -87,7 +87,7 @@ test('unknown command outcome offers the identical retry and confirms native 204
   await settle();
   expect(button(m.thread_watch_watch())).toBeDefined();
   expect(reads[0]?.fetch.cache).toBe('no-store');
-  expect(host.querySelector('a[href="/settings#notifications"]')).not.toBeNull();
+  expect(host.querySelector('a[href="/en/settings#notifications"]')).not.toBeNull();
   await click(m.thread_watch_watch());
   expect(button(m.thread_watch_retry_exact())).toBeDefined();
   expect(host.textContent).toContain(m.thread_watch_outcome_unknown());
@@ -177,14 +177,13 @@ test('viewer replacement and access loss retire private state; anonymous reading
   expect(host.textContent).toContain(m.thread_watch_anonymous());
 });
 
-test('explicit status recovery preserves an unknown requested state on failure, then establishes current status', async () => {
+test('a point status read never settles an unknown command or grants its inverse', async () => {
   const commands: ThreadWatchCommand[] = [];
   let reads = 0;
   const native: ThreadWatchNative = {
     async read() {
       reads++;
-      if (reads === 2) return { kind: 'unknown' };
-      return { kind: 'confirmed', state: { watching: false } };
+      return { kind: 'confirmed', state: { watching: reads > 1 } };
     },
     async set(command) {
       commands.push(command);
@@ -196,13 +195,15 @@ test('explicit status recovery preserves an unknown requested state on failure, 
   await click(m.thread_watch_watch());
   expect(button(m.thread_watch_check_again())).toBeDefined();
   await click(m.thread_watch_check_again());
-  expect(host.textContent).toContain(m.thread_watch_read_failed());
+  expect(host.textContent).toContain(m.thread_watch_outcome_unknown());
+  expect(button(m.thread_watch_retry_exact())).toBeDefined();
+  expect(button(m.thread_watch_stop())).toBeUndefined();
   await click(m.thread_watch_retry_exact());
   expect(commands[1]).toBe(commands[0]);
   await click(m.thread_watch_check_again());
   expect(reads).toBe(3);
-  expect(button(m.thread_watch_watch())).toBeDefined();
-  expect(button(m.thread_watch_retry_exact())).toBeUndefined();
+  expect(button(m.thread_watch_retry_exact())).toBeDefined();
+  expect(button(m.thread_watch_stop())).toBeUndefined();
   expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
 });
 
@@ -274,6 +275,37 @@ test('response-before-retirement clears confirmation; readiness, target and sour
   await settle();
   expect(host.textContent).toContain(m.thread_watch_access_lost());
   expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
+});
+
+test('current empty or denied advice stays distinct from a failed source refresh', async () => {
+  let refreshes = 0;
+  let nativeCalls = 0;
+  const native: ThreadWatchNative = {
+    async read() {
+      nativeCalls++;
+      return { kind: 'unavailable' };
+    },
+    async set() {
+      nativeCalls++;
+      return { kind: 'unknown' };
+    },
+  };
+  const refreshAdvice = async () => {
+    refreshes++;
+    throw new Error('source unavailable');
+  };
+  render({ ...baseline, adviceState: 'denied', refreshAdvice, native });
+  await settle();
+  expect(host.textContent).toContain(m.thread_watch_advice_denied());
+  expect(nativeCalls).toBe(0);
+  render({ ...baseline, adviceState: 'empty', refreshAdvice, native });
+  await settle();
+  expect(host.textContent).toContain(m.thread_watch_advice_empty());
+  await click(m.thread_watch_refresh_advice());
+  expect(host.textContent).toContain(m.thread_watch_refresh_failed());
+  expect(button(m.thread_watch_refresh_advice())).toBeDefined();
+  expect(nativeCalls).toBe(0);
+  expect(refreshes).toBe(1);
 });
 
 afterAll(async () => {

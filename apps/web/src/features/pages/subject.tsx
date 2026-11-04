@@ -67,7 +67,11 @@ import { linkClass, linkColor, PlainLink, type PageLink } from './shared';
 import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import { boundedProfileRelations, profileRelationWindows, type ViewTab } from './views';
 import type { SubjectCommunity } from './subject-community';
-import { SubjectCommunityContext, SubjectCommunityVerificationContext } from './subject-community-view';
+import {
+  SubjectCommunityContext,
+  SubjectCommunityRefreshContext,
+  SubjectCommunityVerificationContext,
+} from './subject-community-view';
 import type { VerificationConfig } from '../../report/turnstile';
 import { subjectUrlForView } from '../../subject/subject-href';
 import { ContextNavigation, contextHref } from './context-navigation';
@@ -523,9 +527,11 @@ export function SubjectPage({
   framed = false,
   verification,
   fileSource,
+  refreshCommunityAdvice,
 }: {
   page: SubjectPageData;
   verification?: VerificationConfig;
+  refreshCommunityAdvice?: () => Promise<void>;
   /** Mounted native connection readers share this visit’s labels, disclosure and selected Context. */
   connections?: ReactNode;
   /** The current frame's label for list-only documents that do not repeat the subject read. */
@@ -943,16 +949,18 @@ export function SubjectPage({
                 link={ContextLink}
               />
             ) : null}
-            <SubjectCommunityContext.Provider value={page.community}>
-              <SubjectCommunityVerificationContext.Provider value={verification}>
-                <CompositionRender
-                  document={page.document}
-                  definitions={pageDefinitions}
-                  components={pageComponents(framed)}
-                  root={PageRoot}
-                />
-              </SubjectCommunityVerificationContext.Provider>
-            </SubjectCommunityContext.Provider>
+            <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
+              <SubjectCommunityContext.Provider value={page.community}>
+                <SubjectCommunityVerificationContext.Provider value={verification}>
+                  <CompositionRender
+                    document={page.document}
+                    definitions={pageDefinitions}
+                    components={pageComponents(framed)}
+                    root={PageRoot}
+                  />
+                </SubjectCommunityVerificationContext.Provider>
+              </SubjectCommunityContext.Provider>
+            </SubjectCommunityRefreshContext.Provider>
             {overview && connections}
             {overview && !placesType(page.document.content, 'Sources') && <SubjectSources />}
             {overview && <SubjectSourcesLink />}

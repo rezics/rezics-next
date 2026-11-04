@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { m } from '../paraglide/messages.js';
@@ -14,6 +14,7 @@ import recordedPosts from '../kernel/recorded/thread-posts.json';
 type Example =
   | 'not-watching'
   | 'watching'
+  | 'card-seeded'
   | 'initial-failure'
   | 'pending'
   | 'refusal'
@@ -72,11 +73,19 @@ function connectedExample(example: Example) {
     readThreadWatch: ({ data }) => readNativeThreadWatch(kernel, data.threadId, 'Bearer prepared-reader'),
     setThreadWatch: ({ data }) => setNativeThreadWatch(kernel, data.threadId, data.watching, 'Bearer prepared-reader'),
   }));
-  return { client, native, anonymous };
+  return { client, native, anonymous, currentWatching: () => watching };
 }
 
 function ThreadWatchPageStory({ example }: { example: Example }) {
   const model = useMemo(() => connectedExample(example), [example]);
+  const [sourceRevision, setSourceRevision] = useState(0);
+  const [seededWatching, setSeededWatching] = useState(false);
+  const seeded = example === 'card-seeded';
+  const authority = useMemo(() => Object.freeze({ model, sourceRevision }), [model, sourceRevision]);
+  const refreshAdvice = async () => {
+    setSeededWatching(model.currentWatching());
+    setSourceRevision((revision) => revision + 1);
+  };
   return (
     <QueryClientProvider client={model.client}>
       <main className="mx-auto max-w-3xl space-y-5 p-4">
@@ -89,11 +98,12 @@ function ThreadWatchPageStory({ example }: { example: Example }) {
               session={model.anonymous ? 'signed-out' : 'signed-in'}
               sessionKnown
               viewerId={model.anonymous ? undefined : 'reader-example'}
-              sessionStamp="story-admission"
+              sessionStamp={seeded ? `story-admission:${sourceRevision}` : 'story-admission'}
               admitted
-              readAuthority={model}
+              readAuthority={seeded ? authority : model}
               returnTo={`/threads/${page.thread.id}/letters-from-b-612`}
               native={model.native}
+              {...(seeded ? { initialWatching: seededWatching, refreshAdvice } : {})}
             />
           }
         />
@@ -144,6 +154,18 @@ export const Watching: Story = {
   globals: { locale: 'de', theme: 'dark', viewport: { value: 'desktop1280', isRotated: false } },
   play: async ({ canvasElement }) => {
     await within(canvasElement).findByRole('button', { name: m.thread_watch_stop() });
+  },
+};
+export const CardSeededRefresh: Story = {
+  args: { example: 'card-seeded' },
+  globals: { locale: 'en', theme: 'light', viewport: { value: 'phone390', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: m.thread_watch_watch() }));
+    await canvas.findByText(m.thread_watch_confirm_started());
+    await userEvent.click(await canvas.findByRole('button', { name: m.thread_watch_refresh_advice() }));
+    await userEvent.click(await canvas.findByRole('button', { name: m.thread_watch_stop() }));
+    await canvas.findByText(m.thread_watch_confirm_stopped());
   },
 };
 export const InitialFailure: Story = {

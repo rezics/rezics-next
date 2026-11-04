@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { SignInPrompt } from './write-prompts';
 import { useThreadWatchCurrent, type ThreadWatchProps, type ThreadWatchView } from './thread-watch-current';
 
@@ -10,6 +11,14 @@ const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full shrink whitespace-normal px-3 py-2 text-start leading-snug [overflow-wrap:anywhere]';
 
 function status(view: ThreadWatchView): string {
+  const confirmation =
+    view.confirmation === true
+      ? m.thread_watch_confirm_started()
+      : view.confirmation === false
+        ? m.thread_watch_confirm_stopped()
+        : '';
+  if (view.refreshingAdvice) return `${confirmation} ${m.thread_watch_refreshing()}`.trim();
+  if (view.phase === 'advice-refresh-failed') return `${confirmation} ${m.thread_watch_refresh_failed()}`.trim();
   switch (view.phase) {
     case 'confirmed':
       return view.confirmation === true
@@ -29,6 +38,12 @@ function status(view: ThreadWatchView): string {
       return m.thread_watch_access_lost();
     case 'unavailable':
       return m.thread_watch_unavailable();
+    case 'advice-empty':
+      return m.thread_watch_advice_empty();
+    case 'advice-denied':
+      return m.thread_watch_advice_denied();
+    case 'advice-unavailable':
+      return m.thread_watch_advice_unavailable();
     default:
       return m.thread_watch_checking();
   }
@@ -40,6 +55,7 @@ export function ThreadWatch(props: ThreadWatchProps) {
   const host = useRef<HTMLDivElement>(null);
   const hadFocus = useRef(false);
   const busy = view.phase === 'checking' || view.phase === 'sending';
+  const adviceRefreshBusy = view.refreshingAdvice === true;
   const signedIn = props.sessionKnown && props.session === 'signed-in';
   const canRecover =
     view.phase === 'read-failed' ||
@@ -59,7 +75,7 @@ export function ThreadWatch(props: ThreadWatchProps) {
     <div
       ref={host}
       className="flex min-w-0 max-w-full flex-col items-start gap-1 text-sm"
-      aria-busy={visit.ready && busy}
+      aria-busy={visit.ready && (busy || adviceRefreshBusy)}
       onFocusCapture={() => {
         hadFocus.current = true;
       }}
@@ -102,12 +118,30 @@ export function ThreadWatch(props: ThreadWatchProps) {
               {m.thread_watch_check_again()}
             </Button>
           ) : null}
+          {visit.ready &&
+          props.refreshAdvice &&
+          ((view.phase === 'confirmed' && typeof view.confirmation === 'boolean') ||
+            view.phase === 'advice-empty' ||
+            view.phase === 'advice-denied' ||
+            view.phase === 'advice-unavailable' ||
+            view.phase === 'advice-refresh-failed') ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={actionClass}
+              disabled={busy || adviceRefreshBusy}
+              onClick={() => void visit.refreshAdvice()}
+            >
+              {m.thread_watch_refresh_advice()}
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {signedIn ? (
         <p className="text-xs text-muted-foreground">
           {m.thread_watch_guidance()}{' '}
-          <a className="inline-flex min-h-11 items-center underline" href="/settings#notifications">
+          <a className="inline-flex min-h-11 items-center underline" href={`/${getLocale()}/settings#notifications`}>
             {m.thread_watch_preferences()}
           </a>
         </p>
