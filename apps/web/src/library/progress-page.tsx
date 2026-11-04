@@ -6,6 +6,7 @@ import { Exposure, useOperation } from '../kernel/exposure';
 import { Button } from '@rezics/ui/shadcn/button';
 import { Field, FieldLabel, FieldLegend } from '@rezics/ui/shadcn/field';
 import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { Input } from '@rezics/ui/shadcn/input';
 import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
 import type { CoverRatio } from '@rezics/ui/cover';
 import { EllipsisIcon } from 'lucide-react';
@@ -109,7 +110,7 @@ export function CurrentViewerProgressIndexPage({
   requested,
 }: {
   loader: CurrentViewerProgressIndex;
-  requested: { subjectId?: string; cursor?: string };
+  requested: { subjectId?: string; state?: string; mode?: string; profileId?: string; cursor?: string };
 }) {
   const renderedSession = useSession();
   const client = useQueryClient();
@@ -123,12 +124,15 @@ export function CurrentViewerProgressIndexPage({
   );
   const locale = getLocale();
   const subjectId = requested.subjectId ?? '';
+  const state = requested.state ?? null;
+  const mode = requested.mode ?? null;
+  const profileId = requested.profileId ?? null;
   const cursor = requested.cursor ?? null;
   const addressIssue = progressAddressIssue(requested);
   const viewer = hydrated ? scoped.subject : loader.viewer;
   const allowed = hydrated ? progressIndexAdmission(client, 'progress_session.list', admitted) : loader.page.signedIn;
   const address = useHistoryAddress('/library/progress', requested.cursor, locale);
-  const scope = JSON.stringify([viewer, scoped.viewer, subjectId, cursor, locale, address.key]);
+  const scope = JSON.stringify([viewer, scoped.viewer, subjectId, state, mode, profileId, cursor, locale, address.key]);
   const origin = useProgressEpisode(
     scope,
     () => {
@@ -145,9 +149,15 @@ export function CurrentViewerProgressIndexPage({
     result?.viewer === viewer &&
     result.locale === locale &&
     result.requested.subjectId === subjectId &&
+    (result.requested.state ?? null) === state &&
+    (result.requested.mode ?? null) === mode &&
+    (result.requested.profileId ?? null) === profileId &&
     result.requested.cursor === cursor &&
     result.page.signedIn &&
-    result.page.subjectId === subjectId;
+    result.page.subjectId === subjectId &&
+    (result.page.state ?? null) === state &&
+    (result.page.mode ?? null) === mode &&
+    (result.page.profileId ?? null) === profileId;
   // Each newly delivered loader may seed its matching scope once. A retained
   // loader cannot seed another lifetime after identity/admission retirement.
   const loaderSource = useRef({ loader, origin });
@@ -158,6 +168,9 @@ export function CurrentViewerProgressIndexPage({
     'current-viewer',
     viewer,
     subjectId,
+    state,
+    mode,
+    profileId,
     cursor,
     locale,
     origin.generation,
@@ -243,6 +256,13 @@ export function CurrentViewerProgressIndexPage({
   };
   if (addressIssue || (matches(result) && result?.page.addressIssue))
     return <ProgressAddressCorrection address={requested} issue={addressIssue ?? result?.page.addressIssue} />;
+  if (!viewer && result?.page.viewerState === 'signed_out')
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <p role="status">{m.library_progress_discovery_signed_out()}</p>
+      </article>
+    );
   if (origin.retired || source.retired || query.isError || !matches(result))
     return (
       <article className="max-w-4xl space-y-6">
@@ -270,6 +290,10 @@ export function CurrentViewerProgressIndexPage({
         key={`${scope}:${source.generation}`}
         page={result!.page}
         cursor={cursor}
+        loading={query.isFetching}
+        retry={() => {
+          if (origin.isCurrent()) void query.refetch();
+        }}
         authority={authority}
         reviewRow={async (id) => {
           const fresh = await readCurrentViewerProgressIndex({ data: requested });
@@ -284,6 +308,8 @@ export function CurrentViewerProgressIndexPage({
 export function ProgressIndexPage(props: {
   page: ProgressIndex;
   cursor?: string | null;
+  loading?: boolean;
+  retry?: () => void;
   authority?: ProgressAuthority;
   reviewRow?: ProgressRowReview;
 }) {
@@ -300,11 +326,15 @@ export function ProgressIndexPage(props: {
 function ProgressIndexPageContent({
   page,
   cursor,
+  loading = false,
+  retry,
   authority,
   reviewRow,
 }: {
   page: ProgressIndex;
   cursor?: string | null;
+  loading?: boolean;
+  retry?: () => void;
   authority?: ProgressAuthority;
   reviewRow?: ProgressRowReview;
 }) {
@@ -326,6 +356,14 @@ function ProgressIndexPageContent({
     const subject = page.selectedSubject;
     return subject ? [pickerSubject(subject)] : [];
   });
+  const [filterSubject, setFilterSubject] = useState<ProgressPickerSubject[]>(() => {
+    const subject = page.selectedSubject;
+    return subject ? [pickerSubject(subject)] : [];
+  });
+  const [filterKind, setFilterKind] = useState<'none' | 'state' | 'mode' | 'profile'>(() =>
+    page.state ? 'state' : page.mode ? 'mode' : page.profileId ? 'profile' : 'none',
+  );
+  const [filterValue, setFilterValue] = useState(() => page.state ?? page.mode ?? page.profileId ?? '');
   const [seenIdentity, setSeenIdentity] = useState(episode);
   const [version, setVersion] = useState<ProgressPickerSubject[]>([]);
   const subject = chosen[0]?.id ?? '';
@@ -346,6 +384,21 @@ function ProgressIndexPageContent({
   const [key, setKey] = useState(page.idempotencyKey);
   const [alert, setAlert] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const filterKindId = useId();
+  const filterValueId = useId();
+
+  const discoveryAddress = {
+    ...(filterSubject[0] ? { subjectId: filterSubject[0].id } : {}),
+    ...(filterKind === 'state' && filterValue ? { state: filterValue } : {}),
+    ...(filterKind === 'mode' && filterValue ? { mode: filterValue } : {}),
+    ...(filterKind === 'profile' && filterValue.trim() ? { profileId: filterValue.trim() } : {}),
+  };
+  const currentFilterAddress = {
+    ...(page.subjectId ? { subjectId: page.subjectId } : {}),
+    ...(page.state ? { state: page.state } : {}),
+    ...(page.mode ? { mode: page.mode } : {}),
+    ...(page.profileId ? { profileId: page.profileId } : {}),
+  };
 
   if (seenIdentity !== episode) {
     setSeenIdentity(episode);
@@ -370,6 +423,9 @@ function ProgressIndexPageContent({
       setPending(false);
       const next = page.selectedSubject;
       setChosen(next ? [pickerSubject(next)] : []);
+      setFilterSubject(next ? [pickerSubject(next)] : []);
+      setFilterKind(page.state ? 'state' : page.mode ? 'mode' : page.profileId ? 'profile' : 'none');
+      setFilterValue(page.state ?? page.mode ?? page.profileId ?? '');
     }
   }
 
@@ -421,6 +477,11 @@ function ProgressIndexPageContent({
     if (!(target instanceof Element)) return;
     const link = target.closest('a') as HTMLAnchorElement | null;
     if (!link) return;
+    if (authority && !authority.isCurrent()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (replayingNavigation.current === link) {
       replayingNavigation.current = null;
       return;
@@ -503,16 +564,165 @@ function ProgressIndexPageContent({
   if (page.addressIssue)
     return (
       <ProgressAddressCorrection
-        address={{ subjectId: page.subjectId, ...(cursor === undefined || cursor === null ? {} : { cursor }) }}
+        address={{
+          subjectId: page.subjectId,
+          ...(page.state ? { state: page.state } : {}),
+          ...(page.mode ? { mode: page.mode } : {}),
+          ...(page.profileId ? { profileId: page.profileId } : {}),
+          ...(cursor === undefined || cursor === null ? {} : { cursor }),
+        }}
         issue={page.addressIssue}
       />
+    );
+  if (page.staleContinuation)
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <p role="status">{m.library_progress_discovery_stale()}</p>
+        <Link
+          to="/library/progress"
+          search={currentFilterAddress}
+          onClick={(event) => {
+            if (authority && !authority.isCurrent()) event.preventDefault();
+          }}
+          className={buttonClass}
+        >
+          {m.library_collections_first_page()}
+        </Link>
+      </article>
+    );
+  const viewerState = page.viewerState ?? (page.signedIn ? 'signed_in' : 'signed_out');
+  if (viewerState !== 'signed_in')
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <p role="status">
+          {viewerState === 'signed_out'
+            ? m.library_progress_discovery_signed_out()
+            : viewerState === 'account_retired'
+              ? m.library_progress_discovery_account_retired()
+              : m.library_progress_unavailable()}
+        </p>
+        {viewerState === 'unavailable' ? (
+          <Button variant="outline" disabled={loading} onClick={retry}>
+            {m.library_progress_retry()}
+          </Button>
+        ) : null}
+      </article>
     );
   const ratio = rowRatio(sessions.map((session) => session.subject));
   return (
     <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
       <PageHeading>{m.library_progress_heading()}</PageHeading>
+      {loading ? <p role="status" aria-live="polite">{m.library_progress_discovery_loading()}</p> : null}
 
       <>
+        <section aria-labelledby="progress-discovery-heading" className="space-y-4">
+          <h2 id="progress-discovery-heading" className="text-xl font-semibold">
+            {m.library_progress_discovery_search()}
+          </h2>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-0 flex-1 basis-72">
+              <ProgressPicker
+                value={filterSubject}
+                label={m.library_progress_discovery_exact_subject()}
+                isCurrent={current}
+                onValueChange={setFilterSubject}
+              />
+            </div>
+            {filterSubject.length ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                onClick={() => setFilterSubject([])}
+              >
+                {m.library_progress_address_clear()}
+              </Button>
+            ) : null}
+            <div className="min-w-48 flex-1">
+              <label htmlFor={filterKindId} className="text-sm font-medium">
+                {m.library_progress_discovery_filter_by()}
+              </label>
+              <NativeSelect
+                id={filterKindId}
+                className="min-h-11"
+                value={filterKind}
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  if (value === 'none' || value === 'state' || value === 'mode' || value === 'profile') {
+                    setFilterKind(value);
+                    setFilterValue('');
+                  }
+                }}
+              >
+                <NativeSelectOption value="none">{m.library_progress_discovery_any_filter()}</NativeSelectOption>
+                <NativeSelectOption value="state">{m.library_progress_discovery_state_filter()}</NativeSelectOption>
+                <NativeSelectOption value="mode">{m.library_progress_discovery_mode_filter()}</NativeSelectOption>
+                <NativeSelectOption value="profile">{m.library_progress_discovery_profile_filter()}</NativeSelectOption>
+              </NativeSelect>
+            </div>
+            {filterKind === 'state' ? (
+              <div className="min-w-48 flex-1">
+                <label htmlFor={filterValueId} className="text-sm font-medium">
+                  {m.library_progress_discovery_filter_value()}
+                </label>
+                <NativeSelect
+                  id={filterValueId}
+                  className="min-h-11"
+                  value={filterValue}
+                  onChange={(event) => setFilterValue(event.currentTarget.value)}
+                >
+                  <NativeSelectOption value="">{m.library_progress_discovery_any_filter()}</NativeSelectOption>
+                  <NativeSelectOption value="active">{m.library_progress_state_active()}</NativeSelectOption>
+                  <NativeSelectOption value="completed">{m.library_progress_state_completed()}</NativeSelectOption>
+                  <NativeSelectOption value="abandoned">{m.library_progress_state_abandoned()}</NativeSelectOption>
+                </NativeSelect>
+              </div>
+            ) : null}
+            {filterKind === 'mode' ? (
+              <div className="min-w-48 flex-1">
+                <label htmlFor={filterValueId} className="text-sm font-medium">
+                  {m.library_progress_discovery_filter_value()}
+                </label>
+                <NativeSelect
+                  id={filterValueId}
+                  className="min-h-11"
+                  value={filterValue}
+                  onChange={(event) => setFilterValue(event.currentTarget.value)}
+                >
+                  <NativeSelectOption value="">{m.library_progress_discovery_any_filter()}</NativeSelectOption>
+                  {modeChoices.map((choice) => (
+                    <NativeSelectOption key={choice.value} value={choice.value}>
+                      {choice.label()}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
+            ) : null}
+            {filterKind === 'profile' ? (
+              <div className="min-w-48 flex-1">
+                <label htmlFor={filterValueId} className="text-sm font-medium">
+                  {m.library_progress_discovery_profile_filter()}
+                </label>
+                <Input
+                  id={filterValueId}
+                  className="min-h-11"
+                  value={filterValue}
+                  onChange={(event) => setFilterValue(event.currentTarget.value)}
+                />
+              </div>
+            ) : null}
+            <Link to="/library/progress" search={discoveryAddress} className={buttonClass}>
+              {m.library_progress_address_apply()}
+            </Link>
+            {page.subjectId || page.state || page.mode || page.profileId ? (
+              <Link to="/library/progress" search={{}} className={buttonClass}>
+                {m.library_progress_discovery_reset()}
+              </Link>
+            ) : null}
+          </div>
+        </section>
         {sessions.length ? (
           <ol className="space-y-3">
             {sessions.map((session) => (
@@ -530,9 +740,9 @@ function ProgressIndexPageContent({
           <p className="text-muted-foreground">
             {cursor || page.next
               ? m.library_progress_page_empty()
-              : page.subjectId
-                ? m.library_progress_empty()
-                : m.library_progress_address_choose()}
+              : page.emptyKind === 'filtered-empty' || page.subjectId || page.state || page.mode || page.profileId
+                ? m.library_progress_discovery_empty_filtered()
+                : m.library_progress_discovery_empty_owner()}
           </p>
         )}
         {cursor || page.next ? (
@@ -541,7 +751,7 @@ function ProgressIndexPageContent({
               {cursor ? (
                 <Link
                   to="/library/progress"
-                  search={{ subjectId: page.subjectId }}
+                  search={currentFilterAddress}
                   onClick={(event) => {
                     if (authority && !authority.isCurrent()) event.preventDefault();
                   }}
@@ -553,7 +763,7 @@ function ProgressIndexPageContent({
               {page.next ? (
                 <Link
                   to="/library/progress"
-                  search={{ subjectId: page.subjectId, cursor: page.next }}
+                  search={{ ...currentFilterAddress, cursor: page.next }}
                   onClick={(event) => {
                     if (authority && !authority.isCurrent()) event.preventDefault();
                   }}
@@ -989,6 +1199,15 @@ function SessionRow({
     }
   }
   const entries: MenuEntry[] = [
+    ...(session.allowedActions?.edit.allowed !== false
+      ? [
+          {
+            type: 'link' as const,
+            label: m.library_progress_discovery_edit(),
+            href: `/${getLocale()}/library/progress/${encodeURIComponent(session.id)}`,
+          },
+        ]
+      : []),
     ...(session.subject
       ? [
           {
@@ -1004,7 +1223,7 @@ function SessionRow({
           },
         ]
       : []),
-    ...(session.state === 'active' && completable
+    ...(session.state === 'active' && session.allowedActions?.complete.allowed !== false && completable
       ? [
           {
             type: 'item' as const,
@@ -1013,7 +1232,7 @@ function SessionRow({
           },
         ]
       : []),
-    ...(session.state === 'active' && abandonable
+    ...(session.state === 'active' && session.allowedActions?.abandon.allowed !== false && abandonable
       ? [
           {
             type: 'item' as const,
@@ -1026,12 +1245,30 @@ function SessionRow({
   const title = session.subject
     ? displayLibraryTitle(session.subject.label, getLocale())
     : { text: m.library_subject_unavailable(), lang: undefined };
+  const meaning =
+    session.meaning === 'known'
+      ? m.library_progress_discovery_meaning_known()
+      : session.meaning === 'unknown'
+        ? m.library_progress_discovery_meaning_unknown()
+        : session.meaning === 'unavailable'
+          ? m.library_progress_discovery_meaning_unavailable()
+          : null;
+  const actionStates = session.allowedActions
+    ? [
+        [m.library_progress_discovery_action_open(), session.allowedActions.open],
+        [m.library_progress_discovery_edit(), session.allowedActions.edit],
+        [m.library_progress_complete(), session.allowedActions.complete],
+        [m.library_progress_abandon(), session.allowedActions.abandon],
+      ] as const
+    : null;
   return (
     <ContentItem
       title={title.text}
       {...(title.lang ? { titleLang: title.lang } : {})}
       headingLevel={2}
-      {...(readable ? { href: `/${getLocale()}/library/progress/${encodeURIComponent(session.id)}` } : {})}
+      {...(readable && session.allowedActions?.open.allowed !== false
+        ? { href: `/${getLocale()}/library/progress/${encodeURIComponent(session.id)}` }
+        : {})}
       visual={
         <div className="w-[72px] shrink-0 sm:w-24">
           <SubjectCover subject={session.subject} ratio={ratio} size="fill" />
@@ -1067,16 +1304,15 @@ function SessionRow({
               }
             />
           </ListRowControl>
+          {meaning ? <p className="text-sm text-muted-foreground">{meaning}</p> : null}
           {!session.unitLabel ? (
             <>
-              <p className="text-sm text-muted-foreground">{m.library_progress_index_reader_history_unavailable()}</p>
               <details className="text-sm text-muted-foreground">
                 <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                   {m.library_progress_details()}
                 </summary>
                 <div className="mt-2 flex flex-col gap-2">
                   <p>{m.library_progress_unit_unspecified()}</p>
-                  <p>{m.library_history_unavailable()}</p>
                   <dl>
                     <dt>
                       {m.library_progress_mode()} / {m.library_progress_unit()}
@@ -1090,6 +1326,24 @@ function SessionRow({
                 </div>
               </details>
             </>
+          ) : null}
+          {actionStates ? (
+            <details className="text-sm text-muted-foreground">
+              <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.library_progress_discovery_actions()}
+              </summary>
+              <ul className="mt-2 space-y-1">
+                {actionStates.map(([label, action]) => (
+                  <li key={label}>
+                    {label}: {action.allowed
+                      ? m.library_progress_discovery_action_available()
+                      : action.reason === 'session_not_active'
+                        ? m.library_progress_discovery_action_not_active()
+                        : m.library_progress_discovery_action_not_authorized()}
+                  </li>
+                ))}
+              </ul>
+            </details>
           ) : null}
           {confirming ? (
             <Exposure operation={confirming === 'abandon' ? 'progress_session.abandon' : 'progress_session.complete'}>

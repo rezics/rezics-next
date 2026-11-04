@@ -7,6 +7,7 @@ import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
@@ -14,12 +15,14 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { ProgressIntent, ProgressPresentation, ProgressScalarMeasure, ProgressSession } from './progress-model.ts';
 import { MAX_PROGRESS_MEASURES } from './progress.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
 import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
 import { MAX_JOURNAL_REFLECTION_CHARACTERS } from './progress-journal.ts';
 import { createConsumptionStatisticsReads, type ConsumptionSummary } from './consumption-statistics.ts';
 import { createReportedYearSummaryReads, type ReportedYearSummary } from './reported-year-summary.ts';
+import { readCurrentSubjectSummaries } from '../semantic/current-subject-summaries.ts';
+import { presentProgressDiscovery } from './progress-discovery-presentation.ts';
 
 const yearCount = t.String({ pattern: '^[0-9]{1,19}$' });
 const reportedCounts = {
@@ -170,6 +173,34 @@ export const sessionSchema = t.Object(
 );
 const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
 const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
+const discoveryAction = t.Object(
+  {
+    allowed: t.Boolean(),
+    reason: t.Union([t.Literal('session_not_active'), t.Literal('not_authorized'), t.Null()]),
+  },
+  closed,
+);
+const discoveryActions = t.Object(
+  {
+    open: discoveryAction,
+    edit: discoveryAction,
+    complete: discoveryAction,
+    abandon: discoveryAction,
+  },
+  closed,
+);
+const progressDiscoverySession = embedded(sessionSchema, {
+  ...presentationFields,
+  allowedActions: discoveryActions,
+});
+const progressDiscoveryResponse = t.Object(
+  {
+    viewerState: t.Literal('signed_in'),
+    progressSessions: t.Array(progressDiscoverySession),
+    next: nullableString,
+  },
+  closed,
+);
 const sessionJournalSchema = t.Object(
   {
     sessionId: id,
@@ -627,6 +658,122 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
               progressSessions: result.sessions.map((session) => sessionView(session)),
               next: result.next,
             });
+          }),
+        );
+      },
+    )
+    .get(
+      '/v1/progressSessionDiscovery',
+      {
+        query: t.Object(
+          {
+            subjectId: t.Optional(id),
+            state: t.Optional(t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')])),
+            mode: t.Optional(mode),
+            profileId: t.Optional(t.String({ minLength: 1, maxLength: 128 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1, default: 20 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+          },
+          closed,
+        ),
+        transform: ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          if (
+            [...query.keys()].some(
+              (key) => !['subjectId', 'state', 'mode', 'profileId', 'limit', 'cursor'].includes(key),
+            ) ||
+            [...query.keys()].some((key) => query.getAll(key).length !== 1) ||
+            ['state', 'mode', 'profileId'].filter((key) => query.has(key)).length > 1
+          )
+            throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: progressDiscoveryResponse,
+          400: invalid,
+          401: unauthorized,
+          403: problemSchema('forbidden', 'account_suspended'),
+          409: conflict,
+          503: unavailable,
+        },
+        detail: detail('progress_session.discovery', 'progress_session:list'),
+      },
+      async ({ query, actor, admission, job, request, set }) => {
+        const viewer = requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          mapped(async () => {
+            const filter = {
+              ...(query.subjectId === undefined ? {} : { subjectId: query.subjectId }),
+              ...(query.state === undefined ? {} : { state: query.state }),
+              ...(query.mode === undefined ? {} : { mode: query.mode }),
+              ...(query.profileId === undefined ? {} : { profileId: query.profileId }),
+            };
+            const result = await sessionCommands().listOwnerSessions(actor, filter, {
+              ...(query.limit === undefined ? {} : { limit: query.limit }),
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              origin: new URL(request.url).origin,
+              language: request.headers.get('accept-language') ?? '',
+            });
+            const dependencies = config();
+            const subjectIds = [
+              ...new Set(
+                result.sessions.flatMap(({ session }) =>
+                  session.versionSubjectId ? [session.subjectId, session.versionSubjectId] : [session.subjectId],
+                ),
+              ),
+            ];
+            const [subjects, presentations] = await Promise.all([
+              readCurrentSubjectSummaries(
+                {
+                  pool,
+                  access: dependencies.access,
+                  actor: viewer,
+                  routeKey: dependencies.routeKey,
+                  deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+                },
+                subjectIds,
+              ),
+              presentProgressDiscovery(pool, result.sessions),
+            ]);
+            await subjects.verify();
+            await sessionCommands().verifyOwnerDiscoveryCurrent(actor, result.generation, result.partitionEpoch);
+            return {
+              viewerState: 'signed_in' as const,
+              progressSessions: result.sessions.map(({ session }) => {
+                const active = session.state === 'active';
+                const readable = viewer.scopes.includes('progress_session:read');
+                const writable = viewer.scopes.includes('progress_session:update');
+                const action = (allowed: boolean, reason: 'session_not_active' | 'not_authorized' | null) => ({
+                  allowed,
+                  reason,
+                });
+                return {
+                  ...sessionView(
+                    session,
+                    new Map(
+                      (presentations.get(session.id)?.measures ?? []).map(({ unit, presentation }) => [
+                        unit,
+                        presentation,
+                      ]),
+                    ),
+                  ),
+                  ...(presentations.has(session.id)
+                    ? { presentation: presentations.get(session.id)!.presentation }
+                    : {}),
+                  subject: subjects.summaries.get(session.subjectId) ?? null,
+                  versionSubject: session.versionSubjectId
+                    ? (subjects.summaries.get(session.versionSubjectId) ?? null)
+                    : null,
+                  allowedActions: {
+                    open: action(readable, readable ? null : 'not_authorized'),
+                    edit: action(readable && writable, readable && writable ? null : 'not_authorized'),
+                    complete: action(active && writable, !writable ? 'not_authorized' : active ? null : 'session_not_active'),
+                    abandon: action(active && writable, !writable ? 'not_authorized' : active ? null : 'session_not_active'),
+                  },
+                };
+              }),
+              next: result.next,
+            };
           }),
         );
       },

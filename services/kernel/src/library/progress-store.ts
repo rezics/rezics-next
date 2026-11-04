@@ -7,6 +7,8 @@ import changeAppend from './progress-store-change-append.sql';
 import changePage from './progress-store-change-page.sql';
 import sessionInsert from './progress-store-session-insert.sql';
 import sessionPage from './progress-store-session-page.sql';
+import discoveryPage from './progress-discovery-page.sql';
+import discoveryGenerationRead from './progress-discovery-generation-read.sql';
 import sessionRead from './progress-store-session-read.sql';
 import sessionUpdate from './progress-store-session-update.sql';
 import sessionJournalLock from './progress-store-session-journal-lock.sql';
@@ -34,6 +36,14 @@ import {
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };
+export type ProgressDiscoveryFact = { session: ProgressSession; profilePin: LibraryProfilePin | null };
+export type ProgressDiscoveryFilter = {
+  subjectId?: string;
+  state?: Exclude<ProgressState, 'retired'>;
+  mode?: ProgressMode;
+  profileId?: string;
+};
+export type ProgressDiscoveryAfter = { startedAt: string; sessionId: string };
 type SessionResult = Omit<
   NonNullable<Awaited<ReturnType<typeof sessionRead.run>>>,
   'mode' | 'unit' | 'state' | 'libraryProfilePin'
@@ -413,6 +423,63 @@ export async function pageSessions(
     for (const row of rows) if (row.libraryProfilePin === null) assertUnit(row.unit, false);
   }
   return rows.map((row) => asSession(row));
+}
+
+export async function progressDiscoveryGeneration(
+  client: Client,
+  route: number,
+  accountId: string,
+): Promise<string> {
+  const row = await discoveryGenerationRead.run(queryClient(client), { route, account_id: accountId });
+  if (!/^(0|[1-9][0-9]*)$/.test(row.generation)) throw new Error('Invalid progress discovery generation');
+  return row.generation;
+}
+
+export async function pageProgressDiscovery(
+  client: Client,
+  route: number,
+  accountId: string,
+  filter: ProgressDiscoveryFilter,
+  after: ProgressDiscoveryAfter | null,
+  limit: number,
+): Promise<ProgressDiscoveryFact[]> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_PROGRESS_PAGE_SIZE)
+    throw new TypeError('Invalid progress discovery limit');
+  const hasSubject = filter.subjectId !== undefined;
+  const filterKind =
+    filter.state !== undefined
+      ? hasSubject
+        ? 'subject_state'
+        : 'state'
+      : filter.mode !== undefined
+        ? hasSubject
+          ? 'subject_mode'
+          : 'mode'
+        : filter.profileId !== undefined
+          ? hasSubject
+            ? 'subject_profile'
+            : 'profile'
+          : hasSubject
+            ? 'subject'
+            : 'owner';
+  const rows = await discoveryPage.run(queryClient(client), {
+    route,
+    account_id: accountId,
+    subject_id: filter.subjectId ?? null,
+    filter_kind: filterKind,
+    state_filter: filter.state ?? '',
+    mode_filter: filter.mode ?? '',
+    profile_filter: filter.profileId ?? '',
+    after_started_at: after?.startedAt ?? null,
+    after_session_id: after?.sessionId ?? null,
+    has_cursor: after !== null,
+    limit,
+  });
+  if (rows.some((row) => row.libraryProfilePin === null)) {
+    await assertPreProfileLibraryRead(client, accountId);
+    for (const row of rows) if (row.libraryProfilePin === null) assertUnit(row.unit, false);
+  }
+  return rows.map((row) => ({ session: asSession(row), profilePin: decodeLibraryProfilePin(row.libraryProfilePin) }));
 }
 
 export async function pageUnits(

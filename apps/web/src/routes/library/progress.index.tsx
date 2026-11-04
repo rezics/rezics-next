@@ -1,4 +1,3 @@
-import { requireSignedIn } from '../../session/guard';
 import { prepareExposure } from '../../kernel/exposure';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
@@ -10,11 +9,16 @@ import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/progress/')({
   beforeLoad: async (args) => {
-    await requireSignedIn(args);
     await prepareExposure(args.context.queryClient);
   },
   validateSearch: progressIndexAddress,
-  loaderDeps: ({ search }) => ({ subjectId: search.subjectId, cursor: search.cursor }),
+  loaderDeps: ({ search }) => ({
+    subjectId: search.subjectId,
+    state: search.state,
+    mode: search.mode,
+    profileId: search.profileId,
+    cursor: search.cursor,
+  }),
   loader: ({ deps }) => readCurrentViewerProgressIndex({ data: deps }),
   staleTime: 0,
   head: ({ match }) =>

@@ -187,14 +187,20 @@ const subject = (n: number, label = `Subject ${n}`) => ({
   label,
   cover: null,
 });
-function envelope(owner = 'A', subjectId = id(1), cursor: string | null = null): CurrentViewerProgressIndex {
+function envelope(
+  owner = 'A',
+  subjectId = id(1),
+  cursor: string | null = null,
+  state?: 'active' | 'completed' | 'abandoned',
+): CurrentViewerProgressIndex {
   return {
     viewer: owner,
     locale: 'en',
-    requested: { subjectId, cursor },
+    requested: { subjectId, ...(state === undefined ? {} : { state }), cursor },
     page: {
       signedIn: true,
       subjectId,
+      ...(state === undefined ? {} : { state }),
       selectedSubject: subject(1, `Private ${owner}`),
       progressChoices: profile,
       next: 'signed/opaque+==',
@@ -214,7 +220,7 @@ function envelope(owner = 'A', subjectId = id(1), cursor: string | null = null):
           locator: null,
           position: null,
           completedUnitCount: 0,
-          state: 'active',
+          state: state ?? 'active',
           revision: 7,
           startedAt: '2026-01-01T00:00:00Z',
           completedAt: null,
@@ -240,7 +246,9 @@ async function mount() {
   client.setQueryData(sessionQuery.queryKey, viewer());
   client.setQueryData(exposureQuery.queryKey, operations);
   let loader = envelope();
-  let requested: { subjectId?: string; cursor?: string } = { subjectId: id(1) };
+  let requested: { subjectId?: string; state?: string; mode?: string; profileId?: string; cursor?: string } = {
+    subjectId: id(1),
+  };
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/library/progress'] }),
@@ -647,5 +655,25 @@ test('public suggestion requests fence both response and decode continuations on
       fetcher.mockRestore();
       await h.close();
     }
+  }
+});
+
+test('late owner results cannot populate a newly selected state predicate', async () => {
+  const h = await mount();
+  try {
+    const oldRead = reads.at(-1)!;
+    await h.address({ subjectId: id(1), state: 'completed' });
+    const filteredRead = reads.at(-1)!;
+    expect(filteredRead).not.toBe(oldRead);
+    await tick(() => filteredRead.work.resolve(envelope()));
+    expect(h.host.textContent).not.toContain('Private A');
+    expect(h.host.querySelector(`a[href="/en/library/progress/${id(20)}"]`)).toBeNull();
+
+    const completed = envelope('A', id(1), null, 'completed');
+    await h.deliver(completed);
+    expect(h.host.textContent).toContain('Private A');
+    expect(h.host.textContent).toContain(m.library_progress_state_completed());
+  } finally {
+    await h.close();
   }
 });
