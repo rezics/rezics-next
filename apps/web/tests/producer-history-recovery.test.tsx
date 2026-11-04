@@ -93,6 +93,7 @@ async function mounted() {
   return {
     host,
     window,
+    clear: () => act(async () => root.render(null)),
     show,
     click,
     button,
@@ -112,7 +113,15 @@ test('initial unavailable read has safe recovery; an empty admission and a conce
   const ui = await mounted();
   const example = producerRecoveryExample();
   try {
-    await ui.show(example.transport, { ok: false, reason: 'unavailable' });
+    const initial = deferred<ProducerHistoryRead>();
+    let firstRead = true;
+    await ui.show({
+      ...example.transport,
+      read: (...args) => (firstRead ? initial.promise : example.transport.read(...args)),
+    });
+    expect(ui.host.textContent).toContain(ui.m.candidate_loading());
+    firstRead = false;
+    await act(async () => initial.resolve({ ok: false, reason: 'unavailable' }));
     expect(ui.host.textContent).toContain(ui.m.producer_history_unavailable());
     expect(ui.host.textContent).not.toContain(ui.m.producer_history_concealed());
     expect(ui.host.querySelector('a')?.textContent).toBe(ui.m.producer_history_back());
@@ -155,7 +164,9 @@ test('failed continuation retries the exact page and session; reload keeps the p
     expect(ui.host.querySelector('ul')).toBeNull();
     expect(ui.host.querySelector('select')).toBeNull();
     expect(ui.window.document.activeElement?.getAttribute('role')).not.toBe('alert');
+    ui.button(ui.m.producer_history_retry()).focus();
     await ui.click(ui.m.producer_history_retry());
+    expect(ui.window.document.activeElement?.tagName).toBe('H2');
     expect(example.reads.slice(0, 2)).toEqual(
       Array(2).fill({ stream: example.first.stream!.key, cursor: 'native-next', session: 'producer-session' }),
     );
@@ -238,6 +249,16 @@ test('A/B/A and equal-page replacement reject late slices; locale/account retire
     await ui.show(transport, example.first);
     await act(async () => pending[6]!.resolve(result(a, 'Retired account')));
     expect(ui.host.textContent).not.toContain('Retired account');
+    ui.button(ui.m.candidate_reload()).focus();
+    await ui.click(ui.m.candidate_reload());
+    const destination = ui.host.querySelector('a')!;
+    destination.focus();
+    await act(async () => pending[7]!.resolve(result(a, 'Deliberate reload')));
+    expect(ui.window.document.activeElement).toBe(destination);
+    await ui.click(ui.m.candidate_reload());
+    await ui.clear();
+    await act(async () => pending[8]!.resolve(result(a, 'After unmount')));
+    expect(ui.host.textContent).toBe('');
   } finally {
     await ui.close();
   }
@@ -313,7 +334,10 @@ test('uncertain retry retains the original command; failed reader retirement nev
     await ui.click(ui.m.producer_history_correct());
     await ui.click(ui.m.relation_open());
     await ui.click(ui.m.relation_propose());
-    const group = () => ui.host.querySelector('[role="group"]')!;
+    const group = () =>
+      [...ui.host.querySelectorAll('[role="group"]')].find(
+        (node) => node.getAttribute('aria-label') === ui.m.candidate_confirm_title({ action: ui.m.relation_propose() }),
+      )!;
     await ui.click(ui.m.relation_propose(), group());
     expect(commands.length).toBe(1);
     await ui.click(ui.m.relation_propose(), group());
