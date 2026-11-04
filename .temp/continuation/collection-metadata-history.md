@@ -22,9 +22,9 @@ estimate:
   files: 11
 acceptance:
   tests:
-    - "Installed generated history methods supply bounded private curator pages and two addressed revisions with truthful coverage and current allowed actions."
-    - "Generated-client transport forwards authenticated session/current origin and handles response sessions, opaque cursors, original revisions/time and genuine authorization/session failures without exposing historical text or current Media in a public reader."
-    - "Mounted Collection cases retire history on curator, account, session, locale and navigation changes while preserving metadata drafts and ordinary update/delete ownership; disclosed covers use the established media presentation without extra hydration."
+    - 'Installed generated history methods supply bounded private curator pages and two addressed revisions with truthful coverage and current allowed actions.'
+    - 'Generated-client transport forwards authenticated session/current origin and handles response sessions, opaque cursors, original revisions/time and genuine authorization/session failures without exposing historical text or current Media in a public reader.'
+    - 'Mounted Collection cases retire history on curator, account, session, locale and navigation changes while preserving metadata drafts and ordinary update/delete ownership; disclosed covers use the established media presentation without extra hydration.'
   failing: true
   workerOwned: true
 ---
