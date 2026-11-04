@@ -26,6 +26,9 @@ text, including surrounding spaces and Unicode composition. Names contain 1–30
 non-whitespace text and cannot contain control characters or unpaired surrogates. They are never matched to an
 account. A person identity must be explicitly selected; parsing a routable ID does not admit or disclose that person.
 
+Decision: Returned loan history stays private and is retained for the owner's lifetime, survives copy deletion or
+disposal, and is removed by terminal owner erasure.
+
 ## Installed boundary
 
 `loan-date.ts` and `loan-model.ts` implement pure validation, immutable operands and fresh lifecycle transitions.
