@@ -69,6 +69,7 @@ export type StatementFieldsRead = ScalarRead & {
   public: ScalarRead['public'] & { subject: Pick<Current['public']['subject'], 'type'> };
 };
 const gregorian = 'http://www.wikidata.org/entity/Q1985727';
+const julian = 'http://www.wikidata.org/entity/Q1985786';
 
 // Caller sizing keeps native controls usable on phones and coarse pointers, with dense fine-pointer desktops.
 const actionClassName =
@@ -230,9 +231,15 @@ function ScalarControl({
   const record = isRecord(content) ? content : {};
   const schema = definition && isRecord(definition.value) ? definition.value : {};
   const properties = isRecord(schema.properties) ? schema.properties : {};
-  const calendar = isRecord(properties.calendarmodel) ? properties.calendarmodel.const : undefined;
-  // Unknown compound datatypes and unsupported calendar models remain intact and visible.
-  if (!editableScalar(definition) || (definition?.datatype === 'time' && calendar !== gregorian))
+  const calendarSchema = isRecord(properties.calendarmodel) ? properties.calendarmodel : {};
+  const calendars = Array.isArray(calendarSchema.enum)
+    ? calendarSchema.enum.filter((value): value is string => typeof value === 'string')
+    : typeof calendarSchema.const === 'string'
+      ? [calendarSchema.const]
+      : [];
+  const supportedCalendars = calendars.filter((value) => value === gregorian || value === julian);
+  // Unknown compound datatypes and schemas without an admitted calendar remain intact and visible.
+  if (!editableScalar(definition) || (definition?.datatype === 'time' && !supportedCalendars.length))
     return (
       <div className="space-y-1 text-sm">
         <PartValue part={part} read={read} locale={locale} />
@@ -265,6 +272,14 @@ function ScalarControl({
     if (value === '') delete next[key];
     onChange({ type: 'value', content: next });
   };
+  const patchInteger = (key: 'timezone' | 'before' | 'after', value: string) => {
+    if (!value) return patch(key, '');
+    const signed = key === 'timezone';
+    const pattern = signed ? /^[+-]?(?:0|[1-9][0-9]{0,15})$/ : /^\+?(?:0|[1-9][0-9]{0,15})$/;
+    if (!pattern.test(value)) return patch(key, value);
+    const parsed = Number(value);
+    patch(key, Number.isSafeInteger(parsed) ? parsed : value);
+  };
   const date = typeof record.time === 'string' ? /^([+-]\d*)-(\d{2})-(\d{2})T00:00:00Z$/.exec(record.time) : null;
   const precision = typeof record.precision === 'number' ? record.precision : undefined;
   const setDate = (index: number, value: string, nextPrecision = precision) => {
@@ -282,7 +297,6 @@ function ScalarControl({
         ...record,
         time: `${parts.join('-')}T00:00:00Z`,
         ...(nextPrecision ? { precision: nextPrecision } : {}),
-        calendarmodel: calendar,
       },
     });
   };
@@ -401,9 +415,14 @@ function ScalarControl({
                 {...invalid('date')}
                 aria-label={m.correction_precision({}, o)}
                 value={precision ?? ''}
-                onChange={(event) => setDate(0, date?.[1] ?? '', Number(event.target.value))}
+              onChange={(event) => setDate(0, date?.[1] ?? '', Number(event.target.value))}
               >
                 <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+                {typeof precision === 'number' && ![9, 10, 11].includes(precision) && (
+                  <NativeSelectOption value={precision}>
+                    {m.time_unsupported_precision({ precision: String(precision) }, o)}
+                  </NativeSelectOption>
+                )}
                 {[9, 10, 11]
                   .filter(
                     (value) =>
@@ -423,9 +442,7 @@ function ScalarControl({
               </NativeSelect>
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
-              {field('year', m.correction_year({}, o), date?.[1]?.replace(/^\+/, '') ?? '', (value) =>
-                setDate(0, value),
-              )}
+              {field('year', m.correction_year({}, o), date?.[1] ?? '', (value) => setDate(0, value))}
               {precision !== undefined &&
                 precision >= 10 &&
                 field(
@@ -444,7 +461,35 @@ function ScalarControl({
                   'number',
                 )}
             </div>
-            <p className="text-sm text-muted-foreground">{m.correction_calendar({}, o)}</p>
+            <Field className="min-w-0">
+              <FieldLabel className={labelClassName} htmlFor={id('calendar')}>
+                {m.correction_calendar({}, o)}
+              </FieldLabel>
+              <NativeSelect
+                className={selectClassName}
+                {...control('calendar')}
+                aria-label={m.correction_calendar({}, o)}
+                value={typeof record.calendarmodel === 'string' ? record.calendarmodel : ''}
+                onChange={(event) => patch('calendarmodel', event.target.value)}
+              >
+                <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+                {supportedCalendars.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {value === gregorian ? m.time_calendar_gregorian({}, o) : m.time_calendar_julian({}, o)}
+                  </NativeSelectOption>
+                ))}
+                {typeof record.calendarmodel === 'string' && !supportedCalendars.includes(record.calendarmodel) && (
+                  <NativeSelectOption value={record.calendarmodel}>
+                    {m.time_unsupported_calendar({ calendar: record.calendarmodel }, o)}
+                  </NativeSelectOption>
+                )}
+              </NativeSelect>
+            </Field>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {field('timezone', m.correction_timezone({}, o), record.timezone === undefined ? '' : String(record.timezone), (value) => patchInteger('timezone', value))}
+              {field('before', m.correction_before({}, o), record.before === undefined ? '' : String(record.before), (value) => patchInteger('before', value))}
+              {field('after', m.correction_after({}, o), record.after === undefined ? '' : String(record.after), (value) => patchInteger('after', value))}
+            </div>
           </div>
         ) : definition.datatype === 'monolingualtext' ? (
           <>

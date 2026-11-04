@@ -12,6 +12,16 @@ export * from './portable.ts';
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const subjectIdPattern = new RegExp(UUID);
 const INTEGER = '^[+-](?:0|[1-9][0-9]*)$';
+const historicalTimeSchema = {
+  type: 'object',
+  required: ['time', 'precision', 'calendarmodel'],
+  additionalProperties: false,
+  properties: {
+    time: { type: 'string', pattern: '^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$' },
+    precision: { enum: [9, 10, 11] },
+    calendarmodel: { const: 'http://www.wikidata.org/entity/Q1985727' },
+  },
+};
 
 export function releaseDigest(release: Release): string {
   return `sha256:${createHash('sha256').update(canonicalize(release)!, 'utf8').digest('hex')}`;
@@ -277,7 +287,10 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
       // canonical comparison below still requires the entire supported shape.
       if (!own(fields, 'lowerBound') && !own(fields, 'upperBound')) options.exact = true;
     }
-    const fixedSchema = canonicalize(value) === canonicalize(valueSchema(property.datatype, options));
+    const currentFixedSchema = canonicalize(value) === canonicalize(valueSchema(property.datatype, options));
+    const historicalTime =
+      property.datatype === 'time' && canonicalize(value) === canonicalize(historicalTimeSchema);
+    const fixedSchema = currentFixedSchema || historicalTime;
     if (!fixedSchema) add(at(pointer, 'value'));
     patterns(value, at(pointer, 'value'));
   }

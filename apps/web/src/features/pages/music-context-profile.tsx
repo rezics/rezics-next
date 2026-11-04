@@ -81,25 +81,25 @@ export function MusicContextProfile({
             {read.facts.map((fact) => (
               <li key={`${fact.property}:${fact.text}`}>
                 {fact.label}:{' '}
-                {fact.unknown
-                  ? fact.property.match(/coord|globe/i)
-                    ? m.music_context_coordinates_unsupported({}, o)
-                    : m.music_context_unknown_date({}, o)
-                  : fact.precision && fact.precision !== '11'
-                    ? m.music_context_partial_date({ date: fact.text }, o)
+                {fact.time
+                  ? fact.time.text
+                  : fact.unknown
+                    ? fact.property.match(/coord|globe/i)
+                      ? m.music_context_coordinates_unsupported({}, o)
+                      : m.music_context_unknown_date({}, o)
                     : fact.text}
               </li>
             ))}
           </ul>
           <ul className="space-y-2">
             {read.links.map((link) => (
-              <li key={`${link.property}:${link.id}:${link.date ?? ''}`}>
+              <li key={`${link.property}:${link.id}:${link.date?.text ?? ''}`}>
                 {link.unreadable ? (
                   m.music_context_unreadable_artist({}, o)
                 ) : (
                   <a className={linkClass} href={subjectHref({ id: link.id, label: link.label }, locale).href}>
                     {link.label}
-                    {link.date ? ` · ${link.date}` : ''}
+                    {link.date ? ` · ${link.date.text}` : ''}
                     {link.role ? ` · ${link.role}` : ''}
                   </a>
                 )}

@@ -26,6 +26,7 @@ import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
 import { quantityPresentation } from '../../subject/quantity-presentation';
+import { timePresentation } from '../../subject/time-presentation';
 import type { PageDocument } from './render';
 import { statementDocument } from './documents';
 import * as accounts from './account';
@@ -192,21 +193,8 @@ function itemLink(id: string, labels: unknown, options: Options) {
   );
 }
 
-function timeText(value: Record<string, unknown>, locale: string): string | null {
-  if (typeof value.time !== 'string') return null;
-  const match = /^([+-]?\d{4,})-(\d{2})-(\d{2})T/.exec(value.time);
-  if (!match || ![9, 10, 11].includes(value.precision as number)) return value.time;
-  const date = new Date(0);
-  // Kernel dates use 00 for the month/day omitted at year/month precision.
-  // setUTCFullYear also preserves years 0–99 instead of adding 1900.
-  date.setUTCFullYear(Number(match[1]), Math.max(1, Number(match[2])) - 1, Math.max(1, Number(match[3])));
-  if (!Number.isFinite(date.getTime())) return value.time;
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: 'UTC',
-    year: 'numeric',
-    ...(value.precision === 10 || value.precision === 11 ? { month: 'long' } : {}),
-    ...(value.precision === 11 ? { day: 'numeric' } : {}),
-  }).format(date);
+function timeText(value: unknown, locale: string): string {
+  return timePresentation(value, locale).text;
 }
 
 function inlineValue(snak: Snak, related: Related, options: Options): ReactNode {
@@ -235,7 +223,7 @@ function inlineValue(snak: Snak, related: Related, options: Options): ReactNode 
       </span>
     );
   }
-  if (property.data_type === 'time' && isRecord(content)) return <span>{timeText(content, options.locale)}</span>;
+  if (property.data_type === 'time') return <span>{timeText(content, options.locale)}</span>;
   if (property.data_type === 'monolingualtext' && isRecord(content) && typeof content.language === 'string') {
     const text = pageText({ [content.language]: content.text }, options.locale);
     return <span lang={text.lang}>{text.text}</span>;

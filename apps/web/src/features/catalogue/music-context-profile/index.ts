@@ -4,6 +4,7 @@ import type { Release } from '@rezics/definitions';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import { MUSIC_CONTEXT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 import { relationFields } from '../../../subject/relation-candidates';
+import { timePresentation, type TimePresentation } from '../../../subject/time-presentation';
 
 export const musicContextRequested = {
   place: ['schema:Place', 'schema:MusicVenue'] as const,
@@ -17,7 +18,7 @@ export type MusicContextFact = {
   property: string;
   label: string;
   text: string;
-  precision?: string | undefined;
+  time?: TimePresentation | undefined;
   unknown?: boolean | undefined;
 };
 export type MusicContextLink = {
@@ -25,7 +26,7 @@ export type MusicContextLink = {
   label: string;
   property: string;
   direction: 'out' | 'in';
-  date?: string | undefined;
+  date?: TimePresentation | undefined;
   role?: string | undefined;
   unreadable?: boolean | undefined;
 };
@@ -72,20 +73,6 @@ export function musicContextKind(release: Definitions, type: string): MusicConte
   return 'unsupported';
 }
 
-function timeText(content: unknown): { text: string; precision?: string; unknown?: boolean } {
-  if (!content || typeof content !== 'object') return { text: '', unknown: true };
-  const value = content as { time?: unknown; precision?: unknown };
-  if (typeof value.time !== 'string' || !value.time) return { text: '', unknown: true };
-  const precision = typeof value.precision === 'number' ? String(value.precision) : undefined;
-  const iso = value.time.replace(/^\+/, '');
-  const text = precision === '9' ? iso.slice(0, 4) : precision === '10' ? iso.slice(0, 7) : iso.slice(0, 10);
-  return {
-    text,
-    ...(precision ? { precision } : {}),
-    ...(precision !== '11' ? { unknown: precision === undefined } : {}),
-  };
-}
-
 export async function readMusicContext(
   client: KernelClient,
   authorization: string | undefined,
@@ -110,13 +97,12 @@ export async function readMusicContext(
       const label = pickText(definition.labels, locale).text;
       for (const statement of statements) {
         if (definition.datatype === 'time') {
-          const time = timeText(statement.value.type === 'value' ? statement.value.content : undefined);
+          const time = timePresentation(statement.value, locale);
           facts.push({
             property,
             label,
             text: time.text,
-            ...(time.precision ? { precision: time.precision } : {}),
-            unknown: time.unknown || statement.value.type !== 'value',
+            time,
           });
           continue;
         }
@@ -164,7 +150,7 @@ export async function readMusicContext(
           label: row.summary?.label?.value ?? '',
           property: stream.id,
           direction: 'out' as const,
-          ...(date ? { date: timeText(date.value.type === 'value' ? date.value.content : undefined).text } : {}),
+          ...(date ? { date: timePresentation(date.value, locale) } : {}),
           ...(role && role.value.type === 'value' && typeof role.value.content === 'string'
             ? { role: role.value.content }
             : {}),

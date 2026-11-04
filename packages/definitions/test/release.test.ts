@@ -161,9 +161,14 @@ test('each data type has exactly its own members and its fixed value schema', ()
     required: ['time', 'precision', 'calendarmodel'],
     additionalProperties: false,
     properties: {
-      time: { type: 'string', pattern: '^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$' },
+      time: { type: 'string', maxLength: 33, pattern: '^[+-][0-9]{4,16}-[0-9]{2}-[0-9]{2}T00:00:00Z$' },
       precision: { enum: [9, 10, 11] },
-      calendarmodel: { const: 'http://www.wikidata.org/entity/Q1985727' },
+      calendarmodel: {
+        enum: ['http://www.wikidata.org/entity/Q1985727', 'http://www.wikidata.org/entity/Q1985786'],
+      },
+      timezone: { type: 'integer', minimum: -9007199254740991, maximum: 9007199254740991 },
+      before: { type: 'integer', minimum: 0, maximum: 9007199254740991 },
+      after: { type: 'integer', minimum: 0, maximum: 9007199254740991 },
     },
   });
   expect(valueSchema('monolingualtext', { pattern: '^\\S' }).properties.text).toEqual({

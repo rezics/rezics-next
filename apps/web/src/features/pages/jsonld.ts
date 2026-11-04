@@ -1,7 +1,6 @@
 import { hasPublicMean, PUBLIC_RATING_SCALE } from './subject-ratings';
 import type { PublicFigure } from './subject-ratings';
 import { pageDocumentReferences, pickLanguage } from '@rezics/composition';
-import { isExists } from 'date-fns/isExists';
 import {
   checkDocument,
   documentParagraphs,
@@ -14,6 +13,7 @@ import { statementDocument } from './documents.ts';
 import { publicCardImage } from '../../media/public-card';
 import { originalLanguage } from '../../subject/language.ts';
 import { subjectHref } from '../../subject/subject-href';
+import { timePresentation } from '../../subject/time-presentation';
 import type { Related, Subject, Summary } from '../../subject/types.ts';
 
 type JsonValue = string | number | JsonValue[] | { [key: string]: JsonValue };
@@ -90,29 +90,8 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function date(value: unknown): string | undefined {
-  // Accept both a time payload and an explicitly wrapped time value.
-  if (record(value) && value.type === 'value') value = value.content;
-  if (!record(value)) return;
-  const { time, precision } = value;
-  if (typeof time !== 'string' || typeof precision !== 'number') return;
-  if (!Number.isInteger(precision) || precision < 9) return;
-  const parts = /^\+?(\d+)-(\d{2})-(\d{2})T/.exec(time);
-  if (!parts) return;
-  const yearDigits = parts[1]!;
-  if (!/[1-9]/.test(yearDigits)) return;
-  const year = yearDigits.replace(/^0+/, '').padStart(4, '0');
-  if (precision === 9) return year;
-  const month = parts[2]!;
-  const monthNumber = Number(month);
-  if (monthNumber < 1 || monthNumber > 12) return;
-  const yearMonth = `${year}-${month}`;
-  if (precision === 10) return yearMonth;
-  const day = parts[3]!;
-  // Gregorian dates repeat every 400 years. An equivalent year keeps validation within
-  // Date's range, avoids its 0–99 year offset and preserves arbitrarily long authored years.
-  const calendarYear = 400 + (Number(year.slice(-4)) % 400);
-  if (!isExists(calendarYear, monthNumber - 1, Number(day))) return;
-  return `${yearMonth}-${day}`;
+  const result = timePresentation(value, 'en');
+  return result.state === 'supported' ? result.structuredDate : undefined;
 }
 
 /** The released property measures integer minutes; never round or guess a unit. */
