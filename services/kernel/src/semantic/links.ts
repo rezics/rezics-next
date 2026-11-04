@@ -5,6 +5,7 @@ import { fenceKey, sourceTuple, readAnchoredFences } from './fences.ts';
 import { semanticCopyRoles } from './erasure-producer.ts';
 import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
+import { readWorkReleaseCards, workReleaseCardLimit, type WorkReleaseCards } from './work-release-cards.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
 import { releaseDigest, type Release } from '@rezics/definitions';
@@ -1022,6 +1023,7 @@ export type SubjectLink = {
 };
 export type SubjectLinksPage = {
   links: SubjectLink[];
+  workReleaseCards?: WorkReleaseCards;
   count?: { value: number; exact: boolean };
   freshness: { consistency: 'eventual'; target_seconds: 10; caught_up: boolean };
   next: string | null;
@@ -1324,7 +1326,26 @@ export async function listSubjectLinks(
       },
     ];
   });
-  return { ...page, links };
+  const workReleaseCards =
+    options.property === 'schema:exampleOfWork'
+      ? options.limit <= workReleaseCardLimit && summaryRelease
+        ? await readWorkReleaseCards({
+            pool,
+            routeKey: options.routeKey,
+            subject: options.subject,
+            context,
+            defaults,
+            links,
+            caughtUp: page.freshness.caught_up,
+            release: summaryRelease,
+            languages,
+            deadline,
+            seen: options.seen,
+            ...(options.authorizeSummary === undefined ? {} : { authorizeSummary: options.authorizeSummary }),
+          })
+        : { state: 'unavailable' as const }
+      : undefined;
+  return { ...page, links, ...(workReleaseCards ? { workReleaseCards } : {}) };
 }
 
 export type SubjectRelation = {
