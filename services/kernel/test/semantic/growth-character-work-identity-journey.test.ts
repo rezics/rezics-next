@@ -1,13 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { bundledRelease } from '@rezics/definitions/bundled';
-import { ACCOUNT_ROLE_BITS } from '../../src/history/contracts.ts';
-import { bindCommandHistoryEvidence } from '../../src/history/record.ts';
+import { randomUUID } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject } from '../../src/semantic/subject.ts';
 import { listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 
 const appearanceProperty = 'schema:character';
@@ -20,54 +17,23 @@ const route = 16000;
 const character = newId(route);
 const holder = newId(route + 16);
 const ring = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(86)]]) };
-const actor = {
-  kind: 'account' as const,
-  accountId: newId(route),
-  clientId: 'growth-character-work',
-  scopes: ['subject:create'],
-  requestedBy: null,
-  authnEpoch: 1,
-};
-const historyAccounts = [
-  {
-    accountRoute: route,
-    accountId: actor.accountId,
-    roles: ACCOUNT_ROLE_BITS.principal | ACCOUNT_ROLE_BITS.actor | ACCOUNT_ROLE_BITS['acting-human'],
-  },
-];
-function creationAuthorization(target: { route: number; id: string }) {
-  return {
-    action: 'subject:create',
-    resource: target,
-    denied: () => new Error('Subject creation is not authorized'),
-    async authorize(tx: Parameters<typeof bindCommandHistoryEvidence>[0]) {
-      bindCommandHistoryEvidence(tx, historyAccounts);
-      return 'execute' as const;
-    },
-  };
-}
 beforeAll(async () => {
   db = await openGrowthDatabase(url);
-  configureTestReceiptKeys(db.pool);
-  const digest = await bootstrapRelease(db.pool, bundledRelease);
-  await createSubject(db.pool, {
-    actor,
-    target: { route, id: character },
-    idempotencyKey: character,
-    digest: new Uint8Array(32),
-    item: { type: 'wd:Q95074', labels: { en: 'Anchor character' } },
-    release: { digest, release: bundledRelease },
-    authorization: creationAuthorization({ route, id: character }),
-  });
-  await createSubject(db.pool, {
-    actor,
-    target: { route: route + 16, id: holder },
-    idempotencyKey: holder,
-    digest: new Uint8Array(32),
-    item: { type: 'schema:VideoGame', labels: { en: 'Holder work' } },
-    release: { digest, release: bundledRelease },
-    authorization: creationAuthorization({ route: route + 16, id: holder }),
-  });
+  await bootstrapRelease(db.pool, bundledRelease);
+  const transaction = randomUUID();
+  await db.admin.query(
+    `INSERT INTO semantic.subject
+      (route,subject_id,type,recorded_transaction_id,visibility,security_revision,current_facts,current_release,projection_pending)
+     VALUES
+      ($1,$2,'wd:Q95074',$3,'visible',0,1,$4,false),
+      ($5,$6,'schema:VideoGame',$3,'visible',0,1,$4,false)`,
+    [route, character, transaction, bundledDigest, route + 16, holder],
+  );
+  await db.admin.query(
+    `INSERT INTO semantic.revision (route,subject_id,revision,kind,release,recorded_transaction_id)
+     VALUES ($1,$2,1,'create',$3,$4), ($5,$6,1,'create',$3,$4)`,
+    [route, character, bundledDigest, transaction, route + 16, holder],
+  );
 });
 afterAll(async () => {
   await db.close();
