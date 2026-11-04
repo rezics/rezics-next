@@ -205,8 +205,7 @@ function SecurityPageView({
   function syncEnrollment(forceFocus = false) {
     const snapshot = enrollmentController.current.snapshot();
     const history = enrollmentController.current.historySnapshot();
-    if (history && (forceFocus || history !== enrollmentHistoryValue.current))
-      focusEnrollmentHistory.current = true;
+    if (history && (forceFocus || history !== enrollmentHistoryValue.current)) focusEnrollmentHistory.current = true;
     enrollmentHistoryValue.current = history;
     setEnrollment(snapshot);
     setEnrollmentHistory(history);
@@ -435,11 +434,7 @@ function SecurityPageView({
         document
           .getElementById(kind === 'session' ? 'security-sessions-heading' : 'security-passkeys-heading')
           ?.focus();
-    } else if (
-      recovery ||
-      registrationRecovery ||
-      (enrollment && enrollment.phase !== 'changed-account')
-    )
+    } else if (recovery || registrationRecovery || (enrollment && enrollment.phase !== 'changed-account'))
       recoveryStatus.current?.focus();
     else if (sessionNotice) sessionStatus.current?.focus();
   }, [operation, recovery, registrationRecovery, sessionNotice, enrollment]);
@@ -470,11 +465,7 @@ function SecurityPageView({
       const target = departureFocus.current;
       departureFocus.current = null;
       if (target?.isConnected && !target.hasAttribute('disabled')) target.focus();
-      else if (
-        recovery ||
-        registrationRecovery ||
-        (enrollment && enrollment.phase !== 'changed-account')
-      )
+      else if (recovery || registrationRecovery || (enrollment && enrollment.phase !== 'changed-account'))
         recoveryStatus.current?.focus();
       else if (passwordOperation) document.querySelector<HTMLDivElement>('#security-password-recovery')?.focus();
       else if (passwordInput.current?.value) passwordInput.current.focus();
@@ -923,8 +914,7 @@ function SecurityPageView({
     setPasskeyError('');
     const generation = authorityGeneration.current;
     const result = await addPasskey(passkeyName, lifetime.current.signal, (phase) => {
-      if (enrollmentController.current.observe(attemptId, phase))
-        syncEnrollment();
+      if (enrollmentController.current.observe(attemptId, phase)) syncEnrollment();
     });
     if (authorityGeneration.current !== generation) return;
     if (activeAccount.current !== owner) return;

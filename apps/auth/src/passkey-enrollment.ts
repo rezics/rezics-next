@@ -54,11 +54,7 @@ export class PasskeyEnrollmentController {
   }
 
   begin(accountId: string): number | null {
-    if (
-      !accountId ||
-      (this.current && this.current.phase !== 'changed-account')
-    )
-      return null;
+    if (!accountId || (this.current && this.current.phase !== 'changed-account')) return null;
     const attemptId = ++this.nextAttemptId;
     this.current = {
       attemptId,
@@ -166,8 +162,7 @@ export class PasskeyEnrollmentController {
 
   retireAuthority(): void {
     const current = this.current;
-    if (current?.possibleEffect)
-      this.recordHistory(current.phase === 'confirmed' ? 'acknowledged' : 'unknown');
+    if (current?.possibleEffect) this.recordHistory(current.phase === 'confirmed' ? 'acknowledged' : 'unknown');
     this.current = null;
   }
 

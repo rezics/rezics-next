@@ -60,7 +60,10 @@ function ready(accountId?: string): Extract<SecurityLoadResult, { kind: 'ready' 
   return value;
 }
 
-function BrowserStory({ source, cancelled }: {
+function BrowserStory({
+  source,
+  cancelled,
+}: {
   source: SecuritySource & {
     reviewRegistration: (accountId: string) => Promise<PasskeyRegistrationReview>;
   };
@@ -160,7 +163,9 @@ function enrollmentStory(config: StoryConfig) {
             await waitFor(() => canvasElement.textContent?.includes(m.auth_security_passkey_registration_reviewed()));
             if (config.next === 'finish') {
               (await waitFor(() => button(canvasElement, m.auth_security_passkey_registration_continue()))).click();
-              await waitFor(() => canvasElement.textContent?.includes(m.auth_security_passkey_registration_review_finished()));
+              await waitFor(() =>
+                canvasElement.textContent?.includes(m.auth_security_passkey_registration_review_finished()),
+              );
             }
           }
           return;

@@ -56,17 +56,22 @@ test('acknowledged history return and dismissal add no registration calls', asyn
     {},
   );
   await flush(() => ui.host.querySelectorAll('form')[1]!.requestSubmit());
-  await flush(() => ui.calls[0]!.resolve(Response.json({
-    challenge: 'Y2hhbGxlbmdl',
-    rp: { id: 'auth.test', name: 'REZICS' },
-    user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
-    pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-  })));
+  await flush(() =>
+    ui.calls[0]!.resolve(
+      Response.json({
+        challenge: 'Y2hhbGxlbmdl',
+        rp: { id: 'auth.test', name: 'REZICS' },
+        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      }),
+    ),
+  );
   await flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
-  await flush(() => ui.calls[1]!.resolve(Response.json(
-    { id: 'native-row-id', name: 'Private key label', created_at: '2026-11-01' },
-    { status: 201 },
-  )));
+  await flush(() =>
+    ui.calls[1]!.resolve(
+      Response.json({ id: 'native-row-id', name: 'Private key label', created_at: '2026-11-01' }, { status: 201 }),
+    ),
+  );
   await flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
   expect(reads).toHaveLength(1);
   await flush(() => reads[0]!.resolve({ kind: 'failure', message: 'Inventory unavailable.' }));

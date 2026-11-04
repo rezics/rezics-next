@@ -182,15 +182,16 @@ test('pagehide after registration dispatch restores an unknown review without pu
   expect(host.textContent).toContain(m.auth_security_inventory_truncated());
   expect(host.textContent).toContain(m.auth_security_passkey_registration_reviewed());
   expect(host.textContent).not.toContain(m.auth_security_passkey_added());
-  expect(host.querySelector('[data-passkey-enrollment-history]')?.textContent)
-    .toContain(m.auth_security_passkey_history_unknown());
-  expect(host.querySelector('[data-passkey-enrollment-history]')?.textContent)
-    .not.toContain('Private passkey label');
+  expect(host.querySelector('[data-passkey-enrollment-history]')?.textContent).toContain(
+    m.auth_security_passkey_history_unknown(),
+  );
+  expect(host.querySelector('[data-passkey-enrollment-history]')?.textContent).not.toContain('Private passkey label');
 
   await flush(() => button(host, m.auth_security_passkey_registration_continue())!.click());
   await flush(() => reads[2]!.resolve(initial));
-  expect(host.querySelector('[data-passkey-enrollment-history]')?.textContent)
-    .toContain(m.auth_security_passkey_history_unknown());
+  expect(host.querySelector('[data-passkey-enrollment-history]')?.textContent).toContain(
+    m.auth_security_passkey_history_unknown(),
+  );
   expect(host.querySelector('#security-passkey-name')).not.toBeNull();
   expect(registrationPaths(calls)).toBe(1);
   await flush(() => button(host, m.auth_security_passkey_add())!.click());
@@ -253,13 +254,14 @@ test.each(['failure', 'signed-out'] as const)(
     Object.defineProperty(navigator, 'credentials', {
       configurable: true,
       value: {
-        create: async () => ({
-          id: 'browser-credential',
-          rawId: new ArrayBuffer(1),
-          type: 'public-key',
-          getClientExtensionResults: () => ({}),
-          response: { attestationObject: new ArrayBuffer(1), clientDataJSON: new ArrayBuffer(1) },
-        } as unknown as Credential),
+        create: async () =>
+          ({
+            id: 'browser-credential',
+            rawId: new ArrayBuffer(1),
+            type: 'public-key',
+            getClientExtensionResults: () => ({}),
+            response: { attestationObject: new ArrayBuffer(1), clientDataJSON: new ArrayBuffer(1) },
+          }) as unknown as Credential,
       },
     });
     const { host, calls, reads } = await mount();
