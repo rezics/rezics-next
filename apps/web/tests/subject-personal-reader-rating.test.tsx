@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 import { dirname } from 'node:path';
 import { act, Fragment, StrictMode, createElement, useState } from 'react';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';

@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 import { addressLease, readLease, operationLease } from '../src/session';
 
 test('read, address and operation admission remain independent and retired addresses never revive', () => {

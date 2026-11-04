@@ -257,6 +257,7 @@ test('undelivered member action fields never grant from current Entry or vote fa
   }
   expect(collectionViewerVoteCurrent(row, facts.question)).toBe(true);
   expect(collectionViewerVoteCurrent(row, { ...facts.question!, revision: 2 })).toBe(false);
+  expect(collectionViewerVoteCurrent(row, { ...facts.question!, scale: { min: 0, max: 10, displayStep: 1 } })).toBe(false);
 });
 
 test('filtered rows without native occurrence IDs return to their bounded page without a fabricated anchor', () => {
