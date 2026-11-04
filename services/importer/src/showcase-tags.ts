@@ -463,7 +463,6 @@ export async function importShowcaseTags(input: {
 const adapterRevision = 'vndb-public-tag-vocabulary@1';
 const schemeCitation = 'https://vndb.org/tags';
 
-type TagLabelLanguage = 'en' | 'ja' | 'zh-Hant';
 type TagDictionaryNeed = {
   ownerKey: string;
   truncated: boolean;
@@ -475,7 +474,7 @@ type TagDictionaryNeed = {
     code: string;
     uri: string;
     citation: string;
-    labels: Partial<Record<TagLabelLanguage, string>>;
+    labels: { und: string };
   }[];
 };
 
@@ -493,15 +492,9 @@ function categoryFromTaxonomy(taxonomy: string): VndbPublicTagCategory | undefin
   return undefined;
 }
 
-function sourceNameLanguage(name: string): TagLabelLanguage {
-  if (/[\u3040-\u30ff]/u.test(name)) return 'ja';
-  if (/\p{Script=Han}/u.test(name)) return 'zh-Hant';
-  return 'en';
-}
-
-function sourceNameLabels(name: unknown): Partial<Record<TagLabelLanguage, string>> | undefined {
+function sourceNameLabels(name: unknown): { und: string } | undefined {
   if (typeof name !== 'string' || name.length < 1 || name.length > 250 || name.trim() !== name) return;
-  return { [sourceNameLanguage(name)]: name };
+  return { und: name };
 }
 
 function vocabularyKey(category: VndbPublicTagCategory, code?: string): string {
@@ -658,25 +651,56 @@ function ackedTagCreates(journal: ShowcaseJournal): Map<string, string> {
   );
 }
 
+function isTagVocabularyCommand(command: BatchCommand): boolean {
+  return command.source.source === 'vndb_cross_media' && command.source.converter_revision === adapterRevision;
+}
+
+async function sendTagCommandPages(
+  port: Pick<CrossMediaPort, 'batch'>,
+  commands: readonly BatchCommand[],
+): Promise<void> {
+  for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
+    const page = commands.slice(offset, offset + BATCH_LIMIT);
+    if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
+      throw new TypeError('VNDB public tag vocabulary commands failed portable validation');
+    await port.batch({ commands: [...page] });
+  }
+}
+
 async function sendMissingTagCommands(input: {
   port: Pick<CrossMediaPort, 'batch'>;
   journal: ShowcaseJournal;
   commands: readonly BatchCommand[];
 }): Promise<void> {
-  const acknowledged = new Map(input.journal.acknowledgedCommands().map((ack) => [ack.command.key, ack.commandDigest]));
-  const commands = input.commands.filter((command) => {
-    const digest = acknowledged.get(command.key);
-    if (digest === undefined) return true;
-    if (digest !== showcaseDigest(command))
-      throw new TypeError('VNDB public tag vocabulary ACK changed its command body');
-    return false;
+  const outgoingKeys = new Set(input.commands.map((command) => command.key));
+  const outgoingCreates = new Set(
+    input.commands.flatMap((command) => (command.op === 'create' ? [command.source.external_id] : [])),
+  );
+  const prepared = input.journal.preparedCommands().flatMap((row) => {
+    if (!isTagVocabularyCommand(row.command)) return [];
+    if (outgoingKeys.has(row.command.key)) return [row.command];
+    if (row.command.op === 'create' && outgoingCreates.has(row.command.source.external_id)) return [row.command];
+    return [];
   });
-  for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
-    const page = commands.slice(offset, offset + BATCH_LIMIT);
-    if (checkBatchWrite({ commands: [...page] }, bundledRelease).length)
-      throw new TypeError('VNDB public tag vocabulary commands failed portable validation');
-    await input.port.batch({ commands: [...page] });
+  if (prepared.length) await sendTagCommandPages(input.port, prepared);
+  const sealed = new Map<string, string>();
+  const created = new Set<string>();
+  for (const row of [...input.journal.acknowledgedCommands(), ...input.journal.preparedCommands()]) {
+    if (!isTagVocabularyCommand(row.command)) continue;
+    sealed.set(row.command.key, row.commandDigest);
+    if (row.command.op === 'create') created.add(row.command.source.external_id);
   }
+  const commands = input.commands.filter((command) => {
+    const digest = sealed.get(command.key);
+    if (digest !== undefined) {
+      if (digest !== showcaseDigest(command))
+        throw new TypeError('VNDB public tag vocabulary ACK changed its command body');
+      return false;
+    }
+    if (command.op === 'create' && created.has(command.source.external_id)) return false;
+    return true;
+  });
+  if (commands.length) await sendTagCommandPages(input.port, commands);
 }
 
 /** Map journal-acknowledged tag identities into the existing known-binding file shape. */
@@ -781,7 +805,7 @@ export async function prepareShowcaseVndbPublicTagVocabulary(input: {
       sourceUri: entry.uri,
       citation: entry.citation,
       nativeType: 'skos:Concept',
-      labels: entry.labels as Record<string, string>,
+      labels: entry.labels,
     }),
   );
   if (conceptCommands.length)
@@ -796,7 +820,7 @@ export async function prepareShowcaseVndbPublicTagVocabulary(input: {
           sourceUri: entry.uri,
           citation: entry.citation,
           nativeType: 'skos:Concept',
-          labels: entry.labels as Record<string, string>,
+          labels: entry.labels,
           schemeId,
           subjectId,
         })

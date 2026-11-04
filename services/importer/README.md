@@ -1718,7 +1718,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Default VNDB public-tag showcase seed
 
 - Touches: streamed `tags`, `tags_parents` and `tags_vn` COPY rows for the selected family, at most 1024 parent edges and 8 closure steps, dictionary ConceptScheme/Concept create and `schema:url`/`skos:inScheme` proposals through the existing importer and showcase journal, current disclosed scheme/concept point reads, admitted `schema:genre` work associations, and the common publishShowcase accept/adopt/public-read path. Individual user ids, notes and votes stay unprojected.
-- Bound: O(file bytes) stream plus O((W+T+A+P+V) log R) importer work for selected works W, closed dictionary T≤512, associations A≤256, parent edges P≤1024 and vocabulary records V≤512. Dictionary schemes publish before Concepts; current type/`schema:url`/`skos:inScheme` is reread before association admission. Deduplicated current reads stay inside their existing freshness lifetime. One explicit weight-contract gap remains because Kana ratings belong to the aggregate-weight owner. Unrelated VN/tag rows are not materialized. No catalogue scan or vote aggregate.
+- Bound: O(file bytes) stream plus O((W+T+A+P+V) log R) importer work for selected works W, closed dictionary T≤512, associations A≤256, parent edges P≤1024 and vocabulary records V≤512. Language assignment is constant per validated name. Dictionary schemes publish before Concepts; current type/`schema:url`/`skos:inScheme` is reread before association admission. Deduplicated current reads stay inside their existing freshness lifetime. One explicit weight-contract gap remains because Kana ratings belong to the aggregate-weight owner. Unrelated VN/tag rows are not materialized. No catalogue scan or vote aggregate.
 - Growth check: `tests/showcase-tags.test.ts` covers selected versus unrelated rows, unsupported/qualified associations, default dictionary publication without a UUID file, taxonomy-closure overflow, retracted scheme withholding and refresh identity. The connected native file `services/kernel/test/imports/showcase-tags.test.ts` is registered and not executed in this attempt.
 
 ### Default Bangumi novel/book showcase seed
@@ -2271,9 +2271,11 @@ only then admits exact work associations. Optional `--vndb-public-tag-bindings`
 remains an explicit UUID override; adopted usable bindings are those the
 current public read actually discloses. Publication consumes the finite
 vocabulary records and exact source URIs from this adapter; it does not invent
-another tag publisher. Concept labels use the exact `tags.name` (ja when kana
-is present, zh-Hant when Han is present without kana, otherwise en) and never
-a minted translation. Decision: `tags_vn.vote` remains the public-association
+another tag publisher. Concept labels keep the exact `tags.name` spelling under
+`und` when that COPY column has no language; Han-only, kana and Latin names are
+not assigned a guessed locale. Already sealed Concept identities and command
+bytes stay unrepaired; a later name proposal is a separate reviewed command.
+Decision: `tags_vn.vote` remains the public-association
 admission filter (integer 1–3). It is not native weight. Public VNDB
 `tags.rating` and released `rezics:sourceTagWeight` belong to the
 aggregate-weight owner, so this journey keeps one bounded weight gap. Parent

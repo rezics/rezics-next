@@ -4,10 +4,28 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../../packages/conversion/src/support.ts';
+import type { BatchCommand } from '@rezics/definitions/bulk';
+import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import {
+  commandKey,
+  sourceDigest,
+  sourceEnvelope,
+  vndbPublicTagConceptUri,
+  vndbPublicTagScheme,
+} from '../../../../packages/conversion/src/support.ts';
 import { parseAuthoredVndbCopy } from '../../../importer/src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
-import { importShowcaseTags, showcaseTagWeightProperty } from '../../../importer/src/showcase-tags.ts';
+import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
+import { captureShowcaseCommands, ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
+import { showcaseVocabularyExternalId } from '../../../importer/src/showcase-manifest.ts';
+import {
+  importShowcaseTags,
+  knownShowcaseTagBindings,
+  planShowcaseTags,
+  prepareShowcaseVndbPublicTagVocabulary,
+  readShowcaseVndbPublicTagVocabulary,
+  showcaseTagWeightProperty,
+} from '../../../importer/src/showcase-tags.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
@@ -368,6 +386,355 @@ test('reader sees selected VN source tag identity and spoiler; retracted or wron
       [],
     );
   } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 180_000);
+
+const adapterRevision = 'vndb-public-tag-vocabulary@1';
+const dictionaryCopy = [
+  'g311\tcont\t0\tt\tt\t学園\t\\N\t\\N',
+  'g44\tero\t2\tt\tt\tAuthored erotic tag\t\\N\t\\N',
+  'g12\tcont\t0\tt\tt\t親タグ\t\\N\t\\N',
+  'g88\tcont\t0\tt\tt\tAuthored false tag\t\\N\t\\N',
+];
+
+function dictionaryTables() {
+  return {
+    async *rows(provider: 'bangumi' | 'vndb', table: string) {
+      if (provider !== 'vndb') return;
+      if (table === 'vn') yield { id: 'v410', olang: 'en' };
+      if (table === 'vn_titles')
+        yield { id: 'v410', lang: 'en', official: 't', title: 'Selected public tag work', latin: null };
+      if (table === 'entry_meta') yield { id: 'v410', revision: 7, lastmod: '2026-10-24' };
+      if (table === 'tags') yield* parseAuthoredVndbCopy('tags', tagsHeader, dictionaryCopy);
+      if (table === 'tags_vn') yield* parseAuthoredVndbCopy('tags_vn', associationHeader, baseAssociations);
+      if (table === 'tags_parents') yield* parseAuthoredVndbCopy('tags_parents', parentHeader, ['g311\tg12\tt']);
+    },
+  };
+}
+
+function guessedTagCreate(input: {
+  sourceKey: string;
+  uri: string;
+  citation: string;
+  labels: Record<string, string>;
+}): Extract<BatchCommand, { op: 'create' }> {
+  const source = sourceEnvelope(
+    {
+      source: 'vndb_cross_media',
+      external_id: showcaseVocabularyExternalId(input.sourceKey),
+      record_revision: null,
+      converter_revision: adapterRevision,
+      digest: sourceDigest({
+        sourceKey: input.sourceKey,
+        uri: input.uri,
+        citations: [input.uri, input.citation],
+        adapterRevision,
+      }),
+    },
+    'facts',
+  );
+  return {
+    op: 'create',
+    key: `vndb-public-tag-vocabulary:${commandKey([JSON.stringify(source), 'create', 'skos:Concept', JSON.stringify(input.labels)])}`,
+    source,
+    subject: { type: 'skos:Concept', labels: input.labels },
+  };
+}
+
+async function acceptAdopted(
+  editor: Awaited<ReturnType<typeof openApiObserver>>,
+  subjectId: string,
+  property: string,
+) {
+  const seen = new Set<string>();
+  for (;;) {
+    const page = await editor.http(
+      `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
+    );
+    expect(page.status).toBe(200);
+    const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
+    const next = listing.candidates.find((item) => item.source && !item.retracted && !seen.has(item.id));
+    if (!next) {
+      const live = listing.candidates.filter((item) => !item.retracted);
+      if (!live.length) return;
+      const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
+        context: globalContext,
+        property,
+        mode: 'replace',
+        expected_head: listing.adoption?.head ?? null,
+        selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
+      });
+      expect(adopted.status).toBe(200);
+      return;
+    }
+    const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
+      context: globalContext,
+      expected_head: next.head,
+    });
+    expect(accepted.status).toBe(200);
+    seen.add(next.id);
+  }
+}
+
+test('default selected VN tag publication keeps language-less names as und through native create, review and public read', async () => {
+  const previous = process.env.TMPDIR;
+  const runtime = await (async () => {
+    process.env.TMPDIR = tmpdir();
+    try {
+      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+    } finally {
+      if (previous === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previous;
+    }
+  })();
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-und-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const tier = await runtime.request(
+      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
+      { key: randomUUID(), tier: 'trusted' },
+      identitySupport(runtime.identity).managementBearer,
+    );
+    expect(tier.status).toBe(200);
+    const editor = await openApiObserver(runtime);
+    const grant = await editor.http('/v1/grants', {
+      resource: { route: 0, id: globalContext },
+      subject: { kind: 'account', id: runtime.identity.governance.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    });
+    expect(grant.status).toBe(201);
+    const port = captureShowcaseCommands(runtime.importTransport, journal);
+    const tables = dictionaryTables();
+    const plan = await planShowcaseTags({ tables, selectedVids: ['v410'] });
+    await prepareShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal, stage: 'schemes' });
+    await prepareShowcaseVndbPublicTagVocabulary({
+      tables,
+      selectedVids: ['v410'],
+      plan,
+      port,
+      journal,
+      stage: 'concepts',
+    });
+    const created = new Map(
+      journal.acknowledgedCommands().flatMap((ack) =>
+        ack.command.op === 'create' && ack.subjectId ? [[ack.command.source.external_id, ack.subjectId] as const] : [],
+      ),
+    );
+    const hanId = created.get('vocabulary:vndb.tag.cont:g311')!;
+    const kanaId = created.get('vocabulary:vndb.tag.cont:g12')!;
+    const latinId = created.get('vocabulary:vndb.tag.ero:g44')!;
+    const publicClient = createPublicBulkClient({
+      origin: runtime.origin,
+      fetch: async (input) => {
+        const url = new URL(String(input));
+        return runtime.request(`${url.pathname}${url.search}`);
+      },
+    });
+    const labelsOf = async (id: string) => {
+      const read = await editor.http(`/v1/subjects/${id}?context=${globalContext}`);
+      expect(read.status).toBe(200);
+      return (read.body as { subject: { labels?: Record<string, string> } }).subject.labels;
+    };
+    expect(await labelsOf(hanId)).toEqual({ und: '学園' });
+    expect(await labelsOf(kanaId)).toEqual({ und: '親タグ' });
+    expect(await labelsOf(latinId)).toEqual({ und: 'Authored erotic tag' });
+    for (const [id, property] of [
+      [created.get('vocabulary:vndb.tag.cont')!, 'schema:url'],
+      [created.get('vocabulary:vndb.tag.ero')!, 'schema:url'],
+      [hanId, 'schema:url'],
+      [kanaId, 'schema:url'],
+      [latinId, 'schema:url'],
+      [hanId, 'skos:inScheme'],
+      [kanaId, 'skos:inScheme'],
+      [latinId, 'skos:inScheme'],
+    ] as const)
+      await acceptAdopted(editor, id, property);
+    const current = await readShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal });
+    expect(current.concepts.find((item) => item.code === 'g311')?.id).toBe(hanId);
+    const imported = await importShowcaseTags({
+      tables,
+      selectedVids: ['v410'],
+      path: join(directory, 'state.sqlite'),
+      port,
+      known: knownShowcaseTagBindings(current),
+      destination: { origin: runtime.origin },
+    });
+    const workId =
+      (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
+      (imported.readings[0]?.subject as { id?: string }).id;
+    expect(workId).toBeTruthy();
+    await acceptAdopted(editor, workId!, 'schema:genre');
+    const publicHan = await publicClient.readSubject(hanId);
+    expect((publicHan.subject as { labels?: Record<string, string> }).labels).toEqual({ und: '学園' });
+    const publicLatin = await publicClient.readSubject(latinId);
+    expect((publicLatin.subject as { labels?: Record<string, string> }).labels).toEqual({ und: 'Authored erotic tag' });
+    const publicKana = await publicClient.readSubject(kanaId);
+    expect((publicKana.subject as { labels?: Record<string, string> }).labels).toEqual({ und: '親タグ' });
+    const publicWork = await publicClient.readSubject(workId!);
+    const genres = (
+      publicWork.subject as {
+        statements: Record<
+          string,
+          { value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[] }[]
+        >;
+      }
+    ).statements['schema:genre'];
+    expect(genres?.map((item) => item.value.content).sort()).toEqual([hanId, latinId].sort());
+    const spoilerOf = (id: string) =>
+      genres
+        ?.find((item) => item.value.content === id)
+        ?.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel')?.value.content;
+    expect(spoilerOf(hanId)).toEqual({ amount: '+0', unit: '1' });
+    expect(spoilerOf(latinId)).toEqual({ amount: '+2', unit: '1' });
+  } finally {
+    journal.close();
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 180_000);
+
+test('reopening a pre-repair journal recovers sealed tag creates and original Concept identities', async () => {
+  const previous = process.env.TMPDIR;
+  const runtime = await (async () => {
+    process.env.TMPDIR = tmpdir();
+    try {
+      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+    } finally {
+      if (previous === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previous;
+    }
+  })();
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-tags-reopen-'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  let journal = new ShowcaseJournal(journalPath);
+  try {
+    const tier = await runtime.request(
+      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
+      { key: randomUUID(), tier: 'trusted' },
+      identitySupport(runtime.identity).managementBearer,
+    );
+    expect(tier.status).toBe(200);
+    const editor = await openApiObserver(runtime);
+    const grant = await editor.http('/v1/grants', {
+      resource: { route: 0, id: globalContext },
+      subject: { kind: 'account', id: runtime.identity.governance.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    });
+    expect(grant.status).toBe(201);
+    const kana = guessedTagCreate({
+      sourceKey: 'vndb.tag.cont:g12',
+      uri: vndbPublicTagConceptUri('cont', 'g12'),
+      citation: vndbRecordUrl('g12'),
+      labels: { ja: '親タグ' },
+    });
+    const han = guessedTagCreate({
+      sourceKey: 'vndb.tag.cont:g311',
+      uri: vndbPublicTagConceptUri('cont', 'g311'),
+      citation: vndbRecordUrl('g311'),
+      labels: { 'zh-Hant': '学園' },
+    });
+    journal.prepareCommand(kana);
+    const sealed = await runtime.importTransport.batch({ commands: [kana] });
+    expect(sealed.results[0]?.status).toBe(201);
+    journal.acknowledgeCommand(kana, sealed.results[0] as Extract<(typeof sealed.results)[number], { status: 200 | 201 }>);
+    const sealedKanaId = (sealed.results[0] as { value: { id: string } }).value.id;
+    journal.prepareCommand(han);
+    journal.close();
+    journal = new ShowcaseJournal(journalPath);
+    const sent: BatchCommand[] = [];
+    const captured = captureShowcaseCommands(runtime.importTransport, journal);
+    const port = {
+      ...captured,
+      async batch(request: { commands: BatchCommand[] }) {
+        sent.push(...request.commands);
+        return captured.batch(request);
+      },
+    };
+    const tables = dictionaryTables();
+    const plan = await planShowcaseTags({ tables, selectedVids: ['v410'] });
+    await prepareShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal, stage: 'schemes' });
+    await prepareShowcaseVndbPublicTagVocabulary({
+      tables,
+      selectedVids: ['v410'],
+      plan,
+      port,
+      journal,
+      stage: 'concepts',
+    });
+    const creates = sent.filter(
+      (command): command is Extract<BatchCommand, { op: 'create' }> =>
+        command.op === 'create' && command.subject.type === 'skos:Concept',
+    );
+    expect(creates.filter((command) => command.source.external_id === kana.source.external_id)).toEqual([]);
+    const recoveredHan = creates.find((command) => command.source.external_id === han.source.external_id);
+    expect(recoveredHan?.key).toBe(han.key);
+    expect(recoveredHan?.subject.labels).toEqual({ 'zh-Hant': '学園' });
+    expect(creates.filter((command) => command.source.external_id === han.source.external_id)).toHaveLength(1);
+    expect(creates.find((command) => command.source.external_id === 'vocabulary:vndb.tag.ero:g44')?.subject.labels).toEqual(
+      { und: 'Authored erotic tag' },
+    );
+    const created = new Map(
+      journal.acknowledgedCommands().flatMap((ack) =>
+        ack.command.op === 'create' && ack.subjectId ? [[ack.command.source.external_id, ack.subjectId] as const] : [],
+      ),
+    );
+    expect(created.get(kana.source.external_id)).toBe(sealedKanaId);
+    const kanaRead = await editor.http(`/v1/subjects/${sealedKanaId}?context=${globalContext}`);
+    expect(kanaRead.status).toBe(200);
+    expect((kanaRead.body as { subject: { labels?: Record<string, string> } }).subject.labels).toEqual({ ja: '親タグ' });
+    const hanId = created.get(han.source.external_id)!;
+    const latinId = created.get('vocabulary:vndb.tag.ero:g44')!;
+    for (const [id, property] of [
+      [created.get('vocabulary:vndb.tag.cont')!, 'schema:url'],
+      [created.get('vocabulary:vndb.tag.ero')!, 'schema:url'],
+      [hanId, 'schema:url'],
+      [sealedKanaId, 'schema:url'],
+      [latinId, 'schema:url'],
+      [hanId, 'skos:inScheme'],
+      [sealedKanaId, 'skos:inScheme'],
+      [latinId, 'skos:inScheme'],
+    ] as const)
+      await acceptAdopted(editor, id, property);
+    const current = await readShowcaseVndbPublicTagVocabulary({ tables, selectedVids: ['v410'], plan, port, journal });
+    expect(current.concepts.find((item) => item.code === 'g12')?.id).toBe(sealedKanaId);
+    const imported = await importShowcaseTags({
+      tables,
+      selectedVids: ['v410'],
+      path: join(directory, 'state.sqlite'),
+      port,
+      known: knownShowcaseTagBindings(current),
+      destination: { origin: runtime.origin },
+    });
+    const workId =
+      (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
+      (imported.readings[0]?.subject as { id?: string }).id;
+    expect(workId).toBeTruthy();
+    await acceptAdopted(editor, workId!, 'schema:genre');
+    const read = await editor.http(`/v1/subjects/${workId}?context=${globalContext}`);
+    expect(read.status).toBe(200);
+    const genres = (
+      read.body as {
+        subject: {
+          statements: Record<
+            string,
+            { value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[] }[]
+          >;
+        };
+      }
+    ).subject.statements['schema:genre'];
+    expect(genres?.map((item) => item.value.content).sort()).toEqual([hanId, latinId].sort());
+    const spoilerOf = (id: string) =>
+      genres
+        ?.find((item) => item.value.content === id)
+        ?.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel')?.value.content;
+    expect(spoilerOf(hanId)).toEqual({ amount: '+0', unit: '1' });
+    expect(spoilerOf(latinId)).toEqual({ amount: '+2', unit: '1' });
+  } finally {
+    journal.close();
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }

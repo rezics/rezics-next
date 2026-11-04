@@ -145,11 +145,19 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal {
   }
 
   acknowledgedCommands(): ShowcaseAcknowledgement[] {
+    return this.#commands('acknowledged');
+  }
+
+  preparedCommands(): ShowcaseAcknowledgement[] {
+    return this.#commands('prepared');
+  }
+
+  #commands(state: 'prepared' | 'acknowledged'): ShowcaseAcknowledgement[] {
     return this.#db
-      .query<JournalCommandRow, [number]>(
-        "SELECT command_key,command_digest,command_json,state,subject_id,candidate_id FROM showcase_command WHERE state='acknowledged' ORDER BY command_key LIMIT ?",
+      .query<JournalCommandRow, [string, number]>(
+        'SELECT command_key,command_digest,command_json,state,subject_id,candidate_id FROM showcase_command WHERE state=? ORDER BY command_key LIMIT ?',
       )
-      .all(showcaseLimits.candidates + showcaseLimits.records)
+      .all(state, showcaseLimits.candidates + showcaseLimits.records)
       .map((row) => ({
         command: JSON.parse(row.command_json) as BatchCommand,
         commandDigest: row.command_digest,
