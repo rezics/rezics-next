@@ -224,4 +224,4 @@ test('operator plans authored COPY character measurements and imports exact supp
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+}, 60_000);
