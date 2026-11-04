@@ -7961,5 +7961,7 @@
   "moderation_directory_empty_next": "Puede haber más ámbitos disponibles en la página siguiente.",
   "moderation_directory_preparing": "Preparando la lista de colas de moderación…",
   "moderation_directory_unavailable": "La lista de colas de moderación no está disponible en este momento.",
-  "moderation_directory_open_scope": "Abrir {label}"
+  "moderation_directory_open_scope": "Abrir {label}",
+  "profile_contribution_context_unavailable": "El contexto original no está disponible. Abre la contribución para leer su contexto actual.",
+  "profile_contribution_historical_citation": "Esta cita conserva la valoración al publicarse; no es una valoración actual."
 }

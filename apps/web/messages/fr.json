@@ -7961,5 +7961,7 @@
   "moderation_directory_empty_next": "D’autres périmètres peuvent être disponibles à la page suivante.",
   "moderation_directory_preparing": "Préparation de la liste des files de modération…",
   "moderation_directory_unavailable": "La liste des files de modération est actuellement indisponible.",
-  "moderation_directory_open_scope": "Ouvrir {label}"
+  "moderation_directory_open_scope": "Ouvrir {label}",
+  "profile_contribution_context_unavailable": "Le contexte d’origine est indisponible. Ouvrez la contribution pour lire son contexte actuel.",
+  "profile_contribution_historical_citation": "Cette citation conserve la note au moment de la publication ; ce n’est pas une note actuelle."
 }

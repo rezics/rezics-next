@@ -7961,5 +7961,7 @@
   "moderation_directory_empty_next": "下一頁可能還有其他範圍。",
   "moderation_directory_preparing": "正在準備審核佇列探索…",
   "moderation_directory_unavailable": "目前無法探索審核佇列。",
-  "moderation_directory_open_scope": "開啟 {label}"
+  "moderation_directory_open_scope": "開啟 {label}",
+  "profile_contribution_context_unavailable": "原始上下文暫時無法顯示。開啟貢獻可查看目前的上下文。",
+  "profile_contribution_historical_citation": "此引用記錄發佈時的評分，並非目前的評分。"
 }

@@ -106,7 +106,12 @@ function FeedCardReviewContext({ item, locale }: { item: FeedItem; locale: strin
     item.destination.id !== summary.id
   )
     return null;
-  const context = record(summary.reviewContext) ? summary.reviewContext : undefined;
+  return <PublicReviewDetails context={summary.reviewContext} locale={locale} />;
+}
+
+/** Shared admitted review context; labels never replace the native citation identity. */
+export function PublicReviewDetails({ context: supplied, locale }: { context: unknown; locale: string }) {
+  const context = record(supplied) ? supplied : undefined;
   if (!context) return null;
   const options = { locale: locale as Locale };
   const target = record(context.target) ? context.target : undefined;
@@ -134,9 +139,9 @@ function FeedCardReviewContext({ item, locale }: { item: FeedItem; locale: strin
       ? { id: questionId, label: questionLabel, revision: questionRevision, units: citedUnits }
       : undefined;
   const status =
-    subjectId && citation?.state === 'withheld'
+    citation?.state === 'withheld' || citation?.state === 'absent'
       ? m.post_history_score_concealed({}, options)
-      : subjectId && citation?.state === 'failed'
+      : citation?.state === 'failed'
         ? m.post_history_score_failed({}, options)
         : undefined;
   if (!subjectId && !question && !status) return null;
@@ -166,7 +171,14 @@ function FeedCardReviewContext({ item, locale }: { item: FeedItem; locale: strin
               {m.thread_history_version({ number: question.revision }, options)}
             </span>
           </p>
-          <p data-feed-review-units={question.units}>
+          <p
+            data-feed-review-units={question.units}
+            data-feed-review-vote-revision={
+              typeof citation?.voteRevision === 'number' && Number.isSafeInteger(citation.voteRevision)
+                ? citation.voteRevision
+                : undefined
+            }
+          >
             {m.home_feed_review_cited_units({ units: new Intl.NumberFormat(locale).format(question.units) }, options)}
           </p>
         </div>
@@ -194,11 +206,29 @@ function FeedCardParentContext({ item, locale }: { item: FeedItem; locale: strin
     destination.threadId !== summary.threadId
   )
     return null;
-  const context = record(summary.parentContext) ? summary.parentContext : undefined;
+  return (
+    <PublicReplyParent
+      context={summary.parentContext}
+      locale={locale}
+      thread={{ id: destination.threadId, title: destination.title }}
+    />
+  );
+}
+
+/** Only the supplied immediate parent, with its own spoiler and exact revision destination. */
+export function PublicReplyParent({
+  context: supplied,
+  locale,
+  thread,
+}: {
+  context: unknown;
+  locale: string;
+  thread: { id: string; title?: string | null };
+}) {
+  const context = record(supplied) ? supplied : undefined;
   if (!context || context.kind !== 'reply' || !record(context.parent)) return null;
   const parent = context.parent;
   const options = { locale: locale as Locale };
-  const thread = { id: destination.threadId, title: destination.title };
   const parentId = id(parent.id) ? parent.id : undefined;
   if (parent.state === 'withheld')
     return <p data-feed-parent-context="withheld">{m.thread_reply_parent_unavailable({}, options)}</p>;

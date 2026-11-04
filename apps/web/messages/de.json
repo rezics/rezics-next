@@ -7961,5 +7961,7 @@
   "moderation_directory_empty_next": "Auf der nächsten Seite sind möglicherweise weitere Bereiche verfügbar.",
   "moderation_directory_preparing": "Die Moderationsübersicht wird vorbereitet…",
   "moderation_directory_unavailable": "Die Moderationsübersicht ist derzeit nicht verfügbar.",
-  "moderation_directory_open_scope": "{label} öffnen"
+  "moderation_directory_open_scope": "{label} öffnen",
+  "profile_contribution_context_unavailable": "Der ursprüngliche Kontext ist nicht verfügbar. Öffne den Beitrag, um seinen aktuellen Kontext zu lesen.",
+  "profile_contribution_historical_citation": "Dieses Zitat hält die Bewertung bei Veröffentlichung fest; es ist keine aktuelle Bewertung."
 }

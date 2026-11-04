@@ -13,18 +13,9 @@ import { personalRead } from '../../kernel/query';
 import { sessionQuery, useSession } from '../../session/query';
 import { Failed, Preview, sectionClass, useOverview, viewHref, type OverviewValue } from './overview';
 import { isRecord, linkClass, linkColor, webUrl } from './shared';
-import { threadHref as canonicalThreadHref, threadTitle } from '../../threads/thread-href';
-import { DocumentValue, readableDocument } from './values';
+import { ContributionRow } from '../../accounts/public-profile/contributions/row';
 import { subjectHref } from '../../subject/subject-href';
 import { AccountFollow } from '../../accounts/public-profile/follow';
-
-function dateText(value: unknown, locale: string): string | null {
-  if (typeof value !== 'string') return null;
-  const date = new Date(value);
-  return Number.isFinite(date.getTime())
-    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(date)
-    : null;
-}
 
 /** Private controls start after hydration and disappear throughout every refresh. */
 function AccountManagementLinks({ id, value }: { id: string; value: OverviewValue }) {
@@ -254,7 +245,7 @@ export function AccountIdentity(props: Record<string, unknown>) {
 
 type ListSpec = {
   slot: string;
-  view: 'posts' | 'reviews' | 'collections';
+  view: 'posts' | 'reviews' | 'discussion' | 'collections';
   kind: 'accountPosts' | 'accountThreads' | 'accountCollections';
   title: (locale: string) => string;
   items: (body: Record<string, unknown>) => unknown;
@@ -300,6 +291,8 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
   if (!Array.isArray(listed)) return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
   const limit = typeof props.limit === 'number' ? props.limit : listed.length;
   const rows = listed.filter(isRecord);
+  if (spec.kind !== 'accountCollections' && rows.length > 20)
+    return <Failed slot={spec.slot} id={id} title={title} locale={value.locale} />;
   const items = rows.slice(0, limit);
   const next = typeof section.body.next === 'string' && section.body.next ? section.body.next : null;
   const paged = props.paged === true;
@@ -358,40 +351,6 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
   );
 }
 
-function Quiet({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-muted-foreground">{children}</p>;
-}
-
-/** A post or opening post body, clipped so a long one cannot push the list off the page. */
-function Excerpt({ body, value }: { body: unknown; value: OverviewValue }) {
-  const document = readableDocument(body);
-  if (!document) return null;
-  return (
-    <div className="max-h-40 overflow-hidden" data-slot="excerpt">
-      <DocumentValue document={document} lang={undefined} labels={value.labels} />
-    </div>
-  );
-}
-
-function threadHref(locale: string, thread: { id: unknown; title?: unknown }): string {
-  const id = typeof thread.id === 'string' ? thread.id : String(thread.id ?? '');
-  const title = typeof thread.title === 'string' ? thread.title : null;
-  return `/${encodeURIComponent(locale)}${canonicalThreadHref({ id, title: threadTitle({ title }) })}`;
-}
-
-/** The locator chooses the native post page; the fragment selects the disclosed post on that page. */
-function accountPostHref(locale: string, post: Record<string, unknown>): string | undefined {
-  if (typeof post.id !== 'string' || !post.id || typeof post.threadId !== 'string' || !post.threadId) return undefined;
-
-  const thread = isRecord(post.thread) ? post.thread : undefined;
-  const href = threadHref(locale, {
-    id: post.threadId,
-    title: thread?.title,
-  });
-  const locator = encodeURIComponent(post.id);
-  return `${href}?post=${locator}#post-${locator}`;
-}
-
 export function AccountPosts(props: Record<string, unknown>) {
   return (
     <AccountList
@@ -402,25 +361,9 @@ export function AccountPosts(props: Record<string, unknown>) {
         kind: 'accountPosts',
         title: (locale) => m.subject_posts({}, { locale: locale as never }),
         items: (body) => body.posts,
-        row: (post, value, index) => {
-          const thread = isRecord(post.thread) ? post.thread : undefined;
-          const title =
-            typeof thread?.title === 'string' && thread.title
-              ? thread.title
-              : m.threads_untitled({}, { locale: value.locale as never });
-          const when = dateText(post.createdAt, value.locale);
-          const href = accountPostHref(value.locale, post);
-          return (
-            <ContentItem
-              key={typeof post.id === 'string' ? post.id : index}
-              title={title}
-              {...(href === undefined ? {} : { href })}
-              headingLevel={3}
-              metadata={when ? <Quiet>{when}</Quiet> : null}
-              preview={<Excerpt body={post.body} value={value} />}
-            />
-          );
-        },
+        row: (post, value, index) => (
+          <ContributionRow key={typeof post.id === 'string' ? post.id : index} item={post} kind="reply" value={value} />
+        ),
       }}
     />
   );
@@ -432,32 +375,21 @@ export function AccountThreads(props: Record<string, unknown>) {
       props={props}
       spec={{
         slot: props.threadKind === 'review' ? 'account-reviews' : 'account-threads',
-        view: 'reviews',
+        view: props.threadKind === 'review' ? 'reviews' : 'discussion',
         kind: 'accountThreads',
         title: (locale) =>
           props.threadKind === 'review'
             ? m.subject_reviews({}, { locale: locale as never })
             : m.subject_discussion({}, { locale: locale as never }),
         items: (body) => body.threads,
-        row: (thread, value, index) => {
-          const title =
-            typeof thread.title === 'string' && thread.title
-              ? thread.title
-              : m.threads_untitled({}, { locale: value.locale as never });
-          const first = isRecord(thread.firstPost) ? thread.firstPost : undefined;
-          const when = dateText(first?.createdAt, value.locale);
-          const href = threadHref(value.locale, { id: thread.id, title: thread.title });
-          return (
-            <ContentItem
-              key={typeof thread.id === 'string' ? thread.id : index}
-              title={title}
-              href={href}
-              headingLevel={3}
-              metadata={when ? <Quiet>{when}</Quiet> : null}
-              preview={<Excerpt body={first?.body} value={value} />}
-            />
-          );
-        },
+        row: (thread, value, index) => (
+          <ContributionRow
+            key={typeof thread.id === 'string' ? thread.id : index}
+            item={thread}
+            kind={props.threadKind === 'review' ? 'review' : 'discussion'}
+            value={value}
+          />
+        ),
       }}
     />
   );

@@ -509,7 +509,7 @@ test('current multilingual titles, fallback slugs and UTC dates remain canonical
       ),
     );
     expect(rows[1]).not.toContain('data-slot="excerpt"');
-    expect(rows[1]).not.toContain('data-content-item-slot="metadata"');
+    expect(rows[1]).toContain('data-profile-contribution-kind="reply"');
     expect(rows[2]).toContain(`href="/${locale}/threads/${source[2]!.threadId}/thread"`);
     expect(rows[2]).toContain(m.threads_untitled({}, { locale: locale as never }));
     const threads = activityResult(page, 'threads').body.threads as Record<string, unknown>[];
@@ -518,7 +518,7 @@ test('current multilingual titles, fallback slugs and UTC dates remain canonical
     const review = renderedRows(contributionSection(renderContributions(page, locale), 'account-reviews'))[0]!;
     expect(review).toContain(`href="/${locale}/threads/${threads[0]!.id}/thread"`);
     expect(review).not.toContain('data-slot="excerpt"');
-    expect(review).not.toContain('data-content-item-slot="metadata"');
+    expect(review).toContain('data-profile-contribution-kind="review"');
   }
 });
 

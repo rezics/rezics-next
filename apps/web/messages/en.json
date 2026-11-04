@@ -8036,5 +8036,7 @@
   "moderation_directory_empty_next": "More scopes may be available on the next page.",
   "moderation_directory_preparing": "Preparing moderation queue discovery…",
   "moderation_directory_unavailable": "Moderation queue discovery is unavailable right now.",
-  "moderation_directory_open_scope": "Open {label}"
+  "moderation_directory_open_scope": "Open {label}",
+  "profile_contribution_context_unavailable": "Original context is unavailable. Open the contribution to read its current context.",
+  "profile_contribution_historical_citation": "This citation records the rating at publication; it is not a current rating."
 }

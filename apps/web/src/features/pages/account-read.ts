@@ -125,7 +125,9 @@ export function accountOf(body: unknown): AccountProfile | undefined {
 
 /** Whether the account lets everyone see this activity view; every other view is not the account's to hide. */
 export function viewIsPublic(profile: AccountProfile | undefined, view: string): boolean {
-  if (!profile) return true;
+  // Content's author discussion page uses publicViews.posts, independently of reviews.
+  if (view === 'discussion') return profile?.publicViews.posts === true;
+  if (!profile) return !['posts', 'reviews', 'collections', 'realms'].includes(view);
   return view === 'posts' || view === 'reviews' || view === 'collections' || view === 'realms'
     ? profile.publicViews[view]
     : true;

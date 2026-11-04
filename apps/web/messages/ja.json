@@ -7961,5 +7961,7 @@
   "moderation_directory_empty_next": "次のページに他の範囲がある可能性があります。",
   "moderation_directory_preparing": "モデレーションキューの一覧を準備しています…",
   "moderation_directory_unavailable": "現在、モデレーションキューの一覧を取得できません。",
-  "moderation_directory_open_scope": "{label} を開く"
+  "moderation_directory_open_scope": "{label} を開く",
+  "profile_contribution_context_unavailable": "元の文脈を表示できません。投稿を開くと現在の文脈を確認できます。",
+  "profile_contribution_historical_citation": "この引用は公開時の評価を記録したもので、現在の評価ではありません。"
 }
