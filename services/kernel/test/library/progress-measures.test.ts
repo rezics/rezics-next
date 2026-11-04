@@ -78,7 +78,7 @@ test('MAL and AniList adopt chapters and volumes into the selected occurrence wi
       `${base}:preview`,
       provider === 'mal'
         ? {
-            xml: '<myanimelist><manga><series_mangadb_id>710</series_mangadb_id><my_read_chapters>0</my_read_chapters><my_read_volumes>2</my_read_volumes></manga></myanimelist>',
+            xml: '<myanimelist><manga><manga_mangadb_id>710</manga_mangadb_id><manga_title>Reading</manga_title><my_read_chapters>0</my_read_chapters><my_read_volumes>2</my_read_volumes></manga></myanimelist>',
           }
         : { upload: JSON.stringify([{ mediaId: 710, media: { type: 'MANGA' }, progress: 0, progressVolumes: 2 }]) },
     );
