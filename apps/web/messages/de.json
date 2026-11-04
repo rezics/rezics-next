@@ -8646,5 +8646,18 @@
   "discovery_account_bio_absent": "Keine öffentliche Biografie",
   "discovery_account_bio_withheld": "Biografie nicht freigegeben",
   "discovery_account_bio_unavailable": "Biografie nicht verfügbar",
-  "discovery_account_bio_truncated": "Biografie gekürzt"
+  "discovery_account_bio_truncated": "Biografie gekürzt",
+  "work_names_title": "Titel und alternative Namen",
+  "work_names_unavailable": "Namen sind für diese Ansicht nicht verfügbar. Laden Sie die Seite neu.",
+  "work_names_fallback": "Die Seite verwendet diesen bereitgestellten Ersatztitel:",
+  "work_names_selected": "Ausgewählter Seitentitel:",
+  "work_names_original": "Originalsprache",
+  "work_names_unknown": "Unbekannt",
+  "work_names_empty": "Keine Titel oder alternativen Namen vorhanden.",
+  "work_names_label": "Titel",
+  "work_names_alias": "Alternativer Name",
+  "work_names_copy": "Kopieren",
+  "work_names_copied": "Kopiert",
+  "work_names_copy_failed": "Kopieren fehlgeschlagen. Wählen Sie den Text zum Kopieren aus.",
+  "work_names_sources": "Quellen"
 }

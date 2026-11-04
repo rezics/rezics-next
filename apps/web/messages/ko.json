@@ -8646,5 +8646,18 @@
   "discovery_account_bio_absent": "공개 소개 없음",
   "discovery_account_bio_withheld": "소개 비공개",
   "discovery_account_bio_unavailable": "소개를 불러올 수 없음",
-  "discovery_account_bio_truncated": "소개가 축약됨"
+  "discovery_account_bio_truncated": "소개가 축약됨",
+  "work_names_title": "제목과 별칭",
+  "work_names_unavailable": "이 읽기에서는 이름을 사용할 수 없습니다. 페이지를 새로 고치세요.",
+  "work_names_fallback": "페이지에 제공된 다음 대체 제목을 표시합니다:",
+  "work_names_selected": "선택된 페이지 제목:",
+  "work_names_original": "원래 언어",
+  "work_names_unknown": "알 수 없음",
+  "work_names_empty": "제공된 제목이나 별칭이 없습니다.",
+  "work_names_label": "제목",
+  "work_names_alias": "별칭",
+  "work_names_copy": "복사",
+  "work_names_copied": "복사됨",
+  "work_names_copy_failed": "복사할 수 없습니다. 텍스트를 선택하여 복사하세요.",
+  "work_names_sources": "출처"
 }

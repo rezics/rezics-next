@@ -8738,5 +8738,18 @@
   "discovery_account_bio_absent": "No public biography",
   "discovery_account_bio_withheld": "Biography withheld",
   "discovery_account_bio_unavailable": "Biography unavailable",
-  "discovery_account_bio_truncated": "Biography shortened"
+  "discovery_account_bio_truncated": "Biography shortened",
+  "work_names_title": "Titles and aliases",
+  "work_names_unavailable": "Names are unavailable for this reading. Refresh the page to read current names.",
+  "work_names_fallback": "The page uses this supplied fallback title:",
+  "work_names_selected": "Selected page title:",
+  "work_names_original": "Original language",
+  "work_names_unknown": "Unknown",
+  "work_names_empty": "No titles or aliases supplied.",
+  "work_names_label": "Title",
+  "work_names_alias": "Alias",
+  "work_names_copy": "Copy",
+  "work_names_copied": "Copied",
+  "work_names_copy_failed": "Could not copy. Select the text to copy it.",
+  "work_names_sources": "Sources"
 }

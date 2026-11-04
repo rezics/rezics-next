@@ -8646,5 +8646,18 @@
   "discovery_account_bio_absent": "Sin biografía pública",
   "discovery_account_bio_withheld": "Biografía oculta",
   "discovery_account_bio_unavailable": "Biografía no disponible",
-  "discovery_account_bio_truncated": "Biografía abreviada"
+  "discovery_account_bio_truncated": "Biografía abreviada",
+  "work_names_title": "Títulos y alias",
+  "work_names_unavailable": "Los nombres no están disponibles. Actualiza la página.",
+  "work_names_fallback": "La página usa este título alternativo proporcionado:",
+  "work_names_selected": "Título seleccionado para la página:",
+  "work_names_original": "Idioma original",
+  "work_names_unknown": "Desconocido",
+  "work_names_empty": "No se han proporcionado títulos ni alias.",
+  "work_names_label": "Título",
+  "work_names_alias": "Alias",
+  "work_names_copy": "Copiar",
+  "work_names_copied": "Copiado",
+  "work_names_copy_failed": "No se pudo copiar. Selecciona el texto para copiarlo.",
+  "work_names_sources": "Fuentes"
 }

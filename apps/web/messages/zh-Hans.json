@@ -8646,5 +8646,18 @@
   "discovery_account_bio_absent": "暂无公开简介",
   "discovery_account_bio_withheld": "简介已隐藏",
   "discovery_account_bio_unavailable": "简介暂不可用",
-  "discovery_account_bio_truncated": "简介已截短"
+  "discovery_account_bio_truncated": "简介已截短",
+  "work_names_title": "标题与别名",
+  "work_names_unavailable": "目前无法读取名称。请重新加载页面。",
+  "work_names_fallback": "页面使用以下已提供的备用标题：",
+  "work_names_selected": "页面选用标题：",
+  "work_names_original": "原始语言",
+  "work_names_unknown": "未知",
+  "work_names_empty": "未提供标题或别名。",
+  "work_names_label": "标题",
+  "work_names_alias": "别名",
+  "work_names_copy": "复制",
+  "work_names_copied": "已复制",
+  "work_names_copy_failed": "无法复制。请选中文字后复制。",
+  "work_names_sources": "来源"
 }

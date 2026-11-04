@@ -8646,5 +8646,18 @@
   "discovery_account_bio_absent": "暫無公開簡介",
   "discovery_account_bio_withheld": "簡介已隱藏",
   "discovery_account_bio_unavailable": "簡介暫時無法取得",
-  "discovery_account_bio_truncated": "簡介已截短"
+  "discovery_account_bio_truncated": "簡介已截短",
+  "work_names_title": "標題與別名",
+  "work_names_unavailable": "目前無法讀取名稱。請重新載入頁面。",
+  "work_names_fallback": "頁面使用以下已提供的備用標題：",
+  "work_names_selected": "頁面選用標題：",
+  "work_names_original": "原始語言",
+  "work_names_unknown": "未知",
+  "work_names_empty": "未提供標題或別名。",
+  "work_names_label": "標題",
+  "work_names_alias": "別名",
+  "work_names_copy": "複製",
+  "work_names_copied": "已複製",
+  "work_names_copy_failed": "無法複製。請選取文字後複製。",
+  "work_names_sources": "來源"
 }
