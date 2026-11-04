@@ -52,7 +52,7 @@ export type ShelfDisplay = {
 export const shelfOrders = ['lastActivity', 'createdAt', 'finishedAt'] as const;
 export const shelfDirections = ['desc', 'asc'] as const;
 // Address recognition is independent of native availability. A retained score address must never become a date visit.
-const shelfAddressOrders = [...shelfOrders, 'personalScore', 'priority'] as const;
+const shelfAddressOrders = [...shelfOrders, 'personalScore', 'priority', 'title'] as const;
 export type ShelfSort = { orderBy: (typeof shelfAddressOrders)[number]; direction: (typeof shelfDirections)[number] };
 
 /** Only the historic states with an adopted date default differ; every other exact profile state uses activity. */

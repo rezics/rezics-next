@@ -234,6 +234,8 @@ export async function readEntryPage(
   // Do not send an unsupported query, fall back to dates, fetch votes, or claim that a native index is preparing.
   if (sort?.orderBy === 'priority') throw new ShelfPageUnavailableError('priority-unavailable');
   if (sort?.orderBy === 'personalScore') throw new ShelfPageUnavailableError('score-unavailable');
+  // Content has not published title order in the installed root client. Preserve the address as preparation.
+  if (sort?.orderBy === 'title') throw new ShelfPageUnavailableError('preparing');
   const result = await client.libraryEntries.get({
     query: { ...libraryListQuery(cursor, limit), ...(state ? { state } : {}), ...sort, ...(type ? { type } : {}) },
     headers: { authorization },

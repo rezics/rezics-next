@@ -257,6 +257,7 @@ export function SortControls({
           <option value="priority" disabled>
             {m.library_rich_entry_priority()}
           </option>
+          <option value="title">{m.library_column_title()}</option>
           <option value="personalScore" disabled>
             {m.library_score_order()}
           </option>
@@ -281,14 +282,18 @@ export function SortControls({
               ? m.library_priority_descending()
               : scoreOrder
                 ? m.library_score_highest()
-                : m.library_sort_newest()}
+                : selection.orderBy === 'title'
+                  ? 'Z–A'
+                  : m.library_sort_newest()}
           </option>
           <option value="asc">
             {priorityOrder
               ? m.library_priority_ascending()
               : scoreOrder
                 ? m.library_score_lowest()
-                : m.library_sort_oldest()}
+                : selection.orderBy === 'title'
+                  ? 'A–Z'
+                  : m.library_sort_oldest()}
           </option>
         </select>
       </label>

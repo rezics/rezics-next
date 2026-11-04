@@ -1,3 +1,5 @@
+import { createShelfTitlePreparation } from './shelf-title-maintenance.ts';
+import type { ShelfTitleSource } from './shelf-title-source.ts';
 import { createShelfScorePreparation } from './shelf-score.ts';
 import { createFollowCountReads } from './follow-count-reads.ts';
 import { t } from 'elysia';
@@ -70,6 +72,7 @@ export type {
 import {
   shelfScoreQuestionSchema,
   shelfScorePreparationSchema,
+  shelfTitlePreparationSchema,
   shelfEntrySchema,
   shelfListQuerySchema,
   shelfSummaryQuerySchema,
@@ -92,6 +95,7 @@ type Dependencies = {
   clock?: KernelClock;
   shelves?: () => ShelfReads;
   shelfTypeDigest?: ShelfTypeDigest;
+  titleSource?: ShelfTitleSource;
   typeSourceObserved?: import('./type-preparation-contract.ts').TypePreparationSourceObserved;
   followingSpaceTargets?: (
     actor: Actor,
@@ -651,6 +655,7 @@ function shelfEntryView(entry: ShelfEntry) {
   return {
     ...entryView(entry),
     ...(entry.personalScore === undefined ? {} : { personalScore: entry.personalScore }),
+    ...(entry.titleCoverage === undefined ? {} : { titleCoverage: entry.titleCoverage }),
     lastActivityAt,
     finishedAt,
     activeProgressSession:
@@ -870,6 +875,21 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       },
     )
     .post(
+      '/v1/libraryShelfTitlePreparation',
+      {
+        headers,
+        response: { 200: shelfTitlePreparationSchema, ...shelfFailures },
+        detail: detail('library_shelf_title.prepare', 'library_entry:list', true),
+      },
+      async ({ actor, headers: requestHeaders, admission, job, set, request }) => {
+        shelfOwner(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () => command(() => createShelfTitlePreparation(config())(
+          actor, idempotencyKeyOf(requestHeaders['idempotency-key']), languageRanges(request.headers.get('accept-language')),
+        )));
+      },
+    )
+    .post(
       '/v1/libraryShelfScorePreparation',
       {
         headers,
@@ -921,7 +941,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           const readPage = () =>
             admission.run('normal', job, async () => {
               await admitShelfRead({ ...config(), clock: dependencies.clock ?? systemClock }, actor, job.deadline);
-              return command(() => shelves('listShelf').listShelf(actor, pageQuery));
+              return command(() => shelves('listShelf').listShelf(actor, { ...pageQuery, ...(query.orderBy === 'title' ? { languages } : {}) }));
             });
           const result = await readPage();
           const revalidate = async () => assertShelfPageCurrent(result, await readPage());
