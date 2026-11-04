@@ -637,5 +637,17 @@
   "auth_security_passkey_registration_confirmed": "Auth가 등록을 확인했습니다. 컨트롤을 다시 사용하기 전에 현재 패스키와 권한을 새로 읽습니다.",
   "auth_security_passkey_registration_review_finished": "현재 패스키를 검토했습니다. 이 검토만으로 이전 등록의 성공 여부를 알 수 없습니다.",
   "auth_security_passkey_registration_saving": "브라우저가 등록 요청을 보냈습니다. Auth가 패스키를 저장했을 수 있으며 응답을 기다리고 있습니다.",
-  "auth_security_passkey_authority_retired": "이전 패스키 결과는 아직 확인되지 않았지만 이 페이지에서는 이전 계정에 대해 더 이상 확인할 수 없습니다."
+  "auth_security_passkey_authority_retired": "이전 패스키 결과는 아직 확인되지 않았지만 이 페이지에서는 이전 계정에 대해 더 이상 확인할 수 없습니다.",
+  "auth_route_failure_title": "페이지를 표시할 수 없습니다",
+  "auth_route_failure_body": "이 페이지를 다시 불러오세요. 계정 작업을 방금 제출했다면 다시 시도하기 전에 해당 작업을 담당하는 페이지에서 결과를 확인하세요.",
+  "auth_route_failure_failed_title": "페이지를 계속 표시할 수 없습니다",
+  "auth_route_failure_failed_body": "페이지를 복구하지 못했습니다. 최근 계정 작업은 다음 단계를 결정하기 전에 확인이 필요할 수 있습니다.",
+  "auth_route_failure_retry": "다시 시도",
+  "auth_route_failure_retrying": "페이지를 다시 불러오는 중…",
+  "auth_route_failure_retry_failed": "다시 시도했지만 페이지를 표시할 수 없습니다.",
+  "auth_route_failure_exit_login": "로그인",
+  "auth_route_failure_exit_security": "계정 보안",
+  "auth_route_failure_safe_navigation": "다른 Auth 페이지",
+  "auth_route_missing_title": "페이지를 찾을 수 없습니다",
+  "auth_route_missing_body": "이 주소에 해당하는 Auth 페이지가 없습니다."
 }

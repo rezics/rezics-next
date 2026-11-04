@@ -637,5 +637,17 @@
   "auth_security_passkey_registration_confirmed": "Auth confirmó el registro. Se actualizarán las llaves de acceso y los permisos actuales antes de volver a habilitar los controles.",
   "auth_security_passkey_registration_review_finished": "Has revisado las llaves de acceso actuales. Esto no confirma si se completó el registro anterior.",
   "auth_security_passkey_registration_saving": "El navegador envió el registro. Es posible que Auth haya guardado la llave; se espera la respuesta.",
-  "auth_security_passkey_authority_retired": "El resultado anterior de la llave de acceso sigue sin resolverse, pero esta página ya no puede comprobarlo para la cuenta anterior."
+  "auth_security_passkey_authority_retired": "El resultado anterior de la llave de acceso sigue sin resolverse, pero esta página ya no puede comprobarlo para la cuenta anterior.",
+  "auth_route_failure_title": "No se pudo mostrar esta página",
+  "auth_route_failure_body": "Vuelve a cargar esta página. Si acabas de enviar una acción de cuenta, revisa el resultado en la página responsable antes de intentarlo de nuevo.",
+  "auth_route_failure_failed_title": "La página sigue sin estar disponible",
+  "auth_route_failure_failed_body": "No se pudo recuperar la página. Puede que tengas que revisar una acción reciente de cuenta antes de decidir el siguiente paso.",
+  "auth_route_failure_retry": "Volver a intentarlo",
+  "auth_route_failure_retrying": "Cargando la página…",
+  "auth_route_failure_retry_failed": "La página sigue sin mostrarse después de volver a intentarlo.",
+  "auth_route_failure_exit_login": "Iniciar sesión",
+  "auth_route_failure_exit_security": "Seguridad de la cuenta",
+  "auth_route_failure_safe_navigation": "Otras páginas de Auth",
+  "auth_route_missing_title": "No se encontró la página",
+  "auth_route_missing_body": "Esta dirección no corresponde a una página de Auth disponible."
 }

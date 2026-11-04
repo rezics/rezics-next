@@ -637,5 +637,17 @@
   "auth_security_passkey_registration_confirmed": "Auth 已确认注册。重新启用控件前，正在更新当前通行密钥和权限。",
   "auth_security_passkey_registration_review_finished": "你已查看当前通行密钥。此操作无法确认先前的注册是否成功。",
   "auth_security_passkey_registration_saving": "浏览器已发送注册请求。Auth 可能已保存通行密钥；正在等待响应。",
-  "auth_security_passkey_authority_retired": "先前的通行密钥结果仍未确定，但此页面已无法为先前的账户检查该结果。"
+  "auth_security_passkey_authority_retired": "先前的通行密钥结果仍未确定，但此页面已无法为先前的账户检查该结果。",
+  "auth_route_failure_title": "无法显示此页面",
+  "auth_route_failure_body": "请重新加载此页面。如果您刚提交了账户操作，请先在负责该操作的页面查看结果，再决定是否重试。",
+  "auth_route_failure_failed_title": "此页面仍无法使用",
+  "auth_route_failure_failed_body": "此页面仍无法显示。最近的账户操作可能仍需查看，请先确认后再决定下一步。",
+  "auth_route_failure_retry": "重试",
+  "auth_route_failure_retrying": "正在重新加载页面…",
+  "auth_route_failure_retry_failed": "重试后仍无法显示此页面。",
+  "auth_route_failure_exit_login": "登录",
+  "auth_route_failure_exit_security": "账户安全",
+  "auth_route_failure_safe_navigation": "其他 Auth 页面",
+  "auth_route_missing_title": "找不到页面",
+  "auth_route_missing_body": "此地址没有对应的 Auth 页面。"
 }

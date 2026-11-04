@@ -637,5 +637,17 @@
   "auth_security_passkey_registration_confirmed": "Auth a confirmé la création. Les clés d’accès et autorisations actuelles sont actualisées avant de réactiver les commandes.",
   "auth_security_passkey_registration_review_finished": "Vous avez vérifié les clés d’accès actuelles. Cela ne confirme pas si la création précédente a abouti.",
   "auth_security_passkey_registration_saving": "Le navigateur a envoyé la demande. Auth a peut-être enregistré la clé ; sa réponse est attendue.",
-  "auth_security_passkey_authority_retired": "Le résultat précédent de la clé d’accès reste incertain, mais cette page ne peut plus le vérifier pour l’ancien compte."
+  "auth_security_passkey_authority_retired": "Le résultat précédent de la clé d’accès reste incertain, mais cette page ne peut plus le vérifier pour l’ancien compte.",
+  "auth_route_failure_title": "Impossible d’afficher cette page",
+  "auth_route_failure_body": "Réessayez de charger cette page. Si vous venez d’envoyer une action sur votre compte, vérifiez son résultat sur la page qui la gère avant de recommencer.",
+  "auth_route_failure_failed_title": "Cette page reste indisponible",
+  "auth_route_failure_failed_body": "La page n’a pas pu être rétablie. Une action récente sur votre compte peut nécessiter une vérification avant de choisir la suite.",
+  "auth_route_failure_retry": "Réessayer",
+  "auth_route_failure_retrying": "Chargement de la page…",
+  "auth_route_failure_retry_failed": "La page n’a toujours pas pu être affichée.",
+  "auth_route_failure_exit_login": "Se connecter",
+  "auth_route_failure_exit_security": "Sécurité du compte",
+  "auth_route_failure_safe_navigation": "Autres pages Auth",
+  "auth_route_missing_title": "Page introuvable",
+  "auth_route_missing_body": "Cette adresse ne correspond à aucune page Auth disponible."
 }

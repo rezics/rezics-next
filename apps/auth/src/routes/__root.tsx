@@ -1,14 +1,19 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
 import { useLayoutEffect } from 'react';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthShell } from '../frame';
+import { RouteFailureError, RouteMissing, RouteRecoveryProvider } from '../route-failure-view';
 import '../styles.css';
 
 export const Route = createRootRoute({
-  component: Root,
+  component: () => <Outlet />,
+  shellComponent: Root,
+  errorComponent: RouteFailureError,
+  notFoundComponent: RouteMissing,
 });
 
-function Root() {
+function Root({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     document.documentElement.dataset.hydrated = '';
   }, []);
@@ -22,7 +27,7 @@ function Root() {
       </head>
       <body>
         <AuthShell>
-          <Outlet />
+          <RouteRecoveryProvider>{children}</RouteRecoveryProvider>
         </AuthShell>
         <Scripts />
       </body>

@@ -500,6 +500,40 @@ body {
   text-align: start;
 }
 
+.auth-route-failure {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  text-align: start;
+}
+
+.auth-route-failure > p {
+  margin: 0;
+}
+
+.auth-route-failure nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
+}
+
+.auth-route-failure nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.auth-route-failure :where(a, button):focus-visible,
+.auth-route-failure h1:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
 .auth-login-alert {
   padding: 0.875rem 1rem;
   border: 1px solid var(--border);

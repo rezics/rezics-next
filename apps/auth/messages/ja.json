@@ -637,5 +637,17 @@
   "auth_security_passkey_registration_confirmed": "Auth が登録を確認しました。操作を再開する前に、現在のパスキーと権限を更新しています。",
   "auth_security_passkey_registration_review_finished": "現在のパスキーを確認しました。この確認では、先ほどの登録が成功したかどうかは分かりません。",
   "auth_security_passkey_registration_saving": "ブラウザーから登録が送信されました。Auth に保存された可能性があります。応答を待っています。",
-  "auth_security_passkey_authority_retired": "先ほどのパスキーの結果は未確定ですが、このページでは以前のアカウントについて確認できなくなりました。"
+  "auth_security_passkey_authority_retired": "先ほどのパスキーの結果は未確定ですが、このページでは以前のアカウントについて確認できなくなりました。",
+  "auth_route_failure_title": "ページを表示できません",
+  "auth_route_failure_body": "このページを再読み込みしてください。アカウント操作を送信した直後の場合は、再試行する前に、その操作を扱うページで結果を確認してください。",
+  "auth_route_failure_failed_title": "ページを表示できませんでした",
+  "auth_route_failure_failed_body": "ページを再表示できませんでした。最近のアカウント操作は、次の手順を決める前に確認が必要な場合があります。",
+  "auth_route_failure_retry": "再試行",
+  "auth_route_failure_retrying": "ページを再読み込みしています…",
+  "auth_route_failure_retry_failed": "再試行しましたが、ページを表示できませんでした。",
+  "auth_route_failure_exit_login": "ログイン",
+  "auth_route_failure_exit_security": "アカウントのセキュリティ",
+  "auth_route_failure_safe_navigation": "Auth のほかのページ",
+  "auth_route_missing_title": "ページが見つかりません",
+  "auth_route_missing_body": "このアドレスに対応する Auth ページはありません。"
 }

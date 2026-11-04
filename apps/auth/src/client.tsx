@@ -8,4 +8,4 @@ window.addEventListener('pageshow', (event) => {
   if (event.persisted) restoreDocumentLocale();
 });
 
-hydrateRoot(document, <StartClient />);
+hydrateRoot(document, <StartClient />, { onCaughtError: () => {} });

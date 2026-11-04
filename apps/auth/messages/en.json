@@ -637,5 +637,17 @@
   "auth_security_passkey_registration_confirmed": "Auth confirmed the registration. Refreshing current passkeys and permissions before controls return.",
   "auth_security_passkey_registration_review_finished": "You reviewed the current passkeys. This does not confirm whether the earlier registration succeeded.",
   "auth_security_passkey_registration_saving": "The browser sent the registration. Auth may have saved the passkey; waiting for its response.",
-  "auth_security_passkey_authority_retired": "The earlier passkey result remains unresolved, but this page can no longer check it for the previous account."
+  "auth_security_passkey_authority_retired": "The earlier passkey result remains unresolved, but this page can no longer check it for the previous account.",
+  "auth_route_failure_title": "We couldn't show this page",
+  "auth_route_failure_body": "Try loading this page again. If you just submitted an account action, review its result on the page that owns it before trying again.",
+  "auth_route_failure_failed_title": "This page still isn't available",
+  "auth_route_failure_failed_body": "The page could not be restored. A recent account action may still need review before you decide what to do next.",
+  "auth_route_failure_retry": "Try again",
+  "auth_route_failure_retrying": "Loading page…",
+  "auth_route_failure_retry_failed": "The page still could not be shown after retrying.",
+  "auth_route_failure_exit_login": "Sign in",
+  "auth_route_failure_exit_security": "Account security",
+  "auth_route_failure_safe_navigation": "Other Auth pages",
+  "auth_route_missing_title": "Page not found",
+  "auth_route_missing_body": "This address doesn't match an available Auth page."
 }

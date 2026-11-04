@@ -1,25 +1,7 @@
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
 import { installAuthLocaleNegotiation } from './locale-choice';
-
-const pagePaths = new Set([
-  '/',
-  '/login',
-  '/signup',
-  '/consent',
-  '/recovery',
-  '/security',
-  '/step-up',
-  '/account/delete',
-  '/account/rename',
-  '/organizations/new',
-  '/automated/new',
-  '/automated/open',
-  '/organizations/delete',
-  '/organizations/members',
-  '/operators/transfer',
-]);
-const assetPrefix = '/auth-assets/';
+import { authUiPagePaths, classifyAuthRequest } from './route-failure';
 
 installAuthLocaleNegotiation();
 
@@ -28,10 +10,11 @@ const fetchHandler = createStartHandler(defaultStreamHandler);
 export default {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const requestClass = classifyAuthRequest(request, url.pathname);
 
     // Start's existing page functions keep issuer cookies on this host. In
     // particular, private reads use POST so the browser supplies a real Origin.
-    if (url.pathname.startsWith('/_serverFn/')) {
+    if (requestClass === 'server-function') {
       if (
         !['GET', 'POST'].includes(request.method) ||
         request.headers.get('sec-fetch-site') === 'cross-site' ||
@@ -50,11 +33,15 @@ export default {
       return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     }
 
-    if (pagePaths.has(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
-      return paraglideMiddleware(request, () => fetchHandler(request));
+    if (requestClass === 'ui-page') {
+      const response = await paraglideMiddleware(request, () => fetchHandler(request));
+      return response.status >= 400 ? privateNoStore(response) : response;
     }
 
-    if (url.pathname.startsWith(assetPrefix)) return new Response('Not Found', { status: 404 });
+    if (requestClass === 'asset') return new Response('Not Found', { status: 404 });
+
+    if (requestClass === 'browser-document')
+      return privateNoStore(await paraglideMiddleware(request, () => fetchHandler(request)));
 
     if (import.meta.env.DEV && __AUTH_ORIGIN__) {
       const target = new URL(__AUTH_ORIGIN__);
@@ -64,8 +51,14 @@ export default {
     }
 
     // On the issuer host, fetch continues to Auth at the origin behind this route.
-    if (pagePaths.has(url.pathname)) return fetch(request);
+    if (authUiPagePaths.has(url.pathname)) return fetch(request);
 
     return new Response('Not Found', { status: 404 });
   },
 };
+
+export function privateNoStore(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
