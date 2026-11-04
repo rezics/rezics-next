@@ -31,8 +31,8 @@ notes:
     qualifiers even where the property is already bundled on another type.
   - Subject import covers type 1 (book), type 2 (anime), type 3 (music), type 4 (game) and type 6 (live-action). Music
     uses the admitted MusicAlbum work fallback; live-action dispatches film versus series from pinned platform/template
-    codes. Real people remain available as credited creators and voice actors. Staff, relation and episode-kind codes
-    for music and live-action remain row-6 vocabulary work.
+    codes. Real people remain available as credited creators and voice actors. Music relation codes and live-action
+    relation codes other than Adaptation remain row-6 vocabulary work.
   - Source strings used as field keys, template names and role labels retain their original spelling. All descriptive
     prose is English.
   - The concept Wikidata mapping describes skos:Concept. No equivalence is asserted between a Bangumi staff role concept
@@ -78,6 +78,8 @@ notes:
   - Collaboration records character crossovers. Its reciprocal rows can use Character instead of Collaboration;
     they do not consistently select a host. Character links works with shared characters and unrelated stories,
     not character-focused works. Other preserves only Bangumi's outgoing catch-all assertion.
+  - Live-action Adaptation (relation.6/1) maps to crossMediaCounterpart on the actual Movie or TVSeries work profile;
+    it preserves the shared cross-media meaning without inferring which work was adapted.
 vocabulary:
   - &id010
     status: proposed
@@ -6792,7 +6794,14 @@ enumerations:
     values:
       - id: 1
         label: Adaptation
-        mapping: *id073
+        mapping:
+          status: existing
+          term: rezics:crossMediaCounterpart
+          'on': schema:CreativeWork
+          meaning: The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
+            holder.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
       - id: 2
         label: Prequel
         mapping: *id073

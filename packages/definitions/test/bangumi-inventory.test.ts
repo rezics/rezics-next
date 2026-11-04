@@ -634,8 +634,33 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
   for (const group of data.enumerations) for (const entry of group.values) validate(entry.mapping);
   for (const mapping of data.vocabulary) validate(mapping);
   const group = (id: string) => data.enumerations.find((entry) => entry.id === id)!.values;
-  for (const id of ['staff.3', 'staff.6', 'relation.3', 'relation.6'])
+  for (const id of ['staff.3', 'staff.6', 'relation.3'])
     for (const entry of group(id)) expect(entry.mapping.status).toBe('omitted');
+  const liveActionRelations = group('relation.6');
+  expect(liveActionRelations.find((entry) => entry.id === 1)!.mapping).toMatchObject({
+    status: 'existing',
+    term: 'rezics:crossMediaCounterpart',
+    on: 'schema:CreativeWork',
+  });
+  for (const entry of liveActionRelations.filter((entry) => entry.id !== 1))
+    expect(entry.mapping.status).toBe('omitted');
+  const counterpart = bundledRelease.properties['rezics:crossMediaCounterpart']!;
+  for (const type of ['schema:Movie', 'schema:TVSeries']) {
+    const pending = [type];
+    const seen = new Set<string>();
+    let admitted = false;
+    while (pending.length) {
+      const next = pending.pop()!;
+      if (seen.has(next)) continue;
+      seen.add(next);
+      const profile = bundledRelease.types[next];
+      if (!profile) continue;
+      admitted ||= profile.properties.includes('rezics:crossMediaCounterpart');
+      pending.push(...profile.bases);
+    }
+    expect(counterpart.datatype).toBe('wikibase-item');
+    expect(admitted).toBe(true);
+  }
   expect(group('subject.type').find((entry) => entry.id === 3)!.mapping).toMatchObject({
     status: 'existing',
     term: 'schema:MusicAlbum',

@@ -8,8 +8,9 @@ import {
   type SourceVocabularyInput,
   type SourceVocabularyResult,
 } from './source-vocabulary.ts';
+import { mapSourceEnumeration } from './cross-media-entities.ts';
 
-export const bangumiVocabularyRevision = 'bangumi-vocabulary@1';
+export const bangumiVocabularyRevision = 'bangumi-vocabulary@2';
 const episodeScheme = 'https://rezics.com/schemes/bangumi/episode-types';
 const characterScheme = 'https://rezics.com/schemes/bangumi/character-kinds';
 const appearanceScheme = 'https://rezics.com/schemes/bangumi/appearance-roles';
@@ -61,66 +62,6 @@ const staffTerms: Readonly<Record<1 | 2 | 4, Readonly<Record<string, readonly nu
     'schema:producer': [1032],
   },
 };
-const relationTerms: Readonly<Record<1 | 2 | 4, Readonly<Record<number, { property: string; inverse?: true }>>>> = {
-  1: {
-    1: { property: 'rezics:crossMediaCounterpart' },
-    1002: { property: 'wdt:P179' },
-    1004: { property: 'rezics:artbookCounterpart' },
-    1005: { property: 'wdt:P155' },
-    1006: { property: 'wdt:P155', inverse: true },
-    1007: { property: 'rezics:sideStoryOf', inverse: true },
-    1008: { property: 'wdt:P361' },
-    1010: { property: 'rezics:editionCounterpart' },
-    1011: { property: 'rezics:sameCharacters' },
-    1012: { property: 'rezics:sameSetting' },
-    1013: { property: 'rezics:alternativeSetting' },
-    1014: { property: 'rezics:collaborationWith' },
-    1015: { property: 'rezics:alternativeVersion' },
-    1099: { property: 'rezics:bangumiRelatedTo' },
-  },
-  2: {
-    1: { property: 'rezics:crossMediaCounterpart' },
-    2: { property: 'wdt:P155' },
-    3: { property: 'wdt:P155', inverse: true },
-    4: { property: 'rezics:summaryOf', inverse: true },
-    5: { property: 'rezics:summaryOf' },
-    6: { property: 'rezics:sideStoryOf', inverse: true },
-    7: { property: 'rezics:sameCharacters' },
-    8: { property: 'rezics:sameSetting' },
-    9: { property: 'rezics:alternativeSetting' },
-    10: { property: 'rezics:alternativeVersion' },
-    11: { property: 'rezics:spinOffOf', inverse: true },
-    12: { property: 'wdt:P361' },
-    14: { property: 'rezics:collaborationWith' },
-    99: { property: 'rezics:bangumiRelatedTo' },
-  },
-  4: {
-    1: { property: 'rezics:crossMediaCounterpart' },
-    4002: { property: 'wdt:P155' },
-    4003: { property: 'wdt:P155', inverse: true },
-    4006: { property: 'rezics:sideStoryOf', inverse: true },
-    4007: { property: 'rezics:sameCharacters' },
-    4008: { property: 'rezics:sameSetting' },
-    4009: { property: 'rezics:alternativeSetting' },
-    4010: { property: 'rezics:alternativeVersion' },
-    4012: { property: 'wdt:P361' },
-    4013: { property: 'rezics:bangumiLegacyVersion' },
-    4014: { property: 'rezics:collaborationWith' },
-    4015: { property: 'rezics:expansionCounterpart' },
-    4016: { property: 'schema:exampleOfWork', inverse: true },
-    4017: { property: 'schema:exampleOfWork' },
-    4018: { property: 'wdt:P361' },
-    4019: { property: 'wdt:P361', inverse: true },
-    4099: { property: 'rezics:bangumiRelatedTo' },
-  },
-};
-const reverseSpecific: Readonly<Record<number, string>> = {
-  6: 'rezics:sideStoryOf',
-  11: 'rezics:spinOffOf',
-  1007: 'rezics:sideStoryOf',
-  4006: 'rezics:sideStoryOf',
-};
-
 function conceptIdentity(value: ResolvedConcept): NativeIdentity {
   return { id: value.id, type: value.type, releaseDigest: value.releaseDigest };
 }
@@ -369,10 +310,12 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
     }
     case 'relation': {
       const code = environment.sourceCode(row.code);
-      const family = row.family === 1 || row.family === 2 || row.family === 4 ? row.family : undefined;
+      const family = row.family === 1 || row.family === 2 || row.family === 3 || row.family === 4 || row.family === 6 ? row.family : undefined;
       const numberCode = typeof row.code === 'number' && Number.isSafeInteger(row.code) ? row.code : undefined;
-      const mapped = family === undefined || numberCode === undefined ? undefined : relationTerms[family][numberCode];
-      if (!code || !mapped) {
+      const inventory = family === undefined || numberCode === undefined
+        ? undefined
+        : mapSourceEnumeration('bangumi', `relation.${family}`, numberCode);
+      if (!code || !family || numberCode === undefined || !inventory) {
         environment.pushGap({
           path,
           ...(code ? { code } : {}),
@@ -381,6 +324,21 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         });
         return;
       }
+      if (inventory.status === 'omitted' || !inventory.term) {
+        environment.pushGap({
+          path,
+          code,
+          reason: 'unsupported_source_case',
+          property: `relation.${family}`,
+        });
+        return;
+      }
+      const reciprocalCode =
+        typeof row.reciprocalCode === 'number' && Number.isSafeInteger(row.reciprocalCode)
+          ? String(row.reciprocalCode)
+          : undefined;
+      const property = (reciprocalCode && inventory.canonicalByReverse?.[reciprocalCode]?.term) || inventory.term;
+      const mapped = { property, ...(inventory.inverse ? { inverse: true as const } : {}) };
       if (!row.endpoint) {
         environment.pushGap({
           path,
@@ -409,15 +367,6 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         environment.pushGap({ path, code, reason: 'incompatible_identity', property: mapped.property });
         return;
       }
-      let property = mapped.property;
-      if (
-        (row.code === 12 || row.code === 1008 || row.code === 4012) &&
-        typeof row.reciprocalCode === 'number' &&
-        Number.isSafeInteger(row.reciprocalCode)
-      ) {
-        const canonical = reverseSpecific[row.reciprocalCode];
-        if (canonical) property = canonical;
-      }
       const definition = environment.release.properties[property];
       if (!environment.admit(subject, property, path, code)) return;
       let canonicalSubjectId = subjectId;
@@ -436,7 +385,7 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         content: '',
         target: endpoint,
         sourceEndpoint: row.endpointCode,
-        mappingRevision: `relation-${row.family}@1`,
+        mappingRevision: `relation-${family}@2${reciprocalCode === undefined ? ':one-sided' : `:reverse-${reciprocalCode}`}`,
       });
       return;
     }

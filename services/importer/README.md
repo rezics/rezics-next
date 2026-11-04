@@ -1423,6 +1423,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 
 ## Cost
 
+### Bangumi subject relations
+
+- Touches: at most 4,096 selected `subject-relations` rows, their reciprocal evidence, existing source bindings and current facts-fence tuples. Relation commands use the bundled property descriptor and the resolved native profile of both endpoints.
+- Bound: the source table remains streamed; the planner retains no more than 4,096 rows and coalesces by unordered endpoint pair. Each exact mapped command body is recorded in the import session's `cross_media_graph` journal before the bounded API write. One relation can cause at most two fence reads. Unknown codes, omitted source families, unavailable properties, missing endpoints and fenced records remain bounded diagnostics or refusals.
+- Growth check: `the production seed coalesces reciprocal subject relation rows into one canonical statement`, `production graph journals immutable relation commands and retries without duplicate delivery`, `live-action adaptation uses the admitted Movie profile and keeps a one-sided row`, `reciprocal parent-story evidence selects its canonical relation and changes the proposal key`, and `unknown, unreviewed music, missing endpoint, and unavailable profile remain bounded gaps` are the focused scenarios. They do not add a separate growth series; the native operator journey is registered in the capability manifest and remains deferred for integration.
+
 ### Resume a sealed generation without its dump
 
 - Touches: exact-source owner/status admission and existing indexed post-seal reconciliation, envelopes, deferred media and finalization pages. Let N be remaining staged/vanished entries, P pending envelope/cover rows, E their remaining effects, H unrelated retained generations, and W the existing admitted record concurrency.

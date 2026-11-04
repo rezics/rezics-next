@@ -925,3 +925,21 @@ At `1a7a0f7787`, alias consumer verification was limited to workspace typing:
 `$ bun scripts/construct.ts` (`remote-check: command 138.994 s on c`). The latter command's wrapper
 selected host `c` despite the unset variable. Neither native acceptance file nor tests were executed;
 the supplemental alias cases remain later integration proof.
+
+### Bangumi reciprocal subject relations
+
+The production seed resolves the pinned `subject-relations` inventory, pairs only source rows that exist, applies
+`canonicalByReverse`, coalesces identical and symmetric statements, retains bounded row evidence, binds both native
+endpoint profiles, and stores each exact relation command before transport. Type 3 remains omitted. The reviewed
+`relation.6/1` decision uses `rezics:crossMediaCounterpart` on the existing Movie or TVSeries profile and does not
+infer a derivation direction. Source evidence is the Bangumi relation inventory and its cited Archive rows; the
+authored native fixture is labelled as authored and is not dump evidence.
+
+Focused scenarios added: `the production seed coalesces reciprocal subject relation rows into one canonical
+statement`; `production graph journals immutable relation commands and retries without duplicate delivery`;
+`live-action adaptation uses the admitted Movie profile and keeps a one-sided row`; `reciprocal parent-story evidence
+selects its canonical relation and changes the proposal key`; `unknown, unreviewed music, missing endpoint, and
+unavailable profile remain bounded gaps`; and `production operator imports reciprocal and one-sided work relations
+for independent native adoption`. None ran in this attempt. The native accept/adopt, current-read, reimport and
+changed-reciprocal journey is registered, but its execution is deferred to integration; no capability promotion is
+claimed.

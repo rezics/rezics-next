@@ -1,5 +1,8 @@
 import type { Database } from 'bun:sqlite';
-import { BATCH_LIMIT, checkBatchWrite, type BatchCommand } from '@rezics/definitions/bulk';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchWriteResult } from '@rezics/definitions/bulk';
+import { mapBangumiVocabulary, bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
+import type { SourceVocabularyGap } from '@rezics/conversion';
 import { commandKey, sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { relationStatement } from '@rezics/conversion/cross-media-entities';
 import type { Claim } from './record-bindings.ts';
@@ -19,14 +22,33 @@ export type GraphEdgeDraft = {
   membership: GraphMembership;
   record: Record<string, unknown>;
   fields: string[];
+  relation?: {
+    family: 1 | 2 | 4 | 6;
+    code: number;
+    reciprocalCode?: number;
+    path: string;
+    sourceSubject: string;
+    sourceEndpoint: string;
+    mappingRevision: string;
+    evidence: { path: string; code: number; sourceSubject: string; sourceEndpoint: string; digest: string }[];
+  };
 };
 export type UnresolvedEdge = GraphEdgeDraft & { reason: string };
 export type ProposedEdge = { key: string; holder: string; target: string; property: string; subject: string };
+export type GraphMappingGap = SourceVocabularyGap & { sourceSubject: string; sourceEndpoint: string; record: Record<string, unknown> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function graphEdgeKey(draft: GraphEdgeDraft): string {
-  return commandKey([draft.alias, draft.table, draft.holder, draft.target, draft.property, sourceDigest(draft.record)]);
+  return commandKey([
+    draft.alias,
+    draft.table,
+    draft.holder,
+    draft.target,
+    draft.property,
+    sourceDigest(draft.record),
+    ...(draft.relation ? [draft.relation.mappingRevision, sourceDigest(draft.relation.evidence)] : []),
+  ]);
 }
 
 export class CrossMediaGraph {
@@ -40,8 +62,17 @@ export class CrossMediaGraph {
       property TEXT NOT NULL,
       payload TEXT NOT NULL,
       status TEXT NOT NULL,
-      command_key TEXT
+      command_key TEXT,
+      command_payload TEXT,
+      native_candidate TEXT,
+      retraction_key TEXT,
+      retraction_payload TEXT
     ) WITHOUT ROWID`);
+    const columns = new Set((database.query('PRAGMA table_info(cross_media_graph)').all() as { name: string }[]).map((row) => row.name));
+    if (!columns.has('command_payload')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN command_payload TEXT');
+    if (!columns.has('native_candidate')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN native_candidate TEXT');
+    if (!columns.has('retraction_key')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN retraction_key TEXT');
+    if (!columns.has('retraction_payload')) database.exec('ALTER TABLE cross_media_graph ADD COLUMN retraction_payload TEXT');
   }
 
   remember(drafts: readonly GraphEdgeDraft[]): void {
@@ -73,16 +104,49 @@ export class CrossMediaGraph {
     return rows.map((row) => JSON.parse(row.payload) as GraphEdgeDraft);
   }
 
+  private command(edgeKey: string): { key: string; bytes: string | null } | null {
+    return this.database.prepare('SELECT command_key AS key, command_payload AS bytes FROM cross_media_graph WHERE edge_key=?').get(edgeKey) as
+      | { key: string; bytes: string }
+      | null;
+  }
+
+  private retainCommand(edgeKey: string, command: BatchCommand): { key: string; bytes: string } {
+    const key = command.key;
+    const bytes = JSON.stringify({ commands: [command] });
+    const prior = this.command(edgeKey);
+    if (prior?.bytes) {
+      if (prior.key !== key || prior.bytes !== bytes) throw new TypeError('Cross-media relation command changed after journaling');
+      return { key: prior.key, bytes: prior.bytes };
+    }
+    this.database
+      .prepare('UPDATE cross_media_graph SET command_key=?, command_payload=? WHERE edge_key=?')
+      .run(key, bytes, edgeKey);
+    return { key, bytes };
+  }
+
   async deliver(input: {
     claim(owner: { source: string; external_id: string }): Claim | null;
-    batch(request: { commands: BatchCommand[] }): Promise<{ results: { key: string; status: number }[] }>;
-  }): Promise<{ proposed: ProposedEdge[]; unresolved: UnresolvedEdge[]; unchanged: number }> {
+    nativeType(externalId: string): string | undefined;
+    fence(input: { source: string; externalId: string; fieldGroup: 'facts' }): Promise<{ fenced: boolean; securityRevision: string | null }>;
+    batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult>;
+    journal?: {
+      prepare(command: BatchCommand): { bytes: string };
+      acknowledge(command: BatchCommand, result: BatchWriteResult['results'][number]): void;
+    };
+    relationSnapshot?: {
+      currentKeys: readonly string[];
+      scope: readonly string[];
+      digest: string;
+      complete: boolean;
+    };
+  }): Promise<{ proposed: ProposedEdge[]; unresolved: UnresolvedEdge[]; gaps: GraphMappingGap[]; unchanged: number }> {
     const drafts = this.planned();
     const proposed: ProposedEdge[] = [];
     const unresolved: UnresolvedEdge[] = [];
+    const gaps: GraphMappingGap[] = [];
     let unchanged = 0;
     const mark = this.database.prepare(`UPDATE cross_media_graph SET status=?, command_key=? WHERE edge_key=?`);
-    const commands: { draft: GraphEdgeDraft; command: BatchCommand; subject: string; target: string }[] = [];
+    const commands: { draft: GraphEdgeDraft; command: BatchCommand; subject: string; target: string; bytes: string }[] = [];
     for (const draft of drafts) {
       const holder = input.claim({ source: draft.alias, external_id: draft.holder });
       const target =
@@ -91,9 +155,90 @@ export class CrossMediaGraph {
           : input.claim({ source: draft.alias, external_id: draft.target });
       if (holder?.state !== 'bound' || target?.state !== 'bound') {
         const reason =
-          holder?.state !== 'bound' ? `Missing target record ${draft.holder}` : `Missing target record ${draft.target}`;
+          holder?.state !== 'bound' ? `missing_holder:${draft.holder}` : `missing_endpoint:${draft.target}`;
         unresolved.push({ ...draft, reason });
         mark.run('unresolved', null, graphEdgeKey(draft));
+        continue;
+      }
+      if (draft.relation) {
+        let fenced = false;
+        for (const externalId of new Set([draft.relation.sourceSubject, draft.relation.sourceEndpoint])) {
+          const fence = await input.fence({ source: draft.alias, externalId, fieldGroup: 'facts' });
+          if (fence.fenced) fenced = true;
+        }
+        if (fenced) {
+          unresolved.push({ ...draft, reason: 'fenced_relation_holder' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const sourceClaim = input.claim({ source: draft.alias, external_id: draft.relation.sourceSubject });
+        const endpointClaim = input.claim({ source: draft.alias, external_id: draft.relation.sourceEndpoint });
+        const sourceType = input.nativeType(draft.relation.sourceSubject);
+        const endpointType = input.nativeType(draft.relation.sourceEndpoint);
+        if (sourceClaim?.state !== 'bound' || endpointClaim?.state !== 'bound' || !sourceType || !endpointType) {
+          unresolved.push({ ...draft, reason: 'missing_native_endpoint_profile' });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const rowDigest = sourceDigest(draft.relation.evidence);
+        const mapped = mapBangumiVocabulary({
+          metadata: {
+            provider: 'bangumi',
+            sourceAlias: draft.alias,
+            externalId: draft.holder,
+            recordRevision: null,
+            digest: rowDigest,
+            converterRevision: `${bangumiVocabularyRevision}:relation-${draft.relation.family}@2:${draft.relation.code}:${draft.relation.reciprocalCode ?? 'one-sided'}`,
+            recordUrl: `https://bgm.tv/subject/${draft.relation.sourceSubject}`,
+            license: 'CC-BY-SA-3.0',
+            attribution: 'Bangumi contributors',
+          },
+          bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+          rows: [
+            {
+              kind: 'relation',
+              path: draft.relation.path,
+              origin: {
+                externalId: draft.holder,
+                revision: null,
+                digest: rowDigest,
+                url: `https://bgm.tv/subject/${draft.relation.sourceSubject}`,
+              },
+              subject: { id: sourceClaim.subject, type: sourceType, releaseDigest: bundledDigest },
+              endpoint: { id: endpointClaim.subject, type: endpointType, releaseDigest: bundledDigest },
+              endpointCode: draft.relation.sourceEndpoint,
+              family: draft.relation.family,
+              code: draft.relation.code,
+              ...(draft.relation.reciprocalCode === undefined ? {} : { reciprocalCode: draft.relation.reciprocalCode }),
+            },
+          ],
+        });
+        for (const gap of mapped.gaps)
+          gaps.push({
+            ...gap,
+            sourceSubject: draft.relation.sourceSubject,
+            sourceEndpoint: draft.relation.sourceEndpoint,
+            record: draft.record,
+          });
+        if (mapped.proposals.length !== 1) {
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
+        const command = mapped.proposals[0]!;
+        if (command.op !== 'propose') throw new TypeError('Bangumi relation mapper returned a non-proposal command');
+        if (command.subject !== holder.subject || command.source.external_id !== draft.holder)
+          throw new TypeError('Cross-media relation mapper did not preserve the canonical holder binding');
+        if (checkBatchWrite({ commands: [command] }, bundledRelease).length)
+          throw new TypeError('Cross-media relation proposal failed portable validation');
+        const retained = this.database
+          .transaction(() => {
+            const prepared = input.journal?.prepare(command);
+            const exact = prepared ? (JSON.parse(prepared.bytes) as { commands: [BatchCommand] }).commands[0] : command;
+            if (!exact || exact.op !== 'propose') throw new TypeError('Cross-media relation journal is invalid');
+            return this.retainCommand(graphEdgeKey(draft), exact);
+          })
+          .immediate();
+        commands.push({ draft, command: JSON.parse(retained.bytes).commands[0] as BatchCommand, subject: holder.subject, target: target.subject, bytes: retained.bytes });
         continue;
       }
       const qualifiers = (draft.qualifiers ?? []).map((qualifier) => {
@@ -121,7 +266,8 @@ export class CrossMediaGraph {
         subject: holder.subject,
         statement,
       };
-      commands.push({ draft, command, subject: holder.subject, target: target.subject });
+      const retained = this.retainCommand(graphEdgeKey(draft), command);
+      commands.push({ draft, command: JSON.parse(retained.bytes).commands[0] as BatchCommand, subject: holder.subject, target: target.subject, bytes: retained.bytes });
     }
     for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
       const page = commands.slice(offset, offset + BATCH_LIMIT);
@@ -129,14 +275,36 @@ export class CrossMediaGraph {
         throw new TypeError('Cross-media relation proposals failed portable validation');
       const result = await input.batch({ commands: page.map((entry) => entry.command) });
       for (const [index, entry] of page.entries()) {
-        const status = result.results[index]?.status;
+        const receipt = result.results[index];
+        const status = receipt?.status;
         if (status === 200) {
           unchanged++;
-          mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
+          if (entry.draft.relation && (!receipt || !('value' in receipt) || !('candidate' in receipt.value)))
+            throw new TypeError('Cross-media relation replay omitted its native candidate receipt');
+          this.database
+            .transaction(() => {
+              if (entry.draft.relation && receipt && 'value' in receipt) input.journal?.acknowledge(entry.command, receipt);
+              if (entry.draft.relation && receipt && 'value' in receipt && 'candidate' in receipt.value)
+                this.database.prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
+                  .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
+              else mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
+            })
+            .immediate();
           continue;
         }
         if (status !== 201) throw new TypeError(`Cross-media relation write failed: ${status}`);
-        mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
+        if (!receipt || !('value' in receipt)) throw new TypeError('Cross-media relation write omitted its native receipt');
+        if (entry.draft.relation && !('candidate' in receipt.value))
+          throw new TypeError('Cross-media relation proposal returned no candidate');
+        this.database
+          .transaction(() => {
+            if (entry.draft.relation) input.journal?.acknowledge(entry.command, receipt);
+            if (entry.draft.relation && 'candidate' in receipt.value)
+              this.database.prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
+                .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
+            else mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
+          })
+          .immediate();
         proposed.push({
           key: graphEdgeKey(entry.draft),
           holder: entry.draft.holder,
@@ -146,7 +314,97 @@ export class CrossMediaGraph {
         });
       }
     }
-    return { proposed, unresolved, unchanged };
+    if (input.relationSnapshot) {
+      await this.retractMissingRelations(input, input.relationSnapshot);
+    }
+    return { proposed, unresolved, gaps, unchanged };
+  }
+
+  private async retractMissingRelations(
+    input: {
+      batch(request: { commands: BatchCommand[] }): Promise<BatchWriteResult>;
+      journal?: {
+        prepare(command: BatchCommand): { bytes: string };
+        acknowledge(command: BatchCommand, result: BatchWriteResult['results'][number]): void;
+      };
+    },
+    snapshot: { currentKeys: readonly string[]; scope: readonly string[]; digest: string; complete: boolean },
+  ): Promise<void> {
+    const currentKeys = new Set(snapshot.currentKeys);
+    const scope = new Set(snapshot.scope);
+    const prior = this.database
+      .prepare(`SELECT edge_key,payload,command_payload,native_candidate,retraction_key,retraction_payload
+        FROM cross_media_graph WHERE table_name='subject-relations' AND status='proposed' AND native_candidate IS NOT NULL`)
+      .all() as {
+      edge_key: string;
+      payload: string;
+      command_payload: string;
+      native_candidate: string;
+      retraction_key: string | null;
+      retraction_payload: string | null;
+    }[];
+    const pending: { edgeKey: string; command: BatchCommand; bytes: string }[] = [];
+    for (const row of prior) {
+      const hasPendingRetraction = row.retraction_payload !== null;
+      if (!hasPendingRetraction && currentKeys.has(row.edge_key)) continue;
+      const draft = JSON.parse(row.payload) as GraphEdgeDraft;
+      if (!draft.relation || (!hasPendingRetraction && (!snapshot.complete || (!scope.has(draft.holder) && !scope.has(draft.target)))))
+        continue;
+      const original = (JSON.parse(row.command_payload) as { commands: BatchCommand[] }).commands[0];
+      if (!original || original.op !== 'propose') continue;
+      const command: BatchCommand = {
+        op: 'retract',
+        key: commandKey([draft.alias, row.edge_key, row.native_candidate, 'relation-retract', snapshot.digest, bangumiVocabularyRevision]),
+        source: {
+          source: original.source.source,
+          external_id: original.source.external_id,
+          record_revision: original.source.record_revision,
+          converter_revision: `${bangumiVocabularyRevision}:relation-retract`,
+          digest: snapshot.digest,
+          field_group: 'facts',
+        },
+        subject: original.subject,
+        candidate: row.native_candidate,
+        references: original.statement.references,
+      };
+      const savedBytes = row.retraction_payload;
+      const pendingCommand = savedBytes
+        ? (JSON.parse(savedBytes) as { commands: [BatchCommand] }).commands[0]
+        : command;
+      if (!pendingCommand || pendingCommand.op !== 'retract') throw new TypeError('Cross-media relation retraction journal is invalid');
+      if (row.retraction_key && row.retraction_key !== pendingCommand.key)
+        throw new TypeError('Cross-media relation retraction key changed after journaling');
+      const retained = this.database
+        .transaction(() => {
+          const prepared = input.journal?.prepare(pendingCommand);
+          const exact = prepared?.bytes ?? savedBytes ?? JSON.stringify({ commands: [pendingCommand] });
+          const value = JSON.parse(exact) as { commands: [BatchCommand] };
+          if (value.commands[0]?.op !== 'retract') throw new TypeError('Cross-media relation retraction journal is invalid');
+          this.database
+            .prepare('UPDATE cross_media_graph SET retraction_key=?, retraction_payload=? WHERE edge_key=?')
+            .run(value.commands[0].key, exact, row.edge_key);
+          return { command: value.commands[0], bytes: exact };
+        })
+        .immediate();
+      pending.push({ edgeKey: row.edge_key, ...retained });
+    }
+    for (let offset = 0; offset < pending.length; offset += BATCH_LIMIT) {
+      const page = pending.slice(offset, offset + BATCH_LIMIT);
+      if (checkBatchWrite({ commands: page.map((entry) => entry.command) }, bundledRelease).length)
+        throw new TypeError('Cross-media relation retractions failed portable validation');
+      const result = await input.batch({ commands: page.map((entry) => entry.command) });
+      for (const [index, entry] of page.entries()) {
+        const receipt = result.results[index];
+        if (!receipt || (receipt.status !== 200 && receipt.status !== 201) || !('value' in receipt))
+          throw new TypeError(`Cross-media relation retraction failed: ${receipt?.status ?? 'missing receipt'}`);
+        this.database
+          .transaction(() => {
+            input.journal?.acknowledge(entry.command, receipt);
+            this.database.prepare(`UPDATE cross_media_graph SET status='retracted' WHERE edge_key=?`).run(entry.edgeKey);
+          })
+          .immediate();
+      }
+    }
   }
 }
 

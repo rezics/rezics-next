@@ -19,6 +19,7 @@ export type SourceMapping = {
   status: 'existing' | 'proposed' | 'omitted';
   term?: string;
   inverse?: boolean;
+  canonicalByReverse?: Readonly<Record<string, { term: string }>>;
   reason?: string;
   concept?: { id: string; scheme: string; label: string };
 };

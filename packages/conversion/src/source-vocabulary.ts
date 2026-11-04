@@ -91,7 +91,7 @@ export type BangumiVocabularyRow =
       subject: NativeIdentity;
       endpoint?: NativeIdentity;
       endpointCode: string;
-      family: 1 | 2 | 4;
+      family: 1 | 2 | 3 | 4 | 6;
       code: number;
       reciprocalCode?: number | null;
     });

@@ -3,15 +3,18 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
   isFamilyRelationTerm,
   liveActionWorkType,
   mapSourceEnumeration,
+  type SourceMapping,
   vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
 import { subjectSlug } from '@rezics/definitions/slug';
+import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import { createAccountTokenProvider, VNDB_IMPORTER_SCOPES } from './credentials.ts';
 import { CrossMediaGraph, citedProviderBinding, type GraphEdgeDraft } from './cross-media-bindings.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
@@ -28,6 +31,7 @@ const patterns: Record<Franchise, RegExp> = {
 };
 export const crossMediaAliases = { bangumi: 'bangumi_cross_media', vndb: 'vndb_cross_media' } as const;
 const FAMILY_CAP = 256;
+const RELATION_CAP = 4096;
 
 /** Membership uses titles only, never synopsis mentions, credits or a shared actor. */
 export function crossMediaFranchise(...names: unknown[]): Franchise | undefined {
@@ -45,6 +49,10 @@ export type CrossMediaGap = {
   fields: string[];
   record: Row;
   reason: string;
+  code?: string;
+  endpoint?: string;
+  property?: string;
+  requiredProfile?: string;
 };
 export type CrossMediaMember = {
   source: Provider;
@@ -60,6 +68,9 @@ export type CrossMediaPlan = {
   franchises: Record<Franchise, { bangumi: string[]; vndb: string[] }>;
   members: CrossMediaMember[];
   gaps: CrossMediaGap[];
+  relationScope: string[];
+  relationSnapshotDigest: string;
+  relationSnapshotComplete: boolean;
 };
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
@@ -87,7 +98,7 @@ function emptyFranchises(): Record<Franchise, { bangumi: string[]; vndb: string[
   };
 }
 
-function bangumiRelation(type: number, code: unknown) {
+function bangumiRelation(type: number, code: unknown): SourceMapping | undefined {
   return mapSourceEnumeration('bangumi', `relation.${type}`, code as number);
 }
 
@@ -109,9 +120,18 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     franchises: emptyFranchises(),
     members: [],
     gaps: [],
+    relationScope: [],
+    relationSnapshotDigest: sourceDigest([]),
+    relationSnapshotComplete: true,
   };
-  const gap = (source: Provider, table: string, record: Row, reason: string) => {
-    plan.gaps.push({ source, fields: fieldsOf(table, record), record, reason });
+  const gap = (
+    source: Provider,
+    table: string,
+    record: Row,
+    reason: string,
+    details: Pick<CrossMediaGap, 'code' | 'endpoint' | 'property' | 'requiredProfile'> = {},
+  ) => {
+    plan.gaps.push({ source, fields: fieldsOf(table, record), record, reason, ...details });
   };
   const edge = (draft: GraphEdgeDraft) => plan.edges.push(draft);
   const member = (entry: CrossMediaMember) => {
@@ -203,45 +223,138 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       plan.records.bangumi.push({ source: 'bangumi', key: String(id), revision: null, payload: row });
   }
 
+  const relationRows: Row[] = [];
+  let relationOverflow = false;
   for await (const row of input.rows('bangumi', 'subject-relations')) {
     const sid = number(row, 'subject_id');
     const rid = number(row, 'related_subject_id');
     if (!familyIds.has(sid) && !familyIds.has(rid) && !referencedWorks.has(sid) && !referencedWorks.has(rid)) continue;
-    const holderType = types.get(sid);
-    const mapping = holderType === undefined ? undefined : bangumiRelation(holderType, row.relation_type);
-    if (!mapping?.term || mapping.status === 'omitted') {
-      gap(
-        'bangumi',
-        'subject-relations',
-        row,
-        mapping?.reason ?? 'No registered native converter for this source relation or entity',
-      );
-      continue;
-    }
-    const holder = mapping.inverse ? String(rid) : String(sid);
-    const target = mapping.inverse ? String(sid) : String(rid);
-    const membership = isFamilyRelationTerm(mapping.term) ? 'family' : 'referenced';
-    const order = row.order;
-    edge({
-      source: 'bangumi',
-      alias: crossMediaAliases.bangumi,
-      table: 'subject-relations',
-      holder,
-      target,
-      property: mapping.term,
-      url: bangumiRecordUrl(holder),
-      membership,
-      record: row,
-      fields: fieldsOf('subject-relations', row),
-      ...(typeof order === 'number'
-        ? {
-            qualifiers: [
-              { property: 'schema:position', content: { amount: String(order < 1 ? order + 1 : order), unit: '1' } },
-            ],
-          }
-        : {}),
-    });
+    if (relationRows.length < RELATION_CAP) relationRows.push(row);
+    else relationOverflow = true;
   }
+  if (relationOverflow)
+    gap('bangumi', 'subject-relations', { limit: RELATION_CAP }, 'Selected source relation limit exceeded');
+  relationRows.sort((left, right) =>
+    number(left, 'subject_id') - number(right, 'subject_id') ||
+    number(left, 'related_subject_id') - number(right, 'related_subject_id') ||
+    Number(left.relation_type) - Number(right.relation_type),
+  );
+  plan.relationScope = [
+    ...new Set([
+      ...[...familyIds.keys(), ...referencedWorks.keys()].map(String),
+      ...relationRows.flatMap((row) => [String(number(row, 'subject_id')), String(number(row, 'related_subject_id'))]),
+    ]),
+  ].sort();
+  plan.relationSnapshotDigest = sourceDigest(relationRows);
+  plan.relationSnapshotComplete = !relationOverflow;
+
+  const pairs = new Map<string, Row[]>();
+  for (const row of relationRows) {
+    const sid = number(row, 'subject_id');
+    const rid = number(row, 'related_subject_id');
+    const key = sid < rid ? `${sid}:${rid}` : `${rid}:${sid}`;
+    pairs.set(key, [...(pairs.get(key) ?? []), row]);
+  }
+  const canonicalEdges = new Map<string, GraphEdgeDraft>();
+  for (const rows of pairs.values()) {
+    for (const row of rows) {
+      const sid = number(row, 'subject_id');
+      const rid = number(row, 'related_subject_id');
+      if (!familyIds.has(sid) && !familyIds.has(rid) && !referencedWorks.has(sid) && !referencedWorks.has(rid)) continue;
+      const family = types.get(sid);
+      const code = row.relation_type;
+      const mapping = family === undefined ? undefined : bangumiRelation(family, code);
+      if (!mapping) {
+        gap('bangumi', 'subject-relations', row, 'Unknown Bangumi relation code', {
+          ...(typeof code === 'number' || typeof code === 'string' ? { code: String(code) } : {}),
+          property: `relation.${family ?? 'unknown'}`,
+        });
+        continue;
+      }
+      if (mapping.status === 'omitted' || !mapping.term) {
+        gap('bangumi', 'subject-relations', row, mapping.reason ?? 'Bangumi relation is not admitted', {
+          ...(typeof code === 'number' || typeof code === 'string' ? { code: String(code) } : {}),
+          property: `relation.${family ?? 'unknown'}`,
+        });
+        continue;
+      }
+      if (![1, 2, 4, 6].includes(family!)) {
+        gap('bangumi', 'subject-relations', row, 'Bangumi relation family is outside the reviewed mapper scope');
+        continue;
+      }
+      if (typeof code !== 'number' || !Number.isSafeInteger(code)) {
+        gap('bangumi', 'subject-relations', row, 'Invalid Bangumi relation code');
+        continue;
+      }
+      const reciprocalRows = rows.filter(
+        (candidate) =>
+          candidate.subject_id === rid &&
+          candidate.related_subject_id === sid &&
+          typeof candidate.relation_type === 'number' &&
+          Number.isSafeInteger(candidate.relation_type),
+      );
+      const reciprocalCodes = [...new Set(reciprocalRows.map((candidate) => candidate.relation_type as number))];
+      if (reciprocalCodes.length > 1) {
+        gap('bangumi', 'subject-relations', row, 'Ambiguous reciprocal Bangumi relation rows');
+        continue;
+      }
+      const reciprocalCode = reciprocalCodes[0];
+      const term =
+        (reciprocalCode === undefined ? undefined : mapping.canonicalByReverse?.[String(reciprocalCode)]?.term) ??
+        mapping.term;
+      let holder = mapping.inverse ? rid : sid;
+      let target = mapping.inverse ? sid : rid;
+      if (bundledRelease.properties[term]?.relation?.symmetric && String(target) < String(holder))
+        [holder, target] = [target, holder];
+      const holderKey = String(holder);
+      const targetKey = String(target);
+      const path = `/subject-relations/${sid}/${rid}`;
+      const evidenceRows = [row, ...reciprocalRows];
+      const evidence = evidenceRows.map((evidenceRow) => ({
+        path: `/subject-relations/${evidenceRow.subject_id}/${evidenceRow.related_subject_id}`,
+        code: evidenceRow.relation_type as number,
+        sourceSubject: String(evidenceRow.subject_id),
+        sourceEndpoint: String(evidenceRow.related_subject_id),
+        digest: sourceDigest(evidenceRow),
+      }));
+      const mappingRevision = `bangumi-relation-${family}@2:${code}:${reciprocalCode ?? 'one-sided'}`;
+      const key = `${holderKey}\u0000${term}\u0000${targetKey}`;
+      const prior = canonicalEdges.get(key);
+      if (prior?.relation) {
+        const combined = [...prior.relation.evidence, ...evidence].filter(
+          (item, index, all) => all.findIndex((other) => other.path === item.path && other.code === item.code) === index,
+        );
+        prior.relation.evidence = combined;
+        prior.fields = [...new Set([...prior.fields, ...fieldsOf('subject-relations', row)])].sort();
+        prior.relation.mappingRevision = [prior.relation.mappingRevision, mappingRevision].sort().join('+');
+        continue;
+      }
+      const draft: GraphEdgeDraft = {
+        source: 'bangumi',
+        alias: crossMediaAliases.bangumi,
+        table: 'subject-relations',
+        holder: holderKey,
+        target: targetKey,
+        property: term,
+        url: bangumiRecordUrl(holderKey),
+        membership: isFamilyRelationTerm(term) ? 'family' : 'referenced',
+        record: row,
+        fields: [...new Set(evidenceRows.flatMap((evidenceRow) => fieldsOf('subject-relations', evidenceRow)))].sort(),
+        relation: {
+          family: family as 1 | 2 | 4 | 6,
+          code,
+          ...(reciprocalCode === undefined ? {} : { reciprocalCode }),
+          path,
+          sourceSubject: String(sid),
+          sourceEndpoint: String(rid),
+          mappingRevision,
+          evidence,
+        },
+      };
+      canonicalEdges.set(key, draft);
+    }
+  }
+  for (const draft of canonicalEdges.values()) edge(draft);
 
   const characters = new Set<number>();
   const persons = new Set<number>();
@@ -948,12 +1061,25 @@ export async function seedCrossMedia(
   const runs: CrossMediaSeedResult['runs'] = {};
   const readings: CrossMediaReading[] = [];
   try {
+    const nativeTypes = new Map<string, string>();
     for (const provider of ['bangumi', 'vndb'] as const) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
       const registration = createSourceRegistration(provider, {
         source: crossMediaAliases[provider],
         converterRevision: entityRevision,
       });
+      for (const record of [...plan.records[provider], ...plan.entities[provider]]) {
+        const conversion = registration.convert(
+          {
+            external_id: record.key,
+            record_revision: record.revision ?? 'unversioned',
+            record: record.payload,
+          },
+          { source: registration.source },
+        );
+        const bootstrap = conversion.proposals.find((command) => command.op === 'create');
+        if (bootstrap?.op === 'create') nativeTypes.set(`${crossMediaAliases[provider]}\u0000${record.key}`, bootstrap.subject.type);
+      }
       async function* records() {
         yield* plan.records[provider];
         yield* plan.entities[provider];
@@ -966,7 +1092,25 @@ export async function seedCrossMedia(
     graph.remember(plan.edges);
     const delivered = await graph.deliver({
       claim: (owner) => importer.session.bindings.claim(owner),
+      nativeType: (externalId) => nativeTypes.get(`${crossMediaAliases.bangumi}\u0000${externalId}`),
+      fence: (input) => port.fence(input),
       batch: (request) => port.batch(request),
+      journal: {
+        prepare: (command) => {
+          const owner = { source: command.source.source, external_id: command.source.external_id };
+          return importer.session.bindings.prepare(owner, sourceDigest([command]), { commands: [command] });
+        },
+        acknowledge: (command, result) => {
+          const owner = { source: command.source.source, external_id: command.source.external_id };
+          importer.session.bindings.acknowledge(owner, command.key, { results: [result] });
+        },
+      },
+      relationSnapshot: {
+        currentKeys: plan.edges.filter((edge) => edge.relation).map(graphEdgeKey),
+        scope: plan.relationScope,
+        digest: plan.relationSnapshotDigest,
+        complete: plan.relationSnapshotComplete,
+      },
     });
     const keys = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
     for (const record of keys) {
@@ -990,12 +1134,24 @@ export async function seedCrossMedia(
       reason: edge.reason,
     }));
     return {
-      status: plan.gaps.length || unresolved.length ? ('imported-with-gaps' as const) : ('imported' as const),
+      status: plan.gaps.length || delivered.gaps.length || unresolved.length ? ('imported-with-gaps' as const) : ('imported' as const),
       franchises: plan.franchises,
       members: plan.members,
       runs,
       readings,
-      gaps: plan.gaps,
+      gaps: [
+        ...plan.gaps,
+        ...delivered.gaps.map((gap) => ({
+          source: 'bangumi' as const,
+          fields: fieldsOf('subject-relations', gap.record),
+          record: gap.record,
+          reason: gap.reason,
+          ...(gap.code === undefined ? {} : { code: gap.code }),
+          ...(gap.endpoint === undefined ? {} : { endpoint: gap.endpoint }),
+          ...(gap.property === undefined ? {} : { property: gap.property }),
+          ...(gap.requiredProfile === undefined ? {} : { requiredProfile: gap.requiredProfile }),
+        })),
+      ],
       unresolved,
     };
   } finally {
