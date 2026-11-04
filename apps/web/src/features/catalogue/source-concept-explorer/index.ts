@@ -127,7 +127,7 @@ export async function readSourceConcept(
 ): Promise<ConceptRead> {
   try {
     const headers = headersOf(authorization, input.session);
-    const query = { includeViewerActions: true };
+    const query = { language: locale, includeViewerActions: true };
     const current = await client.subjects({ id }).get({ query, headers });
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
     if (current.data.subject.id !== id) return candidateFailure(400);
