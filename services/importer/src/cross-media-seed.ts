@@ -2028,7 +2028,7 @@ function currentReleaseEndpoint(
     subject?: {
       id?: unknown;
       type?: unknown;
-      statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown }[]>[] | undefined>;
+      statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[] | undefined>;
     };
   }).subject;
   if (!subject) return 'unknown';
