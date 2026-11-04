@@ -160,10 +160,12 @@ test('metadata review uses explicit field consent and keeps one selection per co
   expect(first).toMatchObject({ fields: [{ field: 'note', status: 'applied' }] });
   expect(await ok(await send('POST', `/${uploadId}:applyMetadata`, request))).toEqual(first);
   expect(
-    (await send('POST', `/${uploadId}:applyMetadata`, {
-      ...request,
-      fields: [{ field: 'privacy', action: 'adopt' }],
-    })).status,
+    (
+      await send('POST', `/${uploadId}:applyMetadata`, {
+        ...request,
+        fields: [{ field: 'privacy', action: 'adopt' }],
+      })
+    ).status,
   ).toBe(409);
 
   const entry = (await ok(await send('GET', `/v1/libraryEntries/${matched}/personal`))).personalEntry;

@@ -22,7 +22,11 @@ function confirmation(): EntryImportMetadataConfirmation {
   };
 }
 
-function review(token: string, requestDigest: string, saved?: EntryImportMetadataConfirmation): EntryImportMetadataReview {
+function review(
+  token: string,
+  requestDigest: string,
+  saved?: EntryImportMetadataConfirmation,
+): EntryImportMetadataReview {
   return {
     token,
     requestDigest,

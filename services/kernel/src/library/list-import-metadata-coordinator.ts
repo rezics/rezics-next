@@ -76,10 +76,7 @@ export type ListImportMetadataCoordinatorAdapter = {
     reviewToken: string,
     reconcile: boolean,
   ) => Promise<EntryImportMetadataReview | null>;
-  readView: (
-    input: ListImportMetadataViewRequest,
-    reviewToken: string,
-  ) => Promise<ListImportMetadataViewState>;
+  readView: (input: ListImportMetadataViewRequest, reviewToken: string) => Promise<ListImportMetadataViewState>;
   confirm: (
     input: ListImportMetadataScope,
     reviewToken: string,
