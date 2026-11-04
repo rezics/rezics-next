@@ -71,7 +71,7 @@ export function Byline({
 }) {
   const locale = getLocale();
   // A deleted account is known by `state` and `kind` alone; whatever else the read carries is not shown.
-  const deleted = author && 'state' in author && author.state === 'deleted';
+  const deleted = author?.state === 'deleted';
   const unknown = showAuthor && !deleted && (!author || (!author.displayName && !author.handle));
   const person = deleted || !author?.handle ? null : `/${locale}/@${encodeURIComponent(author.handle)}`;
   // Only a summary supplied by the existing identity batch can supply an image. Never read a profile per row.
@@ -100,7 +100,7 @@ export function Byline({
             <span className="block min-w-0 whitespace-normal [overflow-wrap:anywhere]" title={identityTitle}>
               {deleted ? (
                 <span>
-                  {author && 'kind' in author && author.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
+                  {author?.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}
                 </span>
               ) : unknown ? (
                 <span>{m.thread_author_unknown()}</span>

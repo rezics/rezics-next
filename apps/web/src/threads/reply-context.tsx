@@ -117,7 +117,7 @@ export class ReplyParentReader {
 
 /** Uses the page-native identity summary, without thumbnails or profile reads. */
 function ParentAuthor({ author }: { author: PageAuthor | undefined }) {
-  if (author && 'state' in author && author.state === 'deleted')
+  if (author?.state === 'deleted')
     return (
       <span>{author.kind === 'organization' ? m.thread_author_deleted_organization() : m.thread_author_deleted()}</span>
     );

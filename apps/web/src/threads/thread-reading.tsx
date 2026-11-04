@@ -413,7 +413,7 @@ export function ThreadReading({
                       personalReady={commandPersonalReady}
                       onChange={updatePost}
                       target={firstPost ? { kind: 'thread', id: thread.id } : { kind: 'post', id: post.id }}
-                      counts={firstPost ? (thread.reactions ?? {}) : (post.reactions ?? {})}
+                      counts={firstPost ? (thread.reactions ?? {}) : ('reactions' in post ? (post.reactions ?? {}) : {})}
                       value={
                         reactionKinds.find(
                           (kind) => kind === currentPersonal?.reactions[firstPost ? thread.id : post.id],
@@ -471,9 +471,8 @@ export function ThreadReading({
               <ThreadReplyComposer
                 key={`${thread.id}:${composer.current.viewerId}`}
                 initialKey={composer.current.initialKey}
-                canSubmit={pageCurrent && replyAvailable}
+                canSubmit={pageCurrent && replyAvailable && currentPersonal !== undefined}
                 slowModeAdvice={page.composed?.slowMode}
-                canSubmit={currentPersonal !== undefined}
                 containerId={thread.id}
                 boardId={thread.boardId}
                 parentId={replyTarget.parentId}
