@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "Lectura de la corrección retirada",
   "producer_history_retired_explanation": "Esta corrección ya no tiene una lectura vigente. Una orden ya enviada puede haber surtido efecto; su resultado puede ser desconocido. No se reenviará nada desde esta corrección retirada.",
   "producer_history_slice_lost": "El segmento original ya no está disponible aquí. Vuelve a leer antes de iniciar deliberadamente otra corrección.",
-  "producer_history_retired_close": "Cerrar corrección retirada"
+  "producer_history_retired_close": "Cerrar corrección retirada",
+  "character_work_title": "Obras donde aparece este personaje",
+  "character_work_appearances": "Apariciones en obras",
+  "character_work_performances": "Interpretaciones de voz",
+  "character_work_window": "Se muestra la ventana cargada. Puede haber más asociaciones.",
+  "character_work_unavailable": "Algunas asociaciones o su identidad original no están disponibles en esta lectura.",
+  "character_work_qualification_unavailable": "Los detalles del papel o del intérprete no están disponibles en esta lectura.",
+  "character_work_performer": "Intérprete",
+  "character_work_original": "Afirmación original",
+  "character_work_new_tab": "(se abre en una pestaña nueva)",
+  "character_work_return_missing": "La afirmación seleccionada ya no está en esta ventana. Reinicia este flujo para leer las asociaciones actuales."
 }

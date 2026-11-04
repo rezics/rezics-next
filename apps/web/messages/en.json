@@ -8883,5 +8883,15 @@
   "producer_history_correction_retired": "Correction reading retired",
   "producer_history_retired_explanation": "This correction no longer has a current reading. A command already sent may still have taken effect; its outcome may be unknown. Nothing will be resent from this retired correction.",
   "producer_history_slice_lost": "The original slice is no longer available here. Read again before deliberately starting another correction.",
-  "producer_history_retired_close": "Dismiss retired correction"
+  "producer_history_retired_close": "Dismiss retired correction",
+  "character_work_title": "Works featuring this character",
+  "character_work_appearances": "Work appearances",
+  "character_work_performances": "Voice performances",
+  "character_work_window": "This is the loaded window. Further associations may be available.",
+  "character_work_unavailable": "Some associations or their original identity are unavailable in this reading.",
+  "character_work_qualification_unavailable": "Role or performer qualification is unavailable in this reading.",
+  "character_work_performer": "Performer",
+  "character_work_original": "Original assertion",
+  "character_work_new_tab": "(opens in a new tab)",
+  "character_work_return_missing": "The selected assertion is no longer in this window. Restart this stream to read its current associations."
 }

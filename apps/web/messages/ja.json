@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "訂正の閲覧内容は失効しました",
   "producer_history_retired_explanation": "この訂正には現在有効な閲覧内容がありません。送信済みの操作はすでに反映されている可能性があり、結果が不明な場合があります。この失効した訂正から再送することはありません。",
   "producer_history_slice_lost": "元の範囲はここでは利用できません。履歴を読み直してから、改めて訂正を開始してください。",
-  "producer_history_retired_close": "失効した訂正を閉じる"
+  "producer_history_retired_close": "失効した訂正を閉じる",
+  "character_work_title": "このキャラクターが登場する作品",
+  "character_work_appearances": "作品への登場",
+  "character_work_performances": "声の出演",
+  "character_work_window": "読み込んだ範囲を表示しています。続きがある場合があります。",
+  "character_work_unavailable": "一部の関連情報または元の記述を、この閲覧では確認できません。",
+  "character_work_qualification_unavailable": "役割または演者の限定情報を、この閲覧では確認できません。",
+  "character_work_performer": "演者",
+  "character_work_original": "元の記述",
+  "character_work_new_tab": "（新しいタブで開く）",
+  "character_work_return_missing": "選択した記述はこの範囲にありません。この関連項目を最初から読み直してください。"
 }

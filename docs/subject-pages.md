@@ -1407,6 +1407,55 @@ groups, and are labelled with the Context they come from.
 
 ## Character appearances and relationships
 
+### Character-origin work visits
+
+The Character overview links directly to its public work appearances in the existing Connections reading. An
+anonymous reader sees the admitted incoming `schema:character` window as **Work appearances** and the independently
+admitted, Character-qualified incoming `wdt:P725` window as **Voice performances**. Both reuse the current loader,
+section state, released labels, shared covers, qualified values and native More/Retry controls. Other connection
+streams and the signed-in Global correction workspace retain their separate uses. Character identity and main
+character associations remain their released producer's assertions; neither appearance roles nor voice credits
+establish identity.
+
+Each row keeps its exact disclosed work holder, original property and statement. Duplicate assertions to one work
+stay separate. Role, performer and source information comes only from that assertion and its supplied summaries.
+Missing role/performer qualification is named as unavailable. A withheld work has no caption or destination. Source
+spoilers gate the entire row, including evidence actions, and native withheld counts never become local group totals.
+An original assertion without qualifiers still links by its native holder/property/statement identity; missing
+identity leaves inspection unavailable while retaining the independently disclosed work destination. Original
+inspection deliberately opens the existing public value destination in a labeled new tab. It does not construct a
+correction candidate or an immutable historical Item. Empty disclosed references mean no disclosed citations.
+
+Decision: Character work visits use the existing Characters and Credits sections as separate loaded-window views;
+original assertion inspection uses the exact-holder public value destination in an explicitly labeled new tab.
+
+Ordinary work links retain normal modified-click behavior and the single bounded Connections return locator. The
+existing parser derives Characters/ Credits section ownership for these two exact native stream keys, preserving
+cursor, reading fingerprint and original holder/statement focus. Current Context is rechecked by the native loader;
+Realm and locale remain in the canonical return destination. Changed readings require an explicit stream restart;
+a missing selected row reports its absence and offers that same restart. Focus restoration yields to user movement.
+The shared session observation retires even batched session A/B/A results; replaced Character, Context, locale,
+release, reader or route windows cannot accept retired callbacks. Private workspace drafts are not part of this state.
+
+**Cost:** Initial loading remains two page aggregates, one active pointer/release pair and one selected stream per
+nonempty native section: `4 + g <= 7` HTTP calls. The Character default chooses the admitted appearance and qualified
+voice directions; it adds zero calls. An explicit selected-stream replacement costs five calls, including exactly
+one existing native stream read. View composition consumes only its already loaded section. Three windows retain
+at most `3 * 12 = 36` rows and `3 * 1,048,576` UTF-8 JSON bytes. Inverse projection requests at most 256 distinct
+holder/qualifier/reference summaries per response, so three sections supply at most 768 such summary entries before
+per-assertion reuse. Qualifiers and references have no additional fixed array cap in this DTO; they and their strings
+are charged within each admitted response's measured UTF-8 bytes. Processing is linear in those supplied rows and
+bytes. No cursor drain, per-row Subject read, graph expansion or additional SQL producer is added. The optional
+Search-owned qualified work-context projection is not present on this native links DTO; no replacement enrichment
+pipeline is introduced. A 1 MiB response guard does not bound examined SQL rows.
+
+Focused mounted cases exercise assertion separation, selected-window return, independent retry, withheld/spoiler
+rows and session/Context retirement. The adapter64/512/4096 case measures typed calls, retained rows and response
+bytes on native-shaped doubles; it is not native SQL growth evidence. Existing current-relation and directed-credit
+native growth acceptance, the actual seeded Character walkthrough, keyboard and 390/1440 light/dark captures remain
+integration acceptance. Earlier profile and credits references inform public-read/edit separation and per-read retry;
+no legacy implementation is ported here.
+
 A Character page distinguishes appearing in a work from a directed character-to-character relationship. Appearances
 are the inverse of admitted `schema:character` statements on works. Role, credited name, spoiler level, part and any
 admitted appearance-specific quantity (including age at that appearance) stay on that exact work statement. They never

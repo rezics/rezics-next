@@ -18,6 +18,13 @@ export type ConnectionReturnWindow = {
   holder?: string;
 };
 
+/** The released Character streams keep their existing native section owner on return. */
+export function connectionReturnGroup(window: ConnectionReturnWindow): 'relations' | 'characters' | 'credits' {
+  if (window.stream === 'in:schema:character') return 'characters';
+  if (window.stream === 'in:wdt:P725:qualified') return 'credits';
+  return 'relations';
+}
+
 /** An opaque public locator, not rows, credentials, a reveal grant or a recursive opener. */
 export function connectionReturnWindow(hash: string): ConnectionReturnWindow | undefined {
   if (!hash.startsWith('#connections?') || hash.length > 28000) return;
@@ -35,10 +42,10 @@ export function connectionReturnWindow(hash: string): ConnectionReturnWindow | u
   const holder = params.get('holder');
   if (
     !stream ||
-    !/^(in|out):[^\s\u0000-\u001f]{1,256}$/u.test(stream) ||
+    !/^(in|out):[^\s\u0000-\u001f\u007f]{1,256}$/u.test(stream) ||
     (reading !== null && !/^[a-f0-9]{64}$/.test(reading)) ||
     (reading === null && (cursor !== null || focus !== null || holder !== null)) ||
-    (cursor !== null && (!cursor || cursor.length > 8192 || /[\u0000-\u001f]/u.test(cursor))) ||
+    (cursor !== null && (!cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
     (focus !== null && !new RegExp(`^${uuid}$`).test(focus)) ||
     (holder !== null && (!focus || !new RegExp(`^${uuid}$`).test(holder))) ||
     (focus !== null && !holder)
@@ -135,13 +142,13 @@ export function subjectVisitReturn(value: unknown, locale?: string): string | un
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
-      (cursor !== null && (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f]/u.test(cursor))) ||
+      (cursor !== null && (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
       (property !== null &&
-        (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f]/u.test(property))) ||
+        (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f\u007f]/u.test(property))) ||
       (screenReturn &&
         (subject?.[2] !== undefined ||
           (screenCursor !== null &&
-            (!screenCursor || screenCursor.length > 8192 || /[\u0000-\u001f]/u.test(screenCursor))) ||
+            (!screenCursor || screenCursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(screenCursor))) ||
           (screenSelection !== null && !new RegExp(`^${uuid}$`, 'i').test(screenSelection)) ||
           (screenEntry !== null && !new RegExp(`^${uuid}$`, 'i').test(screenEntry[1]!)) ||
           (screenSelection !== null && screenEntry?.[1]?.toLowerCase() !== screenSelection.toLowerCase()) ||

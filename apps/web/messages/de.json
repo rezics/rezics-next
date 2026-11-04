@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "Korrekturansicht nicht mehr aktuell",
   "producer_history_retired_explanation": "Diese Korrektur hat keine aktuelle Ansicht mehr. Ein bereits gesendeter Befehl kann wirksam geworden sein; das Ergebnis kann unbekannt sein. Aus dieser Korrektur wird nichts erneut gesendet.",
   "producer_history_slice_lost": "Der ursprüngliche Ausschnitt ist hier nicht mehr verfügbar. Lies den Verlauf erneut, bevor du bewusst eine weitere Korrektur beginnst.",
-  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen"
+  "producer_history_retired_close": "Nicht mehr aktuelle Korrektur schließen",
+  "character_work_title": "Werke mit dieser Figur",
+  "character_work_appearances": "Auftritte in Werken",
+  "character_work_performances": "Sprechrollen",
+  "character_work_window": "Dies ist das geladene Fenster. Weitere Verknüpfungen können vorhanden sein.",
+  "character_work_unavailable": "Einige Verknüpfungen oder ihre ursprüngliche Identität sind in dieser Ansicht nicht verfügbar.",
+  "character_work_qualification_unavailable": "Angaben zur Rolle oder zur darstellenden Person sind in dieser Ansicht nicht verfügbar.",
+  "character_work_performer": "Darstellende Person",
+  "character_work_original": "Ursprüngliche Aussage",
+  "character_work_new_tab": "(öffnet einen neuen Tab)",
+  "character_work_return_missing": "Die ausgewählte Aussage ist nicht mehr in diesem Fenster. Starten Sie diesen Verlauf neu, um die aktuellen Verknüpfungen zu lesen."
 }

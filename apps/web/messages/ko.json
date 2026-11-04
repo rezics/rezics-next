@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "정정 읽기 내용 만료",
   "producer_history_retired_explanation": "이 정정에는 더 이상 유효한 읽기 내용이 없습니다. 이미 보낸 명령은 적용되었을 수 있으며 결과를 알 수 없을 수 있습니다. 만료된 정정에서는 아무것도 다시 보내지 않습니다.",
   "producer_history_slice_lost": "원래 범위는 여기에서 더 이상 사용할 수 없습니다. 이력을 다시 읽은 뒤 새 정정을 직접 시작하세요.",
-  "producer_history_retired_close": "만료된 정정 닫기"
+  "producer_history_retired_close": "만료된 정정 닫기",
+  "character_work_title": "이 캐릭터가 등장하는 작품",
+  "character_work_appearances": "작품 등장",
+  "character_work_performances": "성우 연기",
+  "character_work_window": "불러온 범위만 표시합니다. 다른 연결이 더 있을 수 있습니다.",
+  "character_work_unavailable": "이 열람에서는 일부 연결이나 원본 서술의 식별 정보를 확인할 수 없습니다.",
+  "character_work_qualification_unavailable": "이 열람에서는 역할 또는 연기자의 한정 정보를 확인할 수 없습니다.",
+  "character_work_performer": "연기자",
+  "character_work_original": "원본 서술",
+  "character_work_new_tab": "(새 탭에서 열기)",
+  "character_work_return_missing": "선택한 서술이 이 범위에 없습니다. 이 연결을 처음부터 다시 불러오세요."
 }

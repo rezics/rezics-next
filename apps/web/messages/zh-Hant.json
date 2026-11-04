@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "更正讀取已失效",
   "producer_history_retired_explanation": "此更正已沒有目前有效的讀取。已傳送的命令可能已經生效，結果也可能尚不明確。不會從此失效的更正重新傳送任何命令。",
   "producer_history_slice_lost": "此處已無法使用原來的片段。請重新讀取歷史，再主動開始另一項更正。",
-  "producer_history_retired_close": "關閉已失效的更正"
+  "producer_history_retired_close": "關閉已失效的更正",
+  "character_work_title": "此角色登場的作品",
+  "character_work_appearances": "作品登場",
+  "character_work_performances": "配音演出",
+  "character_work_window": "目前顯示已載入的範圍，可能仍有其他關聯。",
+  "character_work_unavailable": "目前無法讀取部分關聯或其原始陳述身分。",
+  "character_work_qualification_unavailable": "目前無法讀取角色定位或演出者的限定資訊。",
+  "character_work_performer": "演出者",
+  "character_work_original": "原始陳述",
+  "character_work_new_tab": "（在新分頁開啟）",
+  "character_work_return_missing": "選取的陳述已不在此範圍內。請重新讀取此關聯串流的目前內容。"
 }

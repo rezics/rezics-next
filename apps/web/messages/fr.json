@@ -8791,5 +8791,15 @@
   "producer_history_correction_retired": "Lecture de la correction retirée",
   "producer_history_retired_explanation": "Cette correction n’a plus de lecture à jour. Une commande déjà envoyée peut avoir pris effet ; son résultat peut être inconnu. Rien ne sera renvoyé depuis cette correction retirée.",
   "producer_history_slice_lost": "La tranche d’origine n’est plus disponible ici. Relisez l’historique avant de commencer volontairement une autre correction.",
-  "producer_history_retired_close": "Fermer la correction retirée"
+  "producer_history_retired_close": "Fermer la correction retirée",
+  "character_work_title": "Œuvres où figure ce personnage",
+  "character_work_appearances": "Apparitions dans des œuvres",
+  "character_work_performances": "Interprétations vocales",
+  "character_work_window": "Seule la fenêtre chargée est affichée. D’autres associations peuvent exister.",
+  "character_work_unavailable": "Certaines associations ou leur identité d’origine sont indisponibles dans cette lecture.",
+  "character_work_qualification_unavailable": "Les précisions sur le rôle ou l’interprète sont indisponibles dans cette lecture.",
+  "character_work_performer": "Interprète",
+  "character_work_original": "Assertion d’origine",
+  "character_work_new_tab": "(nouvel onglet)",
+  "character_work_return_missing": "L’assertion sélectionnée ne figure plus dans cette fenêtre. Recommencez ce flux pour lire les associations actuelles."
 }
