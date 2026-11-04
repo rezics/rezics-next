@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createContext, forwardRef, useContext, useLayoutEffect, type ReactNode } from 'react';
+import { act, createContext, useContext, useLayoutEffect, type ReactNode } from 'react';
 import type { CopiesPageData, CopyItem, CopyRemoved } from '../src/library/copies-read';
 import { m } from '../src/paraglide/messages.js';
 
@@ -410,7 +410,8 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
     await settle(latest('detail'), { ok: true, copy });
     await click(m.library_copy_conflict_review_accept(), form());
     await click(m.library_copy_draft_navigation_discard(), window.document);
-    await click(m.library_copy_more(), form());
+    // Accepting the reviewed read resets values inside the same disclosed form.
+    expect(field(m.library_copy_note()).value).toBe(copy.note!);
     await text(m.library_copy_note(), 'Saved');
     await submit();
     expect(latest('update').input).toMatchObject({ data: { ...payload.data, idempotencyKey: expect.any(String) } });
