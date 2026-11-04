@@ -81,13 +81,13 @@ export const Unavailable: Story = {
   },
 };
 export const SignedOut: Story = {
-  args: { initial: { status: 'signed-out' } },
+  args: { initial: { status: 'signed-out', discovery: { status: 'unavailable' } } },
   play: async ({ canvasElement }) => {
     await closedPageReady(canvasElement, m.exposure_signed_out());
   },
 };
 export const Denied: Story = {
-  args: { initial: { status: 'denied' } },
+  args: { initial: { status: 'denied', discovery: { status: 'unavailable' } } },
   play: async ({ canvasElement }) => {
     await closedPageReady(canvasElement, m.exposure_denied());
   },
