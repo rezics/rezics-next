@@ -2192,7 +2192,7 @@ for these source Concepts.
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2213,9 +2213,10 @@ revision exists, the normalized digest and the acknowledged native UUID.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@8`, advancing the
-`bangumi@7` name extraction. Selected-family seed uses that same converter; this
-journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
+`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@9`, preserving the
+`bangumi@8` run mapping and earlier name extraction. Selected-family seed uses
+that same converter; this journey adds no publisher. Native read is the
+acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
 date is not completion or access authority.
 
