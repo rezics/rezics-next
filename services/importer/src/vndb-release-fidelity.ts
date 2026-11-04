@@ -87,7 +87,7 @@ async function* boundedRows(input: CrossMediaTables, table: string): AsyncGenera
   let accountedRows = 0;
   for await (const row of input.rows('vndb', table, limits)) {
     if (rows === accountedRows) {
-      limits.consumeRow(Buffer.byteLength(JSON.stringify(row), 'utf8') + 1);
+      limits.consumeRow!(Buffer.byteLength(JSON.stringify(row), 'utf8') + 1);
     }
     accountedRows = rows;
     yield row;

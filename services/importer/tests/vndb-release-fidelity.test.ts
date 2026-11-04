@@ -422,7 +422,7 @@ test('default selected-family traversal acquires directed release endpoints and 
     };
 
     const unknown = await seedCrossMedia(plan, statePath, makePort({ unknownRelation: true }));
-    const unknownEvidence = unknown.releaseSupersessions[0]!;
+    const unknownEvidence = unknown.releaseSupersessions?.[0]!;
     expect(unknownEvidence.status).toBe('unresolved');
     expect(unknownEvidence.command?.op).toBe('propose');
     const exactCommand = unknownEvidence.command;
@@ -441,7 +441,7 @@ test('default selected-family traversal acquires directed release endpoints and 
     expect(currentReadCounts[0]).toEqual(new Map([['r1', 1], ['r2', 1], ['r3', 1]]));
 
     const refused = await seedCrossMedia(plan, statePath, makePort({ refusedRelease: 'r2' }));
-    expect(refused.releaseSupersessions[0]).toMatchObject({ status: 'unresolved', command: exactCommand });
+    expect(refused.releaseSupersessions?.[0]).toMatchObject({ status: 'unresolved', command: exactCommand });
     expect(refused.unresolved).toContainEqual(
       expect.objectContaining({ property: 'rezics:releaseSupersedes', reason: 'current_release_refused:r2' }),
     );
@@ -449,16 +449,16 @@ test('default selected-family traversal acquires directed release endpoints and 
     expect(currentReadCounts[1]).toEqual(new Map([['r1', 1], ['r2', 1], ['r3', 1]]));
 
     const delivered = await seedCrossMedia(plan, statePath, makePort());
-    expect(delivered.releaseSupersessions[0]).toMatchObject({ status: 'proposed', command: exactCommand });
-    expect(delivered.releaseSupersessions[0]?.candidate).toMatch(/^[0-9a-f-]{36}$/u);
+    expect(delivered.releaseSupersessions?.[0]).toMatchObject({ status: 'proposed', command: exactCommand });
+    expect(delivered.releaseSupersessions?.[0]?.candidate).toMatch(/^[0-9a-f-]{36}$/u);
     expect(attemptedRelations).toHaveLength(2);
     expect(currentReadCounts[2]).toEqual(new Map([['r1', 1], ['r2', 1], ['r3', 1]]));
 
     const replay = await seedCrossMedia(plan, statePath, makePort());
-    expect(replay.releaseSupersessions[0]).toMatchObject({
+    expect(replay.releaseSupersessions?.[0]).toMatchObject({
       status: 'proposed',
       command: exactCommand,
-      candidate: delivered.releaseSupersessions[0]?.candidate,
+      candidate: delivered.releaseSupersessions?.[0]?.candidate,
     });
     expect(attemptedRelations[1]).toEqual(exactCommand);
     expect(attemptedRelations).toHaveLength(2);

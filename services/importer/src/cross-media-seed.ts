@@ -1986,7 +1986,7 @@ export type CrossMediaSeedResult = {
   characterDiagnostics: SourceVocabularyGap[];
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
-  releaseSupersessions: GraphEdgeEvidence[];
+  releaseSupersessions?: GraphEdgeEvidence[];
   bangumiGenrePublication?: BangumiGenrePublication;
 };
 
