@@ -22,7 +22,7 @@ const authority: ClassificationAssociationResolution = {
 };
 const fence: SourceFence = { route: 0, source: 'vndb', external_id: 'v17', field_group: 'facts', takenDown: false, securityRevision: null };
 const input = { association, before: authority, after: authority, first: head, last: head, fenceBefore: fence, fenceAfter: fence, now: new Date(payload.asOf) };
-const changed = { state: 'unavailable', reason: 'changed' };
+const changed = { state: 'unavailable', reason: 'changed' } as const;
 
 test('an admitted source read preserves optional indicators, source identity and provenance', () => {
   expect(currentClassificationRead(input)).toMatchObject({ state: 'available', value: {
