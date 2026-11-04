@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { convertCrossMediaEntity } from '../../../../packages/conversion/src/cross-media-entities.ts';
+import { convertCrossMediaEntity, converter_revision } from '../../../../packages/conversion/src/cross-media-entities.ts';
 import type { SourceRecord } from '../../../../packages/conversion/src/index.ts';
 import type { Json, Statement } from '../../../../specs/semantic-driver.ts';
 import type { Proposal } from '../../../../specs/imports-api-driver.ts';
@@ -271,9 +271,7 @@ test('authored Bangumi JSON-lines biographies are adopted and read on Person and
       'person:8101',
       'person:8102',
     ]);
-    expect(biographyCommands.every((command) => command.source.converter_revision === 'cross-media-entities@4')).toBe(
-      true,
-    );
+    expect(biographyCommands.every((command) => command.source.converter_revision === converter_revision)).toBe(true);
     expect(
       captured.some(
         (command) =>

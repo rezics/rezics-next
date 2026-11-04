@@ -649,6 +649,15 @@ not additional check requests.
   executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: label order is
   language then text; `mtl` never ranks names; exact-empty `releases_titles.latin` is unadmitted and does not inherit
   the `vn_titles` empty-cell contract; title language is not a whole-release language assertion.
+- `production operator imports authored VNDB release original languages through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-language.test.ts`.
+  Frozen scenario names:
+  `selected-family COPY import retains distinct release original languages without using title language`;
+  `production operator imports authored VNDB release original languages through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: `releases.olang` uses
+  the inventory `language` enumeration plus `inLanguageTag`; COPY `\\N` and unmapped codes withhold only that fact;
+  converter `@5` offers the statement on unchanged dump bytes without a fabricated source revision.
 - `production operator publishes authored VNDB public tags through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-public-tags.test.ts`.
   Frozen scenario names:

@@ -79,7 +79,7 @@ test('selected staff, producer and release websites become sourced schema:url fa
     },
     context,
   );
-  expect(converter_revision).toBe('cross-media-entities@4');
+  expect(converter_revision).toBe('cross-media-entities@5');
   expect(
     staff.proposals[0] && staff.proposals[0].op === 'propose' ? staff.proposals[0].source.converter_revision : '',
   ).toBe(converter_revision);
