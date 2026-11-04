@@ -7,9 +7,11 @@ import { dirname, join, resolve } from 'node:path';
 import { sameProcess, signalProcessIdentity, waitForProcess, type ProcessIdentity } from './process.ts';
 
 export const HOST_UNIT = 'rezics-goal-host.service';
+export const VERIFIER_UNIT = 'rezics-goal-verifier.service';
+/** Resident units that execute tools/goal continuously and must reload it after cp-sync. */
+export const RESIDENT_CODE_UNITS = [HOST_UNIT, VERIFIER_UNIT] as const;
 export const SERVICE_UNITS = [
-  HOST_UNIT,
-  'rezics-goal-verifier.service',
+  ...RESIDENT_CODE_UNITS,
   'rezics-goal-maintenance.service',
   'rezics-goal-maintenance.timer',
   'rezics-goal-regenerate.service',
@@ -119,12 +121,12 @@ export async function installService(options: ServiceInstall, run = serviceComma
   // Reject a broken unit before the legacy supervisor stops, so a bad install never leaves no host at all.
   await checked(['systemd-analyze', '--user', 'verify', ...SERVICE_UNITS.map((unit) => join(directory, unit))], run);
   await checked(
-    ['systemctl', '--user', 'enable', HOST_UNIT, SERVICE_UNITS[1], SERVICE_UNITS[3], SERVICE_UNITS[5]],
+    ['systemctl', '--user', 'enable', ...RESIDENT_CODE_UNITS, SERVICE_UNITS[3], SERVICE_UNITS[5]],
     run,
   );
   await stopLegacySupervisor(join(main, '.temp/goal'), run);
   // Wait for the notify host only after the old supervisor and host have relinquished the socket.
-  await checked(['systemctl', '--user', 'start', HOST_UNIT, SERVICE_UNITS[1]], run);
+  await checked(['systemctl', '--user', 'start', ...RESIDENT_CODE_UNITS], run);
   await checked(['systemctl', '--user', '--no-block', 'start', SERVICE_UNITS[3], SERVICE_UNITS[5]], run);
   for (const file of ['manager-host-liveness.json', 'manager-host-liveness-retry.json', 'manager-host-restart.json'])
     rmSync(join(main, '.temp/goal', file), { force: true });
@@ -179,7 +181,7 @@ export async function reportServices(
 ): Promise<number> {
   let failed = false;
   if (action === 'restart') {
-    const restarted = await run(['systemctl', '--user', 'restart', HOST_UNIT, SERVICE_UNITS[1]]);
+    const restarted = await run(['systemctl', '--user', 'restart', ...RESIDENT_CODE_UNITS]);
     failed = restarted.code !== 0;
     if (restarted.output.trim()) print(restarted.output.trim());
     const timers = await run(['systemctl', '--user', '--no-block', 'restart', SERVICE_UNITS[3], SERVICE_UNITS[5]]);

@@ -2521,16 +2521,21 @@ Decision: keep the minute sweep to 45 seconds by default and run regeneration se
 budget; both bounds are configurable under `policy.maintenance` and applied when installing services.
 
 Decision: cp-sync records ten-minute mean live-worker width and successful gates and landings before and after
-publication; only failed host readiness, zero live workers while ready tasks were observed, or zero landings while
-current undelivered landing requests were observed restores the previous tree in a forward commit. Lower nonzero
-counts and quiet windows are normal. Demand is sampled throughout the post-publication window.
-After publishing, a missing environment file or host unit triggers `goal service install` from the newly published
+publication; only failed host or verifier readiness, a unit whose process did not start after publication, zero live
+workers while ready tasks were observed, or zero landings while current undelivered landing requests were observed
+restores the previous tree in a forward commit. Lower nonzero counts and quiet windows are normal. Demand is sampled
+throughout the post-publication window.
+After publishing, a missing environment file or resident code unit triggers `goal service install` from the newly published
 main. Installation enables the resident units, stops the legacy transient `rezics-goal-supervisor`
 unit and any recorded supervisor and host by birth identity, then starts the units and waits for host readiness. It signals individual
 recorded processes, never worker groups or name patterns. cp-sync also completes migration when legacy state remains.
-It restarts the host through systemd after publication and rollback. If rollback cannot install or activate its host,
-it restores the published code in another forward commit and restarts that host before exiting with failure; a rollback
-refusal also triggers activation on the current main. Dependency installation failures follow this same recovery path.
+Decision: the resident services that execute tools/goal continuously are the manager host and the dev verifier, listed
+once as `RESIDENT_CODE_UNITS`; maintenance and regenerate stay timer-driven oneshots. After publication and rollback,
+cp-sync restarts each of those units through systemd and checks that each unit's `ExecMainStartTimestamp` is at or
+after the restart. A unit that cannot restart or does not come back fails the sync by name. If rollback cannot install
+or activate its resident services, it restores the published code in another forward commit and restarts those services
+before exiting with failure; a rollback refusal also triggers activation on the current main. Dependency installation
+failures follow this same recovery path.
 No ref rewinding is needed. Status, restart and
 logs show each unit's systemd state and result, including watchdog failure and timer health. Diagnostics live in the
 user journal; consult `systemd.service(5)` and `systemd.exec(5)` for service and environment semantics.
