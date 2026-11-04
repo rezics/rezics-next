@@ -57,3 +57,8 @@ inclusivity, undated state, exact copy/owner operands, name/reference separation
 edits, extension, early return and terminal return. They do not prove concurrent native commands, disclosure,
 receipts, membership cursors, owner retirement, API execution or rendered interaction. Those remain continuation
 acceptance, along with the mounted lifecycle, lost acknowledgements and refresh, disposal races and scale cases.
+
+`bun run --cwd services/kernel typecheck` was run and failed with exit 2. Its first compiler diagnostic was
+`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.`
+That client export is unchanged from the base, where the referenced module is absent. The output also reports
+errors in unchanged Community, Content and Search source/tests. This is not a successful workspace typecheck.
