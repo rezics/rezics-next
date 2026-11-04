@@ -155,8 +155,8 @@ export function characterRelationshipsHref(
     id: string;
     label: string;
     locale: string;
-    context?: string;
-    realm?: string;
+    context?: string | undefined;
+    realm?: string | undefined;
   } & Partial<CharacterRelationshipsAddress>,
 ): string {
   const query = new URLSearchParams();
