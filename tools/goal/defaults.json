@@ -339,7 +339,8 @@
       "fileClockSlackMs": 1000,
       "continuationBudgetPercent": 90,
       "continuationCharacters": 8000,
-      "messageWords": 60
+      "messageWords": 60,
+      "renewalRetryMs": 600000
     },
     "guidance": {
       "longCommandWaitMs": 300000,

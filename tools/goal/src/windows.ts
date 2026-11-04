@@ -16,6 +16,17 @@ const run = (executable: string, argv: string[], policy = defaultPolicy.windows)
   return result.stdout.trim();
 };
 const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+/** tmux 3.7c with no locale replaces unprintable `-F` tabs with underscores. */
+function tmuxFields(line: string): string[] {
+  if (line.includes('\t')) return line.split('\t');
+  const session = line.match(/^(\$\d+)_(.*)_(.*)$/);
+  if (session) return [session[1]!, session[2]!, session[3]!];
+  const window = line.match(/^(@\d+)_(.*)$/);
+  if (window) return [window[1]!, window[2]!];
+  const dead = line.match(/^(.*)_([01])$/);
+  if (dead) return [dead[1]!, dead[2]!];
+  return [line];
+}
 const UNAVAILABLE_CODES = new Set([
   'ETIMEDOUT',
   'EACCES',
@@ -72,7 +83,7 @@ export class TermspacesWindows implements ManagerWindows {
     private readonly execute: WindowRunner = (executable, argv) => run(executable, argv, settings.policy),
   ) {}
   private tmux(argv: string[]): string {
-    return this.execute(this.settings.tmuxCommand ?? 'tmux', ['-S', this.settings.socket, ...argv]);
+    return this.execute(this.settings.tmuxCommand ?? 'tmux', ['-u', '-S', this.settings.socket, ...argv]);
   }
   private observe<T>(read: () => T): T | undefined {
     try {
@@ -87,7 +98,7 @@ export class TermspacesWindows implements ManagerWindows {
       () =>
         this.tmux(['list-sessions', '-F', '#{session_id}\t#{session_name}\t#{@ts-session-id}'])
           .split('\n')
-          .map((line) => line.split('\t'))
+          .map(tmuxFields)
           .find(([, name, id]) => name === this.settings.session || id === this.settings.session)?.[0],
     );
   }
@@ -131,7 +142,7 @@ export class TermspacesWindows implements ManagerWindows {
       () =>
         this.tmux(['list-windows', '-t', session, '-F', '#{window_id}\t#{@goal-manager}'])
           .split('\n')
-          .map((line) => line.split('\t'))
+          .map(tmuxFields)
           .find(([, owner]) => owner === manager)?.[0],
     );
   }
@@ -142,7 +153,7 @@ export class TermspacesWindows implements ManagerWindows {
       this.observe(() =>
         this.tmux(['list-windows', '-t', session, '-F', '#{@goal-manager}\t#{pane_dead}'])
           .split('\n')
-          .map((line) => line.split('\t'))
+          .map(tmuxFields)
           .some(([owner, dead]) => owner === manager && dead === '0'),
       ) === true
     );

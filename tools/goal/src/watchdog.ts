@@ -453,7 +453,7 @@ export function retryWait(
   | { reason: 'check-hosts'; hosts: string[] }
   | null {
   const waitingFor = (task.brief.after ?? []).filter(
-    (id) => !['integrated', 'merged'].includes(dependencyState(id) ?? ''),
+    (id) => !['integrated', 'merged', 'stopped', 'cancelled'].includes(dependencyState(id) ?? ''),
   );
   if (waitingFor.length) return { reason: 'dependencies', waitingFor };
   const until = intent.options?.notBefore;

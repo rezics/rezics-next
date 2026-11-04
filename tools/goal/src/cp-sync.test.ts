@@ -1,5 +1,5 @@
 import { processIdentity } from './process.ts';
-import { installService, SERVICE_UNITS } from './service.ts';
+import { installService, RESIDENT_CODE_UNITS, SERVICE_UNITS } from './service.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { spawnSync } from 'node:child_process';
@@ -600,6 +600,11 @@ test('cp-sync bootstraps missing service state from published main before legacy
         return { code: loaded ? 0 : 1, output: loaded ? 'loaded' : 'not-found' };
       }
       if (argv.includes('stop')) legacy = false;
+      if (argv.includes('show') && argv.some((arg) => String(arg).includes('ExecMainStartTimestamp')))
+        return {
+          code: 0,
+          output: `ActiveState=active\nExecMainStartTimestamp=@${Math.floor(Date.now() / 1000) + 1}\n`,
+        };
       return { code: 0, output: argv.includes('--property=ActiveState') ? 'active' : '' };
     };
     expect(
@@ -644,14 +649,17 @@ test('cp-sync bootstraps missing service state from published main before legacy
         calls.findIndex((call) => call.includes('start')),
       );
     }
-    expect(calls.at(-1)).toEqual([
-      'systemctl',
-      '--user',
-      'show',
-      '--property=ActiveState',
-      '--value',
-      'rezics-goal-host.service',
-    ]);
+    for (const unit of RESIDENT_CODE_UNITS) {
+      expect(calls).toContainEqual(['systemctl', '--user', 'restart', unit]);
+      expect(
+        calls.some(
+          (call) =>
+            call.includes('show') &&
+            call.includes(unit) &&
+            call.includes('--property=ActiveState,ExecMainStartTimestamp'),
+        ),
+      ).toBe(true);
+    }
     expect(history(f.repo).map((entry) => entry.action)).toEqual(['sync']);
   }
   await expect(
@@ -738,7 +746,10 @@ const units = args.filter(arg => arg.startsWith('rezics-goal-'));
 const installed = units.every(unit => existsSync(join(${JSON.stringify(units)}, unit)));
 if (args.includes('--property=LoadState')) { console.log(installed ? 'loaded' : 'not-found'); process.exit(installed ? 0 : 1); }
 if (!installed) throw new Error('Resident units must be installed before activation');
-if (args.includes('--property=ActiveState')) console.log('active');
+if (args.includes('--timestamp=unix') || args.some((arg) => String(arg).includes('ExecMainStartTimestamp'))) {
+  console.log('ActiveState=active');
+  console.log('ExecMainStartTimestamp=@' + Math.floor(Date.now() / 1000 + 1));
+} else if (args.includes('--property=ActiveState')) console.log('active');
 else if (args.includes('show')) console.log('LoadState=loaded\\nActiveState=active\\nResult=success');
 `,
   );

@@ -1306,7 +1306,7 @@ export class WorkerStore implements AttemptFence {
         for (const dependency of after)
           if (!dependencies.get(dependency)) throw new Error(`unknown dependency task: ${dependency}`);
         const state = after.every((dependency) =>
-          ['integrated', 'merged'].includes(dependencies.get(dependency)?.state ?? ''),
+          ['integrated', 'merged', 'stopped', 'cancelled'].includes(dependencies.get(dependency)?.state ?? ''),
         )
           ? 'ready'
           : 'held';
@@ -1640,27 +1640,30 @@ export class WorkerStore implements AttemptFence {
   putRecord(record: AttemptRecord): void {
     this.write(record, () => this.saveRecord(record));
   }
-  /** Notify from a committed cancellation without restoring a terminal worker's write authority. */
-  notifyCancelledDependency(ref: AttemptRef, event: ManagerEvent, deliver: (event: ManagerEvent) => void): void {
+  /** Notify from a dropped terminal predecessor without restoring a worker's write authority. */
+  notifyDroppedDependency(ref: AttemptRef, event: ManagerEvent, deliver: (event: ManagerEvent) => void): void {
     this.db
       .transaction(() => {
         const task = this.task(ref.taskId);
-        if (task.currentAttempt !== ref.attempt || task.state !== 'cancelled')
+        if (task.currentAttempt !== ref.attempt || !['cancelled', 'stopped'].includes(task.state))
           throw new StaleAttemptError(ref, task.currentAttempt);
-        if (event.taskId !== ref.taskId) throw new Error('cancellation notice must name its dependency');
+        if (event.taskId !== ref.taskId) throw new Error('dropped dependency notice must name its predecessor');
         const recorded = this.db
           .query(
-            `SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind='cancelled-dependency-notice'
+            `SELECT 1 FROM worker_events WHERE task_id=? AND attempt=? AND kind IN ('cancelled-dependency-notice','dropped-dependency-notice')
              AND json_extract(body,'$.managerId')=? LIMIT 1`,
           )
           .get(ref.taskId, ref.attempt, event.managerId);
         if (recorded) return;
         this.db
           .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
-          .run(ref.taskId, ref.attempt, 'cancelled-dependency-notice', new Date().toISOString(), JSON.stringify(event));
+          .run(ref.taskId, ref.attempt, 'dropped-dependency-notice', new Date().toISOString(), JSON.stringify(event));
         deliver(event);
       })
       .immediate();
+  }
+  notifyCancelledDependency(ref: AttemptRef, event: ManagerEvent, deliver: (event: ManagerEvent) => void): void {
+    this.notifyDroppedDependency(ref, event, deliver);
   }
   event(ref: AttemptRef, kind: string, body: unknown): void {
     this.write(ref, () => {
@@ -1800,15 +1803,22 @@ export class WorkerStore implements AttemptFence {
       })
       .immediate();
   }
-  /** Commit the requested terminal state once, only after known process groups are confirmed absent. */
-  closeTerminated(ref: AttemptRef, after: PoolReading | null, configDirectory?: string): void {
+  /** Commit the terminal state after known processes or explicit absence evidence are confirmed. */
+  closeTerminated(
+    ref: AttemptRef,
+    after: PoolReading | null,
+    configDirectory?: string,
+    confirmUnknownAbsence?: () => boolean,
+  ): void {
     this.db
       .transaction(() => {
         const task = this.task(ref.taskId);
         if (task.currentAttempt !== ref.attempt) throw new StaleAttemptError(ref, task.currentAttempt);
         const attempt = this.attempt(ref);
         const intent = attempt.terminationIntent;
-        if (intent?.state !== 'complete') throw new Error('physical termination is unconfirmed');
+        if (!intent) throw new Error('termination request is missing');
+        const confirmedAbsent = intent.state === 'unknown' && intent.processIdentity === 'unknown';
+        if (intent.state !== 'complete' && !confirmedAbsent) throw new Error('physical termination is unconfirmed');
         const state = intent.operation === 'cancel' ? 'cancelled' : 'stopped';
         attempt.endedAt ??= new Date().toISOString();
         attempt.after ??= after;
@@ -1820,6 +1830,11 @@ export class WorkerStore implements AttemptFence {
           this.db
             .query('INSERT INTO worker_events(task_id,attempt,kind,at,body) VALUES (?,?,?,?,?)')
             .run(ref.taskId, ref.attempt, state, new Date().toISOString(), '{}');
+        if (confirmedAbsent) {
+          if (!confirmUnknownAbsence?.()) throw new Error('physical termination is unconfirmed');
+          intent.state = 'complete';
+          delete intent.error;
+        }
         task.state = state;
         attempt.state = state;
         intent.settledAt ??= new Date().toISOString();

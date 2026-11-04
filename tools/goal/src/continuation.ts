@@ -153,7 +153,7 @@ export function continuationOverlap(
   const rows = db
     .query(`SELECT id, body FROM worker_tasks
     WHERE json_extract(body, '$.brief.goal') = ?
-      AND json_extract(body, '$.state') IN ('ready', 'running', 'held', 'landing', 'stopped')
+      AND json_extract(body, '$.state') IN ('ready', 'running', 'held', 'landing')
     ORDER BY sequence`)
     .all(goal) as { id: string; body: string }[];
   for (const row of rows) {
