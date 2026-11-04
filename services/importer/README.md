@@ -1485,6 +1485,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: existing source-vocabulary row/command/gap caps (64/100/64) and sequential CrossMedia seed conversion so appearance rows reuse already bound character identities. No catalogue scan, voter, identity-merge or classification write.
 - Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
 
+### Import VNDB character height and weight
+
+- Touches: the selected-family `chars` COPY row already acquired for appearance, existing identity bootstrap/proposals, and independent accept/adopt/read of `schema:height` and `schema:weight`.
+- Bound: at most two exact quantity facts per selected character inside the current command cap; unknown or invalid cells add at most one diagnostic each and never invent a native value.
+- Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
+
 ### Publish admitted VNDB public tag associations
 
 - Touches: extracted `tags` and `tags_vn` COPY rows for the selected works, one reviewed scheme/concept read per admitted binding, and the existing ordinary batch/candidate/current paths.
@@ -2016,6 +2022,13 @@ never guessed. Completeness stays a `wdt:P31` qualifier gap on the release-to-wo
 fact. These proposals do not contain VNDB votes, personal lists or score-derived
 facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA
 and 00/99 omitted components to year or month precision.
+
+Selected-family `chars` rows already reach `convertCrossMediaEntity`. Revision
+`cross-media-entities@4` publishes admitted height and weight from those COPY
+cells as exact native quantities with source units and citations. Appearance
+selection still owns identity; measurement cells never authorize acceptance.
+Decision: COPY `\N` and exact `0` are unknown measurement sentinels, not
+measured zero.
 
 The same production callers now attach admitted `releases_titles` rows to each
 selected release payload and convert them through `cross-media-entities@4`.
