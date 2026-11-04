@@ -115,6 +115,7 @@ test('Home public owners keep supplied text, empty and unavailable context, exac
     ...collection,
     summary: {
       ...collection.summary,
+      coverSource: 'owner',
       cover: {
         media: '00000000-0000-7000-8000-000000000004',
         width: 800,

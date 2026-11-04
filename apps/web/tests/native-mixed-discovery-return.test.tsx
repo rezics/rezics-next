@@ -132,7 +132,7 @@ test('native Collection, review and Space cards keep their supplied context and 
   expect(collection).toContain('Reading shelf');
   expect(collection).toContain('Short novels.');
   expect(collection).toContain('/en/collections/01a1a000-0000-7000-8000-000000000821');
-  expect(collection).not.toContain('members');
+  expect(collection).not.toContain('data-home-collection-preview');
   expect(review).toContain('Review');
   expect(review).toContain('A careful reread');
   expect(review).toContain('Current Reader');
