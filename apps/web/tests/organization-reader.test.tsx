@@ -156,13 +156,13 @@ test('history inspection follows the exact disclosed identity, returns focus, an
     source = {};
     await show();
     expect(host.textContent).toContain('Earlier Studio');
-    await settle(() => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
-    expect(host.querySelectorAll('a,button')).toHaveLength(0);
-    source = {};
     delete read.public.related[target];
+    source = {};
     await show();
     expect(host.textContent).toContain(m.people_biography_unreadable());
     expect([...host.querySelectorAll('a')].some((link) => link.href.includes(target))).toBe(false);
+    await settle(() => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
+    expect(host.querySelectorAll('a,button')).toHaveLength(0);
   } finally {
     await act(async () => root.unmount());
     client.clear();
