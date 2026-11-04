@@ -85,7 +85,7 @@ test('the existing native route revokes only a selected owned session and the ne
       const fixture = testDatabase();
       const pool = new Pool({ connectionString: fixture.url });
       try {
-        const ids = [randomUUID(), randomUUID()];
+        const ids: string[] = [randomUUID(), randomUUID()];
         const accounts = new Map(
           ids.map((id) => [
             id,
