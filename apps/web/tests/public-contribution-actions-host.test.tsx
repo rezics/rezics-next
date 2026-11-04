@@ -330,7 +330,7 @@ async function clickButton(root: HTMLElement, label: string) {
   const button = [...candidates].find(
     (candidate) => candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label,
   );
-  expect(button).toBeDefined();
+  expect(button, `${label}; found ${[...candidates].map((item) => item.textContent?.trim()).join(' | ')}`).toBeDefined();
   await act(async () => {
     button!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
