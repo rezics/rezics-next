@@ -27,6 +27,7 @@ import { Menu, type MenuEntry } from '@rezics/ui/menu';
 import { Input } from '@rezics/ui/shadcn/input';
 import { m } from '../../paraglide/messages.js';
 import type { Locale } from '../../paraglide/runtime.js';
+import type { ReactionCommandRecovery } from '../../threads/thread-reactions';
 import { observeReactionSession } from '../../threads/thread-reactions';
 import { VoteControl, type FeedReaction } from './vote-control';
 import type { FeedItem, FeedPage } from '../pages/home-feed-read';
@@ -34,6 +35,7 @@ import { homeFeedDestination, homeFeedTitle } from '../pages/home-feed-destinati
 import { PostActions } from '../../report/content-actions';
 import type { VerificationConfig } from '../../report/turnstile';
 import {
+  homeNativeReactionAdviceInstalled,
   homeFeedReaction,
   homeFeedReactionStatus,
   homeFeedSubjectReactionProjection,
@@ -201,8 +203,12 @@ export function HomeFeedActions({
   hasReactionFreshness = false,
   onRetry,
   busy = false,
+  commandRecovery,
+  reactionPending = false,
 }: {
   item: FeedItem;
+  commandRecovery?: ReactionCommandRecovery | undefined;
+  reactionPending?: boolean;
   locale: string;
   signedIn: boolean;
   children?: ReactNode;
@@ -246,7 +252,14 @@ export function HomeFeedActions({
       reaction={
         reaction && {
           ...reaction,
+          ...(kind !== 'subject' && homeNativeReactionAdviceInstalled && commandRecovery
+            ? {
+                commandRecovery,
+                personalReady: reaction.personalReady && !reactionPending,
+              }
+            : {}),
           onMutation: async () => {
+            if (kind !== 'subject' && homeNativeReactionAdviceInstalled && commandRecovery) return;
             if (origin?.isCurrent() ?? true) onRetry?.();
           },
         }

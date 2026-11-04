@@ -128,6 +128,7 @@ function nativeAdvice(item: FeedItem, input: { signedIn: boolean; origin?: FeedO
     signInAllowed: false,
     allowedKinds: allowed,
     optimistic: false,
+    settleWithRead: false,
     allowDiscard: true,
   };
 }
