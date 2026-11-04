@@ -7955,5 +7955,16 @@
   "discovery_score_concealed": "Las acciones de puntuación no están habilitadas para este lector.",
   "discovery_score_unavailable": "Las acciones de puntuación no están disponibles.",
   "thread_page_invalid_cursor": "Este enlace de página no es válido o ha caducado. Abre la primera página para continuar.",
-  "thread_page_restart": "Abrir la primera página"
+  "thread_page_restart": "Abrir la primera página",
+  "search_share_action": "Compartir la búsqueda ejecutada",
+  "search_share_draft": "Se excluyen los cambios sin aplicar. Esta es la última búsqueda ejecutada.",
+  "search_share_executed": "Esta es la última búsqueda ejecutada. Se aplican los permisos actuales del destinatario.",
+  "search_share_loading": "Preparando vista previa…",
+  "search_share_copy": "Copiar enlace",
+  "search_share_copied": "Enlace copiado.",
+  "search_share_refused": "Se rechazó la copia. Selecciona y copia el enlace de abajo.",
+  "search_share_oversized": "Esta búsqueda es demasiado grande para un enlace. Sigue editándola para reducirla.",
+  "search_share_private": "Esta búsqueda contiene condiciones privadas o no transferibles. Elimínalas explícitamente antes de compartir.",
+  "search_share_unavailable": "No se puede compartir ahora. Tu búsqueda se conserva; vuelve a intentarlo.",
+  "search_share_close": "Cerrar vista previa"
 }

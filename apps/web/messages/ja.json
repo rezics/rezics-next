@@ -7955,5 +7955,16 @@
   "discovery_score_concealed": "この閲覧者には評価操作が公開されていません。",
   "discovery_score_unavailable": "評価操作を利用できません。",
   "thread_page_invalid_cursor": "このページのリンクは無効か、有効期限が切れています。最初のページから続けてください。",
-  "thread_page_restart": "最初のページを開く"
+  "thread_page_restart": "最初のページを開く",
+  "search_share_action": "実行した検索を共有",
+  "search_share_draft": "未適用の編集は含まれません。最後に実行した検索です。",
+  "search_share_executed": "最後に実行した検索です。受信者の現在の権限が適用されます。",
+  "search_share_loading": "プレビューを準備中…",
+  "search_share_copy": "リンクをコピー",
+  "search_share_copied": "リンクをコピーしました。",
+  "search_share_refused": "コピーが拒否されました。以下のリンクを選択してコピーしてください。",
+  "search_share_oversized": "この検索はリンクには大きすぎます。編集して短くしてください。",
+  "search_share_private": "非公開または移植できない条件があります。共有前に明示的に削除してください。",
+  "search_share_unavailable": "共有を利用できません。検索は保持されています。再試行してください。",
+  "search_share_close": "プレビューを閉じる"
 }

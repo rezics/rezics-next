@@ -7955,5 +7955,16 @@
   "discovery_score_concealed": "此用户无法使用评分操作。",
   "discovery_score_unavailable": "评分操作暂时不可用。",
   "thread_page_invalid_cursor": "此页面链接无效或已过期。请从第一页继续。",
-  "thread_page_restart": "打开第一页"
+  "thread_page_restart": "打开第一页",
+  "search_share_action": "分享已执行的搜索",
+  "search_share_draft": "未应用的编辑不包含在内。这是上次执行的搜索。",
+  "search_share_executed": "这是上次执行的搜索。接收者仍须具有当前权限。",
+  "search_share_loading": "正在准备预览…",
+  "search_share_copy": "复制链接",
+  "search_share_copied": "链接已复制。",
+  "search_share_refused": "复制被拒绝。请选择并复制下方链接。",
+  "search_share_oversized": "此搜索过大，无法通过链接分享。请继续编辑以缩小搜索。",
+  "search_share_private": "此搜索含有私密或不可移植的条件。分享前请明确移除这些条件。",
+  "search_share_unavailable": "暂时无法分享。搜索已保留，请重试。",
+  "search_share_close": "关闭预览"
 }

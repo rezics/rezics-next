@@ -8030,5 +8030,16 @@
   "discovery_score_concealed": "Score actions are not exposed to this reader.",
   "discovery_score_unavailable": "Score actions are unavailable.",
   "thread_page_invalid_cursor": "This page link is invalid or out of date. Open the first page to continue.",
-  "thread_page_restart": "Open the first page"
+  "thread_page_restart": "Open the first page",
+  "search_share_action": "Share executed query",
+  "search_share_draft": "Unapplied edits are excluded. This is the last executed query.",
+  "search_share_executed": "This is the last executed query. Recipients use their current permissions.",
+  "search_share_loading": "Preparing preview…",
+  "search_share_copy": "Copy link",
+  "search_share_copied": "Link copied.",
+  "search_share_refused": "Copy was refused. Select and copy the link below.",
+  "search_share_oversized": "This query is too large for a link. Keep editing to reduce it.",
+  "search_share_private": "This query has private or nonportable conditions. Remove them explicitly before sharing.",
+  "search_share_unavailable": "Sharing is unavailable. Your query is preserved; try again.",
+  "search_share_close": "Close preview"
 }

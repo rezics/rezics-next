@@ -1,3 +1,5 @@
+import { prepareQueryShare } from '../query-share.ts';
+import { QueryShareSchema } from './query-share-schemas.ts';
 import { createTrendingSearchesService } from '../trending-searches.ts';
 import { requiresAdvancedDiscoverySearch } from '../discovery-request.ts';
 import type { DiscoverySearch } from '../discovery-service.ts';
@@ -360,6 +362,7 @@ export function searchRoutes<App>(
       {
         body: t.Object(
           {
+            prepareShare: t.Optional(t.Boolean()),
             representation: t.Optional(t.Union([t.Literal('discovery-v1'), t.Literal('release-groups-v1')])),
             kindPage: t.Optional(
               t.Object(
@@ -396,7 +399,7 @@ export function searchRoutes<App>(
           object,
         ),
         response: {
-          200: t.Union([searchResponse, DiscoveryPageSchema, releaseGroupsResponse, releaseChildrenResponse]),
+          200: t.Union([searchResponse, DiscoveryPageSchema, releaseGroupsResponse, releaseChildrenResponse, QueryShareSchema]),
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),
@@ -411,7 +414,7 @@ export function searchRoutes<App>(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      ({ body, authorize, admission, job, actor, set }) => {
+      async ({ body, authorize, admission, job, actor, set }) => {
         if (body.population !== undefined || body.representation === 'discovery-v1')
           set.headers['cache-control'] = 'private, no-store';
         if (body.representation === 'discovery-v1' && body.population !== undefined)
@@ -568,6 +571,20 @@ export function searchRoutes<App>(
             );
             return { ...page, children: enriched.subjects };
           });
+        }
+        if (body.prepareShare) {
+          set.headers['cache-control'] = 'private, no-store';
+          // Reuse exactly the mounted execution and grants. The link itself grants nothing.
+          if (body.representation === 'discovery-v1') await mixed();
+          else if (body.representation === 'release-groups-v1') await grouped();
+          else await catalogue();
+          const active = await activeRelease(pool);
+          const labels: Record<string, Record<string, string>> = {};
+          if (active) {
+            for (const [id, definition] of Object.entries(active.release.types)) labels[id] = definition.labels;
+            for (const [id, definition] of Object.entries(active.release.properties)) labels[id] = definition.labels;
+          }
+          return prepareQueryShare(body, labels);
         }
         if (body.representation === 'discovery-v1') return mixed();
         if (body.representation === 'release-groups-v1') return grouped();

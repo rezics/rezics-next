@@ -1907,3 +1907,22 @@ The lifecycle unit regressions are authored; native population, factory, receivi
 remain separate acceptance obligations. The dedicated retained-lifetime regressions cover expiry
 during successful and refused owner reads, delayed timer delivery, caller deadline mutation and
 late native final completion. These unit cases remain authored UNRUN.
+
+## Query sharing
+
+`POST /v1/subjects:search` with `prepareShare:true` returns a preparation projection after the ordinary execution,
+including current native admission and existing Search grants. It never writes a share document. The returned
+`parameters` uses the existing localized Search URL; opening it executes the complete predicate again under the
+recipient. Labels are explanatory language-tagged released metadata, never authority. The canonical document
+preserves raw text, Boolean branches, language preference order and ordering. Only explicit text/filter/languages/sort
+fields enter transport; result and kind cursors, principal, credentials and page metadata never do.
+
+Decision: references without a dedicated public portability projection (including saved filters and resource scopes)
+disable sharing rather than assuming that the executing reader's access proves portability.
+
+Cost: preparation reuses one ordinary bounded Search execution (at most 100 results) and one active-release read;
+it adds no enumeration, persistence or owner writes. The existing 1 MiB route body ceiling still applies. Canonical
+filter admission retains the grammar's 32 leaves, depth 4, OR 16, in 64 and four qualifiers. The portable document is
+at most 16 KiB UTF-8; preview adds at most 128 labels of 256 bytes each. Parameters reserve 128 bytes within an 8192-byte
+percent-encoded URL envelope; Web also measures the final same-origin URL including origin and locale. Overflow is
+nonshareable and retains the editor. A preparation refusal never retries as anonymous or removes a condition.
