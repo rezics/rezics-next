@@ -51,7 +51,7 @@ export function WorkbenchPage({
   const owner = useMemo(() => {
     if (typeof window === 'undefined' || !client) return undefined;
     return createPrivateReaderLifetime(client, page, workbenchReadKey(search), navigation);
-  }, [client, page, search, navigation]);
+  }, [client, page, search, navigation, read]);
   const version = useSyncExternalStore(owner?.subscribe ?? (() => () => {}), owner?.snapshot ?? (() => 0), () => 0);
   useEffect(() => () => owner?.retire(), [owner]);
   const retired = Boolean(owner && (!owner.healthy() || (search.history && !owner.available()))) && version >= 0;
