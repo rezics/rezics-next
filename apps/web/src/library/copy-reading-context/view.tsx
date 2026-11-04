@@ -62,7 +62,10 @@ export function CopyReadingContextView({
             </div>
           ) : null}
           {facts.map((fact, index) => (
-            <div key={`${fact.property}:${fact.subject?.id ?? fact.text}:${index}`} className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]">
+            <div
+              key={`${fact.property}:${fact.subject?.id ?? fact.text}:${index}`}
+              className="grid min-w-0 gap-x-2 sm:grid-cols-[5rem_minmax(0,1fr)]"
+            >
               <dt className="text-muted-foreground">{fact.label}</dt>
               <dd className="min-w-0 break-words">
                 {fact.subject ? (

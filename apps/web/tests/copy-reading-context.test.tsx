@@ -57,7 +57,9 @@ test('every native state is distinct and hidden states render no nested identity
     const root = window.document.createElement('main');
     root.innerHTML = renderToStaticMarkup(
       <>
-        {states.map(([context]) => <CopyReadingContextView key={context.state} context={context} locale="en" />)}
+        {states.map(([context]) => (
+          <CopyReadingContextView key={context.state} context={context} locale="en" />
+        ))}
         <CopyReadingContextView locale="en" />
       </>,
     );

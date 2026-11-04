@@ -27,12 +27,7 @@ function stringMap(value: unknown): value is Record<string, string> {
 function factOf(value: unknown): Fact | undefined {
   if (!isRecord(value) || typeof value.kind !== 'string') return;
   if (value.kind === 'item') {
-    if (
-      !onlyKeys(value, ['kind', 'id', 'labels']) ||
-      typeof value.id !== 'string' ||
-      !stringMap(value.labels)
-    )
-      return;
+    if (!onlyKeys(value, ['kind', 'id', 'labels']) || typeof value.id !== 'string' || !stringMap(value.labels)) return;
     return { kind: 'item', id: value.id, labels: value.labels };
   }
   if (value.kind === 'time') {
@@ -45,7 +40,11 @@ function factOf(value: unknown): Fact | undefined {
     };
   }
   if (value.kind === 'quantity') {
-    if (!onlyKeys(value, ['kind', 'amount', 'unit']) || typeof value.amount !== 'number' || !Number.isFinite(value.amount))
+    if (
+      !onlyKeys(value, ['kind', 'amount', 'unit']) ||
+      typeof value.amount !== 'number' ||
+      !Number.isFinite(value.amount)
+    )
       return;
     if (typeof value.unit !== 'string') return;
     return { kind: 'quantity', amount: value.amount, unit: value.unit };
@@ -108,7 +107,10 @@ function parseCopyListContext(value: unknown): NativeCopyListContext {
     return facts ? { state: 'unsupported', facts } : unavailableCopyListContext();
   }
   if (
-    (value.state === 'scope' || value.state === 'withheld' || value.state === 'missing' || value.state === 'unavailable') &&
+    (value.state === 'scope' ||
+      value.state === 'withheld' ||
+      value.state === 'missing' ||
+      value.state === 'unavailable') &&
     onlyKeys(value, ['state'])
   )
     return { state: value.state };
@@ -124,7 +126,10 @@ export function copyListContextFromNativeRow(copy: object): NativeCopyListContex
   return parseCopyListContext(context);
 }
 
-function selectedLabel(labels: Record<string, string>, locale: string): Pick<CopyReadingIdentity, 'label' | 'labelLanguage'> | undefined {
+function selectedLabel(
+  labels: Record<string, string>,
+  locale: string,
+): Pick<CopyReadingIdentity, 'label' | 'labelLanguage'> | undefined {
   const baseLanguage = locale.split('-')[0];
   const language = [locale, ...(baseLanguage ? [baseLanguage] : []), 'en'].find((candidate) => !!labels[candidate]);
   if (!language) return;
@@ -150,7 +155,9 @@ function presentedFacts(
   release: Pick<Release, 'properties'>,
   locale: string,
 ): CopyReadingFact[] {
-  const properties = Object.keys(facts).filter((property) => property !== 'schema:exampleOfWork').slice(0, 4);
+  const properties = Object.keys(facts)
+    .filter((property) => property !== 'schema:exampleOfWork')
+    .slice(0, 4);
   const labels = propertyLabels(release, properties, locale);
   const visible: CopyReadingFact[] = [];
   for (const property of properties) {

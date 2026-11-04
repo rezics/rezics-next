@@ -68,9 +68,7 @@ test('FULL page context stays per copy, preserves qualified facts, and performs 
       'schema:datePublished': { datatype: 'time', labels: { en: 'Publication date' } },
     },
   };
-  const contexts = page.copies.map((copy) =>
-    presentCopyListContext(copy.nativeReadingContext!, release, 'en'),
-  );
+  const contexts = page.copies.map((copy) => presentCopyListContext(copy.nativeReadingContext!, release, 'en'));
   expect(contexts[0]).toMatchObject({ state: 'available', work: [{ id: workId, label: 'Shared work' }] });
   expect(contexts[1]).toMatchObject({ state: 'unsupported' });
   expect(contexts[1]?.state === 'unsupported' && contexts[1].facts).toContainEqual(

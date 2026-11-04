@@ -133,7 +133,11 @@ async function copiesPageBody(input: unknown, current: boolean): Promise<CopiesC
     const release = await readRelease().catch(() => ({ types: {}, properties: {} }));
     page.copies = page.copies.map(({ nativeReadingContext, ...copy }) => ({
       ...copy,
-      readingContext: presentCopyListContext(nativeReadingContext ?? unavailableCopyListContext(), release, requested.locale),
+      readingContext: presentCopyListContext(
+        nativeReadingContext ?? unavailableCopyListContext(),
+        release,
+        requested.locale,
+      ),
     }));
     const pageSubject = page.subjectId
       ? (page.copies.find((copy) => copy.subject?.id === page.subjectId)?.subject ??
