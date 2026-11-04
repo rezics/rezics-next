@@ -1,7 +1,6 @@
 import { expect, mock, spyOn, test } from 'bun:test';
-import { createKernelClient, type KernelClient } from '@rezics/client';
+import type { KernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
-import { loadThreadPage } from '../src/threads/thread-page';
 
 const sessionId = 'a'.repeat(43);
 const csrfToken = 'A'.repeat(22);
@@ -12,6 +11,7 @@ const revisionId = 'revision-one';
 const subjectId = 'subject-one';
 let request: Request;
 let native: KernelClient;
+let signedIn = true;
 const responseHeaders = new Headers();
 
 mock.module('@tanstack/react-start', () => start);
@@ -30,7 +30,10 @@ mock.module('cloudflare:workers', () => ({
     SESSIONS: {
       idFromName: () => sessionId,
       get: () => ({
-        credential: async () => ({ status: 'active', subject: 'viewer-one', accessToken: 'access', csrfToken }),
+        credential: async () =>
+          signedIn
+            ? { status: 'active', subject: 'viewer-one', accessToken: 'access', csrfToken }
+            : { status: 'absent', csrfToken: null },
       }),
     },
   },
@@ -106,43 +109,17 @@ function personalClient(reactions: Record<string, ReactionResult> = {}) {
   return { client, calls };
 }
 
-test('an anonymous thread page read ignores a session cookie and sends no credential', async () => {
-  const calls: Request[] = [];
-  let sessionReads = 0;
-  const client = createKernelClient('https://kernel.test', {
-    fetch: async (input, init) => {
-      const wireRequest = new Request(input, init);
-      calls.push(wireRequest);
-      const path = new URL(wireRequest.url).pathname;
-      if (path.endsWith('/posts')) return Response.json({ posts: [], next: null });
-      return Response.json({ thread: { id: 'thread', firstPost: { id: 'opening' } } });
-    },
-  });
-  await loadThreadPage(
-    client as KernelClient,
-    new Request('https://site.test/en/threads/thread/title', {
-      headers: { cookie: `__Host-rezics_session=${sessionId}` },
-    }),
-    {
-      SITE_ORIGINS: site,
-      SESSIONS: {
-        idFromName() {
-          sessionReads += 1;
-          return 'session';
-        },
-        get() {
-          sessionReads += 1;
-          throw new Error('session must not be read');
-        },
-      },
-    } as never,
-    { id: 'thread' },
-    { sitekey: '', scriptUrl: 'https://site.test/turnstile.js' },
-    'anonymous',
-  );
-  expect(sessionReads).toBe(0);
-  expect(calls.length).toBeGreaterThan(0);
-  expect(calls.every((call) => call.headers.get('authorization') === null)).toBe(true);
+test('an anonymous personal response is not an empty signed-in reaction slot', async () => {
+  signedIn = false;
+  requestFor();
+  try {
+    const result = await readModule.readThreadPersonal({
+      data: { id: threadId, postIds: [postId], readReactions: true },
+    });
+    expect(result).toEqual({ viewerId: null, reactions: {}, reviewVotes: {} });
+  } finally {
+    signedIn = true;
+  }
 });
 
 test('composed personal reads skip reaction fanout and retain exact author revision votes', async () => {
