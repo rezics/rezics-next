@@ -453,7 +453,9 @@ export function NotificationsCard({
                       aria-describedby={waitDescription}
                       onClick={() => void editor.submit(version)}
                     >
-                      {state.intent === null ? m.settings_notifications_restore() : m.settings_notifications_save_draft()}
+                      {state.intent === null
+                        ? m.settings_notifications_restore()
+                        : m.settings_notifications_save_draft()}
                     </Button>
                   ) : null}
                   {!state.pending ? (
