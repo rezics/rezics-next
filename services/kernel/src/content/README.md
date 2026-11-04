@@ -4014,3 +4014,13 @@ this route in this attempt, so no installed declaration head or typing evidence 
   Measure the complete operation including every native producer/consumer phase, indexed prefix, row/block,
   materialized byte, retained raw body, copy and serialization. A final LIMIT or response-byte rejection does not
   establish a bound on work already materialized upstream.
+
+### Current Home personal Library composition
+
+[Current Home personal facts](../../../../docs/feeds.md#current-home-personal-facts) owns the
+response and full per-page cost. `feed-viewer.ts` calls the installed native personal-actions
+reader once per authenticated Home page and retains raw duplicate occurrence keys. Final
+Home source loads use the original cursor operands and repeat actual content/Subject and
+Space/Realm/publication disclosure; no private overlay can admit its own source. The mounted
+schema extends Library's native facts schema and flows through the existing generated FeedPage
+root export at the complete-input publication stage. Web retains its receiver and writers.
