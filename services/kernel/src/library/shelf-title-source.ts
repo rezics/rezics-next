@@ -56,8 +56,17 @@ export async function currentShelfTitleBasis(
   languages: readonly string[],
   viewer: AccountActor,
 ): Promise<string> {
-  const current = await source?.basis(owner, languages, viewer);
-  if (current?.status !== 'current' || !current.version || current.version.length > 256)
-    throw new ShelfReadUnavailableError('complete current Content title/disclosure basis');
+  if (!source)
+    throw new ShelfReadUnavailableError('Content shelfTitleInputs.observe complete-source producer installation');
+  const current = await source.basis(owner, languages, viewer);
+  if (
+    current.status !== 'current' ||
+    typeof current.version !== 'string' ||
+    !current.version ||
+    current.version.length > 256
+  )
+    throw new ShelfReadUnavailableError(
+      'Content complete whole-source title/disclosure/redirect/identity/source-owner observation',
+    );
   return current.version;
 }

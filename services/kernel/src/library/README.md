@@ -1690,6 +1690,9 @@ policy and viewer lifetime without deriving currentness from loaded labels. The 
 unimplemented integration seam; the adapter itself cannot establish complete-source currentness.
 Content still owns installation of that native producer and root client publication. Their absence
 is explicit preparation, including on a retained Web title URL; no default source or saved preference claims readiness.
+Decision: keep the retained title URL in preparation until Content delivers its complete-source callable and official
+root client; Library reports whether producer installation, whole-source observation, exact disclosed batch or stable
+post-batch basis is missing. A version string alone is not a substitute for the producer's complete observation.
 Receiving the published native client, automatic preparation and the native independent 64/512/4096 full-caller
 measurements remain in the continuation. Installed typing, focused cases and rendered review are separate observations;
 no native growth or rendered proof is claimed here.
