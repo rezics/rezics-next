@@ -78,6 +78,7 @@ test('Create an independently identified edition or publication linked to its re
   const fixture = publicationFixture();
   const read = await fixture.transport.load();
   if (!read.ok) throw new Error('Expected real-shaped work read');
+  expect(fixture.calls.some((call) => call.path === '/v1/viewerActions')).toBe(false);
   const initial = draft(read);
   expect(initial.errors).toEqual([]);
   const command: PublicationCommand = {

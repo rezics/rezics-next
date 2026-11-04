@@ -11,6 +11,7 @@ import {
   type InitialSubject,
   type TermDraft,
 } from './create-subject';
+import type { CreateAuthority } from './identity-intake';
 import { creationStatement, editableScalar, emptyCreationStatement, type StatementInput } from './statement-editor';
 import { definitionText } from './definition-guide';
 
@@ -30,6 +31,8 @@ export type PublicationProfile = {
 };
 export type PublicationTransport = {
   load: (refresh?: boolean) => Promise<PublicationRead>;
+  /** Current Global Context subject.create observation. Independent of the disclosed work. */
+  eligibility?: () => Promise<CreateAuthority>;
   submit: (command: PublicationCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
 };

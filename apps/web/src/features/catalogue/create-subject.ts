@@ -49,7 +49,7 @@ export type CreateResult = CreateFailure | { ok: true; id: string; reader: Creat
 export type CreateTransport = {
   definitions?: (refresh?: boolean) => Promise<CreateDefinitions>;
   typeDirectory?: TypeDirectoryTransport;
-  /** Current parent subject.create observation. Absent on specialized profile creators. */
+  /** Current parent subject.create observation. Specialized publication creation binds the same observation. */
   eligibility?: () => Promise<CreateAuthority>;
   submit: (command: CreateSubjectCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;

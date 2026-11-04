@@ -1,5 +1,5 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
 import { ContentItem, ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import type { EntityPickerSearch, EntityPickerSubject } from '@rezics/ui/entity-picker';
@@ -23,6 +23,12 @@ import { m } from '../../paraglide/messages.js';
 import { PageHeading } from '../../shell/page-heading';
 import { subjectHref } from '../../subject/subject-href';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
+import {
+  isAllowedCreateAuthority,
+  observedCreateAuthority,
+  type CreateAuthority,
+} from './identity-intake';
+import { CreateAuthorityStatus } from './identity-intake-view';
 import {
   publicationDraft,
   publicationWorkStatement,
@@ -76,15 +82,74 @@ function PublicationEditorLive({
 }) {
   const id = useId();
   const lifetime = useEditorLifetime();
+  const client = useQueryClient();
   const localDraft = useRef(false);
   const navigation = usePublicationEditorNavigation(() => localDraft.current);
   const stay = useRef<HTMLButtonElement>(null);
   const o = { locale: locale as never };
+  const viewer = useRef({ work, locale, session });
+  viewer.current = { work, locale, session };
   const query = useQuery({
     queryKey: [...['publication-editor', work, locale], lifetime.generation],
     queryFn: () => transport.load(),
     retry: false,
   });
+  const eligibilityKey = ['publication-editor', 'eligibility', locale, String(lifetime.generation), session];
+  const eligibilityQuery = useQuery({
+    queryKey: eligibilityKey,
+    queryFn: async () => {
+      if (session === 'signed-out') return { state: 'guest' } satisfies CreateAuthority;
+      if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' } satisfies CreateAuthority;
+      return observedCreateAuthority(await transport.eligibility());
+    },
+    enabled: !!transport.eligibility && session !== 'unknown' && session !== 'unavailable',
+    retry: false,
+    staleTime: 0,
+  });
+  const observedAuthority: CreateAuthority | null = !transport.eligibility
+    ? null
+    : session === 'signed-out'
+      ? { state: 'guest' }
+      : session === 'unknown' || session === 'unavailable'
+        ? null
+        : eligibilityQuery.data
+          ? observedCreateAuthority(eligibilityQuery.data)
+          : eligibilityQuery.isError
+            ? { state: 'unknown', reason: 'unavailable' }
+            : null;
+  async function refreshCreateEligibility(): Promise<CreateAuthority> {
+    if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' };
+    if (session === 'signed-out') return { state: 'guest' };
+    const started = viewer.current;
+    try {
+      const next = observedCreateAuthority(
+        await client.fetchQuery({
+          queryKey: eligibilityKey,
+          queryFn: () => transport.eligibility!(),
+          staleTime: 0,
+          retry: false,
+        }),
+      );
+      if (
+        !lifetime.active() ||
+        viewer.current.session !== started.session ||
+        viewer.current.locale !== started.locale ||
+        viewer.current.work !== started.work
+      )
+        return { state: 'unknown', reason: 'unavailable' };
+      return next;
+    } catch {
+      const next: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+      if (
+        lifetime.active() &&
+        viewer.current.session === started.session &&
+        viewer.current.locale === started.locale &&
+        viewer.current.work === started.work
+      )
+        client.setQueryData(eligibilityKey, next);
+      return next;
+    }
+  }
   const recoveryScope = JSON.stringify([work, locale, session, lifetime.generation]);
   const recoveryFocus = useRef<
     | {
@@ -135,6 +200,8 @@ function PublicationEditorLive({
   const uncertain = failure?.reason === 'unavailable' && command.current !== null;
   const locked = busy || uncertain || (failure?.reason === 'conflict' && !reviewDefinitions);
   const disabled = locked || session !== 'signed-in' || !read || refreshRequiredRef.current;
+  const eligibilityBlocksNewCreate =
+    !!transport.eligibility && !command.current && !isAllowedCreateAuthority(observedAuthority);
   const admission = useRef({ disabled, created, field });
   admission.current = { disabled, created, field };
   const editable = () =>
@@ -342,9 +409,11 @@ function PublicationEditorLive({
       session !== 'signed-in' ||
       failure?.reason === 'conflict' ||
       reviewDefinitions ||
-      refreshRequired
+      refreshRequired ||
+      eligibilityBlocksNewCreate
     )
       return;
+    const started = viewer.current;
     if (!command.current) {
       if (!reviewing) {
         const draft = publicationDraft(
@@ -365,6 +434,17 @@ function PublicationEditorLive({
         return;
       }
       if (!reviewed) return;
+      if (transport.eligibility) {
+        const current = await refreshCreateEligibility();
+        if (
+          !lifetime.active() ||
+          viewer.current.session !== started.session ||
+          viewer.current.locale !== started.locale ||
+          viewer.current.work !== started.work
+        )
+          return;
+        if (!isAllowedCreateAuthority(current)) return;
+      }
       command.current = { work, relation, item: structuredClone(reviewed), key: crypto.randomUUID() };
       setDraftProfile(profile);
       setDraftNames(
@@ -382,7 +462,14 @@ function PublicationEditorLive({
     setFailure(undefined);
     try {
       const result = await transport.submit(command.current);
-      if (!lifetime.active() || renderedReadingGeneration !== readingGeneration.current) return;
+      if (
+        !lifetime.active() ||
+        renderedReadingGeneration !== readingGeneration.current ||
+        viewer.current.session !== started.session ||
+        viewer.current.locale !== started.locale ||
+        viewer.current.work !== started.work
+      )
+        return;
       if (result.ok) {
         admission.current.created = result;
         localDraft.current = false;
@@ -413,16 +500,30 @@ function PublicationEditorLive({
   async function openCreated() {
     if (!lifetime.active()) return;
     if (!created || running.current) return;
+    const started = viewer.current;
+    const acknowledged = created;
     running.current = true;
     setBusy(true);
     try {
-      const reader = await transport.read(created.id);
-      if (!lifetime.active()) return;
-      setCreated({ ...created, reader });
+      const reader = await transport.read(acknowledged.id);
+      if (
+        !lifetime.active() ||
+        viewer.current.session !== started.session ||
+        viewer.current.locale !== started.locale ||
+        viewer.current.work !== started.work
+      )
+        return;
+      setCreated({ ...acknowledged, reader });
       if (reader.state === 'ready') onNavigate(reader.href);
     } catch {
-      if (!lifetime.active()) return;
-      setCreated({ ...created, reader: { state: 'unavailable' } });
+      if (
+        !lifetime.active() ||
+        viewer.current.session !== started.session ||
+        viewer.current.locale !== started.locale ||
+        viewer.current.work !== started.work
+      )
+        return;
+      setCreated({ ...acknowledged, reader: { state: 'unavailable' } });
     } finally {
       if (!lifetime.active()) return;
       running.current = false;
@@ -494,6 +595,17 @@ function PublicationEditorLive({
         </ContentItemFrame>
       ) : (
         <>
+          {transport.eligibility && session !== 'unknown' && session !== 'unavailable' ? (
+            <CreateAuthorityStatus
+              locale={locale}
+              authority={observedAuthority}
+              href={`/${locale}/catalogue/publication?work=${work}`}
+              {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { pending: true } : {})}
+              onRetry={() => {
+                void refreshCreateEligibility();
+              }}
+            />
+          ) : null}
           {query.isPending && (
             <ContentItemFrame as="div" role="status" className="p-4">
               {m.catalogue_create_loading({}, o)}
@@ -625,7 +737,7 @@ function PublicationEditorLive({
                   {m.catalogue_create_unavailable({}, o)}
                 </ContentItemFrame>
               )}
-              {session === 'signed-out' && (
+              {session === 'signed-out' && !transport.eligibility && (
                 <p>
                   {m.catalogue_create_signed_out({}, o)}{' '}
                   <a
@@ -861,7 +973,8 @@ function PublicationEditorLive({
                     session !== 'signed-in' ||
                     failure?.reason === 'conflict' ||
                     reviewDefinitions ||
-                    refreshRequired
+                    refreshRequired ||
+                    eligibilityBlocksNewCreate
                   }
                 >
                   {busy

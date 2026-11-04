@@ -2,6 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import type { CreateFailure } from '../src/features/catalogue/create-subject';
+import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { PublicationCommand, PublicationTransport } from '../src/features/catalogue/publication-editor';
 import type { PublicationScenario } from '../src/kernel/fake/publication-editor';
 
@@ -887,6 +888,227 @@ test('independent publication creation, local corrections, immutable recovery an
     await act(async () => user.click(body.getByRole('button', { name: m.thread_authoring_leave() })));
     expect(router.state.location.search).toEqual({ page: 'other' });
     expect(host.querySelector('article')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    host.remove();
+    await window.happyDOM.close();
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}, 30_000);
+
+test('publication creation uses Global Context eligibility independently of the disclosed work', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/catalogue/publication' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    Element: window.Element,
+    Node: window.Node,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  mock.module('cloudflare:workers', () => ({ env: {} }));
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+  const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
+  const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
+  const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
+  const { PublicationEditor } = await import('../src/features/catalogue/publication-editor-form');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { publicationFixture, publicationCreatedId } = await import('../src/kernel/fake/publication-editor');
+  const { m } = await import('../src/paraglide/messages.js');
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement, { identifierPrefix: ':publication-eligibility:' });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const user = userEvent.setup({ document: window.document, delay: null });
+  const canvas = within(host as unknown as HTMLElement);
+  type Entry = {
+    session: 'signed-in' | 'signed-out';
+    observation: CreateAuthority | Promise<CreateAuthority>;
+    fixture: ReturnType<typeof publicationFixture>;
+    commands: PublicationCommand[];
+    reads: string[];
+    transport: PublicationTransport;
+  };
+  let entry: Entry | undefined;
+  const Scene = () =>
+    entry ? (
+      <CandidateReaderBoundary
+        address="publication-eligibility"
+        observed={
+          entry.session === 'signed-in'
+            ? { state: 'signed-in' as const, subject: 'reader', csrfToken: 'eligibility-epoch' }
+            : { state: 'signed-out' as const, csrfToken: null }
+        }
+      >
+        <PublicationEditor
+          work={entry.fixture.work.subject.id}
+          locale="en"
+          session={entry.session}
+          transport={entry.transport}
+          search={async () => []}
+          onNavigate={() => {}}
+        />
+      </CandidateReaderBoundary>
+    ) : null;
+  const router = createRouter({
+    routeTree: createRootRoute({ component: Scene }),
+    history: createMemoryHistory({ initialEntries: ['/'] }),
+  });
+  const draw = () =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      ),
+    );
+  function make(observation: CreateAuthority | Promise<CreateAuthority>, scenario: PublicationScenario = 'ready'): Entry {
+    const fixture = publicationFixture(scenario);
+    const commands: PublicationCommand[] = [];
+    const reads: string[] = [];
+    let current = observation;
+    const next: Entry = {
+      session: 'signed-in',
+      observation,
+      fixture,
+      commands,
+      reads,
+      transport: {
+        load: () => fixture.transport.load(),
+        eligibility: async () => current,
+        submit: async (command) => {
+          commands.push(structuredClone(command));
+          return fixture.transport.submit(command);
+        },
+        read: async (id) => {
+          reads.push(id);
+          return fixture.transport.read(id);
+        },
+      },
+    };
+    Object.defineProperty(next, 'observation', {
+      get: () => current,
+      set: (value: CreateAuthority | Promise<CreateAuthority>) => {
+        current = value;
+      },
+    });
+    return next;
+  }
+  const mount = async (next: Entry) => {
+    entry = next;
+    client.clear();
+    await draw();
+  };
+  const scope = () => within(canvas.getByRole('article'));
+  const reviewButton = () => scope().getByRole('button', { name: m.publication_review() }) as HTMLButtonElement;
+  const ready = async () => {
+    await scope().findByRole('textbox', { name: m.catalogue_create_label() });
+    await act(async () => {
+      await user.clear(scope().getByRole('textbox', { name: m.catalogue_create_label() }));
+      await user.type(scope().getByRole('textbox', { name: m.catalogue_create_label() }), 'A distinct edition');
+      await user.click(scope().getByRole('checkbox', { name: m.publication_independent() }));
+    });
+  };
+  try {
+    const refused = make({ state: 'refused', reason: 'permission' });
+    await mount(refused);
+    await ready();
+    await waitFor(() =>
+      expect(scope().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    );
+    expect(scope().getByRole('heading', { name: refused.fixture.work.subject.labels.en!, level: 2 })).toBeDefined();
+    expect(reviewButton().disabled).toBe(true);
+    expect(
+      (scope().getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value,
+    ).toBe('A distinct edition');
+    expect(refused.commands).toHaveLength(0);
+
+    const unknown = make({ state: 'unknown', reason: 'unavailable' });
+    await mount(unknown);
+    await ready();
+    await waitFor(() =>
+      expect(scope().getByRole('alert').textContent).toContain(m.identity_intake_authority_unknown()),
+    );
+    expect(scope().getByRole('heading', { name: unknown.fixture.work.subject.labels.en!, level: 2 })).toBeDefined();
+    expect(reviewButton().disabled).toBe(true);
+    unknown.observation = allowedCreateAuthority;
+    await act(async () => user.click(scope().getByRole('button', { name: m.identity_intake_authority_retry() })));
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_allowed())).toBeDefined());
+    expect(reviewButton().disabled).toBe(false);
+
+    const revoked = make(allowedCreateAuthority);
+    await mount(revoked);
+    await ready();
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_allowed())).toBeDefined());
+    await act(async () => user.click(reviewButton()));
+    await scope().findByRole('heading', { name: m.publication_review() });
+    revoked.observation = { state: 'refused', reason: 'permission' };
+    await act(async () => user.click(scope().getByRole('button', { name: m.publication_submit() })));
+    await waitFor(() =>
+      expect(scope().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    );
+    expect(revoked.commands).toHaveLength(0);
+    expect(scope().getByRole('heading', { name: m.publication_review() })).toBeDefined();
+
+    const concealed = make(allowedCreateAuthority, 'concealed');
+    await mount(concealed);
+    await scope().findByRole('alert');
+    expect(canvas.getByRole('article').textContent).toContain(m.catalogue_create_concealed());
+    expect(canvas.getByRole('article').querySelector('form')).toBeNull();
+    expect(concealed.commands).toHaveLength(0);
+
+    let lateAllowed: (value: CreateAuthority) => void = () => {};
+    const delayed = make(new Promise<CreateAuthority>((resolve) => (lateAllowed = resolve)));
+    await mount(delayed);
+    await ready();
+    expect(reviewButton().disabled).toBe(true);
+    delayed.session = 'signed-out';
+    await draw();
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_guest())).toBeDefined());
+    await scope().findByRole('button', { name: m.publication_review() });
+    lateAllowed(allowedCreateAuthority);
+    await act(async () => {});
+    expect(reviewButton().disabled).toBe(true);
+    expect(delayed.commands).toHaveLength(0);
+
+    const uncertain = make(allowedCreateAuthority, 'uncertain');
+    await mount(uncertain);
+    await ready();
+    await waitFor(() => expect(scope().getByText(m.identity_intake_authority_allowed())).toBeDefined());
+    await act(async () => user.click(reviewButton()));
+    await scope().findByRole('heading', { name: m.publication_review() });
+    await act(async () => user.click(scope().getByRole('button', { name: m.publication_submit() })));
+    await scope().findByRole('heading', { name: m.catalogue_create_uncertain(), level: 2 });
+    expect(uncertain.commands).toHaveLength(1);
+    const sealed = uncertain.commands[0]!;
+    uncertain.observation = { state: 'refused', reason: 'permission' };
+    await act(async () => user.click(scope().getByRole('button', { name: m.catalogue_create_retry() })));
+    await scope().findByRole('link', { name: m.catalogue_create_open() });
+    expect(uncertain.commands).toEqual([sealed, sealed]);
+    expect(uncertain.commands[0]!.work).toBe(uncertain.fixture.work.subject.id);
+    expect(uncertain.commands[0]!.work).not.toBe(publicationCreatedId);
+    expect(uncertain.reads).toEqual([]);
   } finally {
     await act(async () => root.unmount());
     client.clear();
