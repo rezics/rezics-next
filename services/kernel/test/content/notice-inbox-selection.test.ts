@@ -22,12 +22,20 @@ beforeAll(async () => {
     .map(([version, key]) => `${version}:${Buffer.from(key).toString('base64url')}`)
     .join(',');
   fixture = await reactionFixture();
+  const verified = await fixture.verified();
+  if (verified.kind !== 'account') throw new Error('expected an account viewer');
+  await fixture.db.admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES ($1,$2,$2,'account:read','(,)',$2) ON CONFLICT DO NOTHING`,
+    [routeOf(fixture.accountId), fixture.accountId],
+  );
   inbox = {
     pool: fixture.db.pool,
     routeKey: new Uint8Array(32).fill(71),
     access: fixture.access,
-    actor: await fixture.verified(),
+    actor: { ...verified, authnEpoch: Math.max(verified.authnEpoch, 1) },
     tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
+    deadline: Date.now() + 180_000,
   };
 }, 120_000);
 afterAll(async () => {
