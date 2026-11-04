@@ -153,6 +153,7 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
       bindingGroups: groups,
     });
     const refreshed = commands.slice(beforeRefresh).filter((command) => ['schema:gamePlatform', 'wdt:P437'].includes(propertyOf(command)));
+    console.log(JSON.stringify({ changed: changed.runs.vndb?.counts, gaps: changed.gaps, refreshed: commands.slice(beforeRefresh) }));
     expect(changed.runs.vndb?.counts.changed).toBeGreaterThan(0);
     expect(refreshed.filter((command) => propertyOf(command) === 'schema:gamePlatform').map(targetOf).sort()).toEqual(
       [ids.get('mac'), ids.get('win')].sort(),
