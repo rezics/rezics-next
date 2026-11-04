@@ -1,3 +1,5 @@
+import { isCalendarDate } from '@rezics/filter';
+
 /** Loan dates are complete Gregorian calendar days, never timestamps. */
 export class LoanInvalidError extends Error {
   constructor(readonly field: string) {
@@ -13,9 +15,7 @@ export function loanDate(value: unknown, field: string): string {
   const year = Number(value.slice(0, 4));
   const month = Number(value.slice(5, 7));
   const day = Number(value.slice(8, 10));
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  if (year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1]!) throw new LoanInvalidError(field);
+  if (year < 1 || !isCalendarDate({ year, month, day })) throw new LoanInvalidError(field);
   return value;
 }
 

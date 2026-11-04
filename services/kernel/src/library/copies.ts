@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { isCalendarDate } from '@rezics/filter';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
@@ -144,15 +145,13 @@ function within(value: string, max: number): boolean {
 
 /** Calendar date `YYYY-MM-DD`. PostgreSQL `char_length` and date checks reject the same bounds. */
 function isoDate(value: string): boolean {
+  if (value.length !== 10) return false;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return false;
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  if (year < 1 || month < 1 || month > 12) return false;
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return day >= 1 && day <= days[month - 1]!;
+  return year >= 1 && isCalendarDate({ year, month, day });
 }
 
 function subjectId(value: unknown): string {
