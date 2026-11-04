@@ -144,12 +144,7 @@ export function validateCaptureEvidence(capture: Capture): void {
     backgroundStatementCount,
   );
   requireParallel(capture.backgroundPlanBackends, 'backgroundPlanBackends', 'backgroundPlans', backgroundPlanCount);
-  requireParallel(
-    capture.backgroundPlanDatabases,
-    'backgroundPlanDatabases',
-    'backgroundPlans',
-    backgroundPlanCount,
-  );
+  requireParallel(capture.backgroundPlanDatabases, 'backgroundPlanDatabases', 'backgroundPlans', backgroundPlanCount);
 
   requireOwners(capture.planStatements, 'planStatements', capture.statements.length);
   requireOwners(capture.backgroundPlanStatements, 'backgroundPlanStatements', backgroundStatementCount);
