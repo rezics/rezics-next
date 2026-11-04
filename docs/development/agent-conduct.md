@@ -80,8 +80,10 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   - anything hard to reverse.
     Simple, local designs need no research.
 - Managers propose such research to the supermanager, who decides whether the design is complex. A complex design
-  gets two independent researchers on the same brief: GPT-6 Astra at xhigh effort and Claude Opus 5.5. Neither sees
-  the other's work. Each writes `docs/research/<topic>-<researcher>.md`.
+  gets one researcher, Claude Opus 5.5. GPT-6 Astra is expensive. It is used only for a very important decision,
+  such as a cross-cutting architecture or one costly to reverse, and the supermanager decides when. Astra then runs
+  at xhigh effort as a second, independent researcher on the same brief, and neither sees the other's work.
+  Each writes `docs/research/<topic>-<researcher>.md`.
 - A research brief states the decision the research must enable, the context and evidence to read, competing
   hypotheses, the requirements every candidate is tested against, and the deliverables. Researchers measure where
   they can. They cite only sources they retrieved, track their confidence, and end with what would change the

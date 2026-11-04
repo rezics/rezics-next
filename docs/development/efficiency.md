@@ -72,8 +72,18 @@ provides the evidence.
 ## Operating discipline
 
 Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
-Keep allowance balances, account selection and operating ceilings in private configuration. Tokens consumed and
-nominal model price are diagnostic inputs, not success measures.
+Keep allowance balances, account selection and operating ceilings in private configuration.
+
+Token efficiency is a primary measure, beside output: allowance spent per landed product line and per landed
+outcome, tracked per Goal, task class and model profile. It improves in three ways:
+
+- **Clear prompts.** Briefs and role prompts are short, current and free of contradiction, as set out in
+  [instructions and documentation](documentation.md).
+- **The simplest model that does the work.** A well-specified implementation journey runs on GPT-6 Luna at max
+  effort. Stronger models are kept for the work that needs them: review-prone or citation-heavy work, hard
+  debugging, and design. Change a routing default only after comparing profiles on representative accepted work.
+- **No rework.** Attempts that end without landing are the largest token cost. Remove their causes, as set out under
+  "Output and flow".
 
 Record attempts and accepted landings by Goal, task class and model profile. Include failed, replaced and abandoned
 attempts. Count resumed cumulative usage by deltas, once.
