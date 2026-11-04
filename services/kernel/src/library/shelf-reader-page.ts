@@ -2,6 +2,7 @@ import {
   isShelfEntryState,
   MAX_SHELF_PAGE_SIZE,
   type ShelfDateReader,
+  type ShelfDateRows,
   type ShelfPageReader,
 } from './shelf-contract.ts';
 import { routeOf } from '../route/route.ts';
@@ -12,6 +13,7 @@ import { createShelfCreatedAscReader } from './shelf-page-created-asc.ts';
 import { createShelfFinishedAscReader } from './shelf-page-finished-asc.ts';
 import { createShelfFinishedDescReader } from './shelf-page-finished-desc.ts';
 import { createShelfScoreReader } from './shelf-score.ts';
+import { createShelfTitleReader } from './shelf-title-reader.ts';
 import { createEntryPriorityReaders } from './entry-priority-page.ts';
 import all from './shelf-reader-created-desc.sql';
 import state from './shelf-reader-created-desc-state.sql';
@@ -77,17 +79,20 @@ export function createShelfPageReader(): ShelfPageReader {
     finishedAt: { asc: createShelfFinishedAscReader(), desc: createShelfFinishedDescReader() },
   };
   const score = createShelfScoreReader();
+  const title = createShelfTitleReader();
   const priority = createEntryPriorityReaders();
   const active = createShelfActiveReader();
   return {
     async page(client, route, accountId, query, after) {
       const reader =
-        query.orderBy === 'personalScore'
+        query.orderBy === 'title'
+          ? title
+          : query.orderBy === 'personalScore'
           ? score
           : query.orderBy === 'priority'
             ? priority[query.direction]
             : readers[query.orderBy][query.direction];
-      const page = await reader.page(client, route, accountId, query, after);
+      const page: ShelfDateRows = await reader.page(client, route, accountId, query, after);
       const sessions = await active.sessions(
         client,
         route,
@@ -97,6 +102,7 @@ export function createShelfPageReader(): ShelfPageReader {
       return {
         entries: page.entries.map((row) => ({ ...row, activeProgressSession: sessions.get(row.subjectId) ?? null })),
         more: page.more,
+        ...(page.after ? { after: page.after } : {}),
       };
     },
   };

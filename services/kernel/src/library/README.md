@@ -1660,10 +1660,32 @@ epoch validation. Library owns no cursor cryptography.
 Title-order key policy: use Semantic's existing `languageRanges` and `chooseLabel` selection, then the versioned
 `sortName` key (`semantic-sort-name-v1`) as UTF-8 bytes of its first 256 normalized codepoints. This is deterministic
 for the installed Unicode implementation, not a universal human collation. Missing labels remain explicitly
-uncovered; when installed, they sort last in either direction, with directional Subject-ID ties. The key helper is
-available in `shelf-title-key.ts`, but no title index, source-basis fence, maintenance installation, or successful
-title-ordered page is installed yet. Do not advertise title as a supported preference until that producer is ready.
-The native 64/512/4096 derivative and full-caller cost measurements remain unrun and belong to the continuation.
+uncovered; when installed, they sort last in either direction, with directional Subject-ID ties. The native derivative uses `shelf_title_owner`, `shelf_title_head` and `shelf_title_key`; preparation and reads are
+implemented in `shelf-title-maintenance.ts` and `shelf-title-reader.ts`. Entry mutations atomically advance a private
+population version. Preparation uses the existing guarded owner command runner, reads at most 101 Entries, batches
+at most 100 disclosed title inputs before taking Library locks, and writes at most 100 normalized keys. Replacing a
+generation removes at most 100 old keys per command before building. Account maintenance retires its keys in bounded
+pages. The derivative stores normalized bytes and native selection/source/version references, never display labels.
+
+Decision: retain one selected-language title generation per account; selecting another language policy replaces it
+through bounded cleanup and preparation, while title preferences remain unavailable until native readiness is exposed.
+
+`ShelfTitleSource` is the complete-input Content integration port, supplied as `shelves.titleSource`. Its whole-source
+basis must include current viewer disclosure, identity, title, redirect and source-owner changes. Hidden/denied identities
+are unavailable inputs, distinct from visible identities without a label. Source calls finish outside Library
+transactions. Each title page requires the installed population and exact language/source basis, and rechecks that
+basis after releasing its native read. Cursors bind account authentication lifetime, language/key policy, native
+generation/population, source basis and every selected predicate. The native reader selects directional key/Subject
+ranges with missing labels last and enriches only the returned rows; the page never sorts loaded rows.
+
+`GET /v1/libraryEntries?orderBy=title&direction=asc|desc` uses `Accept-Language` for selection; native rows add
+`titleCoverage: 'labelled' | 'missing'`. `POST /v1/libraryShelfTitlePreparation` uses the same language header and existing
+Entry-list authority and idempotency header, returning `{installation:'pending'|'installed',prepared:0..100}`.
+Content still owns installation of the current complete-input source adapter and root client publication. Their absence
+is explicit preparation, including on a retained Web title URL; no default source or saved preference claims readiness.
+Receiving the published native client, automatic preparation and the native independent 64/512/4096 full-caller
+measurements remain in the continuation. Installed typing, focused cases and rendered review are separate observations;
+no native growth or rendered proof is claimed here.
 
 ## FULL personal shelf row facts
 

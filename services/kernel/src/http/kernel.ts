@@ -699,6 +699,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
       );
     },
     ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
+    ...(dependencies.shelves?.titleSource === undefined ? {} : { titleSource: dependencies.shelves.titleSource }),
     shelves: () => {
       const access = resolveAccess({ actions: actionCatalogue(personal), realmRoleReader });
       return createDefaultShelfReads({
