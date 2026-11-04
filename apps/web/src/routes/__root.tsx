@@ -97,9 +97,7 @@ const preserveErrorResponse = createIsomorphicFn()
   })
   .client(() => undefined);
 const publicOrigin = createIsomorphicFn()
-  .server(() =>
-    validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN, getRequest().url),
-  )
+  .server(() => validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN, getRequest().url))
   .client(() =>
     validatePublicOrigin(
       new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href ?? window.location.origin).origin,
