@@ -36,10 +36,7 @@ export async function readCollectionViewerActions(
 ): Promise<CollectionViewerActions> {
   try {
     const input: ViewerActionsInput = { resources: [{ type: 'library.collection', id }] };
-    const result = await client.viewerActions.post(
-      input,
-      authorization ? { headers: { authorization } } : {},
-    );
+    const result = await client.viewerActions.post(input, authorization ? { headers: { authorization } } : {});
     if (result.error || result.status !== 200) return { state: 'unavailable' };
     const resource = result.data?.resources.find((value) => value.type === 'library.collection' && value.id === id);
     return resource && 'viewerActions' in resource
