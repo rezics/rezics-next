@@ -137,8 +137,8 @@ export const CapturedCompanion: Story = {
   },
 };
 export const SourceFailureWithSibling: Story = {
+  ...CapturedCompanion,
   render: () => <Connected state="source-failure" />,
-  play: CapturedCompanion.play,
 };
 export const PendingEdits: Story = {
   render: () => <Connected state="pending" />,
