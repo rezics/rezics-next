@@ -1,4 +1,4 @@
-import { securityEnvelope, currentSecuritySession } from './security-page-fixture';
+import { securityEnvelope, currentSecuritySession, signInPage } from './security-page-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
@@ -103,6 +103,8 @@ const fake = Bun.serve({
       return new Response('No session', { status: 401, headers });
     }
 
+    if (url.pathname === '/signin/page' && request.method === 'POST')
+      return json(signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' }));
     if (url.pathname === '/security-page' && request.method === 'GET')
       return json(securityEnvelope(sessionAccountId, [currentSecuritySession()], passkeys, fresh));
     if (url.pathname === '/session' && request.method === 'GET')
@@ -191,7 +193,7 @@ const fake = Bun.serve({
       if (passkeys.length === 1 && !hasPassword)
         return json({ error: 'last_interactive_credential', effect_status: 'not_applied' }, 409);
       passkeys = passkeys.filter((passkey) => passkey.id !== id);
-      return json({});
+      return json({ success: true });
     }
 
     return new Response('Not Found', { status: 404, headers });
@@ -497,7 +499,7 @@ test(
       expect(registered).toEqual({ response: expect.any(Object), name: 'Phone' });
       expectWebAuthnResponse(registered.response, 'attestation');
       const rows = list.getByRole('listitem');
-      await rows.nth(1).waitFor({ state: 'visible' });
+      await rows.nth(1).getByRole('button').and(english.locator(':enabled')).waitFor();
       expect(await rows.count()).toBe(2);
       expect(await rows.nth(1).innerText()).toContain('Phone');
       expect(await section.getByLabel('Passkey name (optional)').inputValue()).toBe('');
@@ -512,7 +514,7 @@ test(
       await authenticator!.cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: authenticator!.id });
       await addVirtualAuthenticator(authenticator!.cdp);
       await section.getByRole('button', { name: 'Add a passkey', exact: true }).click();
-      await rows.nth(2).waitFor({ state: 'visible' });
+      await rows.nth(2).getByRole('button').and(english.locator(':enabled')).waitFor();
       expect(postBody('/passkeys/register').name).toMatch(/^(Google Chrome|Chromium) on \w+$/);
       expect(await rows.nth(2).innerText()).toContain(postBody('/passkeys/register').name);
 
@@ -522,10 +524,8 @@ test(
         expect(dialog.type()).toBe('confirm');
         await dialog.accept();
       });
-      await Promise.all([
-        english.waitForResponse((response) => new URL(response.url()).pathname === '/passkeys/remove'),
-        rows.nth(1).getByRole('button', { name: 'Remove passkey Phone', exact: true }).click(),
-      ]);
+      await rows.nth(1).getByRole('button', { name: 'Remove passkey Phone', exact: true }).click();
+      await english.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
       expect(confirmations).toBe(1);
       expect(postBody('/passkeys/remove')).toEqual({ id: expect.any(String) });
       expect(postBody('/passkeys/remove').id).toBe(registered.response.id);
@@ -569,10 +569,7 @@ test(
           .getByRole('region', { name: locale === 'en' ? 'Passkeys' : 'Clés d’accès' })
           .getByRole('listitem');
         await row.waitFor({ state: 'visible' });
-        await Promise.all([
-          page.waitForResponse((response) => new URL(response.url()).pathname === '/passkeys/remove'),
-          row.getByRole('button').click(),
-        ]);
+        await row.getByRole('button').click();
         const alert = page.getByRole('alert');
         await alert.waitFor({ state: 'visible' });
         expect(await alert.innerText()).toContain(message);

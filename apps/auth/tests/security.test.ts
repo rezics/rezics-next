@@ -472,7 +472,8 @@ test(
       expect(await page.getByLabel('New password', { exact: true }).inputValue()).toBe('');
       expect(authCalls('/security-page')).toHaveLength(2);
       expect(authCalls('/sessions')).toHaveLength(0);
-      expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+      expect(calls.filter((call) => call.method !== 'GET').map(({ method, url, body }) => ({ method, url, body })))
+        .toEqual([{ method: 'POST', url: '/account-identity', body: '{}' }]);
     } finally {
       inventoryUnavailable = false;
       await page.context().close();
@@ -516,7 +517,8 @@ test(
       expect(await reload.count()).toBe(1);
       expect(await page.getByText('No active sessions were returned.', { exact: true }).count()).toBe(0);
       expect(authCalls('/sessions')).toHaveLength(0);
-      expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+      expect(calls.filter((call) => call.method !== 'GET').map(({ method, url, body }) => ({ method, url, body })))
+        .toEqual([{ method: 'POST', url: '/account-identity', body: '{}' }]);
     } finally {
       release.resolve();
       beforeSessions = undefined;
@@ -549,7 +551,8 @@ test(
       expect(await page.getByRole('button', { name: 'Check current security settings', exact: true }).count()).toBe(0);
       expect(authCalls('/security-page')).toHaveLength(2);
       expect(authCalls('/sessions')).toHaveLength(0);
-      expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+      expect(calls.filter((call) => call.method !== 'GET').map(({ method, url, body }) => ({ method, url, body })))
+        .toEqual([{ method: 'POST', url: '/account-identity', body: '{}' }]);
     } finally {
       inventoryUnavailable = false;
       await page.context().close();
