@@ -206,6 +206,11 @@ test('guarded native BFF ports refuse credentials changed during session await a
   pause.resolve(session);
   expect(await stale).toBe('rejected');
   expect(sent).toHaveLength(2);
+  pause = deferred<typeof session>();
+  const staleCredential = writeQuestionBoundRatingForCurrentReader(client, request(), env, input);
+  pause.resolve({ ...session, subject: reader, csrfToken: 'B'.repeat(22) });
+  await expect(staleCredential).rejects.toThrow();
+  expect(sent).toHaveLength(2);
   pause = undefined;
   const entry = await changePersonalLibraryEntry(client, request(), env, {
     subjectId: reader,
@@ -635,7 +640,16 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
   client.setQueryData(viewerExposureQuery({ subject: reader, id: 1 }).queryKey, { subject: reader, admitted });
   const page = structuredClone(discoveryExample);
   const book = page.hits[3]!;
-  page.hits = [book, { ...book, key: { ...book.key, kind: 'schema:CreativeWork' } }];
+  if (book.summary.kind !== 'subject') throw new Error('Expected the native Subject example');
+  page.hits = [
+    book,
+    {
+      ...book,
+      key: { ...book.key, kind: 'schema:CreativeWork' },
+      summary: { kind: 'subject', value: { ...book.summary.value, type: 'schema:CreativeWork' } },
+    },
+  ];
+  const incarnationId = crypto.randomUUID();
   page.viewerFacts = {
     state: 'current',
     question: {
@@ -649,7 +663,7 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
       rowKey: discoveryKey(hit),
       subjectId: hit.key.id,
       resolvedSubjectId: hit.key.id,
-      entry: { state: 'present', entryState: 'planned', revision: 7, incarnationId: crypto.randomUUID() },
+      entry: { state: 'present', entryState: 'planned', revision: 7, incarnationId },
       vote: { state: 'present', questionId: QUESTION, questionRevision: 1, units: 0, revision: 4 },
     })),
   };
