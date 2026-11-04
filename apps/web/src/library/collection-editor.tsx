@@ -19,7 +19,7 @@ import { CollectionMemberDetails, CollectionMemberNoteSaved } from './collection
 import { CollectionNoteReader } from './collection-note-reader';
 import { SubjectCover } from './subject-row';
 import { collectionMemberRatio } from './collection-presentation';
-import type { CollectionListPresentations, CollectionTypeOption } from './collection-presentation';
+import type { CollectionListPresentations } from './collection-presentation';
 import type { CollectionMember, LibrarySubject } from './reads';
 export { applyCollectionMemberEditPlan, buildCollectionMemberEditPlan } from './collection-member-edit-plan';
 export type { CollectionMemberEditOperation } from './collection-member-edit-plan';
@@ -470,82 +470,4 @@ export function CollectionMemberList({
   );
 }
 
-/** Select exact released Types and already imported, authorized member covers from this loaded page. */
-export function CollectionPresentationFields({
-  types,
-  kind,
-  onKindChange,
-  coverMediaId,
-  onCoverChange,
-  members = [],
-  disabled = false,
-}: {
-  types: readonly CollectionTypeOption[] | null | undefined;
-  kind: string | null;
-  onKindChange: (kind: string | null) => void;
-  coverMediaId: string | null;
-  onCoverChange?: (id: string | null) => void;
-  members?: readonly CollectionMember[];
-  disabled?: boolean;
-}) {
-  const covers = new Map(
-    members.flatMap(({ subject }) => {
-      const cover = subject?.cover;
-      return subject &&
-        cover &&
-        !cover.withheld &&
-        cover.variants.some((v) => v.format === 'avif' || v.format === 'webp')
-        ? [[cover.media, pageText(libraryTitleValue(subject.label), getLocale()).text] as const]
-        : [];
-    }),
-  );
-  return (
-    <div className="grid max-w-3xl gap-4 sm:grid-cols-2" data-collection-presentation-fields>
-      <label className="space-y-1">
-        <span>{m.library_collection_kind()}</span>
-        <select
-          className="block min-h-11 w-full rounded-lg border border-border bg-background px-3"
-          value={kind ?? ''}
-          disabled={disabled}
-          onChange={(event) => onKindChange(event.target.value || null)}
-        >
-          <option value="">{m.library_collection_mixed_label()}</option>
-          {kind && !types?.some((type) => type.id === kind) ? <option value={kind}>{kind}</option> : null}
-          {types?.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.label}
-            </option>
-          ))}
-        </select>
-        <span className="block text-sm text-muted-foreground">{m.library_collection_mixed_help()}</span>
-        {types == null ? (
-          <span role="status" className="block text-sm text-muted-foreground">
-            {m.library_collection_types_unavailable()}
-          </span>
-        ) : null}
-      </label>
-      {onCoverChange ? (
-        <label className="space-y-1">
-          <span>{m.subject_cover()}</span>
-          <select
-            className="block min-h-11 w-full rounded-lg border border-border bg-background px-3"
-            value={coverMediaId ?? ''}
-            disabled={disabled}
-            onChange={(event) => onCoverChange(event.target.value || null)}
-          >
-            <option value="">{m.library_collection_auto()}</option>
-            {coverMediaId && !covers.has(coverMediaId) ? (
-              <option value={coverMediaId}>{m.library_collection_current_cover()}</option>
-            ) : null}
-            {[...covers].map(([id, label]) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <span className="block text-sm text-muted-foreground">{m.library_collection_cover_existing()}</span>
-        </label>
-      ) : null}
-    </div>
-  );
-}
+export { CollectionPresentationFields } from './collection-presentation-review/review';
