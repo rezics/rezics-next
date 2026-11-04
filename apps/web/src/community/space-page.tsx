@@ -347,7 +347,19 @@ export function RealmShelf({
     });
   }, [lease]);
   useEffect(() => {
-    if (!selection.node || !current() || restore.current.focused) return;
+    if (!selection.node) return;
+    const cancel = () => {
+      restore.current.focused = true;
+    };
+    document.addEventListener('pointerdown', cancel);
+    document.addEventListener('focusin', cancel);
+    return () => {
+      document.removeEventListener('pointerdown', cancel);
+      document.removeEventListener('focusin', cancel);
+    };
+  }, [lease]);
+  useEffect(() => {
+    if (!selection.node || frozen || !current() || restore.current.focused) return;
     const shelf = selection.node === 'boards' ? boards : publications;
     if (shelf.busy || (selection.cursor && !shelf.continuation)) return;
     if (shelf.continuation && !shelf.continuation.current()) return;
@@ -360,7 +372,7 @@ export function RealmShelf({
   }, [lease, boards.busy, boards.continuation, publications.busy, publications.continuation]);
   useEffect(() => {
     const receipt = boards.continuation;
-    if (!current() || boards.failure || !receipt?.current()) return;
+    if (frozen || !current() || boards.failure || !receipt?.current()) return;
     const href = realmShelfReturn({
       href: returnTo ?? `/${locale}/realms/${realm.id}`,
       locale,
@@ -371,7 +383,7 @@ export function RealmShelf({
   }, [boards.continuation]);
   useEffect(() => {
     const receipt = publications.continuation;
-    if (!current() || publications.failure || !receipt?.current()) return;
+    if (frozen || !current() || publications.failure || !receipt?.current()) return;
     const href = realmShelfReturn({
       href: returnTo ?? `/${locale}/realms/${realm.id}`,
       locale,
