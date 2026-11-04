@@ -82,7 +82,9 @@ let rerenderMarker = 0;
 let shelfSubjects = subjects();
 const prepare = preparationFixture(
   reader,
-  () => shelfSubjects.find((item) => item.id === subjectId)?.publicationId ?? null,
+  (subjectId) => shelfSubjects.find((item) => item.id === subjectId)?.publicationId ?? null,
+  'adopt',
+  { label: { state: 'available', value: 'Lifetime book', language: 'en' }, cover: { state: 'empty' } },
 );
 
 function HookHarness() {
@@ -186,7 +188,7 @@ type StartedChange = { completion: Promise<void> };
 async function startChange(action: PublicationChange['action']): Promise<StartedChange> {
   let completion!: Promise<void>;
   await act(async () => {
-    completion = latestControl.change(action, target());
+    completion = latestControl.change(action);
   });
   return { completion };
 }
@@ -251,7 +253,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     const staying = owner.block('/realm', '/next', null);
     owner.stay();
     expect(await staying).toBe(true);
-    expect(draft.getSnapshot().target).toEqual(target());
+    expect(draft.getSnapshot().target?.id).toBe(target().id);
     await draft.retry();
     expect(calls[1]).toEqual(exact);
     const leaving = owner.block('/realm', '/next', null);

@@ -1,10 +1,11 @@
-import type { PublicationPrepare } from '../src/community/realm-publication-preparation';
+import type { PublicationPrepare, PublicationPresentation } from '../src/community/realm-publication-preparation';
 
-/** Supplied-port native reference shape, not a recorded or generated response. */
+/** Generated-shape fixture, not a native producer recording. */
 export function preparationFixture(
   accountId: string,
   head: (subjectId: string) => string | null,
   verdict: 'adopt' | 'withdraw' | 'reject' = 'adopt',
+  presentation: PublicationPresentation = { label: { state: 'unavailable' }, cover: { state: 'unavailable' } },
 ): PublicationPrepare {
   return async ({ realmId, subjectId }) => {
     const current = head(subjectId);
@@ -19,7 +20,7 @@ export function preparationFixture(
       kind: 'ready',
       preparation: {
         realm: { realmId, spaceId: realmId, contextId: realmId, title: 'Selected Realm', hostTitle: 'Selected host' },
-        subject: { originalId: subjectId, currentId: subjectId, presentation: { state: 'unavailable' } },
+        subject: { originalId: subjectId, currentId: subjectId, presentation: structuredClone(presentation) },
         current: current === null ? null : { publicationId: current, verdict, decidedAt: '2026-11-04T00:00:00Z' },
         commands: {
           publish: command('publish'),

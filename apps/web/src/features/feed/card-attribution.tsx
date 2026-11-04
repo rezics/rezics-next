@@ -303,7 +303,7 @@ function safeCreditHref(value: string | undefined): string | undefined {
 }
 
 /** Credit stays outside the cover link. Its licence never becomes a licence for the work. */
-function FeedCardImageCredit({
+export function FeedCardImageCredit({
   cover,
   locale,
 }: {

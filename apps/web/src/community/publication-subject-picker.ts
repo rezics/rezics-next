@@ -69,6 +69,14 @@ export function createPublicationDraft(
   let state: Draft = { target: null, outcome: null, busy: false };
   let request: { input: PublicationChange; target: PublicationTarget } | null = null;
   let selected: PublicationTarget | null = null;
+  // Picker disclosure is only a selection hint; native review owns its own presentation.
+  const identity = (target: PublicationTarget): PublicationTarget => ({
+    id: target.id,
+    title: '',
+    labels: {},
+    types: [],
+    cover: null,
+  });
   let active = enabled;
   let retired = false;
   let connected = !binding?.startDisconnected;
@@ -110,7 +118,7 @@ export function createPublicationDraft(
     const target = selected ?? request?.target;
     if (!target) return;
     const read = ++reading;
-    update({ ...state, preparation: null, preparationState: 'loading' });
+    update({ ...state, target: identity(target), preparation: null, preparationState: 'loading' });
     if (!current(ticket)) return;
     let result: PublicationPreparationResult;
     try {
@@ -131,7 +139,23 @@ export function createPublicationDraft(
     }
     update({
       ...state,
-      target: structuredClone(target),
+      target: {
+        ...identity(target),
+        ...(result.preparation.subject.presentation.label.state === 'available'
+          ? {
+              title: result.preparation.subject.presentation.label.value,
+              label: result.preparation.subject.presentation.label.value,
+              labels: {
+                [result.preparation.subject.presentation.label.language]:
+                  result.preparation.subject.presentation.label.value,
+              },
+            }
+          : {}),
+        cover:
+          result.preparation.subject.presentation.cover.state === 'available'
+            ? structuredClone(result.preparation.subject.presentation.cover.value)
+            : null,
+      },
       preparation: structuredClone(result.preparation),
       preparationState: 'ready',
     });
@@ -139,10 +163,10 @@ export function createPublicationDraft(
   function choose(next: PublicationTarget | null, ticket = serial, action?: PublicationChange['action']) {
     if (locked(ticket)) return;
     request = null;
-    selected = next ? structuredClone(next) : null;
+    selected = next ? identity(next) : null;
     reading++;
     update({
-      target: next ? structuredClone(next) : null,
+      target: next ? identity(next) : null,
       outcome: null,
       busy: false,
       ...(action ? { reviewAction: action } : {}),
@@ -155,6 +179,7 @@ export function createPublicationDraft(
     reading++;
     update({
       ...state,
+      target: identity(intent.target),
       preparation: null,
       preparationState: undefined,
       outcome: null,
@@ -181,7 +206,7 @@ export function createPublicationDraft(
       target:
         result.kind === 'denied'
           ? null
-          : { ...structuredClone(intent.target), ...(result.kind === 'saved' ? { publicationId: result.head } : {}) },
+          : { ...identity(intent.target), ...(result.kind === 'saved' ? { publicationId: result.head } : {}) },
       outcome: Object.freeze({ ...result }),
       busy: false,
       action: intent.input.action,

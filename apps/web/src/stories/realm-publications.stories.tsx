@@ -1,4 +1,4 @@
-import type { PublicationPrepare } from '../community/realm-publication-preparation';
+import type { PublicationPrepare, PublicationPresentation } from '../community/realm-publication-preparation';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, screen, userEvent, within } from 'storybook/test';
 import { RealmShelf, type RealmShelfTransport } from '../community/space-page';
@@ -62,9 +62,28 @@ const subjects: PublishedSubject[] = Object.entries(subjectsRecording.subjects).
     ...(publicationId ? { publicationId } : {}),
   };
 });
-// Supplied native-reference shape; installed client/presentation delivery is still unavailable.
+// Generated-shape fixtures reuse recorded content; these are not native preparation recordings.
 const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
   const head = publicationsRecording.items[0]!.publicationId;
+  const subject = subjects.find((item) => item.id === subjectId) ?? subjects[0]!;
+  const label = pickText(subject.labels, getLocale()).text;
+  const presentation: PublicationPresentation = {
+    label: { state: 'available', value: label, language: getLocale() },
+    cover: subject.cover
+      ? {
+          state: 'available',
+          value: {
+            ...subject.cover,
+            credit: {
+              rightsHolder: 'Fixture artist',
+              via: { name: 'Fixture source', url: 'https://example.com/cover' },
+              license: 'CC0-1.0',
+              obligations: ['Keep the image credit.'],
+            },
+          },
+        }
+      : { state: 'empty' },
+  };
   const command = (action: 'publish' | 'withdraw' | 'reject') => ({
     method: 'POST' as const,
     subjectId,
@@ -82,7 +101,7 @@ const prepare: PublicationPrepare = async ({ realmId, subjectId }) => {
         title: realmRecording.realm.title,
         hostTitle: realmRecording.realm.title,
       },
-      subject: { originalId: subjectId, currentId: subjectId, presentation: { state: 'unavailable' } },
+      subject: { originalId: subjectId, currentId: subjectId, presentation },
       current: { publicationId: head, verdict: 'adopt', decidedAt: publicationsRecording.items[0]!.publishedAt },
       commands: { publish: command('publish'), withdraw: command('withdraw'), reject: command('reject') },
       viewer: { accountId: 'story-viewer', clientId: 'fixture', authnEpoch: 1 },
@@ -96,11 +115,15 @@ function Example({
   signedOut = false,
   current = 'adopt',
   preparationFailure,
+  labelState,
+  coverState,
 }: {
   mode?: Mode;
   signedOut?: boolean;
   current?: 'adopt' | 'withdraw' | 'reject' | null;
   preparationFailure?: 'denied' | 'unavailable';
+  labelState?: Exclude<PublicationPresentation['label']['state'], 'available'>;
+  coverState?: Exclude<PublicationPresentation['cover']['state'], 'available'>;
 }) {
   let decisions = 0;
   let originalKey: string | undefined;
@@ -109,6 +132,8 @@ function Example({
       if (preparationFailure) return { kind: preparationFailure };
       const result = await prepare(input);
       if (result.kind === 'ready') {
+        if (labelState) result.preparation.subject.presentation.label = { state: labelState };
+        if (coverState) result.preparation.subject.presentation.cover = { state: coverState };
         result.preparation.current = current === null ? null : { ...result.preparation.current!, verdict: current };
         if (current === null) {
           const publish = result.preparation.commands.publish!;
@@ -189,6 +214,22 @@ export const CurrentRejected: Story = {
 };
 export const CurrentWithdrawn: Story = {
   render: () => <Example current="withdraw" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const ConcealedLabelAvailableCover: Story = {
+  render: () => <Example labelState="concealed" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const AvailableLabelConcealedCover: Story = {
+  render: () => <Example coverState="concealed" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const EmptyPresentation: Story = {
+  render: () => <Example labelState="empty" coverState="empty" />,
+  play: ({ canvasElement }) => selectWork(canvasElement),
+};
+export const UnavailablePresentation: Story = {
+  render: () => <Example labelState="unavailable" coverState="unavailable" />,
   play: ({ canvasElement }) => selectWork(canvasElement),
 };
 export const PreparationDenied: Story = {
@@ -298,6 +339,17 @@ export const CurrentAuthorityDenied: Story = {
   },
 };
 
+const prepareLong: PublicationPrepare = async (input) => {
+  const result = await prepare(input);
+  if (result.kind === 'ready')
+    result.preparation.subject.presentation.label = {
+      state: 'available',
+      value: Array(12).fill(pickText(subjects[0]!.labels, getLocale()).text).join(' · '),
+      language: getLocale(),
+    };
+  return result;
+};
+
 // Constructed text stress from the recorded subject; it supplies no new publication receipt or permission.
 function LongSelection() {
   const subject = subjects[0]!;
@@ -309,7 +361,7 @@ function LongSelection() {
     subjects,
     true,
     '',
-    prepare,
+    prepareLong,
   );
   return (
     <section className="min-w-0 space-y-4">

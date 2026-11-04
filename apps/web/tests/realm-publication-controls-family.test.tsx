@@ -106,7 +106,23 @@ test('Realm publication selection and outcomes use installed shared family with 
       as_of: publication.publishedAt,
     };
   });
-  const prepare = preparationFixture(viewer.subject, () => currentSubjects[0]?.publicationId ?? null);
+  const prepare = preparationFixture(viewer.subject, () => currentSubjects[0]?.publicationId ?? null, 'adopt', {
+    label: { state: 'available', value: long.title, language: 'en' },
+    cover: supplied.cover
+      ? {
+          state: 'available',
+          value: {
+            ...supplied.cover,
+            credit: {
+              rightsHolder: 'Fixture artist',
+              via: { name: 'Fixture source', url: 'https://example.com/source' },
+              license: 'CC0-1.0',
+              obligations: ['Keep this credit'],
+            },
+          },
+        }
+      : { state: 'empty' },
+  });
   const send = (input: PublicationChange) =>
     new Promise<PublicationOutcome>((resolve) => writes.push({ input, resolve }));
   function Harness() {
@@ -207,12 +223,11 @@ test('Realm publication selection and outcomes use installed shared family with 
     expect(control.target).toMatchObject({
       id: supplied.id,
       title: long.title,
-      types: supplied.types,
-      cover: supplied.cover,
-      typeName: long.typeName,
+      types: [],
+      cover: supplied.cover ? { media: supplied.cover.media } : null,
     });
     expect(group.querySelector('h4[data-content-item-slot="title"]')?.textContent).toBe(long.title);
-    expect(group.querySelector('[data-content-item-slot="metadata"]')?.textContent).toBe(long.typeName);
+    expect(group.textContent).not.toContain(long.typeName);
     expect(group.textContent).toContain(m.realm_publication_confirm());
     expect(group.className).toContain('has-[:focus-visible]');
     expect(group.querySelector('img')?.getAttribute('src')).toContain(`/media/${supplied.cover!.media}/`);
@@ -221,7 +236,7 @@ test('Realm publication selection and outcomes use installed shared family with 
       coverSrc(supplied.cover!.media, 'avif', 320),
     );
     expect(picker()).toBeNull();
-    expect(host.querySelector('a')).toBeNull();
+    expect(group.textContent).toContain('Keep this credit');
     expect(group.querySelector('button button, button a')).toBeNull();
     const clear = button(m.realm_publication_clear());
     const publish = button(m.realm_publication_publish());
@@ -241,7 +256,7 @@ test('Realm publication selection and outcomes use installed shared family with 
         host.dir = direction;
         await paint();
         expect(selected()!.querySelector('h4')?.textContent).toBe(long.title);
-        expect(selected()!.querySelector('[data-content-item-slot="metadata"]')?.textContent).toBe(long.typeName);
+        expect(selected()!.textContent).not.toContain(long.typeName);
         expect(button(m.realm_publication_publish()).disabled).toBe(false);
       }
     noFalseResult();
@@ -356,7 +371,7 @@ test('Realm publication selection and outcomes use installed shared family with 
     expect(writes).toHaveLength(count);
     expect(saved).toHaveLength(savedCount);
     expect(selected()).toBeNull();
-    expect(host.querySelector('fieldset')?.disabled).toBe(true);
+    expect(button(m.realm_publication_curate()).getAttribute('aria-expanded')).toBe('false');
     noFalseResult();
 
     const aside = host.querySelector('aside')!;

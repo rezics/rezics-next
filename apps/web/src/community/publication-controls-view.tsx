@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Cover } from '@rezics/ui/cover';
+import { FeedCardImageCredit } from '../features/feed/card-attribution';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { ListRowControl } from '@rezics/ui/list-row';
 import { Button } from '@rezics/ui/shadcn/button';
@@ -242,20 +243,24 @@ export function usePublicationControls(
   };
 }
 
-export function PublicationControls({
-  control,
-  refresh,
-  search,
-}: {
+type PublicationControlsProps = {
   search?: EntityPickerSearch | undefined;
   control: ReturnType<typeof usePublicationControls>;
   refresh: () => Promise<void>;
-}) {
+};
+
+export function PublicationControls(props: PublicationControlsProps) {
+  return <PublicationControlsVisit key={props.control.scope} {...props} />;
+}
+
+function PublicationControlsVisit({ control, refresh, search }: PublicationControlsProps) {
   const [open, setOpen] = useState(false);
   const locale = getLocale();
   const searchSubjects = useMemo(() => search ?? publicationSubjectSearch(locale), [search, locale]);
   const selected = control.target;
   const preparation = control.preparation;
+  const presentation = preparation?.subject.presentation;
+  const title = presentation?.label.state === 'available' ? presentation.label.value : m.realm_publication_selected();
   useEffect(() => {
     if (control.reviewAction) setOpen(true);
   }, [control.reviewAction, control.target?.id]);
@@ -361,13 +366,15 @@ export function PublicationControls({
                 aria-label={m.realm_publication_selected()}
               >
                 <div data-content-item-slot="visual">
-                  <Cover
-                    subject={{ id: selected.id, title: selected.title, types: selected.types }}
-                    cover={selected.cover}
-                    src={coverSrc}
-                    size="xs"
-                    decorative
-                  />
+                  {presentation?.cover.state === 'available' ? (
+                    <Cover
+                      subject={{ id: preparation!.subject.currentId, title, types: [] }}
+                      cover={presentation.cover.value}
+                      src={coverSrc}
+                      size="xs"
+                      decorative
+                    />
+                  ) : null}
                 </div>
                 <div ref={summary} className="min-w-0 flex-1 space-y-1">
                   <ContentItemHeading
@@ -375,11 +382,32 @@ export function PublicationControls({
                     tabIndex={-1}
                     className="text-[17px] leading-snug font-semibold sm:text-lg"
                   >
-                    {selected.title}
+                    <bdi lang={presentation?.label.state === 'available' ? presentation.label.language : undefined}>
+                      {title}
+                    </bdi>
                   </ContentItemHeading>
-                  {selected.typeName ? (
-                    <p data-content-item-slot="metadata" className="text-sm text-muted-foreground">
-                      {selected.typeName}
+                  {presentation && presentation.label.state !== 'available' ? (
+                    <p
+                      data-content-item-slot="metadata"
+                      data-publication-label={presentation.label.state}
+                      className="text-sm text-muted-foreground"
+                    >
+                      {presentation.label.state === 'empty'
+                        ? m.realm_publication_label_empty()
+                        : presentation.label.state === 'concealed'
+                          ? m.realm_publication_label_concealed()
+                          : m.realm_publication_label_unavailable()}
+                    </p>
+                  ) : null}
+                  {presentation?.cover.state === 'available' ? (
+                    <FeedCardImageCredit cover={presentation.cover.value} locale={locale} />
+                  ) : presentation ? (
+                    <p data-publication-cover={presentation.cover.state} className="text-sm text-muted-foreground">
+                      {presentation.cover.state === 'empty'
+                        ? m.realm_publication_cover_empty()
+                        : presentation.cover.state === 'concealed'
+                          ? m.realm_publication_cover_concealed()
+                          : m.realm_publication_cover_unavailable()}
                     </p>
                   ) : null}
                   <p data-content-item-slot="preview" className="text-sm text-muted-foreground">
@@ -457,7 +485,6 @@ export function PublicationControls({
                     </time>
                   </p>
                 ) : null}
-                <p className="text-sm text-muted-foreground">{m.realm_publication_presentation_unavailable()}</p>
               </div>
             ) : null}
             <ListRowControl data-content-item-slot="actions" className="flex flex-wrap gap-2">

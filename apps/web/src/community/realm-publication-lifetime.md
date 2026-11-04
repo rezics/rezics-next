@@ -23,34 +23,39 @@ rows remain independent of preparation failure.
 
 ## Native delivery boundary
 
-The base contains the mounted native preparation resource and its OpenAPI schema. Installed
-`packages/client/src/kernel/community/routes.d.ts` has no preparation method or response declaration. The native
-source's only optional presentation is `{state:"unavailable"}`. Populated and concealed presentation, bounded
-detail fields and their byte limits have not been delivered. `PublicationPrepare` is an independent caller port
-mirroring the documented reference slice; `readRealmPublicationPreparation` returns the precise
-`generated-publication-preparation` unavailable seam. It performs no invented fetch, client cast or second producer.
-Native source, installed client, supplied-port tests and public runtime delivery are separate boundaries.
+The installed generated `realms({realmId}).publications({subjectId}).preparation.get` now owns the response
+and optional presentation types. `readRealmPublicationPreparation` prepares the existing authenticated session,
+uses the request signal, and invokes that method once with private, no-store response handling. The response
+stays in the mounted visit, outside query caches and persistent browser state. Preparation failures do not affect
+shelf continuation, reconciliation, membership or Board consumers.
 
-Decision: keep confirmation unavailable in the mounted shelf until the generated preparation binding arrives;
-expose the current Web DTO as a standalone package type while the generated route declaration is absent, without
-adding transport or enabling confirmation. Never fall back to shelf heads or the adopted-only point read. Existing
-live publisher and capture handles stay with their owners; full Realm/Space composition, membership and Board
-consumers remain independent.
+Label and cover each independently admit available, empty, concealed and unavailable states. Available labels
+carry their native language. Available covers use the shared Cover and image-credit rendering, including credit
+obligations. A selected picker item contributes only its original identity; neither its title, types nor its image
+becomes native review presentation. Starting another inspection removes former presentation immediately. Original
+and current Subject references remain separate, and commands continue to address the original Subject.
+
+Decision: use a neutral selected-work heading when the current label is not available, with separate label and cover state text.
+
+Replacing the mounted review scope closes its category and retires local focus effects. Ordinary inspection replaces
+only the current preparation; it cannot release an unknown command or change its original retry operands. A fresh
+native response can enable confirmation only after its original Subject, Realm destination, expected head and quoted
+precondition match the existing command contract. GET success never supplies command authorization.
 
 ## Cost
 
-- **Touches:** One preparation-port invocation per explicit selection or inspection and one existing native command
+- **Touches:** One generated preparation read per explicit selection or inspection and one existing native command
   per confirmed decision or original retry. No per-row reads, polling, background conflict lookup or shelf scan.
-- **Bound:** Retain one selected work, one replacing preparation and one original command. Projection copies that
-  one preparation in O(admitted bytes). The installed native reference slice allows two Realm/host titles of 1024
-  Unicode characters, at most4096 UTF-8 bytes each before JSON escaping (control escaping can use six bytes).
-  Identity/current/command/viewer components are fixed; these limits do not establish a total response byte cap.
-  There is no admitted detail-field collection in the installed slice; its 1/10/20 projection and byte ceiling
-  cannot be claimed until the producer supplies it.
-- **Growth:** Supplied-port regressions pin all four verdict meanings, one read/one command, no shelf-head adoption,
-  exact unknown retry, explicit conflict reinspection and retirement. Native selected-byte/growth proof and
-  populated/concealed presentation remain producer continuation; frozen acceptance and visual review are deferred.
+- **Bound:** Retain one selected work, one replacing preparation and one original command. Projection copies the
+  disclosed preparation in O(admitted bytes), independent of shelf size. The installed producer bounds a label to
+  4096 characters and its language to 64, cover variants to 12, credit holder/source strings to 1024 characters,
+  license to 128, and obligations to 2048 strings of at most 8192 characters. These are individual producer bounds,
+  not a total response byte cap. The generated-shape test compares actual encoded preparation and projected bytes
+  at three shelf sizes without interpreting labels or shelves as detail fields.
+- **Deferred acceptance:** The installed resource has no detail-field collection. The original 1/10/20 admitted
+  detail-field projection and missing byte bounds remain producer-deferred. Native producer recordings, physical
+  growth proof, the frozen current-review acceptance and rendered phone/desktop, light/dark, eight-locale review
+  remain with their existing owners. Generated declarations and supplied-port fixtures establish none of those passes.
 
-Owner sources inspected: native preparation implementation, selected preparation SQL, mounted producer tests,
-Community's exact preparation and Realm home shelf sections, installed client route declarations and the mounted
-OpenAPI route. No legacy implementation is ported.
+The implementation follows the installed generated method, native preparation implementation and its Subject adapter,
+and the existing command and private caller lifetime owners. No legacy implementation is ported.

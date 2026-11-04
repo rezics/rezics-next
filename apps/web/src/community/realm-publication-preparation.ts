@@ -1,26 +1,12 @@
-/** The installed KernelClient has no publication preparation method yet.
- * This local caller port mirrors the native reference slice, not a second wire producer.
- * Full optional presentation remains with that same native resource's continuation.
- */
-export type PublicationCommand = Readonly<{
-  method: 'POST';
-  href: string;
-  subjectId: string;
-  expectedHead: string | null;
-  ifMatch: string | null;
-}>;
-export type RealmPublicationPreparation = {
-  realm: { realmId: string; spaceId: string; contextId: string; title: string; hostTitle: string };
-  subject: { originalId: string; currentId: string; presentation: { state: 'unavailable' } };
-  current: { publicationId: string; verdict: 'adopt' | 'withdraw' | 'reject'; decidedAt: string } | null;
-  commands: {
-    publish: PublicationCommand | null;
-    withdraw: PublicationCommand | null;
-    reject: PublicationCommand | null;
-  };
-  viewer: { accountId: string; clientId: string; authnEpoch: number };
-  recovery: { requestIdentity: 'unknown'; replay: 'original-command' };
-};
+import type { KernelClient } from '@rezics/client';
+
+// The installed method owns both command advice and independent optional disclosure variants.
+type RealmRoute = ReturnType<KernelClient['realms']>;
+type PublicationRoute = ReturnType<RealmRoute['publications']>;
+type PreparationRead = PublicationRoute['preparation']['get'];
+export type RealmPublicationPreparation = NonNullable<Awaited<ReturnType<PreparationRead>>['data']>['preparation'];
+export type PublicationCommand = RealmPublicationPreparation['commands']['publish'];
+export type PublicationPresentation = RealmPublicationPreparation['subject']['presentation'];
 export type PublicationPreparationResult =
   | { kind: 'ready'; preparation: RealmPublicationPreparation }
   | { kind: 'denied' }
@@ -34,6 +20,33 @@ export const unavailablePublicationPreparation: PublicationPrepare = async () =>
   kind: 'unavailable',
   seam: 'generated-publication-preparation',
 });
+
+/** One private, authenticated generated read; never placed in a shared query cache. */
+export async function readPublicationPreparation(
+  client: KernelClient,
+  authorization: string | null,
+  input: { realmId: string; subjectId: string },
+  signal?: AbortSignal,
+): Promise<PublicationPreparationResult> {
+  if (!authorization) return { kind: 'denied' };
+  if (signal?.aborted) return { kind: 'unavailable' };
+  try {
+    const result = await client
+      .realms({ realmId: input.realmId })
+      .publications({ subjectId: input.subjectId })
+      .preparation.get({ headers: { authorization }, ...(signal ? { fetch: { signal } } : {}) });
+    if (signal?.aborted) return { kind: 'unavailable' };
+    if (result.error || !result.data) {
+      return { kind: [401, 403, 404].includes(result.status) ? 'denied' : 'unavailable' };
+    }
+    const preparation = result.data.preparation;
+    if (preparation.realm.realmId !== input.realmId || preparation.subject.originalId !== input.subjectId)
+      return { kind: 'denied' };
+    return { kind: 'ready', preparation };
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
 
 export function publicationCommandHref(realmId: string, subjectId: string, action: 'publish' | 'withdraw' | 'reject') {
   const base = `/v1/realms/${realmId}/publications`;

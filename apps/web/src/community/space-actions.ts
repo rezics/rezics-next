@@ -1,4 +1,4 @@
-import { unavailablePublicationPreparation } from './realm-publication-preparation';
+import { readPublicationPreparation } from './realm-publication-preparation';
 import { notFound } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { validateRealmClaimStatusRead, type RealmClaimStatusInput } from './realm-claim-status';
@@ -396,7 +396,7 @@ export const readRealmPublications = createServerFn({ method: 'GET' })
     };
   });
 
-/** Named unavailable seam until the mounted native resource reaches KernelClient. */
+/** Selected work inspection uses the same private session transport as the existing commands. */
 export const readRealmPublicationPreparation = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     const { realmId } = validateRealm(input);
@@ -411,8 +411,8 @@ export const readRealmPublicationPreparation = createServerFn({ method: 'GET' })
     return { realmId, subjectId: input.subjectId };
   })
   .handler(async ({ data }) => {
-    setResponseHeader('cache-control', 'private, no-store');
-    return unavailablePublicationPreparation(data);
+    const prepared = await setupReadPreparation();
+    return readPublicationPreparation(kernelClient(), prepared.authorization, data, prepared.request.signal);
   });
 
 export const changeRealmPublication = createServerFn({ method: 'POST' })
