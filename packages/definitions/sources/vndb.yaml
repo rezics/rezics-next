@@ -1,5 +1,6 @@
 # Inventory of the official VNDB 2026-10-25 dump.
 # Snapshot field and column names are frozen from schema_vndbid.sql.
+# The Kana /vn API's tags.rating is a separate aggregate in (0,3]; tags_vn.vote is one user's vote.
 source: https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst
 snapshot:
   dump: https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst
@@ -2516,7 +2517,7 @@ tables:
         reason: User identifier is personal data and is excluded.
       - name: vote
         status: omitted
-        reason: User tag vote is a rating statistic.
+        reason: An individual user's tag vote, not the aggregate tags.rating from the Kana /vn API; never convert or average it into source weight.
       - name: spoiler
         status: proposed
         term: rezics:spoilerLevel

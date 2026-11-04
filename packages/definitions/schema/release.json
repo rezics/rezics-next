@@ -724,6 +724,9 @@
         "minimum": {
           "type": "number"
         },
+        "minimumExclusive": {
+          "const": true
+        },
         "maximum": {
           "type": "number"
         },

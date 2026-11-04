@@ -37,6 +37,7 @@ import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-art
 import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
 import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
 import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
+import { SourceTagWeight } from '../catalogue/source-tag-weight';
 import {
   bindDisclosedClassificationAssociation,
   disclosedClassificationAssociations,
@@ -211,6 +212,10 @@ function inlineValue(snak: Snak, related: Related, options: Options): ReactNode 
   const content = value.content;
   if (property.data_type === 'wikibase-item' && typeof content === 'string') {
     const entry = Object.hasOwn(related, content) ? related[content] : undefined;
+    if (TAG_PROPERTY_SET.has(property.id)) {
+      const label = pageText(entry?.labels, options.locale);
+      if (!entry || !label.text) return null;
+    }
     return itemLink(entry?.redirect ?? content, entry?.labels, options);
   }
   if (property.data_type === 'quantity') {
@@ -320,7 +325,9 @@ type Creator = { id: string; name: string; node: ReactNode };
 const CREATOR_PROPERTIES = ['schema:author', 'schema:creator', 'schema:director', 'schema:musicBy'];
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
 const MAX_CREATORS = 4;
-const TAG_PROPERTY = 'schema:keywords';
+const TAG_PROPERTIES = ['schema:keywords', 'schema:genre'] as const;
+const TAG_PROPERTY_SET = new Set<string>(TAG_PROPERTIES);
+const SOURCE_TAG_WEIGHT_PROPERTIES = new Set(['rezics:sourceTagWeight', 'rezics:sourceTagWeightMetric']);
 
 /** A name compared as written: no case, one space for any run of whitespace. */
 function foldName(text: string): string {
@@ -567,13 +574,15 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
         }
       }
       const qualifiers = statement.qualifiers.flatMap((qualifier) => {
-        if (qualifier.property.id === SPOILER_PROPERTY) return [];
+        if (qualifier.property.id === SPOILER_PROPERTY || SOURCE_TAG_WEIGHT_PROPERTIES.has(qualifier.property.id))
+          return [];
         const shownValue = inlineValue(qualifier, read.related, options);
         return shownValue === null ? [] : [{ qualifier, shownValue }];
       });
       const body = (
         <>
           {value}
+          {!TAG_PROPERTY_SET.has(property) && <SourceTagWeight statement={statement} locale={options.locale} />}
           {qualifiers.length > 0 && (
             <dl className="ms-4 min-w-0 space-y-2 text-sm text-muted-foreground">
               {qualifiers.map(({ qualifier, shownValue }, index) => {
@@ -664,20 +673,23 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       </div>,
     );
   }
-  const keywords = bestRank(
-    (Object.hasOwn(read.subject.statements, TAG_PROPERTY)
-      ? read.subject.statements[TAG_PROPERTY]
-      : []) as unknown as Stmt[],
-  ).flatMap((statement) =>
-    statement.value.type === 'value' && typeof statement.value.content === 'string' && statement.value.content
-      ? [{ statement, text: statement.value.content }]
-      : [],
+  const keywords = TAG_PROPERTIES.flatMap((property) =>
+    bestRank((Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : []) as Stmt[]).flatMap(
+      (statement) => {
+        if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return [];
+        const id = statement.value.content;
+        const entry = Object.hasOwn(read.related, id) ? read.related[id] : undefined;
+        const label = pageText(entry?.labels, options.locale);
+        if (!entry || !label.text) return [];
+        return [{ statement, text: label.text, node: itemLink(entry.redirect ?? id, entry.labels, options) }];
+      },
+    ),
   );
   const visibleKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) <= reader.spoilerLevel);
   const spoilerKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) > reader.spoilerLevel);
   const spoilerKeywordPreview = options.overview ? spoilerKeywords.slice(0, 6) : spoilerKeywords;
   const spoilerKeywordIdentity = spoilerKeywordPreview
-    .map(({ statement, text }) => [statement.id, text, spoilerLevel(statement)] as const)
+    .map(({ statement, text }) => [statement.id, text, spoilerLevel(statement), statement.qualifiers, statement.references] as const)
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
   const spoilerKeywordKey = JSON.stringify([
     read.subject.id,
@@ -692,9 +704,12 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
       aria-label={m.subject_tags({}, { locale: options.locale as never })}
       className="flex flex-wrap gap-2"
     >
-      {items.map(({ statement, text }) => (
+      {items.map(({ statement, node }) => (
         <li key={statement.id}>
-          <span className="rounded-full border border-border px-2.5 py-0.5 text-sm">{text}</span>
+          <span className="inline-flex flex-wrap items-center gap-x-2 rounded-full border border-border px-2.5 py-0.5 text-sm">
+            {node}
+            <SourceTagWeight statement={statement} locale={options.locale} />
+          </span>
         </li>
       ))}
     </ul>

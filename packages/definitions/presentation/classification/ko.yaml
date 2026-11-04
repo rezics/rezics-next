@@ -10,6 +10,10 @@ properties:
   schema:creativeWorkStatus: '작품 상태'
   schema:genre: '장르'
   skos:closeMatch: '유사 개념'
+  rezics:sourceTagWeight: '출처 태그 가중치'
+  rezics:sourceTagWeightMetric: '출처 가중치 지표'
+  rezics:sourceSnapshot: '출처 스냅샷'
+  rezics:sourceTagId: 'VNDB 태그 ID'
 inverseProperties:
   wdt:P7937: '이 형식의 작품'
   skos:inScheme: '이 체계의 개념'
@@ -31,3 +35,7 @@ propertyDescriptions:
   schema:creativeWorkStatus: '이 작품 또는 릴리스의 개발·공개 상태를 나타내는 개념입니다. 특정 릴리스가 작품에 대해 완전한지는 작품 연관의 한정어입니다.'
   schema:genre: '공상과학처럼 이 작품을 분류하는 장르 개념입니다.'
   skos:closeMatch: '의미가 매우 가까운 별개의 개념입니다. 동일성이나 필터의 자동 확장을 뜻하지 않습니다.'
+  rezics:sourceTagWeight: '이 연결에 대한 출처의 정확한 집계값입니다. VNDB tags.rating의 척도는 (0,3]이며 REZICS 투표나 신뢰도가 아닙니다.'
+  rezics:sourceTagWeightMetric: '출처 태그 가중치의 척도와 의미를 정하는 유형화된 지표입니다.'
+  rezics:sourceSnapshot: '인용된 버전 없는 공급자 응답 원본의 SHA-256 다이제스트입니다.'
+  rezics:sourceTagId: '인용된 VNDB 레코드에서 이 태그를 식별하는 공급자 ID입니다.'

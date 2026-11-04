@@ -84,7 +84,7 @@ slots:
       - wd:P136
     annotations:
       datatype: wikibase-item
-      qualifiers: spoilerLevel
+      qualifiers: spoilerLevel sourceTagWeight sourceTagWeightMetric
       relation_group: classification
       inverse: rezics:workInGenre
       relation_order: name
@@ -95,10 +95,42 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
-      qualifiers: spoilerLevel
+      qualifiers: spoilerLevel sourceTagWeight sourceTagWeightMetric
       relation_group: classification
       inverse: rezics:taggedSubject
       relation_order: name
+  sourceTagWeight:
+    slot_uri: rezics:sourceTagWeight
+    description: >-
+      An exact source-reported aggregate VNDB tag rating on this classification association. For vndbTagsRating,
+      the amount is in rating points on the open interval (0,3], unit 1; zero, inferred scores, vote totals and
+      native REZICS assessments are not this statistic.
+    range: decimal
+    minimum_value: 0
+    maximum_value: 3
+    annotations:
+      datatype: quantity
+      units: '1'
+      exact: true
+      minimum_exclusive: true
+  sourceTagWeightMetric:
+    slot_uri: rezics:sourceTagWeightMetric
+    description: The typed metric that defines the scale and interpretation of sourceTagWeight.
+    pattern: '^(?:vndbTagsRating)$(?![\s\S])'
+    annotations:
+      datatype: string
+  sourceSnapshot:
+    slot_uri: rezics:sourceSnapshot
+    description: SHA-256 identity of the exact unversioned provider response used for a cited source statistic.
+    pattern: '^unversioned:sha256:[0-9a-f]{64}$(?![\s\S])'
+    annotations:
+      datatype: string
+  sourceTagId:
+    slot_uri: rezics:sourceTagId
+    description: Provider identifier of the exact tag association within the cited source record.
+    pattern: '^g[1-9][0-9]{0,9}$(?![\s\S])'
+    annotations:
+      datatype: string
   creativeWorkStatus:
     slot_uri: schema:creativeWorkStatus
     description: >-

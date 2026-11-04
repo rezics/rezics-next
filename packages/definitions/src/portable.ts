@@ -119,6 +119,7 @@ export type PropertyDefinition = {
   targets?: string[];
   units?: string[];
   minimum?: number;
+  minimumExclusive?: boolean;
   maximum?: number;
   qualifiers: string[];
   value: object;
