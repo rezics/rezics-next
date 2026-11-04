@@ -87,11 +87,11 @@ function deferred<T>() {
 }
 
 // Authored source outcomes only; execution is deferred by this slice's launch contract.
-async function mount(initial: Partial<Props> = {}) {
+async function mount(initial: Partial<Props> = {}, locale = getLocale()) {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: `https://site.test/${getLocale()}/collections/private-rule/rule` });
+  const window = new Window({ url: `https://site.test/${locale}/collections/private-rule/rule` });
   const globals = {
     window,
     document: window.document,
@@ -141,6 +141,7 @@ async function mount(initial: Partial<Props> = {}) {
     async choose(select: HTMLSelectElement, values: string[]) {
       await act(async () => {
         for (const option of select.options) option.selected = values.includes(option.value);
+        select.dispatchEvent(new window.Event('input', { bubbles: true }) as unknown as Event);
         select.dispatchEvent(new window.Event('change', { bubbles: true }) as unknown as Event);
       });
     },
@@ -176,7 +177,7 @@ test('available choices use supplied localized names, with exact saved and field
       setLocale(locale, { reload: false });
       const ui = await mount({
         page: ready({ and: [state, { owner: { label: { id: '00000000-0000-4000-8000-000000000001' } } }] }),
-      });
+      }, locale);
       try {
         expect(ui.select(m.library_rule_state()).selectedOptions[0]!.textContent).toBe(stateLabels[locale]);
         expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toBe('Weekend reading');
@@ -399,32 +400,47 @@ test('an uncertain save keeps its original binding, key and all operands through
 });
 
 test('viewer, address, CSRF and admission retirement remove exact private details and reject late save completion', async () => {
-  for (const loss of [
+  const losses = [
     { viewerId: 'bob' },
     { collectionId: 'other-rule' },
     { csrfToken: '' },
     { admitted: ['collection_rule.get'] },
-  ]) {
-    const original = ready();
-    const late = deferred<CollectionWriteResult>();
-    const navigation: string[] = [];
-    const ui = await mount({ page: original, save: async () => late.promise, navigate: (id) => navigation.push(id) });
-    try {
+  ];
+  const authority = {
+    viewerId: 'alice',
+    collectionId: 'private-rule',
+    csrfToken: 'csrf-alice',
+    admitted: ['collection.create', 'collection_rule.get', 'collection_rule.update', 'library_label.list'],
+  };
+  let original = ready();
+  let late = deferred<CollectionWriteResult>();
+  const navigation: string[] = [];
+  const ui = await mount({ page: original, ...authority, save: async () => late.promise, navigate: (id) => navigation.push(id) });
+  try {
+    for (const [index, loss] of losses.entries()) {
       await ui.submit();
       await ui.render(loss);
       expect(ui.host.querySelector('form, details, code, select, a')).toBeNull();
       expect(ui.host.textContent).not.toContain(original.rule.releaseDigest);
       await act(async () => late.resolve({ ok: true, id: 'late-private-result' }));
       expect(navigation).toEqual([]);
-      await ui.render({
-        viewerId: 'alice',
-        collectionId: 'private-rule',
-        csrfToken: 'csrf-alice',
-        admitted: ['collection_rule.get', 'collection_rule.update'],
-      });
+      await ui.render(authority);
       expect(ui.host.querySelector('form, details, code')).toBeNull();
-    } finally {
-      await ui.close();
+      if (index < losses.length - 1) {
+        original = {
+          ...ready(),
+          intent: `10000000-0000-4000-8000-${String(index + 2).padStart(12, '0')}`,
+        };
+        late = deferred<CollectionWriteResult>();
+        await ui.render({
+          ...authority,
+          page: original,
+          save: async () => late.promise,
+        });
+        expect(ui.host.querySelector('form')).not.toBeNull();
+      }
     }
+  } finally {
+    await ui.close();
   }
 });
