@@ -5,6 +5,11 @@ test('the mounted Kernel publishes closed review and immediate-parent context wi
   const { paths } = JSON.parse(await kernelContract());
   expect(paths['/v1/libraryShelfScorePreparation'].post.operationId).toBe('library_shelf_score.prepare');
   const page = paths['/v1/feedItems'].get.responses['200'].content['application/json'].schema;
+  const personal = page.properties.viewerPersonalActions.anyOf;
+  expect(personal[0].additionalProperties).toBe(false);
+  expect(personal[0].properties.rows.maxItems).toBe(100);
+  expect(personal[0].properties.rows.items.properties.actions.anyOf[0].properties.allowed.type).toBe('array');
+  expect(personal[1].properties.reason.anyOf.map((value: any) => value.const)).toContain('response_limit');
   const variants = page.properties.feedItems.items.anyOf.map((schema: any) => schema.properties);
   const subject = variants.filter((variant: any) => variant.summary.properties.subjectReactions);
   expect(subject).toHaveLength(3);

@@ -587,3 +587,46 @@ a constant physical-row cost claim. The current native fixed-size regression rem
 OpenAPI publishes these closed native context shapes. Home receiving is wired to the mounted response without a
 Web DTO, but Kernel declaration generation still stops on retained Kernel type errors. Prepared Web cards and focused
 receiving tests do not establish native lifecycle, growth or full experience acceptance.
+
+## Current Home personal facts
+
+Authenticated Home adds optional `viewerPersonalActions` with the exact native
+`ViewerPersonalActionsPage` shape. `FeedViewerPersonalActionsSchema` extends the native
+facts schema with the mounted action state and is reachable through `FeedPageSchema` and
+`feed_item.list` OpenAPI. The complete-input publisher emits declarations and the installed
+client's existing `FeedPage` root alias; Web retains its existing receiver and writers.
+
+Decision: Home attaches one native page result keyed by original occurrence IDs, and
+withholds changed source occurrences without refill, retaining their original retry frontier.
+Only disclosed creative-work Subjects and explicit original review targets are candidates;
+replies, Collections and generic Subjects supply no inferred work operand. A fresh Semantic
+observation confirms exact identity, type and creative-work status. Repeated work references
+retain separate row keys, original Subjects and public citations.
+
+Each authenticated Home request calls the installed `viewerPersonalActions` reader once,
+including empty pages. Its native 100 raw-row, 16384 input-byte and 65536 response-byte bounds
+are independent; rows are not deduplicated before that reader. Three loaded pages prepare,
+read and finalize independently. Home then repeats selected source queries with the original
+cursor operands, original content contexts and selected Space/population admission. Changed
+or missing occurrences are withheld; changed Semantic observations make private facts unavailable.
+Neither successful facts nor mounted advice prove continued source disclosure.
+
+Entry present, absent and scope-unavailable, vote present (including zero), absent and
+unavailable, and actions current (including `allowed: []`) or unavailable retain native meaning.
+Only the standard question `00000000-0000-7000-8000-000000000001`, revision 1, scale 0..20 step 1
+can supply the current counted score. Missing owner identity authority remains unavailable;
+citations and historical votes do not supply scores. Entry absence does not deny creation.
+The helper preserves original writers and `atomic_guard_unavailable` for conditional adoption.
+Authenticated responses remain private/no-store and use the existing actor/client/credential cursor binding.
+
+### Cost: Home personal composition
+
+Every page charges full native facts preparation/read/currentness, mounted action initial/final
+preparation and evaluation, Auth and every represented pool, even on empty, denied and failed
+branches. Content adds one bounded Semantic summary observation/currentness cohort (at most
+20 occurrence references), a second exact selected-lane load at the original native widths,
+and a second selected content-context batch plus Space/population final admission. These
+loads include all native candidate, disclosure, account, Realm, Access, checkout and transaction
+costs of their owners, not merely successful facts reads. No refill or pooled multi-page batch
+is introduced. All work remains bounded by each page's existing lane widths and deadline;
+no operation scales with total Library or vote history.

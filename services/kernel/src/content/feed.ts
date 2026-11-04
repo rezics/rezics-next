@@ -13,6 +13,7 @@ import { createContinueReads } from '../library/continue-reads.ts';
 import { createFollowActivitySource } from '../library/follow-activity.ts';
 import { createCollectionReads } from '../library/collection-reads.ts';
 import type { ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
+import { composeFeedViewerPersonalActions } from './feed-viewer.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
 import { feedExcerpt, feedAuthor } from './feed-summary.ts';
 import { prepareFeedContentContext, type FeedContentContextReference } from './feed-context.ts';
@@ -336,7 +337,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
       // Point question witnesses do not establish population coverage. Keep the
       // independent Context producer closed before enumerating any source.
       if (query.ratingQuestionId !== undefined) throw new ProblemError('dependency_unavailable');
-      const space =
+      let space =
         query.spaceId === undefined
           ? undefined
           : await openFollowingSpace(deps, actor, query.spaceId, deadline, now.toISOString());
@@ -371,8 +372,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
         throw new RangeError('Feed native candidate bound exceeded');
       // One bounded mixed round. Reserve native raw costs, including rejected keys inside owners:
       // discovery <=6D+3, Continue <=39, inbox <=F. Mixed max91; anonymous max123.
-      await Promise.all(
-        names.map(async (lane) => {
+      const loadLane = async (lane: Lane) => {
           if (position[lane] === false) return;
           try {
             if (lane === 'discovery') {
@@ -525,7 +525,10 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
             sources[lane] = sourceState(error);
             next[lane] = position[lane];
           }
-        }),
+      };
+      await Promise.all(names.map(loadLane));
+      const sourceWitnesses = new Map(
+        names.flatMap((lane) => lanes[lane].flatMap(({ item }) => item ? [[item.id, JSON.stringify(item)] as const] : [])),
       );
       // Keep rejected candidates in their original slots: they still consume the native
       // raw budget and examined frontier, including Continue's fingerprint/resume keys.
@@ -620,6 +623,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           });
         }
       }
+      const contextWitnesses = new Map<string, string>();
       if (contextReferences.length) {
         try {
           const composition = await prepareFeedContentContext(
@@ -633,6 +637,7 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           for (const reference of contextReferences) {
             const item = feedItems.find((candidate) => candidate.id === reference.key);
             const context = composed.contexts.get(reference.key);
+            if (context) contextWitnesses.set(reference.key, JSON.stringify({ thread: context.thread, post: context.post }));
             const thread = context?.thread;
             if (
               !item ||
@@ -804,9 +809,55 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           );
         }
       }
+      let viewerPersonalActions: FeedPage['viewerPersonalActions'];
+      if (personal && stream === 'home') {
+        viewerPersonalActions = await composeFeedViewerPersonalActions(
+          deps, actor, feedItems, deadline, languages,
+          async () => {
+            // Reopen the exact independent source queries after all foreign work. Their
+            // new cursors are observations only: retries retain the original frontier.
+            const retainedNext = { ...next };
+            const selectedLanes = [...new Set(feedItems.map((item) => item.source))];
+            await space?.finish();
+            if (query.spaceId !== undefined)
+              space = await openFollowingSpace(deps, actor, query.spaceId, deadline, now.toISOString());
+            for (const lane of selectedLanes) await loadLane(lane);
+            Object.assign(next, retainedNext);
+            const current = new Map(selectedLanes.flatMap((lane) =>
+              lanes[lane].flatMap(({ item }) => item ? [[item.id, JSON.stringify(item)] as const] : [])));
+            for (let index = feedItems.length - 1; index >= 0; index--) {
+              const item = feedItems[index]!;
+              if (current.get(item.id) !== sourceWitnesses.get(item.id)) {
+                feedItems.splice(index, 1);
+                next[item.source] = position[item.source];
+                if (item.source === 'continue') next.resume = position.resume;
+              }
+            }
+            if (contextReferences.length) {
+              const finalContexts = await (await prepareFeedContentContext(
+                content, contextReferences.map(({ key, threadId, postId }) => ({ key, threadId, postId })),
+                { actor, deadline }, languages,
+              )).finish();
+              for (let index = feedItems.length - 1; index >= 0; index--) {
+                const item = feedItems[index]!;
+                if (!contextWitnesses.has(item.id)) continue;
+                const context = finalContexts.contexts.get(item.id);
+                if (!context || JSON.stringify({ thread: context.thread, post: context.post }) !== contextWitnesses.get(item.id)) {
+                  feedItems.splice(index, 1);
+                  next[item.source] = position[item.source];
+                }
+              }
+            }
+            await space?.finish();
+            await spacePopulation?.finish();
+            return feedItems;
+          },
+        );
+      }
       const hasNext = names.some((lane) => next[lane] !== false && sources[lane] === 'ready');
       return {
         feedItems,
+        ...(viewerPersonalActions === undefined ? {} : { viewerPersonalActions }),
         sources,
         asOf: personal ? position.boundary : (discoveryAsOf ?? position.boundary),
         ...(reactionsAsOf === undefined ? {} : { reactionsAsOf }),

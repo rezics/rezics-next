@@ -1,3 +1,4 @@
+import { FeedViewerPersonalActionsSchema } from './feed-viewer-schema.ts';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
 import { FilterError, parseDiscoveryFilter } from '@rezics/filter';
@@ -412,6 +413,7 @@ export const FeedSourceStateSchema = t.Union([
 export const FeedPageSchema = t.Object(
   {
     feedItems: t.Array(FeedItemSchema, { maxItems: 20 }),
+    viewerPersonalActions: t.Optional(FeedViewerPersonalActionsSchema),
     next: nullable,
     asOf: t.String({ format: 'date-time' }),
     reactionsAsOf: t.Optional(t.Union([reactionFreshness, t.Null()])),
