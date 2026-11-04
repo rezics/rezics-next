@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "Este navegador no admite las llaves de acceso. Usa tu contraseña.",
   "auth_login_passkey_method_unavailable": "El inicio de sesión con llave de acceso no está disponible aquí. Usa tu contraseña.",
   "auth_login_password": "Contraseña",
-  "auth_login_pending_passkey": "Esperando el inicio de sesión con una clave de acceso. Puedes usar tu contraseña en su lugar.",
+  "auth_login_pending_passkey": "Esperando el inicio con clave de acceso. Complete o cancele la solicitud antes de elegir otro método.",
   "auth_login_pending_password": "Iniciando sesión con tu contraseña…",
   "auth_login_rate_limited": "Demasiados intentos de inicio de sesión. Vuelve a intentarlo más tarde.",
   "auth_login_recovery": "¿Olvidaste tu contraseña?",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "Introduce el ID completo de la cuenta operadora (UUID).",
   "auth_automated_operator_unlabelled": "Operador sin nombre público",
   "auth_automated_pending": "Comprobando la solicitud de creación actual…",
-  "auth_automated_responsibility": "El operador aparecerá públicamente como responsable de este actor. La creación no añade inicio de sesión ni permisos heredados; cambiar el operador requiere una acción autorizada independiente."
+  "auth_automated_responsibility": "El operador aparecerá públicamente como responsable de este actor. La creación no añade inicio de sesión ni permisos heredados; cambiar el operador requiere una acción autorizada independiente.",
+  "auth_login_return_heading": "Inicio de sesión anterior",
+  "auth_login_return_unsent": "Se estaban preparando las opciones de clave de acceso. No se envió ninguna respuesta de autenticación. Elija un método según la información actual.",
+  "auth_login_return_prompt": "El navegador esperaba una clave de acceso. Esa solicitud se cerró sin enviar la autenticación. Elija un método cuando esté listo.",
+  "auth_login_return_acknowledged": "La autenticación se confirmó antes de salir de esta página. Revise la sesión actual para decidir cómo continuar.",
+  "auth_login_return_refused": "La autenticación anterior fue rechazada. Elija el siguiente paso según la información actual.",
+  "auth_login_return_separate": "La cuenta que se muestra ahora es una observación actual independiente. No confirma ni cancela un inicio de sesión anterior sin confirmar.",
+  "auth_login_return_dismiss": "Ocultar aviso del inicio de sesión anterior",
+  "auth_login_return_dismiss_help": "Solo se oculta este aviso. La autenticación anterior no se resuelve ni se cancela.",
+  "auth_login_autofill": "Autocompletado de claves de acceso del navegador",
+  "auth_login_prompt_cancelled": "La solicitud de clave de acceso se canceló antes de enviar la autenticación. Elija una contraseña o pulse el botón de clave de acceso."
 }

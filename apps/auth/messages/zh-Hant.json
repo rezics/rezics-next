@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "此瀏覽器不支援密碼金鑰，請改用密碼登入。",
   "auth_login_passkey_method_unavailable": "目前無法使用密碼金鑰登入，請改用密碼登入。",
   "auth_login_password": "密碼",
-  "auth_login_pending_passkey": "正在等待通行金鑰登入。你也可以改用密碼。",
+  "auth_login_pending_passkey": "正在等待通行密鑰登入。請先完成或取消提示，再使用其他方式。",
   "auth_login_pending_password": "正在使用密碼登入…",
   "auth_login_rate_limited": "登入嘗試次數過多，請稍後再試。",
   "auth_login_recovery": "忘記密碼？",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "請輸入完整的營運者帳號 ID（UUID）。",
   "auth_automated_operator_unlabelled": "未設定公開名稱的營運者",
   "auth_automated_pending": "正在檢查目前的建立請求…",
-  "auth_automated_responsibility": "營運者將被公開標示為此角色的責任方。建立不會賦予角色登入方式或繼承權限；更換營運者需要另行取得授權。"
+  "auth_automated_responsibility": "營運者將被公開標示為此角色的責任方。建立不會賦予角色登入方式或繼承權限；更換營運者需要另行取得授權。",
+  "auth_login_return_heading": "先前的登入",
+  "auth_login_return_unsent": "正在準備通行密鑰選項。尚未傳送驗證回應。請依目前提示選擇登入方式。",
+  "auth_login_return_prompt": "瀏覽器當時正在等待通行密鑰。該提示已結束，未傳送驗證回應。準備好後請重新選擇登入方式。",
+  "auth_login_return_acknowledged": "離開此頁面前已收到驗證成功確認。請檢視目前工作階段，決定如何繼續。",
+  "auth_login_return_refused": "先前的驗證已遭拒絕。請依目前提示選擇下一步。",
+  "auth_login_return_separate": "現在顯示的帳號是另行觀察到的目前狀態，無法確認或取消先前結果未明的登入。",
+  "auth_login_return_dismiss": "關閉先前登入通知",
+  "auth_login_return_dismiss_help": "關閉只會隱藏此通知，不會確定先前驗證的結果，也不會取消驗證。",
+  "auth_login_autofill": "瀏覽器通行密鑰自動填入",
+  "auth_login_prompt_cancelled": "通行密鑰提示已在傳送驗證前取消。準備好後請選擇密碼或按下通行密鑰按鈕。"
 }

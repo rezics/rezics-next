@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "此浏览器不支持通行密钥。请改用密码登录。",
   "auth_login_passkey_method_unavailable": "当前无法使用通行密钥登录。请改用密码登录。",
   "auth_login_password": "密码",
-  "auth_login_pending_passkey": "正在等待通行密钥登录。你也可以改用密码。",
+  "auth_login_pending_passkey": "正在等待通行密钥登录。请选择完成或取消提示，再使用其他方式。",
   "auth_login_pending_password": "正在使用密码登录…",
   "auth_login_rate_limited": "登录尝试次数过多，请稍后重试。",
   "auth_login_recovery": "忘记密码？",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "请输入完整的运营者账号 ID（UUID）。",
   "auth_automated_operator_unlabelled": "未设置公开名称的运营者",
   "auth_automated_pending": "正在检查当前创建请求…",
-  "auth_automated_responsibility": "运营者将被公开标示为此角色的责任方。创建不会赋予角色登录方式或继承权限；更换运营者需要另行获得授权。"
+  "auth_automated_responsibility": "运营者将被公开标示为此角色的责任方。创建不会赋予角色登录方式或继承权限；更换运营者需要另行获得授权。",
+  "auth_login_return_heading": "先前的登录",
+  "auth_login_return_unsent": "正在准备通行密钥选项。尚未发送认证响应。请根据当前提示选择登录方式。",
+  "auth_login_return_prompt": "浏览器当时正在等待通行密钥。该提示已结束，未发送认证响应。准备好后请重新选择登录方式。",
+  "auth_login_return_acknowledged": "离开此页面前已收到认证成功确认。请查看当前会话，决定如何继续。",
+  "auth_login_return_refused": "先前的认证已被拒绝。请根据当前提示选择下一步。",
+  "auth_login_return_separate": "现在显示的账户是单独观察到的当前状态，不能确认或取消先前结果未明的登录。",
+  "auth_login_return_dismiss": "关闭先前登录通知",
+  "auth_login_return_dismiss_help": "关闭只会隐藏此通知，不会确定先前认证的结果，也不会取消认证。",
+  "auth_login_autofill": "浏览器通行密钥自动填充",
+  "auth_login_prompt_cancelled": "通行密钥提示已在发送认证前取消。准备好后请选择密码或点击通行密钥按钮。"
 }

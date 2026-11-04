@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "Dieser Browser unterstützt keine Passkeys. Verwende stattdessen dein Passwort.",
   "auth_login_passkey_method_unavailable": "Die Passkey-Anmeldung ist hier nicht verfügbar. Verwende stattdessen dein Passwort.",
   "auth_login_password": "Passwort",
-  "auth_login_pending_passkey": "Warten auf die Passkey-Anmeldung. Du kannst stattdessen dein Passwort verwenden.",
+  "auth_login_pending_passkey": "Passkey-Anmeldung läuft. Schließen Sie die Abfrage ab oder brechen Sie sie ab, bevor Sie eine andere Methode wählen.",
   "auth_login_pending_password": "Anmeldung mit deinem Passwort…",
   "auth_login_rate_limited": "Zu viele Anmeldeversuche. Bitte versuche es später erneut.",
   "auth_login_recovery": "Passwort vergessen?",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "Gib eine vollständige Betreiber-Konto-ID (UUID) ein.",
   "auth_automated_operator_unlabelled": "Betreiber ohne öffentlichen Namen",
   "auth_automated_pending": "Die aktuelle Erstellungsanfrage wird geprüft…",
-  "auth_automated_responsibility": "Der Betreiber wird öffentlich als verantwortlich für diesen Akteur ausgewiesen. Die Erstellung fügt weder eine Anmeldung noch geerbte Berechtigungen hinzu. Ein Betreiberwechsel erfordert eine eigene autorisierte Aktion."
+  "auth_automated_responsibility": "Der Betreiber wird öffentlich als verantwortlich für diesen Akteur ausgewiesen. Die Erstellung fügt weder eine Anmeldung noch geerbte Berechtigungen hinzu. Ein Betreiberwechsel erfordert eine eigene autorisierte Aktion.",
+  "auth_login_return_heading": "Frühere Anmeldung",
+  "auth_login_return_unsent": "Passkey-Optionen wurden vorbereitet. Es wurde keine Authentifizierungsantwort gesendet. Wählen Sie anhand der aktuellen Hinweise eine Methode.",
+  "auth_login_return_prompt": "Der Browser wartete auf einen Passkey. Die Aufforderung wurde ohne gesendete Authentifizierung beendet. Wählen Sie bei Bedarf erneut eine Methode.",
+  "auth_login_return_acknowledged": "Die Authentifizierung wurde vor dem Verlassen bestätigt. Prüfen Sie die aktuelle Sitzung, um fortzufahren.",
+  "auth_login_return_refused": "Die frühere Authentifizierung wurde abgelehnt. Wählen Sie anhand der aktuellen Hinweise den nächsten Schritt.",
+  "auth_login_return_separate": "Das jetzt angezeigte Konto ist eine separate aktuelle Beobachtung. Es bestätigt oder beendet keine frühere unbestätigte Anmeldung.",
+  "auth_login_return_dismiss": "Hinweis zur früheren Anmeldung ausblenden",
+  "auth_login_return_dismiss_help": "Dies blendet nur den Hinweis aus. Die frühere Authentifizierung wird dadurch weder geklärt noch abgebrochen.",
+  "auth_login_autofill": "Passkey-Autovervollständigung im Browser",
+  "auth_login_prompt_cancelled": "Die Passkey-Abfrage wurde vor dem Senden abgebrochen. Wählen Sie ein Passwort oder drücken Sie erneut die Passkey-Schaltfläche."
 }

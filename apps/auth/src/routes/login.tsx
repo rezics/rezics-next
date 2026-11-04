@@ -29,6 +29,8 @@ import { ErrorAlert } from '../alert';
 import { selectManagementOperationStepUp } from '../management-operation-step-up';
 import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
 import { LoginAttempt, useLoginJourney } from '../login-attempt';
+import { LoginReturnView } from '../login-return-view';
+import { type LoginPhase } from '../login-return';
 import { loadSignInPageForJourney } from '../signin-page';
 import {
   initialLoginChoice,
@@ -53,11 +55,25 @@ export const Route = createFileRoute('/login')({
 });
 
 function LoginPage() {
-  const journey = useLoginJourney();
-  return journey ? (
-    <LoginForm key={journey.key} query={journey.query} attempt={journey.attempt} />
-  ) : (
-    <AuthPage heading={m.auth_login_heading()} />
+  const { journey, records, dismiss } = useLoginJourney();
+  const current = useRef<HTMLDivElement>(null);
+  return (
+    <AuthPage heading={m.auth_login_heading()}>
+      <LoginReturnView
+        records={records}
+        onDismiss={() => {
+          dismiss();
+          current.current?.focus();
+        }}
+      />
+      <div ref={current} tabIndex={-1}>
+        {journey ? (
+          <LoginForm key={journey.key} query={journey.query} attempt={journey.attempt} restored={journey.restored} />
+        ) : (
+          <p role="status">{m.auth_inventory_loading()}</p>
+        )}
+      </div>
+    </AuthPage>
   );
 }
 
@@ -140,7 +156,7 @@ function LoginDeparture({
   );
 }
 
-function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt }) {
+function LoginForm({ query, attempt, restored }: { query: string; attempt: LoginAttempt; restored: boolean }) {
   const { history } = useRouter();
   const released = useRef(false);
   const unfinished = useRef(false);
@@ -236,12 +252,12 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     const review = loginReview(currentChoice.current);
     void loadSignInPageForJourney(query, window.location.origin, attempt, controller.signal).then((result) => {
       if (!result) return;
-      setChoice(observedLoginChoice(result, review, pageRetry > 0));
+      setChoice(observedLoginChoice(result, review, restored || pageRetry > 0, restored && pageRetry === 0));
     });
     return () => {
       controller.abort();
     };
-  }, [attempt, pageRetry, query]);
+  }, [attempt, pageRetry, query, restored]);
 
   useLayoutEffect(() => {
     if (choice.kind !== 'ready') return;
@@ -298,9 +314,26 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       return;
     const completion = attempt.begin('autofill');
     if (!completion) return;
-    void signInWithPasskey({ autofill: true, isCurrent: completion.isCurrent }).then((result) => {
-      if (completion.finish()) finishPasskey(result);
+    void signInWithPasskey({
+      autofill: true,
+      isCurrent: completion.isCurrent,
+      onPhase: (phase) => observePasskey(completion, phase),
+    }).then((result) => {
+      if (completion.finish()) finishPasskey(result, true);
     });
+  }
+
+  function observePasskey(
+    completion: { isCurrent: () => boolean; observe: (phase: LoginPhase) => void },
+    phase: LoginPhase,
+  ) {
+    if (!completion.isCurrent()) return;
+    completion.observe(phase);
+    if (phase === 'dispatched') {
+      unfinished.current = true;
+      setPending(true);
+      setPasskeyPending(true);
+    }
   }
 
   function switchAccount() {
@@ -334,15 +367,18 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       : null;
   }
 
-  function finishPasskey(result: PasskeySignInResult) {
+  function finishPasskey(result: PasskeySignInResult, autofill = false) {
     if (result.ok) {
       complete(signInTarget(query, window.location.origin));
       return;
     }
     setPending(false);
     setPasskeyPending(false);
-    if (result.reason === 'cancelled') return;
-    if (result.reason === 'unavailable') {
+    if (result.reason === 'cancelled') {
+      if (!autofill) setMessage(m.auth_login_prompt_cancelled());
+      return;
+    }
+    if (result.reason === 'unavailable' && ['unknown', 'dispatched'].includes(attempt.snapshot()?.phase ?? '')) {
       uncertain();
       return;
     }
@@ -361,7 +397,11 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     setEmailError('');
     setPasswordError('');
     if (stepUp) {
+      completion.observe('dispatched');
       const outcome = await confirmStepUpWithPasskey(query, window.location.origin, completion.isCurrent);
+      completion.observe(
+        outcome.ok ? 'acknowledged' : outcome.message === m.auth_failure_unavailable() ? 'unknown' : 'refused',
+      );
       if (!completion.finish()) return;
       if (outcome.ok) {
         complete(outcome.target);
@@ -376,11 +416,13 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       setMessage(outcome.message ?? '');
       return;
     }
-    const result = await signInWithPasskey({ isCurrent: completion.isCurrent });
+    const result = await signInWithPasskey({
+      isCurrent: completion.isCurrent,
+      onPhase: (phase) => observePasskey(completion, phase),
+    });
     if (!completion.finish()) return;
     finishPasskey(result);
-    // Showing the prompt replaced the autofill ceremony, so offer autofill again if the person backed out.
-    if (!result.ok && passkeySupport === 'autofill') startAutofill();
+    // A deliberate button prompt never restarts conditional mediation when it retires.
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -406,6 +448,9 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     setPasswordError('');
     if (stepUp) {
       const outcome = await confirmStepUp(email, password, query, window.location.origin, completion.isCurrent);
+      completion.observe(
+        outcome.ok ? 'acknowledged' : outcome.message === m.auth_failure_unavailable() ? 'unknown' : 'refused',
+      );
       if (!completion.finish()) return;
       setPassword('');
       if (outcome.ok) {
@@ -420,7 +465,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
       setMessage(outcome.message ?? '');
       return;
     }
-    const result = await signIn(email, password);
+    const result = await signIn(email, password, completion.observe);
     if (!completion.finish()) return;
     setPassword('');
     if (result.ok) {
@@ -442,7 +487,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   }
 
   return (
-    <AuthPage heading={m.auth_login_heading()}>
+    <>
       <LoginDeparture unfinished={unfinished} leave={leave} focus={() => emailInput.current?.focus()} />
       <LoginAccountChoiceView
         choice={choice}
@@ -474,7 +519,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
               }}
               aria-invalid={emailError ? true : undefined}
               aria-describedby={emailError ? emailErrorId : undefined}
-              readOnly={pending && !passkeyPending}
+              readOnly={pending}
               required
             />
             {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
@@ -485,7 +530,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
               name="password"
               autoComplete="current-password"
               required
-              readOnly={pending && !passkeyPending}
+              readOnly={pending}
               id={passwordId}
               value={password}
               onChange={(event) => {
@@ -502,7 +547,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
               {message}
             </ErrorAlert>
           ) : null}
-          <Button type="submit" disabled={pending && !passkeyPending} aria-busy={pending && !passkeyPending}>
+          <Button type="submit" disabled={pending} aria-busy={pending && !passkeyPending}>
             {m.auth_login_heading()}
           </Button>
           {!pageData.methods.passkey || passkeySupport === 'none' || passkeySupport === 'checking' ? null : (
@@ -532,6 +577,6 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
           {m.auth_login_signup()}
         </a>
       </nav>
-    </AuthPage>
+    </>
   );
 }

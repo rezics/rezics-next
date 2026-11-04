@@ -139,12 +139,11 @@ async function open(path = '/login') {
 test('replacement and destination changes keep old password, prompt and autofill results out of the current form', async () => {
   const page = await open();
   try {
-    await flush(() => button(page.host, 'Sign in with a passkey')!.click());
     await page.password();
     expect(page.requests).toHaveLength(1);
     expect(page.cancel).toHaveBeenCalled();
     await flush(() => page.ceremonies[0]!.resolve({ ok: false, reason: 'cancelled' }));
-    await flush(() => page.ceremonies[1]!.resolve({ ok: true }));
+    await flush(() => page.ceremonies[0]!.resolve({ ok: true }));
     expect(button(page.host, 'Sign in')!.disabled).toBe(true);
     expect(page.assign).not.toHaveBeenCalled();
     await page.navigate('/login?client_id=reader&scope=openid&scope=&sig=old');
@@ -153,7 +152,7 @@ test('replacement and destination changes keep old password, prompt and autofill
     await flush(() => page.requests[1]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 })));
     const error = page.host.querySelector('[role="alert"]')!.textContent;
     await flush(() => page.requests[0]!.resolve(Response.json({})));
-    await flush(() => page.ceremonies[2]!.resolve({ ok: false, reason: 'unavailable' }));
+    await flush(() => page.ceremonies[1]!.resolve({ ok: false, reason: 'unavailable' }));
     expect(page.host.querySelector('[role="alert"]')!.textContent).toBe(error);
     expect(page.assign).not.toHaveBeenCalled();
     await page.password();
@@ -169,7 +168,7 @@ test('dismissed prompts recover, and departure or cached restoration retires pen
   try {
     await flush(() => button(page.host, 'Sign in with a passkey')!.click());
     await flush(() => page.ceremonies[1]!.resolve({ ok: false, reason: 'cancelled' }));
-    expect(page.host.querySelector('[role="alert"]')).toBeNull();
+    expect(page.host.querySelector('[role="alert"]')?.textContent).toContain('cancelled before authentication');
     expect(button(page.host, 'Sign in')!.disabled).toBe(false);
     await page.password();
     await flush(() => window.dispatchEvent(new dom.Event('pagehide') as unknown as Event));

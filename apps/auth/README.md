@@ -57,8 +57,7 @@ Decision: during an explicit sign-in, disable account switching and session revi
 conditional mediation and the old Continue control synchronously. Native email is display context, never credential input.
 
 The current account, credential entry for another account, pending authentication, unavailable advice and reviewed session
-are distinct mounted choices. Continue belongs to that choice, not merely the last loaded page. Password can still replace
-a passkey ceremony. Same-turn events share LoginAttempt's exclusion before React renders. A dispatched request cannot be
+are distinct mounted choices. Continue belongs to that choice, not merely the last loaded page. An explicit passkey operation owns the method controls until its response retires; a password cannot replace it. Same-turn events share LoginAttempt's exclusion before React renders. A dispatched request cannot be
 cancelled at the server by changing browser presentation. Account-operation returns use the existing step-up selectors and
 confirmation helpers; a page review cannot complete or replay them.
 
@@ -69,6 +68,26 @@ matching account is not evidence that the uncertain request succeeded. The perso
 current-session return or choose credentials again; neither step claims the uncertain request failed or was cancelled.
 Review clears credentials, invalidates conditional mediation and never automatically starts another ceremony. No private
 choice or credential data survives pagehide; BFCache restoration starts with one fresh native observation.
+
+The stable Login boundary retains at most two generic method/phase records in memory: the first unconfirmed
+operation and the latest interrupted operation. Options, browser input, possible dispatch, acknowledgement, refusal
+and cancellation remain distinct. No credential, identity, query, destination, challenge, operation key or private error
+enters this history. Pagehide retires callbacks and synchronously unmounts private controls before returning to the
+browser. A new document has no history. Storage is optional and is never used for this record.
+
+Decision: retain the first unresolved sign-in alongside the latest interruption; dismissal hides both records without
+settling any native effect. A retained return reads current advice once, marks it as refreshed, and never starts autofill.
+Read Retry, locale changes and dismissal send no command. A later refusal or matching viewer never resolves the old
+unknown. A deliberate new authentication uses fresh current advice. Explicit prompts retain method ownership from
+submit through response retirement; conditional mediation is replaceable only before assertion dispatch. Idle autofill
+alone does not warn on departure, but a possibly sent autofill response does. The existing opaque step-up helpers keep
+their native preflight and readback; their invocation is conservatively recorded as possible dispatch, with exact
+management/account-operation selection unchanged.
+
+The whole-call bound remains one bounded native page read per entry, retained return or deliberate read Retry,
+one password authentication or two passkey Auth calls (options plus response, with the existing four-minute options
+cache), and the existing native preflight/readback for operation confirmation. Local phase observation, dismissal,
+focus and return history add zero I/O, inventory scans, polling or speculative commands.
 
 After successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and empty
 parameters and removing every `sig`, `exp`, `prompt` and `return_to`. It keeps `max_age`. Without a remaining query it
@@ -85,14 +104,13 @@ with `{}` for discoverable-credential options, prompts, and sends `{ response, c
 `POST /signin/passkey`, which answers like `/signin`; success resumes with `signInTarget`. Where the browser supports
 conditional mediation, the email field carries `autocomplete="username webauthn"` and the same ceremony runs in the
 background so the browser can offer passkeys in autofill. Both start from one set of options, which the page shares for
-four minutes, so a sign-in is two Auth calls however it starts. A dismissed prompt (`NotAllowedError`) or a ceremony
-replaced by a newer one is silent. A definitive refusal shows a passkey-specific alert; an unconfirmed outcome offers
+four minutes, so a sign-in is two Auth calls however it starts. A dismissed explicit prompt (`NotAllowedError`) gives an attached next step; replacing idle conditional mediation is silent. A definitive refusal shows a passkey-specific alert; an unconfirmed outcome offers
 current-session review. Without WebAuthn the page shows no passkey control and the email field keeps
 `autocomplete="username"`.
 
 Password, explicit passkey and autofill completions belong only to the current login journey. Changing the
 URL, leaving the page or restoring a cached document discards old callbacks and private inputs. A password
-submission can replace a passkey ceremony; only its current completion may unlock the form or navigate.
+submission can replace conditional mediation only before its assertion dispatch; only a current completion may unlock the form or navigate.
 Replacement cancels the browser ceremony, without undoing a server sign-in or retrying an uncertain request.
 
 Decision: login Stay/Leave protects non-whitespace email, any password or a pending explicit sign-in in memory; Stay retains validation, the current request and focus, Leave clears inputs and retires callbacks, reload/close uses the browser warning, and replacement login requests or successful validated returns bypass the choice. Background conditional passkey autofill alone does not warn.

@@ -25,7 +25,12 @@ export function loginReview(choice: LoginAccountChoice): Review {
     : choice.review;
 }
 
-export function observedLoginChoice(result: SignInPageResult, review: Review, explicit: boolean): LoginAccountChoice {
+export function observedLoginChoice(
+  result: SignInPageResult,
+  review: Review,
+  explicit: boolean,
+  returned = false,
+): LoginAccountChoice {
   if (result.kind === 'unavailable') return { kind: 'unavailable', review };
   const { page } = result;
   const viewer = page.viewer.kind === 'signed-in' ? page.viewer.account_id : null;
@@ -37,9 +42,11 @@ export function observedLoginChoice(result: SignInPageResult, review: Review, ex
       ? 'initial'
       : !viewer
         ? 'signed-out'
-        : viewer !== review.previousViewer
-          ? 'changed'
-          : 'reviewed',
+        : returned
+          ? 'reviewed'
+          : viewer !== review.previousViewer
+            ? 'changed'
+            : 'reviewed',
     uncertain: review.uncertain,
   };
 }

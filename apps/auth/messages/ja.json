@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "このブラウザーはパスキーに対応していません。パスワードでログインしてください。",
   "auth_login_passkey_method_unavailable": "ここではパスキーでログインできません。パスワードをお使いください。",
   "auth_login_password": "パスワード",
-  "auth_login_pending_passkey": "パスキーでのログインを待っています。代わりにパスワードを使うこともできます。",
+  "auth_login_pending_passkey": "パスキーでのログインを待っています。別の方法を選ぶ前に、要求を完了するかキャンセルしてください。",
   "auth_login_pending_password": "パスワードでログインしています…",
   "auth_login_rate_limited": "ログインの試行回数が多すぎます。しばらくしてから再度お試しください。",
   "auth_login_recovery": "パスワードを忘れた場合",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "運営者の完全なアカウントID（UUID）を入力してください。",
   "auth_automated_operator_unlabelled": "公開名のない運営者",
   "auth_automated_pending": "現在の作成リクエストを確認中…",
-  "auth_automated_responsibility": "このアクターの責任を持つ運営者が公開表示されます。作成によってログイン手段や権限が引き継がれることはありません。運営者の変更には、別途承認された操作が必要です。"
+  "auth_automated_responsibility": "このアクターの責任を持つ運営者が公開表示されます。作成によってログイン手段や権限が引き継がれることはありません。運営者の変更には、別途承認された操作が必要です。",
+  "auth_login_return_heading": "以前のログイン",
+  "auth_login_return_unsent": "パスキーのオプションを準備していました。認証応答は送信されていません。現在の案内に従って方法を選択してください。",
+  "auth_login_return_prompt": "ブラウザーはパスキーの入力を待っていました。その要求は認証を送信せずに終了しました。準備ができたら方法を選び直してください。",
+  "auth_login_return_acknowledged": "このページを離れる前に認証が確認されました。現在のセッションを確認して続行方法を選んでください。",
+  "auth_login_return_refused": "以前の認証は拒否されました。現在の案内に従って次の操作を選択してください。",
+  "auth_login_return_separate": "現在表示されているアカウントは、別の時点で確認された情報です。以前の結果不明のログインを確認または取り消すものではありません。",
+  "auth_login_return_dismiss": "以前のログイン通知を閉じる",
+  "auth_login_return_dismiss_help": "通知を非表示にするだけです。以前の認証の結果を確定したり、取り消したりすることはできません。",
+  "auth_login_autofill": "ブラウザーのパスキー自動入力",
+  "auth_login_prompt_cancelled": "認証の送信前にパスキーの要求がキャンセルされました。パスワードを選ぶか、パスキーボタンを押してください。"
 }

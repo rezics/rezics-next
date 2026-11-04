@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "이 브라우저에서는 패스키를 지원하지 않습니다. 비밀번호를 사용해 주세요.",
   "auth_login_passkey_method_unavailable": "여기서는 패스키 로그인을 사용할 수 없습니다. 비밀번호를 사용해 주세요.",
   "auth_login_password": "비밀번호",
-  "auth_login_pending_passkey": "패스키 로그인을 기다리는 중입니다. 대신 비밀번호를 사용할 수 있습니다.",
+  "auth_login_pending_passkey": "패스키 로그인을 기다리고 있습니다. 다른 방법을 선택하기 전에 요청을 완료하거나 취소하세요.",
   "auth_login_pending_password": "비밀번호로 로그인하는 중…",
   "auth_login_rate_limited": "로그인 시도 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요.",
   "auth_login_recovery": "비밀번호를 잊으셨나요?",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "운영자의 전체 계정 ID(UUID)를 입력하세요.",
   "auth_automated_operator_unlabelled": "공개 이름이 없는 운영자",
   "auth_automated_pending": "현재 생성 요청을 확인하는 중…",
-  "auth_automated_responsibility": "운영자는 이 액터의 책임자로 공개 표시됩니다. 생성 시 로그인 수단이나 권한이 상속되지 않습니다. 운영자 변경에는 별도로 승인된 작업이 필요합니다."
+  "auth_automated_responsibility": "운영자는 이 액터의 책임자로 공개 표시됩니다. 생성 시 로그인 수단이나 권한이 상속되지 않습니다. 운영자 변경에는 별도로 승인된 작업이 필요합니다.",
+  "auth_login_return_heading": "이전 로그인",
+  "auth_login_return_unsent": "패스키 옵션을 준비하고 있었습니다. 인증 응답은 전송되지 않았습니다. 현재 안내에 따라 방법을 선택하세요.",
+  "auth_login_return_prompt": "브라우저가 패스키 입력을 기다리고 있었습니다. 인증을 전송하지 않고 요청을 종료했습니다. 준비되면 방법을 다시 선택하세요.",
+  "auth_login_return_acknowledged": "이 페이지를 떠나기 전에 인증이 확인되었습니다. 현재 세션을 검토하고 계속할 방법을 선택하세요.",
+  "auth_login_return_refused": "이전 인증이 거부되었습니다. 현재 안내에 따라 다음 단계를 선택하세요.",
+  "auth_login_return_separate": "지금 표시된 계정은 별도로 확인한 현재 상태입니다. 이전의 확인되지 않은 로그인을 확인하거나 취소하지 않습니다.",
+  "auth_login_return_dismiss": "이전 로그인 알림 닫기",
+  "auth_login_return_dismiss_help": "이 알림만 숨깁니다. 이전 인증의 결과를 확정하거나 인증을 취소하지 않습니다.",
+  "auth_login_autofill": "브라우저 패스키 자동 완성",
+  "auth_login_prompt_cancelled": "인증을 보내기 전에 패스키 요청이 취소되었습니다. 비밀번호를 선택하거나 패스키 버튼을 누르세요."
 }

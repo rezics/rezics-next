@@ -39,7 +39,21 @@ async function setup(initial = advice(), query = '?return_to=%2Fsecurity', suppo
     cleanup.push(() => spy.mockRestore());
   const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
   const ceremony = Promise.withResolvers<passkeys.PasskeySignInResult>();
-  const passkey = spyOn(passkeys, 'signInWithPasskey').mockReturnValue(ceremony.promise);
+  const passkey = spyOn(passkeys, 'signInWithPasskey').mockImplementation((options) => {
+    options?.onPhase?.('dispatched');
+    return ceremony.promise.then((result) => {
+      options?.onPhase?.(
+        result.ok
+          ? 'acknowledged'
+          : result.reason === 'unavailable'
+            ? 'unknown'
+            : result.reason === 'cancelled'
+              ? 'cancelled'
+              : 'refused',
+      );
+      return result;
+    });
+  });
   cleanup.push(
     () => assign.mockRestore(),
     () => passkey.mockRestore(),

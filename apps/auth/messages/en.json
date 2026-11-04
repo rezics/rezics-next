@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "Passkey sign-in is not supported by this browser. Use your password instead.",
   "auth_login_passkey_method_unavailable": "Passkey sign-in is unavailable here. Use your password instead.",
   "auth_login_password": "Password",
-  "auth_login_pending_passkey": "Waiting for passkey sign-in. You can use your password instead.",
+  "auth_login_pending_passkey": "Waiting for passkey sign-in. Finish or cancel the prompt before choosing another method.",
   "auth_login_pending_password": "Signing in with your password…",
   "auth_login_rate_limited": "Too many sign-in attempts. Please try again later.",
   "auth_login_recovery": "Forgot your password?",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "Enter a complete operator account ID (UUID).",
   "auth_automated_operator_unlabelled": "Operator without a public name",
   "auth_automated_pending": "Checking the current creation request…",
-  "auth_automated_responsibility": "The operator will be publicly identified as responsible for this actor. Creation adds no actor sign-in or inherited grants; changing the operator requires its own authorized action."
+  "auth_automated_responsibility": "The operator will be publicly identified as responsible for this actor. Creation adds no actor sign-in or inherited grants; changing the operator requires its own authorized action.",
+  "auth_login_return_heading": "Earlier sign-in",
+  "auth_login_return_unsent": "Passkey options were being prepared. No authentication response was sent. Choose a method using the current advice.",
+  "auth_login_return_prompt": "The browser was waiting for a passkey. That prompt has been retired without sending authentication. Choose a method again when ready.",
+  "auth_login_return_acknowledged": "Authentication was acknowledged before this page left. Review the current session to decide how to continue.",
+  "auth_login_return_refused": "The earlier authentication was refused. Use the current advice to choose your next step.",
+  "auth_login_return_separate": "The account shown now is a separate current observation. It cannot confirm or cancel an earlier unconfirmed sign-in.",
+  "auth_login_return_dismiss": "Dismiss earlier sign-in notice",
+  "auth_login_return_dismiss_help": "Dismissal only hides this notice. It does not resolve or cancel the earlier authentication.",
+  "auth_login_autofill": "Browser passkey autofill",
+  "auth_login_prompt_cancelled": "The passkey prompt was cancelled before authentication was sent. Choose password or press the passkey button when ready."
 }

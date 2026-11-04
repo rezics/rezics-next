@@ -1,3 +1,4 @@
+import { observeLogin, loginResultPhase, type LoginPhaseObserver } from './login-return';
 import { authPost, type AuthPostResult } from './api';
 import { accountOperationProfile, type AccountOperationStepUpKind } from './account-operation-step-up';
 
@@ -14,8 +15,9 @@ export type SignInResult =
   | { ok: false; reason: 'credentials' | 'unavailable' }
   | { ok: false; reason: 'rate-limited'; retryAfter: string | null };
 
-export async function signIn(email: string, password: string): Promise<SignInResult> {
-  return signInResult(
+export async function signIn(email: string, password: string, onPhase?: LoginPhaseObserver): Promise<SignInResult> {
+  observeLogin(onPhase, 'dispatched');
+  const result = signInResult(
     await authPost('/signin', {
       email,
       password,
@@ -23,6 +25,8 @@ export async function signIn(email: string, password: string): Promise<SignInRes
       scope: SIGN_IN_SCOPE,
     }),
   );
+  observeLogin(onPhase, loginResultPhase(result));
+  return result;
 }
 
 /** Reauthenticate for one fixed account operation profile. Callers cannot supply client IDs or scopes. */

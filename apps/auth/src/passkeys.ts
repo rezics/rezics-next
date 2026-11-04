@@ -1,3 +1,4 @@
+import { observeLogin, loginResultPhase, type LoginPhaseObserver } from './login-return';
 import {
   browserSupportsWebAuthn,
   browserSupportsWebAuthnAutofill,
@@ -52,21 +53,30 @@ export async function signInWithPasskey({
   operation,
   management,
   isCurrent = () => true,
+  onPhase,
 }: {
   autofill?: boolean;
   operation?: AccountOperationStepUpKind;
   management?: ManagementOperationKind;
   isCurrent?: () => boolean;
+  onPhase?: LoginPhaseObserver;
 } = {}): Promise<PasskeySignInResult> {
   if (operation && management) return { ok: false, reason: 'unavailable' };
+  const observe = (phase: Parameters<LoginPhaseObserver>[0]) => observeLogin(onPhase, phase);
+  observe('options');
   const fetched = await signInOptions();
   if (!isCurrent()) return { ok: false, reason: 'cancelled' };
-  if (!fetched.ok) return signInResult(fetched);
+  if (!fetched.ok) {
+    // Options failure is known pre-authentication work.
+    return signInResult(fetched);
+  }
 
   let response;
+  observe('prompt');
   try {
     response = await startAuthentication({ optionsJSON: fetched.body, useBrowserAutofill: autofill });
   } catch (error) {
+    observe(isCancellation(error) ? 'cancelled' : 'prompt');
     return isCancellation(error) ? { ok: false, reason: 'cancelled' } : { ok: false, reason: 'unavailable' };
   }
   if (!isCurrent()) return { ok: false, reason: 'cancelled' };
@@ -77,7 +87,10 @@ export async function signInWithPasskey({
     : operation
       ? accountOperationProfile(operation)
       : { client_id: SIGN_IN_CLIENT_ID, scope: SIGN_IN_SCOPE };
-  return signInResult(await authPost('/signin/passkey', { response, ...profile }));
+  observe('dispatched');
+  const result = signInResult(await authPost('/signin/passkey', { response, ...profile }));
+  observe(loginResultPhase(result));
+  return result;
 }
 
 export function passkeySignInFailure(result: Exclude<PasskeySignInResult, { ok: true } | { reason: 'cancelled' }>) {

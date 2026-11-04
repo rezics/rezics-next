@@ -151,7 +151,7 @@
   "auth_login_passkey_browser_unsupported": "Ce navigateur ne prend pas en charge les clés d’accès. Utilisez votre mot de passe.",
   "auth_login_passkey_method_unavailable": "La connexion par clé d’accès n’est pas disponible ici. Utilisez votre mot de passe.",
   "auth_login_password": "Mot de passe",
-  "auth_login_pending_passkey": "En attente de la connexion par clé d’accès. Vous pouvez utiliser votre mot de passe à la place.",
+  "auth_login_pending_passkey": "Connexion par clé d’accès en attente. Terminez ou annulez la demande avant de choisir une autre méthode.",
   "auth_login_pending_password": "Connexion avec votre mot de passe…",
   "auth_login_rate_limited": "Trop de tentatives de connexion. Réessayez plus tard.",
   "auth_login_recovery": "Mot de passe oublié ?",
@@ -692,5 +692,15 @@
   "auth_automated_operator_invalid": "Saisissez l’identifiant complet du compte opérateur (UUID).",
   "auth_automated_operator_unlabelled": "Opérateur sans nom public",
   "auth_automated_pending": "Vérification de la demande de création en cours…",
-  "auth_automated_responsibility": "L’opérateur sera publiquement désigné comme responsable de cet acteur. La création n’ajoute ni connexion ni autorisations héritées ; changer d’opérateur nécessite une action autorisée distincte."
+  "auth_automated_responsibility": "L’opérateur sera publiquement désigné comme responsable de cet acteur. La création n’ajoute ni connexion ni autorisations héritées ; changer d’opérateur nécessite une action autorisée distincte.",
+  "auth_login_return_heading": "Connexion précédente",
+  "auth_login_return_unsent": "Les options de clé d’accès étaient en préparation. Aucune réponse d’authentification n’a été envoyée. Choisissez une méthode selon les indications actuelles.",
+  "auth_login_return_prompt": "Le navigateur attendait une clé d’accès. Cette demande a été fermée sans envoi d’authentification. Choisissez à nouveau une méthode quand vous le souhaitez.",
+  "auth_login_return_acknowledged": "L’authentification a été confirmée avant de quitter cette page. Consultez la session actuelle pour décider comment continuer.",
+  "auth_login_return_refused": "L’authentification précédente a été refusée. Choisissez la prochaine étape selon les indications actuelles.",
+  "auth_login_return_separate": "Le compte affiché est une observation actuelle distincte. Il ne confirme ni n’annule une connexion précédente non confirmée.",
+  "auth_login_return_dismiss": "Masquer l’avis de connexion précédente",
+  "auth_login_return_dismiss_help": "Seul cet avis est masqué. Cela ne résout ni n’annule l’authentification précédente.",
+  "auth_login_autofill": "Saisie automatique de clé d’accès du navigateur",
+  "auth_login_prompt_cancelled": "La demande de clé d’accès a été annulée avant l’envoi. Choisissez un mot de passe ou appuyez sur le bouton de clé d’accès."
 }

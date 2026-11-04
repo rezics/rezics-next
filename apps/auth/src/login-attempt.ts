@@ -1,35 +1,53 @@
 import { useRouter } from '@tanstack/react-router';
 import { WebAuthnAbortService } from '@simplewebauthn/browser';
 import { useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
+import { retainLoginHistory, type LoginPhase, type LoginReturnRecord, type LoginReturnHistory } from './login-return';
 
 type Method = 'password' | 'passkey' | 'autofill' | 'continue';
 
 // Browser ownership only: retiring a request cannot undo a server sign-in.
 export class LoginAttempt {
   private active = true;
-  private current: { method: Method } | null = null;
+  private current: { method: Method; phase: LoginPhase } | null = null;
+  private record: LoginReturnRecord | null = null;
+
+  constructor(private readonly onUnknown?: (record: LoginReturnRecord) => void) {}
+
+  snapshot() {
+    return this.record;
+  }
+
+  private replaceable() {
+    return !this.current || (this.current.method === 'autofill' && ['options', 'prompt'].includes(this.current.phase));
+  }
   private pageGeneration = 0;
 
   // Choice changes and reads may replace conditional mediation, never a dispatched explicit operation.
   choose() {
-    if (!this.active || (this.current && this.current.method !== 'autofill')) return false;
+    if (!this.active || !this.replaceable()) return false;
     this.cancel();
     this.pageGeneration += 1;
     return true;
   }
 
   begin(method: Method) {
-    if (!this.active) return null;
-    if (this.current && this.current.method !== 'autofill') {
-      if (method !== 'password' || this.current.method !== 'passkey') return null;
-    }
+    if (!this.active || !this.replaceable()) return null;
     this.cancel();
     this.pageGeneration += 1;
-    const token = { method };
+    const token = { method, phase: (method === 'password' ? 'dispatched' : 'options') as LoginPhase };
+    const observe = (phase: LoginPhase) => {
+      if (!isCurrent() || method === 'continue') return;
+      token.phase = phase;
+      this.record = { method, phase };
+      if (phase === 'unknown') this.onUnknown?.(this.record);
+    };
     this.current = token;
     const isCurrent = () => this.active && this.current === token;
+    observe(token.phase);
     return {
       isCurrent,
+      observe,
       finish: () => {
         if (!isCurrent()) return false;
         this.current = null;
@@ -74,15 +92,27 @@ export class LoginAttempt {
 export function useLoginJourney() {
   const { history } = useRouter();
   const sequence = useRef(0);
-  const [journey, setJourney] = useState<{ key: number; query: string; attempt: LoginAttempt } | null>(null);
+  const [journey, setJourney] = useState<{
+    key: number;
+    query: string;
+    attempt: LoginAttempt;
+    restored: boolean;
+  } | null>(null);
+  const [records, setRecords] = useState<LoginReturnHistory>([]);
   useLayoutEffect(() => {
     let current: LoginAttempt | null = null;
-    const replace = () => {
+    const remember = () => {
+      const record = current?.snapshot();
+      if (record) setRecords((previous) => retainLoginHistory(previous, record));
+    };
+    const replace = (restored = false) => {
+      remember();
       current?.retire();
-      current = new LoginAttempt();
-      setJourney({ key: ++sequence.current, query: history.location.search, attempt: current });
+      current = new LoginAttempt((record) => setRecords((previous) => retainLoginHistory(previous, record)));
+      setJourney({ key: ++sequence.current, query: history.location.search, attempt: current, restored });
     };
     const leave = () => {
+      remember();
       current?.retire();
       current = null;
       setJourney(null);
@@ -92,17 +122,19 @@ export function useLoginJourney() {
       else leave();
     });
     const restore = (event: PageTransitionEvent) => {
-      if (event.persisted && window.location.pathname === '/login') replace();
+      if (event.persisted && window.location.pathname === '/login') replace(true);
     };
-    window.addEventListener('pagehide', leave);
+    // React must remove credential and private choice DOM before this event returns to the browser.
+    const hide = () => flushSync(leave);
+    window.addEventListener('pagehide', hide);
     window.addEventListener('pageshow', restore);
     replace();
     return () => {
       current?.retire();
       unsubscribe();
-      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pagehide', hide);
       window.removeEventListener('pageshow', restore);
     };
   }, [history]);
-  return journey;
+  return { journey, records, dismiss: () => setRecords([]) };
 }
