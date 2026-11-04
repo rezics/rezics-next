@@ -242,11 +242,12 @@ test('anonymous Home Subject reactions return to the card, and unknown coverage 
     ),
   ).toBe(true);
   expect(host.querySelectorAll('[data-slot="subject-reaction-unavailable"] button[aria-label*="—"]')).toHaveLength(5);
-  await click(
-    [...host.querySelectorAll<HTMLButtonElement>('button')].find(
-      (button) => button.textContent === m.subject_section_retry(),
-    )!,
+  const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === m.subject_section_retry(),
   );
+  expect(retry).toBeDefined();
+  expect(retry?.disabled).toBe(false);
+  await click(retry!);
   expect(retries).toBe(1);
   expect(writes).toHaveLength(0);
   expect(nativeFetch).not.toHaveBeenCalled();
