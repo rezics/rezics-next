@@ -58,7 +58,7 @@ function credit(statement: string, characterIds: string[], locale: string, gated
     id: performer,
     label: { text: 'Mina Sato / 佐藤ミナ', lang: 'ja' },
     type: 'schema:Person',
-    summary: related[performer],
+    summary: related[performer]!,
     statement,
     notes: [],
     qualified,
