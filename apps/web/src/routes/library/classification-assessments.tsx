@@ -53,7 +53,7 @@ function ClassificationAssessmentsRoute() {
       subject={origin.subject}
       state={state}
       isCurrent={() => address.isCurrent() && origin.current(0)}
-      read={(original, signal) => readOwnClassificationsForViewer({ data: classificationSearch(original), signal })}
+      read={(original, signal) => readOwnClassificationsForViewer({ data: classificationSearch(original), ...(signal ? { signal } : {}) })}
       onNext={(next) => { if (address.isCurrent() && origin.current(0)) void navigate({ search: classificationSearch(next) }); }}
       commands={{
         csrfToken: () => origin.credential(0) ?? null,
