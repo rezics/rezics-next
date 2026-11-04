@@ -293,7 +293,7 @@
   "auth_rename_confirm": "Ich bestätige die Änderung des Benutzernamens dieses Kontos zu @{handle}.",
   "auth_rename_departure_heading": "Konto umbenennen und verlassen?",
   "auth_rename_departure_unsent": "Dein vorgeschlagener Benutzername und deine Bestätigung werden beim Verlassen gelöscht.",
-  "auth_rename_departure_pending": "Die Umbenennung wurde bereits gesendet. Sie wird durch das Verlassen nicht abgebrochen; derselbe Vorgang wird weiter geprüft.",
+  "auth_rename_departure_pending": "Diese Umbenennung wurde gesendet. Verlassen bricht sie nicht ab und bestätigt ihr Ergebnis nicht. Du kannst bleiben, um das aktuelle Konto zu prüfen.",
   "auth_rename_stay": "Bleiben",
   "auth_rename_leave": "Verlassen",
   "auth_rename_conflict": "Der aktuelle Benutzername hat sich geändert, der gewünschte Name ist nicht verfügbar oder die Freigabe wurde abgelehnt. Das aktuelle Konto wurde neu geladen. Prüfe es und bestätige erneut.",
@@ -311,12 +311,12 @@
   "auth_rename_no_handle": "Kein Benutzername",
   "auth_rename_reconfirm": "Prüfe diese gespeicherte Änderung und bestätige erneut. Die Rückkehr von der Identitätsbestätigung benennt kein Konto um.",
   "auth_rename_reload": "Aktuelles Konto neu laden",
-  "auth_rename_retry": "Aktuellen Namen prüfen und erneut versuchen",
+  "auth_rename_retry": "Ursprüngliche Umbenennung bestätigen und erneut versuchen",
   "auth_rename_signed_out": "Melde dich an, um dein eigenes Konto umzubenennen.",
   "auth_rename_submit": "Konto umbenennen",
   "auth_rename_success": "Der aktuelle Benutzername deines Kontos ist @{handle}.",
   "auth_rename_unavailable": "Das Umbenennen ist derzeit nicht verfügbar. Dein aktuelles Konto konnte nicht sicher gelesen oder bestätigt werden. Lade es vor einem erneuten Versuch neu.",
-  "auth_rename_unknown": "Das Ergebnis ist nicht bestätigt. Behalte diese Änderung unverändert bei und versuche erneut, den aktuellen Namen mit demselben Vorgang zu prüfen.",
+  "auth_rename_unknown": "Eine Umbenennung wurde gesendet, aber ihr Ergebnis ist noch unbekannt. Die Prüfung des aktuellen Kontos wiederholt sie nicht.",
   "auth_security_action_accepted": "Auth hat die Aktion angenommen. Diese Antwort bestätigt nicht den späteren Stand der Sicherheitsübersicht.",
   "auth_security_action_unknown": "Das Ergebnis der Aktion ist unbekannt. Prüfe die aktuellen Sicherheitseinstellungen, bevor du es erneut versuchst.",
   "auth_security_action_unverified": "Deine Sitzung hat nicht mehr die nötigen Berechtigungen. Das Ergebnis der Aktion wurde nicht bestätigt. Melde dich an, um die aktuellen Sicherheitseinstellungen zu prüfen.",
@@ -665,5 +665,7 @@
   "auth_consent_review_current": "Aktuelle Berechtigungen prüfen",
   "auth_consent_sending": "Zustimmung wird gesendet… Das Ergebnis wurde noch nicht bestätigt.",
   "auth_consent_departure_heading": "Diese Prüfung verlassen?",
-  "auth_consent_departure_description": "Eine Zustimmung kann auch nach dem Verlassen wirksam werden. Das Verlassen bricht sie nicht ab und klärt kein unbekanntes Ergebnis. Bleibe, um die aktuellen Berechtigungen zu prüfen, oder verlasse diese Seite."
+  "auth_consent_departure_description": "Eine Zustimmung kann auch nach dem Verlassen wirksam werden. Das Verlassen bricht sie nicht ab und klärt kein unbekanntes Ergebnis. Bleibe, um die aktuellen Berechtigungen zu prüfen, oder verlasse diese Seite.",
+  "auth_rename_acknowledged": "Die ursprüngliche Umbenennung wurde bestätigt. Der aktuelle Name konnte nicht bestätigt werden. Prüfe das aktuelle Konto.",
+  "auth_rename_observation": "Der aktuelle Name ist eine Beobachtung. Er bestätigt nicht das Ergebnis der früheren Umbenennung."
 }

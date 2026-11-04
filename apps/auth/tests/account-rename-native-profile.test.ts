@@ -163,12 +163,14 @@ test('the default source reads a handleless human and reconciles a lost rename r
     { operationKey: attempt.operationKey, operation: attempt.operation, reference: 'original-reference' },
   ]);
   expect(await nativeRenameSource.run(attempt)).toMatchObject({
-    kind: 'renamed',
-    target: { handle: 'after', accountId },
+    kind: 'unknown',
   });
-  expect(f.commands).toHaveLength(2);
+  expect(f.commands).toHaveLength(3);
+  expect(f.commands[2]?.body).toEqual(f.commands[1]?.body);
   const next = createRenameAttempt({ ...current.target, handle: 'after' }, 'next')!;
-  expect(await nativeRenameSource.stepUp(next)).toBe(true);
+  expect(await nativeRenameSource.stepUp(next)).toBe(false);
+  expect(f.navigations).toEqual([]);
+  expect(await nativeRenameSource.stepUp(attempt)).toBe(true);
   expect(f.navigations).toEqual(['/step-up?management_operation=rename&return_to=%2Faccount%2Frename']);
   expect([...f.stored.values()].join('')).not.toContain('original-reference');
   clearRenameContinuation();

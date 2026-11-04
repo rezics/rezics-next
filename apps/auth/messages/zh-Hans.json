@@ -293,7 +293,7 @@
   "auth_rename_confirm": "我确认将此账户的用户名更改为 @{handle}。",
   "auth_rename_departure_heading": "离开账户重命名页面？",
   "auth_rename_departure_unsent": "离开后，建议的用户名和确认状态将被清除。",
-  "auth_rename_departure_pending": "重命名已发送。离开不会取消它；同一操作仍会继续核查。",
+  "auth_rename_departure_pending": "此改名请求已发送。离开不会取消请求，也不会确认结果。你可以留下查看当前账户。",
   "auth_rename_stay": "留下",
   "auth_rename_leave": "离开",
   "auth_rename_conflict": "当前用户名已更改、所需用户名不可用，或原生授权拒绝了更改。已重新加载当前账户，请检查并再次确认。",
@@ -311,12 +311,12 @@
   "auth_rename_no_handle": "无用户名",
   "auth_rename_reconfirm": "请检查已保存的更改并再次明确确认。从身份确认返回不会提交重命名操作。",
   "auth_rename_reload": "重新加载当前账户",
-  "auth_rename_retry": "检查当前用户名并重试",
+  "auth_rename_retry": "确认并重试原改名请求",
   "auth_rename_signed_out": "请登录以重命名自己的账户。",
   "auth_rename_submit": "重命名账户",
   "auth_rename_success": "账户当前的用户名为 @{handle}。",
   "auth_rename_unavailable": "暂时无法重命名账户。无法安全读取或确认当前账户，请重新加载后再试。",
-  "auth_rename_unknown": "尚未确认重命名结果。请保持此次更改内容不变，使用同一操作重试以检查当前用户名。",
+  "auth_rename_unknown": "改名请求已发送，但结果仍未知。查看当前账户不会重试改名。",
   "auth_security_action_accepted": "Auth 已受理此操作。此响应并未核实之后的会话与通行密钥列表状态。",
   "auth_security_action_unknown": "操作结果未知。请先检查当前安全设置，再决定是否重试。",
   "auth_security_action_unverified": "当前会话已失去权限，操作结果尚未核实。请登录以检查当前安全设置。",
@@ -665,5 +665,7 @@
   "auth_consent_review_current": "查看当前权限",
   "auth_consent_sending": "正在发送批准… 尚未收到结果确认。",
   "auth_consent_departure_heading": "离开此权限审核？",
-  "auth_consent_departure_description": "离开后，批准仍可能生效。离开不会取消批准，也不能确定未知结果。你可以留下查看当前权限，或离开此页面。"
+  "auth_consent_departure_description": "离开后，批准仍可能生效。离开不会取消批准，也不能确定未知结果。你可以留下查看当前权限，或离开此页面。",
+  "auth_rename_acknowledged": "原改名请求已获确认，但无法确认当前用户名。请查看当前账户。",
+  "auth_rename_observation": "当前用户名仅表示观察到的现状，不能确认先前改名请求的结果。"
 }

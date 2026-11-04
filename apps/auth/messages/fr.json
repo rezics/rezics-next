@@ -293,7 +293,7 @@
   "auth_rename_confirm": "Je confirme le changement du nom de ce compte en @{handle}.",
   "auth_rename_departure_heading": "Quitter le changement de nom du compte ?",
   "auth_rename_departure_unsent": "Votre nom proposé et votre confirmation seront effacés si vous quittez cette page.",
-  "auth_rename_departure_pending": "Ce changement a déjà été envoyé. Le quitter ne l’annulera pas ; cette même opération continuera d’être vérifiée.",
+  "auth_rename_departure_pending": "Ce changement a été envoyé. Quitter ne l’annulera pas et ne confirmera pas son résultat. Vous pouvez rester pour vérifier le compte actuel.",
   "auth_rename_stay": "Rester",
   "auth_rename_leave": "Quitter",
   "auth_rename_conflict": "Le nom actuel a changé, le nom demandé est indisponible ou l’autorisation a été refusée. Le compte actuel a été rechargé. Vérifiez-le et confirmez à nouveau.",
@@ -311,12 +311,12 @@
   "auth_rename_no_handle": "Aucun nom",
   "auth_rename_reconfirm": "Vérifiez cette modification enregistrée et confirmez à nouveau. Le retour après confirmation de votre identité ne soumet aucun changement de nom.",
   "auth_rename_reload": "Recharger le compte actuel",
-  "auth_rename_retry": "Vérifier le nom actuel et réessayer",
+  "auth_rename_retry": "Confirmer et réessayer le changement initial",
   "auth_rename_signed_out": "Connectez-vous pour renommer votre propre compte.",
   "auth_rename_submit": "Renommer le compte",
   "auth_rename_success": "Le nom actuel de votre compte est @{handle}.",
   "auth_rename_unavailable": "Le changement de nom est indisponible. Votre compte actuel n’a pas pu être lu ou confirmé de manière sûre. Rechargez-le avant de réessayer.",
-  "auth_rename_unknown": "Le résultat n’est pas confirmé. Conservez cette modification sans la changer et réessayez pour vérifier le nom actuel avec la même opération.",
+  "auth_rename_unknown": "Un changement de nom a été envoyé, mais son résultat reste inconnu. Vérifier le compte actuel ne le relance pas.",
   "auth_security_action_accepted": "Auth a accepté l’action. Cette réponse ne confirme pas l’état ultérieur de la liste des sessions et des clés d’accès.",
   "auth_security_action_unknown": "Le résultat de l’action est inconnu. Vérifiez les paramètres de sécurité actuels avant de réessayer.",
   "auth_security_action_unverified": "Votre session n’est plus autorisée. Le résultat de l’action n’a pas été vérifié. Connectez-vous pour vérifier les paramètres de sécurité actuels.",
@@ -665,5 +665,7 @@
   "auth_consent_review_current": "Consulter les autorisations actuelles",
   "auth_consent_sending": "Envoi de l’approbation… Le résultat n’a pas encore été confirmé.",
   "auth_consent_departure_heading": "Quitter cette vérification ?",
-  "auth_consent_departure_description": "Une approbation peut prendre effet après votre départ. Quitter ne l’annule pas et ne résout pas un résultat inconnu. Restez pour consulter les autorisations actuelles, ou quittez cette page."
+  "auth_consent_departure_description": "Une approbation peut prendre effet après votre départ. Quitter ne l’annule pas et ne résout pas un résultat inconnu. Restez pour consulter les autorisations actuelles, ou quittez cette page.",
+  "auth_rename_acknowledged": "Le changement initial a été confirmé. Le nom actuel n’a pas pu être confirmé. Vérifiez le compte actuel.",
+  "auth_rename_observation": "Le nom actuel est une observation. Il ne confirme pas le résultat du changement précédent."
 }

@@ -140,7 +140,7 @@ for (const phase of ['initial', 'reload', 'renamed', 'conflict', 'step-up', 'han
     expect(ui.host.querySelector<HTMLInputElement>('#rename-confirm')!.checked).toBe(false);
     expect(ui.host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
   });
-test('uncertain execution stays locked; explicit recovery reads back success with the original command', async () => {
+test('an observed matching handle keeps uncertain execution locked until native acknowledgement', async () => {
   const selected = attempt();
   saveRenameContinuation(selected);
   let reads = 0;
@@ -163,11 +163,13 @@ test('uncertain execution stays locked; explicit recovery reads back success wit
   expect(bodies[1]).toEqual({ ...bodies[0], reference: 'approval' });
   expect(readRenameContinuation()?.operationKey).toBe(selected.operationKey);
   await send(ui.host);
-  expect(ui.host.textContent).toContain(m.auth_rename_success({ handle: 'after' }));
-  expect(bodies).toHaveLength(2);
-  expect(readRenameContinuation()).toBeNull();
+  expect(ui.host.textContent).toContain(m.auth_rename_unknown());
+  expect(ui.host.textContent).not.toContain(m.auth_rename_success({ handle: 'after' }));
+  expect(bodies).toHaveLength(3);
+  expect(bodies[2]).toEqual(bodies[1]);
+  expect(readRenameContinuation()?.operationKey).toBe(selected.operationKey);
 });
-test('departure stops unsent execution while submitted reconciliation cannot overwrite a newer continuation', async () => {
+test('departure stops the next browser stage and preserves a newer continuation', async () => {
   const selected = attempt(),
     approval = deferred<Response>();
   let active = true,
@@ -204,7 +206,7 @@ test('departure stops unsent execution while submitted reconciliation cannot ove
     async () => ({ kind: 'ready', target: target('account', ++reads === 1 ? 'before' : 'after') }),
     () => active,
   );
-  expect(result.kind).toBe('renamed');
-  expect(reads).toBe(2);
+  expect(result.kind).toBe('unavailable');
+  expect(reads).toBe(0);
   expect(readRenameContinuation()).toEqual(saved);
 });

@@ -293,7 +293,7 @@
   "auth_rename_confirm": "I confirm changing this account’s handle to @{handle}.",
   "auth_rename_departure_heading": "Leave account rename?",
   "auth_rename_departure_unsent": "Your proposed handle and confirmation will be cleared if you leave.",
-  "auth_rename_departure_pending": "This rename has already been sent. Leaving will not cancel it; its original operation will keep being checked.",
+  "auth_rename_departure_pending": "This rename was sent. Leaving will not cancel it or confirm its outcome. You can stay to review the current account.",
   "auth_rename_stay": "Stay",
   "auth_rename_leave": "Leave",
   "auth_rename_conflict": "The current handle changed, the requested handle is unavailable, or native approval refused the change. The current account has been reloaded. Review it and confirm again.",
@@ -311,12 +311,12 @@
   "auth_rename_no_handle": "No handle",
   "auth_rename_reconfirm": "Review this saved change and explicitly confirm again. Returning from identity confirmation does not submit a rename.",
   "auth_rename_reload": "Reload current account",
-  "auth_rename_retry": "Check current handle and retry",
+  "auth_rename_retry": "Confirm and retry the original rename",
   "auth_rename_signed_out": "Sign in to rename your own account.",
   "auth_rename_submit": "Rename account",
   "auth_rename_success": "Your account’s current handle is @{handle}.",
   "auth_rename_unavailable": "Account renaming is unavailable. We could not read or confirm your current account securely. Reload before trying again.",
-  "auth_rename_unknown": "The rename outcome is not confirmed. Keep this change unchanged and retry to check the current handle using the same operation.",
+  "auth_rename_unknown": "A rename was sent, but its outcome is still unknown. Reviewing the current account does not retry it.",
   "auth_security_action_accepted": "Auth accepted the action. This response does not verify the later security inventory.",
   "auth_security_action_unknown": "The action result is unknown. Check current security settings before trying again.",
   "auth_security_action_unverified": "Your session is no longer authorized. The action result has not been verified. Sign in to check current security settings.",
@@ -665,5 +665,7 @@
   "auth_consent_review_current": "Review current permissions",
   "auth_consent_sending": "Sending approval… The result has not been acknowledged.",
   "auth_consent_departure_heading": "Leave this review?",
-  "auth_consent_departure_description": "An approval may still take effect after you leave. Leaving does not cancel it or resolve an unknown result. Stay to review current permissions, or leave this page."
+  "auth_consent_departure_description": "An approval may still take effect after you leave. Leaving does not cancel it or resolve an unknown result. Stay to review current permissions, or leave this page.",
+  "auth_rename_acknowledged": "The original rename was acknowledged. Its current handle could not be confirmed. Review the current account.",
+  "auth_rename_observation": "The current handle is an observation. It does not confirm the outcome of the earlier rename."
 }

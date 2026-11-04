@@ -452,16 +452,37 @@ Decision: transfer departure protects meaningful input and unresolved review in 
 
 ## Rename account
 
-Rename review belongs to the mounted page and its native source; replacing the source resets the draft and confirmation,
-and departure prevents unfinished browser stages from changing storage or starting reauthentication.
-Unsent attempts stop after an outstanding read or approval; submitted attempts retain their original key and command
-and finish reconciliation without changing a replacement review. An uncertain mutation requires explicit recovery,
-with current-account readback establishing success. `nativeRenameSource` reads the current initiating account through
-Auth's cookie-authenticated `POST /account-management/profile`, backed by the native exact-ID editable-profile reader
-and its `account:update` permission formula. Only account ID, actor kind and nullable handle reach the page; unavailable
-reads offer Retry and never permit mutation. The selected management profile is exactly `account:update`.
-Step-up uses the shared management continuation and returns to a new explicit confirmation with the original command/key.
-Departure prompts cover nonblank changed handle input, including invalid values, and unresolved operations; opening, focusing or confirming the current handle alone does not prompt.
+Rename review belongs to the mounted page and its native source. A definitive native execution acknowledgement
+and a current handle observation are separate facts. Observing the desired handle after an unknown send never
+claims success or consumes its descriptor. An explicit exact retry can submit only the original key and operation;
+native approval and execution remain authoritative. Acknowledgement with failed or changed readback has its own
+notice and offers current review without another command.
+
+Decision: retain only a generic mounted outcome classification across authority loss and cached-document return;
+keep the admitted original descriptor in its existing storage until definitive acknowledgement, including after
+conflict, refusal or account replacement. A replacement viewer cannot review or retry the former account's work.
+New input cannot replace unknown work. No history summary is stored in browser storage, URLs, history or cookies.
+An ordinary reload without a retained descriptor makes no historical claim.
+
+Refusal, signed-out and management-auth-required states hide all private labels and command controls immediately,
+but show unresolved history independently. Current review is explicit and read-only, with visible pending/failure
+states and a useful focus destination. Same-account management authentication uses the existing exact continuation
+and requires deliberate confirmation on return. References remain in the authorized live attempt only; restoration
+never reconstructs a reference or credentials. Expired references require native approval again with the same key.
+A newer descriptor or marker cannot be consumed by an older completion.
+
+Page retirement aborts bounded reads, clears private cached DOM and retires callbacks before the next browser stage.
+It does not cancel a dispatched native effect. Stay retains current review and focus; Leave preserves unknown history
+and its admitted descriptor, without implying cancellation or starting background reconciliation. Known unsent drafts
+can be discarded. Focus, language changes and history restoration never retry a command.
+
+`nativeRenameSource` uses one `GET /session` and one cookie-authenticated `POST /account-management/rename-page`
+per current review, with the existing finite native projection and `account:update` management profile. Each browser
+read has the existing five-second bound, including its body. Entry, cached-document return and explicit read Retry
+each cost at most two Auth requests. One explicit command turn costs at most six Auth requests: two current-review
+pairs plus at most one approval and one execution. A 409 uses the second pair for current advice instead of readback;
+reusing a live reference omits approval. No polling, inventory scan, per-row loop or new native read is added.
+Authentication handoff retains its existing sign-in/session costs and adds no rename command on return.
 
 ## Operated session opening
 

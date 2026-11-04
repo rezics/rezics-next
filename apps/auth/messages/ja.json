@@ -293,7 +293,7 @@
   "auth_rename_confirm": "このアカウントのハンドルを @{handle} に変更することを確認します。",
   "auth_rename_departure_heading": "アカウント名の変更を終了しますか？",
   "auth_rename_departure_unsent": "ページを離れると、入力したハンドルと確認内容は消去されます。",
-  "auth_rename_departure_pending": "名前の変更は送信済みです。ページを離れても取り消されず、同じ操作の確認が続きます。",
+  "auth_rename_departure_pending": "この変更は送信済みです。離れてもキャンセルされず、結果も確定しません。このページに留まって現在のアカウントを確認できます。",
   "auth_rename_stay": "このページに残る",
   "auth_rename_leave": "ページを離れる",
   "auth_rename_conflict": "現在のハンドルが変わったか、希望するハンドルが利用できないか、変更が承認されませんでした。現在のアカウントを再読み込みしました。内容を確認し、再度確定してください。",
@@ -311,12 +311,12 @@
   "auth_rename_no_handle": "ハンドルなし",
   "auth_rename_reconfirm": "保存された変更内容を確認し、再度確定してください。本人確認から戻るだけでは変更は送信されません。",
   "auth_rename_reload": "現在のアカウントを再読み込み",
-  "auth_rename_retry": "現在のハンドルを確認して再試行",
+  "auth_rename_retry": "元の変更を確認して再試行",
   "auth_rename_signed_out": "自分のアカウント名を変更するにはログインしてください。",
   "auth_rename_submit": "アカウント名を変更",
   "auth_rename_success": "現在のアカウントのハンドルは @{handle} です。",
   "auth_rename_unavailable": "アカウント名を変更できません。現在のアカウントを安全に取得または確認できませんでした。再読み込みしてからもう一度お試しください。",
-  "auth_rename_unknown": "変更結果を確認できません。この変更内容を維持し、同じ操作で現在のハンドルを確認するため再試行してください。",
+  "auth_rename_unknown": "名前の変更は送信されましたが、結果はまだ不明です。現在のアカウントを確認しても再送信は行われません。",
   "auth_security_action_accepted": "Authが操作を受け付けました。この応答は、その後のセッションとパスキーの一覧の状態を確認したものではありません。",
   "auth_security_action_unknown": "操作の結果は不明です。再試行する前に、現在のセキュリティ設定を確認してください。",
   "auth_security_action_unverified": "このセッションには権限がなくなりました。操作の結果は確認できていません。ログインして現在のセキュリティ設定を確認してください。",
@@ -665,5 +665,7 @@
   "auth_consent_review_current": "現在の権限を確認",
   "auth_consent_sending": "承認を送信中… 結果の応答はまだ届いていません。",
   "auth_consent_departure_heading": "この確認ページを離れますか？",
-  "auth_consent_departure_description": "ページを離れた後も承認が反映される可能性があります。離れても承認は取り消されず、不明な結果も確定しません。現在の権限を確認するには残るか、このページを離れてください。"
+  "auth_consent_departure_description": "ページを離れた後も承認が反映される可能性があります。離れても承認は取り消されず、不明な結果も確定しません。現在の権限を確認するには残るか、このページを離れてください。",
+  "auth_rename_acknowledged": "元の変更は受理されました。現在のハンドルは確認できませんでした。現在のアカウントを確認してください。",
+  "auth_rename_observation": "現在のハンドルは現状を示す情報です。以前の変更の結果を確定するものではありません。"
 }

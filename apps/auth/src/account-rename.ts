@@ -1,5 +1,6 @@
 import { managementOperationProfile } from '@rezics/auth-contract';
 import { authPost } from './api';
+import { privateAuthRead } from './private-auth-read';
 import { loadAccountSession } from './account-operations';
 import { createSignupKey, normalizeSignupHandle } from './signup';
 import {
@@ -9,6 +10,7 @@ import {
   managementOperationStepUpUrl,
   pendingManagementOperationMatches,
   pendingManagementOperationStepUpState,
+  pendingRenameReviewStepUpState,
   storePendingManagementOperationStepUp,
   storePendingRenameReviewStepUp,
 } from './management-operation-step-up';
@@ -39,7 +41,7 @@ export type RenameRead =
   | { kind: 'signed-out' }
   | { kind: 'unavailable'; target?: RenameTarget };
 /** The page owner supplies only the authenticated bounded projection, never a handle lookup. */
-export type RenamePageReader = (accountId: string) => Promise<unknown>;
+export type RenamePageReader = (accountId: string, signal?: AbortSignal) => Promise<unknown>;
 
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -54,10 +56,20 @@ export function parseRenameProfile(body: unknown, accountId: string): { handle: 
   return { handle: profile.handle };
 }
 
-async function readNativeRenamePage(_accountId: string): Promise<unknown> {
-  const result = await authPost('/account-management/rename-page', {});
-  if (!result.ok) throw new Error('Account profile unavailable');
-  return result.body;
+async function readNativeRenamePage(_accountId: string, signal?: AbortSignal): Promise<unknown> {
+  return privateAuthRead(async (readSignal) => {
+    const response = await fetch('/account-management/rename-page', {
+      method: 'POST',
+      credentials: 'same-origin',
+      redirect: 'error',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: readSignal,
+    });
+    if (response.status !== 200) throw new Error('Account profile unavailable');
+    return response.json();
+  }, signal);
 }
 
 export function parseRenamePage(body: unknown, accountId: string): RenameRead {
@@ -138,20 +150,27 @@ export function parseRenamePage(body: unknown, accountId: string): RenameRead {
       return { kind: 'unavailable' };
     canRename = true;
   }
-  if (!canRename) {
-    clearPendingRenameReviewStepUp();
-    return { kind: 'refused', target };
-  }
-  target.managementReviewReturned = consumeRenameReviewReturn(accountId);
+  if (!canRename) return { kind: 'refused', target };
+  const reviewReturn = pendingRenameReviewStepUpState();
+  target.managementReviewReturned =
+    reviewReturn.kind === 'pending' &&
+    reviewReturn.value.accountId === accountId &&
+    reviewReturn.value.phase === 'returned' &&
+    consumeRenameReviewReturn(accountId);
   return { kind: 'ready', target };
 }
 
-export async function loadRenameTarget(readPage: RenamePageReader = readNativeRenamePage): Promise<RenameRead> {
-  const session = await loadAccountSession();
+export async function loadRenameTarget(
+  readPage: RenamePageReader = readNativeRenamePage,
+  signal?: AbortSignal,
+): Promise<RenameRead> {
+  const session = await loadAccountSession(signal);
   if (session.kind === 'signed-out') return { kind: 'signed-out' };
   if (session.kind !== 'ready') return { kind: 'unavailable' };
   try {
-    return parseRenamePage(await readPage(session.accountId), session.accountId);
+    if (signal?.aborted) return { kind: 'unavailable' };
+    const body = await readPage(session.accountId, signal);
+    return signal?.aborted ? { kind: 'unavailable' } : parseRenamePage(body, session.accountId);
   } catch {
     return { kind: 'unavailable' };
   }
@@ -235,12 +254,21 @@ export function readRenameContinuation(): RenameContinuation | null {
     return null;
   }
 }
-export function clearRenameContinuation(): void {
+export function sameRenameContinuation(left: RenameContinuation, right: RenameContinuation): boolean {
+  return (
+    left.accountId === right.accountId &&
+    left.operationKey === right.operationKey &&
+    left.operation.handle === right.operation.handle &&
+    left.operation.expectedHandle === right.operation.expectedHandle
+  );
+}
+export function clearRenameContinuation(expected?: RenameContinuation): void {
   const continuation = readRenameContinuation();
+  if (expected && (!continuation || !sameRenameContinuation(continuation, expected))) return;
   const pending = pendingManagementOperationStepUpState();
   if (continuation && pending.kind === 'pending' && pendingManagementOperationMatches(pending.value, continuation))
     clearPendingManagementOperationStepUp();
-  clearPendingRenameReviewStepUp();
+  if (!expected) clearPendingRenameReviewStepUp();
   try {
     window.sessionStorage.removeItem(storageKey);
   } catch {
@@ -250,8 +278,9 @@ export function clearRenameContinuation(): void {
 
 export type RenameResult =
   | { kind: 'renamed'; target: RenameTarget }
+  | { kind: 'acknowledged'; current: RenameRead }
   | { kind: 'conflict'; current: RenameRead }
-  | { kind: 'step-up' | 'denied' | 'unavailable' | 'unknown' };
+  | { kind: 'step-up' | 'denied' | 'unavailable' | 'unknown'; current?: RenameRead };
 
 /** Page-local adapter to the REAL native approval/execution transport. It never
  * supplies authorization, principal, assignment or a synthetic native proof. */
@@ -267,15 +296,16 @@ export async function runRenameAttempt(
     submitted: attempt.submitted,
   });
   if (!closed) return { kind: 'denied' };
-  if (!isCurrent() && !attempt.submitted) return { kind: 'unavailable' };
+  if (!isCurrent()) return { kind: 'unavailable' };
   const current = await readCurrent();
-  if (!isCurrent() && !attempt.submitted) return { kind: 'unavailable' };
-  if (current.kind !== 'ready') return { kind: attempt.submitted ? 'unknown' : 'unavailable' };
-  if (current.target.accountId !== closed.accountId) return { kind: 'denied' };
+  if (!isCurrent()) return { kind: 'unavailable' };
+  if (current.kind !== 'ready') return { kind: attempt.submitted ? 'unknown' : 'unavailable', current };
+  if (current.target.accountId !== closed.accountId) return { kind: 'denied', current };
   if (!renameSessionMatches(current.target)) return { kind: 'step-up' };
-  if (current.target.handle !== closed.operation.expectedHandle) {
-    if (attempt.submitted && current.target.handle === closed.operation.handle)
-      return { kind: 'renamed', target: current.target };
+  if (
+    current.target.handle !== closed.operation.expectedHandle &&
+    !(attempt.submitted && current.target.handle === closed.operation.handle)
+  ) {
     return { kind: 'conflict', current };
   }
   const body = { operationKey: closed.operationKey, operation: closed.operation };
@@ -297,13 +327,16 @@ export async function runRenameAttempt(
       return { kind: 'unavailable' };
     attempt.reference = approval.body.reference;
   }
-  // An unsent review may end while approval is in flight. Already submitted
-  // attempts still reconcile with their original key, descriptor and reference.
-  if (!isCurrent() && !attempt.submitted) return { kind: 'unavailable' };
+  // Retirement stops the next browser stage, including retries of an older send.
+  if (!isCurrent()) return { kind: 'unavailable' };
+  const previouslySubmitted = attempt.submitted;
+  const retained = readRenameContinuation();
+  if (retained && !sameRenameContinuation(retained, attempt)) return { kind: 'unavailable' };
   attempt.submitted = true;
-  if (isCurrent()) saveRenameContinuation(attempt);
+  saveRenameContinuation(attempt);
   const executed = await authPost<unknown>('/account-operations/execute', { ...body, reference: attempt.reference });
   if (!executed.ok) {
+    if ([401, 403, 409].includes(executed.status)) attempt.submitted = previouslySubmitted;
     if (executed.status === 409) return { kind: 'conflict', current: await readCurrent() };
     if (executed.status === 401 && executed.code === 'step_up_required') {
       delete attempt.reference;
@@ -317,21 +350,28 @@ export async function runRenameAttempt(
     executed.body.accountId !== closed.accountId ||
     executed.body.error ||
     executed.body.expired
-  )
+  ) {
+    if (record(executed.body) && executed.body.expired) delete attempt.reference;
     return { kind: 'unknown' };
+  }
   // A workflow receipt alone never establishes the currently effective handle.
-  const observed = await readCurrent();
+  let observed: RenameRead;
+  try {
+    observed = await readCurrent();
+  } catch {
+    observed = { kind: 'unavailable' };
+  }
   return observed.kind === 'ready' &&
     observed.target.accountId === closed.accountId &&
     renameSessionMatches(observed.target) &&
     observed.target.handle === closed.operation.handle
     ? { kind: 'renamed', target: observed.target }
-    : { kind: 'unknown' };
+    : { kind: 'acknowledged', current: observed };
 }
 
 export interface RenameSource {
-  readCurrent(): Promise<RenameRead>;
-  run(attempt: RenameAttempt, isCurrent?: () => boolean): Promise<RenameResult>;
+  readCurrent(signal?: AbortSignal): Promise<RenameRead>;
+  run(attempt: RenameAttempt, isCurrent?: () => boolean, signal?: AbortSignal): Promise<RenameResult>;
   /** Owner composition saves/validates the same continuation, signs in for the
    * management profile, then returns here WITHOUT executing. Check isCurrent
    * after any await before storing a continuation or navigating the browser. */
@@ -339,9 +379,12 @@ export interface RenameSource {
   stepUpForReview?(accountId: string, isCurrent?: () => boolean): Promise<boolean>;
 }
 export const nativeRenameSource: RenameSource = {
-  readCurrent: () => loadRenameTarget(),
-  run: (attempt, isCurrent) => runRenameAttempt(attempt, nativeRenameSource.readCurrent, isCurrent),
+  readCurrent: (signal) => loadRenameTarget(undefined, signal),
+  run: (attempt, isCurrent, signal) =>
+    runRenameAttempt(attempt, () => nativeRenameSource.readCurrent(signal), isCurrent),
   stepUp: async (attempt, isCurrent = () => true) => {
+    const retained = readRenameContinuation();
+    if (retained && !sameRenameContinuation(retained, attempt)) return false;
     const input = { accountId: attempt.accountId, operationKey: attempt.operationKey, operation: attempt.operation };
     if (!isCurrent() || !saveRenameContinuation(attempt) || !storePendingManagementOperationStepUp(input)) return false;
     window.location.assign(managementOperationStepUpUrl('rename'));

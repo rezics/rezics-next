@@ -220,3 +220,31 @@ test('step-up return is allowed and a replacement account revokes the old review
   await tick();
   expect(ui.host.querySelector<HTMLInputElement>('#rename-handle')!.value).toBe('');
 });
+
+test('refusal after unknown retains Stay/Leave and safe focus without former private controls', async () => {
+  const selected = {
+    accountId: 'account',
+    operationKey: 'a'.repeat(32),
+    submitted: true,
+    operation: { kind: 'rename' as const, accountId: 'account', expectedHandle: 'before', handle: 'after' },
+  };
+  saveRenameContinuation(selected);
+  let current: RenameRead = ready();
+  const ui = await mount(source({ readCurrent: async () => current }));
+  current = { kind: 'refused' };
+  await flush(() =>
+    Array.from(ui.host.querySelectorAll('button'))
+      .find((button) => button.textContent === m.auth_rename_reload())!
+      .click(),
+  );
+  const { navigation } = await startNavigation(ui.router, '/next');
+  expect(document.body.textContent).toContain(m.auth_rename_departure_pending());
+  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  expect(ui.router.state.location.pathname).toBe('/account/rename');
+  expect(ui.host.contains(document.activeElement)).toBe(true);
+  expect(ui.host.querySelector('form')).toBeNull();
+  const leaving = await startNavigation(ui.router, '/next');
+  await flush(() => document.body.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+  await flush(() => leaving.navigation);
+  expect(readRenameContinuation()).toEqual(selected);
+});

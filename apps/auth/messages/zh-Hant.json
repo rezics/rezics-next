@@ -293,7 +293,7 @@
   "auth_rename_confirm": "我確認將此帳戶的使用者名稱變更為 @{handle}。",
   "auth_rename_departure_heading": "離開帳戶重新命名頁面？",
   "auth_rename_departure_unsent": "離開後，建議的使用者名稱和確認狀態將會清除。",
-  "auth_rename_departure_pending": "重新命名已送出。離開不會取消它；同一項操作仍會繼續核查。",
+  "auth_rename_departure_pending": "此改名請求已送出。離開不會取消請求，也不會確認結果。你可以留下查看目前帳戶。",
   "auth_rename_stay": "留下",
   "auth_rename_leave": "離開",
   "auth_rename_conflict": "目前使用者名稱已變更、所需名稱無法使用，或原生授權拒絕了變更。已重新載入目前帳戶，請檢查並再次確認。",
@@ -311,12 +311,12 @@
   "auth_rename_no_handle": "無使用者名稱",
   "auth_rename_reconfirm": "請檢查已儲存的變更並再次明確確認。從身分確認返回不會提交重新命名操作。",
   "auth_rename_reload": "重新載入目前帳戶",
-  "auth_rename_retry": "檢查目前使用者名稱並重試",
+  "auth_rename_retry": "確認並重試原改名請求",
   "auth_rename_signed_out": "請登入以重新命名自己的帳戶。",
   "auth_rename_submit": "重新命名帳戶",
   "auth_rename_success": "帳戶目前的使用者名稱為 @{handle}。",
   "auth_rename_unavailable": "暫時無法重新命名帳戶。無法安全讀取或確認目前帳戶，請重新載入後再試。",
-  "auth_rename_unknown": "尚未確認重新命名結果。請保持此次變更內容不變，使用同一操作重試以檢查目前使用者名稱。",
+  "auth_rename_unknown": "改名請求已送出，但結果仍未知。查看目前帳戶不會重試改名。",
   "auth_security_action_accepted": "Auth 已受理這項操作。這項回應並未確認之後的工作階段與密碼金鑰清單狀態。",
   "auth_security_action_unknown": "操作結果不明。請先檢查目前的安全設定，再決定是否重試。",
   "auth_security_action_unverified": "目前工作階段已失去權限，操作結果尚未確認。請登入以檢查目前的安全設定。",
@@ -665,5 +665,7 @@
   "auth_consent_review_current": "查看目前權限",
   "auth_consent_sending": "正在傳送核准… 尚未收到結果確認。",
   "auth_consent_departure_heading": "離開此權限審核？",
-  "auth_consent_departure_description": "離開後，核准仍可能生效。離開不會取消核准，也無法確定未知結果。你可以留下查看目前權限，或離開此頁面。"
+  "auth_consent_departure_description": "離開後，核准仍可能生效。離開不會取消核准，也無法確定未知結果。你可以留下查看目前權限，或離開此頁面。",
+  "auth_rename_acknowledged": "原改名請求已獲確認，但無法確認目前使用者名稱。請查看目前帳戶。",
+  "auth_rename_observation": "目前使用者名稱僅表示觀察到的現況，不能確認先前改名請求的結果。"
 }

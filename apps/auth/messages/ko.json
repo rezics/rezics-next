@@ -293,7 +293,7 @@
   "auth_rename_confirm": "이 계정의 핸들을 @{handle}(으)로 변경하는 데 동의합니다.",
   "auth_rename_departure_heading": "계정 이름 변경을 종료할까요?",
   "auth_rename_departure_unsent": "페이지를 나가면 제안한 핸들과 확인 내용이 지워집니다.",
-  "auth_rename_departure_pending": "이름 변경이 이미 전송되었습니다. 페이지를 나가도 취소되지 않으며 같은 작업의 확인이 계속됩니다.",
+  "auth_rename_departure_pending": "이 변경은 전송되었습니다. 나가도 취소되거나 결과가 확정되지 않습니다. 머물러 현재 계정을 확인할 수 있습니다.",
   "auth_rename_stay": "계속 머무르기",
   "auth_rename_leave": "나가기",
   "auth_rename_conflict": "현재 핸들이 변경되었거나, 요청한 핸들을 사용할 수 없거나, 변경 승인이 거부되었습니다. 현재 계정을 다시 불러왔습니다. 검토하고 다시 확인하세요.",
@@ -311,12 +311,12 @@
   "auth_rename_no_handle": "핸들 없음",
   "auth_rename_reconfirm": "저장된 변경 내용을 검토하고 다시 확인하세요. 본인 확인 후 돌아오는 것만으로는 이름 변경이 제출되지 않습니다.",
   "auth_rename_reload": "현재 계정 다시 불러오기",
-  "auth_rename_retry": "현재 핸들 확인 후 다시 시도",
+  "auth_rename_retry": "원래 변경을 확인하고 다시 시도",
   "auth_rename_signed_out": "본인 계정의 이름을 변경하려면 로그인하세요.",
   "auth_rename_submit": "계정 이름 변경",
   "auth_rename_success": "계정의 현재 핸들은 @{handle}입니다.",
   "auth_rename_unavailable": "계정 이름 변경을 사용할 수 없습니다. 현재 계정을 안전하게 읽거나 확인하지 못했습니다. 다시 불러온 후 시도하세요.",
-  "auth_rename_unknown": "변경 결과가 확인되지 않았습니다. 변경 내용을 그대로 유지하고 같은 작업으로 현재 핸들을 확인하도록 다시 시도하세요.",
+  "auth_rename_unknown": "이름 변경이 전송되었지만 결과는 아직 알 수 없습니다. 현재 계정을 확인해도 변경을 다시 시도하지 않습니다.",
   "auth_security_action_accepted": "Auth가 작업을 접수했습니다. 이 응답은 이후의 세션 및 패스키 목록 상태를 확인한 결과가 아닙니다.",
   "auth_security_action_unknown": "작업 결과를 알 수 없습니다. 다시 시도하기 전에 현재 보안 설정을 확인하세요.",
   "auth_security_action_unverified": "현재 세션에 더 이상 권한이 없습니다. 작업 결과는 확인되지 않았습니다. 로그인하여 현재 보안 설정을 확인하세요.",
@@ -665,5 +665,7 @@
   "auth_consent_review_current": "현재 권한 확인",
   "auth_consent_sending": "승인 전송 중… 아직 결과 응답을 받지 못했습니다.",
   "auth_consent_departure_heading": "이 검토를 떠날까요?",
-  "auth_consent_departure_description": "페이지를 떠난 후에도 승인이 적용될 수 있습니다. 떠나도 승인이 취소되거나 알 수 없는 결과가 확정되지는 않습니다. 남아서 현재 권한을 확인하거나 이 페이지를 떠나세요."
+  "auth_consent_departure_description": "페이지를 떠난 후에도 승인이 적용될 수 있습니다. 떠나도 승인이 취소되거나 알 수 없는 결과가 확정되지는 않습니다. 남아서 현재 권한을 확인하거나 이 페이지를 떠나세요.",
+  "auth_rename_acknowledged": "원래 변경이 승인되었습니다. 현재 핸들은 확인하지 못했습니다. 현재 계정을 확인하세요.",
+  "auth_rename_observation": "현재 핸들은 관찰된 상태입니다. 이전 변경의 결과를 확정하지 않습니다."
 }
