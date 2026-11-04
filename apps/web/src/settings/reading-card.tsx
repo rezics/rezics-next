@@ -224,7 +224,12 @@ export class ReadingDraftRecovery {
     await this.send(false);
   }
   async reload(_waiting?: boolean) {
-    if (!this.owner.canRead() || this.readWaiting() || this.state.phase === 'saving' || this.state.phase === 'reloading')
+    if (
+      !this.owner.canRead() ||
+      this.readWaiting() ||
+      this.state.phase === 'saving' ||
+      this.state.phase === 'reloading'
+    )
       return;
     this.update({
       phase: 'reloading',
