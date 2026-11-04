@@ -6,7 +6,8 @@ scope.
 
 ## Units
 
-The interval is `off` (`0`), `30`, `60` or `300` seconds, default off. It covers successful new threads and replies by
+The native interval is any whole second from `0` (off) through `86400`, default off.
+Decision: retain preset choices `0`, `30`, `60`, `300` and add the current nonpreset value to the controls; do not expose free-text changes yet. It covers successful new threads and replies by
 one account on one board. Edits are not limited. Failed writes and receipt replays do not start a cooldown. Current
 board-curation authority exempts the moderator; Web never invents that exemption locally.
 
@@ -39,5 +40,12 @@ not increment Content's pin revision; the current cursor remains usable unless a
 
 ## Remaining producer binding
 
-Web calls `KernelClient.boards({ id }).slowMode` `GET`/`PUT` when that generated resource exists. Until Content
-installs it, the seam returns unavailable and does not invent an endpoint or a successful native body.
+Web binds the installed `KernelClient.boards({ id }).slowMode` methods and their response DTO directly.
+The declaration is `packages/client/src/kernel/content/routes.d.ts` at declaration head `3c86494744`.
+Only a valid original PUT body with the requested interval acknowledges the command. A malformed or opposite successful
+body remains unknown; no GET follows PUT to infer acknowledgement. Point readers preserve pending independently of
+countdown advice. Reads reject missing fields, wrappers and aliases instead of inventing an off policy.
+
+Reference observations: `legacy-final:apps/web/features/feed/reply-composer.tsx` preserves a draft and reply parent
+across refusal; `/home/edge/projects/rezics/rezics/apps/web/features/following/components/follow-button.tsx` separates
+status failure from mutation pending and opens explicit settings. These were source comparisons, not rendered parity.
