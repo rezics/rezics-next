@@ -26,8 +26,9 @@ and 4 KiB.
 adapter only for the `collection:read` point/page check. Its existing `permission-check.sql` statement now returns
 qualified local and optional Global primitive grants, denials, assignment validity and deadline validity; it does not
 return a final Collection allow. The adapter evaluates every target at the same native snapshot and uses the same
-core for ordinary and explicit advice. The ordinary formula retains the verified public floor independently of
-scope. Explicit advice excludes that floor and resource-role grants.
+core for ordinary and explicit advice. The bounded `prepareReadDecisions().decide` Collection profile also uses
+this core. The ordinary formula retains the verified public floor independently of scope. Explicit advice excludes
+that floor and resource-role grants.
 
 Kernel retains actor/principal authentication, account standing, temporal membership and assignment acquisition,
 floor verification, source completeness, `AuthoritativeTime`, deadlines, weak-map preparation and capability binding,

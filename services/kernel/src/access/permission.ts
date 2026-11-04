@@ -84,6 +84,7 @@ import { createKindAudienceOriginal, type KindOriginalProducer } from './kind-au
 import { kindOriginalFormulaPlan } from './kind-audience-formula.ts';
 import { readExposure, GLOBAL_CONTEXT } from './gates/catalogue.ts';
 import { compileNativePolicyCatalogue, decideNativePermission, type NativePermissionProjection } from './policy-core.ts';
+import type { PolicyCatalogue } from '@rezics/access';
 // Only the Kind original invocation needs a Source-eight-axis declaration for
 // foreign callbacks. Ordinary preparation retains its installed owner protocol.
 const kindOriginalInvocation = new AsyncLocalStorage<boolean>();
@@ -152,6 +153,7 @@ function validBuyerEvidence(proof: BuyerEvidence, time: AuthoritativeTime | unde
 }
 
 type Prepared = {
+  policyCatalogue: PolicyCatalogue;
   work?: AccessWorkAccounting;
   time?: AuthoritativeTime;
   buyerEvidence?: BuyerEvidence;
@@ -395,13 +397,13 @@ async function checkPreparedPermission(
     )
       return { allowed: false, explicit: false };
     if (action === 'collection:read') {
-      const resourceType = page?.resourceType ?? policyCatalogue.actionByName[action]?.resourceTypes[0] ?? '';
+      const resourceType = page?.resourceType ?? facts.policyCatalogue.actionByName[action]?.resourceTypes[0] ?? '';
       const hasPrincipal = facts.principalId !== null;
       const canEvaluateExplicit = includeExplicit && !facts.anonymous && facts.scope;
       const project = (row: (typeof rows)[number]) => row as unknown as NativePermissionProjection;
       const ordinary = rows.map((row) =>
         decideNativePermission(
-          policyCatalogue,
+          facts.policyCatalogue,
           {
             action,
             resourceType,
@@ -418,7 +420,7 @@ async function checkPreparedPermission(
       const explicit = canEvaluateExplicit
         ? rows.map((row) =>
             decideNativePermission(
-              policyCatalogue,
+              facts.policyCatalogue,
               {
                 action,
                 resourceType,
@@ -890,6 +892,7 @@ export function createAccess(config: PermissionConfig): Access {
       requireAccessDeadline(deadline);
       if (binding !== bind(actor, action, resource, page)) return evidence;
       prepared.set(evidence, {
+        policyCatalogue,
         ...(context.work ? { work: context.work } : {}),
         ...(time ? { time } : {}),
         ...(buyerEvidence ? { buyerEvidence } : {}),
@@ -1152,21 +1155,22 @@ export function createAccess(config: PermissionConfig): Access {
             return await within(deadline, async () => {
               const bounded = deadlineClient(client, deadline);
               const scope = identity.kind === 'account' && identity.scopes.includes(borrowedScope ?? batch.action);
+              const policyCore = action === 'collection:read';
               const formulaInput = {
                 route: 0,
                 resource_ids: [...ids],
                 batch: true,
                 include_explicit: scope,
-                include_public: !gate && actions.get(action)!.anonymous,
+                include_public: !gate && !policyCore && actions.get(action)!.anonymous,
                 include_global: isGlobalReachAction(action),
-                policy_core: false,
+                policy_core: policyCore,
                 action,
                 own_account: ownAccount,
                 actor_id: identity.kind === 'account' ? identity.accountId : '',
                 principal_id: principalId ?? '',
                 assignment_route: assignmentRoute,
                 assignment_request_id: assignmentRequestId,
-                anonymous: !scope,
+                anonymous: policyCore ? identity.kind === 'anonymous' : !scope,
                 floor: false,
                 at: decisionTime ? authoritativeTimeValue(decisionTime) : '',
                 roles,
@@ -1205,8 +1209,8 @@ export function createAccess(config: PermissionConfig): Access {
                 rows.some(
                   (row) =>
                     !ids.includes(row.resourceId) ||
-                    typeof row.allowed !== 'boolean' ||
-                    typeof row.explicit !== 'boolean' ||
+                    (policyCore ? typeof row.live !== 'boolean' : typeof row.allowed !== 'boolean') ||
+                    (!policyCore && typeof row.explicit !== 'boolean') ||
                     !row.at ||
                     !row.live,
                 )
@@ -1228,10 +1232,31 @@ export function createAccess(config: PermissionConfig): Access {
               for (const row of rows) {
                 const id = row.resourceId;
                 if (!id || (floor && typeof floor[id] !== 'boolean')) throw new AccessUnavailableError('overloaded');
-                result[id] = Object.freeze({
-                  allowed: row.allowed || (floor?.[id] === true && row.publicAllowed === true),
-                  explicit: row.explicit,
-                });
+                if (policyCore) {
+                  const input = {
+                    action,
+                    resourceType: batch.resourceType,
+                    anonymous: identity.kind === 'anonymous',
+                    hasPrincipal: principalId !== null,
+                    authenticatedBenefit: false,
+                    scope,
+                    floor: floor?.[id] === true,
+                  };
+                  const projection = row as unknown as NativePermissionProjection;
+                  const ordinary = decideNativePermission(policyCatalogue, { ...input, mode: 'ordinary' }, projection);
+                  const explicit = scope && identity.kind === 'account'
+                    ? decideNativePermission(policyCatalogue, { ...input, floor: false, mode: 'explicit' }, projection)
+                    : undefined;
+                  result[id] = Object.freeze({
+                    allowed: ordinary.decision === 'allow',
+                    explicit: explicit?.decision === 'allow' ?? false,
+                  });
+                } else {
+                  result[id] = Object.freeze({
+                    allowed: row.allowed || (floor?.[id] === true && row.publicAllowed === true),
+                    explicit: row.explicit === true,
+                  });
+                }
               }
               return Object.freeze(result);
             });
