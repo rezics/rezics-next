@@ -9,7 +9,21 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/subjects/example' });
-const globals = { window, document: window.document, IS_REACT_ACT_ENVIRONMENT: true };
+const globals = {
+  window,
+  document: window.document,
+  IS_REACT_ACT_ENVIRONMENT: true,
+  HTMLElement: window.HTMLElement,
+  Element: window.Element,
+  Node: window.Node,
+  ShadowRoot: window.ShadowRoot,
+  Document: window.Document,
+  DocumentFragment: window.DocumentFragment,
+  HTMLButtonElement: window.HTMLButtonElement,
+  HTMLInputElement: window.HTMLInputElement,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  navigator: window.navigator,
+};
 const previous = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, value });
