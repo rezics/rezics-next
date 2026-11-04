@@ -20,13 +20,7 @@ import { requestDigest } from '../http/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import {
-  prepareReadDecisions,
-  type Access,
-  type AccessContext,
-  type Actor,
-  type Resource,
-} from '../request/access.ts';
+import { prepareReadDecisions, type Access, type AccessContext, type Actor, type Resource } from '../request/access.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';

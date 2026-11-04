@@ -570,9 +570,7 @@ test('A retained terminal organization verification request with an erased reque
   ).toBe(true);
   expect(Value.Check(schema, { verificationRequest: native })).toBe(false);
   for (const requestedBy of ['not-a-uuid', '', 42, false, {}, [], undefined])
-    expect(
-      Value.Check(schema, { verificationRequest: { ...native, requestedBy }, viewerActions: [] }),
-    ).toBe(false);
+    expect(Value.Check(schema, { verificationRequest: { ...native, requestedBy }, viewerActions: [] })).toBe(false);
   const missingRequester = { ...read.body.verificationRequest };
   delete missingRequester.requestedBy;
   expect(Value.Check(schema, { verificationRequest: missingRequester, viewerActions: [] })).toBe(false);

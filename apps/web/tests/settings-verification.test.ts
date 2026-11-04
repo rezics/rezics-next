@@ -896,12 +896,8 @@ test('a newer request, changed advice, or pending-to-approving transition invali
   const pending = snapshotOf(request);
   const confirmation = verificationWithdrawalObservation(pending);
   expect(confirmation).toBe(verificationWithdrawalObservation(snapshotOf(request)));
-  expect(confirmation).not.toBe(
-    verificationWithdrawalObservation(snapshotOf({ ...request, id: 'request-2' })),
-  );
-  expect(confirmation).not.toBe(
-    verificationWithdrawalObservation(snapshotOf({ ...request, state: 'approving' })),
-  );
+  expect(confirmation).not.toBe(verificationWithdrawalObservation(snapshotOf({ ...request, id: 'request-2' })));
+  expect(confirmation).not.toBe(verificationWithdrawalObservation(snapshotOf({ ...request, state: 'approving' })));
   expect(confirmation).not.toBe(verificationWithdrawalObservation(snapshotOf(request, { viewerActions: [] })));
   expect(verificationWithdrawalObservation(snapshotOf(null))).toBeNull();
 });
