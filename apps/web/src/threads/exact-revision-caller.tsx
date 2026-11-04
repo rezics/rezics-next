@@ -332,7 +332,7 @@ export function ExactRevisionCaller({
       <ExactRevisionView
         identity={identity}
         page={page}
-        historyReturn={historyReturn}
+        {...(historyReturn ? { historyReturn } : {})}
         onRetry={retry}
         readingIdentity={visit}
         isReadingCurrent={() =>
