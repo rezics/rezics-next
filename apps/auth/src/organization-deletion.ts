@@ -141,7 +141,8 @@ export async function executeOrganizationDeletion(
   // approval and execution still revalidate every write operand independently.
   const current = await loadOrganizationDeletion(target.organizationId, read, review);
   if (review && !review.isCurrent()) return { ok: false, reason: 'failure' };
-  if (current.kind === 'authentication-required') return { ok: false, reason: 'step-up' };
+  if (current.kind === 'authentication-required')
+    return { ok: false, reason: current.humanAccountId === target.humanAccountId ? 'step-up' : 'changed' };
   if (current.kind !== 'ready')
     return {
       ok: false,
