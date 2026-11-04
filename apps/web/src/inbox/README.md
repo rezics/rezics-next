@@ -37,6 +37,9 @@ and the latest details; a successful page replaces the retained window rather th
 **Decision:** Count Retry-After is observed once as an absolute deadline on the current Inbox viewer; expiry enables
 the page retry control and does not schedule a fetch. The shell badge stays a compact unknown-or-count indicator.
 
+**Decision:** Inbox list and detail share one local actor presenter for available, withheld and system labels and
+identity fallbacks; native actor disclosure remains unchanged until the additive media summary is officially installed.
+
 **Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. A
 successful continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed
 continuation it retains only the prior 20-row window. A chosen or bulk acknowledgement dispatches one native command,
