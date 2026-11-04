@@ -15,6 +15,7 @@ import {
   watchAuthorization,
   watchOwner,
   watchReceipt,
+  watchRemoveAdvice,
   type WatchDependencies,
   type WatchKind,
 } from './watch-authority.ts';
@@ -54,6 +55,7 @@ export async function listWatches(
     requestedBy: owner.actor.requestedBy,
     authnEpoch: owner.actor.authnEpoch,
   };
+  const initialAdvice = await watchRemoveAdvice(deps, actor, owner, deadline);
   const source = selection(input.kind);
   const limit = input.limit ?? WATCH_MANAGEMENT_PRESENTATION_BUDGET;
   if (!Number.isInteger(limit) || limit < 1 || limit > WATCH_MANAGEMENT_PRESENTATION_BUDGET)
@@ -133,12 +135,15 @@ export async function listWatches(
       revision: row.revision,
       createdAt: new Date(row.created_at).toISOString(),
     };
+    const command = { watchId: identity.id, kind: identity.kind, expectedRevision: identity.revision };
     finalItems.push(
       final.presentation
-        ? { ...identity, state: 'available', ...final.presentation }
-        : { ...identity, state: 'unavailable' },
+        ? { ...identity, state: 'available', ...final.presentation, command }
+        : { ...identity, state: 'unavailable', command },
     );
   }
+  const finalAdvice = await watchRemoveAdvice(deps, actor, owner, deadline);
+  if (finalAdvice !== initialAdvice) throw new ProblemError('dependency_unavailable');
   const finalOwner = await requireWatchOwner(deps, actor, deadline, accountId);
   if (
     finalOwner.id !== ownerObservation.id ||
@@ -159,7 +164,12 @@ export async function listWatches(
           now,
         )
       : null;
-  return { items: finalItems, next };
+  return {
+    viewer: { state: 'current', accountId: ownerObservation.id },
+    actions: { remove: finalAdvice },
+    items: finalItems,
+    next,
+  };
 }
 
 async function watchGeneration(deps: WatchDependencies, route: number, deadline: number): Promise<number> {

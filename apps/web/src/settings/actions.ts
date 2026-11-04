@@ -200,15 +200,9 @@ export const readWatchInventory = createServerFn({ method: 'GET' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
-    if (!authorization || !accountId || accountId !== data.accountId) return { kind: 'unavailable' };
-    const page = await readWatchInventoryNative(
-      kernelClient(undefined, authorization),
-      accountId,
-      authorization,
-      data,
-      request.signal,
-    );
-    return { kind: 'page', page };
+    if (!authorization || !accountId || accountId !== data.accountId)
+      return { kind: 'denied', problem: { status: 401, code: null } };
+    return readWatchInventoryNative(kernelClient(undefined, authorization), accountId, data, request.signal);
   });
 
 export const removeWatchSubscription = createServerFn({ method: 'POST' })
@@ -243,6 +237,6 @@ export const removeWatchSubscription = createServerFn({ method: 'POST' })
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
     if (!authorization || !accountId || accountId !== data.accountId || requestCsrfToken(request) !== data.csrfToken)
-      return { kind: 'rejected' };
-    return removeWatchNative(kernelClient(undefined, authorization), authorization, data);
+      return { kind: 'denied', problem: { status: 403, code: null } };
+    return removeWatchNative(kernelClient(undefined, authorization), data);
   });

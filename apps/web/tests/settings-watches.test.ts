@@ -12,23 +12,34 @@ import {
 } from '../src/settings/watch-native';
 
 const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'alice-token' };
-const readable: ManagedWatch = {
+const viewer = { state: 'current' as const, accountId: 'alice' };
+const actions = { remove: 'available' as const };
+function managed(
+  row: Omit<ManagedWatch, 'command' | 'remove'> & Partial<Pick<ManagedWatch, 'command' | 'remove'>>,
+): ManagedWatch {
+  return {
+    ...row,
+    command: row.command ?? { watchId: row.subscriptionId, kind: row.kind, expectedRevision: row.revision },
+    remove: row.remove ?? 'available',
+  };
+}
+const readable = managed({
   subscriptionId: 'owner-subscription',
   kind: 'thread',
   revision: 3,
   createdAt: '2026-11-03T10:00:00.000Z',
   target: { title: 'Readable', href: '/threads/a/readable' },
-};
-const inaccessible: ManagedWatch = {
+});
+const inaccessible = managed({
   subscriptionId: 'owner-private-subscription',
   kind: 'thread',
   revision: 4,
   createdAt: '2026-11-02T10:00:00.000Z',
   target: null,
-};
+});
 const page = (watches: readonly ManagedWatch[], next: string | null = null): WatchRead => ({
   kind: 'page',
-  page: { watches, next },
+  page: { viewer, actions, watches, next },
 });
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -50,10 +61,10 @@ function setup(io: WatchManagementIO) {
 test('unavailable management stays distinct from an actual empty page', async () => {
   const { controller } = setup(unavailableWatchManagement);
   await controller.first();
-  expect(controller.snapshot()).toMatchObject({ read: 'unavailable', rows: [] });
+  expect(controller.snapshot()).toMatchObject({ read: 'unavailable', rows: [], problem: { status: null, code: null } });
   const empty = setup({ read: async () => page([]), stop: async () => ({ kind: 'removed' }) }).controller;
   await empty.first();
-  expect(empty.snapshot()).toMatchObject({ read: 'ready', rows: [], next: null });
+  expect(empty.snapshot()).toMatchObject({ read: 'ready', rows: [], next: null, actions: { remove: 'available' } });
 });
 
 test('sparse continuation uses the exact opaque cursor, fixed request size and one page in memory; failure retries that page', async () => {
@@ -73,7 +84,7 @@ test('sparse continuation uses the exact opaque cursor, fixed request size and o
     stop: async () => ({ kind: 'removed' }),
   });
   await controller.first();
-  expect(controller.snapshot()).toMatchObject({ rows: [], next: opaque });
+  expect(controller.snapshot()).toMatchObject({ rows: [], next: opaque, viewer });
   fail = true;
   await controller.next();
   expect(controller.snapshot()).toMatchObject({ read: 'failed', rows: [], cursor: opaque });
@@ -122,8 +133,12 @@ test('lost target access still permits removal by owner subscription identity, w
   });
   await controller.first();
   await controller.stop(inaccessible.subscriptionId);
-  expect(commands[0]?.watchId).toBe(inaccessible.subscriptionId);
-  expect(commands[0]).toMatchObject({ accountId: 'alice', kind: 'thread', expectedRevision: inaccessible.revision });
+  expect(commands[0]?.watchId).toBe(inaccessible.command.watchId);
+  expect(commands[0]).toMatchObject({
+    accountId: 'alice',
+    kind: 'thread',
+    expectedRevision: inaccessible.command.expectedRevision,
+  });
   expect(Object.isFrozen(commands[0])).toBe(true);
   expect(controller.snapshot()).toMatchObject({ write: 'removed', rows: [readable], command: null });
 });
@@ -184,4 +199,87 @@ test('viewer replacement or failed session refresh retires rows, pending command
     await read;
     expect(next.controller.snapshot()).toMatchObject({ retired: true, rows: [] });
   }
+});
+
+test('invalid cursors offer a cursor-free restart; transient failures retry the same range', async () => {
+  const cursors: (string | null)[] = [];
+  let mode: 'page' | 'invalid' | 'unavailable' = 'page';
+  const opaque = 'sealed/+cursor==';
+  const { controller } = setup({
+    read: async ({ cursor }) => {
+      cursors.push(cursor);
+      if (mode === 'invalid') return { kind: 'invalid_cursor', problem: { status: 400, code: 'invalid_cursor' } };
+      if (mode === 'unavailable')
+        return { kind: 'unavailable', problem: { status: 503, code: 'dependency_unavailable' } };
+      return cursor === null ? page([], opaque) : page([readable]);
+    },
+    stop: async () => ({ kind: 'removed' }),
+  });
+  await controller.first();
+  mode = 'unavailable';
+  await controller.next();
+  expect(controller.snapshot()).toMatchObject({
+    read: 'unavailable',
+    cursor: opaque,
+    problem: { status: 503, code: 'dependency_unavailable' },
+  });
+  mode = 'page';
+  await controller.refresh();
+  expect(controller.snapshot()).toMatchObject({ read: 'ready', rows: [readable] });
+  mode = 'invalid';
+  await controller.refresh();
+  expect(controller.snapshot()).toMatchObject({ read: 'invalid_cursor', cursor: opaque });
+  mode = 'page';
+  await controller.first();
+  expect(controller.snapshot()).toMatchObject({ read: 'ready', rows: [] });
+  expect(cursors).toEqual([null, opaque, opaque, opaque, null]);
+});
+
+test('owner-denied remove advice keeps concealed rows and withholds the stop command', async () => {
+  const denied = managed({ ...inaccessible, remove: 'denied' });
+  let writes = 0;
+  const { controller } = setup({
+    read: async () => ({
+      kind: 'page',
+      page: { viewer, actions: { remove: 'denied' }, watches: [denied], next: null },
+    }),
+    stop: async () => {
+      writes++;
+      return { kind: 'removed' };
+    },
+  });
+  await controller.first();
+  await controller.stop(denied.subscriptionId);
+  expect(writes).toBe(0);
+  expect(controller.snapshot()).toMatchObject({
+    read: 'ready',
+    actions: { remove: 'denied' },
+    rows: [denied],
+    command: null,
+  });
+});
+
+test('conflict and access-denied stops do not replay the original command', async () => {
+  const commands: StopWatch[] = [];
+  let outcome: 'conflict' | 'denied' = 'conflict';
+  const { controller } = setup({
+    read: async () => page([readable]),
+    stop: async (input) => {
+      commands.push(input);
+      return outcome === 'conflict'
+        ? { kind: 'conflict', problem: { status: 409, code: 'conflict' } }
+        : { kind: 'denied', problem: { status: 403, code: 'forbidden' } };
+    },
+  });
+  await controller.first();
+  await controller.stop(readable.subscriptionId);
+  expect(controller.snapshot()).toMatchObject({ write: 'conflict', command: null, read: 'failed' });
+  await controller.retryOriginal();
+  expect(commands).toHaveLength(1);
+  await controller.first();
+  outcome = 'denied';
+  await controller.stop(readable.subscriptionId);
+  expect(controller.snapshot()).toMatchObject({ write: 'denied', command: null, read: 'denied' });
+  await controller.retryOriginal();
+  expect(commands).toHaveLength(2);
 });

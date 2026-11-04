@@ -32,11 +32,20 @@ export type {
   EntryAnnotationCorrectionSelection,
 } from './kernel/library/entry-annotation-correction';
 export type WatchManagementKind = 'thread' | 'board';
+export type WatchManagementAdvice = 'available' | 'denied';
+export type WatchManagementViewer = { state: 'current'; accountId: string };
+export type WatchManagementActions = { remove: WatchManagementAdvice };
+export type WatchManagementCommand = {
+  watchId: string;
+  kind: WatchManagementKind;
+  expectedRevision: number;
+};
 type WatchManagementIdentity = {
   id: string;
   kind: WatchManagementKind;
   revision: number;
   createdAt: string;
+  command: WatchManagementCommand;
 };
 export type WatchManagementItem =
   | (WatchManagementIdentity & {
@@ -46,6 +55,8 @@ export type WatchManagementItem =
     })
   | (WatchManagementIdentity & { state: 'unavailable' });
 export type WatchManagementPage = {
+  viewer: WatchManagementViewer;
+  actions: WatchManagementActions;
   items: WatchManagementItem[];
   next: string | null;
 };
@@ -200,11 +211,12 @@ type DecisionPages = Omit<GeneratedKernelClient['moderation-decisions'], keyof F
   ((...args: Parameters<GeneratedKernelClient['moderation-decisions']>) => DecisionPageEndpoints);
 type PersonalEntryCall<T> = Promise<{
   data: T | null;
-  error: unknown;
+  error: { value: unknown; status?: number } | null;
   response: Response;
   status: number;
+  headers: Headers;
 }>;
-type PersonalReadOptions = { headers?: Record<string, string> };
+type PersonalReadOptions = { headers?: Record<string, string>; fetch?: { signal?: AbortSignal } };
 type PersonalWriteOptions = { headers: Record<string, string> & { 'idempotency-key': string } };
 type PersonalEntryEndpoints = {
   personal: {
