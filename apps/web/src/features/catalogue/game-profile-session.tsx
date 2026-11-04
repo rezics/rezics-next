@@ -11,7 +11,7 @@ import {
   proposeGameClassification,
   loadGameClassificationReview,
 } from './game-profile-actions';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { readCorrectionReview, confirmCorrection, readCorrection } from './statement-editor-actions';
 import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectRelationEditor, proposeSubjectRelation, confirmSubjectRelation } from './relation-editor-actions';
@@ -24,6 +24,7 @@ function GameProfileSessionLive({ id, locale }: { id?: string; locale: string })
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
   );
+  const eligibility = useCallback(() => readCatalogueCreateEligibility(), []);
   return (
     <GameProfile
       {...(id ? { id } : {})}
@@ -36,6 +37,7 @@ function GameProfileSessionLive({ id, locale }: { id?: string; locale: string })
       transport={{
         load: () => loadGameProfile({ data: id }),
         create: (data) => createCatalogueGame({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+        eligibility,
         read: (data) => readCreatedCatalogueSubject({ data }),
         facts: {
           read: () => readCorrection({ data: editorRequest({ id: id! }, editorWork) }),

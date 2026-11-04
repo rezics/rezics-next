@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { act, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { GameCommand } from '../src/features/catalogue/game-profile';
+import type { CreateAuthority } from '../src/features/catalogue/identity-intake';
 import * as start from '../.storybook/react-start';
 
 mock.module('@tanstack/react-start', () => start);
@@ -80,6 +81,11 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
     expect(host.querySelector('[data-game-create-review]')).not.toBeNull();
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
   }
+  async function retryAuthority() {
+    await act(async () =>
+      user.click(canvas().getByRole('button', { name: m.identity_intake_authority_retry() })),
+    );
+  }
   async function add(property: string) {
     await act(async () =>
       user.selectOptions(canvas().getByRole('combobox', { name: m.character_add_fact() }), property),
@@ -101,15 +107,42 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
   }
   try {
     const fixture = gameProfileFixture();
+    let authority: CreateAuthority = { state: 'refused', reason: 'permission' };
+    let authorityReads = 0;
+    const guardedTransport = {
+      ...fixture.transport,
+      eligibility: async () => {
+        authorityReads++;
+        return structuredClone(authority);
+      },
+    };
     await render(
       <GameProfile
         locale="en"
         session="signed-in"
-        transport={fixture.transport}
+        transport={guardedTransport}
         search={async () => []}
         onNavigate={() => {}}
       />,
     );
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_refused_permission()));
+    await waitFor(() => expect(canvas().getByRole('combobox', { name: m.catalogue_create_type() })).toBeDefined());
+    const typeChoice = canvas().getByRole('combobox', { name: m.catalogue_create_type() }) as HTMLSelectElement;
+    expect(typeChoice.disabled).toBe(false);
+    expect((canvas().getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(fixture.calls.some((call) => call.method === 'POST')).toBe(false);
+
+    authority = { state: 'unknown', reason: 'unavailable' };
+    await retryAuthority();
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_unknown()));
+    expect(typeChoice.disabled).toBe(false);
+    authority = { state: 'allowed', action: 'subject:create', operations: ['subject.create'] };
+    await retryAuthority();
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    expect(authorityReads).toBe(3);
+
     await choose('schema:VideoGame');
     await act(async () =>
       user.type(canvas().getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed lantern'),
@@ -148,8 +181,19 @@ test('Game creation reviews multilingual facts, copies evidence, repairs nested 
     expect(review.textContent).toContain('https://example.org/game-source');
     expect(review.textContent).toContain(m.candidate_rank_normal());
     expect(fixture.calls.some((call) => call.method === 'POST')).toBe(false);
+
+    authority = { state: 'refused', reason: 'permission' };
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_refused_permission()));
+    expect(host.querySelector('[data-game-create-review]')).not.toBeNull();
+    expect(fixture.calls.some((call) => call.method === 'POST')).toBe(false);
+    authority = { state: 'allowed', action: 'subject:create', operations: ['subject.create'] };
+    await retryAuthority();
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    expect(host.querySelector('[data-game-create-review]')).not.toBeNull();
     await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
     await waitFor(() => expect(canvas().getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());
+    expect(authorityReads).toBe(6);
     expect(host.textContent).toContain(gameId);
     const created = fixture.calls.find((call) => call.method === 'POST')!.body as GameCommand['item'];
     expect(created.type).toBe('schema:VideoGame');

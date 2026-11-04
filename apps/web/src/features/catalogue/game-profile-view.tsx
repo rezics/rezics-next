@@ -12,6 +12,7 @@ import { ViewHeading } from '../pages/view-heading';
 import { CandidateValue } from '../pages/data';
 import { CreateSubjectForm } from './create-subject-form';
 import type { CreatedReader, CreateResult } from './create-subject';
+import type { CreateAuthority } from './identity-intake';
 import { GameCreateReview } from './game-create-review';
 import { gameAdmitCreatedReader } from './game-create-review-model';
 import { SubjectTermsEntry } from './subject-terms-entry';
@@ -45,6 +46,7 @@ const gameDisclosureSummaryClass =
 export type GameProfileTransport = {
   load: () => Promise<GameRead>;
   create: (command: GameCommand) => Promise<CreateResult>;
+  eligibility?: () => Promise<CreateAuthority>;
   read: (id: string) => Promise<CreatedReader>;
   facts: FactsTransport;
   classifications: FactsTransport;
@@ -369,6 +371,7 @@ function GameProfileLive({
             ),
           }}
           transport={{
+            ...(transport.eligibility ? { eligibility: transport.eligibility } : {}),
             definitions: async (refresh) => {
               const refreshed = refresh ? await query.refetch() : undefined;
               const current = refreshed ? (refreshed.isError ? undefined : refreshed.data) : read;

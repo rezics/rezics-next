@@ -466,7 +466,10 @@ referable add-ons remain separate subjects. Language/platform combinations never
 
 Creation composes the existing multilingual initial-terms form with optional native statement controls, target
 picker, qualifiers and references. Only explicitly added facts enter ordinary `POST /v1/subjects`; native initial
-facts are selected in Global. Contributors review the exact prepared item before confirmation: admitted type identity
+facts are selected in Global. The shared creator reads current `subject.create` authority on the Global Context
+parent and requires an allowed observation for fresh creation; guest, refusal and unavailable states stay distinct
+while definitions and public targets remain readable. It rechecks before the write, and native execution reauthorizes
+the command. Contributors review the exact prepared item before confirmation: admitted type identity
 and its original label language, work versus add-on versus software-release grain from the current Type descriptor
 and bases, every language row and alias array, and every initial assertion with its native datatype, qualifiers,
 default `normal` rank and grouped references. Type-keyed drafts survive switches; only the current type's prepared
