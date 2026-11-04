@@ -37,7 +37,7 @@ concept-browse retain their own hosts. Collection, Review, Space and Account act
 The public loader remains public: a mounted signed-in reader obtains a private, no-store POST assembly, never a
 private query-cache entry, URL parameter or public summary field. Share, reload and Back assemble current server facts.
 
-Decision: Capability metadata exceeding one shared 1 MiB/1,024-chunk transport allowance withholds inline writes;
+Decision: Capability metadata exceeding one shared 1 MiB/1,024-chunk transport allowance withholds affected inline writes;
 only the immutable standard Global question enables score writes, and conditional providers remain unavailable.
 
 A single page-level capability projection uses the current authenticated release and operation exposure, separately
