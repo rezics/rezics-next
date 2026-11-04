@@ -3,7 +3,7 @@ import { act, createElement } from 'react';
 import { dirname } from 'node:path';
 import { createKernelClient } from '@rezics/client';
 import { planReads, platformRegistry, type CompositionDocument, type SelectedContext } from '@rezics/composition';
-import definitions from '../../packages/definitions/release/rezics.json';
+import definitions from '../../../packages/definitions/release/rezics.json';
 import { qualifiedRelationsPage } from '../src/kernel/fake/qualified-relations';
 import type { GuideRelease } from '../src/features/catalogue/definition-guide';
 import { identityProperty } from '../src/features/catalogue/character-relationships/reading';
