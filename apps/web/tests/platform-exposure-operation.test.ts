@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 import { ExposureOperation } from '../src/platform/exposure/operation';
-import { parseIntent, type Intent, type Outcome } from '../src/platform/exposure/data';
+import { parseIntent, type Intent, type Outcome, type Page } from '../src/platform/exposure/data';
 
 const input: Intent = { group: 'collections', action: 'open', key: 'd42544e2-c78d-4a2a-8e5b-781a913e3920', body: {} };
+const unavailable: Page = { status: 'unavailable', discovery: { status: 'unavailable' } };
 
 test('confirmation freezes a copy, rejects newline keys, and excludes double submission synchronously', async () => {
   expect(() => parseIntent({ ...input, key: input.key + '\n' })).toThrow();
@@ -27,7 +28,7 @@ test('confirmation freezes a copy, rejects newline keys, and excludes double sub
     status: 'recorded',
     operation: controller.intent!,
     receipt: { group: 'collections', open: true, changed: false },
-    current: { status: 'unavailable' },
+    current: unavailable,
   });
   expect((await first)?.status).toBe('recorded');
   expect(await controller.send(change)).toBeNull();
@@ -40,7 +41,7 @@ test('explicit retry keeps its first CSRF continuation and retirement preserves 
   expect(controller.review(input)).toBe(true);
   const original = controller.intent;
   const tokens: string[] = [];
-  const uncertain: Outcome = { status: 'uncertain', operation: original!, current: { status: 'unavailable' } };
+  const uncertain: Outcome = { status: 'uncertain', operation: original!, current: unavailable };
   expect(
     (
       await controller.send(async (_intent, token) => {
@@ -53,7 +54,7 @@ test('explicit retry keeps its first CSRF continuation and retirement preserves 
     (
       await controller.send(async (_intent, token) => {
         tokens.push(token ?? '');
-        return { status: 'uncertain', operation: original!, current: { status: 'unavailable' } };
+        return { status: 'uncertain', operation: original!, current: unavailable };
       }, 'csrf-replacement')
     )?.status,
   ).toBe('uncertain');
@@ -65,8 +66,8 @@ test('explicit retry keeps its first CSRF continuation and retirement preserves 
   controller.retire();
   expect(controller.intent).toBe(original);
   expect(controller.outcome?.status).toBe('uncertain');
-  expect(await controller.send(async () => ({ status: 'not-sent', current: { status: 'unavailable' } }))).toBeNull();
-  finish({ status: 'not-sent', current: { status: 'unavailable' } });
+  expect(await controller.send(async () => ({ status: 'not-sent', current: unavailable }))).toBeNull();
+  finish({ status: 'not-sent', current: unavailable });
   expect(await pending).toBeNull();
   expect(controller.intent).toBe(original);
   expect(controller.outcome?.status).toBe('uncertain');

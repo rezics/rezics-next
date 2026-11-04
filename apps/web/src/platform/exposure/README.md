@@ -3,6 +3,9 @@
 Route: `/{locale}/platform/exposure`, private and no-store. This slice consumes native discovery and commands;
 it does not install a writer, grant, flag engine or wider website scope.
 
+Decision: When native management is refused or unavailable, retain only the generated viewer-filtered group names as
+partial context with unknown status and no controls; they never imply a complete inventory or current authority.
+
 ## Closed native declaration and Accounts owner handoff
 
 Current native source is `services/kernel/src/access/gates/`:
@@ -11,21 +14,21 @@ Current native source is `services/kernel/src/access/gates/`:
   `x-action`. Its visible gate groups are a partial inventory, never a complete management inventory.
 - `GET /v1/platform/exposure` returns `{ admitted: string[] }`, meaning **viewer admission** at T. It cannot
   establish public open/closed state, even for a governance viewer. This page does not use it as state.
-- The delivered native `GET /v1/platform/exposure/management` read supplies one bounded page of
-  `{ exposureGroups: [{ group, open, at }], next }`. The consumer uses the owner's `CurrentExposure` projection
-  and retains the native time string verbatim. A page defaults to 20 groups (maximum 100), and continuation
-  is an explicit user selection of the opaque signed `next`; reload reads only the selected page.
-  No count or complete-inventory claim is inferred. Unknown or denied reads discard prior private rows.
-  The default `data.ts:readCurrentExposure` binding calls that exact route when discovery declares
-  `exposure.read_management` / `exposure:manage_read`. It validates the closed response, ordered unique groups
-  and common timestamp. The native contract is owned by
+- The native `GET /v1/platform/exposure/management` read supplies safe acting account/client IDs, independent
+  current open/close advice, and one bounded page of `{ exposureGroups: [{ group, open, at }], next }`. The consumer
+  uses the owner's `CurrentExposure` projection and retains the native time string verbatim. A page defaults to 20
+  groups (maximum 100), and continuation is an explicit user selection of the opaque signed `next`; reload reads
+  only the selected page. No count or complete-inventory claim is inferred. The default `data.ts:readCurrentExposure`
+  binding calls that exact route independently of OpenAPI discovery. It validates the closed response, safe viewer
+  context, action advice, ordered unique groups and common timestamp. `invalid_cursor`, denied and unavailable reads
+  remain distinct; Start again drops only the opaque cursor and keeps the visit and page limit. The native contract is owned by
   [platform gates](../../../../../../services/kernel/src/access/gates/README.md#current-management-configuration).
-- Exposure commands publish `x-authority-resource-types: ['semantic.context']` with the canonical fixed Global
-  `x-authority-resource-id`. The parser consumes that exact reference and checks the native `viewerActions`
-  result for `exposure:open` with `exposure.open`, or `exposure:close` with `exposure.close` independently.
-  Malformed fixed IDs, authority types and account overrides supply no binding. Kernel's default Global-only
-  reader uses Semantic's actual `globalContextAnchor`; it supplies existence, not permission. Neither
-  `gate:any`, admitted groups, configuration read permission, scopes alone nor governance role names grant mutation.
+- The separate generated OpenAPI response remains viewer-filtered operation discovery and may supply only partial
+  visible-group context. It is optional for this page and cannot establish management, open or close authority.
+  Native action advice comes only from the management response's independent checks against each installed command
+  on fixed Global Context. Neither `gate:any`, discovered groups, configuration read permission, scopes alone nor
+  governance role names grant mutation. When management is refused or unavailable, visible discovery groups remain
+  explicitly partial with unknown state and no controls.
 
 The fixed native target is route 0, ID `00000000-0000-8000-8000-000000000000` (`governance-reach.ts` and
 `gates/catalogue.ts`). Native commands already check the entire current formula before reading an old receipt,
@@ -42,13 +45,10 @@ persistence is allowed.
 Native acceptance, recorded native stories, browser review and full Goal closure remain integration debt. This
 handoff explicitly keeps the original acceptance command and full acceptance conditions; local typing is not that proof.
 
-The catalogue parser bounds processing to 4,096 paths/operations and 256 visible groups, rejecting malformed or
-oversized responses as unavailable. It preserves installed declaration syntax (`^[a-z][a-z_]{0,62}$`, reserved
-`any`, `open`, `close`); it does not widen declarations to the command's historical hyphen allowance.
-For fixed metadata, `viewerActions` transport asks for the declared native type and fixed ID. Existing declarations
-without the optional fixed-ID extension retain their original Global selection using their declared type; the parser
-does not invent a type. Only the exact action AND operation pair can enable confirmation. Missing bindings and source
-errors are unavailable, never denied by inference.
+The optional catalogue parser bounds processing to 4,096 paths/operations and 256 visible groups, rejecting malformed
+or oversized responses as unavailable. It preserves installed declaration syntax (`^[a-z][a-z_]{0,62}$`, reserved
+`any`, `open`, `close`); it does not widen declarations to the command's historical hyphen allowance. It lists only
+groups present in the viewer-filtered document and never projects action permissions.
 The session guard also classifies this route as private so the root cannot prepare anonymous exposure during SSR.
 Messages currently use English fallbacks in every supported locale.
 

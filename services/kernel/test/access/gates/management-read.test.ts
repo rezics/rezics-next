@@ -187,7 +187,10 @@ describe('Exact current direct Global exposure management authority reads bounde
     expect(result.status).toBe(200);
     expect(result.headers.get('cache-control')).toBe('private, no-store');
     const page = await result.json();
-    expect(Object.keys(page).sort()).toEqual(['exposureGroups', 'next']);
+    expect(Object.keys(page).sort()).toEqual(['actions', 'exposureGroups', 'next', 'viewer']);
+    expect(page.viewer).toEqual({ accountId: fixture.actorId, clientId: 'exposure-management' });
+    expect(Object.keys(page.viewer).sort()).toEqual(['accountId', 'clientId']);
+    expect(page.actions).toEqual({ open: false, close: false });
     const installed = [
       ...new Set(
         kernel.routes.flatMap((route) => {
@@ -215,6 +218,62 @@ describe('Exact current direct Global exposure management authority reads bounde
     );
     expect((await discovery.json()).admitted).toContain(groups[0]);
     expect((await nativeRead(await identity(), {})).exposureGroups.length).toBe(Math.min(20, installed.length));
+  });
+
+  test('returns independent current Global open and close advice and withdraws an action denied during observation', async () => {
+    const openOnly = newId(0x1234);
+    await fixture.account(openOnly);
+    await grant(openOnly);
+    await grant(openOnly, 'exposure:open');
+    const openActor = await identity(openOnly, [action, 'exposure:open']);
+    expect((await nativeRead(openActor)).actions).toEqual({ open: true, close: false });
+
+    const closeOnly = newId(0x1234);
+    await fixture.account(closeOnly);
+    await grant(closeOnly);
+    await grant(closeOnly, 'exposure:close');
+    const closeActor = await identity(closeOnly, [action, 'exposure:close']);
+    expect((await nativeRead(closeActor)).actions).toEqual({ open: false, close: true });
+
+    const original = access.prepare!.bind(access);
+    let openPreparations = 0;
+    const interception = spyOn(access, 'prepare').mockImplementation(async (...args) => {
+      if (args[1] === 'exposure:open' && ++openPreparations === 2) {
+        await pool.query(
+          `INSERT INTO access.resource_denial
+           (route, resource_id, subject_id, action, reason, valid, transaction_id)
+           VALUES (0, $1, $2, 'exposure:open', 'resource', '(,)', $3)`,
+          [GLOBAL_CONTEXT.id, openOnly, fixture.transactionId],
+        );
+      }
+      return original(...args);
+    });
+    try {
+      expect((await nativeRead(openActor)).actions).toEqual({ open: false, close: false });
+      expect(openPreparations).toBe(2);
+    } finally {
+      interception.mockRestore();
+      await pool.query(
+        "DELETE FROM access.resource_denial WHERE resource_id = $1 AND subject_id = $2 AND action = 'exposure:open'",
+        [GLOBAL_CONTEXT.id, openOnly],
+      );
+    }
+  });
+
+  test('a failed installed action preparation makes the management read unavailable', async () => {
+    await grant(fixture.actorId, 'exposure:open');
+    const original = access.prepare!.bind(access);
+    const interception = spyOn(access, 'prepare').mockImplementation(async (...args) => {
+      if (args[1] === 'exposure:open') throw new Error('action preparation failed');
+      return original(...args);
+    });
+    try {
+      const result = await response(await bearer(fixture.actorId, [action, 'exposure:open']));
+      expect(result.status).toBe(503);
+      expect((await result.json()).code).toBe('dependency_unavailable');
+    } finally {
+      interception.mockRestore();
+    }
   });
 
   test('rechecks real denials and current assignment before disclosure and distinguishes unavailable reads', async () => {
