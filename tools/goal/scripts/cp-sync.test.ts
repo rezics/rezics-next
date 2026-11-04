@@ -17,7 +17,7 @@ function loadState(argv: string[]): { code: number; output: string } | undefined
   return { code: 0, output: argv.at(-1) === 'rezics-goal-supervisor.service' ? 'not-found' : 'loaded' };
 }
 
-test('After publication, cp-sync restarts every resident service that runs tools/goal code (the manager host and the dev verifier), and verifies that each one\'s process started after the publication.', async () => {
+test("After publication, cp-sync restarts every resident service that runs tools/goal code (the manager host and the dev verifier), and verifies that each one's process started after the publication.", async () => {
   const root = checkout();
   const calls: string[][] = [];
   const startedAtSec = Math.floor(Date.now() / 1000) + 5;
