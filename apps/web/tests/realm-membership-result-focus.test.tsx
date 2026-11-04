@@ -92,7 +92,7 @@ test.each(['join', 'leave', 'recovery', 'survive', 'pointer', 'move', 'renew', '
     window.document.body.append(host);
     const root = createRoot(host as unknown as HTMLElement);
     const button = (label: string) => [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
-    const tick = () => act(() => Bun.sleep(0));
+    const tick = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 1)));
     const until = async (ready: () => boolean) => {
       for (let turn = 0; turn < 100 && !ready(); turn++) await tick();
       expect(ready()).toBe(true);
