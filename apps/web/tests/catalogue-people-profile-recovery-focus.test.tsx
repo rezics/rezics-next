@@ -68,11 +68,7 @@ test('People correction focus stays current and profile creation keeps authority
       action();
       await new Promise((resolve) => setTimeout(resolve, 15));
     });
-  const show = (
-    selectedFixture = fixture,
-    selectedTransport = transport,
-    id: string | null = selectedFixture.id,
-  ) =>
+  const show = (selectedFixture = fixture, selectedTransport = transport, id: string | null = selectedFixture.id) =>
     act(async () =>
       root.render(
         <QueryClientProvider client={client}>
@@ -161,14 +157,12 @@ test('People correction focus stays current and profile creation keeps authority
     await act(async () => user.selectOptions(type, 'schema:Person'));
     const label = within(host).getByRole('textbox', { name: m.catalogue_create_label() });
     await act(async () => user.type(label, 'Retained profile draft'));
-    expect((within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled).toBe(
-      true,
-    );
+    expect(
+      (within(host).getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
 
     authority = { state: 'unknown', reason: 'unavailable' };
-    await act(async () =>
-      user.click(within(host).getByRole('button', { name: m.identity_intake_authority_retry() })),
-    );
+    await act(async () => user.click(within(host).getByRole('button', { name: m.identity_intake_authority_retry() })));
     await waitFor(() =>
       expect(within(host).getByRole('alert').textContent).toBe(m.identity_intake_authority_unknown()),
     );
