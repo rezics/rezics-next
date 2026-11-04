@@ -18,8 +18,7 @@ function assertSelectedDirectorySeek(raw: Capture, selected: number) {
   expect(scans).toHaveLength(2);
   for (const scan of scans) {
     expect(['Index Scan', 'Index Only Scan']).toContain(String(scan['Node Type']));
-    for (const key of ['partition_no', 'generation', 'original'])
-      expect(String(scan['Index Cond'])).toContain(key);
+    for (const key of ['partition_no', 'generation', 'original']) expect(String(scan['Index Cond'])).toContain(key);
   }
   const directory = costOf(raw).relations['semantic.identity_epoch_original'];
   expect(directory).toBeDefined();
