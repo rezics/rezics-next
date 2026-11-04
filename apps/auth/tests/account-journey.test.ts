@@ -379,6 +379,7 @@ test('Default account deletion and operator-transfer pages allow full phone-widt
         await page.setViewportSize({ width: 1280, height: 860 });
         await boundedReview();
         await page.setViewportSize({ width: 390, height: 844 });
+        await page.getByText(copy.auth_transfer_handoff_manual_acceptance, { exact: true }).click();
         await page.locator('#transfer-acceptance').fill('opaque-acceptance-reference');
         await page.locator('#transfer-confirm').check();
         await page.getByRole('button', { name: copy.auth_transfer_submit, exact: true }).click();
@@ -587,7 +588,7 @@ test('Default Security and deletion flows show a genuine recognizable current si
       await started;
       await page.locator('#security-sessions-heading').waitFor();
       page.once('dialog', (dialog) => void dialog.accept());
-      await page.locator('section[aria-labelledby="security-sessions-heading"] button').first().click();
+      await page.locator('section[aria-labelledby="security-sessions-heading"] article button').first().click();
       await page.getByRole('link', { name: copy.auth_security_sign_in, exact: true }).waitFor();
       releaseIdentity!();
       await page.waitForLoadState('networkidle');
