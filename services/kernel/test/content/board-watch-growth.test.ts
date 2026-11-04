@@ -6,7 +6,11 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
 import { assertGrowthAccessPaths, checkGrowth } from '../support/growth.ts';
 import { replyNoticeFixture } from './support/reply-notice-fixture.ts';
-import { captureWatchAccess, interceptThreadSnapshot, watchPageByteEvidence } from './support/watch-management-fixture.ts';
+import {
+  captureWatchAccess,
+  interceptThreadSnapshot,
+  watchPageByteEvidence,
+} from './support/watch-management-fixture.ts';
 
 test('watch management and delivery stay bounded across unrelated, selected, source and authority histories', async () => {
   // Each native request/page owns a bounded telemetry capture. Combining the whole journey in one
@@ -264,7 +268,12 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
                              '2000-01-01T01:00:00Z'::timestamptz + ordinal*interval '2 hours','[)'),transaction_id
             FROM unnest($4::uuid[]) WITH ORDINALITY history(transaction_id,ordinal)`;
           await db.admin.query(insertExpiredAuthority, [grantRoute, f.boardId, owner, authorityTransactions]);
-          await db.admin.query(insertExpiredAuthority, [grantRoute, f.boardId, f.accounts.recipient, unrelatedAuthorityTransactions]);
+          await db.admin.query(insertExpiredAuthority, [
+            grantRoute,
+            f.boardId,
+            f.accounts.recipient,
+            unrelatedAuthorityTransactions,
+          ]);
         },
         prepare,
         async warmup() {
