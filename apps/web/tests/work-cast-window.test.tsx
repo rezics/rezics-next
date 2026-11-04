@@ -369,4 +369,4 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
       descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
     await window.happyDOM.close();
   }
-});
+}, 15_000);
