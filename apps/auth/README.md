@@ -639,7 +639,8 @@ readiness and selected recovery: at most five Auth requests (three session reads
 An active relation/advice Retry costs two Auth requests. Each native transfer-review request retains its ten-second
 whole-call bound, including authentication and at most two selected relation reads; source preparation uses the same
 session/selected-source pair and allocates one local operation key, and destination import review uses one
-session/selected-destination pair. Browser transport retains
+session/selected-destination pair. After unavailable source preparation, read Retry observes that selected relation
+without allocating a key; a separate deliberate preparation is required to create the review. Browser transport retains
 its five-second bound through response-body completion. There is no list scan, refill, per-row authorization, polling,
 file replay, operation allocation, approval or execution in return/read Retry. Native command retries retain their
 original tuple, reference, operation key, deadlines, relation lock and explicit current-authorized confirmation.

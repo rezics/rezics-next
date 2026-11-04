@@ -718,8 +718,17 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       const started = view.current;
       const value = await prepareTransfer(subject.trim(), destination.trim(), session.accountId);
       if (started !== view.current) return;
-      if ('kind' in value) return value;
-      else {
+      if ('kind' in value) {
+        if (value.reason === 'unavailable')
+          offerReadRetry(async () => {
+            const reading = view.current;
+            const relation = await readOperatorRelation(subject.trim(), session.accountId);
+            if (reading !== view.current) return;
+            if (relation.kind !== 'ready') return relation;
+            setCurrent(relation.relation);
+          });
+        return value;
+      } else {
         install({ accountId: session.accountId, request: value, side: 'source', phase: 'approve' });
         setNativeAdvice('source');
       }

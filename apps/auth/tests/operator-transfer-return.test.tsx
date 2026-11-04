@@ -1,6 +1,6 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { act } from 'react';
-import { creationFixture, button, dom, open } from './creation-page-fixture';
+import { creationFixture, button, dom, fill, open } from './creation-page-fixture';
 import type { AccountSessionResult } from '../src/account-operations';
 import type { TransferAttempt } from '../src/operator-transfer';
 
@@ -244,4 +244,27 @@ test('a valid replacement unknown descriptor cannot downgrade an already known a
   expect(summary.textContent).toContain(m.auth_transfer_recovery_source_unknown());
   expect(restoreTransferAttempt()).toEqual(replacement);
   expect(page.calls.some(({ path }) => path.startsWith('/account-operations/'))).toBe(false);
+});
+
+test('read Retry after unavailable source preparation allocates no operation and requires deliberate preparation', async () => {
+  const page = await mount(null);
+  const keys = spyOn(crypto, 'randomUUID');
+  try {
+    await settle(() => {
+      fill(page.host.querySelector<HTMLInputElement>('#transfer-subject')!, saved.request.previous.subjectAccountId);
+      fill(page.host.querySelector<HTMLInputElement>('#transfer-destination')!, saved.request.operatorAccountId);
+    });
+    await page.choose(m.auth_transfer_prepare());
+    await page.resolve(1, new Response(null, { status: 503 }));
+    await page.choose(m.auth_account_delete_retry());
+    await page.resolve(2, matching());
+    expect(keys).not.toHaveBeenCalled();
+    expect(restoreTransferAttempt()).toBeNull();
+    expect(page.host.querySelector('#transfer-subject')).not.toBeNull();
+    expect(page.host.querySelector('#transfer-confirm')).toBeNull();
+    expect(page.host.textContent).toContain(m.auth_transfer_current());
+    expect(page.calls.some(({ path }) => path.startsWith('/account-operations/'))).toBe(false);
+  } finally {
+    keys.mockRestore();
+  }
 });
