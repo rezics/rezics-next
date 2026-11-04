@@ -82,6 +82,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
   const body = fromPlainText('A draft that must survive a cooldown refusal.', 'blocks');
   const owner = { state: 'signed-in' as const, subject: recorded.thread.authorId, csrfToken: 'slow-mode-session' };
   let read: SlowModeRead = { kind: 'unavailable' };
+  let readCalls = 0;
   let heldReads = 0;
   const delayedReads: ((value: SlowModeRead) => void)[] = [];
   const changes: {
@@ -92,8 +93,10 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     credentialMode: string;
     scopeKey: string;
   }[] = [];
+  const acknowledgedIntervals: number[] = [];
   const port: SlowModePort = {
     read: async () => {
+      readCalls++;
       if (heldReads === 0) return read;
       heldReads--;
       return new Promise((resolve) => delayedReads.push(resolve));
@@ -102,6 +105,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       changes.push({ intervalSeconds, idempotencyKey, subject, csrfToken, credentialMode, scopeKey });
       if (changes.length === 1) return { kind: 'unknown' };
       if (read.kind !== 'available') return { kind: 'unavailable' };
+      acknowledgedIntervals.push(intervalSeconds);
       return { kind: 'applied', policy: { ...read.policy, intervalSeconds } };
     },
   };
@@ -161,10 +165,6 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     }
     expect(host.textContent).toContain(text);
   };
-  const selectedSettingInterval = () =>
-    host
-      .querySelector('[data-slot="board-slow-mode-setting"] [role="radio"][aria-checked="true"]')
-      ?.getAttribute('value');
   try {
     await appeared(m.slow_mode_unavailable());
     expect(host.textContent).toContain(m.slow_mode_next_unavailable());
@@ -203,6 +203,7 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
     const sameKeyRetry = [...host.querySelectorAll('button')].find(
       (button) => button.textContent === m.slow_mode_retry(),
     );
+    const readsBeforeAcknowledgement = readCalls;
     await act(async () => {
       await user.click(sameKeyRetry!);
     });
@@ -214,14 +215,15 @@ test('setting and composer keep drafts through cooldown, update policy, recover 
       csrfToken: owner.csrfToken,
       credentialMode: 'session',
     });
-    expect(selectedSettingInterval()).toBe('30');
+    expect(acknowledgedIntervals).toEqual([30]);
+    expect(readCalls).toBe(readsBeforeAcknowledgement);
     await act(async () => {
       await client.invalidateQueries({ queryKey: ['board-slow-mode'] });
     });
     await appeared(
       m.slow_mode_interval_label({ label: m.slow_mode_interval_seconds({ seconds: 45 }) }),
     );
-    expect(selectedSettingInterval()).toBe('45');
+    expect(readCalls).toBeGreaterThan(readsBeforeAcknowledgement);
     expect(host.textContent).toContain(m.slow_mode_saved());
     await act(async () => user.type(host.querySelector('#thread-title')!, 'Cooldown draft'));
     const send = [...host.querySelectorAll('button')].find((button) => button.textContent === m.thread_write_send());
