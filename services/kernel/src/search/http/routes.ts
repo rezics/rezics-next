@@ -538,7 +538,8 @@ export function searchRoutes<App>(
                 errors: [{ pointer: '/representation', code: 'unsupported' }],
               });
             const active = await activeRelease(pool);
-            const principal = actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
+            const principal: 'anonymous' | `account:${string}` =
+              actor.kind === 'account' ? `account:${actor.accountId}` : 'anonymous';
             const page = await search.releaseGroups(
               principal,
               body as GroupedReleaseSearchRequest,
