@@ -605,6 +605,7 @@ test('Default Security and deletion flows show a genuine recognizable current si
       expect(await page.locator('.auth-account-identity').count()).toBe(0);
 
       identityMode = 'denied';
+      await context.addCookies([{ name: 'auth_session', value: 'review-session', url: origin }]);
       await visit('/account/delete');
       await page.getByRole('alert').waitFor();
       expect(await page.locator('.auth-card').innerText()).not.toContain(secondEmail);
