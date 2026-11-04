@@ -35,7 +35,7 @@ test('served operands, exact own status and recovery form one fresh private rout
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
     await import('@tanstack/react-router');
-  const { getLocale, setLocale, deLocalizeUrl } = await import('../src/paraglide/runtime.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
   const { browserObservation } = await import('../src/session/observation');
   const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const { privateReaderFingerprint } = await import('../src/moderation/private-reader-origin');
@@ -109,11 +109,14 @@ test('served operands, exact own status and recovery form one fresh private rout
     };
   };
   const statuses: string[] = [];
+  let statusMode: 'loaded' | 'closed' = 'loaded';
   mock.module('../src/moderation/reporter-history/server', () => ({ ...historyServer, readReporterHistory: read }));
   mock.module('../src/moderation/reporter-status-read', () => ({
     ...statusServer,
     readReporterStatus: async ({ data }: { data: { id: string; generation: string } }) => {
       statuses.push(data.id);
+      if (statusMode === 'closed')
+        return { ...data, readerOrigin: origin, viewer: origin, result: { state: 'closed' } };
       return {
         ...data,
         readerOrigin: origin,
@@ -177,9 +180,10 @@ test('served operands, exact own status and recovery form one fresh private rout
       await tick();
     });
   const follow = async (link: HTMLAnchorElement) => {
-    const url = deLocalizeUrl(new URL(link.href));
     await act(async () => {
-      await router.navigate({ href: url.pathname + url.search });
+      link.focus();
+      link.click();
+      await tick();
     });
   };
   try {
@@ -209,6 +213,7 @@ test('served operands, exact own status and recovery form one fresh private rout
     expect(host.textContent).toContain('Exact own Realm evidence');
     expect(host.textContent).toContain('Dismissed');
     expect(host.textContent).toContain('Realm');
+    expect(window.document.activeElement === host.querySelector('h1')).toBe(true);
     const back = host.querySelector<HTMLAnchorElement>('a')!;
     expect(new URL(back.href).searchParams.get('cursor')).toBe(cursor);
     await follow(back);
@@ -244,6 +249,13 @@ test('served operands, exact own status and recovery form one fresh private rout
     await act(async () => {
       await router.navigate({ href: selectedAddress });
     });
+    statusMode = 'closed';
+    await follow(host.querySelector<HTMLAnchorElement>('a[href*="historyReportId"]')!);
+    expect(host.textContent).toContain('not available on this platform');
+    expect(host.textContent).not.toContain('Exact own Realm evidence');
+    await follow(host.querySelector<HTMLAnchorElement>('a')!);
+    expect(router.state.location.search).toEqual({ cursor, reportId: otherId });
+    statusMode = 'loaded';
     mode = 'preparing';
     await click('Refresh');
     expect(host.textContent).toContain('report history is being prepared');

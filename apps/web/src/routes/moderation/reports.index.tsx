@@ -1,9 +1,10 @@
 import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import { useLayoutEffect, useMemo } from 'react';
 import { browserObservation } from '../../session/observation';
-import { createReporterHistoryFocus, type ReporterHistoryFocus } from '../../moderation/reporter-history/focus';
+import { reporterHistoryFocusFor } from '../../moderation/reporter-history/focus';
 import { prepareExposure } from '../../kernel/exposure';
 import { ReporterHistoryCurrent, ReporterHistoryPage } from '../../moderation/reporter-history/view';
+import { reporterHistoryStatusHref } from '../../moderation/reporter-history/navigation';
 import { reporterHistoryQuery } from '../../moderation/reporter-history/model';
 import { prepareReporterHistoryVisit } from '../../moderation/reporter-history/journey';
 import { readReporterHistory } from '../../moderation/reporter-history/server';
@@ -49,7 +50,7 @@ function ReporterHistoryRoute() {
   const initial = Route.useLoaderData();
   const router = useRouter();
   const location = useLocation();
-  const focus = historyFocus(router);
+  const focus = reporterHistoryFocusFor(router);
   const navigationKey = location.state.__TSR_key ?? location.href;
   const navigation = useMemo(
     () => ({
@@ -62,15 +63,22 @@ function ReporterHistoryRoute() {
           await router.navigate({ to: '/moderation/reports', search: operands, resetScroll: false });
         }
       },
+      openStatus: async (reportId: string, cursor?: string) => {
+        focus.requestStatus(reportId);
+        await router.navigate({ href: reporterHistoryStatusHref(reportId, cursor) });
+      },
       isCurrent: () => (router.state.location.state.__TSR_key ?? router.state.location.href) === initial.navigationKey,
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
           try {
-            focus.navigating(
-              toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
-                ? reporterHistoryQuery(toLocation.search)
-                : null,
-            );
+            const statusId = /^\/moderation\/reports\/([^/]+)$/.exec(toLocation.pathname)?.[1];
+            if (statusId) focus.navigatingStatus(statusId);
+            else
+              focus.navigating(
+                toLocation.pathname.replace(/\/$/, '') === '/moderation/reports'
+                  ? reporterHistoryQuery(toLocation.search)
+                  : null,
+              );
           } catch {
             focus.cancel();
           }
@@ -95,22 +103,11 @@ function ReporterHistoryRoute() {
   );
 }
 
-// Focus follows one local route activation, never a cache of private visits.
-const routeFocus = new WeakMap<object, ReporterHistoryFocus>();
-function historyFocus(router: object) {
-  let focus = routeFocus.get(router);
-  if (!focus) {
-    focus = createReporterHistoryFocus();
-    routeFocus.set(router, focus);
-  }
-  return focus;
-}
-
 function ReporterHistoryRecovery({ state }: { state: 'loading' | 'unavailable' }) {
   const query = Route.useSearch();
   const router = useRouter();
   const { queryClient } = Route.useRouteContext();
-  const focus = historyFocus(router);
+  const focus = reporterHistoryFocusFor(router);
   useLayoutEffect(() => {
     // A native back/forward or explicit return has no surviving inventory control.
     // Start watching here so a Tab or focus movement during preparation cancels recovery.

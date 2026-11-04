@@ -51,15 +51,31 @@ export function createReporterHistoryFocus() {
       };
     },
     request(query: ReporterHistoryQuery) {
-      if (request) request.operands = operandsKey(query);
+      if (request) request.operands = `history:${operandsKey(query)}`;
+    },
+    requestStatus(reportId: string) {
+      if (request) request.operands = `status:${reportId}`;
+    },
+    navigatingStatus(reportId: string) {
+      if (request && request.operands !== `status:${reportId}`) cancel();
+    },
+    arriveStatus(root: HTMLElement, reportId: string, current: () => boolean) {
+      const activation = request;
+      if (!activation) return;
+      if (activation.operands !== `status:${reportId}` || !activation.current() || !current()) return cancel();
+      const document = root.ownerDocument;
+      if (document.activeElement !== activation.source && document.activeElement !== document.body) return cancel();
+      cancel();
+      root.querySelector<HTMLElement>('#reporter-status-heading')?.focus();
     },
     navigating(query: ReporterHistoryQuery | null) {
-      if (request && (!query || request.operands !== operandsKey(query))) cancel();
+      if (request && (!query || request.operands !== `history:${operandsKey(query)}`)) cancel();
     },
     arrive(root: HTMLElement, query: ReporterHistoryQuery, current: () => boolean) {
       const activation = request;
       if (!activation) return;
-      if (activation.operands !== operandsKey(query) || !activation.current() || !current()) return cancel();
+      if (activation.operands !== `history:${operandsKey(query)}` || !activation.current() || !current())
+        return cancel();
       const document = root.ownerDocument;
       if (document.activeElement !== activation.source && document.activeElement !== document.body) return cancel();
       // Exact native selection may accompany a bounded page. Only its actual selected control receives focus.
@@ -75,3 +91,14 @@ export function createReporterHistoryFocus() {
   };
 }
 export type ReporterHistoryFocus = ReturnType<typeof createReporterHistoryFocus>;
+
+// This is only the current navigation's focus ticket; private data stays with each route reader.
+const visits = new WeakMap<object, ReporterHistoryFocus>();
+export function reporterHistoryFocusFor(router: object): ReporterHistoryFocus {
+  let focus = visits.get(router);
+  if (!focus) {
+    focus = createReporterHistoryFocus();
+    visits.set(router, focus);
+  }
+  return focus;
+}

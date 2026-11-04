@@ -20,6 +20,7 @@ export type ReporterHistoryVisit = ReporterHistoryRead & {
 export type ReporterHistoryNavigation = PrivateReaderNavigation & {
   /** Served routes commit operands and prepare a new visit. They never invoke this visit's local reader. */
   request?: (query: ReporterHistoryQuery) => Promise<void>;
+  openStatus?: (reportId: string, cursor?: string) => Promise<void>;
 };
 export type ReporterHistoryState = ReporterHistoryResult | { state: 'loading' | 'retired' };
 const unavailable = { state: 'unavailable' } as const;

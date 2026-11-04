@@ -158,8 +158,15 @@ Decision: a missing configured native origin remains unavailable, including deve
 - Growth check: focused consumer cases pin exact endpoint/operands, sparse and preparing results, selection,
   private projection and safe advice. Native independent-population growth remains controller/producer work.
 
-The localized route, private visit owner, account navigation and story states remain in the continuation brief;
-this seam alone is not a served history page. Installed declaration head and native execution remain unverified.
+The localized route prepares each replacing private visit from closed cursor/report operands. Next, selection and
+restart commit browser history; refresh and retry prepare the same address again. The retired visit cannot publish
+alongside a route loader. Selected status and its validated local return use these same operands, with one keyboard
+focus ticket that retires on movement, navigation or browser incarnation replacement. No private pages are cached in
+this handoff. Native execution remains controller-owned.
+
+`reporter-status-model.ts` narrows the installed root response's own-submission branch for Board, Thread, Post,
+Subject, Space and Realm. It preserves the submitted reference and disposition independently of target availability;
+only history's admitted native advice can navigate to a target.
 
 Decision: an own-history visit retains one replacement page and exact selection; failed continuation retries its original operands, expiry restarts explicitly, and locale or native source replacement retires the visit.
 

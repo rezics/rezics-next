@@ -141,7 +141,7 @@ function ReporterHistoryVisit({
     <div
       ref={boundary}
       onClickCapture={(event) => {
-        const source = (event.target as Element).closest<HTMLButtonElement>('button');
+        const source = (event.target as Element).closest<HTMLElement>('button, a[data-reporter-status]');
         if (source && event.detail === 0 && journey.isConnected()) {
           const observation = browserObservation(cache).getSnapshot();
           focus?.activate(source, () => {
@@ -160,6 +160,7 @@ function ReporterHistoryVisit({
       <ReporterHistoryPage
         result={result}
         query={journey.operands()}
+        {...(navigation?.openStatus ? { onOpenStatus: navigation.openStatus } : {})}
         onRefresh={() => journey.refresh()}
         onRetry={() => journey.retry()}
         onContinue={() => journey.next()}
@@ -180,6 +181,7 @@ export function ReporterHistoryPage({
   onSelect = () => undefined,
   onRestart = () => undefined,
   onRefresh,
+  onOpenStatus,
 }: {
   result: ReporterHistoryState;
   query: ReporterHistoryQuery;
@@ -188,6 +190,7 @@ export function ReporterHistoryPage({
   onSelect?: (reportId: string) => void | Promise<void>;
   onRestart?: Retry;
   onRefresh?: Retry;
+  onOpenStatus?: (reportId: string, cursor?: string) => Promise<void>;
 }) {
   return (
     <section
@@ -236,7 +239,13 @@ export function ReporterHistoryPage({
       ) : null}
       {result.state === 'retired' ? <p role="status">{m.reporter_history_denied()}</p> : null}
       {result.state === 'loaded' ? (
-        <ReporterHistoryResults page={result.page} query={query} onSelect={onSelect} onContinue={onContinue} />
+        <ReporterHistoryResults
+          page={result.page}
+          query={query}
+          onSelect={onSelect}
+          onContinue={onContinue}
+          {...(onOpenStatus ? { onOpenStatus } : {})}
+        />
       ) : null}
     </section>
   );
@@ -284,10 +293,12 @@ function ReporterHistoryResults({
   query,
   onSelect,
   onContinue,
+  onOpenStatus,
 }: {
   page: ReporterHistoryPage;
   query: ReporterHistoryQuery;
   onSelect: (reportId: string) => void | Promise<void>;
+  onOpenStatus?: (reportId: string, cursor?: string) => Promise<void>;
   onContinue: Retry;
 }) {
   const selectedUnavailable =
@@ -306,6 +317,7 @@ function ReporterHistoryResults({
               selected={page.selectedReportId === entry.id}
               query={query}
               onSelect={onSelect}
+              {...(onOpenStatus ? { onOpenStatus } : {})}
             />
           ))}
         </ol>
@@ -328,11 +340,13 @@ function HistoryEntry({
   selected,
   query,
   onSelect,
+  onOpenStatus,
 }: {
   entry: ReporterHistoryEntry;
   selected: boolean;
   query: ReporterHistoryQuery;
   onSelect: (reportId: string) => void | Promise<void>;
+  onOpenStatus?: (reportId: string, cursor?: string) => Promise<void>;
 }) {
   const summary = entry.targetSummary;
   const targetLabel = summary.state === 'available' ? summary.label || m.reporter_status_target() : null;
@@ -391,6 +405,21 @@ function HistoryEntry({
             <a
               className="inline-flex min-h-11 items-center px-2 font-medium underline underline-offset-4"
               href={statusHref}
+              data-reporter-status
+              onClick={(event) => {
+                if (
+                  !onOpenStatus ||
+                  event.defaultPrevented ||
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
+                event.preventDefault();
+                void onOpenStatus(entry.id, query.cursor);
+              }}
             >
               {m.reporter_status_view()}
             </a>
