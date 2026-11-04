@@ -369,7 +369,10 @@ test('bfcache refresh is reader-local and two mounted readers cannot consume one
     const bfcacheRead = await waitForRead(2);
     expect(reads).toHaveLength(3);
     ready(bfcacheRead);
-    await act(async () => bfcacheRead.promise);
+    await act(async () => {
+      await bfcacheRead.promise;
+      await tick();
+    });
     await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
     expect(first.host.textContent).toContain('The same original question and Subject pair');
   } finally {
