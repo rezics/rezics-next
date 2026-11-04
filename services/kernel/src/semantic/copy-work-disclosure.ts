@@ -59,11 +59,7 @@ type HeadRow = {
   value: string | null;
 };
 
-type Membership =
-  | { kind: 'works'; ids: string[] }
-  | { kind: 'concealed' }
-  | { kind: 'overflow' }
-  | { kind: 'unready' };
+type Membership = { kind: 'works'; ids: string[] } | { kind: 'concealed' } | { kind: 'overflow' } | { kind: 'unready' };
 type SourceObservation = {
   header: HeadRow;
   locators: HeadRow[];
@@ -471,9 +467,18 @@ function observation(
       return withReadTransaction(
         deps.pool,
         async (client) => {
-          if (components.length) await partitionReadClients(client, components.map((cut) => cut.partition));
+          if (components.length)
+            await partitionReadClients(
+              client,
+              components.map((cut) => cut.partition),
+            );
           const current = new Map(
-            (await readPartitions(client, components.map((cut) => cut.partition))).map((row) => [row.partitionNo, row]),
+            (
+              await readPartitions(
+                client,
+                components.map((cut) => cut.partition),
+              )
+            ).map((row) => [row.partitionNo, row]),
           );
           for (const cut of components) {
             const found = current.get(cut.partition);

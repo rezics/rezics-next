@@ -80,9 +80,9 @@ test('native Book edition disclosure returns selected work labels and exact empt
     await locators(f.pool, partial, extra.slice(0, 1));
 
     const deps = await f.deps('anonymous');
-    await expect(readCopyWorkDisclosure(deps, { identities: Array(COPY_WORK_DISCLOSURE_MAX_RAW + 1).fill(edition) })).rejects.toBeInstanceOf(
-      RangeError,
-    );
+    await expect(
+      readCopyWorkDisclosure(deps, { identities: Array(COPY_WORK_DISCLOSURE_MAX_RAW + 1).fill(edition) }),
+    ).rejects.toBeInstanceOf(RangeError);
 
     const duplicates = [edition, empty, edition, person];
     const observed = await readCopyWorkDisclosure(deps, { identities: duplicates, languages: ['zh-Hans'] });
