@@ -360,9 +360,10 @@ test('current native actions govern create/add/reorder; review precedes sending 
     expect(moves.mock.calls[0]![0].data).toMatchObject({ memberId: members[1]!.id, after: null });
     expect(refreshes).toBe(2);
     expect(
-      [...host.querySelectorAll('[data-collection-members] > li, [data-slot="collection-member-card"]')].map((node) =>
-        node.getAttribute('data-collection-member-id') ??
-        node.querySelector('[data-collection-member-id]')?.getAttribute('data-collection-member-id'),
+      [...host.querySelectorAll('[data-collection-members] > li, [data-slot="collection-member-card"]')].map(
+        (node) =>
+          node.getAttribute('data-collection-member-id') ??
+          node.querySelector('[data-collection-member-id]')?.getAttribute('data-collection-member-id'),
       ),
     ).toEqual(acknowledged.members.map((member) => member.id));
     expect(
