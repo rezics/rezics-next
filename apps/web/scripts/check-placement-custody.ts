@@ -3,6 +3,7 @@ import { spawn, type SpawnOptions } from 'node:child_process';
 import {
   chmodSync,
   closeSync,
+  existsSync,
   fsyncSync,
   lstatSync,
   mkdtempSync,
@@ -3532,8 +3533,21 @@ export function runWebCheckDriverProcess(
   });
 }
 
+/** Worker TMPDIR may live inside the candidate worktree; custody files must never do so. */
+function privateTemporaryRoot(): string {
+  const base = realpathSync(tmpdir());
+  let root = realpathSync(process.cwd());
+  while (!existsSync(join(root, '.git'))) {
+    const parent = dirname(root);
+    if (parent === root) return base;
+    root = parent;
+  }
+  const inside = relative(root, base);
+  return inside === '' || (!inside.startsWith('..') && !isAbsolute(inside)) ? realpathSync('/tmp') : base;
+}
+
 export function createWebCheckPrivateFiles(values: Record<string, string>): WebCheckPrivateFiles {
-  const directory = mkdtempSync(join(tmpdir(), 'rezics-web-check-'));
+  const directory = mkdtempSync(join(privateTemporaryRoot(), 'rezics-web-check-'));
   chmodSync(directory, PRIVATE_DIRECTORY_MODE);
   const environmentFile = join(directory, 'environment.json');
   const descriptorFile = join(directory, 'prepared-descriptor.json');
