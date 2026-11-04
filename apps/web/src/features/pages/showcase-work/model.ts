@@ -19,7 +19,10 @@ export type WorkDestination = {
 };
 
 /** Only the work identities already disclosed beside this Subject's native statements qualify. */
-export function showcaseWorkKind(type: string | undefined, types: readonly string[] = []): ShowcaseWorkKind | undefined {
+export function showcaseWorkKind(
+  type: string | undefined,
+  types: readonly string[] = [],
+): ShowcaseWorkKind | undefined {
   const declared = [type, ...types].filter((value): value is string => typeof value === 'string');
   if (declared.includes('wd:Q689445')) return 'visual-novel';
   if (declared.includes('schema:Book')) return 'book';

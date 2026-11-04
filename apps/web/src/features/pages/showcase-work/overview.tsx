@@ -73,7 +73,9 @@ export function WorkFranchiseOverview({
               {relation.forwardLabel ? (
                 <p className="text-sm text-muted-foreground">{relation.forwardLabel}</p>
               ) : (
-                <p className="text-sm text-muted-foreground">{m.work_franchise_relation_label_unavailable({}, options)}</p>
+                <p className="text-sm text-muted-foreground">
+                  {m.work_franchise_relation_label_unavailable({}, options)}
+                </p>
               )}
               <Link href={href} className={workLink}>
                 <span className="text-sm font-medium text-muted-foreground">{kindName}</span>
