@@ -95,7 +95,12 @@ test('required unavailable or malformed eligibility fails privately; real native
 
 test('native refusal preserves bounded response fields without exposing exception details', async () => {
   const native = new MediaProblem(
-    { type: 'https://example.test/problems/rate_limited', title: 'private response body', status: 429, code: 'rate_limited' },
+    {
+      type: 'https://example.test/problems/rate_limited',
+      title: 'private response body',
+      status: 429,
+      code: 'rate_limited',
+    },
     { 'Retry-After': '60' },
   );
   Object.defineProperty(native.problem, 'retryable', { value: true });

@@ -352,7 +352,9 @@ export function VerificationSubjectChooserView({
                 ? m.settings_verification_search_results({ count: subjects.length })
                 : m.settings_verification_search_empty()
               : null}
-            {!disabled && state.phase === 'failed' ? state.failure?.message ?? m.settings_verification_search_failed() : null}
+            {!disabled && state.phase === 'failed'
+              ? (state.failure?.message ?? m.settings_verification_search_failed())
+              : null}
             {!disabled && state.phase === 'failed' && retryWaiting
               ? ` ${m.settings_verification_search_retry_wait()}`
               : null}

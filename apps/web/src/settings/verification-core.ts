@@ -39,9 +39,7 @@ export type VerificationReadResult<T> = { ok: true; value: T } | { ok: false; fa
 export type VerificationSearchFailure = Omit<VerificationFailure, 'requestId'> & {
   kind: 'refused' | 'closed' | 'unavailable';
 };
-export type VerificationSearchResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; failure: VerificationSearchFailure };
+export type VerificationSearchResult<T> = { ok: true; value: T } | { ok: false; failure: VerificationSearchFailure };
 
 export class VerificationReadError extends Error {
   constructor(readonly failure: VerificationFailure) {

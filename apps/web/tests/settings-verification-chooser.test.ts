@@ -80,7 +80,12 @@ test('failed search stays visibly failed until explicit retry; empty and account
   try {
     search.edit('Avery');
     await settle();
-    expect(search.snapshot()).toMatchObject({ query: 'Avery', phase: 'failed', subjects: [], failure: unavailable.failure });
+    expect(search.snapshot()).toMatchObject({
+      query: 'Avery',
+      phase: 'failed',
+      subjects: [],
+      failure: unavailable.failure,
+    });
     await settle();
     expect(attempts).toBe(1);
     search.retry();
@@ -201,7 +206,12 @@ test('stalled chooser requests fail without empty results or replay, and explici
     search.setEnabled(true);
     search.edit('Avery');
     await settle();
-    expect(search.snapshot()).toMatchObject({ query: 'Avery', phase: 'failed', subjects: [], failure: expect.any(Object) });
+    expect(search.snapshot()).toMatchObject({
+      query: 'Avery',
+      phase: 'failed',
+      subjects: [],
+      failure: expect.any(Object),
+    });
     expect(signal.aborted).toBe(true);
     expect(calls).toBe(1);
     search.retry();
