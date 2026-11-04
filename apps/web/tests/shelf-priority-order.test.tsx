@@ -15,6 +15,8 @@ const { resolveShelfPresentation } = await import('../src/library/shelf-preferen
 
 test('priority addresses default to rank 1 first and retain the exact filtered continuation in either direction', () => {
   expect(shelfSort({ orderBy: 'priority' })).toEqual({ orderBy: 'priority', direction: 'asc' });
+  expect(resolveShelfPresentation({ orderBy: 'priority', cursor: 'original' },
+    { sorts: { all: { field: 'added', direction: 'desc' } } }).sort).toEqual({ orderBy: 'priority', direction: 'asc' });
   for (const direction of ['asc', 'desc'] as const) {
     const address = validateShelfSearch({
       type: 'schema:Book', state: 'reading.arc-1', orderBy: 'priority', direction,

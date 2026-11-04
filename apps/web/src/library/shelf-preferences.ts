@@ -95,11 +95,11 @@ export function resolveShelfPresentation(
   const tab = shelfTabForState(search.state);
   const savedSort = tab ? libraryOrderFromShelf(saved.sorts?.[tab]) : undefined;
   const orderBy = search.orderBy ?? savedSort?.orderBy ?? fallbackSort.orderBy;
-  const direction = search.direction ?? savedSort?.direction ?? fallbackSort.direction;
+  const direction = search.direction ?? (search.orderBy === 'priority' ? fallbackSort.direction : savedSort?.direction ?? fallbackSort.direction);
   const usedChangedSavedSort =
     !!savedSort &&
     ((search.orderBy === undefined && savedSort.orderBy !== fallbackSort.orderBy) ||
-      (search.direction === undefined && savedSort.direction !== fallbackSort.direction));
+      (search.direction === undefined && search.orderBy !== 'priority' && savedSort.direction !== fallbackSort.direction));
   const cursorInvalidated = !!search.cursor && usedChangedSavedSort;
   const scope = typeScope(search.type);
   const base = shelfDisplay(search);
