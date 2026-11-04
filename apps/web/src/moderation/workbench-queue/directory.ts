@@ -23,7 +23,10 @@ export type ModerationDirectoryPage =
   | { state: 'preparing' | 'unavailable' | 'denied' | 'stale'; items: []; next: null };
 
 export type ModerationDirectoryInput = { cursor?: string; realmId?: string; limit: 20 };
-export type ModerationDirectorySource = (input: ModerationDirectoryInput) => Promise<ModerationDirectoryPage>;
+export type ModerationDirectorySource = (
+  input: ModerationDirectoryInput,
+  signal?: AbortSignal,
+) => Promise<ModerationDirectoryPage>;
 
 /** No installed public producer binding yet. Never substitute Account memberships or a board inventory. */
 export const nativeModerationDirectoryUnavailable: ModerationDirectorySource = async () => ({

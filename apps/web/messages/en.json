@@ -8597,5 +8597,12 @@
   "work_franchise_kind_game": "Game",
   "work_franchise_kind_screen": "Screen work",
   "work_franchise_kind_book": "Book",
-  "work_franchise_relation_label_unavailable": "Relation label unavailable"
+  "work_franchise_relation_label_unavailable": "Relation label unavailable",
+  "moderation_directory_continuation_failed": "This directory page could not be loaded. Retry the same page.",
+  "moderation_directory_restart": "Restart queue discovery",
+  "moderation_directory_return": "Return to queue discovery",
+  "moderation_directory_return_hint": "Your original directory page will be checked again when you return.",
+  "moderation_directory_ready": "Choose a queue you are currently permitted to open.",
+  "moderation_directory_retired": "This private directory visit has ended. Restart to check your current queues.",
+  "moderation_directory_expired": "This directory page has expired. Restart discovery to check current queue access."
 }

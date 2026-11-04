@@ -8485,5 +8485,12 @@
   "work_franchise_kind_game": "Spiel",
   "work_franchise_kind_screen": "Film- oder Fernseharbeit",
   "work_franchise_kind_book": "Buch",
-  "work_franchise_relation_label_unavailable": "Beziehungsbezeichnung nicht verfügbar"
+  "work_franchise_relation_label_unavailable": "Beziehungsbezeichnung nicht verfügbar",
+  "moderation_directory_continuation_failed": "Diese Übersichtsseite konnte nicht geladen werden. Versuche dieselbe Seite erneut.",
+  "moderation_directory_restart": "Warteschlangenübersicht neu starten",
+  "moderation_directory_return": "Zurück zur Warteschlangenübersicht",
+  "moderation_directory_return_hint": "Beim Zurückkehren wird deine ursprüngliche Übersichtsseite erneut geprüft.",
+  "moderation_directory_ready": "Wähle eine Warteschlange, die du derzeit öffnen darfst.",
+  "moderation_directory_retired": "Dieser private Besuch der Übersicht ist beendet. Starte neu, um deine aktuellen Warteschlangen zu prüfen.",
+  "moderation_directory_expired": "Diese Übersichtsseite ist abgelaufen. Starte die Übersicht neu, um den aktuellen Zugriff zu prüfen."
 }

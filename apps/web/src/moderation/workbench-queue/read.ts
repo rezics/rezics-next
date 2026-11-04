@@ -3,12 +3,17 @@ import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { getLocale } from '../../paraglide/runtime.js';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import { catalogueReportsClient } from '../catalogue-reports-client';
 import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from '../private-reader-origin';
-import { preparePrivateReaderRead, type PrivateReaderRead } from '../private-reader-lifetime';
+import {
+  preparePrivateReaderRead,
+  privateReaderSessionSource,
+  type PrivateReaderRead,
+} from '../private-reader-lifetime';
 import { readModerationAppealPage, type Appeal, type AppealPage, type AppealProvenance } from '../appeals-read';
 import { readModerationReports, type Report, type ResolvedReportTarget } from '../reports-read';
 import { historySource, readWorkbenchHistory, type HistoryRead, type HistorySource } from '../workbench-history/read';
@@ -44,6 +49,7 @@ export type WorkbenchDirectoryItem = { id: string; title: string | null };
 export type WorkbenchReadState = 'ready' | 'denied' | 'unavailable' | 'stale';
 export type WorkbenchRead = PrivateReaderRead & {
   readKey: string;
+  locale?: string;
   generation: string;
   search: WorkbenchSearch;
   state: WorkbenchReadState;
@@ -66,6 +72,8 @@ export type WorkbenchRead = PrivateReaderRead & {
   unavailableReason?: 'native-appeal-inspect';
   history?: HistoryRead | undefined;
 };
+export type WorkbenchReader = (search: WorkbenchSearch, signal?: AbortSignal) => Promise<WorkbenchRead>;
+
 export type WorkbenchNativeSource = {
   history?: HistorySource;
   directory?: ModerationDirectorySource;
@@ -170,7 +178,9 @@ function bounded<T>(items: readonly T[], limit = WORKBENCH_PAGE_SIZE): T[] {
 export async function readWorkbench(
   source: WorkbenchNativeSource,
   search: WorkbenchSearch,
+  signal?: AbortSignal,
 ): Promise<Omit<WorkbenchRead, keyof PrivateReaderRead | 'generation'>> {
+  signal?.throwIfAborted();
   const scope = workbenchScope(search);
   const identity = { readKey: workbenchReadKey(search), search };
   const idle = {
@@ -185,12 +195,23 @@ export async function readWorkbench(
     selectedTarget: null as ResolvedReportTarget | null,
   };
   if (scope.kind === 'none' || scope.kind === 'realm') {
-    const page = await (source.directory ?? nativeModerationDirectoryUnavailable)({
-      limit: WORKBENCH_PAGE_SIZE,
-      ...(search.directoryCursor ? { cursor: search.directoryCursor } : {}),
-      ...(scope.kind === 'realm' ? { realmId: scope.realmId } : {}),
-    });
-    return { ...identity, state: 'ready', ...idle, directory: moderationDirectoryPage(page) };
+    try {
+      const page = await (source.directory ?? nativeModerationDirectoryUnavailable)(
+        {
+          limit: WORKBENCH_PAGE_SIZE,
+          ...(search.directoryCursor ? { cursor: search.directoryCursor } : {}),
+          ...(scope.kind === 'realm' ? { realmId: scope.realmId } : {}),
+        },
+        signal,
+      );
+      signal?.throwIfAborted();
+      const directory = moderationDirectoryPage(page);
+      signal?.throwIfAborted();
+      return { ...identity, state: 'ready', ...idle, directory };
+    } catch {
+      signal?.throwIfAborted();
+      return { ...identity, state: 'ready', ...idle, directory: { state: 'unavailable', items: [], next: null } };
+    }
   }
   if (scope.kind === 'catalogue' && search.queue === 'appeals') {
     return { ...identity, state: 'unavailable', ...idle };
@@ -242,14 +263,18 @@ export async function readWorkbench(
   };
 }
 
-const auth = (authorization: string) => ({ headers: { authorization }, fetch: { cache: 'no-store' as const } });
+const auth = (authorization: string, signal?: AbortSignal) => ({
+  headers: { authorization },
+  fetch: { cache: 'no-store' as const, ...(signal ? { signal } : {}) },
+});
 
 function nativeSource(
   client: KernelClient,
   authorization: string,
   origin: PrivateReaderOrigin | null,
+  signal?: AbortSignal,
 ): WorkbenchNativeSource {
-  const headers = auth(authorization);
+  const headers = auth(authorization, signal);
   return {
     history: historySource(client, authorization),
     directory: nativeModerationDirectoryUnavailable,
@@ -276,6 +301,7 @@ function nativeSource(
         authorization,
         origin?.subject ?? '',
         origin,
+        signal,
       );
       if (page.state !== 'ready')
         throw new WorkbenchReadFailure(
@@ -292,7 +318,7 @@ function nativeSource(
           targetKind: 'subject',
           ...(cursor ? { cursor } : {}),
         } as { limit: number; cursor?: string },
-        headers: { authorization },
+        ...headers,
       });
       if (result.error) throw new WorkbenchReadFailure(listFailure(result.status, result.error.value));
       if (!result.data) throw new WorkbenchReadFailure('unavailable');
@@ -324,11 +350,15 @@ export async function readWorkbenchPage(
   search: WorkbenchSearch,
   authorization: string,
   readerOrigin: PrivateReaderOrigin,
+  signal?: AbortSignal,
 ): Promise<WorkbenchRead> {
   try {
-    const page = await readWorkbench(nativeSource(client, authorization, readerOrigin), search);
-    return { ...page, generation: crypto.randomUUID(), readerOrigin };
+    signal?.throwIfAborted();
+    const page = await readWorkbench(nativeSource(client, authorization, readerOrigin, signal), search, signal);
+    signal?.throwIfAborted();
+    return { ...page, generation: crypto.randomUUID(), readerOrigin, locale: getLocale() };
   } catch (error) {
+    signal?.throwIfAborted();
     return {
       ...emptyRead(search, readerOrigin, error instanceof WorkbenchReadFailure ? error.state : 'unavailable'),
       ...(error instanceof WorkbenchReadFailure && error.reason ? { unavailableReason: error.reason } : {}),
@@ -343,27 +373,56 @@ export const loadWorkbench = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
+    request.signal.throwIfAborted();
     await prepareSession(request, env as Partial<SessionEnv>);
+    request.signal.throwIfAborted();
     const authorization = viewerCredential(request);
     const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
+    request.signal.throwIfAborted();
     if (!authorization || !readerOrigin) return emptyRead(data, null, 'denied');
-    return readWorkbenchPage(kernelClient(), data, authorization, readerOrigin);
+    return readWorkbenchPage(kernelClient(), data, authorization, readerOrigin, request.signal);
   });
 
 export async function prepareWorkbenchRead(
   cache: QueryClient,
   search: WorkbenchSearch,
-  read: (search: WorkbenchSearch) => Promise<WorkbenchRead>,
+  read: WorkbenchReader,
   signal: AbortSignal,
 ): Promise<WorkbenchRead> {
-  const original = workbenchSearch(search);
-  const page = await preparePrivateReaderRead(cache, workbenchReadKey(original), () => read(original), signal);
-  return page.readerBinding.retired || !page.readerOrigin
-    ? {
-        ...emptyRead(original, page.readerOrigin ?? null, page.readerBinding.retired ? 'denied' : 'unavailable'),
-        readerBinding: page.readerBinding,
-      }
-    : page;
+  const original = Object.freeze(workbenchSearch(search));
+  const locale = getLocale();
+  // Observe successful replacements synchronously, before dispatch. A fetch-start event
+  // leaves this incarnation intact; even an equal successful replacement retires it.
+  const session = privateReaderSessionSource(cache);
+  const revision = session.snapshot();
+  const retired = new AbortController();
+  const requestSignal = AbortSignal.any([signal, retired.signal]);
+  const stop = session.subscribe(() => {
+    if (session.snapshot() !== revision) retired.abort();
+  });
+  try {
+    const page = await preparePrivateReaderRead(
+      cache,
+      workbenchReadKey(original),
+      () => read(original, requestSignal),
+      requestSignal,
+    );
+    requestSignal.throwIfAborted();
+    const wrongLocale = getLocale() !== locale || (page.locale !== undefined && page.locale !== locale);
+    return page.readerBinding.retired || !page.readerOrigin || wrongLocale
+      ? {
+          ...emptyRead(
+            original,
+            page.readerOrigin ?? null,
+            page.readerBinding.retired || wrongLocale ? 'denied' : 'unavailable',
+          ),
+          locale,
+          readerBinding: { ...page.readerBinding, retired: page.readerBinding.retired || wrongLocale },
+        }
+      : { ...page, locale };
+  } finally {
+    stop();
+  }
 }
 
 export function workbenchQueueScope(

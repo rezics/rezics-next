@@ -8485,5 +8485,12 @@
   "work_franchise_kind_game": "遊戲",
   "work_franchise_kind_screen": "影視作品",
   "work_franchise_kind_book": "書籍",
-  "work_franchise_relation_label_unavailable": "關係標籤無法使用"
+  "work_franchise_relation_label_unavailable": "關係標籤無法使用",
+  "moderation_directory_continuation_failed": "無法載入此目錄頁面。請重試同一頁。",
+  "moderation_directory_restart": "重新探索審核佇列",
+  "moderation_directory_return": "返回審核佇列目錄",
+  "moderation_directory_return_hint": "返回時將重新檢查原來的目錄頁面。",
+  "moderation_directory_ready": "請選擇您目前有權開啟的佇列。",
+  "moderation_directory_retired": "本次私人目錄存取已結束。請重新開始以檢查目前可用的佇列。",
+  "moderation_directory_expired": "此目錄頁面已過期。請重新探索佇列以檢查目前的存取權限。"
 }

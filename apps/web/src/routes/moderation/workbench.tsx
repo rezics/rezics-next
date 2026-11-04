@@ -3,18 +3,18 @@ import { createFileRoute, useNavigate, useRouter, type ErrorComponentProps } fro
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
+import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 import { isPlatformClosedError } from '../../kernel/platform-closed';
 import { ClosedErrorPage } from '../../shell/closed';
 import {
-  loadWorkbench,
-  prepareWorkbenchRead,
   workbenchSearch,
   WorkbenchPage,
   WorkbenchPreparing,
   WorkbenchView,
   type WorkbenchSearch,
 } from '../../moderation/workbench-queue';
+import { createWorkbenchLoader } from '../../moderation/workbench-queue/route-loader';
 
 export const Route = createFileRoute('/moderation/workbench')({
   beforeLoad: requireSignedIn,
@@ -24,15 +24,7 @@ export const Route = createFileRoute('/moderation/workbench')({
   gcTime: 0,
   validateSearch: workbenchSearch,
   loaderDeps: ({ search }) => search,
-  loader: async ({ deps, abortController, context, location }) => {
-    const page = await prepareWorkbenchRead(
-      context.queryClient,
-      deps,
-      (data) => loadWorkbench({ data }),
-      abortController.signal,
-    );
-    return { ...page, navigationKey: location.state.__TSR_key ?? location.href };
-  },
+  loader: createWorkbenchLoader(),
   head: ({ match }) =>
     pageHead({ title: m.moderation_workbench_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   pendingComponent: WorkbenchPreparing,
@@ -47,7 +39,9 @@ function WorkbenchRoute() {
   const router = useRouter();
   const navigation = useMemo(
     () => ({
-      isCurrent: () => (router.state.location.state.__TSR_key ?? router.state.location.href) === page.navigationKey,
+      isCurrent: () =>
+        getLocale() === page.locale &&
+        (router.state.location.state.__TSR_key ?? router.state.location.href) === page.navigationKey,
       subscribe: (retire: () => void) => {
         const leave = router.subscribe('onBeforeNavigate', ({ toLocation }) => {
           if ((toLocation.state.__TSR_key ?? toLocation.href) !== page.navigationKey) retire();

@@ -8485,5 +8485,12 @@
   "work_franchise_kind_game": "ゲーム",
   "work_franchise_kind_screen": "映像作品",
   "work_franchise_kind_book": "書籍",
-  "work_franchise_relation_label_unavailable": "関係ラベルを利用できません"
+  "work_franchise_relation_label_unavailable": "関係ラベルを利用できません",
+  "moderation_directory_continuation_failed": "一覧のこのページを読み込めませんでした。同じページを再試行してください。",
+  "moderation_directory_restart": "キューの検索をやり直す",
+  "moderation_directory_return": "キューの一覧に戻る",
+  "moderation_directory_return_hint": "戻ると、元の一覧ページのアクセス権が再確認されます。",
+  "moderation_directory_ready": "現在開く権限のあるキューを選択してください。",
+  "moderation_directory_retired": "この非公開の一覧の閲覧は終了しました。現在のキューを確認するにはやり直してください。",
+  "moderation_directory_expired": "一覧のこのページは期限切れです。検索をやり直して、現在のアクセス権を確認してください。"
 }

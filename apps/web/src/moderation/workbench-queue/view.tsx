@@ -11,6 +11,7 @@ import { openWorkbenchHistory, returnFromWorkbenchHistory, WorkbenchHistory } fr
 import { WorkbenchReportSelect, WorkbenchSelection } from '../workbench-selection';
 import { WorkbenchTriageCase, workbenchTriageIdentity } from '../workbench-triage';
 import {
+  workbenchDirectorySearch,
   workbenchCaseHref,
   workbenchQueueHref,
   workbenchScope,
@@ -57,12 +58,14 @@ function CaseRow({
   identity,
   selection,
   number,
+  isCurrent,
 }: {
   item: WorkbenchCase;
   search: WorkbenchSearch;
   identity: string;
   selection?: ReportsBulkAction;
   number: number;
+  isCurrent?: () => boolean;
 }) {
   const scope = workbenchQueueScope(search);
   if (!scope) return null;
@@ -72,7 +75,13 @@ function CaseRow({
       {selection && item.kind === 'report' ? (
         <WorkbenchReportSelect controller={selection} reportId={item.id} number={number} />
       ) : null}
-      <a className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`} href={href}>
+      <a
+        className={`${control} justify-start text-left font-medium underline-offset-4 hover:underline`}
+        href={href}
+        onClick={(event) => {
+          if (isCurrent && !isCurrent()) event.preventDefault();
+        }}
+      >
         {m.moderation_workbench_open_case({ id: item.id })}
       </a>
       <WorkbenchTriageCase item={item} identity={identity} />
@@ -151,11 +160,14 @@ export function WorkbenchView({
           variant="outline"
           className={control}
           onClick={() => {
-            if (!isCurrent || isCurrent()) onSearch(workbenchSearch({}));
+            if (!isCurrent || isCurrent()) onSearch(workbenchDirectorySearch(search));
           }}
         >
-          {m.moderation_directory_heading()}
+          {m.moderation_directory_return()}
         </Button>
+      ) : null}
+      {queueScope && search.directory ? (
+        <p className="text-sm text-muted-foreground">{m.moderation_directory_return_hint()}</p>
       ) : null}
       {page.state === 'ready' && (scope.kind === 'none' || scope.kind === 'realm') ? (
         <ModerationDirectory
@@ -306,6 +318,7 @@ export function WorkbenchView({
                     identity={identity}
                     number={index + 1}
                     {...(selection ? { selection } : {})}
+                    {...(isCurrent ? { isCurrent } : {})}
                   />
                 ))}
               </ul>

@@ -19,6 +19,9 @@ export type WorkbenchCaseSearch = {
   order: 'newest' | 'oldest';
   realm?: string;
   queue?: 'reports' | 'resolved';
+  directory?: true;
+  directoryCursor?: string;
+  directoryRealm?: string;
 };
 
 export function parseWorkbenchCaseSearch(input: Record<string, unknown>): WorkbenchCaseSearch | null {
@@ -28,6 +31,17 @@ export function parseWorkbenchCaseSearch(input: Record<string, unknown>): Workbe
   if (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096)) return null;
   if (input.realm !== undefined && (typeof input.realm !== 'string' || input.realm.length > 128)) return null;
   if (input.queue !== undefined && input.queue !== 'reports' && input.queue !== 'resolved') return null;
+  if (input.directory !== undefined && input.directory !== true && input.directory !== 'true') return null;
+  if (
+    input.directoryCursor !== undefined &&
+    (typeof input.directoryCursor !== 'string' || !input.directoryCursor || input.directoryCursor.length > 4096)
+  )
+    return null;
+  if (
+    input.directoryRealm !== undefined &&
+    (typeof input.directoryRealm !== 'string' || !input.directoryRealm || input.directoryRealm.length > 128)
+  )
+    return null;
   const selection = reportSelection(input);
   for (const key of ['status', 'targetKind', 'order'] as const)
     if (input[key] !== undefined && input[key] !== selection[key]) return null;
@@ -42,6 +56,9 @@ export function parseWorkbenchCaseSearch(input: Record<string, unknown>): Workbe
     ...(typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
     ...(typeof input.realm === 'string' && input.realm ? { realm: input.realm } : {}),
     ...(queue ? { queue } : {}),
+    ...(input.directory === true || input.directory === 'true' ? { directory: true } : {}),
+    ...(typeof input.directoryCursor === 'string' ? { directoryCursor: input.directoryCursor } : {}),
+    ...(typeof input.directoryRealm === 'string' ? { directoryRealm: input.directoryRealm } : {}),
   };
 }
 
@@ -69,6 +86,9 @@ function caseParams(search: WorkbenchCaseSearch): URLSearchParams {
   if (search.post) params.set('post', search.post);
   if (search.cursor) params.set('cursor', search.cursor);
   if (search.realm) params.set('realm', search.realm);
+  if (search.directory) params.set('directory', 'true');
+  if (search.directoryCursor) params.set('directoryCursor', search.directoryCursor);
+  if (search.directoryRealm) params.set('directoryRealm', search.directoryRealm);
   return params;
 }
 
@@ -90,6 +110,9 @@ function asCaseSearch(input: WorkbenchCaseSearch | ReportReadInput): WorkbenchCa
     ...(post ? { post } : {}),
     ...(input.cursor ? { cursor: input.cursor } : {}),
     ...(realm ? { realm } : {}),
+    ...('directory' in input && input.directory ? { directory: true } : {}),
+    ...('directoryCursor' in input && input.directoryCursor ? { directoryCursor: input.directoryCursor } : {}),
+    ...('directoryRealm' in input && input.directoryRealm ? { directoryRealm: input.directoryRealm } : {}),
     queue,
   };
 }
@@ -109,6 +132,9 @@ export function workbenchCaseQueueHref(input: WorkbenchCaseSearch | ReportReadIn
     order: search.order,
   });
   if (search.realm) params.set('realm', search.realm);
+  if (search.directory) params.set('directory', 'true');
+  if (search.directoryCursor) params.set('directoryCursor', search.directoryCursor);
+  if (search.directoryRealm) params.set('directoryRealm', search.directoryRealm);
   if (search.cursor) params.set('cursor', search.cursor);
   return `/moderation/workbench?${params}`;
 }
