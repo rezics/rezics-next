@@ -26,7 +26,7 @@ export async function prepareShowcaseVndbTraits(
   if (bindings.concepts.length !== concepts.length) throw new Error('Reviewed VNDB character traits are not current');
 
   const characters = new Set(plan.entities.vndb.filter((row) => characterId.test(row.key)).map((row) => row.key));
-  const codes = new Set(reviewedCodes);
+  const codes = new Set<string>(reviewedCodes);
   const traits: Record<string, unknown>[] = [];
   const seen = new Set<string>();
   for (const row of sourcePlan.traits) {

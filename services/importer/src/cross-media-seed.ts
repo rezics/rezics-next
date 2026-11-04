@@ -2907,7 +2907,8 @@ export async function runCrossMediaSeedCli(
         const key = `${entry.source}\0${entry.key}`;
         if (memberKeys.has(key)) {
           const current = plan.members.find((row) => row.source === entry.source && row.key === entry.key);
-          if (current?.membership !== 'family' && entry.membership === 'family') Object.assign(current, entry);
+          if (current && current.membership !== 'family' && entry.membership === 'family')
+            Object.assign(current, entry);
           continue;
         }
         memberKeys.add(key);
