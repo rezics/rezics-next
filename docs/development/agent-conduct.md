@@ -69,6 +69,27 @@ first: line counts are a measure, never a goal ([efficiency](efficiency.md)).
   the approach or split the work; do not resend an equivalent brief.
 - Do not freeze a test that the brief's own behaviour change contradicts.
 
+## Research
+
+- Research is a core part of the workflow. Research every complex abstraction design before briefing its
+  implementation. That covers:
+  - a model, module or package used by two or more Goals;
+  - security, identity, money or data integrity;
+  - a public contract or data format;
+  - a performance-critical structure;
+  - anything hard to reverse.
+    Simple, local designs need no research.
+- Managers propose such research to the supermanager, who decides whether the design is complex. A complex design
+  gets two independent researchers on the same brief: GPT-6 Astra at xhigh effort and Claude Opus 5.5. Neither sees
+  the other's work. Each writes `docs/research/<topic>-<researcher>.md`.
+- A research brief states the decision the research must enable, the context and evidence to read, competing
+  hypotheses, the requirements every candidate is tested against, and the deliverables. Researchers measure where
+  they can. They cite only sources they retrieved, track their confidence, and end with what would change the
+  recommendation.
+- The owner compares the reports and records the decision in the owner document before briefing implementation.
+  The owner is the Goal's manager, or the supermanager for a cross-cutting design. Implementation briefs link the
+  decision.
+
 ## Managers
 
 - A manager synthesizes what its workers report (results, decisions, conflicts, duplicated or missing work across
