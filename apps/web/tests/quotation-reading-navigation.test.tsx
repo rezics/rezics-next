@@ -177,6 +177,8 @@ test('mounted reader owns later-page selection, explicit recovery, return and re
     expect(host.textContent).toContain(m.quotation_stale());
     await click(m.quotation_restart());
     expect(calls.at(-1)).toEqual({});
+    // The standalone fixture mirrors the router's successful Restart URL transition.
+    window.history.replaceState(null, '', `/en/subjects/${id}/work/quotations`);
     // Delayed selection cannot steal focus after the reader moves to an unrelated input.
     let resolve!: (read: QuotationRead) => void;
     answer = () =>
