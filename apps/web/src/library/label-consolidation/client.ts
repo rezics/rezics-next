@@ -32,16 +32,16 @@ export type ConsolidationTransport = {
     ...args: Parameters<ReturnType<typeof consolidationClient>[K]>
   ) => Promise<{
     data: Awaited<ReturnType<ReturnType<typeof consolidationClient>[K]>>['data'];
-    error: { status: number; code: string | null } | null;
+    error: { status: number; code?: string | null; value?: unknown } | null;
   }>;
 };
 
 /** Preserve native refusal status/code without serializing a transport Response or untyped problem fields. */
-export function consolidationError(error: { status: number; value: unknown } | null) {
+export function consolidationError(error: { status: number; code?: string | null; value?: unknown } | null) {
   if (!error) return null;
   const value = error.value;
   return {
     status: error.status,
-    code: value && typeof value === 'object' && 'code' in value && typeof value.code === 'string' ? value.code : null,
+    code: typeof error.code === 'string' ? error.code : value && typeof value === 'object' && 'code' in value && typeof value.code === 'string' ? value.code : null,
   };
 }

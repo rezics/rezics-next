@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { consolidationClient, type Confirmation, type ConfirmationInput, type ConsolidationResult, type ConsolidationTransport } from './client';
+import { consolidationClient, consolidationError, type Confirmation, type ConfirmationInput, type ConsolidationResult, type ConsolidationTransport } from './client';
 import { ConsolidationReview } from './review';
 
 type Operation = 'review' | 'confirm' | 'apply' | 'retry' | 'cancel' | 'result';
@@ -85,7 +85,7 @@ export class ConsolidationVisit {
       if (!current()) return this.discard();
       if (response.error || !response.data) {
         request.failed();
-        this.rejectionValue = response.error;
+        this.rejectionValue = consolidationError(response.error);
         return 'rejected';
       }
       if (!request.accept(response.data)) return this.discard();
@@ -150,7 +150,7 @@ export class ConsolidationVisit {
       const response = await this.transport(captured.headers).result(this.confirmationValue.confirmationId);
       if (this.retired || !captured.isCurrent()) return this.discard();
       if (response.error || !response.data) {
-          this.rejectionValue = response.error;
+          this.rejectionValue = consolidationError(response.error);
           return 'rejected';
         }
       this.acceptResult(response.data);
@@ -174,7 +174,7 @@ export class ConsolidationVisit {
         const response = await transport.confirm(structuredClone(command.evidence), command.key);
         if (this.retired || !captured.isCurrent()) return this.discard();
         if (response.error || !response.data) {
-          this.rejectionValue = response.error;
+          this.rejectionValue = consolidationError(response.error);
           return 'rejected';
         }
         this.confirmationValue = structuredClone(response.data);
@@ -185,7 +185,7 @@ export class ConsolidationVisit {
             : await transport[command.operation](command.confirmationId, command.key);
         if (this.retired || !captured.isCurrent()) return this.discard();
         if (response.error || !response.data) {
-          this.rejectionValue = response.error;
+          this.rejectionValue = consolidationError(response.error);
           return 'rejected';
         }
         this.acceptResult(response.data);
