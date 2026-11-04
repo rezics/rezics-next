@@ -32,6 +32,9 @@ retain local amount or clear choices by measure unit.
   owns the source lifetime and bounded reading contract, replacing the audit's deferred navigation finding.
   Decision: every replacement observation retires selection; browser return uses a fresh admitted reading, never a
   stored private inspection snapshot. Source and story delivery do not claim runtime acceptance.
+- A buyer reading a captured fixed Edition from an order or entitlement returns to that exact detail and both
+  independent list positions after a same-tab visit. Decision: keep these navigation coordinates in route state,
+  re-admit the private detail for the current viewer on return, and leave canonical reader addresses free of private data.
 - Auth pages support sign-in, sign-up, consent, security settings and step-up through the accounts contract.
 - Signed-out private-route visits keep the safe sign-in redirect; an indeterminate session shows an unavailable prompt with a safe sign-in link, and no private loader runs.
 - The session BFF, upload completion and every download preserve caller identity and current API decisions.

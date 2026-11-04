@@ -1,7 +1,8 @@
-import { purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
+import { createPurchaseReaderOrigin, purchaseHistoryHref, type PurchaseHistoryPosition } from './purchase-return';
 import { Exposure } from '../kernel/exposure';
 import { Alert, AlertDescription } from '@rezics/ui/shadcn/alert';
 import { Button } from '@rezics/ui/shadcn/button';
+import { useRouter } from '@tanstack/react-router';
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
@@ -169,6 +170,25 @@ function OrderLifetime({
   };
 }) {
   const order = initial;
+  const router = useRouter();
+  const openPurchaseReader = (editionId: string, href: string) => {
+    if (!origin.isCurrent() || !benefitOrigin?.isCurrent()) return false;
+    const purchaseOrigin = createPurchaseReaderOrigin({
+      kind: 'order',
+      recordId: order.id,
+      editionId,
+      locale,
+      history,
+      viewer: {
+        current: origin.isCurrent(),
+        subject: origin.observed.subject,
+        readId: origin.observed.readId,
+      },
+    });
+    if (!purchaseOrigin) return false;
+    void router.navigate({ href, state: { purchaseOrigin } as never });
+    return true;
+  };
   const [reconciliation, setReconciliation] = useState<ReconciliationPhase>(() =>
     enqueue.accepted ? 'queued' : command.phase === 'refreshing' ? 'retry' : command.phase,
   );
@@ -389,6 +409,7 @@ function OrderLifetime({
               order.entitlement.kind === 'current' &&
               order.entitlement.active
             }
+            onOpenReader={openPurchaseReader}
           />
         </div>
       ) : null}

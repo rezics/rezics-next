@@ -10,12 +10,14 @@ export function BenefitDetails({
   creatorName,
   active = false,
   review = false,
+  onOpenReader,
 }: {
   benefit: CapturedBenefit;
   locale: string;
   creatorName?: string | undefined;
   active?: boolean;
   review?: boolean;
+  onOpenReader?: (editionId: string, href: string) => boolean;
 }) {
   if (benefit.kind !== 'mapped')
     return (
@@ -40,7 +42,23 @@ export function BenefitDetails({
       </dl>
       {!review && <p className="max-w-prose text-sm text-muted-foreground">{m.benefit_reader_notice()}</p>}
       {href ? (
-        <a href={href} className={buttonVariants({ className: 'min-h-11 w-full sm:w-auto' })}>
+        <a
+          href={href}
+          className={buttonVariants({ className: 'min-h-11 w-full sm:w-auto' })}
+          onClick={(event) => {
+            if (
+              event.defaultPrevented ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey ||
+              event.currentTarget.target === '_blank'
+            )
+              return;
+            if (onOpenReader?.(benefit.terms.benefit.resource.id, href)) event.preventDefault();
+          }}
+        >
           {m.benefit_open_reader()}
         </a>
       ) : null}
