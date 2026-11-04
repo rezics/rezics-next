@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { discoveryHttpPage } from '../../src/search/discovery-http.ts';
 import { readPublicCollectionDiscoverySummaries as hydrate } from '../../src/library/collection-discovery-summaries.ts';
 import { readFollowDiscovery } from '../../src/library/follow-discovery.ts';
 import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
@@ -83,7 +84,19 @@ test('public curator and bounded ordered occurrences stay separate from account-
     pool: f.database.pool,
     deadline: Date.now() + 30000,
   });
-  const targets = [{ targetId: collection.id, targetType: 'collection' as const, source: current.sourceGeneration }];
+  const targets = [
+    {
+      targetId: collection.id,
+      targetType: 'collection' as const,
+      source: JSON.stringify([
+        current.id,
+        current.sourceGeneration,
+        current.revision,
+        current.membershipKind,
+        current.membershipKind === 'curated' ? current.orderEpoch : current.outputGeneration,
+      ]),
+    },
+  ];
   const follows = () => readFollowDiscovery(dependencies(), actor, targets, Date.now() + 30000);
   expect(await follows()).toMatchObject({
     state: 'current',
@@ -91,6 +104,27 @@ test('public curator and bounded ordered occurrences stay separate from account-
     partition: partitionOf(routeOf(f.runtime.identity.ordinary.accountId)!),
     rows: [{ following: false, actions: { follow: true, unfollow: true } }],
   });
+  const wire = discoveryHttpPage({
+    hits: [
+      {
+        key: { owner: 'library', kind: 'collection', route: routeOf(collection.id)!, id: collection.id },
+        summary: {
+          kind: 'collection',
+          value: { id: current.id, title: current.title, description: current.description, card: current },
+        },
+      },
+    ],
+    kinds: { values: [], next: null },
+    next: 'same-continuation',
+    as_of: '2026-11-04T00:00:00Z',
+    collectionFollows: await follows(),
+  });
+  expect(wire.collectionFollows).toMatchObject({ state: 'current', rows: [{ following: false }] });
+  expect(wire.hits[0]?.summary).toMatchObject({
+    kind: 'collection',
+    value: { card: { curator: current.curator, preview: current.preview } },
+  });
+  expect(wire.hits[0]?.summary.value).not.toHaveProperty('following');
   const key = randomUUID();
   for (let replay = 0; replay < 2; replay++)
     expect((await f.send('PUT', `/v1/follows/${collection.id}`, undefined, f.owner, key)).status).toBe(200);

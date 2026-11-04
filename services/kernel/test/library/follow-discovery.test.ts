@@ -53,7 +53,7 @@ test('private preparation rejects changed edges, withdrawn read permission and f
   expect(await readFollowDiscovery(dependencies, { kind: 'anonymous' }, targets, Date.now() + 30000)).toEqual({
     state: 'signed-out',
   });
-  expect(readFollowDiscovery(dependencies, actor, [...targets, ...targets], Date.now() + 30000)).rejects.toThrow(
+  await expect(readFollowDiscovery(dependencies, actor, [...targets, ...targets], Date.now() + 30000)).rejects.toThrow(
     'Invalid bounded follow discovery targets',
   );
 }, 120000);

@@ -393,7 +393,13 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
 /** Close the owner/summary union and snapshot nested owner values before serialization. */
 export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
   admitDiscoveryPage(page);
-  const { viewerFacts: originalViewerFacts, ...publicPage } = page;
+  const { viewerFacts: originalViewerFacts, collectionFollows: originalFollows, ...publicPage } = page;
+  const collectionFollows: DiscoveryHttpPage['collectionFollows'] =
+    originalFollows?.state === 'current'
+      ? { ...originalFollows, rows: originalFollows.rows.map((row) => ({ ...row, actions: { ...row.actions } })) }
+      : originalFollows
+        ? { ...originalFollows }
+        : undefined;
   const viewerFacts: DiscoveryHttpPage['viewerFacts'] =
     originalViewerFacts === undefined || originalViewerFacts === null
       ? originalViewerFacts
@@ -496,6 +502,21 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
               ...value,
               card: {
                 ...value.card,
+                curator: { ...value.card.curator },
+                preview:
+                  value.card.preview.state === 'available'
+                    ? {
+                        ...value.card.preview,
+                        members: value.card.preview.members.map((member) => ({
+                          ...member,
+                          subject: {
+                            ...member.subject,
+                            types: [...member.subject.types],
+                            label: member.subject.label ? { ...member.subject.label } : null,
+                          },
+                        })),
+                      }
+                    : { ...value.card.preview },
                 cover: value.card.cover
                   ? {
                       ...value.card.cover,
@@ -542,5 +563,6 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       };
     }),
     ...(viewerFacts === undefined ? {} : { viewerFacts }),
+    ...(collectionFollows === undefined ? {} : { collectionFollows }),
   };
 }
