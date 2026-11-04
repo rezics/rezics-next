@@ -15,7 +15,7 @@ import type {
 } from './contracts.ts';
 import { reapContainers } from './containers.ts';
 import { SqliteLandingQueue } from './land.ts';
-import { MergeTrain } from './merge-train.ts';
+import { MergeTrain, type TrainConfigurationReloader } from './merge-train.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { SharedInboxQueries, type SharedInboxFilter } from './inbox-shared.ts';
 import { backlogStatus, formatBacklogStatus } from './backlog.ts';
@@ -42,6 +42,8 @@ export type IntegrationRuntime = {
   managerLand?(task: string, manager: string): boolean;
   /** Start the existing controller train without running gates in the manager command process. */
   handoffTrain?(): Promise<void>;
+  /** Reload the effective train settings between landings in a long-lived train process. */
+  refreshTrainConfiguration?: TrainConfigurationReloader;
   hostSweepIntervalMs?: number;
   hourlyEfficiencyReport?: { enabled: boolean; timeoutMs: number };
   recoverOrphans?(options?: { adoptRunning?: boolean }): Promise<void>;
@@ -598,10 +600,10 @@ export async function runIntegration(argv: string[], runtime: IntegrationRuntime
   if (command === 'train') {
     await recordManagerCommand(runtime);
     if (runtime.train) {
-      await runtime.train.runWaiting();
+      await runtime.train.runWaiting(runtime.refreshTrainConfiguration);
       await runtime.drainJobs?.();
     } else {
-      await new MergeTrain({ ...runtime, queue }).runWaiting();
+      await new MergeTrain({ ...runtime, queue }).runWaiting(runtime.refreshTrainConfiguration);
       await runtime.drain?.();
     }
     return 0;

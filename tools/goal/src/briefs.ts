@@ -1,7 +1,7 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, win32 } from 'node:path';
-import type { AcceptancePlacement, Brief, BriefContinuation, TaskKind } from './types.ts';
+import type { AcceptancePlacement, AcceptanceRequirement, Brief, BriefContinuation, TaskKind } from './types.ts';
 import { parseProofMetadata } from './verification.ts';
 
 export type RiskOwnership = { version: number; areas: Record<string, string[]> };
@@ -10,6 +10,41 @@ export type RiskOwnership = { version: number; areas: Record<string, string[]> }
  * (2026-10-29). Briefs link evidence files instead of pasting them. Declared paths share this bound.
  */
 export const MAX_BRIEF_BYTES = defaultPolicy.brief.bytes;
+export const BRIEF_AUTHORITY_HINT = 'link an owner document section or quote the decision in the brief';
+export const SUPERSEDED_CHECK_HINT = 'remove superseded check instructions from the brief';
+const ACCEPTANCE_REQUIREMENTS: readonly AcceptanceRequirement[] = ['browser', 'native', 'root'];
+
+export function supersededCheckInstructionParagraph(markdown: string): boolean {
+  return markdown
+    .split(/\n\s*\n/)
+    .some(
+      (section) =>
+        /\b(?:saved|historical|previous|older)\b/i.test(section) &&
+        /\b(?:prompt|instructions?|manifest|session)\b/i.test(section) &&
+        /(?:worker-check|--wait)/i.test(section),
+    );
+}
+
+export function assertBriefDispatchable(markdown: string, mainCheckout?: string): void {
+  if (markdown.includes('.temp/goal/'))
+    throw new Error(`brief must not reference .temp/goal/; ${BRIEF_AUTHORITY_HINT}`);
+  if (mainCheckout && markdown.includes(mainCheckout))
+    throw new Error(`brief must not reference the main checkout path; ${BRIEF_AUTHORITY_HINT}`);
+  if (supersededCheckInstructionParagraph(markdown))
+    throw new Error(`brief holds superseded check instructions; ${SUPERSEDED_CHECK_HINT}`);
+}
+
+function pathImpliesStories(path: string): boolean {
+  return /(?:^|\/)stories(?:\/|$)/i.test(path) || /\.stories\.[^./]+$/i.test(path);
+}
+
+export function acceptanceRequirements(
+  brief: Pick<Brief, 'kind' | 'paths' | 'acceptance'> | Partial<Brief>,
+): AcceptanceRequirement[] {
+  const required = new Set<AcceptanceRequirement>(brief.acceptance?.requires ?? []);
+  if (brief.kind === 'interface' || (brief.paths ?? []).some(pathImpliesStories)) required.add('browser');
+  return [...required];
+}
 /** Visited (i, j) cells; wildcard products larger than this stall dispatch. */
 type BriefPolicy = ControlPolicy['brief'];
 function pathMatchExceeded(): never {
@@ -133,6 +168,43 @@ function continuation(value: unknown): BriefContinuation | undefined {
   if (!Number.isSafeInteger(raw.expectedAttempt) || (raw.expectedAttempt as number) < 1)
     throw new Error('continuation.expectedAttempt must be a positive integer');
   return { taskId, expectedAttempt: raw.expectedAttempt as number };
+}
+const RESEARCHER_MODEL = /^(?:gpt|claude)-[a-z0-9.-]+$/;
+function researcherModels(value: unknown, kind: unknown, model: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (kind !== 'research') throw new Error('researchers is only supported on research briefs');
+  if (model !== undefined) throw new Error('research briefs cannot combine model and researchers');
+  const models = list(value, 'researchers', true);
+  if (models.some((candidate) => !RESEARCHER_MODEL.test(candidate)))
+    throw new Error('researchers entries must be gpt-* or claude-* model pins');
+  if (new Set(models).size !== models.length) throw new Error('researchers entries must be unique');
+  return models;
+}
+
+export type ResearchFanoutBrief = {
+  goal: string;
+  manager: string;
+  researchers: string[];
+  paths: string[];
+  groupId?: string;
+};
+
+/** Read and validate the backlog-only fan-out fields before creating one task per model. */
+export function readResearchFanout(markdown: string): ResearchFanoutBrief | undefined {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+  if (!match) throw new Error('brief needs Markdown front matter');
+  const raw = object(Bun.YAML.parse(match[1]!), 'front matter');
+  const researchers = researcherModels(raw.researchers, raw.kind, raw.model);
+  if (!researchers) return undefined;
+  const groupId = raw.researchGroup === undefined ? undefined : text(raw.researchGroup, 'researchGroup');
+  if (groupId && !/^[A-Za-z0-9_-]{1,128}$/.test(groupId)) throw new Error('researchGroup must be a valid identifier');
+  return {
+    goal: text(raw.goal, 'goal'),
+    manager: text(raw.manager ?? raw.goal, 'manager'),
+    researchers,
+    paths: list(raw.paths ?? [], 'paths'),
+    ...(groupId ? { groupId } : {}),
+  };
 }
 /** Read only the optional existing-task marker so claim recovery can distinguish safe retries from new dispatches. */
 export function readBriefContinuation(markdown: string): BriefContinuation | undefined {
@@ -337,6 +409,7 @@ export function parseBrief(
     throw new Error(
       `brief is ${bytes} bytes; keep it under ${policy.bytes} bytes and link evidence files instead of pasting them`,
     );
+  assertBriefDispatchable(markdown);
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
   if (!match) throw new Error('brief needs Markdown front matter');
   const raw = object(Bun.YAML.parse(match[1]!), 'front matter');
@@ -351,6 +424,18 @@ export function parseBrief(
       'brief target must be stabilize or, for control-plane, main; a brief without a target line goes to dev',
     );
   const target = raw.target === 'stabilize' || raw.target === 'main' ? raw.target : undefined;
+  const researchers = researcherModels(raw.researchers, kind, raw.model);
+  const researchGroup = raw.researchGroup === undefined ? undefined : text(raw.researchGroup, 'researchGroup');
+  const researchReport = raw.researchReport === undefined ? undefined : text(raw.researchReport, 'researchReport');
+  if (researchGroup !== undefined && kind !== 'research')
+    throw new Error('researchGroup is only valid on research briefs');
+  if (researchGroup !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(researchGroup))
+    throw new Error('researchGroup must be a valid identifier');
+  if (researchReport !== undefined) {
+    if (kind !== 'research' || !researchReport.startsWith('docs/research/') || !researchReport.endsWith('.md'))
+      throw new Error('researchReport must be a docs/research/*.md path on a research brief');
+    validatePath(researchReport, policy);
+  }
   const hasFrozenAcceptance = /^\s*(?:`{3,}|~{3,})(?:[^\r\n]*[ \t])?path=/m.test(markdown);
   const ordinaryDevProduct = devProductBrief({ goal, kind, ...(target ? { target } : {}) });
   const acceptance: Record<string, unknown> = raw.acceptance === undefined ? {} : object(raw.acceptance, 'acceptance');
@@ -359,6 +444,14 @@ export function parseBrief(
   const placement = acceptance.placement;
   if (placement !== undefined && placement !== 'local' && placement !== 'default')
     throw new Error('acceptance.placement must be local or default');
+  const requires =
+    acceptance.requires === undefined
+      ? undefined
+      : list(acceptance.requires, 'acceptance.requires').map((item) => {
+          if (!ACCEPTANCE_REQUIREMENTS.includes(item as AcceptanceRequirement))
+            throw new Error('acceptance.requires must be a list of browser, native and root');
+          return item as AcceptanceRequirement;
+        });
   if (commandMissing && placement !== undefined)
     throw new Error('acceptance.placement requires acceptance.command; omit placement for worker-owned validation');
   if (commandMissing && !workerOwnedAcceptance)
@@ -399,12 +492,16 @@ export function parseBrief(
     ...(target ? { target } : {}),
     ...(raw.model === undefined ? {} : { model: text(raw.model, 'model') }),
     ...(raw.effort === undefined ? {} : { effort: text(raw.effort, 'effort') }),
+    ...(researchers ? { researchers } : {}),
+    ...(researchGroup ? { researchGroup } : {}),
+    ...(researchReport ? { researchReport } : {}),
     acceptance: {
       command: commandMissing ? [] : list(acceptance.command, 'acceptance.command', true),
       tests: acceptance.tests === undefined ? [] : list(acceptance.tests, 'acceptance.tests', true),
       failing: boolean(acceptance.failing, 'acceptance.failing', workerOwnedAcceptance),
       ...(workerOwnedAcceptance ? { workerOwned: true as const } : {}),
       ...(placement === undefined ? {} : { placement: placement as AcceptancePlacement }),
+      ...(requires === undefined ? {} : { requires }),
     },
     estimate: { lines: estimate.lines as number, files: estimate.files as number },
     ...(raw.urgent === undefined ? {} : { urgent: boolean(raw.urgent, 'urgent') }),
@@ -425,6 +522,8 @@ export function parseBrief(
   } else if (raw.proof !== undefined) throw new Error('proof metadata requires kind verification');
   if (brief.acceptance.placement === 'local') validateLocalAcceptanceCommand(brief.acceptance.command);
   brief.paths.forEach((pattern) => validatePath(pattern, policy));
+  if (brief.researchReport && !brief.paths.includes(brief.researchReport))
+    throw new Error('researchReport must also be declared in paths');
   for (const area of brief.riskAreas)
     if (!Object.hasOwn(ownership.areas, area)) throw new Error(`unknown risk area: ${area}`);
   for (const [area, patterns] of Object.entries(ownership.areas)) {

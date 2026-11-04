@@ -162,6 +162,7 @@ the lane lease and recheck the control-plane version while they wait. Every proc
 `main:tools/goal` when it starts; a stale train finishes its active landing, releases its lease and hands the remaining
 queue to current code before it can take another request. Pumps used by short commands still return quietly when
 another process holds the lane lease.
+Detached trains reload effective local train settings between landings; each landing log records the SHA-256 revision of the settings used for that landing.
 Failures return to the same profile and session, trigger one consultation, or reach the owning manager's inbox as
 described under [integration](#integration-promotion-culprit-isolation-and-attempt-fencing).
 A stale manager host restarts after finishing its active request and recovers persisted sessions. Restarts are limited to
@@ -563,7 +564,13 @@ protocol or representation meaning; they are not operator limits.
 | `policy.launchSmoke.launchErrors`                     | `8`                                  | Launch errors retained in a smoke evidence snapshot.                                                                                                                                        |
 | `policy.launchSmoke.resultCharacters`                 | `400`                                | Failed resumed-worker result excerpt characters.                                                                                                                                            |
 | `policy.launchSmoke.drainWaitMs`                      | `5000`                               | Wait for an owned worker start to settle during smoke cleanup (ms).                                                                                                                         |
-| `policy.brief.bytes`                                  | `65536`                              | Maximum brief and owner-decision input size (UTF-8 bytes).                                                                                                                                  |
+| `policy.prompt.workerRoleBytes`                       | `3500`                               | Worker role-template budget (UTF-8 bytes).                                                                                                                                                  |
+| `policy.prompt.conditionBytes`                        | `1500`                               | Combined condition-template body budget in one prompt (UTF-8 bytes).                                                                                                                        |
+| `policy.prompt.workerTotalBytes`                      | `20000`                              | Worker prompt total budget (UTF-8 bytes).                                                                                                                                                   |
+| `policy.prompt.managerRoleBytes`                      | `5000`                               | Manager role-template budget (UTF-8 bytes).                                                                                                                                                 |
+| `policy.prompt.managerOpeningBytes`                   | `30000`                              | Manager opening budget (UTF-8 bytes); oversize openings warn until Goal files finish migrating.                                                                                             |
+| `policy.prompt.researchRoleBytes`                     | `2500`                               | Research role-template budget (UTF-8 bytes).                                                                                                                                                |
+| `policy.brief.bytes`                                  | `12288`                              | Maximum brief and owner-decision input size (UTF-8 bytes).                                                                                                                                  |
 | `policy.brief.pathCharacters`                         | `65536`                              | Maximum declared path pattern characters.                                                                                                                                                   |
 | `policy.brief.pathMatchStates`                        | `1000000`                            | Maximum visited cells per path-pattern intersection.                                                                                                                                        |
 | `policy.brief.sharedPaths`                            | README, docs, generated              | Declared paths ignored by continuation overlap; landing already resolves these files.                                                                                                       |
@@ -838,6 +845,7 @@ filesystem component sizes and systemd microsecond conversions are fixed represe
 | `policy.merge.failureLines`                     | `60`       | Merge Git, gate cleanup and failure excerpt: failure lines.              |
 | `policy.merge.failureHeadCharacters`            | `4000`     | Merge Git, gate cleanup and failure excerpt: failure head characters.    |
 | `policy.merge.failureCharacters`                | `8000`     | Merge Git, gate cleanup and failure excerpt: failure characters.         |
+| `policy.trainResolver.devAttempts`              | `3`        | Bounded resolver attempts for repeated dev landing conflicts.            |
 | `policy.trainResolver.inputBytes`               | `262144`   | Isolated conflict resolver: input bytes.                                 |
 | `policy.trainResolver.outputBytes`              | `262144`   | Isolated conflict resolver: output bytes.                                |
 | `policy.trainResolver.timeoutMs`                | `240000`   | Isolated conflict resolver: timeout ms.                                  |
@@ -1195,7 +1203,7 @@ replacement. Delivering that lifecycle seam remains separate work.
 
 Declared paths support literals, `*`, `?` and whole-segment `**`. Absolute paths, traversal and unsupported glob syntax
 are refused. Matching walks an explicit stack and refuses after one million visited states; each pattern shares the
-64 KiB brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
+12,288-byte brief size bound. Risk ownership is checked by intersecting the path patterns, including broad claims such as `src/**`.
 Every intersected risk area must be declared. Extend the ownership data when adding product modules. A `control-plane`
 brief may declare only `tools/goal/` paths; dispatch refuses outside paths and asks that they be split into a dev task.
 
@@ -1203,6 +1211,17 @@ Routing records the table version on each attempt. Open experiments weight work 
 by durable task sequence, starting with `high`; retries retain the original profile and version. Research is read-only.
 Bulk text prompts prohibit translation services, scripts and character mappings. Workers return a structured result
 using `worker-result.schema.json`, including any concrete blocker and the approaches tried.
+
+### Prompts
+
+Workers, managers and researchers receive prompts rendered from `tools/goal/prompts/`: `worker.md`, `manager.md`,
+`research.md`, and `conditions/<id>.md`. The renderer reads those files from disk at each launch, cached by
+modification time and size. Budgets are `policy.prompt` (worker role 3,500 bytes, conditions 1,500, worker total
+20,000, manager role 5,000, manager opening 30,000, research role 2,500) and `policy.brief.bytes` 12,288. A render
+over a budget refuses the launch and names each layer's measured size; a manager opening over its budget logs a
+warning until Goal files finish migrating. Each attempt records a prompt manifest: git blob SHAs of `AGENTS.md`, the
+role template, each condition and the brief; a hash of the policy object; and rendered bytes per layer.
+`attempts --json` exports it.
 
 ### Research
 
@@ -1222,8 +1241,18 @@ reference repositories in the main checkout's `.reference/` (ignored by Git and 
 reused when present. They read them as untrusted data without installing, building or running anything, and land the report with sources, licences,
 the patterns the sources share and a recommendation. Any project's source may be read to learn how it solves the
 problem; the work then implements the design for this repository's stack itself rather than copying files or long
-passages. A report is evidence: once the manager adopts a recommendation, the
-decision goes into the owning document.
+passages. A report is evidence: once the manager adopts a recommendation, the decision goes into the owning document.
+
+Research briefs may set `researchers: [gpt-6-astra, claude-opus-5-5]`. The backlog creates one independent task per
+model, pins `gpt-*` to Codex and `claude-*` to the Claude adapter in the `claude-worker` pool, and gives each task a
+separate `docs/research/<slug>-<model>.md` report path. The slug comes from the brief's existing research report
+path, falling back to its first heading and then its backlog filename; a one-model list is valid. Claude's worker
+pool uses the same allowance and reserve checks as other routed work. When every researcher task ends, the manager
+receives one `research-complete` inbox event listing the report paths and failed researchers. A brief with one
+`model:` line keeps its existing single-task routing.
+
+Decision: derive dual-research report slugs from the existing report path, then the first heading, then the backlog
+filename; allow a one-model `researchers` list so the fan-out can grow without another contract change.
 
 A hard question whose decision is costly to reverse (an architecture or contract choice, a domain the repository has
 no evidence on) gets two researchers: dispatch the same question twice with different report paths, both on the
@@ -1512,7 +1541,9 @@ then fast-forwards main when possible; other main history changes still need a f
 captured integration head, starting the next window. Deleting the branch starts a fresh preflight of the latest
 integration head.
 
-`defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. This includes `bun.lock`: the train keeps the integration lockfile and runs `bun install` against the merged manifests, stages the regenerated lockfile and continues. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown, an already supported import-only conflict, or a configured flat JSON message catalog; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Configured `jsonMessageConflicts` patterns use a three-way key merge, retain the checked-out catalog's order and append keys introduced by the worker, and format the result with the repository formatter. A key changed to different values on both sides remains a conflict and the error names that key. Other non-generated conflicts stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
+`defaults.json` `derivedFiles` declares generated path patterns, their pipeline stage and regeneration command; an untracked local `derivedFiles` setting can replace it. A rebase resolves a conflict in a declared generated path at either stage by keeping the integration side, running each matching command in the train worktree, staging its generated outputs and continuing through the ordinary landing checks. This includes `bun.lock`: the train keeps the integration lockfile and runs `bun install` against the merged manifests, stages the regenerated lockfile and continues. Retries use the same declarations and regeneration commands. The stabilize-to-dev merge applies the same rule and commits regenerated output in its merge commit. A mixed rebase conflict is resolved only when every non-generated conflict is Markdown, an already supported import-only conflict, or a configured flat JSON message catalog; any other conflict stays with the worker before regeneration runs. Markdown rebase conflicts use `git merge-file --union` to keep both sides' additions; the landing log and the owning Goal's integration notice name each such file for section-order review, including unions performed during a retry and in a batch landing. Configured `jsonMessageConflicts` patterns use a three-way key merge, retain the checked-out catalog's order and append keys introduced by the worker, and format the result with the repository formatter. A key changed to different values on both sides remains a conflict and the error names that key. Other non-generated conflicts on main or stabilize stay with the worker. Other stabilize-to-dev conflicts keep the existing notification and recovery behavior.
+
+Dev landing conflicts that rerere and the mechanical resolvers do not settle go to the bounded `TrainResolver` in its own worktree with the task brief, base and both sides. The train releases the dev lease while it runs; a resolved commit returns to the front of the dev queue. `policy.trainResolver.devAttempts` bounds repeated resolution (default `3`). If resolution fails, times out or reaches that bound, the same attempt returns to its worker. The landing outcome and log record the method (`rerere`, `mechanical`, `resolver` or `worker`) and resolver token totals.
 
 After rebasing a single or batched landing, the train checks every path changed by that task against the current dev tree. If the task changed a path but the landing leaves that path's dev content unchanged, the train returns the task to its worker at the merge stage and names the path; a task diff already empty against dev is treated as already represented. Markdown and configured JSON message conflict resolution also stays with the worker when the resolved file keeps only dev's content and discards a worker change. A landing with no net tree change against dev is never reported as integrated on an existing commit.
 

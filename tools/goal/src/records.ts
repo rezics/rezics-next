@@ -401,6 +401,7 @@ export function makeRecord(
     classifierVersion: CLASSIFIER_VERSION,
     stepClasses: measurement.steps,
     earlyStop: false,
+    ...(attempt.prompt ? { prompt: attempt.prompt } : {}),
     usage: {
       model: measurement.usage?.model ?? attempt.profile.model,
       effort: measurement.usage?.effort ?? attempt.profile.effort,

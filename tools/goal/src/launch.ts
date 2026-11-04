@@ -1,13 +1,11 @@
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import {
-  proofProtocolAuthorized,
   proofSourceUnchanged,
   registeredProof,
-  ordinaryProofCommand,
   type ProofAuthorization,
   type ProofReservation,
 } from './verification.ts';
-import { spawnSync, type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
+import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import {
   closeSync,
   existsSync,
@@ -35,18 +33,22 @@ import {
   type WorkerExit,
 } from './process.ts';
 import { fixtureOwnerForLaunch, recordFixtureOwnedProcess } from './fixture-process-ownership.ts';
-import type { AcceptancePlacement, Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
+import type { Attempt, Brief, Pool, Profile, Settings, Task } from './types.ts';
 import type { WorkerStore } from './store.ts';
 import { recordFlow } from './flow.ts';
 import { launchWorkerProcess } from './worker-slice.ts';
 import { agentAdapter, cleanAgentEnvironment, type McpServer } from './agents.ts';
-import { renderLaunchContext, type LaunchContext } from './launch-context.ts';
-import { storybookPrompt, storybookServers } from './storybook.ts';
-import { devProductBrief } from './briefs.ts';
-import { workerTestCommands } from './affected-tests.ts';
+import { type LaunchContext } from './launch-context.ts';
+import { storybookServers } from './storybook.ts';
 import { branchHead } from './attempt-progress.ts';
-import { CONTINUATION_DIRECTORY, continuesItself } from './continuation.ts';
 import { prepareOwnerDecisionPrompt } from './owner-decisions.ts';
+import {
+  applyRenderedPrompt,
+  minimalVerification as promptMinimalVerification,
+  renderCheckProtocol,
+  renderWorkerPrompt,
+} from './prompts.ts';
+export { applyRenderedPrompt, renderWorkerPrompt };
 
 export type LaunchOptions = {
   profile: Profile;
@@ -97,55 +99,10 @@ export function workerEnvironment(
     result.PATH = [wrapperDirectory, result.PATH].filter(Boolean).join(':');
   return result;
 }
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
-}
-function namedWorkerCheck(contractText: string): string | undefined {
-  const match =
-    /(?:^|\s)`?bun\s+("(?:\\.|[^"\\])*"|'(?:[^'\\]|\\.)+'|\/[^\s`]+\/scripts\/worker-check\.ts)(?=[\s`]|$)/m.exec(
-      contractText,
-    );
-  if (!match) return undefined;
-  const token = match[1]!;
-  let path: string;
-  try {
-    path = token.startsWith('"')
-      ? (JSON.parse(token) as string)
-      : token.startsWith("'")
-        ? token.slice(1, -1).replaceAll("'\\''", "'")
-        : token;
-  } catch {
-    return undefined;
-  }
-  return path.startsWith('/') && path.endsWith('/scripts/worker-check.ts') ? path : undefined;
-}
 type CheckProtocolBrief = Pick<Brief, 'acceptance' | 'markdown'> & Partial<Brief>;
-/** How a worker runs the tests of the test files it changed: with the landing's own commands for them. */
-const OWN_TESTS =
-  "After your last edit, run the test files you created or changed once, with the landing's command (`bun test <files>`; services/kernel: `bun run --cwd services/kernel check <files>`; apps/web: `bun apps/web/scripts/focused.ts --private-network -- bun test <files>`; paths relative to that workspace), and fix failures you caused.";
-function longWait(policy: ControlPolicy['guidance']): string {
-  return `Wait for a long command, even one queued for a test slot, in its open session with one yield of at least ${policy.longCommandWaitMs / 1000} seconds (Codex: \`write_stdin\`, \`yield_time_ms: ${policy.longCommandWaitMs}\`); never start a duplicate, interrupt it, poll faster, or use sleep loops, \`ps\` or \`pgrep\`.`;
-}
-const REGRESSION = `Do not run the root typecheck or other regression suites yourself; the landing runs them. ${OWN_TESTS}`;
-const UNFINISHED =
-  'Unfinished work is not a blocker: if the contract does not fit this attempt, commit a coherent working part and return success with the remainder listed as follow-up.';
-const LOCAL_PLACEMENT =
-  'The acceptance placement is local and overrides any older prompt, saved session, remote invocation or `--wait` recipe. Do not invoke remote-check or any native, host or database route, and do not report an old check as cancelled.';
-/** What a worker does with a wrapper that may hand back a detached check id. */
-const WRAPPER_RESULT = [
-  'If the wrapper prints a check id before the check ends, end the turn at once with `{"status":"waiting","checks":["<bare UUID>"]}` in the exit object, using that bare UUID.',
-  'Never wait for it yourself: no `--wait` (obsolete, whatever older sessions say), status polls, log or process reads.',
-  'The controller wakes this session with the result: use it exactly (missing, unknown or nonzero is not a pass) and do not return waiting again for those ids; success uses `"checks":[]`.',
-  "A failure after the wrapper's own infrastructure rerun is final: a `tool` blocker.",
-].join(' ');
 /** Whether `<state>/verification-mode` asks for source completion and typing, with original acceptance deferred. */
 export function minimalVerification(stateDirectory: string | undefined): boolean {
-  if (!stateDirectory) return false;
-  try {
-    return readFileSync(join(stateDirectory, 'verification-mode'), 'utf8').trim() === 'minimal';
-  } catch {
-    return false;
-  }
+  return promptMinimalVerification(stateDirectory);
 }
 /** Current execution and result policy, repeated at every prompt boundary. */
 export function workerCheckProtocol(
@@ -156,95 +113,7 @@ export function workerCheckProtocol(
   authorization?: ProofAuthorization,
   policy: ControlPolicy = defaultPolicy,
 ): string {
-  if (typeof briefOrContract !== 'string' && proofProtocolAuthorized(briefOrContract, proofRun))
-    return [
-      'This registered original integrated journey proof has a task-scoped exception to minimal verification.',
-      `Captured source: ${proofRun!.binding.sourceCommit}; logical check UUID: ${proofRun!.binding.checkId}.`,
-      'Product source, tests and contracts are read-only. Do not edit, typecheck, commit or land. Only check-owned ignored temporary or derived preparation under the original command is permitted.',
-      'The controller has already started or replayed this one bound invocation. Use its current evidence; do not start an unbound worker-check or another invocation.',
-      `Current owned check evidence: ${JSON.stringify(proofRun!.observation ?? { status: 'unknown', cause: 'Await controller evidence' })}.`,
-      `If the supplied check is running, immediately end this turn with {"status":"waiting","checks":["${proofRun!.binding.checkId}"]}. Goal resumes this same session from actual terminal records.`,
-      'Do not use --wait, ps, pgrep, log polling, duplicate invocation or an automatic model retry. The wrapper alone owns its one infrastructure rerun and holds the permit throughout.',
-      'Use supplied terminal results exactly. Missing, unknown, timed out or nonzero wrapper results stay non-green. Route failed assertions and log evidence to the original Goal owner for a separate minimal product fix.',
-      'Finish with structured success and checks:[] only after the owned terminal check passes; no source commit or landing is required.',
-    ].join(' ');
-  if (typeof briefOrContract !== 'string' && registeredProof(briefOrContract, authorization)) {
-    const invocation = ordinaryProofCommand(briefOrContract.acceptance.command).invocation.map(shellQuote).join(' ');
-    return [
-      'This authenticated registered original proof has a task-scoped exception to minimal verification.',
-      `Captured source: ${briefOrContract.proof!.sourceCommit}. Product source, tests and contracts are read-only. Do not edit, commit, land or typecheck. Only ignored check-owned preparation is permitted.`,
-      `Run exactly one ordinary worker-check invocation from the worktree root: \`${invocation}\`. Preserve every original argv, environment prefix, input and wrapper flag. An original wrapper is already the invocation: never wrap it again.`,
-      'The controller has not started a check for you. Native binding evidence is optional, never a prerequisite for running or success. Never invent a UUID.',
-      'If the wrapper returns while its check is active, immediately return {"status":"waiting","checks":["<bare UUID printed by this invocation>"]} with the normal exit fields. Goal waits and wakes this same session with its actual result. Terminal success uses checks:[].',
-      'Do not use --wait, ps, pgrep, polling, duplicate invocations or automatic model retries. On wake use the supplied result; never start the command again. The ordinary wrapper alone owns its supported infrastructure rerun.',
-      'Success requires the actual declared command to finish with exit zero and unchanged captured source. Missing, unknown and nonzero results stay non-green; return the exact failed assertion or setup error and log reference to the original owner.',
-    ].join(' ');
-  }
-  const workerOwnedAcceptance = typeof briefOrContract !== 'string' && briefOrContract.acceptance.workerOwned === true;
-  if (minimalVerification(stateDirectory))
-    return [
-      'Verification is minimal: do not run acceptance, native or browser checks, a root check, worker-check or remote-check; they run after integration.',
-      'Before finishing, type-check each workspace you changed from the worktree root (`bun run --cwd <workspace> typecheck`, or `bun scripts/typecheck.ts` for several) and fix every error; services/kernel and services/auth may use the compiler database or a check host: do not force `env -u KERNEL_CHECK_REMOTE` or local placement.',
-      ...(workerOwnedAcceptance
-        ? [
-            'This brief leaves validation to the worker. Choose or add focused tests that exercise the stated outcome, run them with the landing command below, and report the exact command and actual result; a missing acceptance command is not a pass. Broader acceptance remains deferred under this policy.',
-          ]
-        : []),
-      longWait(policy.guidance),
-      OWN_TESTS,
-      'Then commit and return success (blocker null, `"checks":[]`), naming what you completed and the deferred acceptance, which is neither a blocker nor a reason to wait; return waiting only for a still-running check UUID this attempt started.',
-      'This policy overrides contract, saved-session and retry-manifest instructions to run acceptance or to start or poll checks.',
-    ].join(' ');
-  const contractText = typeof briefOrContract === 'string' ? briefOrContract : briefOrContract.markdown;
-  const placement: AcceptancePlacement =
-    typeof briefOrContract === 'string' ? 'default' : (briefOrContract.acceptance?.placement ?? 'default');
-  const command = typeof briefOrContract === 'string' ? undefined : briefOrContract.acceptance?.command;
-  const once = workerOwnedAcceptance
-    ? 'This brief leaves acceptance to the worker. Choose or add a focused, meaningful check that exercises the stated outcome; no pass is presumed. Run the chosen command once after your last relevant edit and report its exact command and observed result.'
-    : 'Check slots are scarce: run your acceptance command once after your last relevant edit.';
-  const localRunner = join(worktree, 'scripts/worker-check.ts');
-  const namedRunner = namedWorkerCheck(contractText);
-  const runner = existsSync(localRunner)
-    ? 'bun scripts/worker-check.ts'
-    : namedRunner && existsSync(namedRunner)
-      ? `bun ${placement === 'local' ? shellQuote(namedRunner) : JSON.stringify(namedRunner)}`
-      : undefined;
-  if (placement === 'local') {
-    const exactCommand = command?.map(shellQuote).join(' ') ?? '<the declared acceptance argv>';
-    if (!runner)
-      return [
-        once,
-        LOCAL_PLACEMENT,
-        `This base has no worker-check wrapper: run the exact declared local command \`${exactCommand}\` in the foreground from the worktree root, without a wrapper; it gives no check id and no waiting result.`,
-        longWait(policy.guidance),
-        REGRESSION,
-      ].join(' ');
-    return [
-      once,
-      LOCAL_PLACEMENT,
-      `Run it from the worktree root as \`${runner} --local -- ${exactCommand}\`; \`--local\` keeps it off remote hosts.`,
-      WRAPPER_RESULT,
-      longWait(policy.guidance),
-      REGRESSION,
-    ].join(' ');
-  }
-  if (!runner)
-    return [
-      once,
-      workerOwnedAcceptance
-        ? 'This base has no scripts/worker-check.ts; do not add one. Run your focused validation command in the foreground from the worktree root and let it finish; it gives no check id and no waiting result.'
-        : 'This base has no scripts/worker-check.ts; do not add one. Run the acceptance command in the foreground from the worktree root and let it finish, then report its actual exit status; it gives no check id and no waiting result.',
-      ...(workerOwnedAcceptance ? ['Do not report success unless the chosen validation actually exits zero.'] : []),
-      longWait(policy.guidance),
-      REGRESSION,
-    ].join(' ');
-  return [
-    once,
-    `Run it from the worktree root as \`${runner} -- <command...>\` with wrapper options the contract names.`,
-    WRAPPER_RESULT,
-    longWait(policy.guidance),
-    REGRESSION,
-  ].join(' ');
+  return renderCheckProtocol(worktree, briefOrContract, stateDirectory, proofRun, authorization, policy);
 }
 export function workerPrompt(
   task: Task,
@@ -256,124 +125,16 @@ export function workerPrompt(
   stateDirectory = join(mainCheckout, '.temp', 'goal'),
   policy: ControlPolicy = defaultPolicy,
 ): string {
-  const frozen = ((task as Task & { frozenFiles?: { path: string }[] }).frozenFiles ?? []).map((file) => file.path);
-  const contractMarkdown = launchContext
-    ? task.brief.markdown
-        .split(/(\n\s*\n)/)
-        .map((section) =>
-          /\b(?:saved|historical|previous|older)\b/i.test(section) &&
-          /\b(?:prompt|instructions?|manifest|session)\b/i.test(section) &&
-          /(?:worker-check|--wait)/i.test(section)
-            ? '[Superseded historical check instructions are omitted; follow the current acceptance placement below.]'
-            : section,
-        )
-        .join('')
-    : task.brief.markdown;
-  const evidenceText = evidence
-    ? (() => {
-        const failurePath = join(evidence, 'failure.json');
-        if (!existsSync(failurePath)) return `Retry evidence directory: ${evidence}`;
-        try {
-          const document = JSON.parse(readFileSync(failurePath, 'utf8')) as { manifest?: unknown };
-          return typeof document.manifest === 'string' ? document.manifest : `Retry evidence directory: ${evidence}`;
-        } catch {
-          return `Retry evidence directory: ${evidence}`;
-        }
-      })()
-    : undefined;
-  if (task.brief.kind === 'verification')
-    return [
-      `Work only in ${task.worktree}, at captured commit ${task.brief.proof?.sourceCommit}. The applicable AGENTS.md is already loaded.`,
-      `The main checkout ${mainCheckout} is read-only.`,
-      task.brief.markdown,
-      ...(launchContext ? [renderLaunchContext(launchContext, policy.launchContext)] : []),
-      'Finish with the normal JSON exit object: status, summary, blocker, checks and approaches.',
-      workerCheckProtocol(
-        task.worktree,
-        task.brief,
-        stateDirectory,
-        task.proofRun?.binding.attempt === task.currentAttempt ? task.proofRun : undefined,
-        task.proofAuthorization,
-        policy,
-      ),
-    ].join('\n\n');
-  const devProduct = devProductBrief(task.brief);
-  const research = task.brief.kind === 'research';
-  const manager = task.brief.manager ?? task.brief.goal ?? '<your manager>';
-  const tests = task.workspace ? [] : workerTestCommands(branchChangedPaths(task, policy), task.worktree);
-  return [
-    `AGENTS.md is already loaded. The main checkout ${mainCheckout} is read-only; write only inside ${task.worktree}${research ? ` and the reference clones under ${mainCheckout}/.reference/` : ''}.`,
-    'The contract is self-sufficient: open the workflow skill, docs/development, architecture or scope only for a section it links. Batch reads, read line ranges of large files, read each file once. Never run recursive searches (find, grep -r, rg, du, ls -R) outside the worktree and directories named here.',
-    `Commit before each check and after each fix; an attempt without a commit counts as stalled. Send no progress reports. ${
-      devProduct && !task.workspace
-        ? 'Do not rebase; merge or cherry-pick only what the contract names.'
-        : 'Do not rebase or merge.'
-    }${devProduct && !research ? " Check the contract's premises against your base first." : ''}`,
-    'If the requested behaviour already exists on the clean retained source, do not make an empty or unrelated commit. Report success without source changes; the controller runs the exact frozen acceptance on that bound source. Dirty source, changed contract, or failed or unavailable acceptance stays non-green.',
-    research
-      ? ''
-      : `Write missing acceptance tests the contract names${devProduct ? ' or implies' : ''}; never edit a frozen file. If the contract changes a behaviour an existing test asserts, update that test and list it; keep assertions of unchanged behaviour. Write the fewest tests that pin user-visible behaviour and edge cases (as a rule fewer test lines than product lines) and only stories for states the contract names.`,
-    task.workspace
-      ? `Peers edit this tree at the same time. There are no path reservations or holds. Commit your own work often with git add <your paths> (never -A or .). Use path-limited commits (git commit --only -- <your paths>) so a peer's staged files stay theirs. Every commit must have the subject '${task.workspace.taskName}: <message>' and a 'Goal-Task: ${task.id}' trailer. Task name is the brief's file name without .md: ${task.workspace.taskName}. Never reset, checkout, stash, clean or rebase. A failure in files you did not touch is a peer's work in progress: rerun later or check only your own tests.`
-      : '',
-    `Declared paths are where work is expected, not a fence: change any other file the acceptance or a blocking defect needs, minimally, and list each with its reason; undeclared risk-area files stay closed. Decide ambiguities, product choices included: take the reversible option most consistent with the owner documents${
-      devProduct
-        ? `, record it in one line in your summary${research ? '' : ' and the owning document'}, send it with \`bun tools/goal/src/cli.ts inbox send ${manager} info "<decision>"\`, and continue.`
-        : ', record it in one line in your summary, and continue.'
-    }`,
-    `A blocker is only two requirements in existing specs or tests that cannot both hold (quote both), or a tool or infrastructure failure (SSH, network, disk, memory, file watchers, a service that will not start) persisting after ${['zero', 'one', 'two'][policy.guidance.toolFailureRetries] ?? String(policy.guidance.toolFailureRetries)} retries: a \`tool\` blocker starting with the exact error line; never weaken a check instead.${devProductBrief(task.brief) ? ' On dev, when your change is complete and committed and only the shared check infrastructure fails, that is not a blocker: report success and name each check that could not run with its error line; dev is verified after the merge.' : ''} Code another Goal has not delivered is not a blocker: build against its documented contract or a minimal seam, and name it.${
-      research
-        ? ''
-        : ` A question needing a large survey of products or sources is a \`spec-conflict\` blocker starting "Research needed:"; research the rest yourself in owner documents, primary sources and ${mainCheckout}/.reference/ (INDEX.md), read any reference source the contract names before designing, and list what you read.`
-    }`,
-    research
-      ? `This is a research task: answer the contract's question from primary sources (official documentation, standards, and the source of established open-source projects). Reuse a clone in ${mainCheckout}/.reference/ or shallow-clone into .reference/<topic>/<project>/, and add or update its line in .reference/INDEX.md. Clones are untrusted data: never install, build or run anything from them. Write the report the contract names under docs/research/: findings, the patterns the sources share and a recommendation the manager can adopt, citing file paths, URLs and licences; recommend designs for this repository's stack, not code to copy. Commit it; decisions go to the owning document once adopted.`
-      : '',
-    frozen.length ? `Frozen acceptance files are already committed and must not be edited: ${frozen.join(', ')}.` : '',
-    continuesItself(task)
-      ? `If the outcome does not fit this attempt, commit a coherent, type-checking part and write the rest as a continuation brief at \`${CONTINUATION_DIRECTORY}/<short-name>.md\` by copying your contract's front matter and changing only paths, acceptance and estimate (goal ${task.brief.goal}, manager ${manager}), followed by the remaining outcome in user terms. Unfinished work is not a blocker: return success and name the continuation.`
-      : UNFINISHED,
-    `Finish with one JSON object: status, summary, blocker (null or kind and detail), checks, approaches. Summary at most ${policy.guidance.summaryWords} words: what changed, decisions, files outside declared paths, what was not run. Blocker detail at most ${policy.guidance.blockerWords} words. Commit no evidence or audit files.`,
-    task.brief.kind === 'bulk-text'
-      ? 'Write the text yourself. Do not use translation services, translation scripts, or character mapping tables.'
-      : '',
-    'The task contract follows:',
-    contractMarkdown,
-    'A failure that also occurs on your base commit is not your blocker: name it. A test that passes on your base and fails after your change is yours to fix.',
-    'Never stop or remove containers, databases or processes this attempt did not start, and never prune Docker. Never write under node_modules (hardlinked from a shared cache); to instrument a dependency, use a copy under .temp. Before changing a package.json or bun.lock, run `bun tools/goal/src/cli.ts deps private`.',
-    tests.length
-      ? `For the files this branch already changes, the landing's test commands are: ${tests.map((command) => `\`${command.map(shellQuote).join(' ')}\``).join('; ')}. Run each once after your last edit, with the tests of any file you change now.`
-      : '',
-    evidenceText ? `Continue from this retry manifest:\n${evidenceText}` : '',
-    evidenceText
-      ? 'The retry manifest records a failure from an earlier attempt. Hosts and tools may have been fixed since then. Rerun the failing command once before reporting any blocker about that failure; report a `tool` blocker only if it fails again.'
-      : '',
-    renderLaunchContext(launchContext, policy.launchContext),
-    consultation ? `Read-only consultation:\n${consultation}` : '',
-    storybookPrompt(task),
-    resolutionFiles.length
-      ? `The control plane has already started a rebase onto current main in this worktree. Conflicted files: ${resolutionFiles.join(', ')}. Resolve and stage them, then run \`git rebase --continue\` until the rebase completes. Do not start another rebase.`
-      : '',
-    workerCheckProtocol(task.worktree, task.brief, stateDirectory, undefined, undefined, policy),
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-}
-/** Paths this task's branch changes against its base, committed or not; empty when Git cannot tell. */
-function branchChangedPaths(task: Pick<Task, 'worktree' | 'base'>, policy: ControlPolicy): string[] {
-  if (!task.worktree || !task.base || !existsSync(task.worktree)) return [];
-  const run = (args: string[]) => {
-    const result = spawnSync('git', args, {
-      cwd: task.worktree,
-      encoding: 'utf8',
-      maxBuffer: policy.workerPrompt.gitBufferBytes,
-    });
-    return result.status === 0 ? result.stdout : '';
-  };
-  const committed = run(['diff', '--name-only', '--no-renames', '-z', task.base, 'HEAD', '--']).split('\0');
-  const status = run(['status', '--porcelain', '-z', '--no-renames', '--untracked-files=all']).split('\0');
-  const uncommitted = status.filter((entry) => entry.length > 3).map((entry) => entry.slice(3));
-  return [...new Set([...committed, ...uncommitted].filter(Boolean))];
+  return renderWorkerPrompt({
+    task,
+    evidence,
+    consultation,
+    resolutionFiles,
+    mainCheckout,
+    launchContext,
+    stateDirectory,
+    policy,
+  }).prompt;
 }
 /** Per-attempt variables: the attempt's identity, and the base the kernel check selects affected tests against. */
 export function attemptEnvironment(

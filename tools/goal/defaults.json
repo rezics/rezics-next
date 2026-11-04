@@ -557,8 +557,16 @@
       "processCleanupPollMs": 25,
       "systemdCommandTimeoutMs": 25000
     },
+    "prompt": {
+      "workerRoleBytes": 3500,
+      "conditionBytes": 1500,
+      "workerTotalBytes": 20000,
+      "managerRoleBytes": 5000,
+      "managerOpeningBytes": 30000,
+      "researchRoleBytes": 2500
+    },
     "brief": {
-      "bytes": 65536,
+      "bytes": 12288,
       "pathCharacters": 65536,
       "pathMatchStates": 1000000,
       "sharedPaths": [
@@ -626,6 +634,7 @@
       "failureCharacters": 8000
     },
     "trainResolver": {
+      "devAttempts": 3,
       "inputBytes": 262144,
       "outputBytes": 262144,
       "timeoutMs": 240000,

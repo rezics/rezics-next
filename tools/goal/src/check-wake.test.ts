@@ -148,12 +148,10 @@ test('same-session wake forwards the newly persisted minimal source-result and c
 test('a waiting session uses the registered local command on wake even when its saved contract names the old remote route', async () => {
   const h = harness(waitingCli);
   try {
-    const localMarkdown = markdown
-      .replace(
-        '  command: [bun, test]',
-        '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
-      )
-      .concat('\nA saved worker prompt used `bun scripts/worker-check.ts -- <command...>` and `--wait`.\n');
+    const localMarkdown = markdown.replace(
+      '  command: [bun, test]',
+      '  command: [bun, test, apps/web/tests/shell-menus.test.ts]\n  placement: local',
+    );
     writeFileSync(h.briefFile, localMarkdown);
     const { task, ref } = await startWaitingAttempt(h);
     mkdirSync(join(task.worktree, 'scripts'), { recursive: true });
@@ -171,7 +169,8 @@ test('a waiting session uses the registered local command on wake even when its 
     expect(prompt).toContain(
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'",
     );
-    expect(prompt).toContain('The acceptance placement is local and overrides any older prompt');
+    expect(prompt).toContain('The acceptance placement is local');
+    expect(prompt).toContain('Ignore older prompt, saved session, remote invocation or `--wait` recipes');
     expect(prompt).toContain('Never wait for it yourself: no `--wait`');
     expect(prompt).not.toContain('bun scripts/worker-check.ts -- <command...>');
     await recovery;
@@ -210,7 +209,8 @@ test('an adopted waiting attempt without a resumable session gets the current lo
     expect(prompt).toContain(
       "bun scripts/worker-check.ts --local -- 'bun' 'test' 'apps/web/tests/shell-menus.test.ts'",
     );
-    expect(prompt).toContain('The acceptance placement is local and overrides any older prompt');
+    expect(prompt).toContain('The acceptance placement is local');
+    expect(prompt).toContain('Ignore older prompt, saved session, remote invocation or `--wait` recipes');
     expect(prompt).toContain('Never wait for it yourself: no `--wait`');
     expect(prompt.indexOf('The acceptance placement is local')).toBeGreaterThan(
       prompt.indexOf('The task contract follows:'),

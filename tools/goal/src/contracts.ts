@@ -1,4 +1,4 @@
-import type { AffectedTestResult } from './types.ts';
+import type { AffectedTestResult, Tokens } from './types.ts';
 import type { ProcessIdentity } from './process.ts';
 
 // The two halves of the control plane meet only here. The worker side owns tasks, attempts, routing, launch,
@@ -158,6 +158,15 @@ export type LandingRequest = AttemptRef & {
     acceptedCommit: string;
     acceptanceCommand: readonly string[];
   };
+  /** A resolver-created merge commit queued ahead of ordinary dev landings. */
+  devResolution?: {
+    attempts: number;
+    commit: string;
+    targetHead: string;
+    method: 'rerere' | 'mechanical' | 'resolver';
+    tokens: Tokens;
+    paths: readonly string[];
+  };
 };
 
 /** Implemented by the integration side. */
@@ -169,6 +178,13 @@ export type GateStage = 'setup' | 'rebase' | 'scope' | 'gate' | 'merge';
 export type GateOutcomeRefusal = {
   kind: 'frozen-acceptance-change';
   paths: readonly string[];
+};
+
+export type LandingConflictMethod = 'rerere' | 'mechanical' | 'resolver' | 'worker';
+export type LandingConflictResolution = {
+  method: LandingConflictMethod;
+  tokens: Tokens;
+  attempts: number;
 };
 
 export type FirstFailure = {
@@ -218,6 +234,8 @@ export type GateOutcome = AttemptRef & {
   rebaseConflict?: RebaseConflictContext;
   /** A task repeated the same control-plane propagation conflict without source or target progress. */
   controlPlaneConflictRepeated?: boolean;
+  /** How a dev landing conflict was resolved, including resolver tokens on worker fallback. */
+  conflictResolution?: LandingConflictResolution;
   diffLines: number;
   mergedCommit?: string;
 };
@@ -244,6 +262,7 @@ export type ManagerEventKind =
   | 'goal-unmet'
   | 'goal-met'
   | 'goal-idle'
+  | 'research-complete'
   | 'instruction';
 
 export type ManagerEvent = {
