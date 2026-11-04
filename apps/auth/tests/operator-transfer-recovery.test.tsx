@@ -61,17 +61,13 @@ function response(review: object, viewer: string = 'ready') {
     review,
   });
 }
-async function mount(
-  attempt: TransferAttempt,
-  viewer: string = 'ready',
-  owner: AccountSessionResult = session,
-) {
+async function mount(attempt: TransferAttempt, viewer: string = 'ready', owner: AccountSessionResult = session) {
   window.sessionStorage.clear();
   expect(storeTransferAttempt(structuredClone(attempt))).toBe(true);
-  const page = await open(
-    <OperatorTransferPage initial={owner} />,
-    { ...sessionBody, account_id: owner.kind === 'ready' ? owner.accountId : session.accountId },
-  );
+  const page = await open(<OperatorTransferPage initial={owner} />, {
+    ...sessionBody,
+    account_id: owner.kind === 'ready' ? owner.accountId : session.accountId,
+  });
   await settle();
   if (page.calls[0]) await settle(() => page.calls[0]!.resolve(response({ kind: 'readiness' }, viewer)));
   return page;
@@ -127,28 +123,20 @@ test('current relation recovery stays unknown and an explicit exact retry preser
   expectPrivateTransferHidden(page.host);
   await settle(() => button(page.host, m.auth_transfer_recovery_review()).click());
   expect(page.calls[1]?.path).toBe(OPERATOR_TRANSFER_PAGE_PATH);
-  await settle(() =>
-    page.calls[1]!.resolve(
-      response({ kind: 'source', relation: oldRelation, action: 'allowed' }),
-    ),
-  );
+  await settle(() => page.calls[1]!.resolve(response({ kind: 'source', relation: oldRelation, action: 'allowed' })));
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_source_unknown());
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_observed());
   expect(page.host.textContent).not.toContain(m.auth_transfer_observed());
   expect(page.calls.some(({ path }) => path.startsWith('/account-operations/'))).toBe(false);
 
   await settle(() => page.host.querySelector<HTMLInputElement>('#transfer-confirm')!.click());
-  await settle(() =>
-    button(page.host, m.auth_transfer_recovery_retry_exact()).click(),
-  );
+  await settle(() => button(page.host, m.auth_transfer_recovery_retry_exact()).click());
   const execute = page.calls.find(({ path }) => path === '/account-operations/execute');
   expect(execute?.body).toMatchObject({ operationKey: request.sourceOperationKey, reference: unknown.reference });
   await settle(() => execute!.resolve(Response.json({ accountId: request.previous.subjectAccountId })));
   const readback = page.calls.filter(({ path }) => path === OPERATOR_TRANSFER_PAGE_PATH).at(-1)!;
   expect(readback.body).toEqual({ kind: 'source', subjectAccountId: request.previous.subjectAccountId });
-  await settle(() =>
-    readback.resolve(response({ kind: 'source', relation: transferredRelation, action: 'allowed' })),
-  );
+  await settle(() => readback.resolve(response({ kind: 'source', relation: transferredRelation, action: 'allowed' })));
   expect(restoreTransferAttempt()).toMatchObject({
     request: { sourceOperationKey: request.sourceOperationKey },
     reference: unknown.reference,
@@ -209,9 +197,7 @@ test('step-up restoration does not disclose or unlock the saved source command b
   await settle(() => {
     fill(page.host.querySelector<HTMLInputElement>('#transfer-email')!, 'operator@example.test');
     fill(page.host.querySelector<HTMLInputElement>('#transfer-password')!, 'password-value');
-    page.host
-      .querySelector('form')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    page.host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
   });
   const signIn = page.calls.find(({ path }) => path === '/signin')!;
   await settle(() => signIn.resolve(Response.json({ account_id: session.accountId })));
@@ -237,9 +223,7 @@ test('same-turn reviews are excluded and a late read cannot replace newer stored
     request: { ...unknown.request, sourceOperationKey: 'replacement-operation' },
   };
   expect(storeTransferAttempt(replacement)).toBe(true);
-  await settle(() =>
-    page.calls[1]!.resolve(response({ kind: 'source', relation: oldRelation, action: 'allowed' })),
-  );
+  await settle(() => page.calls[1]!.resolve(response({ kind: 'source', relation: oldRelation, action: 'allowed' })));
   expect(restoreTransferAttempt()).toEqual(replacement);
   expect(page.host.textContent).not.toContain(m.auth_transfer_recovery_observed());
   expectPrivateTransferHidden(page.host);

@@ -27,16 +27,9 @@ export function transferRecoveryKind(
 ): TransferRecoveryKind {
   if (result?.kind === 'acknowledged' && result.readback.kind === 'current') return 'none';
   if (attempt?.side === 'source' && attempt.phase === 'execute') return 'source-unknown';
-  if (
-    result?.kind === 'acknowledged' &&
-    result.readback.kind === 'failure' &&
-    result.readback.reason === 'conflict'
-  )
+  if (result?.kind === 'acknowledged' && result.readback.kind === 'failure' && result.readback.reason === 'conflict')
     return 'source-acknowledged-conflict';
-  if (
-    (attempt?.side === 'source' && attempt.phase === 'readback') ||
-    result?.kind === 'acknowledged'
-  )
+  if ((attempt?.side === 'source' && attempt.phase === 'readback') || result?.kind === 'acknowledged')
     return 'source-acknowledged';
   if (attempt?.side === 'destination' && attempt.phase === 'accepted') return 'destination-accepted';
   return attempt ? 'saved-step' : 'none';

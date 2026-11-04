@@ -231,7 +231,10 @@ export const UncertainRestore = {
 };
 export const AcknowledgedReadbackRecovery = {
   render: () =>
-    page({ ...source, phase: 'readback', acceptance: 'opaque-acceptance', reference: 'opaque-approval' }, 'unavailable'),
+    page(
+      { ...source, phase: 'readback', acceptance: 'opaque-acceptance', reference: 'opaque-approval' },
+      'unavailable',
+    ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_recovery_acknowledged()));
     const review = [...canvasElement.querySelectorAll('button')].find(
@@ -242,7 +245,8 @@ export const AcknowledgedReadbackRecovery = {
   },
 };
 export const DestinationAcceptanceRecovery = {
-  render: () => page({ ...source, side: 'destination', phase: 'accepted', reference: 'opaque-destination-acceptance' }, 'ready'),
+  render: () =>
+    page({ ...source, side: 'destination', phase: 'accepted', reference: 'opaque-destination-acceptance' }, 'ready'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_recovery_destination()));
   },

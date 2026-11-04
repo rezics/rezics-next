@@ -1,10 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { OperatorRelation, TransferAttempt, TransferResult } from '../src/operator-transfer';
-import {
-  confirmsTransferReadback,
-  retainsTransferWork,
-  transferRecoveryKind,
-} from '../src/operator-transfer-recovery';
+import { confirmsTransferReadback, retainsTransferWork, transferRecoveryKind } from '../src/operator-transfer-recovery';
 
 const relation: OperatorRelation = {
   previous: { operatorAccountId: 'old', subjectAccountId: 'subject', reservationId: 'old-slot' },
@@ -31,9 +27,9 @@ test('recovery keeps source uncertainty, native acknowledgement and destination 
       readback: { kind: 'failure', reason: 'conflict' },
     } satisfies TransferResult),
   ).toBe('source-acknowledged-conflict');
-  expect(
-    transferRecoveryKind({ ...source, side: 'destination', phase: 'accepted', acceptance: undefined }),
-  ).toBe('destination-accepted');
+  expect(transferRecoveryKind({ ...source, side: 'destination', phase: 'accepted', acceptance: undefined })).toBe(
+    'destination-accepted',
+  );
 });
 
 test('a matching current relation is only an acknowledgement readback when native execution was already acknowledged', () => {

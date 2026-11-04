@@ -50,11 +50,14 @@ test('one deliberate recovery review is bounded to session binding and one selec
     calls.push({ path, body });
     if (path === '/session') return Response.json(sessionBody);
     if (path === OPERATOR_TRANSFER_PAGE_PATH) {
-      if (body.kind === 'readiness')
-        return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } });
+      if (body.kind === 'readiness') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } });
       return Response.json({
         viewer: { kind: 'ready' },
-        review: { kind: 'source', relation: { previous: request.previous, expectedVersion: request.expectedVersion }, action: 'allowed' },
+        review: {
+          kind: 'source',
+          relation: { previous: request.previous, expectedVersion: request.expectedVersion },
+          action: 'allowed',
+        },
       });
     }
     throw new Error(`Unexpected transfer recovery request: ${path}`);

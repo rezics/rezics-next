@@ -218,17 +218,19 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   const protectedWork = () => {
     const value = state.current;
     if (retainsTransferWork(recoveryKind.current)) return true;
-    if (retired.current || value.invalidContinuation || value.needsProof || value.session?.kind !== 'ready') return false;
-    if (value.result?.kind === 'current' || (value.result?.kind === 'acknowledged' && value.result.readback.kind === 'current'))
+    if (retired.current || value.invalidContinuation || value.needsProof || value.session?.kind !== 'ready')
       return false;
-    return (
-      Boolean(
-        value.attempt ||
-        value.subject.trim() ||
-        value.destination.trim() ||
-        value.requestText.trim() ||
-        value.acceptance.trim(),
-      )
+    if (
+      value.result?.kind === 'current' ||
+      (value.result?.kind === 'acknowledged' && value.result.readback.kind === 'current')
+    )
+      return false;
+    return Boolean(
+      value.attempt ||
+      value.subject.trim() ||
+      value.destination.trim() ||
+      value.requestText.trim() ||
+      value.acceptance.trim(),
     );
   };
   function retire() {
@@ -236,8 +238,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     retired.current = true;
     view.current++;
     fileRead.current++;
-    const discardUnsent =
-      unsent.current && JSON.stringify(restoreTransferAttempt()) === JSON.stringify(unsent.current);
+    const discardUnsent = unsent.current && JSON.stringify(restoreTransferAttempt()) === JSON.stringify(unsent.current);
     const currentAttempt = state.current.attempt ?? liveAttempt.current;
     const inferred = transferRecoveryKind(currentAttempt, state.current.result);
     updateRecovery(
@@ -435,7 +436,11 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       setRecoveryReviewed(false);
       if (saved.phase === 'approve') {
         const advice = await refreshTransferAdvice(saved);
-        if (started !== view.current || retired.current || JSON.stringify(restoreTransferAttempt()) !== JSON.stringify(saved))
+        if (
+          started !== view.current ||
+          retired.current ||
+          JSON.stringify(restoreTransferAttempt()) !== JSON.stringify(saved)
+        )
           return;
         if (advice) {
           showFailure(advice);
@@ -494,11 +499,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     }
     const acknowledged = value.side === 'source' && value.phase === 'readback';
     if (relation.kind !== 'ready') {
-      if (
-        acknowledged &&
-        ['account-changed', 'denied', 'step-up'].includes(relation.reason)
-      )
-        return relation;
+      if (acknowledged && ['account-changed', 'denied', 'step-up'].includes(relation.reason)) return relation;
       if (acknowledged) {
         const result: TransferResult = { kind: 'acknowledged', reference: value.reference!, readback: relation };
         setResult(result);
@@ -725,7 +726,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     });
   }
   function reviewAttempt() {
-    if (!attempt || session?.kind !== 'ready' || !nativeReady || needsProof || invalidContinuation || retired.current) return;
+    if (!attempt || session?.kind !== 'ready' || !nativeReady || needsProof || invalidContinuation || retired.current)
+      return;
     const selected = attempt;
     readPage(async () => {
       const failure = await refreshTransferAdvice(selected);
@@ -797,12 +799,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
     if (session?.kind !== 'ready') return;
     const started = view.current;
     void perform(async () => {
-      const outcome = await reauthenticateTransfer(
-        session.accountId,
-        email,
-        password,
-        () => started === view.current,
-      );
+      const outcome = await reauthenticateTransfer(session.accountId, email, password, () => started === view.current);
       if (started !== view.current) return;
       setPassword('');
       if (outcome) showFailure(outcome);
@@ -855,7 +852,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
   }
 
   const locked = pending || needsProof || invalidContinuation || !nativeReady || retired.current;
-  const canDisclose = session?.kind === 'ready' && nativeReady && !needsProof && !invalidContinuation && !retired.current;
+  const canDisclose =
+    session?.kind === 'ready' && nativeReady && !needsProof && !invalidContinuation && !retired.current;
   const canDiscloseAttempt = canDisclose && attemptReviewed;
   const recoveryVisible =
     recovery !== 'none' && (!canDisclose || recovery !== 'saved-step' || !attemptReviewed || !attempt);
@@ -1001,7 +999,10 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
               ) : null}
             </ErrorAlert>
           ) : null}
-          {canDiscloseAttempt && attempt?.side === 'destination' && attempt.phase === 'accepted' && attempt.reference ? (
+          {canDiscloseAttempt &&
+          attempt?.side === 'destination' &&
+          attempt.phase === 'accepted' &&
+          attempt.reference ? (
             <>
               <p>{m.auth_transfer_accepted()}</p>
               <Button disabled={locked} onClick={() => download('acceptance')}>
@@ -1276,17 +1277,13 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
                   {attempt.phase === 'execute'
                     ? m.auth_transfer_recovery_retry_exact()
                     : attempt.side === 'destination'
-                    ? m.auth_transfer_accept()
-                    : m.auth_transfer_submit()}
+                      ? m.auth_transfer_accept()
+                      : m.auth_transfer_submit()}
                 </Button>
               </form>
             ) : null}
             {attempt.phase !== 'execute' && attempt.phase !== 'readback' ? (
-              <Button
-                variant="outline"
-                disabled={locked}
-                onClick={() => readPage(() => readCurrent(attempt))}
-              >
+              <Button variant="outline" disabled={locked} onClick={() => readPage(() => readCurrent(attempt))}>
                 {m.auth_transfer_readback()}
               </Button>
             ) : null}
