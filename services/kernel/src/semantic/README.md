@@ -1398,6 +1398,27 @@ and refuses incomplete or changed observations with native unavailability. It ne
   worker caller evidence is in `test/search/released-relation-source.test.ts`. Three-scale physical work and
   whole-population retained-cut readiness remain required before a complete projection/query claim.
 
+### Search current nonrelation snapshot
+
+The mounted `subjectSource.read` projects current Global nonrelation statements from `search_selected` through
+[search-source-current-statements.sql](search-source-current-statements.sql). Terms still use `current_term_fact`.
+This is not a second selection engine: `search_project_fact` / `search_project_adoption` already maintain the
+heads, and `search_rebuild_one` remains the cold-fold owner. Exact row derivation is
+[search-source-cost.md](search-source-cost.md). Decision: unreadied head coverage throws
+`CommandUnavailableError('contention')` after one rebuild outside the snapshot; ready-empty stays an empty list.
+
+- Touches: the existing `B ≤ 256` id batch, partition position, subject/readiness points, current term heads,
+  `search_selected_page` active nonrelation heads with per-Subject `LIMIT S·C+1`, then the existing disclosure,
+  lifecycle, fence and release points on those returned heads. One cold fold step, when needed, runs after the
+  snapshot and is charged on that visit.
+- Bound: physical selected rows `O(B S + C_returned)` with `S ≤ 512` current facts and `C ≤ 32` selected
+  candidates per expanded slot. Obsolete fact/revision count is not a term. Inactive selected rows are excluded
+  by the active index before the row limit. An overflow lookahead is preparing, not a truncated page.
+- Growth check: `test/semantic/growth-search-source-current-visit.test.ts` at 64/512/4096 unrelated Subjects with
+  growing obsolete history on the requested keys; `test/semantic/search-source-current-visit.test.ts` covers compact
+  and expanded heads, retract, competing candidates, lifecycle, rank, qualifier, late commit, Context, disclosure
+  and unreadied coverage. This does not claim a new Search page acceptance.
+
 ### Anchored subject read
 
 - Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts through a keyed `current_term_fact` lateral (the current-term view, never historical fact materialization). Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one requested-id batch per partition plus one redirect-target batch per partition when needed. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown. The self summary and related summaries use the shared batched label statement, including the original-language slot, with the costs derived in the [Cost table](#cost).
