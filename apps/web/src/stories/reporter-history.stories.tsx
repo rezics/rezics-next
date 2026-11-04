@@ -40,6 +40,10 @@ function page(
   return { state, entries, selectedReportId, nextCursor, retry: { cursor: 'opaque/history-cursor' }, viewer: { kind: 'reporter' } };
 }
 
+function loaded(value: HistoryPage) {
+  return { state: 'loaded' as const, page: value, nativeSourceFingerprint: 'story-native-source' };
+}
+
 function Frame({ children }: { children: ReactNode }) {
   return <PatternStory>{children}</PatternStory>;
 }
@@ -48,7 +52,7 @@ export const Preparing: Story = {
   name: 'Preparing private history',
   render: () => (
     <Frame>
-      <ReporterHistoryPage result={{ state: 'loaded', page: page('preparing', []) }} query={{ cursor: 'opaque/history-cursor' }} />
+      <ReporterHistoryPage result={loaded(page('preparing', []))} query={{ cursor: 'opaque/history-cursor' }} />
     </Frame>
   ),
 };
@@ -57,7 +61,7 @@ export const CompleteEmpty: Story = {
   name: 'Complete empty history',
   render: () => (
     <Frame>
-      <ReporterHistoryPage result={{ state: 'loaded', page: page('ready', []) }} query={{}} />
+      <ReporterHistoryPage result={loaded(page('ready', []))} query={{}} />
     </Frame>
   ),
 };
@@ -66,7 +70,7 @@ export const SparseContinuation: Story = {
   name: 'Sparse page with continuation',
   render: () => (
     <Frame>
-      <ReporterHistoryPage result={{ state: 'loaded', page: page('ready', [row], null, 'next-frontier') }} query={{}} />
+      <ReporterHistoryPage result={loaded(page('ready', [row], null, 'next-frontier'))} query={{}} />
     </Frame>
   ),
 };
@@ -94,7 +98,7 @@ export const SelectedUnavailable: Story = {
   render: () => (
     <Frame>
       <ReporterHistoryPage
-        result={{ state: 'loaded', page: page('ready', [], null) }}
+        result={loaded(page('ready', [], null))}
         query={{ cursor: 'opaque/history-cursor', reportId }}
       />
     </Frame>
@@ -114,7 +118,7 @@ function KeyboardSelection() {
   const [selected, setSelected] = useState(false);
   return (
     <ReporterHistoryPage
-      result={{ state: 'loaded', page: page('ready', [row], selected ? reportId : null) }}
+      result={loaded(page('ready', [row], selected ? reportId : null))}
       query={{ cursor: 'phone-cursor' }}
       onSelect={() => setSelected(true)}
     />
