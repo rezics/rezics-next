@@ -72,9 +72,13 @@ test('source-only Bangumi change publishes fresh digest without inventing a fiel
       .slice(offset)
       .flatMap((request) => request.commands)
       .filter((command) => command.op === 'propose');
-    expect(fresh).toHaveLength(2);
+    expect(fresh).toHaveLength(3);
     expect(fresh.every((command) => command.source.digest === after.digest)).toBe(true);
-    expect(fresh.map((command) => command.statement.property.id).sort()).toEqual(['schema:name', 'wdt:P5732']);
+    expect(fresh.map((command) => command.statement.property.id).sort()).toEqual([
+      'schema:datePublished',
+      'schema:name',
+      'wdt:P5732',
+    ]);
     expect(sent.flatMap((request) => request.commands).filter((command) => command.op === 'create')).toHaveLength(1);
     expect(sent.slice(0, offset)).toEqual(oldRequests);
     for (const [key, value] of oldReceipts) expect(receipts.get(key)).toEqual(value);
