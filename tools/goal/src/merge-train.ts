@@ -3951,7 +3951,9 @@ export class MergeTrain {
             appendFileSync(logPath, `Required ${label} failed before advancing ${targetBranch}:\n${output}\n`);
             if (owner)
               this.notifyDevTypecheckFailure(owner.taskId, owner.managerId, command, output, commit, logPath, label);
-            return { error: `${kind === 'boot' ? 'Boot check' : 'Root typecheck'} failed before advancing ${targetBranch}: ${output}` };
+            return {
+              error: `${kind === 'boot' ? 'Boot check' : 'Root typecheck'} failed before advancing ${targetBranch}: ${output}`,
+            };
           }
         }
         this.options.beforePromotionAdvance?.();
