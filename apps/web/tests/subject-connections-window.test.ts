@@ -1,17 +1,57 @@
 import { expect, test } from 'bun:test';
-import type { ConnectionAddress, ConnectionGroup, ConnectionSection, ConnectionVisit, ConnectionStream } from '../src/features/pages/subject-connections';
-import { createConnectionWindow, CONNECTION_HISTORY_LIMIT, type ConnectionRead } from '../src/features/pages/subject-connections-window';
+import type {
+  ConnectionAddress,
+  ConnectionGroup,
+  ConnectionSection,
+  ConnectionVisit,
+  ConnectionStream,
+} from '../src/features/pages/subject-connections';
+import {
+  createConnectionWindow,
+  CONNECTION_HISTORY_LIMIT,
+  type ConnectionRead,
+} from '../src/features/pages/subject-connections-window';
 
 const id = '00000000-0000-4000-8000-000000000001';
 const streams: ConnectionStream[] = [
-  { key: 'out:wdt:P144', property: 'wdt:P144', direction: 'out', group: 'relations', label: 'Part of', forwardLabel: 'Part of', language: 'en' },
-  { key: 'out:wdt:P50', property: 'wdt:P50', direction: 'out', group: 'credits', label: 'Author', forwardLabel: 'Author', language: 'en' },
-  { key: 'out:wdt:P136', property: 'wdt:P136', direction: 'out', group: 'relations', label: 'Genre', forwardLabel: 'Genre', language: 'en' },
+  {
+    key: 'out:wdt:P144',
+    property: 'wdt:P144',
+    direction: 'out',
+    group: 'relations',
+    label: 'Part of',
+    forwardLabel: 'Part of',
+    language: 'en',
+  },
+  {
+    key: 'out:wdt:P50',
+    property: 'wdt:P50',
+    direction: 'out',
+    group: 'credits',
+    label: 'Author',
+    forwardLabel: 'Author',
+    language: 'en',
+  },
+  {
+    key: 'out:wdt:P136',
+    property: 'wdt:P136',
+    direction: 'out',
+    group: 'relations',
+    label: 'Genre',
+    forwardLabel: 'Genre',
+    language: 'en',
+  },
 ];
 const address = { id, locale: 'en' };
 const hash = (page: number) => page.toString(16).padStart(2, '0').repeat(32);
 
-function makeSection(stream: ConnectionStream, page: number, fetch: number, next?: string, status?: number): ConnectionSection {
+function makeSection(
+  stream: ConnectionStream,
+  page: number,
+  fetch: number,
+  next?: string,
+  status?: number,
+): ConnectionSection {
   return {
     stream,
     ...(!status ? { reading: hash(page) } : {}),
@@ -44,7 +84,9 @@ test('Previous refetches under the retained reading, retries the failed address,
     const sections = Object.fromEntries(
       groups.map((group) => {
         const selection = request.selection?.[group];
-        const stream = streams.find((choice) => choice.key === selection?.stream) ?? streams.find((choice) => choice.group === group)!;
+        const stream =
+          streams.find((choice) => choice.key === selection?.stream) ??
+          streams.find((choice) => choice.group === group)!;
         const page = selection?.cursor?.endsWith('page-2') ? 2 : selection?.cursor?.endsWith('page-3') ? 3 : 1;
         const next =
           (group === 'relations' && page < 3) || (group === 'credits' && page === 1)
@@ -74,7 +116,11 @@ test('Previous refetches under the retained reading, retries the failed address,
   expect(window.snapshot().visit?.sections.relations?.section).toMatchObject({ ok: false, status: 403 });
   expect(window.snapshot().visit?.sections.credits).toBe(creditBefore);
   await window.retry('relations');
-  expect(calls.at(-1)?.selection?.relations).toEqual({ stream: streams[0]!.key, cursor: `${streams[0]!.key}-page-2`, reading: hash(2) });
+  expect(calls.at(-1)?.selection?.relations).toEqual({
+    stream: streams[0]!.key,
+    cursor: `${streams[0]!.key}-page-2`,
+    reading: hash(2),
+  });
   expect(window.snapshot().pages?.relations).toMatchObject({ page: 2, index: 1 });
   expect(window.snapshot().visit?.sections.relations?.section).toMatchObject({
     ok: true,
@@ -106,7 +152,10 @@ test('history is capped, stream selection restarts at its first page, and bounda
   await window.load();
   for (let page = 2; page <= CONNECTION_HISTORY_LIMIT + 2; page++) await window.next('relations');
   expect(window.snapshot().pages?.relations?.history).toHaveLength(CONNECTION_HISTORY_LIMIT);
-  expect(window.snapshot().pages?.relations).toMatchObject({ page: CONNECTION_HISTORY_LIMIT + 2, index: CONNECTION_HISTORY_LIMIT - 1 });
+  expect(window.snapshot().pages?.relations).toMatchObject({
+    page: CONNECTION_HISTORY_LIMIT + 2,
+    index: CONNECTION_HISTORY_LIMIT - 1,
+  });
   while (window.snapshot().pages?.relations?.index) await window.previous('relations');
   expect(window.snapshot().pages?.relations).toMatchObject({ page: 3, index: 0 });
   const beforeBoundary = calls.length;

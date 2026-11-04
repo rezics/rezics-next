@@ -52,7 +52,9 @@ function validHistory(value: ConnectionWindowResume, selection?: ConnectionSelec
       (address.cursor !== undefined && !validCursor(address.cursor)) ||
       !digest.test(address.reading) ||
       (address.page !== undefined &&
-        (!Number.isSafeInteger(address.page) || address.page < 1 || (priorPage !== undefined && address.page !== priorPage + 1)))
+        (!Number.isSafeInteger(address.page) ||
+          address.page < 1 ||
+          (priorPage !== undefined && address.page !== priorPage + 1)))
     )
       return false;
     if (address.page !== undefined) priorPage = address.page;
@@ -60,9 +62,7 @@ function validHistory(value: ConnectionWindowResume, selection?: ConnectionSelec
   const current = value.history[value.index]!;
   return (
     !selection ||
-    (selection.stream === value.stream &&
-      selection.cursor === current.cursor &&
-      selection.reading === current.reading)
+    (selection.stream === value.stream && selection.cursor === current.cursor && selection.reading === current.reading)
   );
 }
 
@@ -121,7 +121,11 @@ export function createConnectionWindow(
       failed: { selection, move },
     };
   }
-  function completed(group: ConnectionGroup, current: NonNullable<Extract<ConnectionVisit, { ok: true }>['sections'][ConnectionGroup]>, move: PageMove) {
+  function completed(
+    group: ConnectionGroup,
+    current: NonNullable<Extract<ConnectionVisit, { ok: true }>['sections'][ConnectionGroup]>,
+    move: PageMove,
+  ) {
     if (!current.section.ok || !current.reading) return;
     const selection = selections[group] ?? { stream: current.stream.key };
     const prior = pages[group];
@@ -262,14 +266,13 @@ export function createConnectionWindow(
       if (current?.section.ok) completed(group, current, pageMove);
       else failed(group, selection, pageMove);
     } else if (!group && result.sections) {
-      for (const [sectionGroup, current] of Object.entries(result.sections) as [ConnectionGroup, NonNullable<typeof result.sections[ConnectionGroup]>][]) {
+      for (const [sectionGroup, current] of Object.entries(result.sections) as [
+        ConnectionGroup,
+        NonNullable<(typeof result.sections)[ConnectionGroup]>,
+      ][]) {
         if (!current) continue;
         if (current.section.ok) completed(sectionGroup, current, { kind: 'initial' });
-        else failed(
-          sectionGroup,
-          selections[sectionGroup] ?? { stream: current.stream.key },
-          { kind: 'initial' },
-        );
+        else failed(sectionGroup, selections[sectionGroup] ?? { stream: current.stream.key }, { kind: 'initial' });
       }
     }
     for (const [sectionGroup, current] of Object.entries(result.sections)) {

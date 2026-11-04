@@ -310,7 +310,9 @@ export function connectionWindowFragment(window: ConnectionReturnWindow): string
     }
     return `#connections?${params}`;
   };
-  let history = window.history?.filter((entry) => Number.isSafeInteger(entry.page) && entry.page > 0).map((entry) => ({ ...entry }));
+  let history = window.history
+    ?.filter((entry) => Number.isSafeInteger(entry.page) && entry.page > 0)
+    .map((entry) => ({ ...entry }));
   let index = window.index;
   while (history && history.length && index !== undefined) {
     const hash = fragment(history, index);

@@ -31,7 +31,15 @@ const snak = (property: string, content: string) => ({
   property: { id: property, data_type: 'wikibase-item' },
   value: { type: 'value', content },
 });
-function CharacterVisit({ locale, failed, paged }: { locale: 'en' | 'ja' | 'zh-Hant'; failed: boolean; paged: boolean }) {
+function CharacterVisit({
+  locale,
+  failed,
+  paged,
+}: {
+  locale: 'en' | 'ja' | 'zh-Hant';
+  failed: boolean;
+  paged: boolean;
+}) {
   const streams = (['schema:character', 'wdt:P725'] as const).map((property, index) => ({
     key: `in:${property}${index ? ':qualified' : ''}`,
     property,
@@ -62,7 +70,8 @@ function CharacterVisit({ locale, failed, paged }: { locale: 'en' | 'ja' | 'zh-H
                         : address.selection?.characters?.cursor === 'appearance-page-2'
                           ? [3]
                           : [0, 1, 2]
-                      : [0, 1, 2]).map((row) => ({
+                      : [0, 1, 2]
+                    ).map((row) => ({
                       subject: id(2),
                       property: stream.property,
                       statement: id(10 + index * 10 + row),

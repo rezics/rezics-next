@@ -6,7 +6,12 @@ import { planReads, platformRegistry, type CompositionDocument } from '@rezics/c
 import definitions from '../../../packages/definitions/release/rezics.json';
 import type { GuideRelease } from '../src/features/catalogue/definition-guide';
 import { qualifiedRelationsPage } from '../src/kernel/fake/qualified-relations';
-import type { ConnectionAddress, ConnectionSection, ConnectionStream, ConnectionVisit } from '../src/features/pages/subject-connections';
+import type {
+  ConnectionAddress,
+  ConnectionSection,
+  ConnectionStream,
+  ConnectionVisit,
+} from '../src/features/pages/subject-connections';
 import type { ConnectionRead } from '../src/features/pages/subject-connections-window';
 import { connectionReturnWindow, subjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
 
@@ -27,40 +32,81 @@ const page = () => {
   return result;
 };
 const appearance: ConnectionStream = {
-  key: 'in:schema:character', property: 'schema:character', direction: 'in', group: 'characters',
-  label: 'Work appearances', forwardLabel: 'Character', language: 'en',
+  key: 'in:schema:character',
+  property: 'schema:character',
+  direction: 'in',
+  group: 'characters',
+  label: 'Work appearances',
+  forwardLabel: 'Character',
+  language: 'en',
 };
 const voice: ConnectionStream = {
-  key: 'in:wdt:P725:qualified', property: 'wdt:P725', direction: 'in', group: 'credits',
-  label: 'Voice performances', forwardLabel: 'Voice actor', language: 'en', filter: id(1),
+  key: 'in:wdt:P725:qualified',
+  property: 'wdt:P725',
+  direction: 'in',
+  group: 'credits',
+  label: 'Voice performances',
+  forwardLabel: 'Voice actor',
+  language: 'en',
+  filter: id(1),
 };
 const otherCredit: ConnectionStream = {
-  key: 'out:wdt:P286', property: 'wdt:P286', direction: 'out', group: 'credits',
-  label: 'Crew', forwardLabel: 'Crew', language: 'en',
+  key: 'out:wdt:P286',
+  property: 'wdt:P286',
+  direction: 'out',
+  group: 'credits',
+  label: 'Crew',
+  forwardLabel: 'Crew',
+  language: 'en',
 };
 const relation: ConnectionStream = {
-  key: 'out:wdt:P144', property: 'wdt:P144', direction: 'out', group: 'relations',
-  label: 'Part of', forwardLabel: 'Part of', language: 'en',
+  key: 'out:wdt:P144',
+  property: 'wdt:P144',
+  direction: 'out',
+  group: 'relations',
+  label: 'Part of',
+  forwardLabel: 'Part of',
+  language: 'en',
 };
 const snak = (property: string, content: unknown, dataType = 'wikibase-item') => ({
-  property: { id: property, data_type: dataType }, value: { type: 'value', content },
+  property: { id: property, data_type: dataType },
+  value: { type: 'value', content },
 });
 const summary = (n: number, label: string) => ({
-  id: id(n), type: 'schema:Book', types: ['schema:Book'], label: { value: label, language: 'en' }, cover: null,
+  id: id(n),
+  type: 'schema:Book',
+  types: ['schema:Book'],
+  label: { value: label, language: 'en' },
+  cover: null,
 });
 function appearanceRow(statement: number, spoiler = false, title = `Work ${statement}`) {
   return {
-    subject: id(2), statement: id(statement), property: appearance.property, summary: summary(2, title),
+    subject: id(2),
+    statement: id(statement),
+    property: appearance.property,
+    summary: summary(2, title),
     assertion: {
-      ...snak(appearance.property, id(1)), id: id(statement), rank: 'normal',
-      qualifiers: [snak('wdt:P3831', id(3)), ...(spoiler ? [snak('rezics:spoilerLevel', { amount: '1', unit: '1' }, 'quantity')] : [])],
+      ...snak(appearance.property, id(1)),
+      id: id(statement),
+      rank: 'normal',
+      qualifiers: [
+        snak('wdt:P3831', id(3)),
+        ...(spoiler ? [snak('rezics:spoilerLevel', { amount: '1', unit: '1' }, 'quantity')] : []),
+      ],
       references: [{ parts: [snak('schema:url', `https://source.test/assertion-${statement}`, 'url')] }],
       rezics: { release: release.digest, revision: 1 },
     },
     related: { [id(3)]: summary(3, 'Released role') },
   };
 }
-function section(stream: ConnectionStream, cursor: string | undefined, links: unknown[], next?: string, status?: number, pageReading = 'a') {
+function section(
+  stream: ConnectionStream,
+  cursor: string | undefined,
+  links: unknown[],
+  next?: string,
+  status?: number,
+  pageReading = 'a',
+) {
   return {
     stream,
     ...(!status ? { reading: pageReading.repeat(64) } : {}),
@@ -68,16 +114,29 @@ function section(stream: ConnectionStream, cursor: string | undefined, links: un
       ? { ok: false as const, status }
       : {
           ok: true as const,
-          read: { kind: stream.direction === 'in' ? 'links' as const : 'relations' as const, id: id(1), property: stream.property, limit: 12, ...(cursor ? { cursor } : {}) },
+          read: {
+            kind: stream.direction === 'in' ? ('links' as const) : ('relations' as const),
+            id: id(1),
+            property: stream.property,
+            limit: 12,
+            ...(cursor ? { cursor } : {}),
+          },
           body: { [stream.direction === 'in' ? 'links' : 'relations']: links, ...(next ? { next } : {}) },
         },
   } as ConnectionSection;
 }
-function visit(address: ConnectionAddress, options: { failPrevious?: boolean; spoiler?: boolean; privateTitle?: string } = {}): ConnectionVisit {
+function visit(
+  address: ConnectionAddress,
+  options: { failPrevious?: boolean; spoiler?: boolean; privateTitle?: string } = {},
+): ConnectionVisit {
   const charCursor = address.selection?.characters?.cursor;
   const charPage = charCursor === 'appearance-page-2' ? 2 : charCursor === 'appearance-page-3' ? 3 : 1;
-  const charStream = [appearance, voice, otherCredit, relation].find((stream) => stream.key === address.selection?.[stream.group]?.stream) ?? appearance;
-  const creditStream = [voice, otherCredit].find((stream) => stream.key === address.selection?.credits?.stream) ?? voice;
+  const charStream =
+    [appearance, voice, otherCredit, relation].find(
+      (stream) => stream.key === address.selection?.[stream.group]?.stream,
+    ) ?? appearance;
+  const creditStream =
+    [voice, otherCredit].find((stream) => stream.key === address.selection?.credits?.stream) ?? voice;
   const fail = options.failPrevious && address.selection?.characters?.reading === 'a'.repeat(64);
   const sections: Partial<Record<'relations' | 'characters' | 'credits', ConnectionSection>> = {
     relations: section(relation, undefined, []),
@@ -91,14 +150,18 @@ function visit(address: ConnectionAddress, options: { failPrevious?: boolean; sp
           undefined,
           charPage === 1 ? 'a' : charPage === 2 ? 'b' : 'c',
         ),
-    credits: creditStream === otherCredit
-      ? section(otherCredit, undefined, [])
-      : section(voice, undefined, [appearanceRow(20)]),
+    credits:
+      creditStream === otherCredit
+        ? section(otherCredit, undefined, [])
+        : section(voice, undefined, [appearanceRow(20)]),
   };
   if (address.only) {
     const group = address.only;
     return {
-      ok: true, id: id(1), release: 'release', streams: [appearance, voice, otherCredit, relation],
+      ok: true,
+      id: id(1),
+      release: 'release',
+      streams: [appearance, voice, otherCredit, relation],
       sections: { [group]: sections[group] },
     };
   }
@@ -109,13 +172,29 @@ function visit(address: ConnectionAddress, options: { failPrevious?: boolean; sp
 }
 
 async function mounted(
-  run: (host: HTMLDivElement, render: (read: ConnectionRead, source?: ReturnType<typeof page>, context?: string) => Promise<void>, client: QueryClient, browser: any) => Promise<void>,
+  run: (
+    host: HTMLDivElement,
+    render: (read: ConnectionRead, source?: ReturnType<typeof page>, context?: string) => Promise<void>,
+    client: QueryClient,
+    browser: any,
+  ) => Promise<void>,
 ) {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const browser = new Window({ url: `https://site.test/en/subjects/${id(1)}/character` });
-  const globals = { window: browser, document: browser.document, navigator: browser.navigator, HTMLElement: browser.HTMLElement, Element: browser.Element, Node: browser.Node, IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window: browser,
+    document: browser.document,
+    navigator: browser.navigator,
+    HTMLElement: browser.HTMLElement,
+    Element: browser.Element,
+    Node: browser.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const prior = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
   const host = document.createElement('div');
   document.body.append(host);
@@ -125,9 +204,16 @@ async function mounted(
   const source = page();
   const render = async (read: ConnectionRead, next = source, context?: string) => {
     const value = {
-      subject: id(1), subjectLabel: 'Character', locale: 'en', link: (props: any) => h('a', props),
-      reader: { spoilerLevel: 0, suitability: 'show' }, labels: { cover: {}, spoilerHide: 'Hide' },
-      unlabelled: 'Unlabelled', spoilerShow: 'Reveal', relations: {}, sections: {},
+      subject: id(1),
+      subjectLabel: 'Character',
+      locale: 'en',
+      link: (props: any) => h('a', props),
+      reader: { spoilerLevel: 0, suitability: 'show' },
+      labels: { cover: {}, spoilerHide: 'Hide' },
+      unlabelled: 'Unlabelled',
+      spoilerShow: 'Reveal',
+      relations: {},
+      sections: {},
       ...(context ? { context: { id: context, population: { kind: 'global' } } } : {}),
     } as any;
     await act(async () =>
@@ -157,7 +243,9 @@ async function mounted(
   }
 }
 function button(section: Element, name: string) {
-  return Array.from(section.querySelectorAll('button')).find((item) => item.textContent?.includes(name)) as HTMLButtonElement;
+  return Array.from(section.querySelectorAll('button')).find((item) =>
+    item.textContent?.includes(name),
+  ) as HTMLButtonElement;
 }
 
 test('mounted pages go forward, back through an empty terminal, and return to the exact retained assertion and focus', async () =>
@@ -179,11 +267,17 @@ test('mounted pages go forward, back through an empty terminal, and return to th
     expect(characters().textContent).toContain('No visible entries on this page.');
     await act(async () => button(characters(), 'Previous page').click());
     expect(calls.at(-1)?.selection?.characters).toMatchObject({ cursor: 'appearance-page-2', reading: 'b'.repeat(64) });
-    const work = characters().querySelector<HTMLAnchorElement>(`[data-work-statement="${id(11)}"] a[href*="/subjects/${id(2)}/"]`)!;
+    const work = characters().querySelector<HTMLAnchorElement>(
+      `[data-work-statement="${id(11)}"] a[href*="/subjects/${id(2)}/"]`,
+    )!;
     const via = new URL(work.href).searchParams.get('via')!;
     expect(subjectVisitReturn(via, 'en')).toBe(via);
     expect(connectionReturnWindow(new URL(via, 'https://site.test').hash)).toMatchObject({
-      stream: appearance.key, index: 1, history: [{ page: 1 }, { page: 2 }, { page: 3 }], focus: id(11), holder: id(2),
+      stream: appearance.key,
+      index: 1,
+      history: [{ page: 1 }, { page: 2 }, { page: 3 }],
+      focus: id(11),
+      holder: id(2),
     });
     browser.location.href = `https://site.test${via}`;
     await render(read, page());
@@ -226,7 +320,11 @@ test('caller replacement retires late rows and whole-association spoilers hide c
     let settle!: (visit: ConnectionVisit) => void;
     let count = 0;
     const read: ConnectionRead = async (address) =>
-      ++count === 1 ? new Promise((resolve) => { settle = resolve; }) : visit(address);
+      ++count === 1
+        ? new Promise((resolve) => {
+            settle = resolve;
+          })
+        : visit(address);
     await render(read);
     await render(read, page(), id(9));
     await act(async () => settle(visit({ id: id(1), locale: 'en' }, { privateTitle: 'Retired private title' })));

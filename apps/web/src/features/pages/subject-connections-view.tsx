@@ -430,9 +430,7 @@ function ConnectionsReading({
               </label>
               {snapshot.pages?.[group] ? (
                 snapshot.pages[group]!.page !== undefined ? (
-                  <p role="status">
-                    {m.subject_connections_page_status({ page: snapshot.pages[group]!.page! }, o)}
-                  </p>
+                  <p role="status">{m.subject_connections_page_status({ page: snapshot.pages[group]!.page! }, o)}</p>
                 ) : (
                   <p role="status">{m.subject_connections_current_page({}, o)}</p>
                 )
@@ -478,12 +476,7 @@ function ConnectionsReading({
                           value.subjectLabel ?? value.unlabelled,
                           value.locale,
                           value.realm,
-                          connectionReturn(
-                            current,
-                            snapshot.pages?.[group],
-                            work.statement.id,
-                            work.holder,
-                          ),
+                          connectionReturn(current, snapshot.pages?.[group], work.statement.id, work.holder),
                         );
                         const WorkLink: typeof PlainLink = (props) => (
                           <Link {...props} href={withSubjectVisitReturn(props.href, returnHref, value.locale)} />
