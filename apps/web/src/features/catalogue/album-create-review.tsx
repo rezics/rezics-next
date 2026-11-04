@@ -3,7 +3,7 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { m } from '../../paraglide/messages.js';
-import { PartValue } from './statement-editor-view';
+import { StatementSummary } from './statement-summary';
 import { albumDraft, albumFields, albumType, type AlbumItem } from './album-profile';
 import type { TermDraft } from './create-subject';
 import { creationStatement, type StatementInput } from './statement-editor';
@@ -20,70 +20,6 @@ export function albumCreateFingerprint(
 ) {
   const { item } = albumDraft(release, [...terms], [...statements]);
   return JSON.stringify({ item, admitted: albumFields(release) });
-}
-
-function rankLabel(rank: string | undefined, locale: string) {
-  const o = { locale: locale as never };
-  return rank === 'preferred' ? m.candidate_rank_preferred({}, o) : m.candidate_rank_normal({}, o);
-}
-
-function StatementReadout({
-  statement,
-  release,
-  locale,
-}: {
-  statement: StatementInput;
-  release: Release;
-  locale: string;
-}) {
-  const o = { locale: locale as never };
-  const read = { release, public: { related: {} } };
-  return (
-    <div className="min-w-0 space-y-3">
-      <div className="min-w-0 text-base leading-relaxed">
-        <PartValue part={statement} read={read} locale={locale} />
-      </div>
-      <p className="text-sm">
-        {m.candidate_rank({}, o)}: {rankLabel(statement.rank, locale)}
-      </p>
-      <dl className="min-w-0 space-y-2 text-sm">
-        {(statement.qualifiers ?? []).map((part, index) => (
-          <div key={index} className="min-w-0 space-y-1">
-            <dt
-              className="text-muted-foreground"
-              lang={pickText(release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
-            >
-              {pickText(release.properties[part.property.id]?.labels ?? {}, locale).text ||
-                m.subject_value_unlabelled({}, o)}
-            </dt>
-            <dd className="min-w-0">
-              <PartValue part={part} read={read} locale={locale} />
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <ol className="min-w-0 space-y-3">
-        {statement.references.map((reference, index) => (
-          <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3 text-sm">
-            <p className="text-muted-foreground">
-              {m.correction_references({}, o)} {index + 1}
-            </p>
-            {reference.parts.length ? (
-              <ul className="min-w-0 space-y-1">
-                {reference.parts.map((part, partIndex) => (
-                  <li key={partIndex} className="min-w-0">
-                    <PartValue part={part} read={read} locale={locale} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">{m.facts_reuse_empty({}, o)}</p>
-            )}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
 }
 
 export function AlbumCreateReview({
@@ -180,9 +116,9 @@ export function AlbumCreateReview({
                 {name.text || row.statement.property.id}
                 {` · ${index + 1}`}
               </ContentItemHeading>
-              <StatementReadout
+              <StatementSummary
                 statement={creationStatement(row.statement, release)}
-                release={release}
+                read={{ release, source: null, public: { related: {}, subject: { type: item.type } } }}
                 locale={locale}
               />
               <Button type="button" variant="outline" className={wrap} onClick={() => onJumpFact(row.id)}>

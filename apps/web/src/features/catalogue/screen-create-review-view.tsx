@@ -4,78 +4,11 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { ScreenItem } from './screen-profile';
-import { PartValue, type StatementFieldsRead } from './statement-editor-view';
-import type { StatementInput } from './statement-editor';
+import type { StatementFieldsRead } from './statement-editor-view';
+import { StatementSummary } from './statement-summary';
 
 const wrap =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal py-2 [overflow-wrap:anywhere] md:pointer-fine:min-h-8 md:pointer-fine:min-w-0 md:pointer-fine:py-1';
-
-function rankLabel(rank: string | undefined, locale: string) {
-  const o = { locale: locale as never };
-  return rank === 'preferred'
-    ? m.candidate_rank_preferred({}, o)
-    : rank === 'deprecated'
-      ? m.changes_rank_deprecated({}, o)
-      : m.candidate_rank_normal({}, o);
-}
-
-function Assertion({
-  statement,
-  read,
-  locale,
-}: {
-  statement: StatementInput;
-  read: StatementFieldsRead;
-  locale: string;
-}) {
-  const o = { locale: locale as never };
-  return (
-    <div className="min-w-0 space-y-3">
-      <div className="min-w-0 text-base leading-relaxed">
-        <PartValue part={statement} read={read} locale={locale} />
-      </div>
-      <p className="text-sm">
-        {m.candidate_rank({}, o)}: {rankLabel(statement.rank, locale)}
-      </p>
-      <dl className="min-w-0 space-y-2 text-sm">
-        {(statement.qualifiers ?? []).map((part, index) => (
-          <div key={index} className="min-w-0 space-y-1">
-            <dt
-              className="text-muted-foreground"
-              lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
-            >
-              {pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).text ||
-                m.subject_value_unlabelled({}, o)}
-            </dt>
-            <dd className="min-w-0">
-              <PartValue part={part} read={read} locale={locale} />
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <ol className="min-w-0 space-y-3">
-        {statement.references.map((reference, index) => (
-          <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3 text-sm">
-            <p className="text-muted-foreground">
-              {m.correction_references({}, o)} {index + 1}
-            </p>
-            {reference.parts.length ? (
-              <ul className="min-w-0 space-y-1">
-                {reference.parts.map((part, partIndex) => (
-                  <li key={partIndex} className="min-w-0">
-                    <PartValue part={part} read={read} locale={locale} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">{m.facts_reuse_empty({}, o)}</p>
-            )}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
 
 export function ScreenCreateReview({
   item,
@@ -173,7 +106,7 @@ export function ScreenCreateReview({
               </ContentItemHeading>
               {rows.map((statement, index) => (
                 <div key={index} className="min-w-0 space-y-2">
-                  <Assertion statement={statement} read={context} locale={locale} />
+                  <StatementSummary statement={statement} read={context} locale={locale} />
                   <Button
                     type="button"
                     variant="outline"

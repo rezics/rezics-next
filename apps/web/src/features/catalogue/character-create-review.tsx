@@ -3,10 +3,10 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { m } from '../../paraglide/messages.js';
-import { PartValue } from './statement-editor-view';
+import { StatementSummary } from './statement-summary';
 import { characterDraft, characterGroups, type CharacterItem } from './character-profile';
 import type { TermDraft } from './create-subject';
-import { creationStatement, type StatementInput, type SnakInput } from './statement-editor';
+import { creationStatement, type StatementInput } from './statement-editor';
 import type { FactDraft } from './subject-facts';
 
 export function characterCreateFingerprint(release: Release, terms: TermDraft[], facts: StatementInput[]) {
@@ -27,71 +27,6 @@ export function characterCreateDrafts(facts: readonly { id: number; fact: Statem
 
 const wrap =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-center md:pointer-fine:min-h-8 md:pointer-fine:py-1';
-
-function rankLabel(rank: string | undefined, locale: string) {
-  const o = { locale: locale as never };
-  return rank === 'preferred' ? m.candidate_rank_preferred({}, o) : m.candidate_rank_normal({}, o);
-}
-
-function StatementReadout({
-  statement,
-  release,
-  locale,
-}: {
-  statement: StatementInput;
-  release: Release;
-  locale: string;
-}) {
-  const o = { locale: locale as never };
-  const read = { release, public: { related: {} } };
-  return (
-    <div className="min-w-0 space-y-3">
-      <div className="min-w-0 text-base leading-relaxed">
-        <PartValue part={statement} read={read} locale={locale} />
-      </div>
-      <p className="text-sm">
-        {m.candidate_rank({}, o)}: {rankLabel(statement.rank, locale)}
-      </p>
-      <dl className="min-w-0 space-y-2 text-sm">
-        {(statement.qualifiers ?? []).map((part, index) => (
-          <div key={index} className="min-w-0 space-y-1">
-            <dt
-              className="text-muted-foreground"
-              lang={pickText(release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
-            >
-              {pickText(release.properties[part.property.id]?.labels ?? {}, locale).text ||
-                m.subject_value_unlabelled({}, o)}
-              :{' '}
-            </dt>
-            <dd className="min-w-0">
-              <PartValue part={part} read={read} locale={locale} />
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <ol className="min-w-0 space-y-3">
-        {statement.references.map((reference, index) => (
-          <li key={index} className="min-w-0 space-y-1 border-s-2 border-border ps-3 text-sm">
-            <p className="text-muted-foreground">
-              {m.correction_references({}, o)} {index + 1}
-            </p>
-            {reference.parts.length ? (
-              <ul className="min-w-0 space-y-1">
-                {reference.parts.map((part: SnakInput, partIndex: number) => (
-                  <li key={partIndex} className="min-w-0">
-                    <PartValue part={part} read={read} locale={locale} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">{m.facts_reuse_empty({}, o)}</p>
-            )}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
 
 export function CharacterCreateReview({
   item,
@@ -176,7 +111,11 @@ export function CharacterCreateReview({
                   {m.character_create_correction_fact({ number: index + 1 }, o)}
                   {name.text ? ` · ${name.text}` : ''}
                 </ContentItemHeading>
-                <StatementReadout statement={creationStatement(fact, release)} release={release} locale={locale} />
+                <StatementSummary
+                  statement={creationStatement(fact, release)}
+                  read={{ release, source: null, public: { related: {}, subject: { type: item.type } } }}
+                  locale={locale}
+                />
                 <Button type="button" variant="outline" className={wrap} onClick={() => onJumpFact(id)}>
                   {m.character_create_review_open({}, o)}
                 </Button>
