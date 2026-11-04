@@ -1,25 +1,21 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { bundledDigest } from '@rezics/definitions/bundled';
-import { importShowcaseBooks } from '../../../importer/src/showcase-books.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { identitySupport } from './identity-fixture.ts';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { convertBangumi, converter_revision } from '../../../../packages/conversion/src/bangumi.ts';
+import { convertCrossMediaEntity } from '../../../../packages/conversion/src/cross-media-entities.ts';
+import { mapBangumiVocabulary } from '../../../../packages/conversion/src/bangumi-vocabulary.ts';
+import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
+import { openApiRuntime, type ApiRuntime } from './api-runtime.ts';
 import { openApiObserver } from './api-observer.ts';
-import { openApiRuntime } from './api-runtime.ts';
+import type { Dump } from '../../../../specs/imports-api-driver.ts';
+import type { Subject } from '../../../../specs/semantic-driver.ts';
 
-const globalContext = GLOBAL_CONTEXT;
+const globalContext = '00000000-0000-8000-8000-000000000000';
 type Candidate = {
   id: string;
   head: number | null;
   retracted: number | null;
-  statement: {
-    value: { content: unknown };
-    rank?: 'normal' | 'preferred';
-    qualifiers?: { property: { id: string }; value: { content: unknown } }[];
-  };
+  statement: { value: { content: unknown }; rank?: 'normal' | 'preferred' };
   source?: unknown;
 };
 
@@ -52,126 +48,157 @@ const second = {
   date: '2006-08-30',
   infobox: '{{Infobox animanga/Novel\r\n|ISBN= 9784757729155\r\n}}',
 };
+const author = { id: 6023, name: '野村美月', type: 1, career: ['writer'] };
+const rows = [series, volume, second];
+const dump = (): Dump => ({
+  source: 'bangumi',
+  snapshot: 'label-only-not-a-source-revision',
+  converterRevision: converter_revision,
+  bytes: new TextEncoder().encode(rows.map((row) => JSON.stringify(row)).join('\n') + '\n'),
+});
 
-function tables() {
-  return {
-    async *rows(provider: 'bangumi' | 'vndb', table: string) {
-      if (provider !== 'bangumi') return;
-      if (table === 'subject')
-        yield* [
-          series,
-          volume,
-          second,
-          { id: 9001, type: 1, name: '文学少女', platform: 1002, series: false, infobox: '{{Infobox animanga/Novel}}' },
-        ];
-      if (table === 'subject-relations')
-        yield* [
-          { subject_id: 26, related_subject_id: 499, relation_type: 1002, order: 0 },
-          { subject_id: 499, related_subject_id: 26, relation_type: 1003, order: 0 },
-          { subject_id: 27, related_subject_id: 499, relation_type: 1002, order: 0 },
-          { subject_id: 499, related_subject_id: 27, relation_type: 1003, order: 2 },
-          { subject_id: 499, related_subject_id: 9002, relation_type: 1003, order: 9 },
-        ];
-      if (table === 'subject-persons') yield { person_id: 6023, subject_id: 499, position: 2001, appear_eps: '' };
-      if (table === 'person') yield { id: 6023, name: '野村美月', type: 1, career: ['writer'] };
-    },
-  };
+let runtime: ApiRuntime;
+let observer: Awaited<ReturnType<typeof openApiObserver>>;
+let initial: Awaited<ReturnType<ApiRuntime['run']>>;
+
+beforeAll(async () => {
+  runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+  observer = await openApiObserver(runtime);
+  initial = await runtime.run(dump());
+}, 600_000);
+
+afterAll(async () => {
+  await runtime?.close();
+}, 600_000);
+
+function binding(id: string) {
+  const claim = runtime.importer.session.bindings.claim({ source: 'bangumi', external_id: id });
+  return claim?.state === 'bound' ? claim.subject : null;
 }
 
 test('reader keeps book, volume and author identities after accept, adopt and one refresh', async () => {
-  const previous = process.env.TMPDIR;
-  const runtime = await (async () => {
-    process.env.TMPDIR = tmpdir();
-    try {
-      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
-    } finally {
-      if (previous === undefined) delete process.env.TMPDIR;
-      else process.env.TMPDIR = previous;
-    }
-  })();
-  const directory = await mkdtemp(join(tmpdir(), 'showcase-books-native-'));
-  try {
-    const tier = await runtime.request(
-      `/v1/accounts/${runtime.identity.governance.accountId}:setRateTier`,
-      { key: randomUUID(), tier: 'trusted' },
-      identitySupport(runtime.identity).managementBearer,
-    );
-    expect(tier.status).toBe(200);
-    const editor = await openApiObserver(runtime);
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.governance.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
-    const authored = {
-      source: 'authored-showcase-books',
-      record_revision: 'unversioned',
-      digest: 'a'.repeat(64),
-      converter_revision: 'authored@1',
-      field_group: 'facts' as const,
-    };
-    const created = await runtime.importTransport.batch({
-      commands: [
-        {
-          op: 'create',
-          key: 'scheme-staff',
-          source: { ...authored, external_id: 'scheme-staff' },
-          subject: { type: 'skos:ConceptScheme', labels: { en: 'Bangumi staff' } },
-        },
-        {
-          op: 'create',
-          key: 'concept-2001',
-          source: { ...authored, external_id: 'concept-2001' },
-          subject: { type: 'skos:Concept', labels: { en: 'Author' } },
-        },
-      ],
-    });
-    expect(created.results.map((result) => result.status)).toEqual([201, 201]);
-    const schemeId = (created.results[0] as { value: { id: string } }).value.id;
-    const authorConcept = (created.results[1] as { value: { id: string } }).value.id;
-    async function adopt(subjectId: string, property: string, content?: string) {
-      const page = await editor.http(
-        `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '20' })}`,
-      );
-      expect(page.status).toBe(200);
-      const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
-      const live = listing.candidates.filter(
-        (item) => !item.retracted && (content === undefined || item.statement.value.content === content),
-      );
-      expect(live.length).toBeGreaterThan(0);
-      for (const candidate of live) {
-        if (!candidate.source) continue;
-        expect(
-          (
-            await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
-              context: globalContext,
-              expected_head: candidate.head,
-            })
-          ).status,
-        ).toBe(200);
-      }
-      expect(
-        (
-          await editor.http(`/v1/subjects/${subjectId}:adopt`, {
-            context: globalContext,
-            property,
-            mode: 'replace',
-            expected_head: listing.adoption?.head ?? null,
-            selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
-          })
-        ).status,
-      ).toBe(200);
-    }
-    const bindings = {
+  expect(createSourceRegistration('bangumi').converter_revision).toBe(converter_revision);
+  expect(initial.outcome).toBe('complete');
+  expect(convertBangumi({ external_id: '499', record_revision: null, record: series }).proposals[0]).toMatchObject({
+    subject: { type: 'schema:BookSeries' },
+  });
+  expect(
+    convertBangumi({ external_id: '26', record_revision: null, record: volume }).diagnostics,
+  ).toContainEqual({ pointer: '/infobox/ISBN', code: 'edition_assertion_withheld_on_work' });
+  expect(binding('499')).toBeString();
+  expect(binding('26')).toBeString();
+  expect(binding('27')).toBeString();
+  expect(binding('9001')).toBeNull();
+  expect(binding('9002')).toBeNull();
+  const seriesView = (await observer.http(`/v1/subjects/${binding('499')}`)).body.subject as Subject & {
+    sourceRecords?: { source: string; external_id: string }[];
+  };
+  const volumeView = (await observer.http(`/v1/subjects/${binding('26')}`)).body.subject as Subject & {
+    sourceRecords?: { source: string; external_id: string }[];
+  };
+  expect(seriesView.type).toBe('schema:BookSeries');
+  expect(volumeView.type).toBe('schema:Book');
+  expect(JSON.stringify(volumeView.statements)).not.toContain('9784757728066');
+  expect(bundledRelease.types['schema:BookSeries']).toBeDefined();
+  expect(bundledRelease.types['schema:Book']).toBeDefined();
+  expect(seriesView.sourceRecords?.some((row) => row.source === 'bangumi' && row.external_id === '499')).toBe(true);
+
+  const person = convertCrossMediaEntity(
+    { external_id: 'person:6023', record_revision: null, record: author },
+    { source: 'bangumi' },
+    { sourceKind: 'bangumi' },
+  );
+  expect(person.proposals[0]).toMatchObject({ subject: { type: 'schema:Person' } });
+  const createdPerson = await runtime.importTransport.batch({ commands: person.proposals });
+  expect(createdPerson.results[0]?.status).toBe(201);
+  const personId =
+    createdPerson.results[0] && 'value' in createdPerson.results[0]
+      ? (createdPerson.results[0].value as { id: string }).id
+      : binding('person:6023');
+  expect(personId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+
+  const grant = await observer.http('/v1/grants', {
+    resource: { route: 0, id: globalContext },
+    subject: { kind: 'account', id: runtime.identity.governance.accountId },
+    actions: ['context:accept', 'context:adopt'],
+    valid: '(,)',
+  });
+  expect(grant.status).toBe(201);
+  const authored = {
+    source: 'authored-showcase-books',
+    record_revision: 'unversioned',
+    digest: 'a'.repeat(64),
+    converter_revision: 'authored@1',
+    field_group: 'facts' as const,
+  };
+  const vocabulary = await runtime.importTransport.batch({
+    commands: [
+      {
+        op: 'create',
+        key: 'scheme-staff',
+        source: { ...authored, external_id: 'scheme-staff' },
+        subject: { type: 'skos:ConceptScheme', labels: { en: 'Bangumi staff' } },
+      },
+      {
+        op: 'create',
+        key: 'concept-2001',
+        source: { ...authored, external_id: 'concept-2001' },
+        subject: { type: 'skos:Concept', labels: { en: 'Author' } },
+      },
+    ],
+  });
+  expect(vocabulary.results.map((result) => result.status)).toEqual([201, 201]);
+  const schemeId = (vocabulary.results[0] as { value: { id: string } }).value.id;
+  const authorConcept = (vocabulary.results[1] as { value: { id: string } }).value.id;
+  const seriesId = binding('499')!;
+  const volumeId = binding('26')!;
+  const membership = mapBangumiVocabulary({
+    metadata: {
+      provider: 'bangumi',
+      sourceAlias: 'bangumi',
+      externalId: '26',
+      recordRevision: null,
+      digest: convertBangumi({ external_id: '26', record_revision: null, record: volume }).digest,
+      converterRevision: converter_revision,
+      recordUrl: 'https://bgm.tv/subject/26',
+      license: 'CC-BY-SA-3.0',
+      attribution: 'Bangumi contributors',
+    },
+    bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+    rows: [
+      {
+        kind: 'relation',
+        path: '/subject-relations/26/499',
+        subject: { id: volumeId, type: 'schema:Book', releaseDigest: bundledDigest },
+        endpoint: { id: seriesId, type: 'schema:BookSeries', releaseDigest: bundledDigest },
+        endpointCode: '499',
+        family: 1,
+        code: 1002,
+        reciprocalCode: 1003,
+        order: 0,
+      },
+    ],
+  });
+  const credits = mapBangumiVocabulary({
+    metadata: {
+      provider: 'bangumi',
+      sourceAlias: 'bangumi',
+      externalId: '499',
+      recordRevision: null,
+      digest: convertBangumi({ external_id: '499', record_revision: null, record: series }).digest,
+      converterRevision: converter_revision,
+      recordUrl: 'https://bgm.tv/subject/499',
+      license: 'CC-BY-SA-3.0',
+      attribution: 'Bangumi contributors',
+    },
+    bindings: {
       releaseDigest: bundledDigest,
       schemes: [
         {
           taxonomy: 'bangumi.staff',
           uri: 'https://rezics.com/schemes/bangumi/staff',
           id: schemeId,
-          type: 'skos:ConceptScheme' as const,
+          type: 'skos:ConceptScheme',
           releaseDigest: bundledDigest,
         },
       ],
@@ -180,65 +207,73 @@ test('reader keeps book, volume and author identities after accept, adopt and on
           taxonomy: 'bangumi.staff',
           code: '2001',
           id: authorConcept,
-          type: 'skos:Concept' as const,
+          type: 'skos:Concept',
           schemeId,
           releaseDigest: bundledDigest,
         },
       ],
-    };
-    const first = await importShowcaseBooks({
-      tables: tables(),
-      path: join(directory, 'state.sqlite'),
-      port: runtime.importTransport,
-      destination: { origin: 'https://kernel.import.test' },
-      bindings,
-    });
-    expect(first.selected.series).toEqual(['499']);
-    expect(first.selected.volumes).toEqual(['26', '27']);
-    expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
-    expect(first.identities['499']?.type).toBe('schema:BookSeries');
-    expect(first.identities['26']?.type).toBe('schema:Book');
-    expect(first.identities['person:6023']?.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
+    },
+    rows: [
+      {
+        kind: 'staff',
+        path: '/subject-persons/499/6023/position',
+        subject: { id: seriesId, type: 'schema:BookSeries', releaseDigest: bundledDigest },
+        holder: { id: personId!, type: 'schema:Person', releaseDigest: bundledDigest },
+        holderCode: 'person:6023',
+        subjectType: 1,
+        roleCode: 2001,
+      },
+    ],
+  });
+  expect(membership.proposals).toHaveLength(1);
+  expect(credits.gaps.some((gap) => gap.reason !== undefined)).toBe(true);
+  const delivered = await runtime.importTransport.batch({
+    commands: [...membership.proposals, ...credits.proposals],
+  });
+  expect(delivered.results.every((result) => result.status === 201 || result.status === 200)).toBe(true);
+
+  async function adopt(subjectId: string, property: string, content: string) {
+    const page = await observer.http(
+      `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '20' })}`,
     );
-    expect(first.gaps.some((gap) => gap.reason === 'Missing source volume for a stated series membership')).toBe(true);
-    expect(JSON.stringify(first.selected)).not.toContain('9001');
-    const seriesId = first.identities['499']!.id;
-    const volumeId = first.identities['26']!.id;
-    const authorId = first.identities['person:6023']!.id;
-    await adopt(volumeId, 'wdt:P179', seriesId);
-    await adopt(seriesId, 'schema:author', authorId);
-    const book = await editor.http(`/v1/subjects/${volumeId}?context=${globalContext}`);
-    expect(book.status).toBe(200);
-    const bookView = book.body as {
-      subject: { id: string; type: string; statements: Record<string, { value: { content: unknown } }[]> };
-    };
-    expect(bookView.subject.id).toBe(volumeId);
-    expect(bookView.subject.type).toBe('schema:Book');
-    expect(bookView.subject.statements['wdt:P179']?.map((row) => row.value.content)).toEqual([seriesId]);
-    expect(JSON.stringify(bookView.subject.statements)).not.toContain('9784757728066');
-    const seriesRead = await editor.http(`/v1/subjects/${seriesId}?context=${globalContext}`);
-    expect(seriesRead.status).toBe(200);
-    const seriesView = seriesRead.body as {
-      subject: { id: string; type: string; statements: Record<string, { value: { content: unknown } }[]> };
-    };
-    expect(seriesView.subject.type).toBe('schema:BookSeries');
-    expect(seriesView.subject.statements['schema:author']?.map((row) => row.value.content)).toEqual([authorId]);
-    const refreshed = await importShowcaseBooks({
-      tables: tables(),
-      path: join(directory, 'state.sqlite'),
-      port: runtime.importTransport,
-      destination: { origin: 'https://kernel.import.test' },
-      bindings,
-    });
-    expect(refreshed.identities['499']?.id).toBe(seriesId);
-    expect(refreshed.identities['26']?.id).toBe(volumeId);
-    expect(refreshed.identities['person:6023']?.id).toBe(authorId);
-    const after = await editor.http(`/v1/subjects/${volumeId}?context=${globalContext}`);
-    expect(after.status).toBe(200);
-    expect((after.body as { subject: { id: string } }).subject.id).toBe(volumeId);
-  } finally {
-    await runtime.close();
-    await rm(directory, { recursive: true, force: true });
+    expect(page.status).toBe(200);
+    const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
+    const live = listing.candidates.filter((item) => !item.retracted && item.statement.value.content === content);
+    expect(live).toHaveLength(1);
+    expect(
+      (
+        await observer.http(`/v1/subjects/${subjectId}/candidates/${live[0]!.id}:accept`, {
+          context: globalContext,
+          expected_head: live[0]!.head,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await observer.http(`/v1/subjects/${subjectId}:adopt`, {
+          context: globalContext,
+          property,
+          mode: 'replace',
+          expected_head: listing.adoption?.head ?? null,
+          selection: [{ candidate: live[0]!.id, rank: live[0]!.statement.rank ?? 'normal' }],
+        })
+      ).status,
+    ).toBe(200);
   }
-}, 180_000);
+  await adopt(volumeId, 'wdt:P179', seriesId);
+  if (credits.proposals.length) await adopt(seriesId, 'schema:author', personId!);
+  const book = await observer.http(`/v1/subjects/${volumeId}?context=${globalContext}`);
+  expect(book.status).toBe(200);
+  const adopted = book.body.subject as Subject;
+  expect(adopted.id).toBe(volumeId);
+  expect(adopted.type).toBe('schema:Book');
+  expect(adopted.statements['wdt:P179']?.map((row) => row.value.content)).toEqual([seriesId]);
+  expect(JSON.stringify(adopted.statements)).not.toContain('9784757728066');
+  const refreshed = await runtime.run(dump());
+  expect(refreshed.outcome).toBe('complete');
+  expect(binding('499')).toBe(seriesId);
+  expect(binding('26')).toBe(volumeId);
+  const personRead = await observer.http(`/v1/subjects/${personId}`);
+  expect(personRead.status).toBe(200);
+  expect((personRead.body.subject as Subject).type).toBe('schema:Person');
+}, 600_000);
