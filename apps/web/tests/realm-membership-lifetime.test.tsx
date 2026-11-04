@@ -7,7 +7,6 @@ import type { MembershipResult } from '../src/community/space';
 import type { NativeRealmHomeObservation } from '../src/community/realm-home-native';
 import type { RealmJoinAdvice } from '../src/community/native-operations';
 import type { RealmViewer } from '../src/community/realm-membership-queries';
-import { realmMembershipQuery } from '../src/community/realm-membership-queries';
 import { useRealmMembershipCaller } from '../src/community/realm-membership-lifetime';
 import { realmMembershipTestReaders } from './realm-membership-test-fixture';
 import * as start from '../.storybook/react-start';
@@ -73,9 +72,14 @@ mock.module('../src/community/space-actions', () => ({
   },
 }));
 
+const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
 const sessionModule = await import('../src/session/query');
+const { realmMembershipQuery } = await import('../src/community/realm-membership-queries');
 const { RealmMembership } = await import('../src/community/realm-membership');
 const { m } = await import('../src/paraglide/messages.js');
+if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+else Reflect.deleteProperty(globalThis, 'window');
 
 const realmId = '0192f3a0-6c1e-7b2a-9d4e-000000000201';
 const nextRealmId = '0192f3a0-6c1e-7b2a-9d4e-000000000202';
