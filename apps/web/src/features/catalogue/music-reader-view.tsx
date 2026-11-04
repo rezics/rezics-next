@@ -237,7 +237,7 @@ function EditionList({
   locale,
   link: Link,
 }: {
-  editions: Extract<AlbumEditionRead, { ok: true }>;
+  editions: AlbumEditionRead;
   locale: string;
   link: PageLink;
 }) {
@@ -247,7 +247,11 @@ function EditionList({
       <ContentItemHeading level={2} className="text-xl font-semibold">
         {m.subject_editions({}, o)}
       </ContentItemHeading>
-      {!editions.admitted ? (
+      {!editions.ok ? (
+        <p role="alert">
+          {editions.reason === 'withheld' ? m.music_reader_denied({}, o) : m.music_reader_unavailable({}, o)}
+        </p>
+      ) : !editions.admitted ? (
         <p role="status">{m.music_reader_unavailable({}, o)}</p>
       ) : editions.rows.length ? (
         <ul className="min-w-0 space-y-2">
@@ -258,6 +262,8 @@ function EditionList({
                 <Link
                   href={subjectHref({ id: row.subject, label }, locale).href}
                   className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center [overflow-wrap:anywhere]`}
+                  target="_blank"
+                  rel="noopener"
                 >
                   {label}
                 </Link>
@@ -287,7 +293,7 @@ export function MusicAlbumReader({
   release?: Release;
   public?: SubjectRead | null;
   bounds?: readonly ProfileBound[];
-  editions?: Extract<AlbumEditionRead, { ok: true }>;
+  editions?: AlbumEditionRead;
   reason?: Exclude<ProfileReaderState, 'ready' | 'empty'>;
   loading?: boolean;
   onRetry?: () => void;
@@ -392,7 +398,7 @@ export function MusicAlbumOverview({
   const profile = query.data?.profile;
   const release = profile?.ok ? profile.release : undefined;
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
-  const editions = query.data?.editions?.ok ? query.data.editions : undefined;
+  const editions = query.data?.editions;
   return (
     <MusicAlbumReader
       locale={locale}

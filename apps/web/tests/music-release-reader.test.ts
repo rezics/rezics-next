@@ -155,6 +155,9 @@ test('recorded native music release binds album, format, ordered duplicate track
   const page = await readMusicRelease(fixture.client, recorded, { ...musicAddress, stream: 'forward:schema:track' }, 'en');
   if (!page.ok) throw new Error('Expected recorded music release');
   expect(page.admitted).toBe(true);
+  expect(page.stream?.key).toBe('forward:schema:track');
+  const defaulted = await readMusicRelease(fixture.client, recorded, musicAddress, 'en');
+  expect(defaulted.ok && defaulted.stream?.key).toBe('forward:schema:track');
   expect(page.facts.find((fact) => fact.kind === 'album')?.property).toBe('schema:releaseOf');
   expect(page.facts.find((fact) => fact.property === 'wdt:P437')).toBeDefined();
   expect(page.unsupported).toContain('schema:contentLocation');

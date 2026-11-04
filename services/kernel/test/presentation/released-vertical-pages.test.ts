@@ -32,6 +32,7 @@ const launch = {
   series: ['wd:Q7725310', 'schema:BookSeries'],
   character: ['wd:Q95074'],
   agents: ['schema:Person', 'schema:Organization', 'schema:SoftwareApplication'],
+  works: ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'],
 };
 const sources = bundledSources();
 const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });

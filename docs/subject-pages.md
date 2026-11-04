@@ -38,7 +38,9 @@ source provenance, distinct from editorial acceptance. Relation pages that retur
 loaded page only; they never imply a complete tracklist or episode list.
 
 Type3 maps to MusicAlbum with no work/release/track split. The ordinary album contents reader consumes only admitted canonical containment streams; it does not publish tracks or recordings. MusicAlbum, MusicRelease and MusicRecording
-have no Library profile, so Library states, copies and progress stay unpublished. An album overview offers admitted inverse `schema:releaseOf` editions as destinations. An ordinary Subject Recording destination
+have no Library profile, so Library states, copies and progress stay unpublished. An album overview offers admitted inverse `schema:releaseOf` editions as destinations. Decision: the edition page
+defaults to the admitted `schema:track` window; listing-occurrence Concepts distinguish repeated recording slots and
+medium identity stays unpublished. An ordinary Subject Recording destination
 is available when its distinct type and fields are admitted by that subject's pinned immutable definition release. Type6 maps pinned movie platforms to
 Movie and pinned TV-template platforms to TVSeries; unknown platform codes stay ignored. Movie and TVSeries expose the
 existing `anime.film` and `anime.series` Library controls. Opening an admitted `schema:TVSeason` or `schema:Episode`

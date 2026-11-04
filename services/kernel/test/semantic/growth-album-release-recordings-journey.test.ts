@@ -9,7 +9,7 @@ import { itemFacts } from '../../src/semantic/item.ts';
 import { newId } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 import { verticalManifests } from '../support/manifests.ts';
-import { labelOrderKey } from '../../src/semantic/link-keys.ts';
+import { positionKey } from '../../src/semantic/link-keys.ts';
 import { randomUUID } from 'node:crypto';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -46,37 +46,22 @@ beforeAll(async () => {
       authorize: async () => true,
     });
   }
-  const occurrence = newId(route);
-  const rows = [];
-  for (let index = 0; index < selectedTracks; index++) {
-    const statement = newId(route);
-    const slot = newId(route);
-    const orderKey = labelOrderKey({ en: `Track ${String(index + 1).padStart(2, '0')}` });
-    const transaction = randomUUID();
-    rows.push({
-      route,
-      subject_id: holder,
-      property: 'schema:track',
-      filter_value: '00000000-0000-0000-0000-000000000000',
-      order_key: orderKey,
-      target_subject_id: recording,
-      statement_id: statement,
-      slot_id: slot,
-      relation: true,
-      source_type: 'schema:MusicRelease',
-      source_order_key: orderKey,
-      outbound_order: 'position',
-      source_revision: 1,
-      source_security_revision: 0,
-      target_revision: 1,
-      target_type: 'schema:MusicRecording',
-      external: null,
-      value: 'value',
-      present: true,
-      recorded_transaction_id: transaction,
-    });
-    void occurrence;
-  }
+  const adopt = randomUUID();
+  const tracks = Array.from({ length: selectedTracks }, (_, index) => ({
+    property: { id: 'schema:track' },
+    value: { type: 'value' as const, content: recording },
+    qualifiers: [
+      { property: { id: 'schema:position' }, value: { type: 'value' as const, content: String(index + 1) } },
+      { property: { id: 'wdt:P642' }, value: { type: 'value' as const, content: newId(route) } },
+    ],
+    references: [],
+  }));
+  const statements = itemFacts(
+    holder,
+    { statements: { 'schema:track': tracks } },
+    'schema:MusicRelease',
+    bundledRelease,
+  ).filter((fact) => fact.kind === 'statement');
   await seed(
     db,
     {
@@ -84,7 +69,58 @@ beforeAll(async () => {
       hotPartition: route >> 4,
       hotShare: 1,
       rows: ({ ordinal }) => ({
-        'semantic.outbound_link': ordinal < selectedTracks ? [rows[ordinal]!] : [],
+        'semantic.revision':
+          ordinal === 0
+            ? [
+                {
+                  route,
+                  subject_id: holder,
+                  revision: 2,
+                  kind: 'adopt',
+                  release: bundledDigest,
+                  recorded_transaction_id: adopt,
+                },
+              ]
+            : [],
+        'semantic.fact':
+          ordinal === 0
+            ? statements.map((fact) => ({
+                ...fact,
+                route,
+                subject_id: holder,
+                recorded_transaction_id: adopt,
+                release: bundledDigest,
+                relation: true,
+              }))
+            : [],
+        'semantic.outbound_link':
+          ordinal === 0
+            ? statements.map((fact, index) => {
+                const orderKey = positionKey(String(index + 1));
+                return {
+                  route,
+                  subject_id: holder,
+                  property: 'schema:track',
+                  filter_value: '00000000-0000-0000-0000-000000000000',
+                  order_key: orderKey,
+                  target_subject_id: recording,
+                  statement_id: fact.statement_id,
+                  slot_id: fact.slot_id,
+                  relation: true,
+                  source_type: 'schema:MusicRelease',
+                  source_order_key: orderKey,
+                  outbound_order: 'position',
+                  source_revision: 2,
+                  source_security_revision: 0,
+                  target_revision: 1,
+                  target_type: 'schema:MusicRecording',
+                  external: null,
+                  value: 'value',
+                  present: true,
+                  recorded_transaction_id: adopt,
+                };
+              })
+            : [],
         'semantic.outbound_link_count':
           ordinal === 0
             ? [
@@ -99,7 +135,7 @@ beforeAll(async () => {
             : [],
       }),
     },
-    { from: 0, to: selectedTracks },
+    { from: 0, to: 1 },
   );
 }, 120_000);
 afterAll(async () => {

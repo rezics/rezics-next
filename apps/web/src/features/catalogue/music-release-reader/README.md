@@ -22,10 +22,12 @@ retain their existing authority and draft recovery; this reader performs no writ
 
 One selected stream follows native direction and order. Forward item relations must admit this release and target a
 released music identity; inverse relations must target this release and be admitted on a released music identity.
-Canonical containment uses `bf:hasPart`/`schema:hasPart` forward and `schema:isPartOf`/`wdt:P361`/`wdt:P1433` inverse.
-No album, file or generic CreativeWork target is relabelled as a recording or medium. Rows retain holder, statement,
-slot qualifiers and summary identity, including repeated recordings in distinct slots. A withheld summary has no
-invented destination. Corrections open the exact holder's existing membership editor.
+The default window is admitted `schema:track`. Canonical containment still uses `bf:hasPart`/`schema:hasPart` forward
+and `schema:isPartOf`/`wdt:P361`/`wdt:P1433` inverse when those streams are selected. Listing-occurrence Concepts on
+`wdt:P642` keep repeated recording slots distinct; `rezics:MusicMedium` stays unpublished. No album, file or generic
+CreativeWork target is relabelled as a recording or medium. Rows retain holder, statement, slot qualifiers and summary
+identity, including repeated recordings in distinct slots. A withheld summary has no invented destination. Corrections
+open the exact holder's existing membership editor.
 
 Each next, stream or restart replaces one bounded window; unavailable continuation retains the previous window and
 retries the exact pending address. Invalid/withheld results retire it. There is no refill, automatic retry, per-target

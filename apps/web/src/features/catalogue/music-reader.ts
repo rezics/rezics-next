@@ -84,7 +84,7 @@ export type MusicReaderVisit = {
   groups: ProfileGroup[];
   sources: ProfileSourceRecord[];
   bounds: ProfileBound[];
-  editions: Extract<AlbumEditionRead, { ok: true }>;
+  editions: AlbumEditionRead;
   correction?: { id: string; href: string };
 };
 
@@ -369,7 +369,7 @@ export function musicReaderVisit(input: {
   public?: SubjectRead | null;
   reason?: Exclude<ProfileReaderState, 'ready' | 'empty'>;
   bounds?: readonly ProfileBound[];
-  editions?: Extract<AlbumEditionRead, { ok: true }>;
+  editions?: AlbumEditionRead;
   loading?: boolean;
 }): MusicReaderVisit {
   const library: ProfileLibrary = { admitted: false, states: [], copies: false, progress: false };
@@ -377,7 +377,7 @@ export function musicReaderVisit(input: {
   const editions = input.editions ?? emptyEditions(input.release);
   const bounds = [
     ...(input.bounds ?? []),
-    ...(input.editions?.admitted
+    ...(editions.ok && editions.admitted
       ? [
           {
             property: albumEditionProperty,
