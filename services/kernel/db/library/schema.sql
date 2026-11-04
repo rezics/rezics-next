@@ -2675,7 +2675,6 @@ CREATE TABLE library.bangumi_upload (
     upload_id uuid NOT NULL,
     cancelled boolean DEFAULT false NOT NULL,
     expires_at timestamp with time zone DEFAULT (clock_timestamp() + '7 days'::interval) NOT NULL,
-    recovery_until timestamp with time zone,
     CONSTRAINT bangumi_upload_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -8100,14 +8099,7 @@ ALTER TABLE ONLY library.yearly_completion_goal
 -- Name: bangumi_upload_expiry; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX bangumi_upload_expiry ON library.bangumi_upload USING btree (expires_at, route, account_id, upload_id) WHERE (recovery_until IS NULL);
-
-
---
--- Name: bangumi_upload_recovery_expiry; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX bangumi_upload_recovery_expiry ON library.bangumi_upload USING btree (recovery_until, route, account_id, upload_id) WHERE (recovery_until IS NOT NULL);
+CREATE INDEX bangumi_upload_expiry ON library.bangumi_upload USING btree (expires_at, route, account_id, upload_id);
 
 
 --
