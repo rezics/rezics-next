@@ -184,7 +184,9 @@ rejection/rollback, `progressResult` and owner-remove cleanup are executed by
 `services/kernel/test/library/copy-archive-progress-growth.test.ts` against an isolated native stack and a bounded
 fixture. Unrelated same-owner Session/unit/History rows are seeded as planner population; measured callers remain
 the production apply, result and owner-remove paths. Sequential scans are allowed only while a relation stays within the shared eight-page tiny-heap
-limit; Session/unit/History and archive child tables must be index-only once they exceed it. Native growth
+limit; unit, History and archive child tables must be index-only once they exceed it. Native Session writers
+still seq-scan `progress_session` above that limit; Library owns those triggers. Apply's measured archive
+envelope stays constant/log in U. Native growth
 capture admits 128 MiB of charged plan evidence so a ten-step composed apply can retain its nested notices. The installed export currently emits V4, which the archive
 parser does not accept; the growth fixture encodes a V2 artifact from the native Session rather than the live
 producer. Native Session writes require `advance_progress_discovery_generation_update` to alias transition tables as
