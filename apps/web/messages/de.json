@@ -9879,5 +9879,21 @@
   "library_annotation_no_change": "Keine persönlichen Änderungen zu speichern. Es wurde kein Befehl gesendet.",
   "library_annotation_discarded": "Ungesendeter Entwurf verworfen. Die empfangenen persönlichen Werte sind wiederhergestellt.",
   "library_annotation_saving": "Geprüfte persönliche Änderungen werden gespeichert…",
-  "library_annotation_pending_help": "Lasse diesen Besuch geöffnet, bis das Ergebnis bestätigt ist. Eine Aktualisierung im Hintergrund bestätigt diesen Befehl nicht."
+  "library_annotation_pending_help": "Lasse diesen Besuch geöffnet, bis das Ergebnis bestätigt ist. Eine Aktualisierung im Hintergrund bestätigt diesen Befehl nicht.",
+  "condition_range_mode": "Bedeutung des Bereichs",
+  "condition_range_year_mode": "Numerische Jahre",
+  "condition_range_calendar_mode": "Gregorianischer Kalender",
+  "condition_range_replace_title": "Bedeutung des Bereichs ändern?",
+  "condition_range_replace_help": "Numerische Grenzen vergleichen erfasste Jahre. Kalendergrenzen prüfen eine mögliche Überschneidung der dargestellten Datumsintervalle. Die Bedeutungen können abweichen. Ersetzen Sie die aktuellen Grenzen und unfertigen Eingaben und geben Sie neue Grenzen ein. Erst Anwenden führt die Suche aus.",
+  "condition_range_replace_confirm": "Grenzen ersetzen",
+  "condition_calendar_open": "Offene Grenze",
+  "condition_calendar_incomplete": "Unvollständiges oder ungültiges Datum",
+  "condition_calendar_year": "Jahresgenauigkeit",
+  "condition_calendar_month": "Monatsgenauigkeit",
+  "condition_calendar_day": "Tagesgenauigkeit",
+  "condition_calendar_help": "Geben Sie ein Jahr (2024), einen Monat (2024-02) oder einen Tag (2024-02-29) ein. Erweiterte Jahre mit Vorzeichen sind zulässig, etwa -0044 oder +012345-06. Fehlende Teile stehen für das ganze Jahr oder den ganzen Monat. Eine leere Grenze lässt den Bereich offen.",
+  "condition_calendar_overlap": "Gregorianische Grenzen sind einschließlich. Ein erfasstes Jahr oder ein Monat kann passen, wenn sich die möglichen Daten mit dem Bereich überschneiden; ein genaues Datum wird damit nicht behauptet. Fehlende Daten passen nicht.",
+  "condition_calendar_invalid": "Geben Sie ein gültiges gregorianisches Jahr, einen Monat oder einen Tag ein. Der Text bleibt zur Korrektur erhalten.",
+  "condition_calendar_empty": "Geben Sie vor dem Anwenden mindestens eine Grenze ein.",
+  "condition_calendar_reversed": "Die untere Grenze darf nicht nach der oberen liegen. Korrigieren Sie eine Grenze vor dem Anwenden."
 }

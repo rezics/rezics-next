@@ -9886,5 +9886,21 @@
   "library_annotation_no_change": "没有需要保存的个人更改，未发送命令。",
   "library_annotation_discarded": "已丢弃未提交的草稿，并恢复已收到的个人值。",
   "library_annotation_saving": "正在保存已检查的个人更改…",
-  "library_annotation_pending_help": "请保持本次访问，直到结果得到确认。后台刷新不能确认该命令的结果。"
+  "library_annotation_pending_help": "请保持本次访问，直到结果得到确认。后台刷新不能确认该命令的结果。",
+  "condition_range_mode": "范围含义",
+  "condition_range_year_mode": "数值年份",
+  "condition_range_calendar_mode": "格里高利历",
+  "condition_range_replace_title": "更改范围含义？",
+  "condition_range_replace_help": "数值边界比较记录的年份。日历边界匹配所表示日期区间的可能重叠。两种含义可能不同。替换当前边界和未完成的编辑后，请输入新边界；只有点击应用才会执行搜索。",
+  "condition_range_replace_confirm": "替换边界",
+  "condition_calendar_open": "开放边界",
+  "condition_calendar_incomplete": "日期不完整或无效",
+  "condition_calendar_year": "年精度",
+  "condition_calendar_month": "月精度",
+  "condition_calendar_day": "日精度",
+  "condition_calendar_help": "输入年份（2024）、月份（2024-02）或日期（2024-02-29）。支持带符号的扩展年份，例如 -0044 或 +012345-06。省略的部分表示整年或整月。留空一侧边界表示该侧不限。",
+  "condition_calendar_overlap": "格里高利历边界包含端点。若记录的年份或月份中可能的日期与范围重叠，就可能匹配；这并不表示记录日期恰好是某一天。缺失日期不会匹配。",
+  "condition_calendar_invalid": "请输入有效的格里高利历年份、月份或日期；输入内容会保留以便修正。",
+  "condition_calendar_empty": "应用前请至少输入一侧边界。",
+  "condition_calendar_reversed": "下限不能晚于上限；应用前请修正任一端点。"
 }

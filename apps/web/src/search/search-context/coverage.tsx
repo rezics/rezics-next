@@ -128,7 +128,7 @@ export function SearchCoverage({
             ))}
             {Object.entries(state.ranges ?? {}).map(([property, range]) => (
               <li key={property}>
-                {label(property)}: {rangeDescription(range)}
+                {label(property)}: {rangeDescription(range, locale)}
               </li>
             ))}
           </ul>

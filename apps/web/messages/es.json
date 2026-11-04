@@ -9879,5 +9879,21 @@
   "library_annotation_no_change": "No hay cambios personales que guardar. No se ha enviado ningún comando.",
   "library_annotation_discarded": "Borrador sin enviar descartado. Se han restaurado los valores personales recibidos.",
   "library_annotation_saving": "Guardando los cambios personales revisados…",
-  "library_annotation_pending_help": "Mantén esta visita abierta hasta confirmar el resultado. Una actualización en segundo plano no confirma este comando."
+  "library_annotation_pending_help": "Mantén esta visita abierta hasta confirmar el resultado. Una actualización en segundo plano no confirma este comando.",
+  "condition_range_mode": "Significado del intervalo",
+  "condition_range_year_mode": "Años numéricos",
+  "condition_range_calendar_mode": "Calendario gregoriano",
+  "condition_range_replace_title": "¿Cambiar el significado del intervalo?",
+  "condition_range_replace_help": "Los límites numéricos comparan los años registrados. Los límites de calendario buscan un posible solapamiento de los intervalos representados. Los significados pueden diferir. Reemplaza los límites y las ediciones pendientes e introduce nuevos límites. La búsqueda solo se ejecuta al aplicar.",
+  "condition_range_replace_confirm": "Reemplazar límites",
+  "condition_calendar_open": "Límite abierto",
+  "condition_calendar_incomplete": "Fecha incompleta o no válida",
+  "condition_calendar_year": "Precisión de año",
+  "condition_calendar_month": "Precisión de mes",
+  "condition_calendar_day": "Precisión de día",
+  "condition_calendar_help": "Introduce un año (2024), mes (2024-02) o día (2024-02-29). Se admiten años extendidos con signo, como -0044 o +012345-06. Los componentes ausentes representan todo el año o mes. Deja un límite vacío para un intervalo abierto.",
+  "condition_calendar_overlap": "Los límites gregorianos son inclusivos. Un año o mes registrado puede coincidir si sus fechas posibles se solapan con el intervalo; esto no afirma una fecha exacta. Las fechas ausentes no coinciden.",
+  "condition_calendar_invalid": "Introduce un año, mes o día gregoriano válido; el texto se conserva para corregirlo.",
+  "condition_calendar_empty": "Introduce al menos un límite antes de aplicar.",
+  "condition_calendar_reversed": "El límite inferior no puede ser posterior al superior; corrige uno antes de aplicar."
 }

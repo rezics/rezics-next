@@ -1,4 +1,5 @@
 import { FILTER_LIMITS, type FilterDocument } from '@rezics/filter';
+import type { ConditionCalendarDraft } from './condition-calendar';
 import type { ConditionRangeDraft } from './condition-range-input';
 
 export type ConditionTreePath = readonly (number | 'and' | 'or' | 'not')[];
@@ -15,6 +16,7 @@ export type ConditionDraftNode = {
   key: number;
   operator: 'and' | 'or' | 'not' | undefined;
   children: ConditionDraftNode[];
+  calendar?: ConditionCalendarDraft;
   ranges: Record<'gte' | 'lte', ConditionRangeDraft>;
 };
 
