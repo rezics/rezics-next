@@ -70,6 +70,25 @@ The reader repeats at most four reads for one deliberate window: Subject, active
 defines subject/page byte bounds, bounded retention and retirement on replacement authority or observation. Existing
 release/file companion costs and release type meanings remain unchanged.
 
+## Read a story arc
+
+The ordinary Subject overview exposes the [Story Arc reader](../apps/web/src/features/catalogue/story-arc-reader/README.md)
+for an arc and for a work with disclosed arc slots. Its existing Summary supplies admitted narrative context.
+Separate directed membership and sequence streams preserve native order, positions, first/last parts, qualifiers
+and exact sources. An arc member can show only that work’s appearances explicitly qualified for this arc; missing
+released filtering is unsupported with the existing Details path. Spoiler qualification gates the complete row,
+including target navigation. Unavailable continuation is not an ending, and replaced authority retires old controls.
+
+Decision: public destinations open in a new tab to preserve the exact originating work/arc window and keyboard
+return; at most one member appearance window opens inline, with Back restoring its member control.
+
+### Story arc Cost
+
+Each deliberate window uses one Subject read, the existing active/immutable definition pair and at most one
+20-row relation page, without target hydration. One outer and one optional appearance window are retained;
+the [reader Cost](../apps/web/src/features/catalogue/story-arc-reader/README.md#cost) defines byte, cursor and stream
+bounds. Current Character, correction/classification and prerequisite-deferred native acceptance remain unchanged.
+
 ## Create a catalogue subject
 
 `/{locale}/catalogue/new` is the generic initial-terms form, discoverable in the ordinary subject header's

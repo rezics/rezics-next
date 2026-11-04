@@ -7867,5 +7867,21 @@
   "music_release_album": "Album",
   "music_release_absent": "Aucune valeur enregistrée.",
   "music_release_generic": "Lire les faits génériques (nouvel onglet)",
-  "music_release_correct": "Proposer une correction (nouvel onglet)"
+  "music_release_correct": "Proposer une correction (nouvel onglet)",
+  "arc_reader_title": "Lire un arc narratif",
+  "arc_reader_scope": "Appartenance, séquence et apparitions restent distinctes. L’ordre et les plages sont ceux du catalogue ; dates et titres ne définissent pas la chronologie.",
+  "arc_reader_return": "Les destinations s’ouvrent dans un nouvel onglet. Fermez-le pour retrouver cette fenêtre de lecture.",
+  "arc_reader_unavailable": "Cette lecture est indisponible. Réessayez.",
+  "arc_reader_withheld": "Ce contenu n’est pas divulgué.",
+  "arc_reader_next_unavailable": "La page suivante est indisponible. La page conservée n’indique pas où l’arc se termine.",
+  "arc_reader_unsupported": "Cette version des définitions ne configure pas cette lecture. Consultez les faits disponibles dans Détails.",
+  "arc_reader_sequence": "Relations narratives orientées, dans l’ordre publié.",
+  "arc_reader_appearances": "Uniquement les apparitions de cette œuvre explicitement associées à cet arc.",
+  "arc_reader_membership": "Appartenances orientées, dans l’ordre publié. La position et les parties de début et de fin conservent leur sens déclaré.",
+  "arc_reader_open": "Ouvrir le sujet",
+  "arc_reader_characters": "Lire les apparitions de cette œuvre dans l’arc",
+  "arc_reader_back": "Retour aux œuvres membres",
+  "arc_reader_complete": "Aucune autre page dans ce flux. Cela n’établit pas une fin narrative.",
+  "arc_reader_statement": "Déclaration",
+  "arc_reader_target": "Cible"
 }

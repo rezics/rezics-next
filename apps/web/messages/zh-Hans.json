@@ -7867,5 +7867,21 @@
   "music_release_album": "专辑",
   "music_release_absent": "尚未记录任何值。",
   "music_release_generic": "阅读通用事实（新标签页）",
-  "music_release_correct": "提出修正（新标签页）"
+  "music_release_correct": "提出修正（新标签页）",
+  "arc_reader_title": "阅读故事篇章",
+  "arc_reader_scope": "成员、叙事顺序与登场各自独立。顺序与起止部分依目录记载，不以日期或标题推断时间线。",
+  "arc_reader_return": "目标页会在新标签页打开。关闭标签页即可返回当前阅读位置。",
+  "arc_reader_unavailable": "暂时无法读取，请重试。",
+  "arc_reader_withheld": "此内容未公开。",
+  "arc_reader_next_unavailable": "无法读取下一页。保留的页面不代表篇章到此结束。",
+  "arc_reader_unsupported": "当前定义版本尚未配置此阅读方式。可前往“详细信息”查看现有事实。",
+  "arc_reader_sequence": "有方向的叙事关系，按已发布的顺序排列。",
+  "arc_reader_appearances": "仅显示此作品中明确标注属于本篇章的登场。",
+  "arc_reader_membership": "有方向的成员关系，按已发布的顺序排列。位置与起止部分保留原有含义。",
+  "arc_reader_open": "打开条目",
+  "arc_reader_characters": "阅读此作品的篇章登场",
+  "arc_reader_back": "返回成员作品",
+  "arc_reader_complete": "此数据流没有下一页，并不代表叙事已结束。",
+  "arc_reader_statement": "陈述",
+  "arc_reader_target": "目标"
 }

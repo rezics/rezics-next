@@ -7867,5 +7867,21 @@
   "music_release_album": "アルバム",
   "music_release_absent": "値は記録されていません。",
   "music_release_generic": "一般的な情報を読む（新しいタブ）",
-  "music_release_correct": "修正を提案（新しいタブ）"
+  "music_release_correct": "修正を提案（新しいタブ）",
+  "arc_reader_title": "ストーリーアークを読む",
+  "arc_reader_scope": "所属、物語の順序、登場は別々の関係です。順序と範囲はカタログの記載に従い、日付や題名から時系列を推測しません。",
+  "arc_reader_return": "リンク先は新しいタブで開きます。タブを閉じると、この閲覧位置に戻れます。",
+  "arc_reader_unavailable": "現在読み込めません。再試行してください。",
+  "arc_reader_withheld": "この内容は公開されていません。",
+  "arc_reader_next_unavailable": "次のページを読み込めません。表示中のページがアークの終わりとは限りません。",
+  "arc_reader_unsupported": "この定義版では、この閲覧方法は設定されていません。「詳細」で既存の情報を確認できます。",
+  "arc_reader_sequence": "方向を持つ物語上の関係を、公開された順序で表示します。",
+  "arc_reader_appearances": "この作品で、このアークへの登場と明示された情報のみを表示します。",
+  "arc_reader_membership": "方向を持つ所属関係を、公開された順序で表示します。位置と最初・最後の部分は記載どおりの意味を保ちます。",
+  "arc_reader_open": "項目を開く",
+  "arc_reader_characters": "この作品のアーク内の登場を読む",
+  "arc_reader_back": "所属作品に戻る",
+  "arc_reader_complete": "この一覧に次のページはありません。物語の終わりを意味するものではありません。",
+  "arc_reader_statement": "記述",
+  "arc_reader_target": "対象"
 }

@@ -7867,5 +7867,21 @@
   "music_release_album": "Album",
   "music_release_absent": "Kein Wert erfasst.",
   "music_release_generic": "Allgemeine Fakten lesen (neuer Tab)",
-  "music_release_correct": "Korrektur vorschlagen (neuer Tab)"
+  "music_release_correct": "Korrektur vorschlagen (neuer Tab)",
+  "arc_reader_title": "Handlungsbogen lesen",
+  "arc_reader_scope": "Zugehörigkeit, Abfolge und Auftritte bleiben getrennt. Reihenfolge und Teilbereiche stammen aus dem Katalog; Datum und Titel begründen keine Chronologie.",
+  "arc_reader_return": "Ziele öffnen sich in einem neuen Tab. Schließen Sie ihn, um zu diesem Lesefenster zurückzukehren.",
+  "arc_reader_unavailable": "Diese Ansicht ist nicht verfügbar. Versuchen Sie es erneut.",
+  "arc_reader_withheld": "Dieser Inhalt wird nicht offengelegt.",
+  "arc_reader_next_unavailable": "Die nächste Seite ist nicht verfügbar. Die beibehaltene Seite belegt nicht, wo der Handlungsbogen endet.",
+  "arc_reader_unsupported": "Diese Definitionsversion konfiguriert diese Ansicht nicht. Verfügbare Fakten finden Sie unter Details.",
+  "arc_reader_sequence": "Gerichtete Erzählbeziehungen in ihrer veröffentlichten Reihenfolge.",
+  "arc_reader_appearances": "Nur Auftritte in diesem Werk, die ausdrücklich diesem Handlungsbogen zugeordnet sind.",
+  "arc_reader_membership": "Gerichtete Zugehörigkeiten in veröffentlichter Reihenfolge. Position sowie erster und letzter Teil behalten ihre angegebene Bedeutung.",
+  "arc_reader_open": "Eintrag öffnen",
+  "arc_reader_characters": "Auftritte dieses Werks im Handlungsbogen lesen",
+  "arc_reader_back": "Zurück zu den zugehörigen Werken",
+  "arc_reader_complete": "Keine weitere Seite in diesem Datenstrom. Dies belegt kein erzählerisches Ende.",
+  "arc_reader_statement": "Aussage",
+  "arc_reader_target": "Ziel"
 }

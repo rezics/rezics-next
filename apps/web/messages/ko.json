@@ -7867,5 +7867,21 @@
   "music_release_album": "앨범",
   "music_release_absent": "기록된 값이 없습니다.",
   "music_release_generic": "일반 정보 읽기 (새 탭)",
-  "music_release_correct": "수정 제안 (새 탭)"
+  "music_release_correct": "수정 제안 (새 탭)",
+  "arc_reader_title": "스토리 아크 읽기",
+  "arc_reader_scope": "소속, 서사 순서, 등장은 서로 다른 관계입니다. 순서와 범위는 목록에 기록된 내용을 따르며 날짜나 제목으로 연대기를 추론하지 않습니다.",
+  "arc_reader_return": "대상은 새 탭에서 열립니다. 탭을 닫으면 현재 읽기 위치로 돌아옵니다.",
+  "arc_reader_unavailable": "지금은 읽을 수 없습니다. 다시 시도하세요.",
+  "arc_reader_withheld": "이 내용은 공개되지 않았습니다.",
+  "arc_reader_next_unavailable": "다음 페이지를 읽을 수 없습니다. 현재 페이지가 아크의 끝을 뜻하지는 않습니다.",
+  "arc_reader_unsupported": "현재 정의 버전은 이 읽기 방식을 지원하지 않습니다. 자세히 보기에서 기존 사실을 확인하세요.",
+  "arc_reader_sequence": "방향이 있는 서사 관계를 공개된 순서로 표시합니다.",
+  "arc_reader_appearances": "이 작품에서 이 아크에 속한다고 명시된 등장만 표시합니다.",
+  "arc_reader_membership": "방향이 있는 소속 관계를 공개된 순서로 표시합니다. 위치와 시작·끝 부분은 명시된 의미를 유지합니다.",
+  "arc_reader_open": "항목 열기",
+  "arc_reader_characters": "이 작품의 아크 내 등장 읽기",
+  "arc_reader_back": "소속 작품으로 돌아가기",
+  "arc_reader_complete": "이 목록에는 다음 페이지가 없습니다. 서사가 끝났다는 뜻은 아닙니다.",
+  "arc_reader_statement": "진술",
+  "arc_reader_target": "대상"
 }

@@ -17,6 +17,7 @@ import { MusicAlbumOverview } from '../catalogue/music-reader-view';
 import { MusicReleaseOverview } from '../catalogue/music-release-reader/entry';
 import { musicReleaseEntry } from '../catalogue/music-release-reader/model';
 import { AlbumTrackOverview } from '../catalogue/album-track-reader/entry';
+import { StoryArcOverview } from '../catalogue/story-arc-reader/entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
@@ -729,6 +730,22 @@ export function SubjectPage({
             )}
             {!overview && bar}
             {overview && !header && afterHeader}
+            {overview &&
+            read &&
+            !page.account &&
+            (read.subject.type === 'wd:Q2620972' ||
+              (read.subject.relationCounts?.['rezics:storyArc'] ?? 0) > 0 ||
+              (read.subject.statements['rezics:storyArc']?.length ?? 0) > 0) ? (
+              <StoryArcOverview
+                source={page}
+                reader={page.requestedReader ?? null}
+                settings={reader}
+                id={read.subject.id}
+                context={page.context?.id ?? read.subject.context}
+                locale={locale}
+                realm={realm}
+              />
+            ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:Person' ? (
               <PersonOverview
                 source={page}

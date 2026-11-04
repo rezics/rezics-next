@@ -7942,5 +7942,21 @@
   "music_release_album": "Album",
   "music_release_absent": "No value is recorded.",
   "music_release_generic": "Read generic facts (new tab)",
-  "music_release_correct": "Suggest a correction (new tab)"
+  "music_release_correct": "Suggest a correction (new tab)",
+  "arc_reader_title": "Story arc reading",
+  "arc_reader_scope": "Membership, sequence and appearances remain separate. Order and part ranges are supplied by the catalogue; dates and titles do not establish chronology.",
+  "arc_reader_return": "Destinations open in a new tab. Close it to return to this exact reading window.",
+  "arc_reader_unavailable": "This reading is unavailable. Try again.",
+  "arc_reader_withheld": "This reading is not disclosed.",
+  "arc_reader_next_unavailable": "The next page is unavailable. The retained page does not establish where the arc ends.",
+  "arc_reader_unsupported": "This release does not configure this reading. Continue through Details for available facts.",
+  "arc_reader_sequence": "Directed narrative relationships, in their released order.",
+  "arc_reader_appearances": "Only appearances explicitly qualified for this arc, on this work.",
+  "arc_reader_membership": "Directed memberships, in their released order. Position and first/last parts retain their stated meaning.",
+  "arc_reader_open": "Open subject",
+  "arc_reader_characters": "Read this work’s arc appearances",
+  "arc_reader_back": "Return to member works",
+  "arc_reader_complete": "No further page in this stream. This does not establish a narrative ending.",
+  "arc_reader_statement": "Statement",
+  "arc_reader_target": "Target"
 }

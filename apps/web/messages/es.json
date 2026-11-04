@@ -7867,5 +7867,21 @@
   "music_release_album": "Álbum",
   "music_release_absent": "No hay ningún valor registrado.",
   "music_release_generic": "Consultar datos generales (otra pestaña)",
-  "music_release_correct": "Sugerir una corrección (otra pestaña)"
+  "music_release_correct": "Sugerir una corrección (otra pestaña)",
+  "arc_reader_title": "Leer un arco narrativo",
+  "arc_reader_scope": "La pertenencia, la secuencia y las apariciones son relaciones distintas. El orden y los intervalos proceden del catálogo; las fechas y los títulos no establecen una cronología.",
+  "arc_reader_return": "Los destinos se abren en una pestaña nueva. Ciérrela para volver a esta misma ventana de lectura.",
+  "arc_reader_unavailable": "Esta lectura no está disponible. Inténtelo de nuevo.",
+  "arc_reader_withheld": "Este contenido no se divulga.",
+  "arc_reader_next_unavailable": "La página siguiente no está disponible. La página conservada no determina dónde termina el arco.",
+  "arc_reader_unsupported": "Esta versión de las definiciones no configura esta lectura. Consulte los hechos disponibles en Detalles.",
+  "arc_reader_sequence": "Relaciones narrativas dirigidas, en su orden publicado.",
+  "arc_reader_appearances": "Solo las apariciones de esta obra asociadas explícitamente a este arco.",
+  "arc_reader_membership": "Pertenencias dirigidas, en su orden publicado. La posición y las partes inicial y final conservan su significado declarado.",
+  "arc_reader_open": "Abrir tema",
+  "arc_reader_characters": "Leer las apariciones de esta obra en el arco",
+  "arc_reader_back": "Volver a las obras integrantes",
+  "arc_reader_complete": "No hay más páginas en este flujo. Esto no establece un final narrativo.",
+  "arc_reader_statement": "Declaración",
+  "arc_reader_target": "Destino"
 }
