@@ -55,8 +55,8 @@ function publicIdentity(value: unknown, accountId: string): value is MembershipP
     fields(value, ['id', 'kind', 'handle', 'displayName']) &&
     value.id === accountId &&
     (value.kind === 'actor' || value.kind === 'organization') &&
-    (value.handle === null || typeof value.handle === 'string' && value.handle.length <= 256) &&
-    (value.displayName === null || typeof value.displayName === 'string' && value.displayName.length <= 256)
+    (value.handle === null || (typeof value.handle === 'string' && value.handle.length <= 256)) &&
+    (value.displayName === null || (typeof value.displayName === 'string' && value.displayName.length <= 256))
   );
 }
 
@@ -150,7 +150,10 @@ export function organizationMembershipPageTransport(
         headers: { 'cache-control': 'private, no-store', 'x-content-type-options': 'nosniff' },
       });
     const refused = (status: number) =>
-      response({ error: status === 503 ? 'organization_membership_page_unavailable' : 'organization_membership_page_denied' }, status);
+      response(
+        { error: status === 503 ? 'organization_membership_page_unavailable' : 'organization_membership_page_denied' },
+        status,
+      );
     if (!access) return refused(503);
     if (
       request.method !== 'POST' ||
@@ -196,8 +199,12 @@ export function organizationMembershipPageTransport(
     } catch (error) {
       if (error && typeof error === 'object' && 'code' in error && error.code === 'step_up_required')
         return response({ error: 'step_up_required' }, 401);
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'invalid_cursor') return refused(400);
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'stale_cursor') return refused(409);
       const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined;
-      return refused(typeof status === 'number' && [400, 401, 403, 404, 409, 413, 415, 503].includes(status) ? status : 503);
+      return refused(
+        typeof status === 'number' && [400, 401, 403, 404, 409, 413, 415, 503].includes(status) ? status : 503,
+      );
     }
   };
 }
