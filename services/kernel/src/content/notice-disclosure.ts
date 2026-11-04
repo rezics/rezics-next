@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { routeOf } from '../route/route.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { ReportId } from './model.ts';
@@ -26,7 +27,7 @@ export type NoticeCandidate = Readonly<{
   unread: boolean;
 }>;
 
-import { readNoticeActors, unavailableNoticeActor, type NoticeActor, type NoticeActorObservationReader } from './notice-actor-context.ts';
+import { readNoticeActors, unavailableNoticeActor, type NoticeActor } from './notice-actor-context.ts';
 export type { NoticeActor } from './notice-actor-context.ts';
 
 export type NoticeTarget = Readonly<{
@@ -63,7 +64,6 @@ export type NoticeDisclosureDependencies = Readonly<{
   routeKey: Uint8Array;
   actor: Actor;
   deadline: number;
-  noticeActorObservations?: NoticeActorObservationReader;
 }>;
 
 const withheldTarget = (): NoticeTarget => ({
@@ -294,7 +294,7 @@ export async function discloseNoticeCandidates(
   const actors =
     options.includeActors === false
       ? new Map<string, NoticeActor>()
-      : await readNoticeActors(dependencies.pool, actorIds, dependencies.deadline, dependencies.noticeActorObservations);
+      : await readNoticeActors(dependencies.pool, actorIds, dependencies.deadline);
 
   // The first native source and target reads are the baseline. Re-read those same
   // keys after Account/Media composition so the presentation round cannot validate

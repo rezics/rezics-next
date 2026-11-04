@@ -13,7 +13,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { reactionFixture } from './reactions.test.ts';
 import { observeSql } from './support/sql-observer.ts';
-import { readNoticeActors, type NoticeActorObservationReader } from '../../src/content/notice-actor-context.ts';
+import { readNoticeActors } from '../../src/content/notice-actor-context.ts';
 
 let fixture: Awaited<ReturnType<typeof reactionFixture>>;
 let inbox: InboxDependencies;
@@ -155,34 +155,43 @@ test('notice actor composition admits Media variants independently and retires c
      VALUES ($1,$2,'webp',64,64,'image/webp',100,repeat('b',64),'unused-variant-key',$2)`,
     [r, media],
   );
-  const identity = {
-    id, kind: 'actor' as const, state: 'active' as const, displayName: 'Current member', handle: null,
-    automated: false, operatorId: null, avatarMediaId: media, nativeState: 'active' as const, authnFenced: false,
-  };
-  const read = async (after?: NoticeActorObservationReader) => {
-    const requested: string[][] = [];
-    const actors = await readNoticeActors(fixture.db.pool, [id, id], Date.now() + 30_000, async (client, ids) => {
-      requested.push([...ids]);
-      return requested.length === 2 && after ? after(client, ids) : [identity];
+  const original = (await fixture.db.admin.query(
+    'SELECT display_name FROM access.account WHERE route=$1 AND account_id=$2', [r, id],
+  )).rows[0];
+  const reset = () => fixture.db.admin.query(
+    `UPDATE access.account SET state='active',authn_fenced=false,display_name=$3,avatar=$4
+     WHERE route=$1 AND account_id=$2`, [r, id, original.display_name, media],
+  );
+  await reset();
+  const trace = observeSql(fixture.db.pool);
+  const read = () => readNoticeActors(fixture.db.pool, [id, id], Date.now() + 30_000);
+  try {
+    expect((await read()).get(id)).toMatchObject({
+      state: 'available', avatarUrl: null,
+      avatar: { media, width: 64, height: 64, variants: [{ format: 'webp', width: 64 }] },
     });
-    expect(requested).toEqual([[id], [id]]);
-    return actors.get(id);
-  };
-  expect(await read()).toMatchObject({
-    state: 'available', displayName: 'Current member', avatarUrl: null,
-    avatar: { media, width: 64, height: 64, variants: [{ format: 'webp', width: 64 }] },
-  });
-  for (const changed of [
-    { ...identity, avatarMediaId: newId(r) },
-    { ...identity, displayName: 'Replacement name' },
-    { ...identity, authnFenced: true },
-    { ...identity, operatorId: newId(r) },
-    { id, kind: 'actor' as const, state: 'deleted' as const },
-  ]) expect(await read(async () => [changed])).toBeUndefined();
-  expect(await read(async () => [])).toBeUndefined();
-  await expect(read(async () => { throw new Error('Account observation unavailable'); })).rejects.toThrow('Account observation unavailable');
-  await fixture.db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [r, media]);
-  expect(await read()).toMatchObject({ state: 'available', displayName: 'Current member', avatar: null, avatarUrl: null });
-  const thin = await readNoticeActors(fixture.db.pool, [id], Date.now() + 30_000);
-  expect(thin.get(id)).toMatchObject({ state: 'available', avatar: null, avatarUrl: null });
+    const observations = trace.records.filter((row) => row.statement.includes('AS "nativeState"'));
+    expect(observations).toHaveLength(2);
+    const statement = observations[0]!.statement;
+    expect(trace.records.filter((row) => row.statement.includes('variants_json'))).toHaveLength(1);
+    for (const assignment of ["avatar=NULL", "display_name='Replacement name'", 'authn_fenced=true', "state='pending'", "state='deleted'"]) {
+      await reset();
+      const barrier = trace.hold({ statement, occurrence: 2 }, 'before');
+      const reading = read();
+      try {
+        await barrier.entered;
+        await fixture.db.admin.query(`UPDATE access.account SET ${assignment} WHERE route=$1 AND account_id=$2`, [r, id]);
+      } finally { barrier.release(); }
+      expect((await reading).get(id)).toBeUndefined();
+    }
+    await reset();
+    trace.armFault({ match: { statement, occurrence: 2 }, boundary: 'before', error: new Error('Account observation unavailable') });
+    await expect(read()).rejects.toThrow('Account observation unavailable');
+    await fixture.db.admin.query('UPDATE content.media SET taken_down=true WHERE route=$1 AND media_id=$2', [r, media]);
+    expect((await read()).get(id)).toMatchObject({ state: 'available', avatar: null, avatarUrl: null });
+  } finally {
+    await trace.close();
+    await reset();
+    await fixture.db.admin.query('UPDATE access.account SET avatar=NULL WHERE route=$1 AND account_id=$2', [r, id]);
+  }
 });
