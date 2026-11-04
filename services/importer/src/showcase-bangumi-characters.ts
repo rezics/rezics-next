@@ -1,5 +1,11 @@
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { BATCH_LIMIT, checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
+import {
+  BATCH_LIMIT,
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchReference,
+  type BatchStatement,
+} from '@rezics/definitions/bulk';
 import type { SourceVocabularyBindings, SourceVocabularyGap } from '@rezics/conversion';
 import { mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
 import { commandKey, sourceDigest, sourceEnvelope } from '../../../packages/conversion/src/support.ts';
@@ -109,7 +115,8 @@ function selectedNeed(plan: CrossMediaPlan): CharacterVocabularyNeed {
   );
   const schemes = new Map<Taxonomy, { ownerKey: string; citation: string }>();
   for (const evidence of selectedConcepts) {
-    if (!schemes.has(evidence.taxonomy)) schemes.set(evidence.taxonomy, { ownerKey: evidence.ownerKey, citation: evidence.citation });
+    if (!schemes.has(evidence.taxonomy))
+      schemes.set(evidence.taxonomy, { ownerKey: evidence.ownerKey, citation: evidence.citation });
   }
   return { schemes, concepts: selectedConcepts, diagnostics: diagnostics.slice(0, 64) };
 }
@@ -206,12 +213,12 @@ function vocabularyCommands(input: {
     });
   }
   return statements.map((statement) => ({
-      op: 'propose' as const,
-      key: `bangumi-character-vocabulary:${commandKey([JSON.stringify(source), subjectId, 'propose', JSON.stringify(statement)])}`,
-      source,
-      subject: subjectId,
-      statement,
-    }));
+    op: 'propose' as const,
+    key: `bangumi-character-vocabulary:${commandKey([JSON.stringify(source), subjectId, 'propose', JSON.stringify(statement)])}`,
+    source,
+    subject: subjectId,
+    statement,
+  }));
 }
 
 function ackedCreates(journal: ShowcaseJournal): Map<string, string> {
@@ -238,7 +245,8 @@ async function sendMissing(input: {
   const commands = input.commands.filter((command) => {
     const digest = acknowledged.get(command.key);
     if (digest === undefined) return true;
-    if (digest !== showcaseDigest(command)) throw new TypeError('Bangumi character vocabulary ACK changed its command body');
+    if (digest !== showcaseDigest(command))
+      throw new TypeError('Bangumi character vocabulary ACK changed its command body');
     return false;
   });
   for (let offset = 0; offset < commands.length; offset += BATCH_LIMIT) {
@@ -263,14 +271,16 @@ function identityBindings(need: CharacterVocabularyNeed, journal: ShowcaseJourna
     const id = creates.get(showcaseVocabularyExternalId(vocabularyKey(entry.taxonomy, entry.code)));
     const schemeId = schemeIds.get(entry.taxonomy);
     return id && schemeId
-      ? [{
-          taxonomy: entry.taxonomy,
-          code: entry.code,
-          id,
-          type: 'skos:Concept' as const,
-          schemeId,
-          releaseDigest: bundledDigest,
-        }]
+      ? [
+          {
+            taxonomy: entry.taxonomy,
+            code: entry.code,
+            id,
+            type: 'skos:Concept' as const,
+            schemeId,
+            releaseDigest: bundledDigest,
+          },
+        ]
       : [];
   });
   return { releaseDigest: bundledDigest, schemes, concepts };
@@ -310,10 +320,9 @@ export async function prepareShowcaseBangumiCharacterVocabulary(input: {
   const current = await currentBangumiCharacterVocabularyBindings(identityBindings(need, input.journal), input.port);
   const currentSchemes = new Map(current.schemes.map((entry) => [entry.taxonomy, entry.id]));
   const conceptEntries = need.concepts.filter((entry) => currentSchemes.has(entry.taxonomy));
-  const conceptCommands = conceptEntries.flatMap((entry) =>
-    vocabularyCommands({ entry, nativeType: 'skos:Concept' }),
-  );
-  if (conceptCommands.length) await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
+  const conceptCommands = conceptEntries.flatMap((entry) => vocabularyCommands({ entry, nativeType: 'skos:Concept' }));
+  if (conceptCommands.length)
+    await sendMissing({ port: input.port, journal: input.journal, commands: conceptCommands });
   const conceptCreates = ackedCreates(input.journal);
   const conceptProposals = conceptEntries.flatMap((entry) => {
     const subjectId = conceptCreates.get(showcaseVocabularyExternalId(vocabularyKey(entry.taxonomy, entry.code)));

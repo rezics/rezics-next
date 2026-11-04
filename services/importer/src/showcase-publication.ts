@@ -1018,7 +1018,7 @@ export async function publishShowcase(input: {
                 host !== 'www.bangumi.tv' &&
                 !(assertion.property === 'schema:image' && host === 'lain.bgm.tv') &&
                 !sourceVocabularyCitation(record, uri)
-            : host !== 'vndb.org' && !host.endsWith('.vndb.org');
+              : host !== 'vndb.org' && !host.endsWith('.vndb.org');
         } catch {
           return true;
         }
@@ -1474,16 +1474,12 @@ export async function publishShowcase(input: {
       const code = appearance?.roleCode ?? (characterRecord?.payload as Record<string, unknown> | undefined)?.type;
       const group = appearance ? 'subject-characters.type' : 'character.role';
       const enumeration =
-        typeof code === 'number' || typeof code === 'string'
-          ? mapSourceEnumeration('bangumi', group, code)
-          : undefined;
+        typeof code === 'number' || typeof code === 'string' ? mapSourceEnumeration('bangumi', group, code) : undefined;
       const conceptUri = enumeration?.concept?.id;
       const concept = conceptUri
         ? manifest.vocabulary.find(
             (record) =>
-              record.provider === 'bangumi' &&
-              record.nativeType === 'skos:Concept' &&
-              record.sourceUri === conceptUri,
+              record.provider === 'bangumi' && record.nativeType === 'skos:Concept' && record.sourceUri === conceptUri,
           )
         : undefined;
       return [

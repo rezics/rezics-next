@@ -84,13 +84,12 @@ export function bangumiAppearanceSource(alias: string, appearance: BangumiAppear
     appearance.sourceIndex < 0
   )
     throw new TypeError('Invalid Bangumi appearance source identity');
-  const sourceRow =
-    appearance.sourceRow ?? {
-      subject_id: Number(appearance.subjectId),
-      character_id: appearance.characterId,
-      type: appearance.roleCode,
-      ...(appearance.order === undefined ? {} : { order: appearance.order }),
-    };
+  const sourceRow = appearance.sourceRow ?? {
+    subject_id: Number(appearance.subjectId),
+    character_id: appearance.characterId,
+    type: appearance.roleCode,
+    ...(appearance.order === undefined ? {} : { order: appearance.order }),
+  };
   return sourceEnvelope(
     {
       source: alias,
@@ -122,14 +121,19 @@ export function combineSourceVocabularyRequests(
       const prior = schemes.get(item.taxonomy);
       if (
         prior &&
-        (prior.id !== item.id || prior.uri !== item.uri || prior.type !== item.type || prior.releaseDigest !== item.releaseDigest)
+        (prior.id !== item.id ||
+          prior.uri !== item.uri ||
+          prior.type !== item.type ||
+          prior.releaseDigest !== item.releaseDigest)
       )
         throw new TypeError(`Source vocabulary adapters disagree on scheme ${item.taxonomy}`);
       schemes.set(item.taxonomy, item);
     }
     for (const item of request.bindings.concepts) {
       if (item.releaseDigest !== releaseDigest)
-        throw new TypeError(`Source vocabulary concept uses a different definition release: ${item.taxonomy}:${item.code}`);
+        throw new TypeError(
+          `Source vocabulary concept uses a different definition release: ${item.taxonomy}:${item.code}`,
+        );
       const key = `${item.taxonomy}\0${item.code}`;
       const prior = concepts.get(key);
       if (

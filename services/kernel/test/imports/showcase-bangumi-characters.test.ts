@@ -77,8 +77,11 @@ function vocabularySubjectIds(journal: ShowcaseJournal): Map<string, string> {
 }
 
 function subjectStatements(read: Awaited<ReturnType<ReturnType<typeof createPublicBulkClient>['readSubject']>>) {
-  return (read.subject as { statements: Record<string, { value: { content: unknown }; qualifiers?: unknown[]; references?: unknown[] }[]> })
-    .statements;
+  return (
+    read.subject as {
+      statements: Record<string, { value: { content: unknown }; qualifiers?: unknown[]; references?: unknown[] }[]>;
+    }
+  ).statements;
 }
 
 test('selected anime character vocabulary is separately adopted and refreshed through the default adapter', async () => {
@@ -98,19 +101,14 @@ test('selected anime character vocabulary is separately adopted and refreshed th
       },
     });
     const plan = await planCrossMediaSeed(sourceTables());
-    expect(plan.characterAppearances?.map(({ subjectId, characterId, roleCode }) => [subjectId, characterId, roleCode])).toEqual([
+    expect(
+      plan.characterAppearances?.map(({ subjectId, characterId, roleCode }) => [subjectId, characterId, roleCode]),
+    ).toEqual([
       ['101', 901, 1],
       ['102', 901, 2],
     ]);
     const seed = (bindings?: SourceVocabularyBindings) =>
-      seedCrossMedia(
-        plan,
-        statePath,
-        port,
-        { origin: runtime.origin },
-        {},
-        bindings,
-      );
+      seedCrossMedia(plan, statePath, port, { origin: runtime.origin }, {}, bindings);
     const first = await seed();
     const identities = new Map(
       first.readings.map((reading) => [reading.externalId, (reading.subject.subject as { id: string }).id]),
@@ -123,15 +121,17 @@ test('selected anime character vocabulary is separately adopted and refreshed th
     const schemes = await prepareShowcaseBangumiCharacterVocabulary({ plan, port, journal, stage: 'schemes' });
     expect(schemes.bindings.schemes).toEqual([]);
     expect(
-      (await publishShowcase({
-        plan,
-        result: first,
-        aliases: crossMediaAliases,
-        journal,
-        review: runtime.importTransport,
-        publicClient,
-        vocabularyRequirements: schemes.requirements,
-      })).status,
+      (
+        await publishShowcase({
+          plan,
+          result: first,
+          aliases: crossMediaAliases,
+          journal,
+          review: runtime.importTransport,
+          publicClient,
+          vocabularyRequirements: schemes.requirements,
+        })
+      ).status,
     ).toBe('incomplete');
 
     const grant = await editor.http('/v1/grants', {
@@ -208,7 +208,9 @@ test('selected anime character vocabulary is separately adopted and refreshed th
     const secondWork = subjectStatements(await publicClient.readSubject(workTwoId));
     const character = subjectStatements(await publicClient.readSubject(characterId));
     const firstAppearance = firstWork['schema:character']?.find((statement) => statement.value.content === characterId);
-    const secondAppearance = secondWork['schema:character']?.find((statement) => statement.value.content === characterId);
+    const secondAppearance = secondWork['schema:character']?.find(
+      (statement) => statement.value.content === characterId,
+    );
     expect(firstAppearance?.qualifiers).toContainEqual(
       expect.objectContaining({ property: { id: 'wdt:P3831' }, value: { content: main.id } }),
     );
@@ -216,9 +218,9 @@ test('selected anime character vocabulary is separately adopted and refreshed th
       expect.objectContaining({ property: { id: 'wdt:P3831' }, value: { content: supporting.id } }),
     );
     expect(character['schema:keywords']?.map((statement) => statement.value.content)).toContain(kind.id);
-    expect(
-      JSON.stringify(firstAppearance?.references),
-    ).toContain('https://bgm.tv/subject/101#/subject-characters/0/type');
+    expect(JSON.stringify(firstAppearance?.references)).toContain(
+      'https://bgm.tv/subject/101#/subject-characters/0/type',
+    );
 
     const acknowledged = vocabularySubjectIds(journal);
     expect(acknowledged.get(characterKindsUri)).toBe(kindSchemeId);

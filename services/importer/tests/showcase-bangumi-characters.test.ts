@@ -6,10 +6,7 @@ import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { NativeIdentity, SourceVocabularyRow } from '@rezics/conversion';
-import {
-  bangumiRecordUrl,
-  converter_revision as entityRevision,
-} from '@rezics/conversion/cross-media-entities';
+import { bangumiRecordUrl, converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import {
   crossMediaAliases,
   planCrossMediaSeed,
@@ -97,7 +94,10 @@ function vocabularyPort(journal: ShowcaseJournal) {
         return { key: command.key, status: 201 as const, value };
       });
       for (const [index, command] of request.commands.entries()) {
-        journal.acknowledgeCommand(command, results[index]! as Extract<BatchWriteResult['results'][number], { status: 200 | 201 }>);
+        journal.acknowledgeCommand(
+          command,
+          results[index]! as Extract<BatchWriteResult['results'][number], { status: 200 | 201 }>,
+        );
       }
       return { results } as BatchWriteResult;
     },
@@ -141,7 +141,9 @@ function appearanceRow(
 
 test('default local adapter keeps character kinds separate from each anime appearance role and withholds a wrong-scheme role', async () => {
   const plan = await planCrossMediaSeed(tables());
-  expect(plan.characterAppearances?.map(({ subjectId, characterId, roleCode }) => [subjectId, characterId, roleCode])).toEqual([
+  expect(
+    plan.characterAppearances?.map(({ subjectId, characterId, roleCode }) => [subjectId, characterId, roleCode]),
+  ).toEqual([
     ['101', 901, 1],
     ['102', 901, 2],
   ]);
@@ -221,9 +223,11 @@ test('default local adapter keeps character kinds separate from each anime appea
     expect(mainAppearance?.source).toEqual(
       bangumiAppearanceSource(crossMediaAliases.bangumi, plan.characterAppearances![0]!),
     );
-    expect(
-      workTwoResult.sourceVocabularyGaps?.find((gap) => gap.reason === 'missing_concept'),
-    ).toMatchObject({ path: '/subject-characters/1/type', code: '2', property: 'skos:Concept' });
+    expect(workTwoResult.sourceVocabularyGaps?.find((gap) => gap.reason === 'missing_concept')).toMatchObject({
+      path: '/subject-characters/1/type',
+      code: '2',
+      property: 'skos:Concept',
+    });
     expect(
       workTwoResult.proposals.some(
         (command) => command.op === 'propose' && command.statement.property.id === 'schema:character',
