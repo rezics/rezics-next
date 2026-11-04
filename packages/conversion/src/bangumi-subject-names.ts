@@ -11,6 +11,18 @@ export type BangumiNameExtraction = Readonly<{
   names: readonly BangumiSubjectName[];
   diagnostics: readonly BangumiNameDiagnostic[];
 }>;
+export type BangumiNameRecord = Readonly<{
+  type: number;
+  name: string;
+  name_cn?: string;
+  infobox?: string;
+}>;
+export type BangumiNameTemplate = Readonly<{
+  type: number;
+  isTemplateHead(line: string): boolean;
+  listFields: ReadonlySet<'中文名' | '别名'>;
+  retainedOtherFields?: ReadonlySet<string>;
+}>;
 
 const nameLimit = 24;
 const fieldLimit = 64;
@@ -23,6 +35,7 @@ type NameField = {
   form: 'empty' | 'scalar' | 'list';
   values: string[];
   unsupported: boolean;
+  limitExceeded: boolean;
 };
 
 function* sourceLines(text: string): Generator<{ line: string; number: number }> {
@@ -59,16 +72,11 @@ function compareNames(left: BangumiSubjectName, right: BangumiSubjectName): numb
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/**
- * Extract only the two admitted TVAnime name fields. Unknown fields and wiki
- * structures remain bounded omissions; source spelling inside plain values is kept.
- */
-export function extractBangumiSubjectNames(record: {
-  readonly type: number;
-  readonly name: string;
-  readonly name_cn?: string;
-  readonly infobox?: string;
-}): BangumiNameExtraction {
+/** Extract admitted names from one pinned template with bounded field staging. */
+export function extractBangumiNamesForTemplate(
+  record: BangumiNameRecord,
+  template: BangumiNameTemplate,
+): BangumiNameExtraction {
   const names: BangumiSubjectName[] = [];
   const seen = new Set<string>();
   const diagnostics: BangumiNameDiagnostic[] = [];
@@ -92,10 +100,28 @@ export function extractBangumiSubjectNames(record: {
     seen.add(tuple);
     if (names.length < nameLimit) names.push({ property, language, text: raw });
   };
+  const stageValue = (field: NameField, raw: string) => {
+    if (field.unsupported || field.limitExceeded) return;
+    const text = plainName(raw);
+    if (text === undefined) {
+      field.unsupported = true;
+      return;
+    }
+    const property = field.key === '中文名' ? 'schema:name' : 'schema:alternateName';
+    const language = field.key === '中文名' ? 'zh' : 'und';
+    const tuple = `${property}\u0000${language}\u0000${text}`;
+    if (seen.has(tuple) || field.values.includes(text)) return;
+    if (names.length + field.values.length >= nameLimit) {
+      field.limitExceeded = true;
+      return;
+    }
+    field.values.push(text);
+  };
 
   addTopLevel('schema:name', 'und', record.name);
   if (record.name_cn?.trim()) addTopLevel('schema:name', 'zh', record.name_cn);
-  if (record.type !== 2 || record.infobox === undefined) return { names: names.sort(compareNames), diagnostics };
+  if (record.type !== template.type || record.infobox === undefined)
+    return { names: names.sort(compareNames), diagnostics };
 
   const infobox = record.infobox;
   const iterator = sourceLines(infobox);
@@ -108,7 +134,7 @@ export function extractBangumiSubjectNames(record: {
     }
     candidate = iterator.next();
   }
-  if (!header || !isBangumiTVAnimeTemplateHead(header.line)) {
+  if (!header || !template.isTemplateHead(header.line)) {
     omit('/infobox', 'unsupported_infobox_template');
     return { names: names.sort(compareNames), diagnostics };
   }
@@ -128,22 +154,17 @@ export function extractBangumiSubjectNames(record: {
       omit(field.pointer, 'unsupported_infobox_name_form');
       return;
     }
+    if (field.limitExceeded) {
+      omit(field.pointer, 'infobox_name_limit');
+      return;
+    }
     if (!field.values.length) return;
 
     const property = field.key === '中文名' ? 'schema:name' : 'schema:alternateName';
     const language = field.key === '中文名' ? 'zh' : 'und';
-    const staged = field.values.map((value) => plainName(value));
-    if (staged.some((text) => text === undefined)) {
-      omit(field.pointer, 'unsupported_infobox_name_form');
-      return;
-    }
-    const fieldNames = new Map<string, BangumiSubjectName>();
-    for (const text of staged) {
-      if (text === undefined) continue;
-      const tuple = `${property}\u0000${language}\u0000${text}`;
-      fieldNames.set(tuple, { property, language, text });
-    }
-    const additions = [...fieldNames].filter(([tuple]) => !seen.has(tuple));
+    const additions = field.values
+      .map((text) => [`${property}\u0000${language}\u0000${text}`, { property, language, text }] as const)
+      .filter(([tuple]) => !seen.has(tuple));
     if (names.length + additions.length > nameLimit) {
       omit(field.pointer, 'infobox_name_limit');
       return;
@@ -197,13 +218,14 @@ export function extractBangumiSubjectNames(record: {
         form: 'empty',
         values: [],
         unsupported: false,
+        limitExceeded: false,
       };
       if (key === '中文名' || key === '别名') {
         if (value) {
           active.form = 'scalar';
-          active.values.push(value);
+          stageValue(active, value);
         }
-      } else if (!bangumiTelevisionRunKeys.has(key)) omit(pointer, 'unsupported_infobox_key');
+      } else if (!template.retainedOtherFields?.has(key)) omit(pointer, 'unsupported_infobox_key');
       continue;
     }
     if (!active) {
@@ -213,21 +235,36 @@ export function extractBangumiSubjectNames(record: {
     if (active.key !== '中文名' && active.key !== '别名') continue;
     const continuation = cleanHorizontal(line);
     if (continuation.startsWith('*')) {
-      if (active.key !== '别名' || continuation.startsWith('**') || continuation === '*' || active.form === 'scalar') {
+      if (
+        !template.listFields.has(active.key as '中文名' | '别名') ||
+        continuation.startsWith('**') ||
+        continuation === '*' ||
+        active.form === 'scalar'
+      ) {
         active.unsupported = true;
         continue;
       }
       active.form = 'list';
-      active.values.push(continuation.slice(1));
+      stageValue(active, continuation.slice(1));
       continue;
     }
     if (active.key === '别名' && active.form === 'empty') {
       active.form = 'scalar';
-      active.values.push(continuation);
+      stageValue(active, continuation);
     } else active.unsupported = true;
   }
   finishField(active, closed);
   if (!closed) omit('/infobox', 'unsupported_infobox_structure');
   if (trailing) omit('/infobox', 'unsupported_infobox_structure');
   return { names: names.sort(compareNames), diagnostics };
+}
+
+/** The TVAnime owner admits only its pinned template and existing run fields. */
+export function extractBangumiSubjectNames(record: BangumiNameRecord): BangumiNameExtraction {
+  return extractBangumiNamesForTemplate(record, {
+    type: 2,
+    isTemplateHead: isBangumiTVAnimeTemplateHead,
+    listFields: new Set(['别名']),
+    retainedOtherFields: bangumiTelevisionRunKeys,
+  });
 }

@@ -917,7 +917,7 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 
 ## Bangumi TVAnime subject names
 
-`bangumi@7` consumes only `中文名` and `别名` from the exact pinned
+`bangumi@10` consumes only `中文名` and `别名` from the exact pinned
 `{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
 Bangumi converter and selected-family registrations share this pure extraction.
 The existing top-level `name` and `name_cn` bootstrap labels keep their current
@@ -933,7 +933,36 @@ omissions, with no source prose copied into diagnostics. Parsing scans at most 6
 field occurrences, retains at most 24 distinct name values, and emits at most 16
 omission diagnostics. Each field occurrence is staged until its complete scalar
 or bullet-list form is known; malformed or mixed occurrences contribute no names.
-omission diagnostics.
+
+## Bangumi Game subject names
+
+The pinned `{{Infobox Game` grammar is distinct from TVAnime. Bangumi type 4
+uses only scalar `中文名` and scalar or single-level bullet-list `别名`; Chinese
+names are `zh` and aliases stay `und`. Top-level `name` and `name_cn` keep their
+existing bootstrap meanings. These names become independently cited native
+`schema:name` and `schema:alternateName` proposals on the existing VideoGame
+identity. The full infobox stays in the bounded normalized projection and digest.
+
+Nested wiki markup, unsupported keys and incomplete field occurrences are
+withheld as bounded diagnostics. Exact property/language/text tuples dedupe;
+spelling and stable semantic ordering are retained. No game language, preferred
+label, translation or identity match is inferred from a name. Platform, genre,
+summary and cover mappings remain with their current owners.
+
+Decision: Game names advance ordinary Bangumi conversion to `bangumi@10`; the
+selected-family caller uses `bangumi@10+cross-media-entities@9` to refresh under
+its current registered converter.
+
+- Touches: one selected Game record, at most 24 distinct names and 16 omission
+  diagnostics; every admitted name carries its exact subject citation.
+- Bound: 65,536 infobox characters, 64 field occurrences, the existing
+  normalized-record cap and source journal/batch limits; source prose never
+  enters diagnostics.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` covers the
+  shared Game fixture, selected-family registration, citations, omission,
+  neighbor exclusion and refresh. The connected ordinary caller is
+  `services/kernel/test/imports/bangumi-game-names.test.ts`; native execution is
+  controller-owned, with no local pass claimed.
 
 ### Bangumi character physical profile
 

@@ -2207,13 +2207,11 @@ for these source Concepts.
 
 ### Bangumi TVAnime subject names
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@9`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
+Ordinary imports use the current `bangumi@10` converter; selected-family
+imports use `bangumi@10+cross-media-entities@9`. Both share one pure TVAnime
+name extractor and the existing journal, source metadata admission, citations,
+candidate acceptance and adoption flow.
+No additional seed publisher or identity lookup is involved. The importer keeps the
 exact Bangumi subject alias and key, unversioned record state where no provider
 revision exists, the normalized digest and the acknowledged native UUID.
 
@@ -2251,10 +2249,9 @@ date is not completion or access authority.
 ### Bangumi Game player count
 
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
-`游玩人数` on type 4 through `bangumi@9`, advancing the `bangumi@8` TVAnime
-original-run mapping. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@8` registration; this journey adds no
-publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
+`游玩人数` on type 4 through `bangumi@10`, preserving the earlier player-count
+mapping. Selected-family seed uses `bangumi@10+cross-media-entities@9`; this
+journey adds no publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
 Decision: Game-template `游玩人数` admits only an entire-field unqualified
@@ -2272,6 +2269,32 @@ positive integer or inclusive range; a lone count invents no minimum.
   selected-family caller is
   `services/kernel/test/imports/bangumi-game-player-count.test.ts`; native
   execution remains controller-owned.
+
+### Bangumi Game subject names
+
+Type 4 Games retain names from the exact pinned `{{Infobox Game` template.
+Scalar `中文名` becomes `schema:name` in `zh`; scalar or single-level bullet
+`别名` becomes `schema:alternateName` in `und`. Top-level labels keep their
+existing meanings. Names cite the exact Bangumi subject URL after the provider
+identity is bound, and the complete bounded infobox remains in the projection
+and digest. No game language, preferred label, translation or identity match is
+inferred.
+
+Unsupported nested markup and malformed field occurrences become bounded
+diagnostics without source prose. Platform, genre, player count, summary and
+cover remain with their current owners. Ordinary imports use `bangumi@10`; the
+selected-family caller uses `bangumi@10+cross-media-entities@9`. Ordinary
+imports remain proposal-only; review and adoption use the separate current API.
+
+- Touches: one source-selected Game record, at most 24 names and 16 omissions,
+  with an exact source citation per proposal.
+- Bound: 65,536 infobox characters, 64 fields, the existing normalized-record,
+  journal and batch caps.
+- Growth check: `services/importer/tests/bangumi-game-names.test.ts` covers
+  selected-family names, provenance, omissions and neighbor exclusion. The
+  ordinary review/adoption/reopen/facts-fence journey is
+  `services/kernel/test/imports/bangumi-game-names.test.ts`; native execution
+  remains controller-owned.
 
 ### Bangumi creator and voice credits
 
@@ -2480,9 +2503,8 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 
 ### Bangumi TVAnime subject names
 
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@6`.
+Ordinary imports use the current `bangumi@10` converter; selected-family
+imports use `bangumi@10+cross-media-entities@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
