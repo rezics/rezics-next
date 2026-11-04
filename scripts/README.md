@@ -444,8 +444,8 @@ receipts do not establish resolution after admission deployment or characterize 
 
 No cause-supported runner repair follows from this cohort. Dependency-cache and Git-preparation work retain their
 existing owners. Keep reclaim and disk stopgap evidence separate; runner deployment and cp-sync, and retirement of
-either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration remain separate
-questions for the existing compiler/health chain; this cohort supplies neither.
+either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration
+remain separate questions for the existing compiler/health chain; this cohort supplies neither.
 
 1. Select a responding eligible host and verify a run-private SSH control connection with a trivial command before
    using it. The probe is bounded to five seconds. On failure, close that run's master, replace its control path and

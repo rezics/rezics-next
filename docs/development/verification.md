@@ -409,8 +409,8 @@ receipts do not establish resolution after admission deployment or characterize 
 
 No cause-supported runner repair follows from this cohort. Dependency-cache and Git-preparation work retain their
 existing owners. Keep reclaim and disk stopgap evidence separate; runner deployment and cp-sync, and retirement of
-either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration remain separate
-questions for the existing compiler/health chain; this cohort supplies neither.
+either stopgap, remain with the supermanager. Post-admission throughput and host-b successful typecheck duration
+remain separate questions for the existing compiler/health chain; this cohort supplies neither.
 
 Measured on 28 October 2026 on this machine: Linux x64, AMD Ryzen Threadripper 3970X,
 32 cores / 64 logical CPUs, 64 GiB RAM. Baseline runtime: Bun 1.4.3. Candidate runtime:
