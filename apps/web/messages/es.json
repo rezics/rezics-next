@@ -1443,6 +1443,7 @@
   "settings_notification_save": "Guardar",
   "settings_notifications_heading": "Notificaciones",
   "settings_notifications_read_only": "Puedes ver la configuración guardada, pero el acceso actual de la cuenta no permite cambiarla.",
+  "settings_notifications_review_unavailable": "El acceso actual de la cuenta no permite esta operación guardada. Vuelve a cargar las notificaciones para comprobarlo cuando cambie el acceso.",
   "settings_notifications_mandatory": "Las decisiones de moderación sobre tu contenido y los resultados de denuncias y apelaciones siempre se envían.",
   "settings_notifications_policy_heading": "Siempre se envían",
   "settings_notifications_default_on": "Predeterminado: activado",

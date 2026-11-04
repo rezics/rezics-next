@@ -60,6 +60,11 @@ export function admittedNotificationPatch(
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
+export function notificationIntentAllowed(intent: NotificationPatch | undefined, page: PreferencePage): boolean {
+  const admitted = admittedNotificationPatch(intent, page);
+  return admitted !== undefined && preferencePageAllows(page, admitted === null ? 'reset' : 'edit');
+}
+
 export function notificationOriginalAllowed(
   input: Pick<NotificationChange, 'notifications'> | null,
   page: PreferencePage | null,
@@ -260,6 +265,7 @@ export class NotificationEditor {
       this.useCurrent();
       return;
     }
+    if (!notificationIntentAllowed(this.state.intent, this.state.currentAdvice)) return;
     await this.start(this.state.intent, version);
   }
   private async start(notifications: NotificationPatch, version: number) {

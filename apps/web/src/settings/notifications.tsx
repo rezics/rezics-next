@@ -9,6 +9,7 @@ import { WatchNotificationGuide } from './watch-notification-guide';
 import { readSettingsPage, saveNotifications } from './actions';
 import {
   NotificationEditor,
+  notificationIntentAllowed,
   notificationOriginalAllowed,
   notificationsNeedNavigationDecision,
   type NotificationEditorIO,
@@ -101,6 +102,10 @@ export function NotificationsCard({
   const canEdit = state.currentAdvice ? preferencePageAllows(state.currentAdvice, 'edit') : false;
   const canDraft = localEdit && preferencePageAllows(state.known.page, 'edit');
   const canRetryOriginal = notificationOriginalAllowed(state.pending?.input ?? null, state.currentAdvice);
+  const canSubmitReview =
+    state.currentAdvice !== null &&
+    state.intent !== undefined &&
+    notificationIntentAllowed(state.intent, state.currentAdvice);
   const rowDisabled = disabled || (commandWaiting && !localEdit) || (!canEdit && !canDraft);
   const restoreDisabled =
     commandWaiting ||
@@ -436,16 +441,21 @@ export function NotificationsCard({
                     </li>
                   ))}
                 </ul>
+                {state.intent !== undefined && !canSubmitReview ? (
+                  <p role="status">{m.settings_notifications_review_unavailable()}</p>
+                ) : null}
                 <div className="flex min-w-0 flex-wrap gap-2">
-                  <Button
-                    className={preferenceActionClassName}
-                    type="button"
-                    disabled={commandWaiting || disabled}
-                    aria-describedby={waitDescription}
-                    onClick={() => void editor.submit(version)}
-                  >
-                    {state.intent === null ? m.settings_notifications_restore() : m.settings_notifications_save_draft()}
-                  </Button>
+                  {state.intent !== undefined ? (
+                    <Button
+                      className={preferenceActionClassName}
+                      type="button"
+                      disabled={commandWaiting || disabled || !canSubmitReview}
+                      aria-describedby={waitDescription}
+                      onClick={() => void editor.submit(version)}
+                    >
+                      {state.intent === null ? m.settings_notifications_restore() : m.settings_notifications_save_draft()}
+                    </Button>
+                  ) : null}
                   {!state.pending ? (
                     <Button
                       className={preferenceActionClassName}
