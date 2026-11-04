@@ -1636,7 +1636,7 @@ actual source-statistic API effects; neither local table success nor pure conver
 ### Import authored VNDB character names and qualified aliases
 
 - Touches: the selected `chars_vns` character IDs and exact-owner `chars_names` and `chars_alias` COPY rows, the existing family planner, dump cache and cross-media converter. The acquired headers are `id lang name latin` and `id spoil name latin`; missing extracted tables make the cache incomplete and trigger its existing refresh path.
-- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@8` makes newly supported rows available on refresh even when source bytes are unchanged.
+- Bound: 64 localized names and 64 aliases per character, 4 KiB and 1,500 codepoints per text, 64 KiB normalized input and 257 proposals. The planner streams both tables, retains rows only for selected character IDs, rejects conflicts or overflow with an addressable gap, and does not publish a partial character payload. Mapping revision `cross-media-entities@9` makes newly supported rows available on refresh even when source bytes are unchanged.
 - Meaning: source language tags and spelling are preserved. Romanized cells become alternate names. Language-less aliases use `und`, explicit Romanized alias cells use `und-Latn`, and the exact source spoiler level qualifies both. Empty nullable Latin cells remain in the digest but produce no alternate-name fact. Bootstrap names use stable language-then-text selection and never contain qualified alias text.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
@@ -2119,7 +2119,7 @@ revision bump.
 Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
-selected release payload and convert them through `cross-media-entities@8`.
+selected release payload and convert them through `cross-media-entities@9`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
@@ -2192,7 +2192,7 @@ for these source Concepts.
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@8`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2439,7 +2439,7 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@6`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@6`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2474,9 +2474,10 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   set; no new source table, page, publisher or native lookup is added.
 - Bound: source rows remain under the existing 1 MiB line cap; infobox parsing
   is limited to 32 KiB, depth 2, 64 fields, 64 aliases, 4 KiB/500 codepoints per
-  name, 16 diagnostics and at most 83 commands. Structurally malformed alias
-  groups are withheld as a whole; unsupported custom labels are omitted with
-  diagnostics while supported aliases, names and summary remain.
+  name, 16 diagnostics and at most 85 commands, including up to two existing
+  physical-profile facts. Structurally malformed alias groups are withheld as a
+  whole; unsupported custom labels are omitted with diagnostics while
+  supported aliases, names and summary remain.
 - Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
   covers exact language mapping and changed alias removal;
   `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the

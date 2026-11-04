@@ -382,7 +382,7 @@ exact `0` is never a measured zero.
 
 ### VNDB release titles
 
-`cross-media-entities@8` projects admitted `releases_titles` rows onto
+`cross-media-entities@9` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -404,7 +404,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@8` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@9` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -483,7 +483,7 @@ Decision: platform and medium projections advance the converter from `@6` to `@7
 
 ### VNDB character names and aliases
 
-`cross-media-entities@8` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@9` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -504,7 +504,7 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@8` reads only the selected character's `name`, `name_cn`
+`cross-media-entities@9` reads only the selected character's `name`, `name_cn`
 and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
 `name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
 preferred name. Every supported `别名` row is an alternate name; its exact label
@@ -521,8 +521,9 @@ usable; a structurally malformed alias group is withheld as a whole.
 Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level and `简体中文名` fields keep separate preferred-name roles, and only the observed full-width comma splits nicknames.
 
 - Touches: one selected character projection, at most 16 preferred-name facts,
-  64 alternate-name facts and 83 public commands; each fact uses the existing
-  Character profile and ordinary importer/publication flow.
+  64 alternate-name facts and 85 public commands, including up to two existing
+  physical-profile facts; each fact uses the existing Character profile and
+  ordinary importer/publication flow.
 - Bound: 32 KiB infobox, nesting depth 2, 64 fields, 64 aliases, 4 KiB and 500
   codepoints per name, 16 bounded diagnostics and the existing 65,536-byte
   normalized-record cap. Structurally malformed alias groups are withheld as a
@@ -532,7 +533,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: this `@8` mapping preserves existing VNDB character names, release minimum age and GTIN mappings while adding Bangumi character names.
+Combined revision decision: `cross-media-entities@9` preserves the current Bangumi physical profile, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi character names.
 
 ### VNDB native alternate-name contract
 
@@ -900,7 +901,7 @@ omission diagnostics.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@8` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@9` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an

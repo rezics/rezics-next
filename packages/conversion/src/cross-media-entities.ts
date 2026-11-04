@@ -31,13 +31,18 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 import {
+  bangumiCharacterMeasurementLimits,
   projectBangumiCharacterMeasurements,
   type BangumiCharacterMeasurementProjection,
 } from './bangumi-character-measurements.ts';
 
 export const converter_revision = 'cross-media-entities@9';
 export const bangumiCharacterNameCommandLimit =
-  2 + bangumiCharacterNameLimits.maxNameFacts + bangumiCharacterNameLimits.maxAlternateNameFacts + 1;
+  2 +
+  bangumiCharacterNameLimits.maxNameFacts +
+  bangumiCharacterNameLimits.maxAlternateNameFacts +
+  bangumiCharacterMeasurementLimits.maxQuantityFacts +
+  1;
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxClassificationAssociations: 64,
@@ -1207,6 +1212,10 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     if (characterKind !== undefined) normalized.type = characterKind;
     const summary = own(raw, 'summary', '/summary');
     if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
+    const characterMeasurements = projectBangumiCharacterMeasurements(own(raw, 'infobox', '/infobox'));
+    if (characterMeasurements.evidence.length)
+      normalized.characterPhysicalProfile = { fields: characterMeasurements.evidence };
+    diagnostics.push(...characterMeasurements.diagnostics);
     projectEntityLinks(kind, raw, expected, normalized);
     if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > 65_536) fail('', 'invalid_record_byte_limit');
     return {
@@ -1217,6 +1226,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       names: nameFacts,
       alternateNames,
       identifier: expected,
+      characterMeasurements,
       maxCommands: bangumiCharacterNameCommandLimit,
       ...(diagnostics.length ? { diagnostics: diagnostics.slice(0, bangumiCharacterNameLimits.maxDiagnostics) } : {}),
     };
@@ -1233,16 +1243,6 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   const diagnostics: ConversionDiagnostic[] = [];
   let characterMeasurements: BangumiCharacterMeasurementProjection | undefined;
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
-  if (kind === 'bangumi-character') {
-    const characterKind = own(raw, 'type', '/type');
-    if (characterKind !== undefined) normalized.type = characterKind;
-    const summary = own(raw, 'summary', '/summary');
-    if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
-    characterMeasurements = projectBangumiCharacterMeasurements(own(raw, 'infobox', '/infobox'));
-    if (characterMeasurements.evidence.length)
-      normalized.characterPhysicalProfile = { fields: characterMeasurements.evidence };
-    diagnostics.push(...characterMeasurements.diagnostics);
-  }
   if (kind === 'bangumi-person') {
     type = personType(raw);
     normalized.type = own(raw, 'type', '/type');
