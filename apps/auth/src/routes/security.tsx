@@ -19,6 +19,12 @@ import type { SecurityPageEnvelope, SecurityAdvice, ConsentReviewOperation } fro
 import { privateAuthRead } from '../private-auth-read';
 import { waitForSecurityAction } from '../security-target-operation';
 import {
+  retainSecurityTargetReturn,
+  securityTargetReturnFromAttempt,
+  type SecurityTargetReturnOutcome,
+} from '../security-target-return';
+import { SecurityTargetReturnView } from '../security-target-return-view';
+import {
   SecurityTargetReview,
   SecurityTargetRecovery,
   securityTargetRow,
@@ -76,9 +82,22 @@ type SecurityOperation =
       reading: boolean;
       truncated: boolean;
     }
-  | { kind: 'review'; target: SecurityTarget; generation: number; advice: number; retry: boolean }
+  | {
+      kind: 'review';
+      target: SecurityTarget;
+      generation: number;
+      advice: number;
+      retry: boolean;
+      outcome: SecurityTargetReturnOutcome | null;
+    }
   | { kind: 'target'; target: SecurityTarget }
-  | { kind: 'recovery'; target: SecurityTarget; phase: TargetRecoveryPhase; reading: boolean };
+  | {
+      kind: 'recovery';
+      target: SecurityTarget;
+      outcome: SecurityTargetReturnOutcome;
+      phase: TargetRecoveryPhase;
+      reading: boolean;
+    };
 
 type DepartureState = { protected: boolean; allow: boolean };
 type DepartureBlocker =
@@ -179,6 +198,9 @@ function SecurityPageView({
   const departureProtected = Boolean(passwordDraftPresent || passkeyName.trim() || operation);
   if (departure) departure.current.protected = departureProtected;
   const [signedOutNotice, setSignedOutNotice] = useState('');
+  const [targetReturn, setTargetReturn] = useState<SecurityTargetReturnOutcome | null>(null);
+  const targetReturnValue = useRef<SecurityTargetReturnOutcome | null>(null);
+  const targetReturnDismissed = useRef(false);
   const activeAccount = useRef('');
   const authorityGeneration = useRef(0);
   const renderGeneration = authorityGeneration.current;
@@ -191,6 +213,7 @@ function SecurityPageView({
   const recoveryStatus = useRef<HTMLDivElement>(null);
   const sessionStatus = useRef<HTMLDivElement>(null);
   const signedOutStatus = useRef<HTMLParagraphElement>(null);
+  const targetReturnStatus = useRef<HTMLDivElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
   const passwordAlert = useRef<HTMLDivElement>(null);
   const currentPasswordAdvice = useRef<SecurityAdvice | undefined>(page?.actions.change_password);
@@ -231,7 +254,7 @@ function SecurityPageView({
     let active = true;
     let pending = false;
     let departed = false;
-    let unresolved: SecurityTarget | null = null;
+    let unresolved: { target: SecurityTarget; outcome: SecurityTargetReturnOutcome } | null = null;
     async function load(provided?: SecurityLoadResult) {
       if (!active || departed || pending) return;
       pending = true;
@@ -264,8 +287,14 @@ function SecurityPageView({
         setPasswordLimits(limits);
         const restoredEnrollment = enrollmentController.current.restoreFor(result.accountId);
         setEnrollment(restoredEnrollment);
-        if (unresolved?.accountId === result.accountId) {
-          updateOperation({ kind: 'recovery', target: unresolved, phase: 'unknown', reading: false });
+        if (unresolved?.target.accountId === result.accountId) {
+          updateOperation({
+            kind: 'recovery',
+            target: unresolved.target,
+            outcome: unresolved.outcome,
+            phase: unresolved.outcome === 'acknowledged' ? 'accepted' : 'unknown',
+            reading: false,
+          });
         } else if (
           restoredEnrollment?.reviewRequired &&
           restoredEnrollment.accountId === result.accountId &&
@@ -302,7 +331,12 @@ function SecurityPageView({
       if (departed) return;
       departed = true;
       const held = activeOperation.current;
-      if (held?.kind === 'target' || held?.kind === 'recovery') unresolved = held.target;
+      if (held?.kind === 'target' || held?.kind === 'recovery') {
+        unresolved = {
+          target: held.target,
+          outcome: securityTargetReturnFromAttempt(held) ?? 'unknown',
+        };
+      }
       pending = false;
       enrollmentController.current.pagehide();
       // Commit the cleared DOM before the browser freezes this document.
@@ -363,6 +397,10 @@ function SecurityPageView({
   }, [loadState, signedOutNotice]);
 
   useLayoutEffect(() => {
+    if (targetReturn) targetReturnStatus.current?.focus();
+  }, [targetReturn]);
+
+  useLayoutEffect(() => {
     if (!blocker || !departure) return;
     if (blocker.status === 'blocked') {
       if (!departureProtected) {
@@ -397,6 +435,19 @@ function SecurityPageView({
     setOperation(next);
   }
 
+  function rememberTargetReturn(outcome: SecurityTargetReturnOutcome) {
+    if (targetReturnDismissed.current) return;
+    const retained = retainSecurityTargetReturn(targetReturnValue.current, outcome);
+    targetReturnValue.current = retained;
+    setTargetReturn(retained);
+  }
+
+  function dismissTargetReturn() {
+    targetReturnDismissed.current = true;
+    targetReturnValue.current = null;
+    setTargetReturn(null);
+  }
+
   function beginConsentReview(): ConsentReviewOperation | null {
     if (activeOperation.current || !activeAccount.current) return null;
     const held: SecurityOperation = { kind: 'consent' };
@@ -412,7 +463,13 @@ function SecurityPageView({
     };
   }
 
-  function clearPrivateData(state: Exclude<LoadState, 'ready'>, notice = '') {
+  function clearPrivateData(
+    state: Exclude<LoadState, 'ready'>,
+    notice = '',
+    returnedOutcome?: SecurityTargetReturnOutcome,
+  ) {
+    const outcome = returnedOutcome ?? securityTargetReturnFromAttempt(activeOperation.current);
+    if (outcome) rememberTargetReturn(outcome);
     if (departure) departure.current.protected = false;
     authorityGeneration.current++;
     adviceGeneration.current++;
@@ -462,7 +519,7 @@ function SecurityPageView({
     adviceGeneration.current++;
     const attempt: SecurityOperation = { ...held, reading: true };
     updateOperation(attempt);
-    const { target } = held;
+    const { target, outcome } = held;
     const generation = authorityGeneration.current;
     const result = await privateAuthRead(
       (signal) => (securitySource?.read ?? readSecurityTarget)(target, signal),
@@ -475,7 +532,7 @@ function SecurityPageView({
       return;
     }
     if (result.kind === 'unavailable') {
-      updateOperation({ kind: 'recovery', target, phase: 'unavailable', reading: false });
+      updateOperation({ kind: 'recovery', target, outcome, phase: 'unavailable', reading: false });
       setSessionError('');
       return;
     }
@@ -491,6 +548,7 @@ function SecurityPageView({
       updateOperation({
         kind: 'recovery',
         target,
+        outcome,
         phase: result.presence === 'present' ? 'present' : 'truncated',
         reading: false,
       });
@@ -499,21 +557,28 @@ function SecurityPageView({
 
   function finishAction(target: SecurityTarget, result: SecurityActionResult, current: boolean) {
     if (result.kind === 'signed-out' || result.kind === 'denied' || result.kind === 'step-up') {
-      clearPrivateData(result.kind === 'denied' ? 'failure' : 'signed-out', m.auth_security_action_unverified());
+      clearPrivateData(
+        result.kind === 'denied' ? 'failure' : 'signed-out',
+        m.auth_security_action_unverified(),
+        result.kind === 'signed-out' ? 'unknown' : 'refused',
+      );
       if (result.kind === 'step-up') window.location.assign(STEP_UP_URL);
       return;
     }
     if (result.kind === 'accepted' || result.kind === 'unknown') {
+      const outcome = result.kind === 'accepted' ? 'acknowledged' : 'unknown';
       // Native passkey removal revokes all sessions. An acknowledgement is not a later inventory read.
       if (result.sessionEnded || (result.kind === 'accepted' && (current || target.kind === 'passkey'))) {
         clearPrivateData(
           'signed-out',
           result.kind === 'accepted' ? m.auth_security_action_accepted() : m.auth_security_action_unverified(),
+          outcome,
         );
         if (result.kind === 'accepted' && current && target.kind === 'session') window.location.assign('/login');
         return;
       }
-      updateOperation({ kind: 'recovery', target, phase: result.kind, reading: false });
+      rememberTargetReturn(outcome);
+      updateOperation({ kind: 'recovery', target, outcome, phase: result.kind, reading: false });
       if (result.kind === 'accepted') void recoverTarget();
       return;
     }
@@ -543,19 +608,28 @@ function SecurityPageView({
     const selected = securityTargetRow(target, sessions, passkeys);
     if (!selected || !canAct(targetAdvice(selected))) return;
     targetOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const outcome = retryAllowed && held?.kind === 'recovery' ? held.outcome : null;
     updateOperation({
       kind: 'review',
       target,
       generation: authorityGeneration.current,
       advice: adviceGeneration.current,
       retry,
+      outcome,
     });
   }
 
   function cancelTargetReview(expected: Extract<SecurityOperation, { kind: 'review' }>) {
     const held = activeOperation.current;
     if (held !== expected || held.kind !== 'review') return;
-    if (held.retry) updateOperation({ kind: 'recovery', target: held.target, phase: 'present', reading: false });
+    if (held.retry)
+      updateOperation({
+        kind: 'recovery',
+        target: held.target,
+        outcome: held.outcome ?? 'unknown',
+        phase: 'present',
+        reading: false,
+      });
     else {
       returnTargetFocus.current = held.target.kind;
       updateOperation(null);
@@ -587,6 +661,7 @@ function SecurityPageView({
     }
     const current = selected.kind === 'session' && selected.row.current;
     const dispatch: SecurityOperation = { kind: 'target', target };
+    targetReturnDismissed.current = false;
     updateOperation(dispatch);
     setSessionNotice('');
     setSessionError('');
@@ -902,6 +977,13 @@ function SecurityPageView({
     return (
       <AuthPage heading={m.auth_security_heading()}>
         <div className="auth-login-form">
+          {targetReturn ? (
+            <SecurityTargetReturnView
+              outcome={targetReturn}
+              statusRef={targetReturnStatus}
+              dismiss={dismissTargetReturn}
+            />
+          ) : null}
           <p>{m.auth_security_sign_in_required()}</p>
           {signedOutNotice ? (
             <p ref={signedOutStatus} tabIndex={-1} role="status">
@@ -927,6 +1009,13 @@ function SecurityPageView({
     return (
       <AuthPage heading={m.auth_security_heading()}>
         <div className="auth-login-form">
+          {targetReturn ? (
+            <SecurityTargetReturnView
+              outcome={targetReturn}
+              statusRef={targetReturnStatus}
+              dismiss={dismissTargetReturn}
+            />
+          ) : null}
           <ErrorAlert>{loadMessage}</ErrorAlert>
           <PasskeyEnrollmentView
             state={enrollment}
@@ -966,6 +1055,13 @@ function SecurityPageView({
           />
         }
       >
+        {targetReturn ? (
+          <SecurityTargetReturnView
+            outcome={targetReturn}
+            statusRef={targetReturnStatus}
+            dismiss={dismissTargetReturn}
+          />
+        ) : null}
         <div
           className="auth-security-page"
           aria-busy={loadState === 'loading' || (operationBlocked && operation?.kind !== 'review')}

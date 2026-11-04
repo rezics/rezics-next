@@ -53,6 +53,8 @@ the exact response mapping belongs to those contracts. Run the applicable worksp
 a shared kernel runtime contract change requires `bun run --cwd services/kernel check`.
 Use [verification](../development/verification.md) for root typecheck, growth and promotion evidence.
 
+Decision: A mounted Security target outcome that is unknown stays unknown through later attempts until dismissed; a later acknowledgement or refusal cannot settle the earlier send.
+
 ## External conditions
 
 Production identity, mail and abuse-prevention integrations must be configured through supported interfaces.

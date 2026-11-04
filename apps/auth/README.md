@@ -250,6 +250,18 @@ native last-credential refusal. Readback never repeats a removal. A complete cur
 absence; a truncated missing row cannot prove absence. Only a currently present target permits a newly reviewed
 exact-target command. Recovery descriptions come only from a fresh present row; retained list rows are marked as previously shown until current readback.
 
+If pagehide or lost authority retires an active target attempt, the mounted document keeps only a generic outcome
+classification: unknown, acknowledged or refused. It contains no account or target data and appears in loading,
+failure, sign-in and replacement-viewer states. A current inventory observation remains separate from that history;
+returning, focusing the page, retrying a read or dismissing the notice never sends a command. Dismissal hides only the
+notice. A same-account return can restore the exact in-memory target for deliberate current review after the bounded
+native read; another account receives no former target or retry action. A new document has no historical claim.
+
+Whole-call costs remain bounded: the page uses one native `GET /security-page` read; dispatch uses the existing current
+`GET /session` check and one exact-key removal command (two Auth requests, zero kernel reads); each deliberate
+current-state check uses one native Security page read and zero commands. Pagehide, return, focus and notice dismissal
+add no Auth or kernel calls, inventory scans or per-row reads.
+
 Decision: the browser action wait is twelve seconds: the existing sequential five-second native account check and
 five-second command, plus two seconds for browser/BFF delivery. Expiry, abort, thrown transport or malformed
 acknowledgement after invocation becomes unknown. One invocation sends at most one command; cancellation cannot
