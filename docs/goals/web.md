@@ -13,6 +13,10 @@ capabilities and disclosure rules on every page and device.
   boards, threads, posting/replies and the scoped community, Zone, moderation and notification surfaces.
 - Collections, the personal library, independent labels, holdings, progress and explicit publication are usable
   through their real APIs. Filters remain available wherever the common Collection abstraction appears.
+
+Decision: Independent progress visits expose explicit refresh, adopt newer saved values in untouched units, and
+retain local amount or clear choices by measure unit.
+
 - The Collection editor supports bounded destination and occurrence-anchor browsing, exact duplicate-preserving
   transfer review, the existing atomic native transfer and bounded source/destination recovery. Its limits and
   consumer authorities are recorded in the [placement journey](../../apps/web/src/library/collection-placement-journey.md).
