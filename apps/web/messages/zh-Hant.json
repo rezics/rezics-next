@@ -7917,5 +7917,12 @@
   "game_reader_more_available": "還有更多發行版本。目前僅顯示已載入的視窗。",
   "game_reader_fallback": "所有事實與更正",
   "game_reader_correct": "更正遊戲事實",
-  "game_reader_refresh": "重新整理目前資料"
+  "game_reader_refresh": "重新整理目前資料",
+  "recording_reader_unsupported": "此主題的定義版本尚未發布錄音專用欄位。請開啟「詳情」查看目前事實並使用現有的更正功能。",
+  "recording_reader_unavailable": "無法讀取此錄音對應的不可變定義版本。請開啟「詳情」查看目前事實並使用現有的更正功能。",
+  "recording_reader_empty": "此頁面沒有揭露已獲准的錄音事實。",
+  "recording_reader_contributions": "演奏者及其他貢獻者",
+  "recording_reader_associations": "關聯",
+  "recording_reader_continue": "在完整關係檢視中繼續",
+  "recording_reader_return": "返回來源頁面"
 }

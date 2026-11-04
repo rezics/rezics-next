@@ -124,3 +124,29 @@ changed current scale, retired/merged original target and concealed context thro
 Browser review at 390px/1280px, light/dark, keyboard open/action/return remains for the controller's browser check. All eight
 locales share the same layout and localized historical provenance labels; continuation/retry, disclosure and media
 controls retain 44px targets and wrapping. See [Subject pages](../../../../../docs/subject-pages.md#overview).
+
+## Recording reader
+
+The ordinary Subject overview may mount the Recording reader only for `schema:MusicRecording`. It reads the exact
+immutable release named by the current Subject read, and uses only that type's admitted properties and each
+relation property's admitted qualifiers. Property labels and direction come from that release; relation targets
+remain the exact disclosed Subject ids from the current read. Credit-group properties keep each statement's own
+role, time, order and other admitted qualifier values. Work, album and release identities stay separate Subject
+destinations.
+
+If the exact release has no Recording definition, the overview gives an unsupported state and keeps Details and the
+existing facts/correction controls available. A missing or mismatched release gives an unavailable state. The reader
+does not infer predicates or hydrate private or historical evidence. A bounded association page links to the ordinary
+Relations view, and a validated single-hop `via` address provides the return to the source page.
+
+### Cost
+
+- **Reads:** One installed `definitions.releases` operation for the Subject read's exact immutable release. The
+  existing Subject page read supplies facts, qualified values and disclosed relation targets. There are zero extra
+  Subject, performer, work, album, release, provider, playback or per-field reads.
+- **Rendering:** The reader visits only the current Subject statements whose property ids appear on the admitted
+  Recording type. It retains no source registry, private state, historical snapshot or local continuation. An
+  incomplete native relation window links to the ordinary Relations view without refill or cursor rewriting.
+- **Return:** Only the route's validated same-locale single-hop `via` address is retained in page props and propagated
+  to Recording relation destinations and finite-view links. Invalid, nested or cross-locale addresses are omitted by
+  the existing return-address validator.

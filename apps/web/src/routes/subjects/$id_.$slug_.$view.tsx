@@ -30,6 +30,7 @@ import { getLocale } from '../../paraglide/runtime.js';
 import { WriteReviewAction } from '../../subject/write-review';
 import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
+import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { SubjectCandidateCuration } from '../../features/pages/curate-view';
 import { SubjectViewError } from '../../subject/view-error';
 import { env } from 'cloudflare:workers';
@@ -123,8 +124,9 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     cursor: search.cursor,
     realm: validatePageRealm(search.realm),
     node: validatePageNode(search.node),
+    via: subjectVisitReturn(search.via, getLocale()),
   }),
-  loaderDeps: ({ search }) => ({ cursor: search.cursor, realm: search.realm, node: search.node }),
+  loaderDeps: ({ search }) => ({ cursor: search.cursor, realm: search.realm, node: search.node, via: search.via }),
   loader: async ({ params, location, context, deps }) => {
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     if (!isView(params.view) || params.view === 'overview') throw notFound();
@@ -192,7 +194,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     const typeData = type ? await context.queryClient.ensureQueryData(subjectFrameQuery(type, getLocale())) : {};
     const nextHref =
       loaded.next !== undefined
-        ? `${canonical.href}/${encodeURIComponent(params.view)}?${loaded.node ? `node=${encodeURIComponent(loaded.node)}&` : ''}cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}`
+        ? `${canonical.href}/${encodeURIComponent(params.view)}?${loaded.node ? `node=${encodeURIComponent(loaded.node)}&` : ''}cursor=${encodeURIComponent(loaded.next)}${deps.realm ? `&realm=${encodeURIComponent(deps.realm)}` : ''}${deps.via ? `&via=${encodeURIComponent(deps.via)}` : ''}`
         : undefined;
     return {
       ...canonical,
@@ -243,6 +245,7 @@ function SubjectViewRoute() {
   } = Route.useLoaderData();
   const browserSession = useSession();
   const { state: session } = browserSession;
+  const search = Route.useSearch();
   const readerKey = subjectReaderPartition(realm, initialReader, browserSession);
   const currentReader = useSubjectReaderRefresh(initialReader, readerKey);
   const personal = useSubjectPersonalReader({
@@ -260,6 +263,7 @@ function SubjectViewRoute() {
   return (
     <SubjectViewPage
       page={page}
+      returnTo={search.via}
       subjectLabel={frame.title.text}
       curation={
         view === 'details' && !realm ? <SubjectCandidateCuration id={page.subject!} locale={locale} /> : undefined
@@ -305,6 +309,7 @@ function SubjectViewRoute() {
           tabs={tabs}
           tabLabels={viewTabLabels()}
           view={view}
+          {...(search.via ? { returnTo: search.via } : {})}
           library={<SubjectLibraryLeaf frame={frame} locale={locale} session={browserSession} />}
         />
       }

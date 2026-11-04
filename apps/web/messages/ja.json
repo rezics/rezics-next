@@ -7917,5 +7917,12 @@
   "game_reader_more_available": "さらに発売版があります。読み込み済みの範囲のみを表示しています。",
   "game_reader_fallback": "すべての情報と訂正",
   "game_reader_correct": "ゲーム情報を訂正",
-  "game_reader_refresh": "現在の情報を更新"
+  "game_reader_refresh": "現在の情報を更新",
+  "recording_reader_unsupported": "この主題の定義リリースには、録音に固有の項目がまだ公開されていません。「詳細」で現在の事実を確認し、既存の訂正機能をご利用ください。",
+  "recording_reader_unavailable": "この録音の不変な定義リリースを読み込めませんでした。「詳細」で現在の事実を確認し、既存の訂正機能をご利用ください。",
+  "recording_reader_empty": "このページでは、許可された録音の事実は公開されていません。",
+  "recording_reader_contributions": "演奏者とその他の貢献者",
+  "recording_reader_associations": "関連項目",
+  "recording_reader_continue": "すべての関連項目を表示",
+  "recording_reader_return": "元のページに戻る"
 }

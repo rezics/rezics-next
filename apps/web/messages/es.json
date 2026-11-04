@@ -7917,5 +7917,12 @@
   "game_reader_more_available": "Hay más ediciones disponibles. Solo se muestra la ventana cargada.",
   "game_reader_fallback": "Todos los datos y correcciones",
   "game_reader_correct": "Corregir datos del juego",
-  "game_reader_refresh": "Actualizar la lectura"
+  "game_reader_refresh": "Actualizar la lectura",
+  "recording_reader_unsupported": "La versión de definiciones de este tema aún no publica campos específicos de grabación. Abre Detalles para consultar los datos actuales y usar las opciones de corrección existentes.",
+  "recording_reader_unavailable": "No se pudo leer la versión inmutable de definiciones de esta grabación. Abre Detalles para consultar los datos actuales y usar las opciones de corrección existentes.",
+  "recording_reader_empty": "Esta página no muestra datos admitidos de la grabación.",
+  "recording_reader_contributions": "Intérpretes y demás colaboradores",
+  "recording_reader_associations": "Relaciones",
+  "recording_reader_continue": "Continuar en la vista completa de relaciones",
+  "recording_reader_return": "Volver a la página de origen"
 }

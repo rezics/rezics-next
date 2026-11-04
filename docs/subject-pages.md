@@ -38,7 +38,8 @@ source provenance, distinct from editorial acceptance. Relation pages that retur
 loaded page only; they never imply a complete tracklist or episode list.
 
 Type3 maps to MusicAlbum with no work/release/track split. The ordinary album contents reader consumes only admitted canonical containment streams; it does not publish tracks or recordings. MusicAlbum
-has no Library profile, so Library states, copies and progress stay unpublished. Type6 maps pinned movie platforms to
+has no Library profile, so Library states, copies and progress stay unpublished. An ordinary Subject Recording destination
+is available when its distinct type and fields are admitted by that subject's pinned immutable definition release. Type6 maps pinned movie platforms to
 Movie and pinned TV-template platforms to TVSeries; unknown platform codes stay ignored. Movie and TVSeries expose the
 existing `anime.film` and `anime.series` Library controls. Opening an admitted `schema:TVSeason` or `schema:Episode`
 subject uses that grain's released fields and Library pin; Bangumi episode family bootstrap stays unpublished on the
@@ -123,6 +124,22 @@ Each deliberate window uses one Subject read, the existing active/immutable defi
 20-row relation page, without target hydration. One outer and one optional appearance window are retained;
 the [reader Cost](../apps/web/src/features/catalogue/story-arc-reader/README.md#cost) defines byte, cursor and stream
 bounds. Current Character, correction/classification and prerequisite-deferred native acceptance remain unchanged.
+
+## Read a Recording
+
+The ordinary Subject Recording overview reads only the current disclosed identity, duration/version, and qualified
+performer, composition and release associations admitted by that subject's pinned immutable definition release.
+Recording, musical work, album and release remain distinct identities. Each association preserves its declared
+direction, role/time qualifiers and exact target; unsupported vocabulary keeps the existing Facts and correction path.
+
+Decision: A Recording overview preserves each property's declared direction and exact target identity, and carries only
+the validated single-hop `via` return address.
+
+### Recording Cost
+
+The reader uses the existing Subject page read plus one read of its exact immutable definition release. It adds no
+Subject, provider, playback or per-association reads; an incomplete relation window continues through the ordinary
+bounded Relations view.
 
 ## Create a catalogue subject
 

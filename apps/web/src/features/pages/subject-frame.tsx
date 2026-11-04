@@ -52,6 +52,7 @@ import { ViewTabs, type ViewTabLabels } from './view-tabs';
 import type { ViewTab } from './views';
 import { assertSamePageContext } from './context-subject';
 import { contextHref } from './context-navigation';
+import { withSubjectVisitReturn } from './subject-visit-navigation';
 import { PageStreamHeadingContext, ViewHeadingActions } from './view-heading';
 export { ViewHeading, ViewHeadingActions } from './view-heading';
 
@@ -226,6 +227,7 @@ export function SubjectFrame({
   view,
   base: tabBase,
   realm,
+  returnTo,
   context,
   navigation,
   library,
@@ -248,6 +250,7 @@ export function SubjectFrame({
   /** The page-view address when this subject is embedded in a routed Zone. */
   base?: string;
   realm?: string | undefined;
+  returnTo?: string | undefined;
   /** A companion review route may select a Context independently of its public overview read. */
   context?: string | undefined;
 }) {
@@ -273,7 +276,7 @@ export function SubjectFrame({
               className={`${linkClass} ${frame.title.text ? linkColor : 'text-muted-foreground'} min-w-0 max-w-full font-sans text-lg font-semibold wrap-anywhere`}
             >
               <Link
-                href={contextHref(base, realm)}
+                href={contextHref(withSubjectVisitReturn(base, returnTo ?? '', locale), realm)}
                 className="inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm whitespace-normal wrap-anywhere focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 {...(frame.title.lang ? { lang: frame.title.lang } : {})}
               >
@@ -390,8 +393,17 @@ export function SubjectFrame({
           base={tabBase ?? base}
           labels={tabLabels}
           realm={realm}
+          {...(returnTo ? { returnTo } : {})}
         />
       )}
+      {returnTo ? (
+        <a
+          href={returnTo}
+          className={`${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 items-center underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+        >
+          {m.recording_reader_return({}, { locale: locale as never })}
+        </a>
+      ) : null}
     </div>
   );
 }

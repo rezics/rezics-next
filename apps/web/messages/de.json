@@ -7917,5 +7917,12 @@
   "game_reader_more_available": "Weitere Ausgaben sind verfügbar. Dies ist nur der geladene Ausschnitt.",
   "game_reader_fallback": "Alle Fakten und Korrekturen",
   "game_reader_correct": "Spielangaben korrigieren",
-  "game_reader_refresh": "Aktuelle Angaben neu laden"
+  "game_reader_refresh": "Aktuelle Angaben neu laden",
+  "recording_reader_unsupported": "Für dieses Subjekt sind in der Definitionsversion keine spezifischen Aufnahmefelder veröffentlicht. Öffne „Details“, um die aktuellen Fakten zu prüfen und die vorhandenen Korrekturmöglichkeiten zu nutzen.",
+  "recording_reader_unavailable": "Die unveränderliche Definitionsversion dieser Aufnahme konnte nicht gelesen werden. Öffne „Details“, um die aktuellen Fakten zu prüfen und die vorhandenen Korrekturmöglichkeiten zu nutzen.",
+  "recording_reader_empty": "Auf dieser Seite sind keine zugelassenen Aufnahmedaten offengelegt.",
+  "recording_reader_contributions": "Mitwirkende und Interpretinnen und Interpreten",
+  "recording_reader_associations": "Verknüpfungen",
+  "recording_reader_continue": "In der vollständigen Relationsansicht fortfahren",
+  "recording_reader_return": "Zur Ausgangsseite zurück"
 }

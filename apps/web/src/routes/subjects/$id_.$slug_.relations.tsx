@@ -31,6 +31,7 @@ import { m } from '../../paraglide/messages.js';
 import { validateViewCursor, validatePageRealm, validatePageNode } from '../../features/pages/view-cursor';
 import { subjectHead } from '../../features/pages/subject-head';
 import { pageHeadContext } from '../../shell/head-context';
+import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const curiePattern = /^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z0-9_.-]+$/;
@@ -96,6 +97,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       cursor: search.cursor,
       realm: validatePageRealm(search.realm),
       node: validatePageNode(search.node),
+      via: subjectVisitReturn(search.via, getLocale()),
     };
   },
   loaderDeps: ({ search }) => ({
@@ -103,6 +105,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
     cursor: search.cursor,
     realm: search.realm,
     node: search.node,
+    via: search.via,
   }),
   loader: async ({ params, deps, location, context }) => {
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
@@ -164,6 +167,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
         paths: canonical.paths,
         cursor,
         realm: deps.realm,
+        via: deps.via,
       };
     }
     const [overview, links] = await Promise.all([
@@ -211,6 +215,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/relations')({
       paths: canonical.paths,
       cursor,
       realm: undefined,
+      via: deps.via,
     };
   },
   head: ({ loaderData, match }) =>
@@ -266,6 +271,7 @@ function RelationsRoute() {
       tabs={tabs}
       tabLabels={viewTabLabels()}
       view="relations"
+      {...(data.via ? { returnTo: data.via } : {})}
       library={<SubjectLibraryLeaf frame={frame} locale={getLocale()} session={browserSession} />}
     />
   );
@@ -273,6 +279,7 @@ function RelationsRoute() {
     return (
       <SubjectViewPage
         page={data.page}
+        {...(data.via ? { returnTo: data.via } : {})}
         subjectLabel={frame.title.text}
         locale={getLocale()}
         messages={subjectPageMessages()}

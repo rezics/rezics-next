@@ -7917,5 +7917,12 @@
   "game_reader_more_available": "还有更多发行版本。当前仅显示已加载的窗口。",
   "game_reader_fallback": "全部事实与更正",
   "game_reader_correct": "更正游戏事实",
-  "game_reader_refresh": "刷新当前资料"
+  "game_reader_refresh": "刷新当前资料",
+  "recording_reader_unsupported": "此主题的定义版本尚未发布录音专用字段。请打开“详情”查看当前事实并使用现有的更正功能。",
+  "recording_reader_unavailable": "无法读取此录音对应的不可变定义版本。请打开“详情”查看当前事实并使用现有的更正功能。",
+  "recording_reader_empty": "此页面没有披露已获准的录音事实。",
+  "recording_reader_contributions": "演奏者及其他贡献者",
+  "recording_reader_associations": "关联",
+  "recording_reader_continue": "在完整关系视图中继续",
+  "recording_reader_return": "返回来源页面"
 }

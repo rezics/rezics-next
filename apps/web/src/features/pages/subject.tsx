@@ -20,6 +20,8 @@ import { MusicReleaseOverview } from '../catalogue/music-release-reader/entry';
 import { musicReleaseEntry } from '../catalogue/music-release-reader/model';
 import { AlbumTrackOverview } from '../catalogue/album-track-reader/entry';
 import { StoryArcOverview } from '../catalogue/story-arc-reader/entry';
+import { RecordingOverview } from '../catalogue/recording-reader/overview';
+import { recordingType } from '../catalogue/recording-reader/model';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
 import { LiteraryProfileEntry } from '../catalogue/literary-profile-entry';
@@ -64,6 +66,7 @@ import type { VerificationConfig } from '../../report/turnstile';
 import { subjectUrlForView } from '../../subject/subject-href';
 import { ContextNavigation, contextHref } from './context-navigation';
 import { candidateContext } from '../../subject/candidates';
+import { subjectVisitReturn, withSubjectVisitReturn } from './subject-visit-navigation';
 
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -477,6 +480,7 @@ export function SubjectPage({
   ratio,
   relations,
   view = 'overview',
+  returnTo,
   tabs,
   tabLabels,
   heading,
@@ -513,6 +517,8 @@ export function SubjectPage({
   relations?: Record<string, RelationDefinition>;
   /** The view this document is. */
   view?: View;
+  /** The validated single-hop subject visit return address, when supplied by a Recording journey. */
+  returnTo?: string;
   /** The views to offer, from `subjectTabs` of the subject's overview. */
   tabs?: readonly ViewTab[];
   tabLabels?: ViewTabLabels;
@@ -527,14 +533,16 @@ export function SubjectPage({
 }) {
   const overview = view === 'overview';
   const read = subjectBody(page);
+  const visitReturn = subjectVisitReturn(returnTo, locale);
   const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
   const realm = subjectPageRealm(page);
   const ContextLink = useMemo(() => {
     const Link = link ?? PlainLink;
     return function SelectedLink(props: ComponentProps<PageLink>) {
-      return <Link {...props} href={contextHref(props.href, realm)} />;
+      const href = withSubjectVisitReturn(props.href, visitReturn ?? '', locale);
+      return <Link {...props} href={contextHref(href, realm)} />;
     };
-  }, [link, realm]);
+  }, [link, locale, realm, visitReturn]);
   const renderedActions =
     read && !page.account && !realm ? (
       <>
@@ -636,6 +644,7 @@ export function SubjectPage({
           ).href
         }
         realm={realm}
+        {...(visitReturn ? { returnTo: visitReturn } : {})}
         labels={tabLabels}
       />
     ) : null;
@@ -730,6 +739,16 @@ export function SubjectPage({
                 locale={locale}
               />
             )}
+            {visitReturn && !framed ? (
+              <p>
+                <a
+                  className={`${linkClass} ${linkColor} inline-flex min-h-11 items-center underline underline-offset-4`}
+                  href={visitReturn}
+                >
+                  {m.recording_reader_return({}, { locale: locale as never })}
+                </a>
+              </p>
+            ) : null}
             {!overview && bar}
             {overview && !header && afterHeader}
             {overview &&
@@ -799,6 +818,16 @@ export function SubjectPage({
                 context={page.context?.id ?? read.subject.context}
                 locale={locale}
                 realm={realm}
+              />
+            ) : null}
+            {overview && read && !page.account && read.subject.type === recordingType ? (
+              <RecordingOverview
+                locale={locale}
+                public={composedSubjectRead(read)}
+                bounds={boundedProfileRelations(page)}
+                context={page.context}
+                {...(visitReturn ? { returnTo: visitReturn } : {})}
+                link={ContextLink}
               />
             ) : null}
             {overview && read && !page.account && isScreenType(read.subject.type) ? (

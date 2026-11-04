@@ -232,6 +232,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   }),
   loaderDeps: ({ search }) => ({
     realm: search.realm,
+    via: search.via,
     slot: search.slot,
     slotResult: search.slotResult,
     labelResult: search.labelResult,
@@ -465,6 +466,7 @@ export function SubjectOverview({
             <RatingsContext.Provider value={ratings}>
               <SubjectPage
                 page={page}
+                returnTo={search.via}
                 verification={verification}
                 connections={
                   currentReader ? (

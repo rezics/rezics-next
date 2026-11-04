@@ -7992,5 +7992,12 @@
   "game_reader_more_available": "More releases are available. This is only the loaded window.",
   "game_reader_fallback": "All facts and corrections",
   "game_reader_correct": "Correct Game facts",
-  "game_reader_refresh": "Refresh current reading"
+  "game_reader_refresh": "Refresh current reading",
+  "recording_reader_unsupported": "Recording-specific fields are not published in this subject's definition release. Open Details to inspect current facts and use the existing correction controls.",
+  "recording_reader_unavailable": "The immutable definition release for this recording could not be read. Open Details to inspect current facts and use the existing correction controls.",
+  "recording_reader_empty": "No admitted recording facts are disclosed on this page.",
+  "recording_reader_contributions": "Performers and other contributors",
+  "recording_reader_associations": "Associations",
+  "recording_reader_continue": "Continue in the full Relations view",
+  "recording_reader_return": "Return to the source page"
 }

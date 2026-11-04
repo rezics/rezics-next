@@ -7917,5 +7917,12 @@
   "game_reader_more_available": "D’autres éditions sont disponibles. Seule la fenêtre chargée est affichée.",
   "game_reader_fallback": "Tous les faits et corrections",
   "game_reader_correct": "Corriger les faits du jeu",
-  "game_reader_refresh": "Actualiser la lecture"
+  "game_reader_refresh": "Actualiser la lecture",
+  "recording_reader_unsupported": "La version des définitions de ce sujet ne publie pas encore de champs propres aux enregistrements. Ouvrez Détails pour consulter les faits actuels et utiliser les outils de correction existants.",
+  "recording_reader_unavailable": "La version immuable des définitions de cet enregistrement n’a pas pu être lue. Ouvrez Détails pour consulter les faits actuels et utiliser les outils de correction existants.",
+  "recording_reader_empty": "Aucun fait admis sur cet enregistrement n’est divulgué sur cette page.",
+  "recording_reader_contributions": "Interprètes et autres contributeurs",
+  "recording_reader_associations": "Relations",
+  "recording_reader_continue": "Continuer dans la vue complète des relations",
+  "recording_reader_return": "Revenir à la page d’origine"
 }
