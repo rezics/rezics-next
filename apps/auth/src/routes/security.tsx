@@ -504,7 +504,7 @@ function SecurityPageView({
     if (activeAccount.current !== owner) return;
     if (result.ok) {
       // Retire earlier target advice until the native composition has caught up.
-      setPasskeys((current) => [...current.map((row) => ({ ...row, remove: undefined })), result.passkey]);
+      setPasskeys((current) => [...current.map((row) => ({ ...row, remove: 'unavailable' as const })), result.passkey]);
       setPage(null);
       void refreshRegistrationInventory(owner, generation);
       setPasskeyName('');
@@ -521,7 +521,7 @@ function SecurityPageView({
 
   async function refreshRegistrationInventory(owner: string, generation: number) {
     updateOperation({ kind: 'passkey-add' });
-    setSessions((current) => current.map((row) => ({ ...row, revoke: undefined })));
+    setSessions((current) => current.map((row) => ({ ...row, revoke: 'unavailable' as const })));
     const result = await (securitySource?.load ?? loadSecurity)(passkeysSupported()).catch((): SecurityLoadResult => ({
       kind: 'failure',
       message: m.auth_security_passkeys_failed(),

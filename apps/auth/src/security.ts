@@ -107,7 +107,7 @@ type EffectApproval = { reference: string; expiresAt: string };
 
 export async function loadSecurity(_withPasskeys: boolean, signal?: AbortSignal): Promise<SecurityLoadResult> {
   const result = await loadSecurityPage(signal);
-  if (result.kind === 'signed-out') return result;
+  if (result.kind === 'signed-out') return { kind: 'signed-out' };
   if (result.kind !== 'ready') return { kind: 'failure', message: failureMessage(503, 'unavailable', null) };
   const { page } = result;
   return {
