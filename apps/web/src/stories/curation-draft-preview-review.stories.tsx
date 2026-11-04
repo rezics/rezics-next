@@ -3,11 +3,12 @@ import {
   platformRegistry,
   PROFILE_FORMAT,
   profileDigest,
+  resolveView,
   type CompositionDocument,
   type PresentationProfile,
 } from '@rezics/composition';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import recorded from '../kernel/recorded/subject.json';
@@ -39,7 +40,8 @@ const lease = {
 function pageFor(input: DraftPreviewInput): SubjectPageData {
   const digest = profileDigest(input.profile);
   const selectedView = 'view' in input.target ? (input.target.view ?? 'overview') : 'overview';
-  const document = input.profile.generic.views?.[selectedView] ?? sampleDocument;
+  const witness = 'route' in input.target ? { route: input.target.route } : {};
+  const document = resolveView(input.profile, witness, selectedView)?.document ?? sampleDocument;
   const reads = Object.fromEntries(
     Object.keys(planReads(platformRegistry, document, { subject: recorded.subject.id }).reads).map((key) => [
       key,
