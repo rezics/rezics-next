@@ -369,10 +369,10 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
     expect(prepared.requirements.map((item) => [item.nativeType, item.sourceKey, item.ownerKey])).toEqual([
       ['skos:ConceptScheme', 'vndb.tag.cont', 'v410'],
       ['skos:ConceptScheme', 'vndb.tag.ero', 'v410'],
-      ['skos:Concept', 'vndb.tag.cont:g12', 'v410'],
       ['skos:Concept', 'vndb.tag.cont:g311', 'v410'],
-      ['skos:Concept', 'vndb.tag.cont:g88', 'v410'],
       ['skos:Concept', 'vndb.tag.ero:g44', 'v410'],
+      ['skos:Concept', 'vndb.tag.cont:g12', 'v410'],
+      ['skos:Concept', 'vndb.tag.cont:g88', 'v410'],
     ]);
     const parentCreate = commands.find(
       (command) =>
