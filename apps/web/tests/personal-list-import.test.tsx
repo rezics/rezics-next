@@ -401,7 +401,7 @@ test('confirms only reviewed rows and retries an unknown apply with the identica
   expect(journey.snapshot().selection).toEqual([]);
 });
 
-test('keeps acknowledged outcomes and the remaining selection after native cancellation', async () => {
+test('keeps acknowledged outcomes and retires private review after native cancellation', async () => {
   const rows = [row(0), row(1)];
   const journey = createVndbJourney({
     visit: visit(),
@@ -438,8 +438,9 @@ test('keeps acknowledged outcomes and the remaining selection after native cance
   const snap = await journey.confirm();
   expect(snap.cancelled).toBe(true);
   expect(snap.outcomes.map((outcome) => outcome.ordinal)).toEqual([0]);
-  expect(snap.selection.map((item) => item.ordinal)).toEqual([1]);
+  expect(snap.selection).toEqual([]);
   expect(snap.unattempted).toEqual([1]);
+  expect(snap.unattemptedEffects.map((effect) => [effect.ordinal, effect.reviewId])).toEqual([[1, reviewIds[1]]]);
 });
 
 test.each(['retire', 'subject', 'csrfToken'] as const)(
