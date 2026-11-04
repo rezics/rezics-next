@@ -25,6 +25,7 @@ const stateLabels = {
 const choices: RuleChoices = {
   release: {
     state: 'ready',
+    digest: 'sha256:original-immutable-release',
     metadata: { types: {}, properties: {} },
     profiles: [
       {
@@ -57,6 +58,12 @@ function ready(filter: FilterDocument = state): Ready {
     intent: key,
     address: { collectionId: 'private-rule' },
     choices,
+    accepted: {
+      state: 'ready',
+      digest: 'sha256:original-immutable-release',
+      metadata: choices.release.metadata,
+      profiles: choices.release.profiles,
+    },
     rule: {
       filter,
       sort: 'id',
@@ -203,6 +210,56 @@ test('available choices use supplied localized names, with exact saved and field
     }
   } finally {
     setLocale(previous, { reload: false });
+  }
+});
+
+test('criteria review preserves nested negative meaning and exact references when current metadata is unavailable', async () => {
+  const filter: FilterDocument = {
+    and: [
+      { type: { in: ['schema:Book', 'schema:Removed'] } },
+      {
+        not: {
+          or: [
+            { statement: { property: 'schema:status', in: ['value:retired'] } },
+            { owner: { label: { id: 'label:removed' } } },
+          ],
+        },
+      },
+    ],
+  };
+  const page = ready(filter);
+  page.accepted = {
+    state: 'ready',
+    digest: page.rule.releaseDigest,
+    metadata: {
+      types: { 'schema:Book': { labels: { en: 'Book type' }, bases: [], facets: [] } },
+      properties: { 'schema:status': { labels: { en: 'Reading status' }, datatype: 'string' } },
+    },
+    profiles: [],
+  };
+  page.choices = {
+    release: { state: 'unavailable', profiles: [] },
+    labels: { state: 'unavailable', values: [], next: null },
+  };
+  const ui = await mount({ page });
+  try {
+    const review = [...ui.host.querySelectorAll('section')].find(
+      (section) => section.getAttribute('aria-labelledby') === 'rule-review-heading',
+    );
+    expect(review).toBeDefined();
+    expect(review!.textContent).toContain(m.saved_filter_review_group_and());
+    expect(review!.textContent).toContain(m.saved_filter_review_group_not());
+    expect(review!.textContent).toContain(m.saved_filter_review_group_or());
+    expect(review!.textContent).toContain('Book type');
+    expect(review!.textContent).toContain('Reading status');
+    expect(review!.textContent).toContain('schema:Removed');
+    expect(review!.textContent).toContain('value:retired');
+    expect(review!.textContent).toContain('label:removed');
+    expect(review!.textContent).toContain(m.library_rule_review_metadata_unavailable());
+    expect(review!.textContent).toContain(m.library_rule_review_no_evaluation());
+    expect(review!.textContent).not.toContain('0 results');
+  } finally {
+    await ui.close();
   }
 });
 

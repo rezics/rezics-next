@@ -505,8 +505,14 @@ test('An uncertain saved-rule update keeps its original command and confirms the
     intent: '10000000-0000-4000-8000-000000000001',
     address: { collectionId: id },
     choices: {
-      release: { state: 'ready', metadata: { types: {}, properties: {} }, profiles: [] },
+      release: { state: 'ready', digest: 'original-release', metadata: { types: {}, properties: {} }, profiles: [] },
       labels: { state: 'ready', values: [], next: null },
+    },
+    accepted: {
+      state: 'ready',
+      digest: 'original-release',
+      metadata: { types: {}, properties: {} },
+      profiles: [],
     },
     rule: {
       filter: { owner: { presence: true } },
@@ -528,6 +534,7 @@ test('An uncertain saved-rule update keeps its original command and confirms the
   document.body.append(host);
   const root = createRoot(host);
   const requests: Array<{ input: RuleWrite; csrf: string } & ReturnType<typeof deferred<CollectionWriteResult>>> = [];
+  const navigations: string[] = [];
   const send = (input: RuleWrite, csrf: string) => {
     const request = { input, csrf, ...deferred<CollectionWriteResult>() };
     requests.push(request);
@@ -544,8 +551,20 @@ test('An uncertain saved-rule update keeps its original command and confirms the
           csrfToken={csrfToken}
           save={save}
           resultsHref={resultsHref}
+          navigate={(savedId) => navigations.push(savedId)}
+          isOwnerCurrent={() => true}
           admitted={['collection_rule.get', 'collection_rule.update']}
-          reload={async () => ({ ...rule, intent: 'new-read', rule: { ...rule.rule, revision: 12 } })}
+          reload={async () => ({
+            ...rule,
+            intent: 'new-read',
+            rule: {
+              ...rule.rule,
+              revision: 12,
+              releaseDigest: 'new-release',
+              sourceGeneration: 'new-source',
+            },
+            accepted: { ...rule.accepted!, digest: 'new-release' },
+          })}
         />,
       ),
     );
@@ -555,6 +574,12 @@ test('An uncertain saved-rule update keeps its original command and confirms the
     });
   try {
     await render('original-credential');
+    expect(host.textContent).toContain('original-source');
+    expect(host.textContent).toContain('original-release');
+    expect(host.textContent).toContain(m.library_rule_revision());
+    expect(host.textContent).toContain(m.library_rule_collection_revision());
+    expect(host.textContent).toContain(m.library_rule_review_owner_verified());
+    expect(host.querySelector('button[type="submit"]')!.textContent).toContain(m.library_rule_save_and_view_results());
     await submit();
     await submit();
     expect(requests).toHaveLength(1);
@@ -567,6 +592,8 @@ test('An uncertain saved-rule update keeps its original command and confirms the
         .click(),
     );
     expect(requests).toHaveLength(1); // A read cannot replay the uncertain command.
+    expect(host.textContent).toContain('original-source');
+    expect(host.textContent).not.toContain('new-source');
     await submit();
     expect(requests).toHaveLength(2);
     expect(requests[1]!.input).toEqual(requests[0]!.input);
@@ -577,11 +604,14 @@ test('An uncertain saved-rule update keeps its original command and confirms the
     await settle(() => requests[1]!.resolve({ ok: true, id: 'wrong-identity' }));
     expect(host.textContent).toContain(m.library_rule_uncertain());
     expect(host.textContent).not.toContain(m.library_rule_saved());
+    expect(navigations).toEqual([]);
     await submit();
     expect(requests).toHaveLength(3);
     expect(requests[2]!.input).toEqual(requests[0]!.input);
     await settle(() => requests[2]!.resolve({ ok: true, id }));
     expect(host.textContent).toContain(m.library_rule_saved());
+    expect(navigations).toEqual([id]);
+    expect(host.textContent).toContain(m.library_rule_review_confirmed_collection());
     const members = [...host.querySelectorAll('a')].find((a) => a.textContent === m.library_rule_members())!;
     expect(members.getAttribute('href')).toBe(savedQueryRuleReturn(resultsHref, id, 'en', true));
     expect(new URL(members.href).searchParams.getAll('f.schema:keywords')).toEqual(['b', 'a']);

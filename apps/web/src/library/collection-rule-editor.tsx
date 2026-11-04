@@ -13,12 +13,13 @@ import { localizedLabel } from '../search/results';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { PageHeading } from '../shell/page-heading';
-import type { RuleChoicePage, RuleChoices, RulePage } from './collection-rule-read';
+import type { RuleChoicePage, RuleChoices, RuleMeaning, RulePage } from './collection-rule-read';
 import type { RuleWrite } from './collection-rule-actions';
 import type { CollectionWriteResult } from './collection-records';
 import { CollectionRuleControls } from './collection-rule-controls';
 import { collectionRuleLabelPrefix } from './collection-rule-label-input';
 import { ruleDraftSnapshot, useCollectionRuleDraftNavigation } from './collection-rule-draft-navigation';
+import { DynamicRuleReview, ruleReviewReleaseFromChoices } from './dynamic-rule-review';
 
 type AvailablePage = Extract<RulePage, { state: 'new' | 'ready' }>;
 const presence: FilterDocument = { owner: { presence: true } };
@@ -485,6 +486,8 @@ function RuleForm({
   const choiceContext = useRef({ q: '', next: page.choices.labels.next, generation: 0 });
   const labelContext = choiceContext.current;
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [currentRuleRead, setCurrentRuleRead] = useState(false);
+  const [reviewCurrentRule, setReviewCurrentRule] = useState(false);
   const confirmed = useRef(false);
   const snapshot = ruleDraftSnapshot({ filter, title, description });
   const baseline = useRef(snapshot);
@@ -573,9 +576,13 @@ function RuleForm({
         confirmed.current = true;
         baseline.current = snapshot;
         setSavedId(result.id);
+        setCurrentRuleRead(false);
+        setReviewCurrentRule(false);
         if (operation.current()) navigate?.(result.id);
       } else {
         setConflict(result.reason === 'conflict');
+        setCurrentRuleRead(false);
+        setReviewCurrentRule(false);
         setFeedback(
           result.reason === 'conflict'
             ? m.library_rule_conflict()
@@ -606,6 +613,7 @@ function RuleForm({
       const current = await reload();
       if (!operation.current()) return;
       if (accepts(current)) {
+        const wasConflict = conflict;
         sourceActive.current = true;
         remember(current);
         // An uncertain command retains its exact revision, filter, metadata and key across reads.
@@ -621,6 +629,8 @@ function RuleForm({
           setChoices(current.choices);
         }
         setConflict(false);
+        setCurrentRuleRead(wasConflict);
+        setReviewCurrentRule(false);
         confirmed.current = false;
         setSavedId(null);
         setFeedback(m.library_rule_reloaded());
@@ -690,6 +700,36 @@ function RuleForm({
     canLabel && (canLabelCurrent?.() ?? true)
       ? choices
       : { ...choices, labels: { state: 'unavailable' as const, values: [], next: null } };
+  const currentMeaning = ruleReviewReleaseFromChoices(choices);
+  const filterMatchesSaved = base.state === 'ready' && ruleDraftSnapshot(filter) === ruleDraftSnapshot(base.rule.filter);
+  const reviewFilter = intent?.filter ?? filter ?? presence;
+  const reviewStage = intent
+    ? 'submitted'
+    : savedId
+      ? 'confirmed'
+      : filterMatchesSaved
+        ? 'saved'
+        : 'draft';
+  const savedMeaning: RuleMeaning | undefined =
+    base.state === 'ready'
+      ? (base.accepted ?? {
+          state:
+            choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
+              ? 'ready'
+              : 'unavailable',
+          digest: base.rule.releaseDigest,
+          ...(choices.release.state === 'ready' && choices.release.digest === base.rule.releaseDigest
+            ? {
+                metadata: choices.release.metadata,
+                profiles: choices.release.profiles,
+              }
+            : { profiles: [] }),
+        })
+      : undefined;
+  const reviewUsesSavedMeaning = filterMatchesSaved && base.state === 'ready' && !savedId;
+  const reviewMeaning = reviewUsesSavedMeaning && savedMeaning ? savedMeaning : undefined;
+  const reviewProfiles = reviewMeaning?.profiles ?? choices.release.profiles;
+  const reviewProfileState = reviewMeaning?.state ?? choices.release.state;
   return (
     <article className="flex min-w-0 max-w-4xl flex-col gap-4 text-foreground">
       {navigation.boundary}
@@ -823,6 +863,50 @@ function RuleForm({
               extension={extension}
               embedded
             />
+            <DynamicRuleReview
+              filter={reviewFilter}
+              stage={reviewStage}
+              current={currentMeaning}
+              accepted={reviewMeaning}
+              choices={visibleChoices}
+              profiles={reviewProfiles}
+              profileState={reviewProfileState}
+              basis={base.state === 'ready' && reviewStage !== 'confirmed' ? base.rule : undefined}
+              basisKind={intent ? 'original' : 'loaded'}
+              collectionId={base.state === 'ready' ? base.id : savedId ?? undefined}
+              returnedId={savedId ?? undefined}
+              ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
+            />
+            {currentRuleRead && base.state === 'ready' ? (
+              <section className="min-w-0 space-y-3 rounded-lg border border-primary/30 p-4">
+                <p className="text-sm text-muted-foreground">{m.library_rule_review_current_prompt()}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-expanded={reviewCurrentRule}
+                  onClick={() => setReviewCurrentRule((value) => !value)}
+                >
+                  {reviewCurrentRule
+                    ? m.library_rule_review_current_close()
+                    : m.library_rule_review_current_button()}
+                </Button>
+                {reviewCurrentRule ? (
+                  <DynamicRuleReview
+                    filter={base.rule.filter}
+                    stage="current"
+                    current={currentMeaning}
+                    accepted={savedMeaning}
+                    choices={visibleChoices}
+                    profiles={base.accepted?.profiles ?? choices.release.profiles}
+                    profileState={base.accepted?.state ?? choices.release.state}
+                    basis={base.rule}
+                    basisKind="loaded"
+                    collectionId={base.id}
+                    ownerCurrent={isOwnerCurrent?.() ?? ownerCurrent()}
+                  />
+                ) : null}
+              </section>
+            ) : null}
             <details className="text-sm">
               <summary className="min-h-11 cursor-pointer content-center rounded-md py-2 text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
                 {m.search_reader_condition_limits_title()}
@@ -843,6 +927,7 @@ function RuleForm({
           savedId={savedId}
           collectionId={base.state === 'ready' ? base.id : null}
           resultsHref={resultsHref}
+          navigateAfterSave={!!navigate}
           refresh={() => void refresh()}
         />
         <TechnicalDetails label={m.library_rule_details()}>
