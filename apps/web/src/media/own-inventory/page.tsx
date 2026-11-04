@@ -39,6 +39,15 @@ export function CurrentViewerOwnMediaPage({ initial, cursor, invalidAddress = fa
   );
 }
 
+type RemovalEpisode = {
+  intent: OwnMediaEraseIntent;
+  identity: string;
+  viewKey: string;
+  current: () => boolean;
+  send: EraseCall;
+  retired?: boolean;
+};
+
 type Selection = { id: string; identity: string; viewKey: string };
 type Feedback = { kind: 'acknowledged' | 'uncertain' | 'denied' | 'concealed' | 'stale' | 'signed-out'; id: string };
 const returnStateKey = '__ownMediaInventoryReturn';
@@ -178,11 +187,11 @@ export function OwnMediaInventoryWorkspace({
   const rowButtons = useRef(new Map<string, HTMLButtonElement>());
   const [selection, setSelection] = useState<Selection | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const intentRef = useRef<OwnMediaEraseIntent | null>(null);
+  const episodeRef = useRef<RemovalEpisode | null>(null);
+  const [episode, setEpisode] = useState<RemovalEpisode | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState(false);
   const pendingCommands = useRef(new Set<string>());
-  const attempt = useRef(0);
   const localeNow = getLocale();
   let indexed: ReturnType<typeof indexOwnMediaPage> | null = null;
   let invalidPage = false;
@@ -207,14 +216,8 @@ export function OwnMediaInventoryWorkspace({
 
   useEffect(() => {
     if (!selection || selectedCurrent) return;
-    attempt.current += 1;
-    setBusy(false);
     setSelection(null);
     setConfirmingId(null);
-    if (intentRef.current?.mediaId === selection.id) {
-      intentRef.current = null;
-    }
-    setFeedback((current) => (current?.id === selection.id ? null : current));
   }, [selection, selectedCurrent]);
 
   useEffect(() => {
@@ -239,60 +242,73 @@ export function OwnMediaInventoryWorkspace({
 
   const choose = (entry: OwnMediaInventoryEntry) => {
     if (!isCurrent()) return;
-    attempt.current += 1;
-    setBusy(false);
-    setFeedback(null);
     setConfirmingId(null);
-    intentRef.current = null;
     setSelection((current) =>
       current?.id === entry.id ? null : { id: entry.id, identity: mediaIdentity(entry), viewKey },
     );
   };
 
-  const runErase = async (next: OwnMediaEraseIntent) => {
+  // Selection is transient; the original command and its sender belong to this visit.
+  const episodeRow = episode ? rows.get(episode.intent.mediaId) : null;
+  const episodeAuthority = Boolean(
+    episode && !episode.retired && episode.viewKey === viewKey && episode.intent.viewer === subject &&
+    episode.current() && isCurrent() && state === 'ready',
+  );
+  useEffect(() => {
+    if (episode && !episodeAuthority) episode.retired = true;
+  }, [episode, episodeAuthority]);
+  const retryAdmitted = Boolean(
+    episodeAuthority && episodeRow && episode &&
+    mediaIdentity(episodeRow) === episode.identity &&
+    eraseIntentFor(episodeRow, episode.intent.viewer, episode.intent.source, episode.intent.idempotencyKey),
+  );
+
+  const runErase = async (original: RemovalEpisode) => {
+    const next = original.intent;
+    const row = rows.get(next.mediaId);
     if (
-      !isCurrent() ||
-      !selectedCurrent ||
-      !activeEntry ||
-      next.mediaId !== activeEntry.id ||
+      episodeRef.current !== original || original.retired || !original.current() || !isCurrent() ||
+      original.viewKey !== viewKey || next.viewer !== subject || state !== 'ready' ||
+      !row || mediaIdentity(row) !== original.identity ||
+      !eraseIntentFor(row, next.viewer, next.source, next.idempotencyKey) ||
       pendingCommands.current.has(next.mediaId)
-    )
-      return;
-    const owner = attempt.current;
+    ) return;
     pendingCommands.current.add(next.mediaId);
     setBusy(true);
     let result: OwnMediaEraseResult;
     try {
-      result = await onErase({ data: next });
+      result = await original.send({ data: next });
     } catch {
       result = 'uncertain';
     } finally {
       pendingCommands.current.delete(next.mediaId);
-      if (owner === attempt.current && isCurrent()) setBusy(false);
     }
-    if (owner !== attempt.current || !isCurrent()) return;
+    if (episodeRef.current !== original || original.retired || !original.current() || !isCurrent()) return;
+    setBusy(false);
     setFeedback({ kind: result, id: next.mediaId });
-    if (result === 'acknowledged') {
-      intentRef.current = null;
-      void onRefresh();
-    } else if (result !== 'uncertain') {
-      intentRef.current = null;
+    if (result !== 'uncertain') {
+      episodeRef.current = null;
+      setEpisode(null);
+      if (result === 'acknowledged') void onRefresh();
     }
   };
 
   const confirmErase = (entry: OwnMediaInventoryEntry) => {
-    if (!isCurrent() || !selectedCurrent || !subject) return;
+    if (episodeRef.current || !isCurrent() || !selectedCurrent || !subject) return;
     const next = eraseIntentFor(entry, subject, OWN_MEDIA_SOURCE, crypto.randomUUID());
     if (!next) return;
-    intentRef.current = next;
+    const original: RemovalEpisode = {
+      intent: next, identity: mediaIdentity(entry), viewKey, current: isCurrent, send: onErase,
+    };
+    episodeRef.current = original;
+    setEpisode(original);
     setConfirmingId(null);
     setFeedback(null);
-    void runErase(next);
+    void runErase(original);
   };
 
   const retryErase = () => {
-    const original = intentRef.current;
-    if (original && feedback?.kind === 'uncertain' && isCurrent()) void runErase(original);
+    if (episode && retryAdmitted && feedback?.kind === 'uncertain') void runErase(episode);
   };
 
   const format = locale || localeNow;
@@ -307,6 +323,33 @@ export function OwnMediaInventoryWorkspace({
         </h1>
         <p className="max-w-3xl text-sm text-muted-foreground">{m.own_media_intro()}</p>
       </header>
+
+      {episode ? (
+        <section role="alert" className="grid min-w-0 gap-3 rounded-lg border border-warning p-4">
+          <h2 className="font-medium">{m.own_media_recovery_heading()}</h2>
+          {episodeAuthority && episodeRow ? (
+            <p className="break-words text-sm">
+              {purposeText(episodeRow.purpose)} · <span className="break-all">{episodeRow.id}</span>
+            </p>
+          ) : null}
+          <p className="text-sm text-muted-foreground">
+            {!episodeAuthority ? m.own_media_recovery_withheld() : busy ? m.own_media_removing() : m.own_media_removal_uncertain()}
+          </p>
+          <p className="text-sm text-muted-foreground">{m.own_media_recovery_browsing()}</p>
+          {!retryAdmitted ? <p>{m.own_media_recovery_withheld()}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" disabled={!episodeAuthority || !episodeRow} onClick={() => {
+              if (!episodeRow || !episodeAuthority || !isCurrent()) return;
+              setSelection({ id: episodeRow.id, identity: mediaIdentity(episodeRow), viewKey });
+              rowButtons.current.get(episodeRow.id)?.focus();
+            }}>{m.own_media_recovery_return()}</Button>
+            <Button variant="outline" onClick={retryErase}
+              disabled={busy || !retryAdmitted || feedback?.kind !== 'uncertain'}>
+              {m.own_media_retry_removal()}
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
       {status !== 'ready' ? (
         <section className="grid gap-3 rounded-lg border p-4" aria-live="polite">
@@ -327,23 +370,14 @@ export function OwnMediaInventoryWorkspace({
         </section>
       ) : page ? (
         <>
-          {feedback?.kind === 'uncertain' ? (
-            <div role="alert" className="grid gap-2 rounded-lg border border-warning p-4">
-              <p className="font-medium">{m.own_media_removal_uncertain()}</p>
-              <p className="text-sm text-muted-foreground">{m.own_media_removal_uncertain_detail()}</p>
-              <Button variant="outline" onClick={retryErase} disabled={busy || !isCurrent()}>
-                {busy ? m.own_media_removing() : m.own_media_retry_removal()}
-              </Button>
-            </div>
-          ) : null}
           {feedback?.kind === 'acknowledged' ? (
             <p role="status" className="rounded-lg border p-3 text-sm">
-              {m.own_media_removed()}
+              {m.own_media_removed()} <span className="break-all">{feedback.id}</span>
             </p>
           ) : null}
           {feedback && !['uncertain', 'acknowledged'].includes(feedback.kind) ? (
             <p role="alert" className="rounded-lg border p-3 text-sm">
-              {m.own_media_removal_refused()}
+              {m.own_media_removal_refused()} <span className="break-all">{feedback.id}</span>
             </p>
           ) : null}
 
@@ -480,7 +514,7 @@ export function OwnMediaInventoryWorkspace({
                         {entry.actions.remove?.operationId === 'media.erase' && entry.state !== 'erased' ? (
                           confirmingId === entry.id ? (
                             <div className="flex flex-wrap gap-2">
-                              <Button onClick={() => confirmErase(entry)} disabled={!isCurrent() || busy}>
+                              <Button onClick={() => confirmErase(entry)} disabled={!isCurrent() || !!episode}>
                                 {busy ? m.own_media_removing() : m.own_media_confirm_remove()}
                               </Button>
                               <Button variant="outline" onClick={() => setConfirmingId(null)} disabled={busy}>
@@ -492,7 +526,7 @@ export function OwnMediaInventoryWorkspace({
                               variant="outline"
                               className="justify-self-start"
                               onClick={() => setConfirmingId(entry.id)}
-                              disabled={!isCurrent() || !selectedCurrent || busy}
+                              disabled={!isCurrent() || !selectedCurrent || !!episode}
                             >
                               {m.own_media_remove()}
                             </Button>
