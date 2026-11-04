@@ -1205,6 +1205,9 @@ function AdmittedPresentationViewEditor({
           locale={locale}
           lease={lease}
           read={transport.previewDraft}
+          onReturn={() => {
+            if (isCurrent()) pageRegion.current?.focus();
+          }}
           {...(previewFocusHandoff ? { focusHandoff: previewFocusHandoff } : {})}
         />
       )}

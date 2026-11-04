@@ -256,8 +256,8 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         await render();
         await capture();
         expect(calls).toHaveLength(0);
-        expect(controls().getByRole('alert').textContent).toContain(m.presentation_preview_invalid({}, { locale }));
-        const address = controls().getByRole('textbox', { name: m.draft_preview_address({}, { locale }) });
+        expect(controls().getByRole('alert').textContent).toContain(m.draft_preview_subject_invalid({}, { locale }));
+        const address = controls().getByRole('textbox', { name: m.draft_preview_subject_id({}, { locale }) });
         await act(async () => user.type(address, recorded.subject.id));
         await select(controls().getByRole('combobox', { name: m.draft_preview_view({}, { locale }) }), 'details');
         expect(calls).toHaveLength(0);
@@ -295,7 +295,8 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         );
         await click(templates.getByRole('button', { name: m.curation_companion_add({}, { locale }) }));
         await settle(0, success(0, true));
-        expect(controls().getByText('Draft companion sibling')).toBeTruthy();
+        expect(controls().queryByText('Draft companion sibling')).toBeNull();
+        expect(controls().getByText(m.draft_preview_interrupted({}, { locale }))).toBeTruthy();
         expect(canvas.getByRole('heading', { name: m.presentation_preview_title({}, { locale }) })).toBeTruthy();
         await capture();
         expect(calls[1]!.input.profile.types[0]?.type).toBe('schema:Book');
@@ -311,7 +312,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         const keyAfterRecovery = canvas.getByRole('textbox', { name: m.curation_key({}, { locale }) });
         await act(async () => user.type(keyAfterRecovery, 'schema:Novel'));
         await click(canvas.getByRole('button', { name: m.curation_add({}, { locale }) }));
-        const focused = controls().getByRole('textbox', { name: m.draft_preview_address({}, { locale }) });
+        const focused = controls().getByRole('textbox', { name: m.draft_preview_subject_id({}, { locale }) });
         focused.focus();
         await act(async () =>
           client.setQueryData(['session'], { state: 'signed-in', subject: reader, csrfToken: 'second' }),
@@ -333,7 +334,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         await click(controls().getByRole('button', { name: m.draft_preview_retry({}, { locale }) }));
         expect(calls[3]!.input).toEqual(calls[2]!.input);
         await settle(3, { ok: false, reason: 'denied' });
-        expect(controls().getByRole('alert').textContent).toContain(m.presentation_preview_denied({}, { locale }));
+        expect(controls().getByRole('alert').textContent).toContain(m.draft_preview_native_refusal({}, { locale }));
         await capture();
         const replacementLocale = UI_LOCALES.find((candidate) => candidate !== startingLocale)!;
         locale = replacementLocale;
@@ -357,7 +358,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         correction.focus();
         await click(correction);
         expect(
-          (controls().getByRole('textbox', { name: m.draft_preview_address({}, { locale }) }) as HTMLInputElement)
+          (controls().getByRole('textbox', { name: m.draft_preview_account({}, { locale }) }) as HTMLInputElement)
             .value,
         ).toBe('current-reader');
         expect(window.document.activeElement).toBe(
@@ -367,7 +368,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
         expect(calls[6]!.input.target).toEqual({ account: 'current-reader', view: 'details' });
         // Another reader sees only their own fresh state, while this reader's draft and focus wait locally.
         controls()
-          .getByRole('textbox', { name: m.draft_preview_address({}, { locale }) })
+          .getByRole('textbox', { name: m.draft_preview_account({}, { locale }) })
           .focus();
         await act(async () =>
           client.setQueryData(['session'], { state: 'signed-in', subject: anotherReader, csrfToken: 'other' }),
