@@ -1554,8 +1554,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
             const partition = await withConnection(dependencies.pool, (client) =>
               readPartition(client, partitionOf(route)),
             );
-            if (query.cursor !== undefined && cursorEpoch !== partition?.epoch)
-              throw new ProblemError('stale_cursor');
+            if (query.cursor !== undefined && cursorEpoch !== partition?.epoch) throw new ProblemError('stale_cursor');
             const size = query.limit ?? 20;
             const targetType = query.targetType;
             const rows = await follows().listFollows(actor, {

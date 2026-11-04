@@ -748,24 +748,25 @@ test('following kind pages seek the selected population and bind cursors to kind
     request('GET', `/v1/follows?targetType=subject&limit=1&cursor=${encodeURIComponent(first.next)}`),
   );
   await problem(wrongKind.value, 400, 'invalid_cursor');
-  expect(wrongKind.capture.statements.some((statement) => /FROM (?:library\.follow|core\.partition)\b/i.test(statement))).toBe(
-    false,
-  );
+  expect(
+    wrongKind.capture.statements.some((statement) => /FROM (?:library\.follow|core\.partition)\b/i.test(statement)),
+  ).toBe(false);
   await problem(
     await request('GET', `/v1/follows?limit=1&cursor=${encodeURIComponent(first.next)}`),
     400,
     'invalid_cursor',
   );
   await problem(
-    await request('GET', `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`, undefined, 'other'),
+    await request(
+      'GET',
+      `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`,
+      undefined,
+      'other',
+    ),
     400,
     'invalid_cursor',
   );
-  await problem(
-    await request('GET', '/v1/follows?targetType=collection&cursor=malformed'),
-    400,
-    'invalid_cursor',
-  );
+  await problem(await request('GET', '/v1/follows?targetType=collection&cursor=malformed'), 400, 'invalid_cursor');
   await problem(await request('GET', '/v1/follows?targetType=realm'), 400, 'invalid_request');
 
   await json(await request('DELETE', `/v1/follows/${expectedCollectionIds[1]}`));
@@ -806,9 +807,9 @@ test('a kind page of 100 probes one more row from that kind', async () => {
     const last = await json(
       await request('GET', `/v1/follows?targetType=collection&limit=100&cursor=${encodeURIComponent(first.next)}`),
     );
-    expect(last.follows.filter((follow: { targetId: string }) => follow.targetId.startsWith(`${prefix}-`))).toHaveLength(
-      1,
-    );
+    expect(
+      last.follows.filter((follow: { targetId: string }) => follow.targetId.startsWith(`${prefix}-`)),
+    ).toHaveLength(1);
     expect(last.next).toBeNull();
   } finally {
     await db.admin.query(
