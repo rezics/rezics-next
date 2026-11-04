@@ -30,7 +30,7 @@ type NativeAdvice = import('../src/accounts/public-profile/contribution-actions/
 
 const id = '00000000-0000-4000-8000-000000000001';
 
-test('private advice selects the exact native action, operation, revision and reader without treating missing as denied', () => {
+test('private advice requires the exact native action, operation, revision and reader', () => {
   const reference = { type: 'content.thread' as const, id, placeId: id, sourceRevisionId: id };
   const operation = { action: 'reaction:set', operationId: 'reaction.set', state: 'available' as const };
   const nativeReference = {
@@ -54,56 +54,30 @@ test('private advice selects the exact native action, operation, revision and re
     reader: id,
     isCurrent: () => true,
   };
+  const withReferences = (references: NativeAdvice['actions']['references']): NativeAdvice => ({
+    ...source,
+    actions: { ...source.actions, references },
+  });
   expect(contributionOperationAdvice(request)).toBe('available');
   for (const state of ['denied', 'sign_in_required', 'withheld', 'unavailable', 'not_applicable'] as const) {
-    expect(
-      contributionOperationAdvice({
-        ...request,
-        source: {
-          ...source,
-          actions: { ...source.actions, references: [{ ...nativeReference, operations: [{ ...operation, state }] }] },
-        },
-      }),
-    ).toBe(state);
+    const next = { ...nativeReference, operations: [{ ...operation, state }] };
+    expect(contributionOperationAdvice({ ...request, source: withReferences([next]) })).toBe(state);
   }
-  expect(contributionOperationAdvice({ ...request, action: 'different-action' })).toBe('missing');
-  expect(contributionOperationAdvice({ ...request, operationId: 'different-operation' })).toBe('missing');
-  expect(contributionOperationAdvice({ ...request, source: undefined })).toBe('missing');
-  expect(contributionOperationAdvice({ ...request, reader: 'replacement-reader' })).toBe('unavailable');
+  for (const replacement of [{ action: 'other' }, { operationId: 'other' }, { source: undefined }])
+    expect(contributionOperationAdvice({ ...request, ...replacement })).toBe('missing');
+  expect(contributionOperationAdvice({ ...request, reader: 'replacement' })).toBe('unavailable');
   expect(contributionOperationAdvice({ ...request, isCurrent: () => false, failed: true })).toBe('retired');
   expect(contributionOperationAdvice({ ...request, failed: true })).toBe('failed');
-  for (const replacement of [
-    { ...nativeReference, sourceRevisionId: 'replacement-revision' },
-    { ...nativeReference, operations: [operation, operation] },
-  ]) {
-    expect(
-      contributionOperationAdvice({
-        ...request,
-        source: {
-          ...source,
-          actions: { ...source.actions, references: [replacement] },
-        },
-      }),
-    ).toBe('unavailable');
-  }
-  expect(
-    contributionOperationAdvice({
-      ...request,
-      source: {
-        ...source,
-        currentness: { actions: 'unavailable' },
-      },
-    }),
-  ).toBe('unavailable');
-  expect(
-    contributionOperationAdvice({
-      ...request,
-      source: {
-        ...source,
-        actions: { ...source.actions, references: [{ ...nativeReference, state: 'withheld' }] },
-      },
-    }),
-  ).toBe('withheld');
+  for (const references of [
+    [{ ...nativeReference, sourceRevisionId: 'replacement' }],
+    [{ ...nativeReference, operations: [operation, operation] }],
+    [nativeReference, nativeReference],
+  ])
+    expect(contributionOperationAdvice({ ...request, source: withReferences(references) })).toBe('unavailable');
+  const stale: NativeAdvice = { ...source, currentness: { actions: 'unavailable' } };
+  expect(contributionOperationAdvice({ ...request, source: stale })).toBe('unavailable');
+  const withheld = withReferences([{ ...nativeReference, state: 'withheld' }]);
+  expect(contributionOperationAdvice({ ...request, source: withheld })).toBe('withheld');
 });
 
 test('only surviving original Discussion, Review and Post occurrences select advice; Post watch keeps its thread', () => {
@@ -128,16 +102,29 @@ test('only surviving original Discussion, Review and Post occurrences select adv
     { ...thread, firstPost: { ...firstPost, revisionId: 'replacement-revision' } },
   ])
     expect(originalContributionReference(input, replacement)).toBeUndefined();
-  const postReference = { ...threadReference, type: 'content.post' as const, threadId: id, threadRevisionId: id };
+  const postId = '00000000-0000-4000-8000-000000000002';
+  const postRevision = '00000000-0000-4000-8000-000000000003';
+  const postReference = {
+    ...threadReference,
+    id: postId,
+    sourceRevisionId: postRevision,
+    type: 'content.post' as const,
+    threadId: id,
+    threadRevisionId: id,
+  };
   const postInput = { ...input, view: 'posts' as const, references: [postReference] };
-  const post = { ...publicState, id, authorId: id, threadId: id, revisionId: id, thread };
+  const post = { ...publicState, id: postId, authorId: id, threadId: id, revisionId: postRevision, thread };
   expect(originalContributionReference(postInput, post)).toBe(postReference);
   expect(
     originalContributionReference(postInput, { ...post, thread: { ...thread, boardId: 'replacement-board' } }),
   ).toBeUndefined();
   expect(contributionCommandTarget(postReference, 'watch')).toEqual({ type: 'content.thread', id, revisionId: id });
   for (const operation of ['reaction', 'report', 'reply'] as const)
-    expect(contributionCommandTarget(postReference, operation)).toEqual({ type: 'content.post', id, revisionId: id });
+    expect(contributionCommandTarget(postReference, operation)).toEqual({
+      type: 'content.post',
+      id: postId,
+      revisionId: postRevision,
+    });
 });
 
 function episode(client: QueryClient, row: Record<string, unknown>): ContributionActionsEpisode {
