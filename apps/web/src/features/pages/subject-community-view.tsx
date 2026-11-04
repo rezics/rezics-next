@@ -18,6 +18,7 @@ import { SubjectCommunityInteractions } from './subject-community-interactions';
 
 export const SubjectCommunityContext = createContext<SubjectCommunity | undefined>(undefined);
 export const SubjectCommunityVerificationContext = createContext<VerificationConfig | undefined>(undefined);
+export const SubjectCommunityRefreshContext = createContext<(() => Promise<void>) | undefined>(undefined);
 const headingClass =
   'text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl';
 const actionClass = `${linkClass} ${linkColor} inline-flex min-h-11 min-w-11 max-w-full items-center rounded-sm text-sm font-medium whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
@@ -53,6 +54,7 @@ export function SubjectCommunityRegion({
   const options = { locale: locale as never };
   const community = useContext(SubjectCommunityContext);
   const verification = useContext(SubjectCommunityVerificationContext);
+  const refreshAdvice = useContext(SubjectCommunityRefreshContext);
   const reading = useSubjectCommunityReading({
     source: community?.sourceKey ?? region,
     reader: community?.reader ?? null,
@@ -257,6 +259,7 @@ export function SubjectCommunityRegion({
                     reader={reader}
                     source={community?.sourceKey ?? community?.now ?? ''}
                     reactionsAsOf={reactionsAsOf}
+                    {...(refreshAdvice ? { refreshAdvice } : {})}
                     {...(verification ? { verification } : {})}
                     {...(preparedTransport ? { preparedTransport } : {})}
                     {...(preparedWatch ? { preparedWatch } : {})}

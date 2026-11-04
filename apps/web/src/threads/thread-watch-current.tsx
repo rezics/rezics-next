@@ -21,6 +21,10 @@ export type ThreadWatchProps = {
   returnTo: string;
   /** A current native card can seed this visit without a per-thread status request. */
   initialWatching?: boolean;
+  /** A current source may have no usable watch operation without having failed to load. */
+  adviceState?: 'empty' | 'denied' | 'unavailable';
+  /** Re-read the current Thread or Subject source. This never submits a watch command. */
+  refreshAdvice?: () => Promise<void>;
   observation?: ThreadPageObservation;
   /** The admitted page/source identity, separate from a repeated thread ID. */
   readAuthority?: object;
@@ -39,9 +43,14 @@ export type ThreadWatchView = Readonly<{
     | 'refused'
     | 'access-lost'
     | 'unavailable'
+    | 'advice-empty'
+    | 'advice-denied'
+    | 'advice-unavailable'
+    | 'advice-refresh-failed'
     | 'retired';
   watching?: boolean;
   confirmation?: boolean;
+  refreshingAdvice?: boolean;
   /** Only an unresolved write retains an exact requested state. A read is never its receipt. */
   command?: ThreadWatchCommand;
 }>;
@@ -78,6 +87,7 @@ function sameBinding(left: Binding, right: Binding): boolean {
     left.props.sessionStamp === right.props.sessionStamp &&
     left.props.admitted === right.props.admitted &&
     left.props.initialWatching === right.props.initialWatching &&
+    left.props.adviceState === right.props.adviceState &&
     left.props.observation === right.props.observation &&
     left.props.readAuthority === right.props.readAuthority
   );
@@ -123,6 +133,9 @@ export class ThreadWatchVisit {
     if (this.ready && typeof props.initialWatching === 'boolean') {
       this.started = true;
       this.view = Object.freeze({ phase: 'confirmed', watching: props.initialWatching });
+    } else if (this.ready && props.adviceState) {
+      this.started = true;
+      this.view = Object.freeze({ phase: `advice-${props.adviceState}` as ThreadWatchView['phase'] });
     }
     this.owner = Object.freeze({
       threadId: props.threadId,
@@ -208,19 +221,25 @@ export class ThreadWatchVisit {
   }
 
   private acceptRead(result: ThreadWatchReadResult, unresolved: ThreadWatchCommand | undefined) {
-    if (
+    if (result.kind === 'access-lost') {
+      this.loseAccess();
+    } else if (unresolved) {
+      // A private point read has no receipt. Keep the original command and never authorize its inverse.
+      this.publish(
+        result.kind === 'unavailable'
+          ? { phase: 'unavailable', command: unresolved }
+          : { phase: 'unknown', command: unresolved },
+      );
+    } else if (
       result.kind === 'confirmed' &&
       typeof result.state?.watching === 'boolean' &&
       Object.keys(result.state).length === 1
     ) {
       // Current status, independently observed. No claim about the earlier uncertain operation.
       this.publish({ phase: 'confirmed', watching: result.state.watching });
-    } else if (result.kind === 'access-lost') {
-      this.loseAccess();
     } else {
       this.publish({
         phase: result.kind === 'unavailable' ? 'unavailable' : 'read-failed',
-        ...(unresolved ? { command: unresolved } : {}),
       });
     }
   }
@@ -280,6 +299,40 @@ export class ThreadWatchVisit {
   retry = () => {
     if (!this.current() || this.active || !this.view.command) return;
     void this.send(this.view.command);
+  };
+
+  refreshAdvice = async () => {
+    const refresh = this.binding.props.refreshAdvice;
+    if (!refresh || !this.current() || this.active) return;
+    const previous = this.view;
+    if (
+      !(
+        (previous.phase === 'confirmed' && typeof previous.confirmation === 'boolean') ||
+        previous.phase === 'advice-empty' ||
+        previous.phase === 'advice-denied' ||
+        previous.phase === 'advice-unavailable' ||
+        previous.phase === 'advice-refresh-failed'
+      )
+    )
+      return;
+    const ticket = {};
+    this.active = ticket;
+    this.publish({ ...previous, refreshingAdvice: true });
+    const failed = (): ThreadWatchView => ({
+      phase: 'advice-refresh-failed',
+      ...(typeof previous.watching === 'boolean' ? { watching: previous.watching } : {}),
+      ...(typeof previous.confirmation === 'boolean' ? { confirmation: previous.confirmation } : {}),
+    });
+    try {
+      if (!this.current()) return;
+      await refresh();
+      // A source replacement retires this visit; unchanged advice is not proof of a fresh read.
+      if (this.current() && this.active === ticket) this.publish(failed());
+    } catch {
+      if (this.current() && this.active === ticket) this.publish(failed());
+    } finally {
+      if (this.active === ticket) this.active = undefined;
+    }
   };
 
   private async send(command: ThreadWatchCommand) {

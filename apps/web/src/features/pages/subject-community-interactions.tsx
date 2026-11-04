@@ -46,7 +46,12 @@ export function SubjectCommunityInteractions({
   const sessionMatches =
     !client || (sessionKnown && reader !== null && session.state === 'signed-in' && session.subject === reader);
   const advice = thread.actions;
-  const currentWatch = advice?.watch?.state === 'current' ? advice.watch : null;
+  const watchAdvice = advice?.watch;
+  const currentWatch = watchAdvice?.state === 'current' ? watchAdvice : null;
+  const watchAdviceState =
+    watchAdvice?.state === 'empty' || watchAdvice?.state === 'denied' || watchAdvice?.state === 'unavailable'
+      ? watchAdvice.state
+      : undefined;
   const canReact =
     advice?.reaction === 'available' &&
     reader !== null &&
@@ -55,6 +60,7 @@ export function SubjectCommunityInteractions({
     thread.viewerReaction !== undefined &&
     reactionsAsOf !== null;
   const canWatch = currentWatch !== null && reader !== null && sessionMatches;
+  const canShowWatchAdvice = watchAdviceState !== undefined && reader !== null && sessionMatches;
   const lifetime = useSubjectCommunityLifetime({
     subjectId: subject.id,
     contextId,
@@ -62,7 +68,7 @@ export function SubjectCommunityInteractions({
     route: href,
     source,
     targetId: thread.id,
-    ready: canReact || canWatch,
+    ready: canReact || canWatch || canShowWatchAdvice,
     locale,
   });
   const readAuthority = useMemo(() => Object.freeze({}), [lifetime.key]);
@@ -75,7 +81,16 @@ export function SubjectCommunityInteractions({
     (advice?.reply === 'sign_in_required' && reader === null);
   const showOverflow = advice?.overflow === true;
 
-  if (!showReply && !canReact && !reactionSignIn && !canWatch && !watchSignIn && !showOverflow) return null;
+  if (
+    !showReply &&
+    !canReact &&
+    !reactionSignIn &&
+    !canWatch &&
+    !canShowWatchAdvice &&
+    !watchSignIn &&
+    !showOverflow
+  )
+    return null;
   return (
     <div data-slot="community-actions" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
       {showReply && advice?.reply === 'available' ? (
@@ -112,9 +127,25 @@ export function SubjectCommunityInteractions({
           sessionStamp={source}
           admitted
           returnTo={replyHref}
-          initialWatching={currentWatch!.watching}
+          {...(currentWatch ? { initialWatching: currentWatch.watching } : { adviceState: watchAdviceState })}
           readAuthority={readAuthority}
           isCurrent={lifetime.isCurrent}
+          {...(refreshAdvice ? { refreshAdvice } : {})}
+          {...(preparedWatch ? { native: preparedWatch } : {})}
+        />
+      ) : canShowWatchAdvice ? (
+        <ThreadWatch
+          threadId={thread.id}
+          session="signed-in"
+          sessionKnown
+          viewerId={reader!}
+          sessionStamp={source}
+          admitted
+          returnTo={replyHref}
+          adviceState={watchAdviceState}
+          readAuthority={readAuthority}
+          isCurrent={lifetime.isCurrent}
+          {...(refreshAdvice ? { refreshAdvice } : {})}
           {...(preparedWatch ? { native: preparedWatch } : {})}
         />
       ) : watchSignIn ? (

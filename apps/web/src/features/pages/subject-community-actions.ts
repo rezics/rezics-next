@@ -20,7 +20,11 @@ export type CommunityActionAdvice = Readonly<{
   /** The existing thread reader owns the reply composer and post.create command. */
   reply: 'available' | 'sign_in_required' | null;
   reaction: 'available' | 'sign_in_required' | null;
-  watch: { state: 'current'; watching: boolean } | { state: 'sign_in_required' } | null;
+  watch:
+    | { state: 'current'; watching: boolean }
+    | { state: 'sign_in_required' }
+    | { state: 'empty' | 'denied' | 'unavailable' }
+    | null;
   overflow: boolean;
 }>;
 
@@ -162,15 +166,24 @@ export function projectCommunityActionAdvice(
         : null;
 
   let watchAdvice: CommunityActionAdvice['watch'] = null;
-  if (isRecord(watch)) {
+  if ((watch === null || watch === undefined) && currentness.watch === 'not_applicable') {
+    watchAdvice = { state: 'empty' };
+  } else if (isRecord(watch)) {
     if (
       watch.state === 'current' &&
-      Object.keys(watch).length === 2 &&
+      exactKeys(watch, ['state', 'watching']) &&
       typeof watch.watching === 'boolean' &&
       currentness.watch === 'current' &&
       operation(exactThread, watch.watching ? 'thread.unwatch' : 'thread.watch', 'thread:watch') === 'available'
     )
       watchAdvice = { state: 'current', watching: watch.watching };
+    else if (
+      watch.state === 'current' &&
+      exactKeys(watch, ['state', 'watching']) &&
+      typeof watch.watching === 'boolean' &&
+      currentness.watch === 'current'
+    )
+      watchAdvice = { state: 'denied' };
     else if (
       watch.state === 'sign_in_required' &&
       Object.keys(watch).length === 1 &&
@@ -178,10 +191,19 @@ export function projectCommunityActionAdvice(
       operation(exactThread, 'thread.watch', 'thread:watch') === 'sign_in_required'
     )
       watchAdvice = { state: 'sign_in_required' };
-    else if (watch.state === 'unavailable' && exactKeys(watch, ['state', 'retryable']) && watch.retryable === true) {
-      // Keep unavailable/withheld watch state closed without creating a control.
-    } else if (watch.state === 'withheld' && exactKeys(watch, ['state'])) {
-      // Keep unavailable/withheld watch state closed without creating a control.
+    else if (
+      watch.state === 'unavailable' &&
+      exactKeys(watch, ['state', 'retryable']) &&
+      watch.retryable === true &&
+      currentness.watch === 'unavailable'
+    ) {
+      watchAdvice = { state: 'unavailable' };
+    } else if (
+      watch.state === 'withheld' &&
+      exactKeys(watch, ['state']) &&
+      currentness.watch !== 'unavailable'
+    ) {
+      watchAdvice = { state: 'denied' };
     } else return;
   } else return;
 

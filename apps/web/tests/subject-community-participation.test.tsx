@@ -238,7 +238,7 @@ afterAll(async () => {
   mock.restore();
 });
 
-test('native watch baseline skips per-card reads and an uncertain write recovers from current status', async () => {
+test('native watch baseline skips per-card reads and a point read cannot settle an uncertain write', async () => {
   const reads: string[] = [];
   const commands: ThreadWatchCommand[] = [];
   const native: ThreadWatchNative = {
@@ -270,8 +270,15 @@ test('native watch baseline skips per-card reads and an uncertain write recovers
   await act(async () => check!.click());
   await act(async () => tick());
   expect(reads).toEqual([`${threadId}/reader-one`]);
-  expect(host.textContent).toContain(m.thread_watch_watching());
+  expect(host.textContent).toContain(m.thread_watch_outcome_unknown());
   expect(host.textContent).not.toContain(m.thread_watch_confirm_started());
+  const retry = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === m.thread_watch_retry_exact(),
+  );
+  expect(retry).toBeDefined();
+  await act(async () => retry!.click());
+  await act(async () => tick());
+  expect(commands[1]).toBe(commands[0]);
   expect(
     [...host.querySelectorAll<HTMLButtonElement>('button')].some(
       (button) => button.textContent === m.thread_watch_stop(),
