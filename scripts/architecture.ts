@@ -1109,9 +1109,18 @@ export function auditArchitecture(
     const members = new Set(component);
     const cyclic = component.length > 1 || moduleEdges.some(([source, target]) => source === target && members.has(source));
     if (!cyclic) continue;
+    const reportedPairs = new Set<string>();
     for (const located of locatedEdges) {
       if (members.has(located.sourceModule.id) && members.has(located.targetModule.id) && located.sourceModule.id !== located.targetModule.id) {
-        add(located.sourceModule.id, "rule 3", located.source, stableEdge(located.edge, `${located.target} (module dependency cycle)`));
+        const pair = `${located.sourceModule.id}\n${located.targetModule.id}`;
+        if (reportedPairs.has(pair)) continue;
+        reportedPairs.add(pair);
+        add(
+          located.sourceModule.id,
+          "rule 3",
+          `<module:${located.sourceModule.id}>`,
+          `${located.sourceModule.id} => ${located.targetModule.id} (module dependency cycle)`,
+        );
       }
     }
   }
