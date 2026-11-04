@@ -106,6 +106,17 @@ A Post uses its original containing thread and opening revision. A status read c
 the native owner retains that command for exact retry. A successful watch needs fresh advice before its inverse can
 appear. No native writer, transport or session observation is copied into this account module.
 
+Decision: the prepared native reaction picker requires both exact set and clear advice, because the existing picker
+can issue either operation; one operation's admission cannot stand in for the other.
+
+`contribution-actions/reaction.tsx` composes `ThreadReactions` for original Discussion, Review and Post occurrences.
+It requires the original operation lease and the mounted native `reaction:set` action with `thread.set_reaction` /
+`thread.clear_reaction` or `post.set_reaction` / `post.clear_reaction` respectively. Slots and counts are explicit
+prepared inputs, never parsed from the receiver's unknown response. The native owner retains an uncertain choice,
+reader, credential and key through advice/count echoes; deliberate retry replays that command before a current point
+read can reconcile its projection. The account module owns no reaction transport or recovery engine. A supplied
+projection watermark keeps the native owner's existing settlement rule.
+
 The mounted contribution response adapter and production controls still require the publisher's official callable
-and DTO. Reaction, report and reply owner composition remains to be completed. Existing public links and the shared
-host retirement and recovery notice continue to own the production journey meanwhile.
+and DTO. Report and reply owner composition remains to be completed. Existing public links and the shared host
+retirement and recovery notice continue to own the production journey meanwhile.

@@ -26,6 +26,7 @@ const { rememberContribution, restoreContributionRecovery, contributionReturnOcc
   await import('../src/accounts/public-profile/contributions/navigation');
 const { ContributionAdvicePresentation, ContributionWatch } =
   await import('../src/accounts/public-profile/contribution-actions/presentation');
+const { ContributionReaction } = await import('../src/accounts/public-profile/contribution-actions/reaction');
 const { originalContributionReference, contributionCommandTarget, contributionOperationAdvice } =
   await import('../src/accounts/public-profile/contribution-actions/advice');
 type NativeAdvice = import('../src/accounts/public-profile/contribution-actions/advice').NativeContributionAdvice;
@@ -614,3 +615,128 @@ test('prepared current advice keeps native watch custody through uncertain readb
     await dom.close();
   }
 });
+
+test.each(['discussion', 'reviews', 'posts'] as const)(
+  'prepared %s reactions retain the native uncertain command through readback and retry',
+  async (view) => {
+    const dom = await installDom();
+    const client = new QueryClient();
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: id, csrfToken: 'original-credential' });
+    const node = document.createElement('div');
+    document.body.append(node);
+    const root = createRoot(node);
+    const kind = view === 'posts' ? 'post' : 'thread';
+    const publicState = { availability: 'available', visibility: 'published' };
+    const firstPost = { ...publicState, threadId: id, revisionId: id };
+    const thread = {
+      ...publicState,
+      id,
+      authorId: id,
+      boardId: id,
+      firstPost,
+      kind: view === 'reviews' ? 'review' : 'discussion',
+    };
+    const reference = {
+      type: `content.${kind}` as const,
+      id,
+      placeId: id,
+      sourceRevisionId: id,
+      threadId: id,
+      threadRevisionId: id,
+    };
+    const input = { accountId: id, view, cursor: 'original+/=', proof: 'native-proof', references: [reference] };
+    const operations = ['set', 'clear'].map((operation) => ({
+      action: 'reaction:set',
+      operationId: `${kind}.${operation}_reaction`,
+      state: 'available' as const,
+    }));
+    const source: NativeAdvice = {
+      viewer: { kind: 'account', id },
+      currentness: { actions: 'current' },
+      actions: {
+        state: 'current',
+        retryable: false,
+        references: [{ type: reference.type, id, sourceRevisionId: id, state: 'current', operations }],
+      },
+    };
+    const scope = {
+      input,
+      row: view === 'posts' ? { ...publicState, id, authorId: id, revisionId: id, threadId: id, thread } : thread,
+      source,
+      reader: id,
+      locale: 'en' as const,
+      isCurrent: () => true,
+      operation: () => ({
+        reader: id,
+        operation: 'reaction' as const,
+        current: () => true,
+        credential: () => 'original-credential',
+      }),
+    };
+    type Transport = NonNullable<import('../src/threads/thread-reactions').ThreadReactionsProps['preparedTransport']>;
+    const commands: Parameters<Transport['change']>[0][] = [];
+    let reads = 0;
+    const transport: Transport = {
+      async change(command) {
+        commands.push(command);
+        return commands.length === 1 ? { ok: false, reason: 'unavailable' } : { ok: true };
+      },
+      async read() {
+        reads++;
+        return { ok: true, value: 'like', counts: { like: 2 } };
+      },
+    };
+    const paint = async (advice = source, count = 1) =>
+      act(async () => {
+        root.render(
+          <QueryClientProvider client={client}>
+            <ContributionReaction
+              presentation={{ ...scope, source: advice }}
+              counts={{ like: count }}
+              value={null}
+              returnTo="/en/accounts/author/posts?cursor=original%2B%2F%3D#reply"
+              preparedTransport={transport}
+            />
+          </QueryClientProvider>,
+        );
+      });
+    try {
+      for (const replacement of [
+        [{ ...operations[0]!, state: 'denied' as const }, operations[1]!],
+        [operations[0]!],
+        operations.map((operation) => ({ ...operation, operationId: 'reaction.set' })),
+      ]) {
+        await paint({
+          ...source,
+          actions: { ...source.actions, references: [{ ...source.actions.references[0]!, operations: replacement }] },
+        });
+        expect(node.querySelector('button')).toBeNull();
+      }
+      await paint();
+      expect(commands).toHaveLength(0);
+      await act(async () => node.querySelector<HTMLButtonElement>('[data-slot="reaction-chip"]')!.click());
+      expect(commands).toHaveLength(1);
+      expect(commands[0]!.data).toEqual({ target: kind, id, kind: 'like', expectedReader: id });
+      expect(new Headers(commands[0]!.headers).get('X-CSRF-Token')).toBe('original-credential');
+      // New read advice and totals do not acknowledge the lost command or start another write/read.
+      await paint({ ...source }, 2);
+      expect(reads).toBe(0);
+      expect(commands).toHaveLength(1);
+      const retry = [...node.querySelectorAll('button')].find((button) => button.textContent === 'Retry');
+      expect(retry).toBeDefined();
+      await act(async () => retry!.click());
+      expect(commands).toHaveLength(2);
+      expect(commands[1]!.data).toEqual(commands[0]!.data);
+      expect(new Headers(commands[1]!.headers).get('Idempotency-Key')).toBe(
+        new Headers(commands[0]!.headers).get('Idempotency-Key'),
+      );
+      expect(reads).toBe(1);
+      expect(node.querySelector('[role="status"]')).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      client.clear();
+      node.remove();
+      await dom.close();
+    }
+  },
+);
