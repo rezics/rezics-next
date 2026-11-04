@@ -2,6 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThreadActivity } from '../src/threads/thread-activity/view';
 import { m } from '../src/paraglide/messages.js';
 
@@ -26,6 +27,55 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, key);
   }
   await window.happyDOM.close();
+});
+
+test('mounted activity retires on cache fetch, invalidation and equal session replacement', async () => {
+  const client = new QueryClient();
+  const queryKey = ['thread-page', 'thread', 'opaque:/+?=&版', 'selected-post'];
+  const host = document.createElement('div');
+  const root = createRoot(host);
+  const activity = { state: 'current', count: { kind: 'exact', value: 41 }, lastActivityAt: null } as const;
+  const render = (publication: object) =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <ThreadActivity
+            activity={activity}
+            queryKey={queryKey}
+            publication={publication}
+            current
+            onRetry={async () => {}}
+            isCurrent={() => true}
+          />
+        </QueryClientProvider>,
+      ),
+    );
+  try {
+    client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
+    for (const transition of ['fetch', 'invalidate', 'session'] as const) {
+      const publication = {};
+      client.setQueryData(queryKey, publication);
+      await render(publication);
+      expect(host.textContent).toContain('Replies: 41');
+      await act(async () => {
+        if (transition === 'fetch') {
+          const query = client.getQueryCache().find({ queryKey, exact: true })!;
+          query.setState({ fetchStatus: 'fetching' });
+          query.setState({ fetchStatus: 'idle' });
+        } else if (transition === 'invalidate') {
+          await client.invalidateQueries({ queryKey, exact: true, refetchType: 'none' });
+          client.setQueryData(queryKey, publication);
+        } else {
+          client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
+        }
+      });
+      expect(host.textContent).not.toContain('Replies: 41');
+      expect(host.querySelector('button')?.disabled).toBe(false);
+    }
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+  }
 });
 
 test('mounted activity retry keeps the reader request and retires late UI on replacement', async () => {

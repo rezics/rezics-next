@@ -3,7 +3,7 @@ import { ContentItemHeading } from '@rezics/ui/content-item';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@rezics/ui/shadcn/collapsible';
 import { reactionKinds } from '@rezics/ui/reactions';
 import { fromPlainText } from '@rezics/document';
-import { QueryClientContext } from '@tanstack/react-query';
+import { QueryClientContext, type QueryKey } from '@tanstack/react-query';
 import {
   useCallback,
   useContext,
@@ -163,6 +163,7 @@ export function ThreadReading({
   pageCallbackRevision = '0:0',
   isPageCallbackCurrent = () => true,
   readAuthority,
+  activityQueryKey,
   personal,
   session,
   readerSubject,
@@ -180,6 +181,7 @@ export function ThreadReading({
   pageCallbackRevision?: string;
   isPageCallbackCurrent?: () => boolean;
   readAuthority?: object;
+  activityQueryKey?: QueryKey;
   Post: typeof ThreadReadingPost;
   signedOut: ReactNode;
   personal: ThreadReadingPersonal | undefined;
@@ -395,6 +397,8 @@ export function ThreadReading({
           <ThreadActivity
             key={pageCallbackRevision}
             activity={page.conversationActivity}
+            publication={page}
+            queryKey={activityQueryKey}
             current={pageCurrent && observationMatches}
             isCurrent={isPageCallbackCurrent}
             onRetry={refreshPage}

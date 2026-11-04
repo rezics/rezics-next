@@ -494,6 +494,7 @@ export function ThreadPage() {
         key={id}
         page={page}
         readAuthority={readScope}
+        activityQueryKey={activeAdmission.queryKey}
         readerSubject={subject}
         Post={ThreadReadingPost}
         signedOut={<SignInPrompt returnTo={returnTo} label={m.threads_sign_in_to_reply()} />}
