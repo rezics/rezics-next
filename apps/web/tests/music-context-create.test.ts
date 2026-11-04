@@ -275,7 +275,7 @@ test('an admitted music-context Type creates once after a current eligibility re
         page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.music_context_create_add_fact() }), page.urlFact!),
       );
       const button = page.canvas
-        .getAllByRole('button', { name: page.m.music_context_create_add_fact() })
+        .getAllByRole('button', { name: page.m.correction_add() })
         .find((node) => !(node as HTMLButtonElement).disabled);
       await act(async () => page.user.click(button!));
       const row = page.host.querySelector('[data-slot="music-context-initial-fact"]') as HTMLElement;
