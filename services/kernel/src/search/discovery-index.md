@@ -18,6 +18,8 @@ common generation and writer lifecycle; it does not create a second eligibility 
 
 Registry ownership follows the current scope table: `collection` uses Commerce, while `review` and `space` use Content.
 
+Decision: keep the shared discovery source contract in the declared `kernel-search` service entry; a separate package would require its own conformance vectors and two production consumers.
+
 The default query registry binds Commerce with `createNativeCollectionDiscoveryAdapter`, reviews with
 Content's `createReviewDiscoverySource` and `createReviewDiscoveryAdapter` (or the worker's supplied
 `ReviewDiscoverySource`), and Spaces with `nativeSpaceDiscoveryAdapter`. The actual query caller is
