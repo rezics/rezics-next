@@ -133,7 +133,7 @@ export function ContentEditionReader({
           />
           <footer className="space-y-4 border-t border-border pt-6 text-sm text-muted-foreground">
             <p>{m.content_edition_attribution()}</p>
-          {returnLink('inline-flex min-h-11 items-center text-primary underline underline-offset-4')}
+            {returnLink('inline-flex min-h-11 items-center text-primary underline underline-offset-4')}
             <dl>
               <dt className="font-medium text-foreground">{m.content_edition_licence()}</dt>
               <dd>{published.metadata.licence}</dd>

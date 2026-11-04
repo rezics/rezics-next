@@ -40,7 +40,8 @@ const render = (page: ContentEditionState, returnOrigin?: { kind: 'order' | 'ent
   renderToStaticMarkup(createElement(ContentEditionReader, { editionId, page, returnOrigin }));
 
 test('published, refused, withdrawn, mismatched and unavailable editions keep the same admitted purchase return', () => {
-  const href = '/en/entitlements/entitlement-0456?ordersCursor=orders%2F%2B%3F%3D&entitlementsCursor=benefits%2F%2B%3F%3D';
+  const href =
+    '/en/entitlements/entitlement-0456?ordersCursor=orders%2F%2B%3F%3D&entitlementsCursor=benefits%2F%2B%3F%3D';
   const states: ContentEditionState[] = [
     published,
     { state: 'refused', status: 403 },
@@ -86,7 +87,10 @@ test('account replacement removes the private return before a published reader c
     subject: 'buyer-b',
     readId: 43,
   });
-  const markup = render(published, admitted ? { kind: origin.kind, href: purchaseReaderOriginHref(origin) } : undefined);
+  const markup = render(
+    published,
+    admitted ? { kind: origin.kind, href: purchaseReaderOriginHref(origin) } : undefined,
+  );
 
   expect(markup).toContain('href="/en/orders"');
   expect(markup).toContain(m.content_edition_purchases());

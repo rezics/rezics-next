@@ -1,4 +1,11 @@
-import { createFileRoute, useLoaderData, useLocation, useParams, useRouter, useRouterState } from '@tanstack/react-router';
+import {
+  createFileRoute,
+  useLoaderData,
+  useLocation,
+  useParams,
+  useRouter,
+  useRouterState,
+} from '@tanstack/react-router';
 import { readContentEdition } from '../../content-editions/edition-read';
 import { ContentEditionPage, type ContentEditionReturnOrigin } from '../../content-editions/edition-view';
 import {
@@ -92,14 +99,18 @@ function CurrentPurchaseOriginEdition({
     origin.kind === 'order' ? 'order.get' : 'entitlement.get',
     JSON.stringify([origin.kind, origin.recordId, origin.editionId, origin.locale, origin.history]),
   );
-  const returnOrigin: ContentEditionReturnOrigin | undefined =
-    purchaseReaderOriginIsCurrent(origin, editionId, locale, {
+  const returnOrigin: ContentEditionReturnOrigin | undefined = purchaseReaderOriginIsCurrent(
+    origin,
+    editionId,
+    locale,
+    {
       current: current.origin.isCurrent(),
       subject: current.origin.observed.subject,
       readId: current.origin.observed.readId,
-    })
-      ? { kind: origin.kind, href: purchaseReaderOriginHref(origin) }
-      : undefined;
+    },
+  )
+    ? { kind: origin.kind, href: purchaseReaderOriginHref(origin) }
+    : undefined;
   return (
     <ContentEditionPage
       editionId={editionId}

@@ -31,8 +31,9 @@ test('same-tab reader origin returns to the exact receipt or entitlement while c
     expect(destination.pathname).toBe(`/ja/${kind === 'order' ? 'orders' : 'entitlements'}/${recordId}`);
     expect(destination.searchParams.get('ordersCursor')).toBe(history.ordersCursor);
     expect(destination.searchParams.get('entitlementsCursor')).toBe(history.entitlementsCursor);
-    expect(purchaseReaderOriginIsCurrent(restored, editionId, 'ja', { current: true, subject: 'buyer-a', readId: 42 }))
-      .toBe(true);
+    expect(
+      purchaseReaderOriginIsCurrent(restored, editionId, 'ja', { current: true, subject: 'buyer-a', readId: 42 }),
+    ).toBe(true);
 
     const publicReader = benefitReaderHref(benefit, true, 'ja')!;
     expect(publicReader).toBe(`/ja/editions/${editionId}`);

@@ -135,7 +135,8 @@ export function purchaseReaderOriginIsCurrent(
 
 /** Build only the two supported private detail destinations; no arbitrary return URL is accepted. */
 export function purchaseReaderOriginHref(origin: PurchaseReaderOrigin): string {
-  const detail = `${origin.kind === 'order' ? 'orders' : 'entitlements'}/${encodeURIComponent(origin.recordId)}` as const;
+  const detail =
+    `${origin.kind === 'order' ? 'orders' : 'entitlements'}/${encodeURIComponent(origin.recordId)}` as const;
   return purchaseHistoryHref(origin.locale, detail, origin.history);
 }
 
