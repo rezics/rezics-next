@@ -4,8 +4,6 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import {
   CrossMediaDumpFiles,
   crossMediaAliases,
@@ -205,7 +203,7 @@ test('selected-family Game rows use the Bangumi converter and retain only bounde
     });
     expect(JSON.stringify(conversion.diagnostics)).not.toContain('不予采纳');
     expect(conversion.diagnostics!.length).toBeLessThanOrEqual(16);
-    expect(registration.converter_revision).toBe(`${bangumiRevision}+${entityRevision}`);
+    expect(registration.converter_revision).toBe(crossMediaBangumiRevision);
 
     const wrongTemplate = registration.convert(
       {
