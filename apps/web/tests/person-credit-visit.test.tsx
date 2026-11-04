@@ -133,7 +133,9 @@ test('current Person credit returns from work, Character and Sources with exact 
     );
   const click = async (name: string) =>
     act(async () => {
-      [...window.document.querySelectorAll('button')].find((button) => button.textContent === name)!.click();
+      const button = [...window.document.querySelectorAll('button')].find((button) => button.textContent === name)!;
+      button.focus();
+      button.click();
     });
   try {
     await render();
