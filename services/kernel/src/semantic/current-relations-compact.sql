@@ -13,8 +13,12 @@ WITH input AS MATERIALIZED (
 ), source AS MATERIALIZED (
   SELECT input.*, subject.visibility = 'visible' AS visible
   FROM input
-  LEFT JOIN semantic.subject AS subject
-    ON subject.route = input.route AND subject.subject_id = input.subject_id
+  LEFT JOIN LATERAL (
+    SELECT visibility
+    FROM semantic.subject
+    WHERE route = input.route AND subject_id = input.subject_id
+    LIMIT 1
+  ) AS subject ON true
 ), slot_state AS MATERIALIZED (
   SELECT source.*,
          slot_head.operation AS slot_operation
@@ -47,13 +51,14 @@ WITH input AS MATERIALIZED (
      AND revision.recorded_transaction_id = f.recorded_transaction_id
     WHERE f.route = slot_state.route AND f.subject_id = slot_state.subject_id
       AND f.slot_id = slot_state.slot_id AND f.statement_id = slot_state.candidate_id
-      AND f.kind = 'statement'
+      AND f.statement_id IS NOT NULL AND f.kind = 'statement'
     ORDER BY f.log_seq DESC
     LIMIT 1
   ) AS fact_release ON true
 )
 SELECT subject_id::text AS subject_id,
        candidate_id::text AS candidate_id,
+       property AS requested_property,
        COALESCE(visible, false) AS visible,
        slot_operation = 'expand' AS expanded,
        CASE WHEN visible

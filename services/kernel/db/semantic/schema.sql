@@ -11231,6 +11231,13 @@ CREATE INDEX fact_compact_candidate ON semantic.fact USING btree (route, subject
 
 
 --
+-- Name: fact_current_relation_key_seek; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE INDEX fact_current_relation_key_seek ON semantic.fact USING btree (route, subject_id, slot_id, statement_id, log_seq DESC) INCLUDE (operation, property, relation) WHERE (statement_id IS NOT NULL);
+
+
+--
 -- Name: fact_erasure_key; Type: INDEX; Schema: semantic; Owner: -
 --
 

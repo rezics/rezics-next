@@ -95,7 +95,12 @@ export async function currentRelationFacts(
   const seen = new Set<string>();
   for (const candidate of candidates) {
     const route = routeOf(candidate.subject);
-    if (route === null || routeOf(candidate.candidate) !== route) continue;
+    if (
+      route === null ||
+      routeOf(candidate.candidate) !== route ||
+      (candidate.slot !== undefined && routeOf(candidate.slot) !== route)
+    )
+      continue;
     const key = currentRelationKey(candidate);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -108,6 +113,7 @@ export async function currentRelationFacts(
       route,
       subject_id: candidate.subject,
       candidate_id: candidate.candidate,
+      slot_id: candidate.slot ?? null,
     })),
   })) as {
     subject_id: string;
@@ -126,6 +132,7 @@ export async function currentRelationFacts(
       (!candidate.requireRelation || live.relation)
     );
   });
+  const requested = new Map(valid.map((entry) => [currentRelationKey(entry.candidate), entry] as const));
   const compact = (await readCompactRelationCandidates.run(client, {
     candidates: active.map(({ candidate, route }) => ({
       route,
@@ -145,6 +152,7 @@ export async function currentRelationFacts(
     kind: FactRow['kind'] | null;
     language: string | null;
     property: string | null;
+    requested_property: string;
     statement_id: string | null;
     operation: FactRow['operation'] | null;
     body: unknown;
@@ -154,8 +162,12 @@ export async function currentRelationFacts(
   const compactKeys = new Set<string>();
   const fallback: typeof valid = [];
   for (const row of compact) {
-    const candidate = active.find(
-      (entry) => entry.candidate.subject === row.subject_id && entry.candidate.candidate === row.candidate_id,
+    const candidate = requested.get(
+      currentRelationKey({
+        subject: row.subject_id,
+        property: row.requested_property,
+        candidate: row.candidate_id,
+      }),
     );
     if (!candidate || !row.visible) continue;
     const key = currentRelationKey(candidate.candidate);
@@ -242,6 +254,7 @@ export async function currentRelationFacts(
         route,
         subject_id: candidate.subject,
         candidate_id: candidate.candidate,
+        ...(candidate.slot === undefined ? {} : { slot_id: candidate.slot }),
       })),
     );
     const unknown: string[] = [];
