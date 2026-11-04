@@ -38,7 +38,7 @@ async function call(path: string, token?: string, method = 'GET', body?: unknown
   if (token) headers.set('authorization', `Bearer ${token}`);
   if (body !== undefined) {
     headers.set('content-type', 'application/json');
-    headers.set('idempotency-key', randomUUID());
+    headers.set('idempotency-key', JSON.stringify(randomUUID()));
   }
   const response = await kernel.handle(
     new Request(`http://kernel.test${path}`, {
