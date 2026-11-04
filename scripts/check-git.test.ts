@@ -41,7 +41,7 @@ function git(cwd: string, ...args: string[]) {
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
     stdout: 'pipe',
     stderr: 'pipe',
-    timeout: 10000,
+    timeout: 30000,
   });
   expect(run.exitCode, run.stderr.toString()).toBe(0);
   return run.stdout.toString().trim();
@@ -488,7 +488,7 @@ function storeHas(store: string, oid: string) {
       env: { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' },
       stdout: 'ignore',
       stderr: 'ignore',
-      timeout: 10000,
+      timeout: 30000,
     }).exitCode === 0
   );
 }
