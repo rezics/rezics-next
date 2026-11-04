@@ -13,7 +13,7 @@ export type WorkNames =
       state: 'ready';
       bytes: number;
       groups: WorkNameGroup[];
-      selected: { text: string; lang?: string };
+      selected: { text: string; lang: string | null };
       original: ReturnType<typeof originalTitle>;
       originalLanguage: string | undefined;
     };
@@ -41,7 +41,8 @@ export function workNames(subject: Subject, locale: string): WorkNames {
   if (invalid) return { state: 'unavailable', bytes };
   const original = originalLanguage(subject);
   return {
-    state: 'ready', bytes,
+    state: 'ready',
+    bytes,
     selected: pickText(subject.labels, locale, original),
     original: originalTitle(subject),
     originalLanguage: original,
@@ -51,7 +52,7 @@ export function workNames(subject: Subject, locale: string): WorkNames {
 
 /** These are the actual type and ancestors supplied by the released summary, never a guessed Book. */
 export function supportsWorkNames(type: string, ancestors: readonly string[] = []): boolean {
-  return [type, ...ancestors].some((id) => [
-    'wd:Q689445', 'schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode', 'schema:Book',
-  ].includes(id));
+  return [type, ...ancestors].some((id) =>
+    ['wd:Q689445', 'schema:Movie', 'schema:TVSeries', 'schema:TVSeason', 'schema:Episode', 'schema:Book'].includes(id),
+  );
 }

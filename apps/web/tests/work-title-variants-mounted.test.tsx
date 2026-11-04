@@ -6,12 +6,22 @@ import { workNames } from '../src/features/catalogue/work-names/model';
 import { work } from './work-title-variants.test';
 
 test('mounted disclosure exposes native language groups, copy controls and retired state without another heading', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window();
-  const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    Element: window.Element, Node: window.Node, IS_REACT_ACT_ENVIRONMENT: true };
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    Element: window.Element,
+    Node: window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
   const host = document.createElement('div');
   document.body.append(host);
@@ -36,7 +46,8 @@ test('mounted disclosure exposes native language groups, copy controls and retir
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key);
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
     }
     await window.happyDOM.close();
   }

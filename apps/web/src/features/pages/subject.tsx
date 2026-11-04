@@ -813,9 +813,14 @@ export function SubjectPage({
               />
             )}
             {overview && read && !page.account && workAddress ? (
-              <WorkNamesEntry subject={read.subject} ancestors={read.summary?.types} source={page}
-                locale={locale} context={page.context?.id ?? null}
-                sourcesHref={contextHref(`${workAddress.href}/sources`, realm)} />
+              <WorkNamesEntry
+                subject={read.subject}
+                ancestors={read.summary?.types}
+                source={page}
+                locale={locale}
+                context={page.context?.id ?? null}
+                sourcesHref={contextHref(`${workAddress.href}/sources`, realm)}
+              />
             ) : null}
             {overview && read && !page.account && showcaseWork && workReturn ? (
               <WorkFranchiseOverview
