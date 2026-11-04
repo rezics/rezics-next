@@ -119,35 +119,57 @@ async function communityBoard() {
     'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
   });
   const { board } = await command<{ board: { id: string } }>(`/v1/realms/${target.realmId}/boards`, {
-    conceptId, title: 'Selected Board', visibility: 'published',
+    conceptId,
+    title: 'Selected Board',
+    visibility: 'published',
   });
-  const thread = async (title: string) => (await command<{ thread: { id: string; firstPost: { id: string } } }>(
-    '/v1/threads', { boardId: board.id, title, body: fromPlainText(title), licence: 'MIT', visibility: 'published', subjectIds: [] },
-  )).thread;
+  const thread = async (title: string) =>
+    (
+      await command<{ thread: { id: string; firstPost: { id: string } } }>('/v1/threads', {
+        boardId: board.id,
+        title,
+        body: fromPlainText(title),
+        licence: 'MIT',
+        visibility: 'published',
+        subjectIds: [],
+      })
+    ).thread;
   return { target, board, thread };
 }
 
 test('mounted community keeps a three-thread native prefix, exact destinations, and producer replies distinct from empty', async () => {
   const { target, board, thread } = await communityBoard();
-  expect((await home(target.realmId)).boards.items[0]!.recent).toEqual({ state: 'current', threads: [], complete: true });
+  expect((await home(target.realmId)).boards.items[0]!.recent).toEqual({
+    state: 'current',
+    threads: [],
+    complete: true,
+  });
   const created = [];
   for (let index = 0; index < 4; index++) created.push(await thread(`Recent discussion ${index}`));
   const latest = created.at(-1)!;
   await command(`/v1/threads/${latest.id}/posts`, {
-    body: fromPlainText('One admitted reply'), licence: 'MIT', visibility: 'published', subjectIds: [],
+    body: fromPlainText('One admitted reply'),
+    licence: 'MIT',
+    visibility: 'published',
+    subjectIds: [],
   });
   await driver.settle();
   const partition = partitionOf(routeOf(latest.id)!);
   for (let page = 0; page < 10; page++) {
     const repaired = await repairConversationActivityPage(runtime.system.database.pool, partition, Date.now() + 30_000);
-    if (repaired.done) break;
+    if (!repaired.more) break;
   }
   const result = await home(target.realmId);
   const selected = result.boards.items[0]!;
   expect(selected.id).toBe(board.id);
   if (selected.recent.state !== 'current') throw new Error('Recent discussions were unavailable');
   expect(selected.recent.complete).toBe(false);
-  expect(selected.recent.threads.map((item) => item.thread.id)).toEqual(created.slice(1).reverse().map((item) => item.id));
+  expect(selected.recent.threads.map((item) => item.thread.id)).toEqual(
+    created
+      .slice(1)
+      .reverse()
+      .map((item) => item.id),
+  );
   expect(selected.recent.threads[0]).toMatchObject({
     thread: { title: 'Recent discussion 3', firstPost: { availability: 'available' } },
     target: { kind: 'thread', id: latest.id, boardId: board.id },
@@ -166,7 +188,9 @@ test('community retains original thread sources across foreign hydration and ret
   try {
     await barrier.entered;
     await command(`/v1/posts/${created.firstPost.id}/revisions`, {
-      body: fromPlainText('Changed opening'), licence: 'MIT', subjectIds: [],
+      body: fromPlainText('Changed opening'),
+      licence: 'MIT',
+      subjectIds: [],
     });
     barrier.release();
     const stale = await pending;
@@ -177,7 +201,10 @@ test('community retains original thread sources across foreign hydration and ret
     await pending;
     await observer.close();
   }
-  expect((await home(target.realmId)).boards.items[0]!.recent.state).toBe('current');
+  const retry = (await home(target.realmId)).boards.items[0]!.recent;
+  expect(retry.state).toBe('current');
+  if (retry.state === 'current')
+    expect(retry.threads[0]!.thread.firstPost.body).toEqual(fromPlainText('Changed opening'));
 });
 
 test('mounted empty home keeps carrier, identity, optional states, and anonymous sign-in distinct', async () => {

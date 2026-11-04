@@ -25,10 +25,16 @@ export const RealmHomeBoardQuerySchema = t.Object(
 );
 export const RealmHomeBoardPageSchema = t.Object(
   {
-    items: t.Array(t.Object({
-      ...BoardRecordSchema.properties,
-      recent: t.Union([RealmCommunityRecentSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
-    }, closed), { maxItems: REALM_HOME_BOARD_LIMIT }),
+    items: t.Array(
+      t.Object(
+        {
+          ...BoardRecordSchema.properties,
+          recent: t.Union([RealmCommunityRecentSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
+        },
+        closed,
+      ),
+      { maxItems: REALM_HOME_BOARD_LIMIT },
+    ),
     next: t.Union([t.String(), t.Null()]),
   },
   closed,
@@ -49,7 +55,7 @@ export function createRealmHomeBoardObservationReader(deps: ContentBoardDependen
     const observation = await observeBoardRecords(deps, selected.ids, context);
     if (observation.records.some(({ anchor }) => anchor.epoch !== selected.anchor.epoch))
       throw new AccessUnavailableError('contention');
-    const admitted = observation.records.flatMap(({ value }) => value?.realmId === realmId ? [value] : []);
+    const admitted = observation.records.flatMap(({ value }) => (value?.realmId === realmId ? [value] : []));
     const community = await observeRealmCommunity(deps, admitted, context);
     return {
       page: {

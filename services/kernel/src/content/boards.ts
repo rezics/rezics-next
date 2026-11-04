@@ -254,7 +254,13 @@ export async function observeBoardRecentThreads(
   if (!selected) throw new ContentNotFoundError();
   const ids = selected.candidate.slice(0, BOARD_RECENT_THREAD_LIMIT).map((row) => row.thread_id);
   const initial = await discloseBoardPageThreads(
-    dependencies, boardId, selected.board, ids, new Map(), context, decisions,
+    dependencies,
+    boardId,
+    selected.board,
+    ids,
+    new Map(),
+    context,
+    decisions,
   );
   if (!initial.parentAllowed || initial.boardAnchor.epoch !== selected.anchor.anchor.epoch)
     throw new ContentNotFoundError();
@@ -266,18 +272,30 @@ export async function observeBoardRecentThreads(
     complete: selected.candidate.length <= BOARD_RECENT_THREAD_LIMIT,
     async current() {
       const final = await discloseBoardPageThreads(
-        dependencies, boardId, selected.board, ids, new Map(), context,
+        dependencies,
+        boardId,
+        selected.board,
+        ids,
+        new Map(),
+        context,
         await prepareBoardPageDecisions(dependencies, context),
       );
       if (!final.parentAllowed || final.boardAnchor.epoch !== initial.boardAnchor.epoch) return false;
-      const byId = new Map(final.items.flatMap(({ value, anchor }) => value ? [[value.id, { value, anchor }] as const] : []));
+      const byId = new Map(
+        final.items.flatMap(({ value, anchor }) => (value ? [[value.id, { value, anchor }] as const] : [])),
+      );
       return threads.every((thread) => {
         const now = byId.get(thread.id);
         const before = initial.items.find(({ value }) => value?.id === thread.id)!;
         const witness = contentSourceWitness(thread);
-        return !!now && !!witness && witness === contentSourceWitness(now.value) &&
+        return (
+          !!now &&
+          !!witness &&
+          witness === contentSourceWitness(now.value) &&
           before.anchor.epoch === now.anchor.epoch &&
-          now.value.availability === 'available' && now.value.firstPost.availability === 'available';
+          now.value.availability === 'available' &&
+          now.value.firstPost.availability === 'available'
+        );
       });
     },
   };
