@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
@@ -27,6 +28,12 @@ import {
   type BangumiCreatorCreditDraft,
   type BangumiCreatorCreditGap,
 } from './bangumi-creator-credits.ts';
+import {
+  combineVocabularyRequests,
+  prepareShowcaseVndbCredits,
+  type VndbCreditVocabularyReferences,
+  type VndbCreditVocabularyRequirement,
+} from './showcase-vndb-credits.ts';
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
@@ -1444,6 +1451,8 @@ export type CrossMediaSeedResult = {
   readings: CrossMediaReading[];
   gaps: CrossMediaGap[];
   creditGaps: BangumiCreatorCreditGap[];
+  vndbCreditDiagnostics: SourceVocabularyGap[];
+  vndbCreditVocabularyRequirements: VndbCreditVocabularyRequirement[];
   characterDiagnostics: SourceVocabularyGap[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
 };
@@ -1461,6 +1470,7 @@ export type CrossMediaSeedExtras = {
   entitiesFirst?: boolean;
   recordConcurrency?: ImporterOptions['recordConcurrency'];
   sourceVocabulary?: SourceVocabularyBindings;
+  vndbCreditReferences?: VndbCreditVocabularyReferences;
   providers?: readonly Provider[];
   mediaDeadlineMs?: ImporterOptions['mediaDeadlineMs'];
 };
@@ -1473,10 +1483,28 @@ export async function seedCrossMedia(
   extras?: CrossMediaSeedExtras,
   characterBindings?: SourceVocabularyBindings,
 ) {
+  const providers = extras?.providers ?? (['bangumi', 'vndb'] as const);
+  const vndbCredits = providers.includes('vndb')
+    ? await prepareShowcaseVndbCredits(plan, port, extras?.vndbCreditReferences)
+    : undefined;
+  const vocabularyAdmission = extras?.vocabularyAdmission || vndbCredits
+    ? {
+        request(
+          context: Parameters<
+            NonNullable<NonNullable<ImporterOptions['vocabularyAdmission']>['request']>
+          >[0],
+        ) {
+          return combineVocabularyRequests([
+            extras?.vocabularyAdmission?.request?.(context),
+            vndbCredits?.vocabularyAdmission.request?.(context),
+          ]);
+        },
+      }
+    : undefined;
   const importer = createImporter({
     path,
     ...(destination ? { destination } : {}),
-    ...(extras?.vocabularyAdmission ? { vocabularyAdmission: extras.vocabularyAdmission } : {}),
+    ...(vocabularyAdmission ? { vocabularyAdmission } : {}),
     ...(extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
     ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
     transport: {
@@ -1492,7 +1520,6 @@ export async function seedCrossMedia(
   const readings: CrossMediaReading[] = [];
   try {
     const nativeTypes = new Map<string, string>();
-    const providers = extras?.providers ?? (['bangumi', 'vndb'] as const);
     for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
       const registration = createSourceRegistration(provider, {
@@ -1513,7 +1540,7 @@ export async function seedCrossMedia(
           nativeTypes.set(`${crossMediaAliases[provider]}\u0000${record.key}`, bootstrap.subject.type);
       }
       async function* records() {
-        if (extras?.entitiesFirst) {
+        if (extras?.entitiesFirst || (provider === 'vndb' && vndbCredits !== undefined)) {
           yield* plan.entities[provider];
           yield* plan.records[provider];
         } else {
@@ -1542,7 +1569,8 @@ export async function seedCrossMedia(
       runs.bangumiCharacterFidelity = fidelity.run;
     }
     const graph = new CrossMediaGraph(importer.session.store.database);
-    graph.remember(plan.edges);
+    const graphEdges = vndbCredits?.deliveryEdges(plan.edges) ?? plan.edges;
+    graph.remember(graphEdges);
     const delivered = await graph.deliver({
       claim: (owner) => importer.session.bindings.claim(owner),
       nativeType: (externalId, alias) => nativeTypes.get(`${alias ?? crossMediaAliases.bangumi}\u0000${externalId}`),
@@ -1561,7 +1589,7 @@ export async function seedCrossMedia(
         },
       },
       relationSnapshot: {
-        currentKeys: plan.edges.filter((edge) => edge.relation).map(graphEdgeKey),
+        currentKeys: graphEdges.filter((edge) => edge.relation).map(graphEdgeKey),
         scope: plan.relationScope,
         digest: plan.relationSnapshotDigest,
         complete: plan.relationSnapshotComplete,
@@ -1622,6 +1650,7 @@ export async function seedCrossMedia(
         unresolved.length ||
         credits.gaps.length ||
         credits.fenced.length ||
+        (vndbCredits?.diagnostics.length ?? 0) ||
         (fidelity?.gaps.length ?? 0)
           ? ('imported-with-gaps' as const)
           : ('imported' as const),
@@ -1643,6 +1672,8 @@ export async function seedCrossMedia(
         })),
       ],
       creditGaps: credits.gaps,
+      vndbCreditDiagnostics: vndbCredits?.diagnostics ?? [],
+      vndbCreditVocabularyRequirements: vndbCredits?.requirements ?? [],
       characterDiagnostics: fidelity?.gaps ?? [],
       unresolved,
     };
@@ -1663,21 +1694,20 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     '--account',
     '--client',
     '--bangumi-character-bindings',
+    '--vndb-credit-bindings',
   ];
   if (argv.length === 1 && argv[0] === '--help') {
     process.stdout.write(
       `Usage: bun scripts/datasets/cross-media-seed.ts ${flags
-        .filter((flag) => flag !== '--bangumi-character-bindings')
+        .filter((flag) => flag !== '--bangumi-character-bindings' && flag !== '--vndb-credit-bindings')
         .map((flag) => `${flag} <value>`)
-        .join(' ')} [--bangumi-character-bindings <json>]\n`,
+        .join(' ')} [--bangumi-character-bindings <json>] [--vndb-credit-bindings <json>]\n`,
     );
     return;
   }
-  const requiredFlags = flags.filter((flag) => flag !== '--bangumi-character-bindings');
-  ensure(
-    argv.length === requiredFlags.length * 2 || argv.length === flags.length * 2,
-    'Expected explicit cross-media seed configuration',
-  );
+  const optionalFlags = new Set(['--bangumi-character-bindings', '--vndb-credit-bindings']);
+  const requiredFlags = flags.filter((flag) => !optionalFlags.has(flag));
+  ensure(argv.length % 2 === 0, 'Expected explicit cross-media seed configuration');
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i]!,
@@ -1705,6 +1735,12 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   const characterBindingsPath = values.has('--bangumi-character-bindings')
     ? resolve(values.get('--bangumi-character-bindings')!)
     : undefined;
+  const explicitCreditBindingsPath = values.has('--vndb-credit-bindings')
+    ? resolve(values.get('--vndb-credit-bindings')!)
+    : undefined;
+  const defaultCreditBindingsPath = resolve('.temp/cross-media-seed/vndb-credit-bindings.json');
+  const creditBindingsPath =
+    explicitCreditBindingsPath ?? (existsSync(defaultCreditBindingsPath) ? defaultCreditBindingsPath : undefined);
   ensure(
     characterBindingsPath === undefined ||
       (characterBindingsPath !== resultPath &&
@@ -1719,6 +1755,19 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     characterBindings = JSON.parse(bytes.toString('utf8')) as SourceVocabularyBindings;
   }
   ensure(
+    creditBindingsPath === undefined ||
+      (creditBindingsPath !== resultPath &&
+        creditBindingsPath !== statePath &&
+        ![`${statePath}-wal`, `${statePath}-shm`].includes(creditBindingsPath)),
+    'VNDB credit bindings must not overlap importer state or result',
+  );
+  let vndbCreditReferences: VndbCreditVocabularyReferences | undefined;
+  if (creditBindingsPath) {
+    const bytes = await readFile(creditBindingsPath);
+    ensure(bytes.byteLength <= 256 * 1024, 'VNDB credit bindings exceed the configuration limit');
+    vndbCreditReferences = JSON.parse(bytes.toString('utf8')) as VndbCreditVocabularyReferences;
+  }
+  ensure(
     resultPath !== statePath && ![`${statePath}-wal`, `${statePath}-shm`].includes(resultPath),
     'Result must not overwrite importer state',
   );
@@ -1728,7 +1777,7 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     statePath,
     createImportTransport({ origin: api, tokenProvider }),
     { origin: api },
-    undefined,
+    { ...(vndbCreditReferences ? { vndbCreditReferences } : {}) },
     characterBindings,
   );
   await mkdir(dirname(resultPath), { recursive: true });
@@ -1737,6 +1786,6 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     `${JSON.stringify({ ...result, sourceDigests: Object.fromEntries(input.digests) }, null, 2)}\n`,
   );
   process.stdout.write(
-    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length} review gaps. Result: ${resultPath}\n`,
+    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + result.vndbCreditDiagnostics.length} review gaps. Result: ${resultPath}\n`,
   );
 }

@@ -1,4 +1,5 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
+import { sourceDigest } from '../../../packages/conversion/src/support.ts';
 import type { SourceRecord } from '@rezics/conversion';
 import type {
   NativeIdentity,
@@ -7,6 +8,7 @@ import type {
   VndbVocabularyRow,
 } from '@rezics/conversion';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { Owner } from './record-bindings.ts';
 import {
   emptyCrossMediaPlan,
@@ -24,6 +26,7 @@ import type { ImporterOptions } from './importer.ts';
 export const creditTypeSchemeUri = 'https://vndb.org/credit-types';
 export const creditTypeTaxonomy = 'vndb.credit_type';
 export const creditTypeConceptUri = (code: string) => `${creditTypeSchemeUri}/${code}`;
+export const vndbStaffCreditConverterRevision = 'vndb-staff-credits@1';
 const VN_CAP = 8;
 const CREDIT_CAP = 64;
 type Row = Record<string, unknown>;
@@ -33,6 +36,9 @@ export type VndbStaffCredit = {
   staffId: string;
   aliasId: string;
   kind: 'staff' | 'voice';
+  sourcePath: string;
+  recordRevision: string;
+  sourceDigest: string;
   role?: string;
   creditedAs?: string;
   characterId?: string;
@@ -141,7 +147,14 @@ export function staffCreditVocabulary(
       const character = credit.characterId ? identities.get(credit.characterId) : undefined;
       rows.push({
         kind: 'voice-credit',
-        path: `/vn_seiyuu/${credit.aliasId}/${credit.characterId ?? 'character'}`,
+        path: credit.sourcePath,
+        origin: {
+          externalId: credit.vn,
+          revision: credit.recordRevision,
+          digest: credit.sourceDigest,
+          url: vndbRecordUrl(credit.vn),
+          converterRevision: vndbStaffCreditConverterRevision,
+        },
         subject: vn,
         ...(holder === undefined ? {} : { performer: holder }),
         performerCode: credit.staffId,
@@ -153,7 +166,14 @@ export function staffCreditVocabulary(
     }
     rows.push({
       kind: 'staff',
-      path: `/vn_staff/${credit.aliasId}/${credit.role ?? 'role'}`,
+      path: credit.sourcePath,
+      origin: {
+        externalId: credit.vn,
+        revision: credit.recordRevision,
+        digest: credit.sourceDigest,
+        url: vndbRecordUrl(credit.vn),
+        converterRevision: vndbStaffCreditConverterRevision,
+      },
       subject: vn,
       ...(holder === undefined ? {} : { holder }),
       holderCode: credit.staffId,
@@ -310,27 +330,36 @@ export async function planVndbStaffCredits(input: CrossMediaTables): Promise<Vnd
       continue;
     }
     if (table === 'vn_seiyuu') {
+      const vn = text(row, 'id');
       const characterId = text(row, 'cid');
       if (!charRows.has(characterId)) {
         gap(table, row, 'Missing target record for this source relation');
         continue;
       }
       plan.staffCredits.push({
-        vn: text(row, 'id'),
+        vn,
         staffId: sid,
         aliasId: aid,
         kind: 'voice',
+        sourcePath: `/vn_seiyuu/${vn}/${aid}/${characterId}`,
+        recordRevision: String((revisions.get(vn) as { revision: number }).revision),
+        sourceDigest: sourceDigest(row),
         characterId,
         ...(spelling.value === undefined ? {} : { creditedAs: spelling.value }),
       });
       continue;
     }
+    const vn = text(row, 'id');
+    const role = text(row, 'role');
     plan.staffCredits.push({
-      vn: text(row, 'id'),
+      vn,
       staffId: sid,
       aliasId: aid,
       kind: 'staff',
-      role: text(row, 'role'),
+      sourcePath: `/vn_staff/${vn}/${aid}/${role}`,
+      recordRevision: String((revisions.get(vn) as { revision: number }).revision),
+      sourceDigest: sourceDigest(row),
+      role,
       ...(spelling.value === undefined ? {} : { creditedAs: spelling.value }),
     });
   }
