@@ -79,7 +79,7 @@ test('selected Bangumi Person careers use current source Concepts and released o
   expect(valid.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:hasOccupation')).toBe(false);
   expect(checkBatchWrite({ commands: [...valid.proposals, ...mapped.proposals] }, bundledRelease)).toEqual([]);
   expect(mapCareers(valid, 'schema:Person', { releaseDigest: bundledDigest, schemes: [], concepts: [] }).gaps).toContainEqual(
-    expect.objectContaining({ reason: 'missing_scheme', property: 'https://rezics.com/schemes/bangumi/careers' }),
+    expect.objectContaining({ reason: 'missing_scheme', property: 'skos:ConceptScheme' }),
   );
 
   for (const value of [[], ['future-role'], { role: 'producer' }, ['producer', null]]) {
