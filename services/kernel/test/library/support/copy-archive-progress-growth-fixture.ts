@@ -1,4 +1,3 @@
-import { expect } from 'bun:test';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import {
@@ -8,7 +7,14 @@ import {
   unitData,
 } from '../../../../../packages/definitions/test/support/library-profiles.ts';
 import { admittedAccess, authenticateAccount } from '../../support/admitted-access.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthReport } from '../../support/growth.ts';
+import {
+  assertGrowthAccessPaths,
+  checkGrowth,
+  openGrowthDatabase,
+  type Bound,
+  type GrowthReport,
+  type Metric,
+} from '../../support/growth.ts';
 import { configureTestReceiptKeys } from '../../support/receipt-keys.ts';
 import { ACCOUNT_ROLE_BITS } from '../../../src/history/contracts.ts';
 import { bindCommandHistoryEvidence } from '../../../src/history/record.ts';
@@ -145,10 +151,14 @@ export function paddedActiveCommand(target = 8000) {
 }
 
 export function expectNoGrownScans(report: GrowthReport) {
-  for (const sample of report.samples)
-    for (const cost of sample.repetitions)
-      for (const relation of ['library.progress_session', 'library.progress_unit', 'library.progress_change'])
-        expect(cost.relations?.[relation]?.sequentialScans ?? 0, `${relation} at scale ${sample.scale}`).toBe(0);
+  assertGrowthAccessPaths(report.name, report.samples, [
+    'library.progress_session',
+    'library.progress_unit',
+    'library.progress_change',
+    'library.copy_archive_row',
+    'library.copy_archive_progress_review',
+    'library.copy_archive_progress_apply',
+  ]);
 }
 
 export async function createCopyArchiveProgressGrowthFixture() {
@@ -468,13 +478,14 @@ export async function createCopyArchiveProgressGrowthFixture() {
     operation: (actor: AccountActor, scale: number, repetition: number) => Promise<unknown>,
     hooks?: {
       prepare?: (actor: AccountActor, scale: number, repetition: number) => Promise<void>;
+      bounds?: Partial<Record<Metric, Bound>>;
     },
   ) {
     const accountId = person.actor.accountId;
     return checkGrowth(db, {
       name,
       scales: SCALES,
-      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic', ...hooks?.bounds },
       byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
       indexProbes: 2,
       async grow(_database, scale, previous) {
