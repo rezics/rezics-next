@@ -48,8 +48,10 @@ function source(access = f.access) {
 function read(headers: Headers, access: Access) {
   return accountDeletionPageTransport(f.host.service, f.host.handler, f.authPool, source(access))(request(headers));
 }
-async function proof(headers: Headers) {
-  return f.host.service.internal.withFreshHuman({ headers, fresh: false }, async (human) => human);
+function nativeRead(headers: Headers, access = f.access) {
+  return f.host.service.internal.withFreshHuman({ headers, fresh: false }, async (human) =>
+    source(access).readAccountDeletionAdvice({ human, deadline: Date.now() + 3000 }),
+  );
 }
 
 test('real host offers authentication before display, then native advice without approvals or execution', async () => {
@@ -91,18 +93,13 @@ test('real host offers authentication before display, then native advice without
 
 test('exact-human source rejects ordinary, operated and substituted actors', async () => {
   const human = await person();
-  const current = await proof(human.exact);
-  await expect(
-    source().readAccountDeletionAdvice({ human: await proof(human.headers), deadline: Date.now() + 3000 }),
-  ).rejects.toThrow();
+  await expect(nativeRead(human.headers)).rejects.toThrow();
   const other = await person();
   const wrong: Access = {
     ...f.access,
     authenticate: async () => f.access.authenticate(other.bearer, { pool, deadline: Date.now() + 3000 }),
   };
-  await expect(
-    source(wrong).readAccountDeletionAdvice({ human: current, deadline: Date.now() + 3000 }),
-  ).rejects.toThrow();
+  await expect(nativeRead(human.exact, wrong)).rejects.toThrow();
   for (const patch of [
     "state='suspended'",
     'authn_fenced=true',
@@ -110,12 +107,13 @@ test('exact-human source rejects ordinary, operated and substituted actors', asy
     `operator_account_id='${other.accountId}'`,
   ]) {
     const target = await person();
-    const live = await proof(target.exact);
-    await pool.query(`UPDATE access.account SET ${patch} WHERE route=$1 AND account_id=$2`, [
-      routeOf(target.accountId),
-      target.accountId,
-    ]);
-    await expect(source().readAccountDeletionAdvice({ human: live, deadline: Date.now() + 3000 })).rejects.toThrow();
+    await f.host.service.internal.withFreshHuman({ headers: target.exact, fresh: false }, async (live) => {
+      await pool.query(`UPDATE access.account SET ${patch} WHERE route=$1 AND account_id=$2`, [
+        routeOf(target.accountId),
+        target.accountId,
+      ]);
+      await expect(source().readAccountDeletionAdvice({ human: live, deadline: Date.now() + 3000 })).rejects.toThrow();
+    });
   }
 }, 60000);
 
