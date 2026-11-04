@@ -184,9 +184,9 @@ test('GitHub fetch serializes only fetch and ref verify on the store lock', () =
   const pin = script.indexOf('flock -x 8');
   const release = script.indexOf('flock -u 9');
   const checkout = script.indexOf('checkout-index --all --force');
-  const lockFetchPhase = script.indexOf("REMOTE_CHECK_PHASE\\tshared-store lock/fetch");
+  const lockFetchPhase = script.indexOf('REMOTE_CHECK_PHASE\\tshared-store lock/fetch');
   const checkoutStart = script.indexOf("checkout_started=$(python3 -c 'import time; print(time.monotonic_ns())')");
-  const checkoutPhase = script.indexOf("REMOTE_CHECK_PHASE\\tcheckout");
+  const checkoutPhase = script.indexOf('REMOTE_CHECK_PHASE\\tcheckout');
   const gc = script.indexOf('gc --quiet --prune=7.days.ago');
   expect(script.indexOf(lockFile)).toBeGreaterThan(-1);
   expect(script.indexOf(pinFile)).toBeGreaterThan(-1);
