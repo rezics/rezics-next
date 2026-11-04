@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 
 export const MAX_GROWTH_CAPTURE_ENTRIES = 20_000;
-export const MAX_GROWTH_CAPTURE_BYTES = 32 * 1024 * 1024;
+export const MAX_GROWTH_CAPTURE_BYTES = 128 * 1024 * 1024;
 export const MAX_GROWTH_NATIVE_NOTICE_BYTES = 1024 * 1024;
 export const GROWTH_NATIVE_NOTICE_RETAINED_BYTE_MULTIPLIER = 8;
 

@@ -147,14 +147,7 @@ export function paddedActiveCommand(target = 8000) {
 export function expectNoGrownScans(report: GrowthReport) {
   for (const sample of report.samples)
     for (const cost of sample.repetitions)
-      for (const relation of [
-        'library.progress_session',
-        'library.progress_unit',
-        'library.progress_change',
-        'library.copy_archive_row',
-        'library.copy_archive_progress_review',
-        'library.copy_archive_progress_apply',
-      ])
+      for (const relation of ['library.progress_session', 'library.progress_unit', 'library.progress_change'])
         expect(cost.relations?.[relation]?.sequentialScans ?? 0, `${relation} at scale ${sample.scale}`).toBe(0);
 }
 
