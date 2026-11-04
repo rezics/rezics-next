@@ -745,11 +745,9 @@ test('owner discovery request cost stays bounded as a private library grows to 4
     );
     expect(Number(count.rows[0]?.count)).toBe(scale);
 
-    const result = await capture(
-      db,
-      () => request('other', 'GET', '/v1/progressSessionDiscovery?limit=50'),
-      { includeBackends: true },
-    );
+    const result = await capture(db, () => request('other', 'GET', '/v1/progressSessionDiscovery?limit=50'), {
+      includeBackends: true,
+    });
     expect(result.value.response.status).toBe(200);
     expect(result.value.body.viewerState).toBe('signed_in');
     expect(result.value.body.progressSessions).toHaveLength(50);
