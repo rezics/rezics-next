@@ -65,6 +65,7 @@ test('the initial pin wins overlap and each replacement keeps its selected count
   const pin = response.pinnedThreads[0]!;
   const threadId = pin.thread.id;
   pin.actions.react = 'allowed';
+  pin.interaction.viewer = { state: 'current', reaction: null };
   response.threads.unshift({
     ...pin,
     actions: { ...pin.actions, react: 'unavailable' },
