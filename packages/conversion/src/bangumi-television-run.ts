@@ -61,6 +61,7 @@ export function bangumiTelevisionRun(
       field.key === totalKey ||
       field.key === '中文名' ||
       field.key === '别名' ||
+      field.key === '官方网站' ||
       isBangumiTVAnimeWorkEvidenceField(field.key)
     )
       continue;

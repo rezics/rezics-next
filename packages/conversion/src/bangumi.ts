@@ -31,8 +31,8 @@ export const converter_revision = 'bangumi@11';
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Thirteen projected top-level fields; at most 24 distinct Game names, one cover
-// intent, and one citation envelope per statement with at most two URL parts.
+// Thirteen projected top-level fields; at most 95 commands, one cover intent,
+// and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
@@ -312,11 +312,17 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   const extractedNames = gameNames ?? extractedFields!;
   const television = extractedFields?.televisionRun ?? bangumiTelevisionRun(record);
   const nameFields = new Map<BatchStatement, string>();
+  const websiteFields = new Map<BatchStatement, string>();
   const facts = [fact('wdt:P5732', input.external_id)];
   for (const name of extractedNames.names) {
     const statement = fact(name.property, { language: name.language, text: name.text });
     if (bookTitleProfile && name.pointer.startsWith('/infobox/'))
       nameFields.set(statement, `name:${name.pointer}:${name.property}:${name.language}:${name.text}`);
+    facts.push(statement);
+  }
+  for (const website of extractedFields?.officialWebsites ?? []) {
+    const statement = fact('schema:url', website.url);
+    websiteFields.set(statement, `official-website:${website.url}`);
     facts.push(statement);
   }
   facts.push(...(extractedFields?.workEvidence ?? []).map((item) => fact(item.property, item.value)));
@@ -378,6 +384,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       const content = statement.value.type === 'value' ? statement.value.content : undefined;
       const field =
         nameFields.get(statement) ??
+        websiteFields.get(statement) ??
         ((property === 'schema:name' || property === 'schema:alternateName') &&
         content &&
         typeof content === 'object' &&

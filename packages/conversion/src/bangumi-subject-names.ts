@@ -26,8 +26,10 @@ export type BangumiNameExtraction = Readonly<{
   names: readonly BangumiSubjectName[];
   diagnostics: readonly BangumiNameDiagnostic[];
 }>;
+export type BangumiOfficialWebsite = Readonly<{ url: string; pointer: string }>;
 export type BangumiTVAnimeEvidenceExtraction = BangumiNameExtraction &
   Readonly<{
+    officialWebsites: readonly BangumiOfficialWebsite[];
     workEvidence: readonly BangumiWorkEvidence[];
     televisionRun: TelevisionRunMapping;
   }>;
@@ -48,6 +50,7 @@ export type BangumiNameTemplate = Readonly<{
 }>;
 
 const nameLimit = 24;
+const officialWebsiteLimit = 32;
 const fieldLimit = 64;
 export const bangumiDiagnosticLimit = 16;
 const diagnosticLimit = bangumiDiagnosticLimit;
@@ -90,6 +93,35 @@ function plainName(value: string): string | undefined {
   return text;
 }
 
+function officialWebsiteUrl(value: string): string | undefined {
+  if (
+    value.length > 1500 ||
+    !value.isWellFormed() ||
+    !/^https?:\/\/[^\s]+$/u.test(value) ||
+    /[\u0000-\u0020\u007f-\u009f\\]/u.test(value) ||
+    /%(?![0-9a-f]{2})/iu.test(value) ||
+    value.includes('{{') ||
+    value.includes('}}') ||
+    value.includes('[[') ||
+    value.includes(']]') ||
+    value.includes('|')
+  )
+    return;
+  try {
+    const parsed = new URL(value);
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password
+    )
+      return;
+  } catch {
+    return;
+  }
+  return value;
+}
+
 function compareNames(left: BangumiSubjectName, right: BangumiSubjectName): number {
   const a = `${left.property}\u0000${left.language}\u0000${left.text}`;
   const b = `${right.property}\u0000${right.language}\u0000${right.text}`;
@@ -124,6 +156,8 @@ export function extractBangumiTVAnimeEvidence(
 ): BangumiTVAnimeEvidenceExtraction {
   const names: BangumiSubjectName[] = [];
   const seen = new Set<string>();
+  const officialWebsites: BangumiOfficialWebsite[] = [];
+  const seenWebsites = new Set<string>();
   const diagnostics: BangumiNameDiagnostic[] = [];
   let diagnosticOverflow = false;
   let fieldOverflow = false;
@@ -152,13 +186,24 @@ export function extractBangumiTVAnimeEvidence(
   if (record.name_cn?.trim()) addTopLevel('schema:name', 'zh', record.name_cn);
   const book = record.type === 1 && nativeType === 'schema:Book';
   const tvAnime = record.type === 2 && nativeType === 'schema:TVSeries';
-  if ((!book && !tvAnime) || record.infobox === undefined)
+  if (!book && !tvAnime)
     return {
       names: names.sort(compareNames),
       diagnostics,
+      officialWebsites,
       workEvidence: [],
       televisionRun: bangumiTelevisionRun(record),
     };
+  if (record.infobox === undefined) {
+    if (tvAnime) omit('/infobox/官方网站', 'official_website_field_absent');
+    return {
+      names: names.sort(compareNames),
+      diagnostics,
+      officialWebsites,
+      workEvidence: [],
+      televisionRun: bangumiTelevisionRun(record),
+    };
+  }
 
   const infobox = record.infobox;
   const iterator = sourceLines(infobox);
@@ -176,6 +221,7 @@ export function extractBangumiTVAnimeEvidence(
     return {
       names: names.sort(compareNames),
       diagnostics,
+      officialWebsites,
       workEvidence: [],
       televisionRun: bangumiTelevisionRun(record),
     };
@@ -184,6 +230,7 @@ export function extractBangumiTVAnimeEvidence(
   let fields = 0;
   let closed = false;
   let trailing = false;
+  let officialWebsiteSeen = false;
   const televisionFields: BangumiTelevisionRunInfoboxField[] = [];
   let active: NameField | undefined;
 
@@ -192,6 +239,25 @@ export function extractBangumiTVAnimeEvidence(
     if (field.workEvidence) {
       if (complete) workEvidence.finish(field.workEvidence);
       else omit(field.pointer, 'unsupported_infobox_structure');
+    }
+    if (field.key === '官方网站' && tvAnime) {
+      if (!complete) {
+        omit(field.pointer, 'unsupported_infobox_structure');
+        return;
+      }
+      if (field.unsupported || field.form !== 'scalar' || field.values.length !== 1) {
+        omit(field.pointer, 'unsupported_infobox_website_form');
+        return;
+      }
+      const url = officialWebsiteUrl(field.values[0]!);
+      if (url === undefined) {
+        omit(field.pointer, 'unsupported_infobox_website_form');
+      } else if (!seenWebsites.has(url)) {
+        seenWebsites.add(url);
+        if (officialWebsites.length < officialWebsiteLimit) officialWebsites.push({ url, pointer: field.pointer });
+        else omit(field.pointer, 'infobox_website_limit');
+      }
+      return;
     }
     if (field.key !== '中文名' && field.key !== '别名') return;
     if (!complete) {
@@ -266,6 +332,7 @@ export function extractBangumiTVAnimeEvidence(
         continue;
       }
       const value = cleanHorizontal(line.slice(equals + 1));
+      if (tvAnime && key === '官方网站') officialWebsiteSeen = true;
       if (tvAnime) {
         const runEquals = row.line.startsWith('|') ? row.line.indexOf('=') : -1;
         if (runEquals >= 2 && runEquals <= 65) {
@@ -291,6 +358,11 @@ export function extractBangumiTVAnimeEvidence(
           active.form = 'scalar';
           active.values.push(value);
         }
+      } else if (tvAnime && key === '官方网站') {
+        if (value) {
+          active.form = 'scalar';
+          active.values.push(value);
+        }
       } else if (
         !(tvAnime && bangumiTelevisionRunKeys.has(key)) &&
         !(tvAnime && isBangumiTVAnimeWorkEvidenceField(key))
@@ -300,6 +372,10 @@ export function extractBangumiTVAnimeEvidence(
     }
     if (!active) {
       omit(`/infobox/lines/${row.number}`, 'unsupported_infobox_structure');
+      continue;
+    }
+    if (tvAnime && active.key === '官方网站') {
+      active.unsupported = true;
       continue;
     }
     const continuation = cleanHorizontal(line);
@@ -328,9 +404,11 @@ export function extractBangumiTVAnimeEvidence(
   finishField(active, closed);
   if (!closed) omit('/infobox', 'unsupported_infobox_structure');
   if (trailing) omit('/infobox', 'unsupported_infobox_structure');
+  if (tvAnime && !officialWebsiteSeen) omit('/infobox/官方网站', 'official_website_field_absent');
   return {
     names: names.sort(compareNames),
     diagnostics,
+    officialWebsites,
     workEvidence: workEvidence.values(),
     televisionRun: bangumiTelevisionRun(record, tvAnime ? televisionFields : undefined),
   };

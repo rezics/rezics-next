@@ -2282,35 +2282,29 @@ aggregate-weight owner, so this journey keeps one bounded weight gap. Parent
 `tags_parents` edges stay review gaps until Semantic admits `skos:broader`
 for these source Concepts.
 
-### Bangumi TVAnime subject names
+### Bangumi TVAnime bounded profile conversion
 
-Ordinary Bangumi registration and selected-family type 2 rows reach
-`convertBangumi`; the ordinary caller uses `bangumi@11` and the selected-family
-registration uses `cross-media-entities@11+bangumi@11`. Both share the pure TVAnime
-field extraction and existing journal, source metadata admission, citations,
-candidate review, adoption and current-read flow. No additional seed publisher or
-identity lookup is involved. The importer keeps the exact Bangumi subject alias
-and key, unversioned record state where no provider revision exists, normalized
-digest and acknowledged native UUID.
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@11` revision while the ordinary caller uses `bangumi@9`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
-exact Bangumi subject alias and key, unversioned record state where no provider
-revision exists, the normalized digest and the acknowledged native UUID.
+Current `bangumi@11` retains the exact-template TVAnime names, original-run and
+work-evidence projections while adding the official website mapping. Ordinary
+registration and selected-family rows share the bounded pure conversion; the
+selected-family registration uses
+`cross-media-entities@11+bangumi@11`. Existing source metadata admission,
+citations, journal, independent review/adoption, current-read flow and exact
+Bangumi alias/key remain in use. No additional publisher or identity lookup is
+involved. A source without a provider revision remains `unversioned`; semantic
+digests still include the bounded infobox projection.
 
-- Touches: one selected source record, at most 24 name statements and 16 bounded
-  omission diagnostics; each name carries its exact Bangumi subject citation.
-- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
-  and the current source journal and batch limits; raw source values never enter
+- Touches: one selected TVAnime record, at most 24 name facts, 32 website facts,
+  existing original-run/work-evidence facts and 16 bounded diagnostics. Every
+  projected fact cites the exact Bangumi subject record.
+- Bound: 65,536 projected characters, 64 infobox fields, 1,500 characters per
+  URL and the existing 100-command batch ceiling; source values stay out of
   diagnostics.
-- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
-  selected-family JSONL planning, stable identity, unchanged and changed input,
-  exact citations and omissions. The connected ordinary caller is
-  `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
-  remains controller-owned.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  covers ordinary and selected-family proposals, identity reuse, refresh and a
+  bounded unsupported value. The related public-read journey is
+  `services/kernel/test/imports/bangumi-official-websites.test.ts`; native
+  execution remains controller-owned.
 
 ### Bangumi television original run
 
@@ -2555,35 +2549,33 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 - Bound: 65,536 UTF-8 infobox bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 emitted quantity facts and 16 diagnostics. Explicit centimetres/metres and kilograms/grams retain their source units; missing units are never guessed. The existing source journal, publication manifest and command ceiling still apply.
 - Growth check: `packages/conversion/tests/bangumi-character-measurements.test.ts` covers exact unit meaning, unknown and unsupported values, independent removal and the parser bounds. `services/kernel/test/imports/bangumi-character-measurements.test.ts` covers default selected identity, exact citation, proposal versus public adoption, reopen and changed-source suppression under a current facts fence. Kernel execution remains controller-owned and is deferred to integration.
 
-### Bangumi TVAnime subject names
+### Bangumi TVAnime official websites
 
-Ordinary Bangumi registration and selected-family type 2 rows reach
-`convertBangumi`; the ordinary caller uses `bangumi@11` and the selected-family
-registration uses `cross-media-entities@11+bangumi@11`. Both share the pure TVAnime
-field extraction and existing journal, source metadata admission, citations,
-candidate review, adoption and current-read flow. No additional seed publisher or
-identity lookup is involved. The importer keeps the exact Bangumi subject alias
-and key, unversioned record state where no provider revision exists, normalized
-digest and acknowledged native UUID.
-Ordinary Bangumi registration and selected-family type 2 rows already reach
-`convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@11` revision while the ordinary caller uses `bangumi@9`.
-Both use one pure TVAnime name extractor and the existing journal, source
-metadata admission, citations, candidate acceptance and adoption flow. No
-additional seed publisher or identity lookup is involved. The importer keeps the
-exact Bangumi subject alias and key, unversioned record state where no provider
-revision exists, the normalized digest and the acknowledged native UUID.
+The official-website projection runs through ordinary `bangumi@11` and the
+selected-family `cross-media-entities@11+bangumi@11` registration. It recognizes
+only a literal `官方网站` value from the exact pinned type-2 TVAnime template.
+The URL fact is distinct from its `schema:url` reference to the exact Bangumi
+subject record. Source spelling, path, query and fragment are preserved. A
+changed value offers a new candidate on the same acknowledged work identity;
+ordinary import stays proposal-only and current adopted selections are not
+rewritten by source text. Absent or unsupported values do not retract facts.
 
-- Touches: one selected source record, at most 24 name statements and 16 bounded
-  omission diagnostics; each name carries its exact Bangumi subject citation.
-- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
-  and the current source journal and batch limits; raw source values never enter
-  diagnostics.
-- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
-  selected-family JSONL planning, stable identity, unchanged and changed input,
-  exact citations and omissions. The connected ordinary caller is
-  `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
-  remains controller-owned.
+The common publisher keeps independent exact-candidate acceptance and adoption,
+current authority checks, journal recovery, source and tuple-home fences, and a
+current public read of the acknowledged TVSeries. The website is never fetched
+or used for identity resolution. The one-literal/no-host-normalization/no-list-
+splitting decision is recorded in `packages/conversion/README.md`.
+
+- Touches: one selected TVAnime source record, up to 32 URL proposals and 16
+  bounded omission diagnostics, each candidate citing the source record.
+- Bound: 65,536 projected characters, 64 visited infobox fields, 1,500
+  characters per URL and at most 95 converter commands under the released
+  100-command batch ceiling; destination pages are not requested.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  covers ordinary/default proposals, same-identity refresh and unsupported
+  source shape. `services/kernel/test/imports/bangumi-official-websites.test.ts`
+  covers separate acceptance/adoption, public read, restart and fencing; native
+  execution is controller-owned and the M1 walkthrough remains separate.
 
 ### Bangumi character source names
 
@@ -2625,7 +2617,6 @@ source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
 uses its existing `cross-media-entities@11+bangumi@11` registration, record bindings,
-uses its existing `cross-media-entities@11` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh

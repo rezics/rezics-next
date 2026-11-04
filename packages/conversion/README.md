@@ -973,26 +973,43 @@ remain pure; the source-only digest includes the ordered metadata tags and exclu
 bindings. Supported records visit thirteen top-level fields and produce at most nine
 commands and one cover intent; byte caps remain unchanged. The new keyword adds one bounded citation and one qualifier.
 
-## Bangumi TVAnime subject names
+## Bangumi TVAnime subject profiles
 
-`bangumi@9` introduced the `中文名` and `别名` mapping from the exact pinned
-`{{Infobox animanga/TVAnime` template on Bangumi type 2 `schema:TVSeries` records.
-The ordinary Bangumi converter and selected-family registrations share this pure extraction.
-The existing top-level `name` and `name_cn` bootstrap labels keep their current
-meanings; infobox names become cited native name facts after subject binding and
-do not set `inLanguage`. The complete infobox remains in the existing bounded
-projection and digest for raw change detection.
+Current `bangumi@11` shares one bounded infobox scan for the exact pinned
+`{{Infobox animanga/TVAnime` template on selected type-2 `schema:TVSeries`
+records. It preserves the existing cited name, original-run and work-evidence
+mappings while adding the explicit `官方网站` URL fact. The top-level `name` and
+`name_cn` bootstrap labels keep their current meanings. Infobox `中文名` is `zh`;
+`别名` is `und` because the template defines no alias-language syntax. These
+names become cited facts after subject binding and do not set `inLanguage`.
 
-The scalar `中文名` is `zh`. Scalar and bullet-list `别名` values are `und`,
-because the pinned template defines no alias-language syntax. Equal property,
-language and exact-text tuples deduplicate; other spellings remain separate.
-Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
-omissions, with no source prose copied into diagnostics. Parsing scans at most 64
-field occurrences, retains at most 24 distinct name values, and shares a 16-item
-diagnostic cap with retained source-field, TVAnime run and Game player-count
-omissions. Each field
-occurrence is staged until its complete scalar or bullet-list form is known;
-malformed or mixed occurrences contribute no names.
+Decision: accept one literal HTTP(S) `官方网站` value per field occurrence. Keep
+source URL spelling and path, query and fragment; coalesce only exact duplicates,
+retain distinct addresses as separate candidates, and do not normalize hosts or
+split lists. Each URL fact cites the exact Bangumi subject record; that citation
+is separate from the URL fact and the Bangumi record URL never substitutes for a
+work website. No destination is fetched, followed or used to resolve identity.
+
+The URL parser accepts only a well-formed absolute HTTP(S) address without
+credentials, malformed percent escapes, whitespace, wiki markup or mixed list
+text. Unsupported forms remain bounded omissions. The released TVSeries
+`schema:url` is single-valued, so independent review chooses one exact candidate.
+The shared scan visits at most 64 fields, retains at most 24 distinct name
+values and 32 distinct website values, and shares a 16-item diagnostic cap with
+other bounded source omissions. Values are staged until their complete scalar
+or list form is known. The complete infobox remains in the bounded projection
+and semantic digest for raw-change detection; absent or unsupported values do
+not retract independently adopted assertions.
+
+- Touches: one selected TVAnime record, at most 24 name facts, 32 website facts
+  and 16 bounded omission diagnostics; each website cites its source record.
+- Bound: the 65,536-character projection, 64 infobox fields, 1,500 characters
+  per website and at most 95 ordinary commands under the released batch cap.
+- Growth check: `tests/bangumi-official-websites.test.ts` covers ordinary and
+  selected-family conversion, refresh, exact citation and unsupported input.
+  The separate public-read journey is
+  `services/kernel/test/imports/bangumi-official-websites.test.ts`; its native
+  execution remains controller-owned.
 
 ### Bangumi character physical profile
 
@@ -1063,9 +1080,9 @@ parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
 Decision: type 1 Book/BookSeries dispatch remains in `bangumi@11`, preserving
-TVAnime names, Book-template names, original-run, Game player-count and TVAnime
-work evidence alongside Game names. One Bangumi subject stays one identity;
-ISBN does not create a `bf:Instance`.
+TVAnime names, Book-template names, original-run, Game player-count and work
+evidence and Game names while the same honest revision adds official websites. One Bangumi subject stays one
+identity; ISBN does not create a `bf:Instance`.
 
 ## Bangumi TVAnime work evidence
 
@@ -1073,8 +1090,8 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 `官方网站` stays with the separate `schema:url` mapping, and the parser removes
 only horizontal template/list boundary whitespace.
 
-`bangumi@10` also consumes the exact pinned TVAnime `链接` and `Copyright`
-fields. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
+`bangumi@10` introduced the exact pinned TVAnime `链接` and `Copyright`
+mapping, retained by current `bangumi@11`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
 source text preserved. Both facts cite only the exact Bangumi subject record.
