@@ -10,11 +10,10 @@ import { boardRealmId, readBoardRealm, type BoardRealm } from './board-context';
 import { sameThreadSlug, threadTitle } from './thread-href';
 import { readThreadDocumentMedia, type ThreadDocumentMedia } from './document-media-read';
 
-type ThreadResource = ReturnType<KernelClient['threads']>;
 type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
-type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
-type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
+type Thread = ReadingPageResponse['thread'];
+type PostPage = { posts: ReadingPageResponse['replies']['items']; next: ReadingPageResponse['replies']['next'] };
 export type ThreadPost = PostPage['posts'][number];
 
 type PageInput = { id: string; cursor?: string; post?: string };
@@ -23,7 +22,7 @@ type CanonicalPageInput = PageInput & { expectedSlug: string };
 export type ThreadSlugRedirect = { redirect: { id: string; title: string | null } };
 
 export type LoadedThreadPage = {
-  thread: Thread['thread'];
+  thread: Thread;
   board?: Board;
   realm?: BoardRealm;
   posts: PostPage;
@@ -110,7 +109,7 @@ export async function loadThreadPage(
     const threadResult = authorization
       ? await client.threads({ id: data.id }).get({ headers: { authorization } })
       : await client.threads({ id: data.id }).get();
-    const thread = checkRead<Thread>(threadResult, 'thread');
+    const thread = checkRead<{ thread: Thread }>(threadResult, 'thread');
     if (thread.thread.id !== data.id) throw notFound();
     if (!sameThreadSlug(data.expectedSlug, thread.thread.title))
       return { redirect: { id: thread.thread.id, title: threadTitle(thread.thread) } };
