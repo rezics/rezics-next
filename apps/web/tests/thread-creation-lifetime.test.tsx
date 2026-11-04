@@ -625,3 +625,56 @@ test('caller revisions reject retained callbacks after same-value cache replacem
   replayClient.clear();
   readinessClient.clear();
 });
+
+test('mounted future-thread attachments retain recovery only until the admitted composer leaves', async () => {
+  const page = await mountPage({ boardId: id(81), purpose: 'discussion', presetSubject: id(82),
+    presetSubjectTitle: 'Subject', key: id(83), visible: true });
+  const reservations: { body: Record<string, unknown>; key: string | null }[] = [];
+  let first = true;
+  let lose = true;
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+    if (init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      reservations.push({ body, key: new Headers(init.headers).get('idempotency-key') });
+      if (body.newThread) {
+        if (!first) return Response.json({}, { status: 409 });
+        first = false;
+      } else if (lose) { lose = false; throw new Error('lost reservation'); }
+      return Response.json({ media: { id: id(84), containerId: id(85), state: 'reserved',
+        mediaType: 'image/png', byteCount: 3 } });
+    }
+    if (init?.method === 'PUT') return new Response(null, { status: 204 });
+    return Response.json({ media: { id: id(84), state: 'available', mediaType: 'image/png', byteCount: 3 } });
+  });
+  const button = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
+  const attach = async (name: string) => {
+    await act(async () => page.user.click(button(page.m.editor_image())));
+    await page.settle(() => !!document.querySelector('input[type="file"]'));
+    await act(async () => page.user.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!,
+      new File(['png'], name, { type: 'image/png' })));
+  };
+  try {
+    await page.render();
+    await page.fill('Draft title', 'Keep this writing through recovery.');
+    await attach('first.png');
+    await page.settle(() => !!button(page.m.editor_insert_image()) && !button(page.m.editor_insert_image()).disabled);
+    await act(async () => page.user.click(button(page.m.editor_insert_image())));
+    await attach('second.png');
+    await page.settle(() => !!button(page.m.editor_retry_upload()));
+    expect(page.title()?.value).toBe('Draft title');
+    await act(async () => page.user.click(button(page.m.editor_retry_upload())));
+    await page.settle(() => reservations.length === 4);
+    expect(reservations[2]!.body).toMatchObject({ containerId: id(85) });
+    expect(reservations[3]).toEqual(reservations[2]);
+    await act(async () => page.updateConfig((current) => ({ ...current, visible: false })));
+    await act(async () => page.updateConfig((current) => ({ ...current, visible: true })));
+    await page.settle(() => !!page.editor());
+    await attach('new-visit.png');
+    await page.settle(() => reservations.length === 5);
+    expect(reservations[4]!.body).toHaveProperty('newThread');
+    expect(reservations[4]!.body).not.toHaveProperty('containerId');
+  } finally {
+    transport.mockRestore();
+    await page.dispose();
+  }
+});

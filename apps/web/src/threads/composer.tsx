@@ -148,13 +148,18 @@ function useComposerUpload(
     recovery.invalidate();
     for (const entry of copies.current.values()) if (entry.target !== JSON.stringify(target)) entry.controller.abort();
   });
-  useLayoutEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    const owner = lifetime.controller.signal;
+    const retire = () => {
       for (const source of copies.current.keys()) removeCopy(source);
       recovery.clear();
-    },
-    [recovery],
-  );
+    };
+    owner.addEventListener('abort', retire, { once: true });
+    return () => {
+      owner.removeEventListener('abort', retire);
+      retire();
+    };
+  }, [recovery, lifetime]);
   const upload = async (file: File, signal: AbortSignal) => {
     const owner = lifetime.controller.signal;
     if (!lifetime.current(owner)) throw new DOMException('Editor retired', 'AbortError');
@@ -189,6 +194,7 @@ function useComposerUpload(
   };
   return {
     upload,
+    retire: () => recovery.clear(),
     copy,
     removeCopy,
     copySources: () => copies.current.keys(),
@@ -1087,6 +1093,7 @@ function PostComposerContent<T, Context = undefined>({
         return;
       }
       replyIntent.current.settle(true);
+      mediaUpload.retire();
       localWriting.draft?.settle('success');
       setTitle('');
       invalidateWriting();
@@ -1103,6 +1110,7 @@ function PostComposerContent<T, Context = undefined>({
       }
       departure.release();
       onSuccess(result.value);
+      if (boardId && !containerId) lifetime.retire();
     } catch {
       if (!lifetime.current(owner)) return;
       replyIntent.current.settle(false);

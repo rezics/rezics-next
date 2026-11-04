@@ -1,5 +1,6 @@
 import type { UploadedImage } from '@rezics/ui';
 import * as source from './upload';
+import { FutureThreadUploadEpisode } from './thread-upload-episode/episode';
 
 export type ReplyUploadTarget = Parameters<typeof source.uploadReplyImage>[0];
 export type ReplyUploadContext = {
@@ -43,11 +44,18 @@ type Pending = {
   blocked?: 'target-changed' | 'fresh-file';
   running: boolean;
   attempted: boolean;
+  reservation?: source.ReplyImageReservation;
 };
 
 /** One mounted editor's original Files, never media IDs inferred from a document or another draft. */
 export class ReplyImageUploadRecovery {
   private readonly pending = new Map<File, Pending>();
+  private episode?: { context: ReplyUploadContext; identity: FutureThreadUploadEpisode };
+
+  private retireEpisode(): void {
+    this.episode?.identity.retire();
+    this.episode = undefined;
+  }
 
   constructor(
     private readonly current: () => ReplyUploadContext,
@@ -55,16 +63,19 @@ export class ReplyImageUploadRecovery {
   ) {}
 
   invalidate(): void {
+    if (this.episode && !sameContext(this.episode.context, this.current())) this.retireEpisode();
     for (const entry of this.pending.values()) {
       if (!sameContext(entry.context, this.current())) {
         entry.blocked = 'target-changed';
         delete entry.mediaId;
+        delete entry.reservation;
         entry.controller.abort();
       }
     }
   }
 
   clear(): void {
+    this.retireEpisode();
     for (const [file, entry] of this.pending) this.remove(file, entry);
   }
 
@@ -84,12 +95,23 @@ export class ReplyImageUploadRecovery {
     if (!entry) {
       if (!context.target || !context.session) throw new source.UploadRefusal('unavailable');
       if (this.pending.size >= source.replyImageLimit) throw new source.UploadRefusal('unavailable');
+      if (typeof context.target !== 'string' && 'newThread' in context.target && !this.episode) {
+        const original = structuredClone(context);
+        this.episode = {
+          context: original,
+          identity: new FutureThreadUploadEpisode(() => sameContext(original, this.current())),
+        };
+      }
       entry = {
         context: structuredClone(context),
         controller: new AbortController(),
         detach: () => {},
         running: false,
         attempted: false,
+        // Custom legacy transports retain their conservative no-ID recovery behavior.
+        ...(this.transport === native ? { reservation: {
+          original: source.createMediaReservationIntent(context.target, file, 'post-image', context.session.subject),
+        } } : {}),
       };
       this.pending.set(file, entry);
     }
@@ -110,9 +132,13 @@ export class ReplyImageUploadRecovery {
         if (uploaded.src !== entry.mediaId) throw new source.UploadRefusal('unavailable');
       } else {
         // Without a returned reservation ID, another reserve could duplicate an uncertain upload.
-        if (entry.attempted) throw new source.UploadRefusal('unavailable');
+        if (entry.attempted && !entry.reservation) throw new source.UploadRefusal('unavailable');
         entry.attempted = true;
-        uploaded = await this.transport.uploadReplyImage(entry.context.target!, file, entry.controller.signal);
+        uploaded = await this.transport.uploadReplyImage(entry.context.target!, file, entry.controller.signal,
+          entry.reservation ? {
+            reservation: entry.reservation,
+            ...(this.episode ? { episode: this.episode.identity } : {}),
+          } : undefined);
       }
       this.invalidate();
       if (entry.blocked) throw new ReplyUploadRecoveryRefusal(entry.blocked);
