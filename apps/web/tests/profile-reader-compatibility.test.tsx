@@ -437,8 +437,9 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     );
     expect([
       host.textContent?.includes(m.settings_profile_acknowledged_stale()),
-      [...host.querySelectorAll('button')].filter((item) => item.textContent?.trim() === m.settings_profile_retry_save())
-        .length,
+      [...host.querySelectorAll('button')].filter(
+        (item) => item.textContent?.trim() === m.settings_profile_retry_save(),
+      ).length,
     ]).toEqual([true, 0]);
     await capturedRetry();
     await act(async () => writableEditor.edit({ displayName: 'Current organization' }));
@@ -497,7 +498,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await click(button(m.settings_profile_save()));
     await until(() => saveRequests.length === uncertainWrite + 1, 'the original uncertain command');
     const originalAttempt = saveRequests[uncertainWrite]!.attempt;
-    expect(originalAttempt.patch).toEqual({ displayName: 'Current organization', biography: 'Uncertain original command' });
+    expect(originalAttempt.patch).toEqual({
+      displayName: 'Current organization',
+      biography: 'Uncertain original command',
+    });
     await resolveWrite(uncertainWrite, { ok: false, status: 503, message: '', failure: { status: 503 } });
     expect(writableEditor.snapshot().attempt).toBe(originalAttempt);
     expect(writableEditor.snapshot().phase).toBe('uncertain');
