@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { pickText } from '@rezics/composition';
+import { PAGE_GLOBAL_CONTEXT, pickText } from '@rezics/composition';
 import { MediaProblem } from '../../media/kernel';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
@@ -10,9 +10,49 @@ import {
   isTermsCommand,
   type TermsCommand,
   type TermsFailure,
+  type TermsPageAuthority,
   type TermsRead,
   type TermsResult,
+  type TermsViewerState,
 } from './subject-terms';
+
+const termsOperation = { action: 'statement:propose', operation: 'subject.terms' } as const;
+
+/** Observe only the mounted Terms operation on the exact Global authority resource. */
+export async function readTermsPageAuthority(
+  client: KernelClient,
+  viewer: TermsViewerState,
+  authorization?: string,
+): Promise<TermsPageAuthority> {
+  if (viewer === 'signed-out') return { viewer, actions: { state: 'ready', actions: [] } };
+  if (viewer !== 'signed-in' || !authorization)
+    return { viewer: 'unavailable', actions: { state: 'unavailable' } };
+  try {
+    const result = await client.viewerActions.post(
+      { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT }] },
+      { headers: { authorization }, fetch: { cache: 'no-store', redirect: 'manual' } },
+    );
+    if (result.status === 401) return { viewer: 'signed-out', actions: { state: 'ready', actions: [] } };
+    if (result.error || result.status !== 200)
+      return { viewer, actions: { state: 'unavailable' } };
+    const resource = result.data?.resources.find(
+      (entry) => entry.type === 'semantic.context' && entry.id === PAGE_GLOBAL_CONTEXT,
+    );
+    if (!resource || !('viewerActions' in resource)) return { viewer, actions: { state: 'unavailable' } };
+    const allowed = resource.viewerActions.some(
+      (entry) => entry.action === termsOperation.action && entry.operations.includes(termsOperation.operation),
+    );
+    return {
+      viewer,
+      actions: {
+        state: 'ready',
+        actions: allowed ? [{ action: termsOperation.action, operations: [termsOperation.operation] }] : [],
+      },
+    };
+  } catch {
+    return { viewer, actions: { state: 'unavailable' } };
+  }
+}
 
 function refusal(status: number, body?: unknown): TermsFailure {
   const code = body && typeof body === 'object' ? Reflect.get(body, 'code') : undefined;

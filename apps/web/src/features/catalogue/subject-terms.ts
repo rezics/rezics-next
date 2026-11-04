@@ -5,12 +5,22 @@ export const termFields = ['labels', 'descriptions', 'aliases'] as const;
 export type TermField = (typeof termFields)[number];
 export type Terms = Pick<SubjectRead['subject'], TermField>;
 export type TermsPatch = Parameters<ReturnType<KernelClient['subjects']>['terms']['patch']>[0];
+export type TermsViewerState = 'signed-in' | 'signed-out' | 'unavailable';
+export type TermsViewerActions =
+  | { state: 'ready'; actions: { action: string; operations: string[] }[] }
+  | { state: 'unavailable' };
+export type TermsPageAuthority = { viewer: TermsViewerState; actions: TermsViewerActions };
+export const unavailableTermsAuthority: TermsPageAuthority = {
+  viewer: 'unavailable',
+  actions: { state: 'unavailable' },
+};
 export type TermsSnapshot = {
   subject: Pick<SubjectRead['subject'], 'id' | 'type' | 'revision' | TermField>;
   etag: string;
   href: string;
   profileHref?: string;
   session?: string;
+  authority?: TermsPageAuthority;
 };
 export type TermsRead = { state: 'ready'; snapshot: TermsSnapshot } | { state: 'concealed' | 'denied' | 'unavailable' };
 export type TermsCommand = { id: string; etag: string; key: string; patch: TermsPatch; session?: string };
@@ -25,11 +35,24 @@ export type TermsResult =
   | { ok: true; id: string; revision: number; reader: TermsRead; session?: string };
 export type TermsTransport = {
   read: (id: string, session?: string) => Promise<TermsRead>;
+  readAuthority?: () => Promise<TermsPageAuthority>;
   submit: (command: TermsCommand) => Promise<TermsResult>;
 };
 export type TermEdit = { mode: 'keep' | 'set' | 'remove'; value: string };
 export type LanguageDraft = Record<TermField, TermEdit>;
 export type TermsDraft = Record<string, LanguageDraft>;
+
+/** Match the installed mounted operation and its native action exactly. */
+export function termsCorrectionAllowed(authority: TermsPageAuthority, snapshot: TermsSnapshot): boolean {
+  return (
+    !snapshot.profileHref &&
+    authority.viewer === 'signed-in' &&
+    authority.actions.state === 'ready' &&
+    authority.actions.actions.some(
+      (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.terms'),
+    )
+  );
+}
 
 export function languageDraft(terms: Terms, language: string): LanguageDraft {
   return {

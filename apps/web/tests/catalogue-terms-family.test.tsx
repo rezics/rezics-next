@@ -43,7 +43,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
   const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const first = catalogueTermsFixture('stale');
-  const second = catalogueTermsFixture('uncertain');
+  const second = catalogueTermsFixture('action-unavailable');
   const navigation = catalogueTermsFixture('uncertain');
   const longName = `A long supplied name ${'星'.repeat(220)}`;
   const longAlias = `An unbroken alias ${'a'.repeat(220)}`;
@@ -159,6 +159,16 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     const nameB = fieldset(b, m.catalogue_create_label());
     await select(nameA, m.catalogue_terms_action(), 'set');
     await select(nameB, m.catalogue_terms_action(), 'set');
+    await settle(() => b.textContent?.includes(m.catalogue_terms_action_unavailable()) ?? false);
+    await replace(nameB, m.catalogue_create_label(), 'Draft during access outage');
+    expect(button(b, m.catalogue_terms_save()).disabled).toBe(true);
+    await click(b, m.catalogue_terms_retry_access());
+    expect(control(nameB, m.catalogue_create_label()).value).toBe('Draft during access outage');
+    expect(b.textContent).toContain(m.catalogue_terms_action_unavailable());
+    second.setScenario('uncertain');
+    await click(b, m.catalogue_terms_retry_access());
+    expect(button(b, m.catalogue_terms_save()).disabled).toBe(false);
+    expect(control(nameB, m.catalogue_create_label()).value).toBe('Draft during access outage');
     const nameId = control(nameA, m.catalogue_create_label()).id;
     await replace(nameA, m.catalogue_create_label(), '');
     await click(a, m.catalogue_terms_save());
@@ -382,6 +392,10 @@ test('independent Terms forms retain stable associations, multilingual drafts an
           reads.push([id, session]);
           return reads.length === 1 ? recoveryInitial : delayed;
         },
+        readAuthority: async () => ({
+          viewer: 'signed-in',
+          actions: { state: 'ready', actions: [{ action: 'statement:propose', operations: ['subject.terms'] }] },
+        }),
         submit: async (command) => {
           commands.push(structuredClone(command));
           return mode === 'comparison'

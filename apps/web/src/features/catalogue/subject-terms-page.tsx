@@ -42,11 +42,14 @@ import {
   type TermsCommand,
   type TermsDraft,
   type TermsFailure,
+  type TermsPageAuthority,
   type TermsPatch,
   type TermsRead,
   type TermsResult,
   type TermsSnapshot,
   type TermsTransport,
+  termsCorrectionAllowed,
+  unavailableTermsAuthority,
 } from './subject-terms';
 import {
   applyTermResolutions,
@@ -173,6 +176,14 @@ function SubjectTermsPageLive({
   const [replacements, setReplacements] = useState<Record<string, TermEdit>>({});
   const [reviewed, setReviewed] = useState<string | null>(null);
   const [saved, setSaved] = useState<Extract<TermsResult, { ok: true }>>();
+  const [authorityOverride, setAuthorityOverride] = useState<{
+    visit: TermsReadVisit;
+    snapshot: TermsSnapshot;
+    authority: TermsPageAuthority;
+  }>();
+  const [authorityChecking, setAuthorityChecking] = useState(false);
+  const [unknownPending, setUnknownPending] = useState(false);
+  const unknownPendingRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localDecision, setLocalDecision] = useState<LocalTermsDecision | null>(null);
@@ -225,6 +236,36 @@ function SubjectTermsPageLive({
       : query.data?.state === 'ready'
         ? query.data.snapshot
         : undefined;
+  const stale = failure?.reason === 'stale' || failure?.reason === 'conflict';
+  const authoritySnapshot = stale && comparison?.state === 'ready' ? comparison.snapshot : base;
+  const authorityQuery = useQuery({
+    queryKey: [
+      'catalogue-terms-authority',
+      id,
+      locale,
+      session,
+      lifetime.generation,
+      authoritySnapshot?.subject.id,
+      authoritySnapshot?.etag,
+    ],
+    queryFn: async () => ({
+      id: authoritySnapshot!.subject.id,
+      etag: authoritySnapshot!.etag,
+      authority: transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority,
+    }),
+    enabled: !!authoritySnapshot,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  function authorityFor(snapshot: TermsSnapshot): TermsPageAuthority {
+    if (authorityOverride?.visit === visit && authorityOverride.snapshot === snapshot) return authorityOverride.authority;
+    const observed = authorityQuery.data;
+    if (observed?.id === snapshot.subject.id && observed.etag === snapshot.etag) return observed.authority;
+    return snapshot.authority ?? unavailableTermsAuthority;
+  }
   const origin = useMemo(
     () => ({}),
     [query.data, query.error, query.dataUpdatedAt, query.errorUpdatedAt, initialRetry, visit],
@@ -296,6 +337,37 @@ function SubjectTermsPageLive({
       if (intent && retryFocus.current === intent) setSettledRetry(intent);
     }
   }
+  async function retryAuthority() {
+    const snapshot = authoritySnapshot;
+    if (
+      !snapshot ||
+      authorityChecking ||
+      running.current ||
+      !lifetime.active() ||
+      currentVisit.current !== visit ||
+      currentReadScope.current !== readScope
+    )
+      return;
+    setAuthorityChecking(true);
+    try {
+      const next = transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority;
+      if (
+        !lifetime.active() ||
+        currentVisit.current !== visit ||
+        currentReadScope.current !== readScope ||
+        (stale && (comparison?.state !== 'ready' || comparison.snapshot !== snapshot)) ||
+        (!stale && base !== snapshot)
+      )
+        return;
+      setAuthorityOverride({ visit, snapshot, authority: next });
+    } catch {
+      if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
+        setAuthorityOverride({ visit, snapshot, authority: unavailableTermsAuthority });
+    } finally {
+      if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
+        setAuthorityChecking(false);
+    }
+  }
   // Deliberate keyboard recovery returns to the current editor or truthful failure boundary.
   useLayoutEffect(() => {
     if (!settledRetry || query.isPending || query.isFetching) return;
@@ -338,8 +410,10 @@ function SubjectTermsPageLive({
       failure?.reason !== 'conflict' &&
       !(failure?.reason === 'unavailable' && pending.current),
   };
-  const uncertain = failure?.reason === 'unavailable' && pending.current !== null;
-  const stale = failure?.reason === 'stale' || failure?.reason === 'conflict';
+  const uncertain = (unknownPending && pending.current !== null) || (failure?.reason === 'unavailable' && pending.current !== null);
+  const authority = authoritySnapshot ? authorityFor(authoritySnapshot) : unavailableTermsAuthority;
+  const correctionAllowed = !!authoritySnapshot && termsCorrectionAllowed(authority, authoritySnapshot);
+  const unknownSealedCommand = unknownPending && pending.current !== null;
   const isCurrentDecision = (decision: LocalTermsDecision) => {
     const latest = current.current;
     return (
@@ -663,66 +737,132 @@ function SubjectTermsPageLive({
     if (activeDecision) return;
     if (!base || running.current || saved || session !== 'signed-in' || (stale && !confirmed)) return;
     const snapshot = confirmed ?? base;
-    if (stale && confirmed) {
-      if (!resolved || resolved.unresolved.length || reviewed !== resolved.fingerprint) return;
-      if (resolved.errors.length || !hasTermsPatch(resolved.patch)) {
-        setFailure({ ok: false, reason: 'invalid', errors: resolved.errors });
-        return;
-      }
-      pending.current = {
-        id: snapshot.subject.id,
-        etag: snapshot.etag,
-        key: crypto.randomUUID(),
-        patch: resolved.patch,
-        ...(snapshot.session ? { session: snapshot.session } : {}),
-      };
-    } else if (!pending.current) {
-      const draft = termsPatch(snapshot.subject, drafts);
-      if (draft.errors.length || !hasTermsPatch(draft.patch)) {
-        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
-        return;
-      }
-      pending.current = {
-        id: snapshot.subject.id,
-        etag: snapshot.etag,
-        key: crypto.randomUUID(),
-        patch: draft.patch,
-        ...(snapshot.session ? { session: snapshot.session } : {}),
-      };
-    }
-    const command = pending.current;
+    if (!termsCorrectionAllowed(authorityFor(snapshot), snapshot)) return;
     running.current = true;
     setSubmitting(true);
     setBusy(true);
-    if (!stale) setComparison(undefined);
-    setFailure(undefined);
     try {
+      // A page observation is not a grant. Recheck the mounted operation before sealing a new command or replay.
+      let freshAuthority: TermsPageAuthority;
+      try {
+        freshAuthority = transport.readAuthority ? await transport.readAuthority() : unavailableTermsAuthority;
+      } catch {
+        freshAuthority = unavailableTermsAuthority;
+      }
+      if (
+        !lifetime.active() ||
+        currentVisit.current !== visit ||
+        currentReadScope.current !== readScope ||
+        (stale && (comparison?.state !== 'ready' || comparison.snapshot !== snapshot)) ||
+        (!stale && base !== snapshot)
+      )
+        return;
+      setAuthorityOverride({ visit, snapshot, authority: freshAuthority });
+      if (!termsCorrectionAllowed(freshAuthority, snapshot)) return;
+
+      if (stale && confirmed && !pending.current) {
+        if (!resolved || resolved.unresolved.length || reviewed !== resolved.fingerprint) return;
+        if (resolved.errors.length || !hasTermsPatch(resolved.patch)) {
+          setFailure({ ok: false, reason: 'invalid', errors: resolved.errors });
+          return;
+        }
+        pending.current = {
+          id: snapshot.subject.id,
+          etag: snapshot.etag,
+          key: crypto.randomUUID(),
+          patch: resolved.patch,
+          ...(snapshot.session ? { session: snapshot.session } : {}),
+        };
+        unknownPendingRef.current = false;
+        setUnknownPending(false);
+      } else if (!pending.current) {
+        const draft = termsPatch(snapshot.subject, drafts);
+        if (draft.errors.length || !hasTermsPatch(draft.patch)) {
+          setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+          return;
+        }
+        pending.current = {
+          id: snapshot.subject.id,
+          etag: snapshot.etag,
+          key: crypto.randomUUID(),
+          patch: draft.patch,
+          ...(snapshot.session ? { session: snapshot.session } : {}),
+        };
+        unknownPendingRef.current = false;
+        setUnknownPending(false);
+      }
+      const command = pending.current;
+      if (!command) return;
+      const wasUnknown = unknownPendingRef.current;
+      if (!stale) setComparison(undefined);
+      setFailure(undefined);
       const result = await transport.submit(command);
-      if (!lifetime.active()) return;
+      if (
+        !lifetime.active() ||
+        currentVisit.current !== visit ||
+        currentReadScope.current !== readScope
+      )
+        return;
       if (result.ok) {
         setSaved(result);
         pending.current = null;
+        unknownPendingRef.current = false;
+        setUnknownPending(false);
         setResolution(undefined);
         setChoices({});
         setReviewed(null);
       } else {
-        setFailure(result);
+        const uncertainResult = result.reason === 'unavailable' || wasUnknown;
+        setFailure(uncertainResult ? { ok: false, reason: 'unavailable' } : result);
         if (result.reason === 'stale' || result.reason === 'conflict') {
           pending.current = null;
+          unknownPendingRef.current = false;
+          setUnknownPending(false);
           setComparison(undefined);
           setResolution({ original: snapshot, intent: command.patch });
           setChoices({});
           setReviewed(null);
-        } else if (result.reason !== 'unavailable') pending.current = null;
+        } else if (uncertainResult) {
+          unknownPendingRef.current = true;
+          setUnknownPending(true);
+        } else {
+          pending.current = null;
+          unknownPendingRef.current = false;
+          setUnknownPending(false);
+        }
+        if (result.reason === 'denied' || result.reason === 'signed-out' || result.reason === 'concealed') {
+          try {
+            const refreshed = transport.readAuthority
+              ? await transport.readAuthority()
+              : unavailableTermsAuthority;
+            if (
+              lifetime.active() &&
+              currentVisit.current === visit &&
+              currentReadScope.current === readScope
+            )
+              setAuthorityOverride({ visit, snapshot, authority: refreshed });
+          } catch {
+            if (lifetime.active() && currentVisit.current === visit && currentReadScope.current === readScope)
+              setAuthorityOverride({ visit, snapshot, authority: unavailableTermsAuthority });
+          }
+        }
       }
     } catch {
-      if (!lifetime.active()) return;
+      if (
+        !lifetime.active() ||
+        currentVisit.current !== visit ||
+        currentReadScope.current !== readScope
+      )
+        return;
       setFailure({ ok: false, reason: 'unavailable' });
+      unknownPendingRef.current = true;
+      setUnknownPending(true);
     } finally {
-      if (!lifetime.active()) return;
       running.current = false;
-      setSubmitting(false);
-      setBusy(false);
+      if (lifetime.active()) {
+        setSubmitting(false);
+        setBusy(false);
+      }
     }
   }
 
@@ -947,7 +1087,7 @@ function SubjectTermsPageLive({
           {session !== 'signed-in' && (
             <p role="status">
               {session === 'signed-out'
-                ? m.catalogue_create_signed_out({}, options)
+                ? m.catalogue_terms_sign_in({}, options)
                 : session === 'unavailable'
                   ? m.catalogue_create_unavailable({}, options)
                   : m.catalogue_create_loading({}, options)}
@@ -964,6 +1104,48 @@ function SubjectTermsPageLive({
               )}
             </p>
           )}
+          {session === 'signed-in' && authority.viewer === 'signed-out' && (
+            <p role="status">
+              {m.catalogue_terms_sign_in({}, options)}{' '}
+              <a
+                className={linkClassName}
+                href={`/auth/sign-in?return_to=${encodeURIComponent(`${base.href}/terms`)}`}
+              >
+                {m.account_sign_in({}, options)}
+              </a>
+            </p>
+          )}
+          {session === 'signed-in' &&
+            (authority.viewer === 'unavailable' || authority.actions.state === 'unavailable') && (
+              <section role="status" className="flex min-w-0 flex-wrap items-center gap-2">
+                <p>{m.catalogue_terms_action_unavailable({}, options)}</p>
+                <Button
+                  className={actionClassName}
+                  type="button"
+                  variant="outline"
+                  disabled={authorityChecking || busy}
+                  onClick={() => void retryAuthority()}
+                >
+                  {authorityChecking ? m.catalogue_create_loading({}, options) : m.catalogue_terms_retry_access({}, options)}
+                </Button>
+              </section>
+            )}
+          {session === 'signed-in' &&
+            authority.viewer === 'signed-in' &&
+            authority.actions.state === 'ready' &&
+            !correctionAllowed && (
+              <p role="status">
+                {m.catalogue_terms_read_only({}, options)}
+                {base.profileHref && (
+                  <>
+                    {' '}
+                    <a className={linkClassName} href={base.profileHref}>
+                      {m.catalogue_terms_profile({}, options)}
+                    </a>
+                  </>
+                )}
+              </p>
+            )}
           {saved ? (
             <ContentItemFrame
               as="div"
@@ -1353,6 +1535,7 @@ function SubjectTermsPageLive({
                 disabled={
                   busy ||
                   session !== 'signed-in' ||
+                  !correctionAllowed ||
                   (stale && (comparison?.state !== 'ready' || !reviewCurrent || !hasTermsPatch(resolved?.patch ?? {})))
                 }
               >

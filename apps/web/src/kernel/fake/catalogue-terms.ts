@@ -3,6 +3,7 @@ import { patchSubjectTerms, readSubjectTerms } from '../../features/catalogue/su
 import {
   patchedTerms,
   type TermsCommand,
+  type TermsPageAuthority,
   type TermsPatch,
   type TermsTransport,
 } from '../../features/catalogue/subject-terms';
@@ -24,7 +25,8 @@ export type TermsScenario =
   | 'saving'
   | 'concealed'
   | 'read-unavailable'
-  | 'reader-denied';
+  | 'reader-denied'
+  | 'action-unavailable';
 
 /** Native-shaped samples only: this isolated request seam is not native execution proof. */
 export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale = 'en') {
@@ -118,6 +120,18 @@ export function catalogueTermsFixture(scenario: TermsScenario = 'ready', locale 
     new Request('https://site.invalid/api', { method: 'POST', headers: { authorization: 'Bearer fixture' } });
   const transport: TermsTransport = {
     read: (id, session) => readSubjectTerms(client, id, locale, 'Bearer fixture', session),
+    readAuthority: async (): Promise<TermsPageAuthority> =>
+      active === 'action-unavailable'
+        ? { viewer: 'signed-in', actions: { state: 'unavailable' } }
+        : active === 'signed-out'
+          ? { viewer: 'signed-out', actions: { state: 'ready', actions: [] } }
+          : {
+              viewer: 'signed-in',
+              actions: {
+                state: 'ready',
+                actions: [{ action: 'statement:propose', operations: ['subject.terms'] }],
+              },
+            },
     submit: (command: TermsCommand) => patchSubjectTerms(client, request(), {}, command, locale),
   };
   return {

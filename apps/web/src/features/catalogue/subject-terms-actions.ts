@@ -5,9 +5,24 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient, requestLocale } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client';
+import { cookie, SESSION_COOKIE } from '../../session/cookies';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
-import { isTermsCommand, type TermsCommand, type TermsRead, type TermsResult } from './subject-terms';
-import { patchSubjectTerms, readSubjectTerms } from './subject-terms-request';
+import {
+  isTermsCommand,
+  unavailableTermsAuthority,
+  type TermsCommand,
+  type TermsPageAuthority,
+  type TermsRead,
+  type TermsResult,
+  type TermsViewerState,
+} from './subject-terms';
+import { patchSubjectTerms, readSubjectTerms, readTermsPageAuthority } from './subject-terms-request';
+
+function currentViewer(request: Request, stale: boolean): TermsViewerState {
+  if (viewerCredential(request)) return 'signed-in';
+  if (stale || cookie(request, SESSION_COOKIE) === undefined) return 'signed-out';
+  return 'unavailable';
+}
 
 export const loadCatalogueTerms = createServerFn({ method: 'GET', strict: false })
   .validator((input: { id: string; session?: string; expectedReader?: string | null }) => {
@@ -29,17 +44,42 @@ export const loadCatalogueTerms = createServerFn({ method: 'GET', strict: false 
     const request = getRequest();
     try {
       await prepareSession(request, env as Partial<SessionEnv>);
-      if (data.expectedReader !== null && sessionSubject(request) !== data.expectedReader) return { state: 'denied' };
+      if ((sessionSubject(request) ?? null) !== data.expectedReader) return { state: 'denied' };
       if (data.expectedReader === null && data.session) return { state: 'denied' };
-      return readSubjectTerms(
-        kernelClient(),
+      const client = kernelClient();
+      const authorization = viewerCredential(request) ?? undefined;
+      const read = await readSubjectTerms(
+        client,
         data.id,
         requestLocale() ?? 'en',
-        data.expectedReader === null ? undefined : (viewerCredential(request) ?? undefined),
+        authorization,
         data.session,
       );
+      return read;
     } catch {
       return { state: 'unavailable' };
+    }
+  });
+
+export const readCatalogueTermsAuthority = createServerFn({ method: 'GET', strict: false })
+  .validator((input: { expectedReader?: string | null }) => {
+    if (
+      !input ||
+      (input.expectedReader !== undefined && input.expectedReader !== null && typeof input.expectedReader !== 'string')
+    )
+      throw new Error('Invalid terms authority read');
+    return { expectedReader: input.expectedReader == null ? null : expectedCandidateReader(input) };
+  })
+  .handler(async ({ data }): Promise<TermsPageAuthority> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    try {
+      const stale = await prepareSession(request, env as Partial<SessionEnv>);
+      if ((sessionSubject(request) ?? null) !== data.expectedReader) return unavailableTermsAuthority;
+      const authorization = viewerCredential(request) ?? undefined;
+      return readTermsPageAuthority(kernelClient(), currentViewer(request, stale), authorization);
+    } catch {
+      return unavailableTermsAuthority;
     }
   });
 

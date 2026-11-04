@@ -1,5 +1,6 @@
 import { authorizedContextMetadata, contextNativeActions } from './context-lifecycle-read.ts';
 import { ContextDirectoryPreparingError } from './context-directory.ts';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
 import type { ViewerActionResource } from '../access/viewer-actions.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { ViewerActionResources } from '../access/viewer-actions.ts';
@@ -63,15 +64,15 @@ export const contextViewerActionResource: ViewerActionResource = {
       async actionAvailability(client, keys, actor, time) {
         const available = await contextNativeActions(client, keys, actor, time);
         return Object.fromEntries(
-          keys.map((id) => [
-            id,
-            Object.fromEntries(
+          keys.map((id) => {
+            const actions = Object.fromEntries(
               ['context:read', 'context:create', 'context:delete', 'context:restore'].map((action) => [
                 action,
                 available[id]?.includes(action) ?? false,
               ]),
-            ),
-          ]),
+            );
+            return [id, { ...actions, 'statement:propose': id === GLOBAL_CONTEXT.id }];
+          }),
         );
       },
     };

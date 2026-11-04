@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { candidateSession, useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { useSession } from '../../session/query';
 import { SubjectTermsPage } from './subject-terms-page';
-import { loadCatalogueTerms, saveCatalogueTerms } from './subject-terms-actions';
+import { loadCatalogueTerms, readCatalogueTermsAuthority, saveCatalogueTerms } from './subject-terms-actions';
 import { readCreateDefinitions } from './create-subject-actions';
 import { editorRequest } from './editor-request';
 
@@ -34,6 +34,8 @@ export const SubjectTermsSession = candidateSession(function SubjectTermsSession
           loadCatalogueTerms({
             data: { expectedReader: work.reader || null, id: subject, ...(session ? { session } : {}) },
           }),
+        readAuthority: () =>
+          readCatalogueTermsAuthority({ data: { expectedReader: work.reader || null } }),
         submit: (command) =>
           saveCatalogueTerms({ data: editorRequest(command, work), headers: { 'X-CSRF-Token': csrfToken ?? '' } }),
       }}

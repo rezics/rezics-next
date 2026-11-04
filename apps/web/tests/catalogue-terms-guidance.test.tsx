@@ -68,6 +68,10 @@ test('Multilingual terms show actionable field-specific corrections without chan
       let hold: Promise<void> | undefined;
       const transport: TermsTransport = {
         read: async () => ({ state: 'ready', snapshot }),
+        readAuthority: async () => ({
+          viewer: 'signed-in',
+          actions: { state: 'ready', actions: [{ action: 'statement:propose', operations: ['subject.terms'] }] },
+        }),
         submit: async (command) => {
           commands.push(structuredClone(command));
           if (hold) await hold;
