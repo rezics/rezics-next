@@ -207,7 +207,7 @@ test(
 );
 
 test(
-  'the page says plainly, before the control, that deletion is final and cannot be undone; its existing sections on what is erased and what is retained stay as they are, and it makes no promise of timing',
+  'the page says plainly, before the control, that deletion is final and cannot be undone; its existing sections on what is erased and what is retained stay as they are, and it makes no promise of cleanup timing',
   async () => {
     for (const [locale, [, label, outcome]] of Object.entries(confirmations)) {
       reset();
@@ -216,7 +216,10 @@ test(
         const warning = page.getByText(outcome, { exact: true });
         await warning.waitFor();
         expect(await warning.isVisible()).toBe(true);
-        expect(await page.locator('main').innerText()).not.toMatch(
+        const copy = await Bun.file(join(app, 'messages', `${locale}.json`)).json();
+        const main = await page.locator('main').innerText();
+        expect(main).toContain(copy.auth_account_delete_cleanup_explanation);
+        expect(main.replace(copy.auth_account_delete_cleanup_explanation, '')).not.toMatch(
           /\b(immediately|instantly|at once|within \d+|by \d{4}|sofort|unverzüglich|inmediatamente|de inmediato|immédiatement)\b|即時|立即|马上|馬上|すぐに|直ちに|즉시/iu,
         );
         const input = page.getByRole('textbox', { name: label, exact: true });
