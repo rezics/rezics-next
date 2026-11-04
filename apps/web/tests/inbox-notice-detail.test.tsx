@@ -220,7 +220,7 @@ test('a lost acknowledgement retries the same immutable key, confirms only recei
     expect(view.host.textContent).toContain('Momo replied in a discussion');
     expect(view.host.textContent).toContain('@momo');
     expect(view.host.textContent).toContain('Current discussion · Current board');
-    expect(view.host.querySelector('img')?.getAttribute('src')).toBe('https://images.test/momo.png');
+    expect(view.host.querySelector('[data-slot="avatar-fallback"]')?.textContent).toBe('M');
     const back = view.host.querySelector('a');
     expect(back?.getAttribute('href')).toContain('/inbox?');
     expect(back?.getAttribute('href')).toContain('cursor=opaque%2F%2Brange%3D%3D');
