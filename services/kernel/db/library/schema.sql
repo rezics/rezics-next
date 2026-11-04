@@ -199,17 +199,17 @@ BEGIN
   INSERT INTO library.progress_discovery_generation (route, account_id, generation)
   SELECT owners.route, owners.account_id, 1
   FROM (
-    SELECT old.route, old.account_id
-    FROM old_rows AS old JOIN new_rows AS new USING (route, session_id)
-    WHERE (old.account_id, old.subject_id, old.state, old.mode, old.started_at, old.library_profile_pin)
+    SELECT previous_row.route, previous_row.account_id
+    FROM old_rows AS previous_row JOIN new_rows AS next_row USING (route, session_id)
+    WHERE (previous_row.account_id, previous_row.subject_id, previous_row.state, previous_row.mode, previous_row.started_at, previous_row.library_profile_pin)
       IS DISTINCT FROM
-      (new.account_id, new.subject_id, new.state, new.mode, new.started_at, new.library_profile_pin)
+      (next_row.account_id, next_row.subject_id, next_row.state, next_row.mode, next_row.started_at, next_row.library_profile_pin)
     UNION
-    SELECT new.route, new.account_id
-    FROM old_rows AS old JOIN new_rows AS new USING (route, session_id)
-    WHERE (old.account_id, old.subject_id, old.state, old.mode, old.started_at, old.library_profile_pin)
+    SELECT next_row.route, next_row.account_id
+    FROM old_rows AS previous_row JOIN new_rows AS next_row USING (route, session_id)
+    WHERE (previous_row.account_id, previous_row.subject_id, previous_row.state, previous_row.mode, previous_row.started_at, previous_row.library_profile_pin)
       IS DISTINCT FROM
-      (new.account_id, new.subject_id, new.state, new.mode, new.started_at, new.library_profile_pin)
+      (next_row.account_id, next_row.subject_id, next_row.state, next_row.mode, next_row.started_at, next_row.library_profile_pin)
   ) AS owners
   GROUP BY owners.route, owners.account_id ORDER BY owners.route, owners.account_id
   ON CONFLICT (route, account_id) DO UPDATE
