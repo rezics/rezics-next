@@ -77,7 +77,7 @@ A successful exact read admits the selection and its opaque response header toge
 selection, token or provenance discards the whole page. No pending row substitutes for selection.
 
 The local composed inspection admission seam checks the selected ID, explicit pending/resolved field, source
-partition/epoch and position against final page provenance, and actor/client/authentication epoch against the same
+partition/epoch and exact position against appeal-ID-bound final source observations, and actor/client/authentication epoch against the same
 credential used by the successful native read and the prepared private reader. It requires the opaque native response
 session header. The browser's prepared reader independently checks its current session fingerprint and retires on
 replacement. Native provenance is an observation, not command permission; `canResolve` remains advice.
@@ -88,12 +88,13 @@ original token unchanged. A current resolved observation cannot settle an uncert
 CSRF headers, key, outcome or statement. A changed `canResolve` hint does not prevent that original explicit retry;
 native authorization and idempotency still decide its result.
 
-Decision: until the installed Board/thread declaration exposes additive final source observations, parent provenance
-covers only its own partition/epoch and position; rows or selections from other or uncovered homes remain unavailable.
+Decision: require every returned row and exact selection to match an appeal-ID-bound final source observation in
+partition, epoch and exact position; missing, malformed, foreign or replaced coverage discards the whole inspection.
+Parent provenance independently binds authorization and never supplies fallback row coverage.
 
-The native producer currently projects row source anchors independently from the parent page anchor. Cross-partition
-selections therefore require additive final source coverage from the declaration publisher; Web cannot manufacture
-it or treat the opaque token as inspectable authority. No new native DTO or endpoint is authored by Web.
+The provenance type comes from the existing Board/thread callable. While the generated declaration lacks the
+producer’s additive observations, the reader uses a runtime validation seam on that response and keeps the installed
+type intact. No new native DTO or endpoint is authored by Web.
 
 Decision: `provenance.source` remains the authorized parent observation; `provenance.sourceObservations` carries one
 appeal-ID-bound final source anchor for each returned pending row and exact selection, without authorizing the parent read.

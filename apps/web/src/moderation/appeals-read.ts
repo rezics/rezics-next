@@ -39,11 +39,7 @@ export type AppealResolutionSnapshot = {
   resolvedAt: string;
 };
 export type AppealSource = NativeAppealPage['provenance']['source'];
-export type AppealProvenance = {
-  actorId: string;
-  session: { clientId: string; authnEpoch: number };
-  source: AppealSource;
-};
+export type AppealProvenance = NativeAppealPage['provenance'];
 export type AppealResolutionCommand = {
   operationId: 'moderation_appeal.resolve';
   method: 'POST';
@@ -297,9 +293,8 @@ function validSource(source: AppealSource | undefined): source is AppealSource {
   );
 }
 
-/** The installed declaration has only the parent final anchor, so other source homes have no observation. */
-function finalSourceObservation(source: AppealSource, parent: AppealSource): AppealSource | undefined {
-  return source.partition === parent.partition && source.epoch === parent.epoch ? parent : undefined;
+function sourceObservationKey(appealId: string, source: AppealSource): string {
+  return JSON.stringify([appealId, source.partition, source.epoch, source.position]);
 }
 
 export function admitAppealInspection(
@@ -346,13 +341,30 @@ export function admitAppealInspection(
         !Number.isFinite(Date.parse(selected.resolution.resolvedAt))))
   )
     throw new AppealReadFailure('unavailable');
-  for (const appeal of [...page.appeals, selected]) {
+  // The publisher's generated declaration may lag the producer. Keep its provenance type intact;
+  // runtime evidence must still be present and valid, with no parent-anchor fallback.
+  if (!('sourceObservations' in provenance) || !Array.isArray(provenance.sourceObservations))
+    throw new AppealReadFailure('unavailable');
+  const retained = [...page.appeals, selected];
+  if (provenance.sourceObservations.length > retained.length) throw new AppealReadFailure('unavailable');
+  const expected = new Set<string>();
+  for (const appeal of retained) {
+    if (!validSource(appeal.source)) throw new AppealReadFailure('unavailable');
+    expected.add(sourceObservationKey(appeal.id, appeal.source));
+  }
+  const observed = new Set<string>();
+  for (const observation of provenance.sourceObservations) {
+    if (!observation || typeof observation.appealId !== 'string' || !validSource(observation.source))
+      throw new AppealReadFailure('unavailable');
+    const key = sourceObservationKey(observation.appealId, observation.source);
+    if (!expected.has(key)) throw new AppealReadFailure('unavailable');
+    observed.add(key);
+  }
+  for (const appeal of retained) {
     const source = appeal.source;
     if (!validSource(source)) throw new AppealReadFailure('unavailable');
-    const finalSource = finalSourceObservation(source, provenance.source);
     if (
-      !finalSource ||
-      BigInt(source.position) > BigInt(finalSource.position) ||
+      !observed.has(sourceObservationKey(appeal.id, source)) ||
       appeal.resolutionCommand?.operationId !== 'moderation_appeal.resolve' ||
       appeal.resolutionCommand.method !== 'POST' ||
       appeal.resolutionCommand.path !== `/v1/moderation-appeals/${appeal.id}:resolve`

@@ -17,7 +17,12 @@ const { privateReaderFingerprint } = await import('../src/moderation/private-rea
 const session = { state: 'signed-in', subject: 'viewer', csrfToken: 'csrf' };
 const origin = { subject: session.subject, csrfFingerprint: await privateReaderFingerprint(session.csrfToken) };
 const source = { partition: 0, epoch: 1, position: '12' };
-const provenance = { actorId: 'viewer', session: { clientId: 'web', authnEpoch: 1 }, source };
+const provenance = {
+  actorId: 'viewer',
+  session: { clientId: 'web', authnEpoch: 1 },
+  source,
+  sourceObservations: [{ appealId: 'appeal', source }],
+};
 const authorization = `Bearer ${btoa('{}')}.${btoa(JSON.stringify({ sub: 'viewer', client_id: 'web', authn_epoch: 1 }))}.signature`;
 
 const row = {
@@ -192,9 +197,10 @@ test('native same-intent retry echoes original opaque session and operands; advi
 test('installed board/thread inspection makes one captured request and admits only its exact native selection', async () => {
   for (const threadId of [undefined, 'thread'])
     for (const resolved of [false, true]) {
+      const selectedSource = { partition: 3, epoch: 4, position: '70' };
       const selected = {
         ...row,
-        source,
+        source: selectedSource,
         resolution: resolved ? { outcome: 'upheld', statement: 'Reviewed.', resolvedAt: row.createdAt } : null,
         resolutionCommand: {
           operationId: 'moderation_appeal.resolve',
@@ -202,7 +208,20 @@ test('installed board/thread inspection makes one captured request and admits on
           path: '/v1/moderation-appeals/appeal:resolve',
         },
       };
-      const wire = { appeals: [], next: 'sparse', selectedAppeal: selected, provenance };
+      const pending = {
+        ...selected,
+        id: 'pending',
+        source: { partition: 2, epoch: 8, position: '91' },
+        resolutionCommand: { ...selected.resolutionCommand, path: '/v1/moderation-appeals/pending:resolve' },
+      };
+      const coverage = {
+        ...provenance,
+        sourceObservations: [
+          { appealId: pending.id, source: pending.source },
+          { appealId: selected.id, source: selected.source },
+        ],
+      };
+      const wire = { appeals: [pending], next: 'sparse', selectedAppeal: selected, provenance: coverage };
       let body: unknown = wire;
       let token = 'opaque-original';
       const requests: Request[] = [];
@@ -218,22 +237,38 @@ test('installed board/thread inspection makes one captured request and admits on
         state: 'ready',
         selectedAppeal: { id: row.id, resolution: selected.resolution },
         nativeSession: token,
-        appeals: [],
+        appeals: [{ id: pending.id }],
         next: 'sparse',
       });
       for (body of [
         { ...wire, appeals: [selected], selectedAppeal: undefined },
         { ...wire, appeals: [{ ...selected, source: { ...source, partition: 1 } }] },
-        { ...wire, provenance: { ...provenance, actorId: 'foreign' } },
+        { ...wire, provenance: { ...coverage, actorId: 'foreign' } },
         { ...wire, selectedAppeal: { ...selected, source: { ...source, partition: 1 } } },
         { ...wire, selectedAppeal: { ...selected, source: { ...source, epoch: 2 } } },
         { ...wire, selectedAppeal: { ...selected, source: { ...source, position: '13' } } },
+        ...[
+          undefined,
+          null,
+          {},
+          [null],
+          [],
+          coverage.sourceObservations.slice(1),
+          [{ appealId: 'foreign', source: selectedSource }],
+          coverage.sourceObservations.map((o) => ({ ...o, source: { ...o.source, position: '071' } })),
+          coverage.sourceObservations.map((o) => ({ ...o, source: { ...o.source, epoch: o.source.epoch + 1 } })),
+          coverage.sourceObservations.map((o) => ({ ...o, source: { ...o.source, position: '999' } })),
+        ].map((sourceObservations) => ({ ...wire, provenance: { ...coverage, sourceObservations } })),
+        ...[
+          { clientId: 'other', authnEpoch: 1 },
+          { clientId: 'web', authnEpoch: 2 },
+        ].map((session) => ({ ...wire, provenance: { ...coverage, session } })),
       ])
         expect(await read()).toMatchObject({ state: 'unavailable', appeals: [], next: null });
       body = wire;
       token = '';
       expect(await read()).toMatchObject({ state: 'unavailable', appeals: [] });
-      expect(requests).toHaveLength(8);
+      expect(requests).toHaveLength(20);
       for (const request of requests) {
         expect(new URL(request.url).pathname).toBe(`/v1/${threadId ? 'threads/thread' : 'boards/board'}/appeals`);
         expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({

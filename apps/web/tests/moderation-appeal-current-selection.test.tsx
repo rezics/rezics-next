@@ -232,24 +232,38 @@ test('an uncertain selected resolution fences refresh and retries its original c
   expect(sent[0]).toMatchObject({ id: selected.id, statement: 'Review this.', outcome: 'uphold' });
 });
 
-test('mounted exact retry receives the installed composed operation outside the retained page', async () => {
+test.each([false, true])('mounted exact retry receives covered cross-home selection, resolved=%s', async (resolved) => {
   const { createKernelClient } = await import('@rezics/client');
   const { readWorkbenchPage } = await import('../src/moderation/workbench-queue/read');
-  const source = { partition: 0, epoch: 1, position: '12' };
+  const source = { partition: 3, epoch: 4, position: '70' };
   const requests: string[] = [];
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       requests.push(new Request(input, init).url);
-      if (requests.length < 3) return Response.json({ code: 'dependency_unavailable' }, { status: 503 });
       return Response.json(
         {
           appeals: [],
           next: 'sparse-next',
-          provenance: { actorId: session.subject, session: { clientId: 'web', authnEpoch: 1 }, source },
+          provenance: {
+            actorId: session.subject,
+            session: { clientId: 'web', authnEpoch: 1 },
+            source: { partition: 0, epoch: 1, position: '12' },
+            sourceObservations:
+              requests.length === 1
+                ? [null]
+                : [
+                    {
+                      appealId: selected.id,
+                      source: requests.length === 2 ? { ...source, epoch: source.epoch + 1 } : source,
+                    },
+                  ],
+          },
           selectedAppeal: {
             ...selected,
             source,
-            resolution: { outcome: 'upheld', statement: 'Native retained outcome.', resolvedAt: selected.createdAt },
+            resolution: resolved
+              ? { outcome: 'upheld', statement: 'Native retained outcome.', resolvedAt: selected.createdAt }
+              : null,
             resolutionCommand: {
               operationId: 'moderation_appeal.resolve',
               method: 'POST',
@@ -267,7 +281,7 @@ test('mounted exact retry receives the installed composed operation outside the 
   await click(button(m.moderation_queue_retry()));
   expect(document.activeElement).toBe(button(m.moderation_queue_retry()));
   await click(button(m.moderation_queue_retry()));
-  expect(host.textContent).toContain('Native retained outcome.');
+  expect(host.textContent).toContain(resolved ? 'Native retained outcome.' : 'Reconsider.');
   expect(host.textContent).not.toContain('opaque-native');
   expect(document.activeElement).toBe(host.querySelector('article'));
   expect(requests).toHaveLength(3);
