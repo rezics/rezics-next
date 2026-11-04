@@ -20,6 +20,8 @@ import { WorkbenchView } from './view';
 
 const nativeReportAction: ReportQueueAction = (data) => actionOnReport({ data, headers: csrfHeaders() });
 
+const nativeWorkbenchRead = (search: WorkbenchSearch) => loadWorkbench({ data: search });
+
 export function WorkbenchPage({
   page,
   search,
@@ -28,7 +30,7 @@ export function WorkbenchPage({
   onRefresh,
   onAction,
   navigation,
-  read = (search) => loadWorkbench({ data: search }),
+  read = nativeWorkbenchRead,
 }: {
   page: WorkbenchRead;
   search: WorkbenchSearch;
