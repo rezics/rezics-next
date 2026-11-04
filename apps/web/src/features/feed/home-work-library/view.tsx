@@ -44,8 +44,8 @@ export function HomeWorkLibraryProvider({
     observation?.getSnapshot ?? readerNothing,
     observation?.getServerSnapshot ?? readerNothing,
   );
-  const admission = useMemo(
-    () => ({ reader: undefined as BrowserReader | undefined, retired: false }),
+  const admission = useMemo<{ reader?: BrowserReader; retired: boolean }>(
+    () => ({ retired: false }),
     [observation, projection],
   );
   if (admission.reader && (reading?.state !== 'signed-in' || reading.observation.id !== admission.reader.id))
