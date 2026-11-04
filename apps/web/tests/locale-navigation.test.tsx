@@ -22,6 +22,7 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
   const window = new Window({ url: `https://site.invalid${entry}` });
+  window.confirm = (() => true) as typeof window.confirm;
   window.matchMedia = ((media: string) => ({
     media,
     matches: false,

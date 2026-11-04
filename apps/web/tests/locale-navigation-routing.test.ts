@@ -30,7 +30,7 @@ test('same-page locale links preserve Subject, Search, and Collection query inte
   }
 
   expect(destination('/subjects/reader', '?q=chapter%202', '#line-2', 'zh-Hant').href).toBe(
-    '/zh-Hant/subjects/reader?q=chapter%202',
+    '/zh-Hant/subjects/reader?q=chapter%202#line-2',
   );
 });
 
@@ -66,7 +66,7 @@ test('external, machine, OIDC, signed, and unsafe return destinations use only t
 });
 
 test('private reader links carry only local route intent so the destination can re-admit the viewer', () => {
-  const current = location('/library/diary', '?cursor=older%2Fpage#entry-9');
+  const current = location('/library/diary', '?cursor=older%2Fpage', '#entry-9');
   const japanese = deriveLocaleDestinations(current).find((entry) => entry.locale === 'ja')!;
   expect(japanese).toEqual({
     locale: 'ja',
