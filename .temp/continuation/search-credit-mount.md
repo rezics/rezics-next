@@ -60,11 +60,11 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "A reader can deliberately search currently public credited creator names and receive the corresponding works, even when that name is absent from the work title and description."
-    - "Native same-statement role/target identity and creator disclosure are retained; a concealed, withdrawn, merged or changed credited name cannot justify a stale result."
-    - "The live field choice, actual matched-name evidence and current result work through mixed/catalogue Search without changing ordinary title-query meaning or replaying incompatible cursors."
-    - "Mount the retained bounded CreditSearchSource consumer using native complete seeks, dependency invalidation and final disclosure; demonstrate 256/1024/4096 independent growth with fixed page and byte bounds."
-    - "Cover contributor-only and title-only searches, exact homonymous role operands, nonmatching descriptions, source replacement, incomplete coverage, relay/rebuild replay, stale cursors, and keyboard/phone selection."
+    - 'A reader can deliberately search currently public credited creator names and receive the corresponding works, even when that name is absent from the work title and description.'
+    - 'Native same-statement role/target identity and creator disclosure are retained; a concealed, withdrawn, merged or changed credited name cannot justify a stale result.'
+    - 'The live field choice, actual matched-name evidence and current result work through mixed/catalogue Search without changing ordinary title-query meaning or replaying incompatible cursors.'
+    - 'Mount the retained bounded CreditSearchSource consumer using native complete seeks, dependency invalidation and final disclosure; demonstrate 256/1024/4096 independent growth with fixed page and byte bounds.'
+    - 'Cover contributor-only and title-only searches, exact homonymous role operands, nonmatching descriptions, source replacement, incomplete coverage, relay/rebuild replay, stale cursors, and keyboard/phone selection.'
 estimate:
   lines: 2350
   files: 34

@@ -86,12 +86,7 @@ export async function createSubjectIndex(
   calendarFormat?: 1,
 ): Promise<void> {
   const calendar = calendarFormat === 1 ? calendarIndexDefinition(subjectIndexDefinition()) : subjectIndexDefinition();
-  return createIndex(
-    search,
-    prefix,
-    generation,
-    creditSearchIndexDefinition(calendar),
-  );
+  return createIndex(search, prefix, generation, creditSearchIndexDefinition(calendar));
 }
 
 /** Successor mapping in the same physical family; legacy Subject generations keep their format. */

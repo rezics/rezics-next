@@ -8,14 +8,7 @@ export function creditSearchIndexDefinition(base: Record<string, unknown>): Reco
   const properties = mappings?.properties as Record<string, unknown> | undefined;
   const metadata = mappings?._meta as Record<string, unknown> | undefined;
   const names = properties?.names as Record<string, unknown> | undefined;
-  if (
-    !mappings ||
-    !properties ||
-    !metadata ||
-    !names ||
-    names.type !== 'text' ||
-    typeof names.analyzer !== 'string'
-  )
+  if (!mappings || !properties || !metadata || !names || names.type !== 'text' || typeof names.analyzer !== 'string')
     throw new TypeError('Credit search requires the installed names analyzer');
   if (Object.hasOwn(properties, 'credited_names') || Object.hasOwn(properties, 'credit_search_complete'))
     throw new TypeError('Credit field is already mapped');
