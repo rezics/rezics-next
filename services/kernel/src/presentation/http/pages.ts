@@ -749,7 +749,7 @@ async function pageAnswer(input: {
       ...(input.catalogue ? { catalogue: input.catalogue } : {}),
       ...(input.viewer ? { viewer: await input.viewer() } : {}),
       reads,
-      ...(viewerEnvelope ?? {}),
+      ...(viewerEnvelope ? { actions: viewerEnvelope.actions } : {}),
     },
     readSession,
     true,

@@ -29,6 +29,8 @@ const labels = {
   'schema:MusicAlbum': ['音乐专辑', '音樂專輯', 'アルバム'],
   'schema:MusicRelease': ['音乐发行', '音樂發行', 'リリース'],
   'schema:MusicRecording': ['录音', '錄音', '録音'],
+  'schema:MediaObject': ['媒体对象', '媒體物件', 'メディアオブジェクト'],
+  'rezics:ReleaseGroup': ['发布组', '發佈組', 'リリースグループ'],
 };
 
 const authoredDescriptions = {

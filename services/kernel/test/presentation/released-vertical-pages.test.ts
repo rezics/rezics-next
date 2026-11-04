@@ -55,7 +55,13 @@ type Page = {
   document: CompositionDocument;
   views: View[];
   reads: Record<string, ReadValue>;
-  viewer?: { type: string; id: string };
+  catalogue?: { state: string; type: string; digest?: string };
+  viewer?: {
+    state: 'anonymous' | 'account';
+    account?: string;
+    context: string;
+    actions: { statementPropose: string };
+  };
   actions?: { status: string; viewerActions?: { action: string; operations: string[] }[] };
 };
 function publicPage(page: Page) {
@@ -240,12 +246,18 @@ for (const [vertical, types] of Object.entries(launch)) {
           const anonymous = await factualPage(driver, 'anonymous', type, id, factual, view);
           const editor = await factualPage(driver, 'editor', type, id, factual, view);
           expect(publicPage(editor)).toEqual(publicPage(anonymous));
-          expect(anonymous.viewer).toEqual({ type, id });
-          expect(editor.viewer).toEqual({ type, id });
           const anonymousStatus = (anonymous as { actions?: { status: string } }).actions?.status ?? 'missing';
           const editorStatus = (editor as { actions?: { status: string } }).actions?.status ?? 'missing';
           expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(anonymousStatus);
           expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(editorStatus);
+          if (['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'].includes(type)) {
+            expect(anonymous.catalogue).toMatchObject({ state: 'released', type });
+            expect(anonymous.viewer).toMatchObject({
+              state: 'anonymous',
+              actions: { statementPropose: 'denied' },
+            });
+            expect(editor.viewer).toMatchObject({ state: 'account' });
+          }
         }
         const missing = await driver.request('anonymous', 'POST', '/v1/pages:read', {
           target: { subject: id, view: 'collections' },

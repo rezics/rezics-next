@@ -115,6 +115,8 @@ classes:
     is_a: Organization
     class_uri: rezics:ReleaseGroup
     description: A source-identified group that releases or distributes related catalogue files.
+    annotations:
+      schema_org_type: https://schema.org/Organization
   Food:
     is_a: Thing
     class_uri: wd:Q2095

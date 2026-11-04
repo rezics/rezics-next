@@ -126,6 +126,12 @@ export type SubjectPageData = {
     context: string;
     actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
   };
+  /** Native Access envelope for the selected subject; private and no-store with viewer. */
+  actions?:
+    | { status: 'ready'; viewerActions: { action: string; operations: string[] }[] }
+    | { status: 'withheld' }
+    | { status: 'unavailable' }
+    | { status: 'denied' };
   reads: Record<string, { status: number; body: unknown; retryAt?: number; headers?: Record<string, string> }>;
 };
 

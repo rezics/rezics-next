@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:085ce689e886123ba2fb4e58353abeab23c29b4d0c80d4196f913678e51f855b",
+  "digest": "sha256:9555d47808257a23a56a3d843ebb4b2b9d3843af3beebb446e379652bf4be002",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -1818,6 +1818,136 @@
           "ko": "AniDB가 식별하고 배포 파일과 연결하는 출처 그룹입니다. 각 파일 및 발행 릴리스와 별개의 식별 대상입니다.",
           "zh-Hans": "由 AniDB 标识并与其发布的文件关联的来源组。其身份与每个文件及出版发行版分别保留。",
           "zh-Hant": "由 AniDB 識別並與其發佈的檔案關聯的來源群組。其身分與各檔案及出版發行版分開保留。"
+        },
+        "schemaOrgType": "https://schema.org/Organization"
+      },
+      "schema:MusicRecording": {
+        "iri": "http://schema.org/MusicRecording",
+        "labels": {
+          "de": "Aufnahme",
+          "en": "recording",
+          "es": "grabación",
+          "fr": "enregistrement",
+          "ja": "録音",
+          "ko": "녹음",
+          "zh-Hans": "录音",
+          "zh-Hant": "錄音"
+        },
+        "mappings": ["wd:Q5057302"],
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "properties": [
+          "rezics:alternativeSetting",
+          "rezics:alternativeVersion",
+          "rezics:artbookCounterpart",
+          "rezics:bangumiLegacyVersion",
+          "rezics:bangumiRelatedTo",
+          "rezics:collaborationWith",
+          "rezics:crossMediaCounterpart",
+          "rezics:editionCounterpart",
+          "rezics:expansionCounterpart",
+          "rezics:sameCharacters",
+          "rezics:sameSetting",
+          "rezics:sideStoryOf",
+          "rezics:spinOffOf",
+          "rezics:storyArc",
+          "rezics:summaryOf",
+          "schema:alternateName",
+          "schema:byArtist",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:duration",
+          "schema:genre",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:sameAs",
+          "schema:url",
+          "wdt:P155",
+          "wdt:P179",
+          "wdt:P361"
+        ],
+        "facets": ["schema:byArtist", "schema:datePublished", "schema:duration", "schema:inLanguage"],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": ["schema:duration", "schema:datePublished"] },
+        "schemaOrgType": "https://schema.org/MusicRecording",
+        "descriptions": {
+          "de": "Eine identifizierte aufgenommene Darbietung eines Musikwerks, etwa ein Song-Take. Getrennt von Albumgruppierung, veröffentlichter Ausgabe, Wiedergabedatei und persönlichem Exemplar.",
+          "en": "An identified recorded performance of a musical work, such as one song take. Distinct from the album grouping, a published edition, a playback file or a personal copy.",
+          "es": "Una interpretación grabada e identificada de una obra musical, como una toma de una canción. Distinta de la agrupación del álbum, una edición publicada, un archivo de reproducción o un ejemplar personal.",
+          "fr": "Une interprétation enregistrée et identifiée d’une œuvre musicale, par exemple une prise d’une chanson. Distincte du regroupement d’album, d’une édition publiée, d’un fichier de lecture ou d’un exemplaire personnel.",
+          "ja": "楽曲の特定の録音、たとえば一つのテイク。アルバムとしてのまとめ、刊行版、再生ファイル、個人の所蔵物とは別です。",
+          "ko": "음악 작품의 식별된 녹음, 예를 들어 한 곡의 테이크입니다. 앨범 묶음, 발행판, 재생 파일, 개인 소장본과는 별개입니다.",
+          "zh-Hans": "可识别的音乐作品录音，例如某一首歌的一次录制。与专辑汇总、发行版本、播放文件和个人藏本分开。",
+          "zh-Hant": "可識別的音樂作品錄音，例如某一首歌的一次錄製。與專輯彙總、發行版本、播放檔和個人藏本分開。"
+        }
+      },
+      "schema:MusicRelease": {
+        "iri": "http://schema.org/MusicRelease",
+        "labels": {
+          "de": "Musikveröffentlichung",
+          "en": "music release",
+          "es": "edición musical",
+          "fr": "édition musicale",
+          "ja": "リリース",
+          "ko": "음반",
+          "zh-Hans": "音乐发行",
+          "zh-Hant": "音樂發行"
+        },
+        "mappings": ["wd:Q108041547"],
+        "bases": ["schema:CreativeWork", "schema:Thing"],
+        "properties": [
+          "rezics:alternativeSetting",
+          "rezics:alternativeVersion",
+          "rezics:artbookCounterpart",
+          "rezics:bangumiLegacyVersion",
+          "rezics:bangumiRelatedTo",
+          "rezics:collaborationWith",
+          "rezics:crossMediaCounterpart",
+          "rezics:editionCounterpart",
+          "rezics:expansionCounterpart",
+          "rezics:sameCharacters",
+          "rezics:sameSetting",
+          "rezics:sideStoryOf",
+          "rezics:spinOffOf",
+          "rezics:storyArc",
+          "rezics:summaryOf",
+          "schema:abstract",
+          "schema:alternateName",
+          "schema:catalogNumber",
+          "schema:contributor",
+          "schema:datePublished",
+          "schema:duration",
+          "schema:genre",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:keywords",
+          "schema:musicBy",
+          "schema:name",
+          "schema:recordLabel",
+          "schema:releaseOf",
+          "schema:sameAs",
+          "schema:track",
+          "schema:url",
+          "wdt:P155",
+          "wdt:P179",
+          "wdt:P361",
+          "wdt:P437"
+        ],
+        "facets": ["schema:releaseOf", "schema:datePublished", "wdt:P437", "schema:recordLabel", "schema:inLanguage"],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": ["schema:datePublished", "wdt:P437"] },
+        "schemaOrgType": "https://schema.org/MusicRelease",
+        "descriptions": {
+          "de": "Eine bestimmte veröffentlichte Ausgabe eines Musikalbums mit Katalognummer, Format, Datum und geordneten Aufnahmen. Getrennt vom Albumwerk, persönlichem Exemplar, Wiedergabedatei und einzelner Aufnahme.",
+          "en": "A specific published edition of a music album, with its catalogue number, format, date and ordered recordings. Distinct from the album work, a personal copy, a playback file or a recording.",
+          "es": "Una edición publicada concreta de un álbum musical, con su número de catálogo, formato, fecha y grabaciones ordenadas. Distinta de la obra-álbum, un ejemplar personal, un archivo de reproducción o una grabación.",
+          "fr": "Une édition publiée précise d’un album musical, avec son numéro de catalogue, son format, sa date et ses enregistrements ordonnés. Distincte de l’œuvre-album, d’un exemplaire personnel, d’un fichier de lecture ou d’un enregistrement.",
+          "ja": "カタログ番号・フォーマット・日付と並んだ録音を持つ、音楽アルバムの特定の刊行版。アルバム作品、個人の所蔵物、再生ファイル、個別の録音とは別です。",
+          "ko": "카탈로그 번호, 형식, 날짜와 정렬된 녹음을 가진 음악 앨범의 특정 발행판입니다. 앨범 작품, 개인 소장본, 재생 파일, 개별 녹음과는 별개입니다.",
+          "zh-Hans": "带有目录号、载体、日期和有序录音的音乐专辑具体发行版。与专辑作品、个人藏本、播放文件和单条录音分开。",
+          "zh-Hant": "帶有目錄號、載體、日期與有序錄音的音樂專輯具體發行版。與專輯作品、個人藏本、播放檔與單條錄音分開。"
         }
       }
     },
@@ -2341,7 +2471,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.2" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.3" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
@@ -6677,6 +6807,251 @@
           "ko": "이 파일과 연결된 AniDB 출처 그룹입니다. 발행 릴리스 및 개인 사본과 구별되며 독립적으로 읽을 수 있습니다.",
           "zh-Hans": "与此文件关联的 AniDB 来源组，可独立读取，并与出版发行版和个人副本区分。",
           "zh-Hant": "與此檔案關聯的 AniDB 來源群組，可獨立讀取，並與出版發行版及個人副本區分。"
+        }
+      },
+      "schema:byArtist": {
+        "iri": "http://schema.org/byArtist",
+        "labels": {
+          "de": "Interpret",
+          "en": "artist",
+          "es": "intérprete",
+          "fr": "interprète",
+          "ja": "アーティスト",
+          "ko": "아티스트",
+          "zh-Hans": "艺人",
+          "zh-Hant": "藝人"
+        },
+        "mappings": ["wd:P175"],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["schema:position", "wdt:P1932", "wdt:P3831", "wdt:P518"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "credit",
+          "order": "position",
+          "inverse": "rezics:artistOf",
+          "filter": ["wdt:P3831", "wdt:P518"],
+          "inverseLabels": {
+            "de": "Aufnahmen dieses Interpreten",
+            "en": "Recordings by this artist",
+            "es": "Grabaciones de este intérprete",
+            "fr": "Enregistrements de cet interprète",
+            "ja": "このアーティストの録音",
+            "ko": "이 아티스트의 녹음",
+            "zh-Hans": "该艺人的录音",
+            "zh-Hant": "該藝人的錄音"
+          }
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "descriptions": {
+          "de": "Eine Person oder Organisation, die als Interpret dieser Aufnahme genannt wird, mit Namensnennung, Reihenfolge und genauer Rolle.",
+          "en": "A person or organization credited as the performing artist of this recording, with credited-as, order and detailed role.",
+          "es": "Una persona u organización acreditada como intérprete de esta grabación, con nombre acreditado, orden y rol detallado.",
+          "fr": "Une personne ou organisation créditée comme interprète de cet enregistrement, avec nom crédité, ordre et rôle détaillé.",
+          "ja": "この録音の演奏者として記される人物または組織。名義、並び、詳細な役割を伴います。",
+          "ko": "이 녹음의 연주자로 적힌 사람 또는 조직이며, 표기 이름, 순서, 세부 역할을 갖습니다.",
+          "zh-Hans": "作为此录音演奏者被记载的人物或组织，带有署名、顺序和具体职责。",
+          "zh-Hant": "作為此錄音演奏者被記載的人物或組織，帶有署名、順序與具體職責。"
+        }
+      },
+      "schema:catalogNumber": {
+        "iri": "http://schema.org/catalogNumber",
+        "labels": {
+          "de": "Katalognummer",
+          "en": "catalogue number",
+          "es": "número de catálogo",
+          "fr": "numéro de catalogue",
+          "ja": "カタログ番号",
+          "ko": "카탈로그 번호",
+          "zh-Hans": "目录号",
+          "zh-Hant": "目錄號"
+        },
+        "mappings": ["wd:P528"],
+        "datatype": "string",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "minLength": 1, "maxLength": 1500 },
+        "descriptions": {
+          "de": "Die vom herausgebenden Label vergebene Katalognummer dieser Ausgabe, als Quelltext gespeichert.",
+          "en": "The catalogue number assigned to this edition by its issuing label, stored as source text.",
+          "es": "El número de catálogo que el sello asignó a esta edición, guardado como texto de la fuente.",
+          "fr": "Le numéro de catalogue attribué à cette édition par son label, conservé tel que la source l’écrit.",
+          "ja": "発行レーベルがこの版に付けたカタログ番号。出典の表記どおり保存します。",
+          "ko": "발행 레이블이 이 판에 부여한 카탈로그 번호로, 출처 표기 그대로 저장합니다.",
+          "zh-Hans": "发行厂牌为这一版给出的目录号，按来源文字保存。",
+          "zh-Hant": "發行廠牌為這一版給出的目錄號，按來源文字保存。"
+        }
+      },
+      "wdt:P642": {
+        "iri": "http://www.wikidata.org/prop/direct/P642",
+        "labels": {
+          "de": "von",
+          "en": "of",
+          "es": "de",
+          "fr": "de",
+          "ja": "対象",
+          "ko": "대상",
+          "zh-Hans": "所属部分",
+          "zh-Hant": "所屬部分"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": { "group": "classification", "order": "name", "inverse": "none" },
+        "targets": ["skos:Concept"],
+        "descriptions": {
+          "de": "Das Listenvorkommen-Konzept, das zwei Zuordnungen zur selben Aufnahme in getrennten Slots hält. Es ist kein veröffentlichtes Tonträger- oder Seitenschema.",
+          "en": "The listing-occurrence Concept that keeps two associations to the same recording in separate slots. It is not a published disc or side medium.",
+          "es": "El concepto de ocurrencia de listado que mantiene en ranuras distintas dos asociaciones a la misma grabación. No es un soporte o cara publicado.",
+          "fr": "Le concept d’occurrence de liste qui sépare deux associations vers le même enregistrement. Ce n’est pas un support ou une face publiés.",
+          "ja": "同一録音への二つの関連を別スロットに保つリスト出現の概念。刊行されたディスクや面ではありません。",
+          "ko": "같은 녹음에 대한 두 연관을 다른 슬롯에 두는 목록 출현 개념입니다. 발행된 디스크나 면이 아닙니다.",
+          "zh-Hans": "把指向同一录音的两条关联分开放在不同槽位的列表出现概念。它不是已发布的碟面或面次。",
+          "zh-Hant": "把指向同一錄音的兩條關聯分開放在不同槽位的列表出現概念。它不是已發布的碟面或面次。"
+        }
+      },
+      "schema:recordLabel": {
+        "iri": "http://schema.org/recordLabel",
+        "labels": {
+          "de": "Plattenlabel",
+          "en": "record label",
+          "es": "sello discográfico",
+          "fr": "label",
+          "ja": "レーベル",
+          "ko": "레이블",
+          "zh-Hans": "唱片公司",
+          "zh-Hant": "唱片公司"
+        },
+        "mappings": ["wd:P264"],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:labelOf",
+          "inverseLabels": {
+            "de": "Veröffentlichungen dieses Labels",
+            "en": "Labelled releases",
+            "es": "Ediciones de este sello",
+            "fr": "Éditions de ce label",
+            "ja": "このレーベルのリリース",
+            "ko": "이 레이블의 음반",
+            "zh-Hans": "该厂牌发行",
+            "zh-Hant": "該廠牌發行"
+          }
+        },
+        "targets": ["schema:Organization"],
+        "descriptions": {
+          "de": "Die Organisation, die als Plattenlabel dieser Ausgabe genannt wird.",
+          "en": "The organization credited as the record label that issued this edition.",
+          "es": "La organización acreditada como sello discográfico que publicó esta edición.",
+          "fr": "L’organisation créditée comme label ayant publié cette édition.",
+          "ja": "この版を発行したレコードレーベルとして記される組織。",
+          "ko": "이 판을 발행한 레코드 레이블로 적힌 조직입니다.",
+          "zh-Hans": "作为发行此版的唱片公司被记载的组织。",
+          "zh-Hant": "作為發行此版的唱片公司被記載的組織。"
+        }
+      },
+      "schema:releaseOf": {
+        "iri": "http://schema.org/releaseOf",
+        "labels": {
+          "de": "Veröffentlichung von",
+          "en": "release of",
+          "es": "edición de",
+          "fr": "édition de",
+          "ja": "作品",
+          "ko": "원작",
+          "zh-Hans": "所属专辑",
+          "zh-Hant": "所屬專輯"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "derivation",
+          "order": "date",
+          "inverse": "schema:albumRelease",
+          "acyclic": true,
+          "inverseLabels": {
+            "de": "Albumveröffentlichungen",
+            "en": "Album releases",
+            "es": "Ediciones del álbum",
+            "fr": "Éditions de l’album",
+            "ja": "アルバムのリリース",
+            "ko": "앨범 발매",
+            "zh-Hans": "专辑发行",
+            "zh-Hant": "專輯發行"
+          }
+        },
+        "targets": ["schema:MusicAlbum"],
+        "descriptions": {
+          "de": "Das Musikalbum-Werk, das diese veröffentlichte Ausgabe realisiert; die Ausgabe ist kein neuer Name für das Album.",
+          "en": "The music album work this published edition realizes; the edition is never a new name for that album.",
+          "es": "La obra-álbum que esta edición publicada realiza; la edición no es un nombre nuevo para ese álbum.",
+          "fr": "L’œuvre-album que cette édition publiée réalise ; l’édition n’est pas un nouveau nom pour cet album.",
+          "ja": "この刊行版が実現する音楽アルバム作品。刊行版はアルバムの別名ではありません。",
+          "ko": "이 발행판이 실현하는 음악 앨범 작품입니다. 발행판은 그 앨범의 새 이름이 아닙니다.",
+          "zh-Hans": "此发行版所实现的音乐专辑作品；发行版不是该专辑的另一个名称。",
+          "zh-Hant": "此發行版所實現的音樂專輯作品；發行版不是該專輯的另一個名稱。"
+        }
+      },
+      "schema:track": {
+        "iri": "http://schema.org/track",
+        "labels": {
+          "de": "Titel",
+          "en": "track",
+          "es": "pista",
+          "fr": "piste",
+          "ja": "収録曲",
+          "ko": "수록곡",
+          "zh-Hans": "曲目",
+          "zh-Hant": "曲目"
+        },
+        "mappings": ["wd:P658"],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": [
+          "schema:datePublished",
+          "schema:position",
+          "schema:sameAs",
+          "wdt:P1932",
+          "wdt:P3831",
+          "wdt:P642"
+        ],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "membership",
+          "order": "position",
+          "inverse": "rezics:recordingOn",
+          "acyclic": true,
+          "slotKey": "wdt:P642",
+          "inverseLabels": {
+            "de": "Veröffentlichungen mit dieser Aufnahme",
+            "en": "Releases containing this recording",
+            "es": "Ediciones que incluyen esta grabación",
+            "fr": "Éditions contenant cet enregistrement",
+            "ja": "この録音を収録したリリース",
+            "ko": "이 녹음이 실린 음반",
+            "zh-Hans": "收录此录音的发行",
+            "zh-Hant": "收錄此錄音的發行"
+          }
+        },
+        "targets": ["schema:MusicRecording"],
+        "descriptions": {
+          "de": "Eine identifizierte Aufnahme auf dieser Ausgabe. Position, Namensnennung, Rolle, Datum und Listenvorkommen trennen wiederholte Nutzungen derselben Aufnahme.",
+          "en": "An identified recording on this edition. Position, credited name, role, date and listing-occurrence distinguish repeated uses of the same recording.",
+          "es": "Una grabación identificada en esta edición. La posición, el nombre acreditado, el rol, la fecha y la ocurrencia de listado distinguen usos repetidos de la misma grabación.",
+          "fr": "Un enregistrement identifié sur cette édition. La position, le nom crédité, le rôle, la date et l’occurrence de liste distinguent les usages répétés du même enregistrement.",
+          "ja": "この版に載る識別済みの録音。位置、名義、役割、日付、リスト上の出現で、同一録音の繰り返しを区別します。",
+          "ko": "이 판에 실린 식별된 녹음입니다. 위치, 표기 이름, 역할, 날짜, 목록 출현으로 같은 녹음의 반복을 구분합니다.",
+          "zh-Hans": "此发行版上可识别的一条录音。位置、署名、职责、日期和列表出现用来区分同一录音的重复收录。",
+          "zh-Hant": "此發行版上可識別的一條錄音。位置、署名、職責、日期與列表出現用來區分同一錄音的重複收錄。"
         }
       }
     },

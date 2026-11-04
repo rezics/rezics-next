@@ -87,6 +87,7 @@ export type CataloguePageMetadata = {
 
 const catalogueFileTypes = ['schema:MediaObject', 'rezics:CatalogueFile', 'wd:Q82753'];
 const catalogueGroupTypes = ['rezics:ReleaseGroup', 'wd:Q55327'];
+const catalogueMusicTypes = ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'];
 
 function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
   if (type === base) return true;
@@ -95,18 +96,19 @@ function typeIsA(release: CataloguePageDefinitions, type: string, base: string, 
   return (release.types[type]?.bases ?? []).some((candidate) => typeIsA(release, candidate, base, seen));
 }
 
-/** The ordinary page carries only the current file/group descriptor and its directed relation vocabulary. */
+/** The ordinary page carries the current file, group or music descriptor and its directed relation vocabulary. */
 export function cataloguePageMetadata(
   release: CataloguePageDefinitions | undefined,
   digest: string | undefined,
   type: string,
 ): CataloguePageMetadata | undefined {
-  const candidate = [...catalogueFileTypes, ...catalogueGroupTypes].includes(type);
+  const candidate = [...catalogueFileTypes, ...catalogueGroupTypes, ...catalogueMusicTypes].includes(type);
   const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
   const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
-  if (!candidate && !file && !group) return;
+  const music = catalogueMusicTypes.some((base) => release && typeIsA(release, type, base));
+  if (!candidate && !file && !group && !music) return;
   if (!release || !digest) return { state: 'unavailable', type };
-  if (!release.types[type] || (!file && !group)) return { state: 'unsupported', type, digest };
+  if (!release.types[type] || (!file && !group && !music)) return { state: 'unsupported', type, digest };
 
   const propertyIds = new Set(release.types[type]?.properties ?? []);
   const inversePropertyIds = new Set<string>();

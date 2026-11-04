@@ -63,7 +63,6 @@ export const PageResponseSchema = t.Object(
       ),
     ),
     reads: t.Record(t.String(), readResult),
-    viewer: t.Optional(t.Object({ type: t.String(), id: t.String() }, closed)),
     actions: t.Optional(
       t.Union([
         t.Object(

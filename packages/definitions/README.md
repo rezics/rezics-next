@@ -39,7 +39,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.2 is current, while release 1.0.0 and 1.0.1 bytes and their digests remain loadable for existing pins. Book
+is immutable: 1.0.3 is current, while release 1.0.0, 1.0.1 and 1.0.2 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -152,8 +152,8 @@ and pattern checks.
 A property may name at most 1,024 targets. Compilation allows at most 256 schema files.
 
 The launch grain is three types and twelve properties in one schema file. The bundled
-catalogue has 27 types, 112 properties and 12 schema files. One hundred such verticals
-add 300 types, 1,200 properties and 100 schema files: 327 types, 1,312 properties and
+catalogue has 29 types, 120 properties and 12 schema files. One hundred such verticals
+add 300 types, 1,200 properties and 100 schema files: 329 types, 1,320 properties and
 112 schema files, still under the 4 MiB release cap. `foaf:focus` ranges over `Thing`, so its
 target is `schema:Thing`; a later type matches through its `bases`.
 `schema:exampleOfWork` ranges over `CreativeWork`, so its target stays
@@ -396,6 +396,8 @@ identify classification resources rather than works.
 | `schema:MusicAlbum`        | 音乐专辑 | 音樂專輯 | アルバム           |
 | `schema:MusicRelease`      | 音乐发行 | 音樂發行 | リリース           |
 | `schema:MusicRecording`    | 录音     | 錄音     | 録音               |
+| `schema:MediaObject`       | 媒体对象 | 媒體物件 | メディアオブジェクト |
+| `rezics:ReleaseGroup`      | 发布组   | 發佈組   | リリースグループ   |
 
 Each changed label below was written by hand. References establish the usage of
 the word in its language; choosing it for a catalogue type is an editorial decision
@@ -502,7 +504,7 @@ Run `bun run --cwd packages/definitions check` from the repository root.
 ### Schema.org subject types
 
 For each concrete catalogue profile, select the narrowest Schema.org class
-that is true of its entire admitted scope. The following 26 mappings are the
+that is true of its entire admitted scope. The following 28 mappings are the
 reviewed choices for subject JSON-LD; the source research and supporting
 rationales are in [the Schema.org mapping report](../../docs/research/catalogue-schema-org-mapping.md).
 The corresponding `annotations.schema_org_type` values are a separate profile
@@ -539,6 +541,8 @@ mappings or property semantics.
 | `schema:MusicAlbum` / MusicAlbum                   | `https://schema.org/MusicAlbum`          |
 | `schema:MusicRelease` / MusicRelease               | `https://schema.org/MusicRelease`        |
 | `schema:MusicRecording` / MusicRecording           | `https://schema.org/MusicRecording`      |
+| `schema:MediaObject` / catalogue file              | `https://schema.org/MediaObject`         |
+| `rezics:ReleaseGroup` / file release group         | `https://schema.org/Organization`        |
 
 Book work and its book-specific edition both use `Book` while keeping distinct
 native identities. Broad fictional characters and Food use `Thing`; broad game
