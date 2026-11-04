@@ -56,6 +56,7 @@ test('selected Game creator credits use current roles, exact evidence, and stabl
       async *rows(provider, table) {
         if (provider === 'bangumi' && table === 'subject') {
           yield { id: 101, name: 'STEINS;GATE', type: 4 };
+          yield { id: 104, name: 'STEINS;GATE', type: 2 };
           yield { id: 102, name: 'CLANNAD', type: 2 };
           yield { id: 103, name: 'Fate/stay night', type: 2 };
         }

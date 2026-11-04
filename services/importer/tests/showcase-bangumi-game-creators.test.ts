@@ -12,7 +12,10 @@ test('selected Game planning preserves type-4 staff occurrences and excludes Gam
   ];
   const tables: CrossMediaTables = {
     async *rows(provider, table) {
-      if (provider === 'bangumi' && table === 'subject') yield { id: 101, name: 'STEINS;GATE', type: 4 };
+      if (provider === 'bangumi' && table === 'subject') {
+        yield { id: 101, name: 'STEINS;GATE', type: 4 };
+        yield { id: 104, name: 'STEINS;GATE', type: 2 };
+      }
       if (provider === 'bangumi' && table === 'subject-persons') yield* rows;
       if (provider === 'bangumi' && table === 'person-characters')
         yield { subject_id: 101, person_id: 12, character_id: 21, summary: 'Voice association' };
