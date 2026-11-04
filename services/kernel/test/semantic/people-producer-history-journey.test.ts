@@ -57,9 +57,7 @@ function pageSubject(page: { reads: Record<string, { status: number; body: any }
   return entry!.body as { subject: any; documents?: Record<string, { availability?: string }> };
 }
 
-function correctionPropose(page: {
-  viewer?: { state?: string; actions?: { statementPropose?: string } };
-}) {
+function correctionPropose(page: { viewer?: { state?: string; actions?: { statementPropose?: string } } }) {
   return page.viewer?.actions?.statementPropose;
 }
 
