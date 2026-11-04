@@ -26,6 +26,30 @@ private related-work handoff keep their existing routes and writers.
 Decision: after unavailable discovery, direct generic creation may continue only with an explicit unverified-search acknowledgement; the failure never counts as no matches or as creation authority.
 Decision: catalogue identity creation eligibility is the current Global Context `subject.create` viewer-action observation, independent of suggestion status; guest is session-derived.
 
+## Browser flow: original licensed catalogue text
+
+The authenticated Subject authored visit reads the current public selected document independently from native
+proposal and editorial action observations. A person composes original text for an admitted document property and
+language, supplies its licence and citations, previews the safe document rendering, and reviews the exact intended
+statement before proposing it. A proposal receipt identifies a candidate; it does not make that candidate selected
+or public. The visit reads the exact candidate and its document through the native comparison, then reads public
+selected text separately. Acceptance and selection remain separate actions from proposal, each shown only when its
+own current mounted operation is available. Native commands reauthorize at execution.
+
+Unavailable action data blocks new commands and leaves safe local text available for a permission reread. A
+confirmed denial keeps public selected text readable. If a prepared property, subject revision, admitted release or
+viewer changes, the prepared intent retires while local drafts remain. Uncertain proposal delivery keeps the exact
+statement, document bytes, licence, citations and command key for current-credential replay; it is never resealed
+against a newer release. Public selected text comes only from an independent current Subject and document read.
+
+Decision: the authored visit keeps public selected-text reading independent from exact native proposal and editorial permissions; unavailable permission reads block commands while retaining safe local text.
+
+### Prepare and recover an authored contribution
+
+- Touches: one current Subject, admitted release, selected public document read, one fixed Global Context action projection and the exact candidate comparison with bounded document disclosure.
+- Bound: preserve the existing two-MiB document preview/body ceiling, candidate-page cap, and native command limits; no cited-content fetching, paragraph permission reads, or candidate-history enumeration. Local draft and preview bytes are bounded independently from database plans.
+- Growth check: hold one released Type, one admitted document and one candidate fixed while unrelated documents, candidate histories and grants grow; account for Access preparation, exact candidate readback and final public disclosure with the existing authored native fixture.
+
 ## Browser flow: multilingual subject terms
 
 The subject header and compact subject frame offer **Edit names and descriptions** at
