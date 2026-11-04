@@ -142,11 +142,6 @@ test('production graph journals immutable relation commands and retries without 
   expect(firstCommand).toMatchObject({
     source: { record_revision: 'unversioned', converter_revision: 'bangumi-vocabulary@2:relation-2@2:12:6' },
     statement: { property: { id: 'rezics:sideStoryOf' } },
-    rights: {
-      license: 'CC-BY-SA-3.0',
-      obligations: ['cc:Attribution', 'cc:ShareAlike'],
-      attribution: 'Bangumi contributors (https://bgm.tv/subject/10)',
-    },
   });
   expect(firstCommand.source.digest).toMatch(/^[a-f0-9]{64}$/);
   expect(firstRow.status).toBe('proposed');

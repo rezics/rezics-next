@@ -247,14 +247,7 @@ export class CrossMediaGraph {
         }
         const mappedCommand = mapped.proposals[0]!;
         if (mappedCommand.op !== 'propose') throw new TypeError('Bangumi relation mapper returned a non-proposal command');
-        const command: BatchCommand = {
-          ...mappedCommand,
-          rights: {
-            license: 'CC-BY-SA-3.0',
-            obligations: ['cc:Attribution', 'cc:ShareAlike'],
-            attribution: `Bangumi contributors (https://bgm.tv/subject/${draft.relation.sourceSubject})`,
-          },
-        };
+        const command: BatchCommand = mappedCommand;
         const sourceIsHolder = command.source.external_id === draft.relation.sourceSubject;
         const sourceIsEndpoint = command.source.external_id === draft.relation.sourceEndpoint;
         const actualHolder = sourceIsHolder ? sourceClaim : sourceIsEndpoint ? endpointClaim : null;
