@@ -114,12 +114,13 @@ export function resolveShelfPresentation(
           ? 'm'
           : base.size);
   const columns = search.columns ?? columnsFromShelf(saved);
+  const { cursor, ...withoutCursor } = search;
   return {
     search: {
-      ...search,
+      ...withoutCursor,
       orderBy,
       direction,
-      cursor: cursorInvalidated ? undefined : search.cursor,
+      ...(!cursorInvalidated && cursor ? { cursor } : {}),
     },
     display: {
       ...base,

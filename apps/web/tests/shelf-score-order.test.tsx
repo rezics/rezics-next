@@ -28,14 +28,15 @@ test('saved score intent survives both directions, per-state defaults and explic
     for (const state of [undefined, 'in_progress', 'planned', 'completed', 'paused', 'dropped']) {
       const tab = state ?? 'all';
       const defaults = { ...saved, sorts: { [tab]: { field: 'rating' as const, direction } } };
-      const implicit = resolveShelfPresentation({ state, type: 'schema:Book', cursor: 'date-cursor' }, defaults);
+      const filter = state ? { state } : {};
+      const implicit = resolveShelfPresentation({ ...filter, type: 'schema:Book', cursor: 'date-cursor' }, defaults);
       expect(implicit.sort).toEqual({ orderBy: 'personalScore', direction });
       expect(implicit.search).toMatchObject({ state, type: 'schema:Book', cursor: undefined });
       expect(implicit.cursorInvalidated).toBe(true);
       expect(implicit.display).toMatchObject({ layout: 'list', size: 'l' });
       const override = { ...implicit.search, orderBy: 'createdAt' as const, direction, cursor: 'date-cursor' };
       expect(resolveShelfPresentation(override, defaults).search).toEqual(override);
-      expect(resolveShelfPresentation({ state }, defaults).sort).toEqual(implicit.sort);
+      expect(resolveShelfPresentation(filter, defaults).sort).toEqual(implicit.sort);
     }
     const search = validateShelfSearch({
       type: 'schema:Book',
