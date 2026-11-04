@@ -8245,5 +8245,6 @@
   "thread_review_cursor_expired": "此页面已过期。请从第一页重新开始。",
   "thread_review_restart": "从头开始",
   "thread_review_select_board": "选择此 Board",
-  "thread_review_destination_changed": "Subject 或 Board 已更改。请刷新评论目标后再继续。"
+  "thread_review_destination_changed": "Subject 或 Board 已更改。请刷新评论目标后再继续。",
+  "search_review_historical_question_unavailable": "无法获取当时的问题名称和量表。这里显示的是已记录的引用，并非当前评分。"
 }

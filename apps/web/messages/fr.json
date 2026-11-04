@@ -8245,5 +8245,6 @@
   "thread_review_cursor_expired": "Cette page a expiré. Recommencez à partir de la première page.",
   "thread_review_restart": "Recommencer",
   "thread_review_select_board": "Sélectionner ce Board",
-  "thread_review_destination_changed": "Le Subject ou le Board a changé. Actualisez les destinations avant de continuer."
+  "thread_review_destination_changed": "Le Subject ou le Board a changé. Actualisez les destinations avant de continuer.",
+  "search_review_historical_question_unavailable": "Le libellé et l’échelle historiques sont indisponibles. Il s’agit de la citation enregistrée, pas de la note actuelle."
 }

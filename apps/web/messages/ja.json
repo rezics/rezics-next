@@ -8245,5 +8245,6 @@
   "thread_review_cursor_expired": "このページの有効期限が切れました。最初のページからやり直してください。",
   "thread_review_restart": "最初からやり直す",
   "thread_review_select_board": "このBoardを選択",
-  "thread_review_destination_changed": "SubjectまたはBoardが変更されました。続行する前にレビュー先を更新してください。"
+  "thread_review_destination_changed": "SubjectまたはBoardが変更されました。続行する前にレビュー先を更新してください。",
+  "search_review_historical_question_unavailable": "当時の質問名と尺度は利用できません。これは記録された引用であり、現在の評価ではありません。"
 }
