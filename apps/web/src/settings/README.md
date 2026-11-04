@@ -104,6 +104,8 @@ detail response-wait recovery is owned by this existing reader and is outside th
 
 The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.
 
+Managed action reads publish their response-time Retry-After deadline in the viewer/target snapshot. The recovery control uses that same absolute deadline after reattachment; expiry enables deliberate retry only.
+
 Directory identities, membership roles and responsibility holds supply no detail admission. Until Content's serial successor to `d9c5a408-5c67-4d33-bf97-76a9918a21b5` installs the complete native viewer/navigation envelope and callable/root, identity rows have no detail links and show explicit unavailable feedback; the strict transport decoder continues to reject incompatible responses. This consumer does not publish declarations or infer missing authority.
 
 The Account card reads the current identity from the managed session and keeps rename advice in its separate native profile and viewer-actions read. Security, rename and deletion handoffs use only fixed Auth-owned paths from trusted issuer configuration; they do not grant a destructive command. An unavailable or denied read stays visible until deliberate reload, and native sign-out keeps ordinary POST/redirect behavior with explicit reload recovery and no automatic replay.

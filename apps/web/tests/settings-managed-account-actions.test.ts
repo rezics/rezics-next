@@ -198,6 +198,7 @@ test('Recover failed management actions without leaving Settings with current na
   const first = read.load();
   expect(await first).toEqual({ state: 'unavailable', status: null, code: null });
   // Parent rendering and effect reattachment keep observing the failed read until a deliberate retry.
+  expect(read.snapshot().retryAt).toBe(0);
   expect(read.load()).toBe(first);
   expect(calls).toBe(1);
   const retry = read.retry();
@@ -208,7 +209,7 @@ test('Recover failed management actions without leaving Settings with current na
   expect(calls).toBe(2);
   reply.resolve(ready);
   expect(await retry).toEqual(ready);
-  expect(read.snapshot()).toEqual({ result: ready, pending: false });
+  expect(read.snapshot()).toEqual({ result: ready, pending: false, retryAt: 0 });
   expect(read.load()).toBe(retry);
   expect(read.retry()).toBe(retry);
   expect(calls).toBe(2);
@@ -226,7 +227,7 @@ test('repeated unavailable reads stay recoverable while a native denial never be
   const failure = { state: 'unavailable', status: 503, code: 'busy', retryAfter: '0' };
   expect(await read.load()).toEqual(failure);
   expect(await read.retry()).toEqual(failure);
-  expect(read.snapshot()).toEqual({ result: failure, pending: false });
+  expect(read.snapshot()).toEqual({ result: failure, pending: false, retryAt: 0 });
   await read.load();
   expect(calls).toBe(2);
   expect(await read.retry()).toEqual(failure);
@@ -261,14 +262,21 @@ test('native Retry-After survives the capability transport and expires without i
       );
       const first = read.load();
       await first;
+      const deadline = read.snapshot().retryAt;
+      expect(deadline).toBe(now + 2_000);
+      const capturedRetry = () => read.retry();
       expect(read.retry()).toBe(first);
       now += 1_999;
+      expect(read.snapshot().retryAt).toBe(deadline);
+      expect(renderRetryWait(deadline)).toContain('waiting');
+      expect(capturedRetry()).toBe(first);
       expect(read.retry()).toBe(first);
       expect(calls).toBe(1);
       now++;
+      expect(renderRetryWait(deadline)).toContain('retry');
       expect(read.load()).toBe(first);
       expect(calls).toBe(1);
-      expect(await read.retry()).toEqual(ready);
+      expect(await capturedRetry()).toEqual(ready);
       expect(calls).toBe(2);
     } finally {
       clock.mockRestore();
@@ -285,23 +293,31 @@ test('late retries cannot publish into a new viewer, target or CSRF lifetime', a
   for (const selection of [target, { ...target, viewerId: accountId }, { ...target, accountId: viewerId }]) {
     const late = deferred<ManagedAccountActionsResult>();
     let calls = 0;
-    const previous = new ManagedAccountActionsRead(target, async () =>
-      ++calls === 1 ? { state: 'unavailable', status: 503, code: 'dependency_unavailable' } : late.promise,
+    let currentOwner = true;
+    const previous = new ManagedAccountActionsRead(
+      target,
+      async () =>
+        ++calls === 1 ? { state: 'unavailable', status: 503, code: 'dependency_unavailable' } : late.promise,
+      () => currentOwner,
     );
     await previous.load();
     const retry = previous.retry();
+    currentOwner = false;
+    expect(previous.snapshot()).toEqual({ result: null, pending: false, retryAt: 0 });
+    previous.dispose();
     const current = new ManagedAccountActionsRead(selection, async () => ({
       state: 'denied',
       status: 403,
       code: 'forbidden',
     }));
-    expect(current.snapshot()).toEqual({ result: null, pending: false });
+    expect(current.snapshot()).toEqual({ result: null, pending: false, retryAt: 0 });
     await current.load();
     late.resolve(ready);
     await retry;
     expect(current.snapshot()).toEqual({
       result: { state: 'denied', status: 403, code: 'forbidden' },
       pending: false,
+      retryAt: 0,
     });
     expect(calls).toBe(2);
   }
@@ -309,9 +325,16 @@ test('late retries cannot publish into a new viewer, target or CSRF lifetime', a
 
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { usePreferenceRetry } from '../src/settings/preference-failure-retry';
 import { ManagedAccountActionsForViewer } from '../src/settings/managed-account-actions';
 import { projectManagedAuthNavigation } from '../src/settings/managed-account-actions-read';
 import type { ManagementDetail } from '../src/settings/managed-account-detail-read';
+
+function renderRetryWait(retryAt: number) {
+  const Feedback = () =>
+    createElement('p', { role: 'status' }, usePreferenceRetry(undefined, retryAt) ? 'waiting' : 'retry');
+  return renderToStaticMarkup(createElement(Feedback));
+}
 
 const deployedAuth = {
   AUTH_ISSUER: 'https://auth.test',
