@@ -408,12 +408,16 @@ function DynamicCollectionPageLifetime({
         ) : null}
         {current.unavailable || (current.preparing && retries >= 3) || explicitRetry ? (
           <div className="min-w-0 space-y-2" aria-busy={retrying}>
-            {current.preparing ? <p role="status">{m.library_dynamic_try_later()}</p> : null}
-            <p className="text-sm text-muted-foreground">
-              {current.unavailable
-                ? m.library_dynamic_retry_unavailable_help()
-                : m.library_dynamic_retry_preparing_help()}
-            </p>
+            {current.preparing && !retrying && retries >= 3 ? (
+              <p role="status">{m.library_dynamic_try_later()}</p>
+            ) : null}
+            {!retrying ? (
+              <p className="text-sm text-muted-foreground">
+                {current.unavailable
+                  ? m.library_dynamic_retry_unavailable_help()
+                  : m.library_dynamic_retry_preparing_help()}
+              </p>
+            ) : null}
             <button
               className="inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
               type="button"

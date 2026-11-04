@@ -74,6 +74,7 @@ function page(change: Partial<Page> = {}): Page {
 }
 type Search = Record<string, string | string[]>;
 async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
+  window.history.replaceState(null, '', `/${locale}/collections/original`);
   setLocale(locale, { reload: false });
   const host = document.createElement('div');
   document.body.append(host);
@@ -110,6 +111,7 @@ async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
       await act(async () => root.unmount());
       client.clear();
       host.remove();
+      window.history.replaceState(null, '', '/en/collections/original');
       setLocale('en', { reload: false });
     },
   };
@@ -320,6 +322,7 @@ test('All eight locale variants supply named recovery and page-local absence', a
         expect(messages[key].trim().length).toBeGreaterThan(0);
       expect(messages.library_dynamic_page_reader_empty.trim().length).toBeGreaterThan(0);
       expect(messages.library_dynamic_page_reader_first_page.trim().length).toBeGreaterThan(0);
+      window.history.replaceState(null, '', `/${locale}/collections/original`);
       setLocale(locale, { reload: false });
       await h.render(page({ cursor, next }));
       expect(h.host.textContent).toContain(messages.library_dynamic_page_reader_empty);
