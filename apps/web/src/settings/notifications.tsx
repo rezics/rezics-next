@@ -12,6 +12,7 @@ import {
   notificationIntentAllowed,
   notificationOriginalAllowed,
   notificationsNeedNavigationDecision,
+  unavailableNotificationIntent,
   type NotificationEditorIO,
 } from './notification-recovery';
 import type { PreferencePage } from './preferences';
@@ -106,6 +107,11 @@ export function NotificationsCard({
     state.currentAdvice !== null &&
     state.intent !== undefined &&
     notificationIntentAllowed(state.intent, state.currentAdvice);
+  const reviewActionAllowed =
+    state.currentAdvice !== null &&
+    state.intent !== undefined &&
+    preferencePageAllows(state.currentAdvice, state.intent === null ? 'reset' : 'edit');
+  const unavailable = state.currentAdvice ? unavailableNotificationIntent(state.intent, state.currentAdvice) : {};
   const rowDisabled = disabled || (commandWaiting && !localEdit) || (!canEdit && !canDraft);
   const restoreDisabled =
     commandWaiting ||
@@ -252,6 +258,29 @@ export function NotificationsCard({
               </form>
             </div>
           </FieldGroup>
+          {Object.keys(unavailable).length > 0 ? (
+            <div className="space-y-3" role="group" aria-label={m.settings_notifications_retained()}>
+              {Object.entries(unavailable).map(([kind, enabled]) => (
+                <div key={kind} className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {m.settings_notifications_retained_unavailable({
+                      name: notificationName(kind),
+                      state: enabled ? m.settings_notifications_on() : m.settings_notifications_off(),
+                    })}
+                  </p>
+                  <Button
+                    className={preferenceActionClassName}
+                    type="button"
+                    variant="outline"
+                    disabled={busy || !hydrated}
+                    onClick={() => editor.discardKind(kind)}
+                  >
+                    {m.settings_notifications_discard_choice()}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div role="status" aria-live="polite" className="min-h-5 text-sm text-muted-foreground">
             {state.phase === 'saving'
               ? m.settings_saving()
@@ -442,15 +471,15 @@ export function NotificationsCard({
                     </li>
                   ))}
                 </ul>
-                {state.intent !== undefined && !canSubmitReview ? (
+                {state.intent !== undefined && !reviewActionAllowed ? (
                   <p role="status">{m.settings_notifications_review_unavailable()}</p>
                 ) : null}
                 <div className="flex min-w-0 flex-wrap gap-2">
-                  {canSubmitReview ? (
+                  {state.intent !== undefined ? (
                     <Button
                       className={preferenceActionClassName}
                       type="button"
-                      disabled={commandWaiting || disabled}
+                      disabled={commandWaiting || disabled || !canSubmitReview}
                       aria-describedby={waitDescription}
                       onClick={() => void editor.submit(version)}
                     >

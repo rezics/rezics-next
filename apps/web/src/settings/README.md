@@ -38,7 +38,8 @@ catalogue is the authority; the page does not invent kinds, title-case unknown k
 controls with the reason. Missing or malformed advice does not create a catalogue or an editable fallback. Watch
 subscriptions stay at `/settings#watches`. Native notification controls are in the first Settings HTML so a no-JavaScript
 save still works; after hydration the selected section is the only shown panel. Conflict reloads the current page and
-version; a still-valid draft needs review and never replays a removed or compulsory kind. Session change clears private
+version; a still-valid draft needs review. Removed or compulsory kinds stay as retained local choices until discarded or
+current advice admits the whole patch; a filtered subset is not completion. Session change clears private
 policy and draft. Uncertain saves keep the original patch and key. A confirmed matching recovery drops the spent intent.
 
 **Decision:** Notification edit/reset advice follows the current `account:update` observation; commands still recheck
@@ -50,6 +51,8 @@ replay receipt ends replay actionability even if its follow-up read fails: retai
 deliberate read recovery only, then review current native values and later local edits.
 
 **Decision:** Reviewed Save/Restore stays visible but disabled until current native advice admits its exact retained intent; the unavailable state explains the denial and offers deliberate Reload to reacquire current advice.
+
+**Decision:** Notification patches are admitted as a whole against the current optional catalogue; retained unavailable kinds stay local and distinct until discarded or later advice admits the full set. Current switches follow the fresh envelope; a retained local value is never shown as current compulsory state.
 
 ## Reading
 

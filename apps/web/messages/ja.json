@@ -1458,6 +1458,8 @@
   "settings_notifications_heading": "通知",
   "settings_notifications_read_only": "保存済みの設定は確認できますが、現在のアカウント権限では変更できません。",
   "settings_notifications_review_unavailable": "現在のアカウント権限では、この保留中の操作を実行できません。権限が変更された後、通知設定を再読み込みして確認してください。",
+  "settings_notifications_retained_unavailable": "保持している「{name}」の選択（{state}）は、現在は任意項目ではありません。破棄するか、現在の案内がこの選択を再び認めるまで再読み込みしてください。",
+  "settings_notifications_discard_choice": "この選択を破棄",
   "settings_notifications_mandatory": "あなたのコンテンツに関するモデレーションの判断、通報の結果、異議申し立ての結果は常に通知されます。",
   "settings_notifications_policy_heading": "常に送信",
   "settings_notifications_default_on": "デフォルト：オン",
