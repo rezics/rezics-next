@@ -16,12 +16,5 @@ export function MusicLocationOverview({
   locale: string;
   reader: string | null;
 }) {
-  return (
-    <MusicLocationReader
-      {...props}
-      locale={locale}
-      reader={reader}
-      transport={transport(locale, reader)}
-    />
-  );
+  return <MusicLocationReader {...props} locale={locale} reader={reader} transport={transport(locale, reader)} />;
 }

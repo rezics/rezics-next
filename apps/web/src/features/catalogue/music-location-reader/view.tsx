@@ -195,9 +195,7 @@ export function MusicLocationWindow({
               <span lang={page.identity.typeLabel.lang ?? undefined}> · {page.identity.typeLabel.text}</span>
             ) : null}
           </p>
-          {page.kind === 'unsupported' ? (
-            <p role="status">{m.music_location_unsupported({}, options)}</p>
-          ) : null}
+          {page.kind === 'unsupported' ? <p role="status">{m.music_location_unsupported({}, options)}</p> : null}
           {page.stream ? (
             <>
               {page.streams.length > 1 ? (
@@ -234,7 +232,10 @@ export function MusicLocationWindow({
                   const summary = row.summary;
                   const type = summary ? page.types[summary.type] : undefined;
                   const href = summary
-                    ? contextHref(subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href, realm)
+                    ? contextHref(
+                        subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href,
+                        realm,
+                      )
                     : undefined;
                   return (
                     <li key={`${row.holder}:${row.statementId}`} data-slot="music-location-row" className="min-w-0">

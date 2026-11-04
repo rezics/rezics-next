@@ -58,12 +58,13 @@ export type MusicLocationRead =
 export type MusicLocationTransport = (address: MusicLocationAddress) => Promise<MusicLocationRead>;
 
 export function musicLocationEntry(type: string, types?: readonly string[] | undefined): boolean {
-  return (
-    Object.values(musicContextRequested).some((ids) => ids.some((id) => type === id || types?.includes(id)))
-  );
+  return Object.values(musicContextRequested).some((ids) => ids.some((id) => type === id || types?.includes(id)));
 }
 
-export function musicLocationSnapshot(subject: SubjectRead['subject'], context = subject.context): MusicLocationSnapshot {
+export function musicLocationSnapshot(
+  subject: SubjectRead['subject'],
+  context = subject.context,
+): MusicLocationSnapshot {
   return {
     id: subject.id,
     context,
@@ -84,9 +85,11 @@ function hasProperty(release: Definitions, type: string, property: string, seen 
   if (seen.has(type)) return false;
   seen.add(type);
   const descriptor = release.types[type];
-  return !!descriptor &&
+  return (
+    !!descriptor &&
     (descriptor.properties.includes(property) ||
-      descriptor.bases.some((base) => hasProperty(release, base, property, seen)));
+      descriptor.bases.some((base) => hasProperty(release, base, property, seen)))
+  );
 }
 
 function admittedProperties(release: Definitions, type: string, seen = new Set<string>()): string[] {
@@ -154,8 +157,7 @@ export function musicLocationStreams(release: Definitions, type: string, locale:
     }
   }
   return streams.sort(
-    (left, right) =>
-      left.label.text.localeCompare(right.label.text, locale) || left.key.localeCompare(right.key),
+    (left, right) => left.label.text.localeCompare(right.label.text, locale) || left.key.localeCompare(right.key),
   );
 }
 
@@ -198,12 +200,7 @@ function sessionOf(result: { headers?: HeadersInit | undefined }) {
 function failure(status: number): MusicLocationFailure {
   return {
     ok: false,
-    reason:
-      status === 401
-        ? 'denied'
-        : status === 403 || status === 404 || status === 308
-          ? 'withheld'
-          : 'unavailable',
+    reason: status === 401 ? 'denied' : status === 403 || status === 404 || status === 308 ? 'withheld' : 'unavailable',
   };
 }
 
@@ -333,18 +330,18 @@ export async function readMusicLocation(
       };
       const result =
         stream.direction === 'forward'
-          ? await client.subjects({ id: address.id }).relations.get({ query, headers: headersOf(authorization, session) })
+          ? await client
+              .subjects({ id: address.id })
+              .relations.get({ query, headers: headersOf(authorization, session) })
           : await client.subjects({ id: address.id }).links.get({ query, headers: headersOf(authorization, session) });
       if (result.status !== 200 || !result.data) return failure(result.status);
       session = sessionOf(result) ?? session;
       const page = result.data;
-      if ((stream.direction === 'forward') !== ('relations' in page)) return { ok: false, reason: 'unavailable' };
+      if ((stream.direction === 'forward') !== 'relations' in page) return { ok: false, reason: 'unavailable' };
       const nativeRows = 'relations' in page ? page.relations : page.links;
       if (
         'relations' in page &&
-        page.relations.some(
-          (row) => row.statement.value.type !== 'value' || row.target !== row.statement.value.content,
-        )
+        page.relations.some((row) => row.statement.value.type !== 'value' || row.target !== row.statement.value.content)
       )
         return { ok: false, reason: 'unavailable' };
       if ('links' in page && page.links.some((row) => row.property !== stream.property))
@@ -364,12 +361,12 @@ export async function readMusicLocation(
       rows =
         'relations' in page
           ? page.relations.map((row) => ({
-                holder: address.id,
-                statementId: row.statement.id,
-                statement: row.statement,
-                summary: row.summary,
-                related: relatedSummaries(row.related),
-              }))
+              holder: address.id,
+              statementId: row.statement.id,
+              statement: row.statement,
+              summary: row.summary,
+              related: relatedSummaries(row.related),
+            }))
           : page.links.map((row) => ({
               holder: row.subject,
               statementId: row.statement,

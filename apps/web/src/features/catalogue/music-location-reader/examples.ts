@@ -1,10 +1,6 @@
 import { createKernelClient, type KernelClient, type SubjectRead } from '@rezics/client';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import {
-  readMusicLocation,
-  musicLocationSnapshot,
-  type MusicLocationAddress,
-} from './model';
+import { readMusicLocation, musicLocationSnapshot, type MusicLocationAddress } from './model';
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type Forward = NonNullable<Awaited<ReturnType<Endpoint['relations']['get']>>['data']>;
@@ -146,13 +142,36 @@ function releaseForExamples() {
 }
 
 function publicSubject(kind: MusicLocationExample): SubjectRead {
-  const id = kind === 'admitted-event' ? musicEventId : kind === 'admitted-area' ? musicAreaId : kind === 'admitted-instrument' ? musicInstrumentId : musicPlaceId;
-  const type = kind === 'admitted-event' ? 'schema:Event' : kind === 'admitted-area' ? 'schema:AdministrativeArea' : kind === 'admitted-instrument' ? 'schema:MusicInstrument' : 'schema:Place';
-  const label = kind === 'admitted-event' ? 'Harbour concert' : kind === 'admitted-area' ? 'North Shore' : kind === 'admitted-instrument' ? 'Grand piano' : 'Harbour Hall';
+  const id =
+    kind === 'admitted-event'
+      ? musicEventId
+      : kind === 'admitted-area'
+        ? musicAreaId
+        : kind === 'admitted-instrument'
+          ? musicInstrumentId
+          : musicPlaceId;
+  const type =
+    kind === 'admitted-event'
+      ? 'schema:Event'
+      : kind === 'admitted-area'
+        ? 'schema:AdministrativeArea'
+        : kind === 'admitted-instrument'
+          ? 'schema:MusicInstrument'
+          : 'schema:Place';
+  const label =
+    kind === 'admitted-event'
+      ? 'Harbour concert'
+      : kind === 'admitted-area'
+        ? 'North Shore'
+        : kind === 'admitted-instrument'
+          ? 'Grand piano'
+          : 'Harbour Hall';
   const revision = 1;
   const statements: SubjectRead['subject']['statements'] = {};
   if (kind === 'admitted-event') {
-    statements['schema:startDate'] = [statement('00000000-0000-4000-8000-00000000d201', 'schema:startDate', 'time', time('+2024-05-00T00:00:00Z', 10))];
+    statements['schema:startDate'] = [
+      statement('00000000-0000-4000-8000-00000000d201', 'schema:startDate', 'time', time('+2024-05-00T00:00:00Z', 10)),
+    ];
   }
   return {
     subject: {
@@ -213,12 +232,10 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
     label: sourceLabel,
     related: {},
   });
-  const areaRelation = statement(
-    '00000000-0000-4000-8000-00000000d212',
-    'schema:containedInPlace',
-    'wikibase-item',
-    { type: 'value', content: musicAreaId },
-  );
+  const areaRelation = statement('00000000-0000-4000-8000-00000000d212', 'schema:containedInPlace', 'wikibase-item', {
+    type: 'value',
+    content: musicAreaId,
+  });
   const eventRelations: Forward = {
     relations: [
       {
@@ -246,12 +263,10 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
   const eventInstrumentRelations: Forward = {
     relations: [
       {
-        statement: statement(
-          '00000000-0000-4000-8000-00000000d215',
-          'schema:instrument',
-          'wikibase-item',
-          { type: 'value', content: musicInstrumentId },
-        ),
+        statement: statement('00000000-0000-4000-8000-00000000d215', 'schema:instrument', 'wikibase-item', {
+          type: 'value',
+          content: musicInstrumentId,
+        }),
         target: musicInstrumentId,
         external: null,
         summary: summary(musicInstrumentId, 'schema:MusicInstrument', 'Grand piano'),
@@ -264,12 +279,10 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
   const eventPerformerRelations: Forward = {
     relations: [
       {
-        statement: statement(
-          '00000000-0000-4000-8000-00000000d216',
-          'schema:performer',
-          'wikibase-item',
-          { type: 'value', content: musicPersonId },
-        ),
+        statement: statement('00000000-0000-4000-8000-00000000d216', 'schema:performer', 'wikibase-item', {
+          type: 'value',
+          content: musicPersonId,
+        }),
         target: musicPersonId,
         external: null,
         summary: summary(musicPersonId, 'schema:Person', 'Ada North'),
@@ -295,12 +308,10 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
         subject: '00000000-0000-4000-8000-00000000d106',
         property: 'schema:location',
         statement: '00000000-0000-4000-8000-00000000d214',
-        assertion: statement(
-          '00000000-0000-4000-8000-00000000d214',
-          'schema:location',
-          'wikibase-item',
-          { type: 'value', content: musicPlaceId },
-        ),
+        assertion: statement('00000000-0000-4000-8000-00000000d214', 'schema:location', 'wikibase-item', {
+          type: 'value',
+          content: musicPlaceId,
+        }),
         summary: summary('00000000-0000-4000-8000-00000000d106', 'schema:Event', 'River concert'),
         type: 'schema:Event',
         label: 'River concert',
@@ -346,9 +357,9 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
                               related: {},
                             },
                           ],
-                  freshness,
-                  next: null,
-                }
+                    freshness,
+                    next: null,
+                  }
               : property === 'schema:instrument'
                 ? eventInstrumentRelations
                 : property === 'schema:performer'
@@ -414,8 +425,7 @@ export function musicLocationExample(scenario: MusicLocationExample = 'admitted-
   );
   const client = createKernelClient('https://location.example', { fetch: exampleFetch });
   const address: MusicLocationAddress = snapshot;
-  const read = (next: MusicLocationAddress = address) =>
-    readMusicLocation(client, undefined, release, next, locale);
+  const read = (next: MusicLocationAddress = address) => readMusicLocation(client, undefined, release, next, locale);
   return {
     address,
     client,

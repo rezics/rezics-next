@@ -102,7 +102,9 @@ test('place, area, event and instrument retain distinct released identity and di
 
   const areaPage = musicLocationExample('admitted-area');
   const areaIdentity = await areaPage.read();
-  expect(areaIdentity.ok && areaIdentity.streams.some((stream) => stream.key === 'out:schema:containedInPlace')).toBe(true);
+  expect(areaIdentity.ok && areaIdentity.streams.some((stream) => stream.key === 'out:schema:containedInPlace')).toBe(
+    true,
+  );
   const areaVenue = await areaPage.read({ ...areaPage.address, stream: 'in:schema:containedInPlace' });
   expect(areaVenue.ok && areaVenue.kind).toBe('area');
   expect(areaVenue.ok && areaVenue.rows[0]?.summary?.id).toBe(musicPlaceId);
@@ -181,8 +183,7 @@ test('a replaced Subject observation cannot restore a delayed relationship windo
       source,
       reader: null,
       locale: 'en',
-      transport: () =>
-        ++requests === 1 ? delayed : Promise.resolve({ ok: false, reason: 'stale' } as const),
+      transport: () => (++requests === 1 ? delayed : Promise.resolve({ ok: false, reason: 'stale' } as const)),
     };
     await mounted.render(props);
     await mounted.render({

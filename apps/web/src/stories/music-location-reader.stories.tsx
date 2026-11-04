@@ -2,10 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { MusicLocationReader } from '../features/catalogue/music-location-reader/view';
-import {
-  musicLocationExample,
-  type MusicLocationExample,
-} from '../features/catalogue/music-location-reader/examples';
+import { musicLocationExample, type MusicLocationExample } from '../features/catalogue/music-location-reader/examples';
 import { getLocale } from '../paraglide/runtime';
 import { m } from '../paraglide/messages.js';
 import { AppShell } from '../shell/shell';

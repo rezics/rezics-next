@@ -60,17 +60,13 @@ export const readSubjectMusicLocation = createServerFn({ method: 'POST', strict:
     const { fetchGuideRelease } = await import('../definition-guide');
     let definitions;
     try {
-      definitions = await fetchGuideRelease(prepared.client, undefined, prepared.authorization
-        ? { authorization: prepared.authorization }
-        : {});
+      definitions = await fetchGuideRelease(
+        prepared.client,
+        undefined,
+        prepared.authorization ? { authorization: prepared.authorization } : {},
+      );
     } catch {
       return { ok: false, reason: 'unavailable' };
     }
-    return readMusicLocation(
-      prepared.client,
-      prepared.authorization,
-      definitions,
-      data,
-      data.locale,
-    );
+    return readMusicLocation(prepared.client, prepared.authorization, definitions, data, data.locale);
   });
