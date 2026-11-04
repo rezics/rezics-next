@@ -153,6 +153,7 @@ mock.module('../src/kernel/client', () => ({
 function installWindow(window: InstanceType<typeof import('happy-dom').Window>) {
   const values = {
     window,
+    scrollTo: window.scrollTo.bind(window),
     document: window.document,
     navigator: window.navigator,
     location: window.location,
@@ -209,6 +210,8 @@ function result(suitability: 'blur' | 'show'): PreferenceResult {
 async function settle() {
   await act(async () => {
     await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -313,6 +316,12 @@ test('public account readers retire old admissions across sign-out, replacement,
     expect(isWithheld(target)).toBe(true);
   };
   const expectAdmittedReader = (target: HTMLElement = host) => {
+    expect(
+      client
+        .getQueryCache()
+        .findAll({ queryKey: ['agent-reader'] })
+        .some((query) => (query.state.data as { kind?: string } | undefined)?.kind === 'ready'),
+    ).toBe(true);
     expect(target.querySelector('[data-slot="cover"]')).not.toBeNull();
     expect(isWithheld(target)).toBe(false);
   };
