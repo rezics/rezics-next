@@ -1281,7 +1281,12 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           admission.run('normal', job, async () => {
             const result = await readSelectedBoardPinAdvice(dependencies, id, body, { actor, deadline: job.deadline });
             for (const anchor of result.anchors) session.record(sessionComponent(anchor));
-            return result.value;
+            return result.value.state === 'ready'
+              ? {
+                  ...result.value,
+                  threads: result.value.threads.map((thread) => ({ ...thread, actions: [...thread.actions] })),
+                }
+              : result.value;
           }),
         );
       },
