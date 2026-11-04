@@ -36,6 +36,7 @@ test('Home public owners keep supplied text, empty and unavailable context, exac
     expect(anonymous).toContain('data-owner-description="empty"');
     expect(anonymous).toContain(`/${locale}/spaces/reading-room`);
     expect(anonymous).toContain(m.home_owner_carrier_unavailable({}, { locale }));
+    expect(anonymous).toContain(m.home_owner_follow_context({}, { locale }));
     expect(anonymous).not.toContain(m.library_follow_unavailable({}, { locale }));
     const prepared = renderToStaticMarkup(<HomeFeed result={result()} locale={locale} signedIn />);
     expect(prepared).toContain(m.library_follow_unavailable({}, { locale }));

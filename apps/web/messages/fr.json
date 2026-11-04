@@ -8035,5 +8035,6 @@
   "home_owner_description_empty": "Aucune description fournie.",
   "home_owner_description_unavailable": "Description indisponible.",
   "home_owner_curator_unavailable": "Informations sur le curateur indisponibles.",
-  "home_owner_carrier_unavailable": "Présentation du Realm indisponible."
+  "home_owner_carrier_unavailable": "Présentation du Realm indisponible.",
+  "home_owner_follow_context": "Suivre ne donne ni accès ni adhésion à un Realm."
 }

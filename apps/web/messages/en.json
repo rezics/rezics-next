@@ -8110,5 +8110,6 @@
   "home_owner_description_empty": "No description supplied.",
   "home_owner_description_unavailable": "Description unavailable.",
   "home_owner_curator_unavailable": "Curator information unavailable.",
-  "home_owner_carrier_unavailable": "Realm presentation unavailable."
+  "home_owner_carrier_unavailable": "Realm presentation unavailable.",
+  "home_owner_follow_context": "Following does not grant access or Realm membership."
 }

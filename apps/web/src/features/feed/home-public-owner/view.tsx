@@ -37,6 +37,7 @@ export function HomePublicOwnerContext({ item, locale }: { item: FeedItem; local
       ) : !('realm' in summary) || !summary.realm?.title ? (
         <p className="text-muted-foreground">{m.home_owner_carrier_unavailable({}, options)}</p>
       ) : null}
+      <p className="text-muted-foreground">{m.home_owner_follow_context({}, options)}</p>
     </div>
   );
 }

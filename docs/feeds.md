@@ -45,9 +45,9 @@ removed or unauthorized candidates retain Search's native examined frontier, inc
 Web continues to receive, for example, `{source:'discovery', key:{owner:'semantic',kind:'schema:Book',route:0,id},
 summary:subjectSummary, destination:{kind:'subject',id,title:null}, occurredAt:null,
 id:'discovery:semantic:'+id}` or the corresponding `accounts/account` key, Account summary and
-`{kind:'account',id,title}` destination. The continuation must publish exact new closed schemas and examples
-for Collection, review-thread and Space destinations together with their mappings and native producer wiring.
-It must retain exact kind/selection cursor binding, `6D+3` discovery work, B=160 and one bounded mixed round.
+`{kind:'account',id,title}` destination. Collection destinations carry their exact ID; Space destinations
+carry the exact ID and admitted canonical address. Their installed mappings retain exact kind/selection
+cursor binding, `6D+3` discovery work, B=160 and one bounded mixed round.
 
 ## Selection and native summaries
 
@@ -91,7 +91,7 @@ the author, with no identifier fallback. No row ratings are added. Collection su
 The mounted page cap is 20 rows; the native kind picker returns at most eight choices per metadata page, and the
 existing rating-question directory returns at most 20. Space restoration uses one current Space point read. The
 wire has no aggregate disclosed-summary byte cap, and its Following Collection description has no `maxLength`;
-public Collection/review/Space summary caps remain producer-owned and unavailable until those variants are mounted.
+Public Collection/review/Space summary bounds remain producer-owned; Web does not enrich the supplied rows.
 Response row counts do not establish native indexed scan work.
 
 Web Back/Forward and owner-destination return keep a versioned descriptor in the current same-origin Home

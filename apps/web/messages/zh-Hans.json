@@ -8035,5 +8035,6 @@
   "home_owner_description_empty": "未提供说明。",
   "home_owner_description_unavailable": "说明暂不可用。",
   "home_owner_curator_unavailable": "策展者信息暂不可用。",
-  "home_owner_carrier_unavailable": "Realm 展示信息暂不可用。"
+  "home_owner_carrier_unavailable": "Realm 展示信息暂不可用。",
+  "home_owner_follow_context": "关注不会授予访问权限或 Realm 成员资格。"
 }
