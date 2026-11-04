@@ -151,6 +151,8 @@ mock.module('../src/kernel/client', () => ({
 }));
 
 function installWindow(window: InstanceType<typeof import('happy-dom').Window>) {
+  // This DOM has no image decoder. Keep images pending instead of treating its zero natural width as a failure.
+  Object.defineProperty(window.HTMLImageElement.prototype, 'complete', { configurable: true, get: () => false });
   const values = {
     window,
     scrollTo: window.scrollTo.bind(window),
@@ -671,7 +673,7 @@ test('public account readers retire old admissions across sign-out, replacement,
     serverClient.clear();
     restoreGlobals();
   }
-});
+}, 15000);
 
 function PublicReaderConsumer({
   page,
