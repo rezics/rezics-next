@@ -4,6 +4,9 @@ Decision: use the existing account ten-second deadline for each native request, 
 twenty-five-second lookup/grant and thirty-five-second transfer BFF envelopes; only an explicit retry replays
 the original pending command. Each envelope includes the native phases plus five seconds for delivery.
 
+Decision: permission search filters only the current native response, keeps the selected choice visible, and shows
+returned nondelegable roles disabled with their returned action expansion.
+
 The deadline includes headers and body decoding, races transports that ignore cancellation, composes caller
 cancellation and releases its timer/listeners. Resource/account/session retirement still invalidates late
 continuations. A stalled review becomes unavailable; a potentially dispatched command stays uncertain with
