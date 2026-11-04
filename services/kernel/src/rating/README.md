@@ -861,6 +861,9 @@ reads, review-context selection and citation disclosure.
   as its ETag (zero before publication) and `Cache-Control: no-cache`, matching other public subject reads.
   The route never reads votes, shard totals or Realm populations. `subject.get` continues to follow the subject's
   head revision and carries no figure; search can reuse `PublicFigure` unchanged.
+
+### Provider source statistics
+
 - `GET /v1/subjects/{id}/source-statistics` returns an array of at most two independent current figures,
   ordered by provider, under the Subject's read rules. An absent, cleared or fenced provider has no row and no
   invented total. Each row retains provider, exact source record, effective fence alias, scale, mean, count,

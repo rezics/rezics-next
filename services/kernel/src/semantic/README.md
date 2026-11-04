@@ -1294,7 +1294,8 @@ change.
   Same-backend standalone mapping is one RR/eight statements; cross-backend source<=10/control<=6,total16/pending11.
   Filtered pages share batched observations/two probes/candidate points within existing <=12/backend or8+4R composed
   budgets and one connection. Raw100 applies to durable steps only. No global observation or per-ID loop is hidden.
-- Growth check: REQUIRED `test/semantic/growth-identity-publication.test.ts` named cases in the owning Cost section,
+- Growth check: REQUIRED, UNDELIVERED `test/semantic/growth-identity-publication.test.ts` named cases in the owning Cost
+  section,
   using checkGrowth series/leading SQL tags/native EXPLAIN, three-scale group/support and independent control/history/
   live-obligation axes. Reclaim/wakeup is in prepare and its own measured case. Native table counts and relation/index
   byte deltas cover every retained/crash/replay/abandon state; continuous disjoint jobs cannot stall finite owner pages.

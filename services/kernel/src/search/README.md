@@ -2085,7 +2085,7 @@ whole-dependency observation. Population growth outside these anchored seeks mus
 Native 256/1024/4096 growth measurement, relay/rebuild invalidation, coverage publication and receiver/browser
 acceptance remain required when mounting this consumer; the focused tests exercise only this consumer contract.
 
-### Public document text consumer
+## Public document text consumer
 
 Decision: public document text uses the existing presentation reference selector and only native public text-profile
 bodies; block/media recipes remain explicitly unsupported until their owner admits plain-text extraction.

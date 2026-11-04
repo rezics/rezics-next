@@ -4097,6 +4097,8 @@ activity retries the same page frontier, while incomplete activity stays withhel
   work, retained/materialized/serialized UTF-8 bytes and all owner phases. Keep producer repair measurements with
   its original owner; this journey measures how page consumers call it.
 
+## Review destinations
+
 Decision: Review destination pages always require an explicit Board selection, including for one eligible Board, and re-inspect that exact Realm/Board/Subject under current native read and thread-create policy before opening the existing composer.
 
 `GET /v1/realms/{realmId}/review-destinations?subjectId=...` composes one page for the deliberately selected Realm
@@ -4136,7 +4138,7 @@ this route in this attempt, so no installed declaration head or typing evidence 
   materialized byte, retained raw body, copy and serialization. A final LIMIT or response-byte rejection does not
   establish a bound on work already materialized upstream.
 
-### Current Home personal Library composition
+## Current Home personal Library composition
 
 [Current Home personal facts](../../../../docs/feeds.md#current-home-personal-facts) owns the
 response and full per-page cost. `feed-viewer.ts` calls the installed native personal-actions

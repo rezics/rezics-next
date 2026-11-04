@@ -4267,8 +4267,8 @@ page; original current locator (nine keyed visits); and the historical copy phas
 and the original released locator once per nonempty same-home page. Verification adds the original three client
 statements per present key; readiness and DELETE each repeat the fixed native locator and manifest checks. This is
 O(k log N) for the original k <= 100, with no account-global collection, history scan or changed raw-page allowance.
-`test/erasure-native-consumers.test.ts` retains its genuine consumer/copy positive oracle and now requires current
-receiving preparation before the positive purge, with mismatched barriers refused. That native proof is deferred.
+`services/auth/test/erasure-native-consumers.test.ts` retains its genuine consumer/copy positive oracle and now requires
+current receiving preparation before the positive purge, with mismatched barriers refused. That native proof is deferred.
 
 The supported shared-history producer-closure handoff for Access receipts, events and actual DBOS copies is still
 missing. No recorder/minimizer or Context-role publication bridge is invented here. If all native phases finish,

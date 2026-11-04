@@ -2227,6 +2227,17 @@ triggers, profile migration ownership and terminal deletion remain on the curren
 bounds each returned projection. `test/library/progress-http.test.ts` covers create/read, independent correction,
 clear, private isolation, stale revision and replay. No separate measure-store growth result is claimed.
 
+### Independent scalar measure composition
+
+Independent scalar measures retain their existing producer in `sessions.ts`, with exact historical presentation in
+`progress-presentation.ts`. [Measure correction and recovery](../../../../docs/library-progress-measures.md)
+owns the composed journey and inclusive source cost. `list-import-progress-adoption.ts` sequences selected measures
+on the returned shared revision; last-write `transactionId` is not immutable occurrence identity. New effects pass
+the reviewed profile binding to the native writer. Pending acknowledgements dispatch the original key/operands to
+that writer before current readback and retain each admitted receipt independently. Current owner authority still
+precedes receipt disclosure. Retired sessions retain values/pins internally and remain concealed on ordinary reads.
+Focused scenarios are in `test/library/progress-measures.test.ts`; broad acceptance and growth remain deferred.
+
 ### Session complete
 
 - Touches: One subject point read, head ensure, typed session lock, reread and CAS, then head touch and existing
@@ -2235,6 +2246,33 @@ clear, private isolation, stale revision and replay. No separate measure-store g
 - Bound: Body `S` 7, `R` `O(1)`, `B` `O(L(N))`, plus authorization, envelope and the changed session/entry's
   fixed owner-head trigger upserts. Stored profile pin and user entry identity/revision/timestamps remain unchanged.
 - Growth check: the same actual native three-scale journey includes completion, with every trigger charged.
+
+### Canonical episode completion
+
+[Canonical episode progress](../../../../docs/library-episode-progress.md) owns the exact native checklist contract,
+limits, lifecycle and Web integration. Decision: canonical episode completions are a separate per-session fact set,
+independent of scalar/manual progress; exact canonical IDs and direct `schema:isPartOf` membership admit additions,
+while correction and clear survive catalogue removal. `episode-progress.ts` and `episode-source.ts` mount through
+`progress-routes.ts`. They use persisted Semantic Subjects, current selected/disclosed relationships and released
+profiles; the Semantic producer interface is requested and the current adapter uses `readSubject`.
+
+`progress_episode` retains only owner-session/episode identity and completion time; `episode_completed_count` is
+an internal bounded counter, never generic progress or catalogue size. Both stay in the owner's native session
+transaction. Existing scalar, cursor, manual sparse units, generic history and published snapshots retain their
+meaning. Canonical IDs are exposed only by the bounded owner reader under current source disclosure. The existing
+100-child session erasure page now shares its budget between manual and canonical children, and session deletion
+checks both. The focused mounted journey is `test/library/episode-progress.test.ts`.
+
+Canonical episode owner admission follows generic session scope, current-account and terminal fences; catalogue disclosure independently uses native Subject Access, without installing an account ACL.
+
+Decision: canonical facts follow native occurrence lifecycle: reopening preserves them; retirement conceals both owner read modes and refuses fresh mutations, while admitted exact receipts remain replayable.
+
+The installed checklist composition pages the actual inverse `schema:isPartOf` work-parts stream, then inspects its
+exact `links[].subject` IDs through the generated `episodes.get` method. Missing/currently concealed Subjects remain
+redacted with `completed:null`; temporary Semantic failure remains `503 semantic_not_ready`. The existing session
+response presents `state:"retired"` separately from original meaning and current `presentation.recording.state`,
+while retired Episode reads and fresh writes remain 404. No new client declaration, catalogue, or background worker
+is introduced.
 
 ### Session abandon
 
@@ -3465,44 +3503,6 @@ current Source/physical binding, bounded execution, final publication and prepar
 return a useful retained page. The callback, locator and allocation declaration confer none of those authorities.
 
 Decision: preserve native metadata reservation and immutable-definition recovery; only explicit runtime admission requires the complete C3 parent, and list previews remain read-only.
-
-## Independent scalar measure composition
-
-Independent scalar measures retain their existing producer in `sessions.ts`, with exact historical presentation in
-`progress-presentation.ts`. [Measure correction and recovery](../../../../docs/library-progress-measures.md)
-owns the composed journey and inclusive source cost. `list-import-progress-adoption.ts` sequences selected measures
-on the returned shared revision; last-write `transactionId` is not immutable occurrence identity. New effects pass
-the reviewed profile binding to the native writer. Pending acknowledgements dispatch the original key/operands to
-that writer before current readback and retain each admitted receipt independently. Current owner authority still
-precedes receipt disclosure. Retired sessions retain values/pins internally and remain concealed on ordinary reads.
-Focused scenarios are in `test/library/progress-measures.test.ts`; broad acceptance and growth remain deferred.
-
-## Canonical episode completion
-
-[Canonical episode progress](../../../../docs/library-episode-progress.md) owns the exact native checklist contract,
-limits, lifecycle and Web integration. Decision: canonical episode completions are a separate per-session fact set,
-independent of scalar/manual progress; exact canonical IDs and direct `schema:isPartOf` membership admit additions,
-while correction and clear survive catalogue removal. `episode-progress.ts` and `episode-source.ts` mount through
-`progress-routes.ts`. They use persisted Semantic Subjects, current selected/disclosed relationships and released
-profiles; the Semantic producer interface is requested and the current adapter uses `readSubject`.
-
-`progress_episode` retains only owner-session/episode identity and completion time; `episode_completed_count` is
-an internal bounded counter, never generic progress or catalogue size. Both stay in the owner's native session
-transaction. Existing scalar, cursor, manual sparse units, generic history and published snapshots retain their
-meaning. Canonical IDs are exposed only by the bounded owner reader under current source disclosure. The existing
-100-child session erasure page now shares its budget between manual and canonical children, and session deletion
-checks both. The focused mounted journey is `test/library/episode-progress.test.ts`.
-
-Canonical episode owner admission follows generic session scope, current-account and terminal fences; catalogue disclosure independently uses native Subject Access, without installing an account ACL.
-
-Decision: canonical facts follow native occurrence lifecycle: reopening preserves them; retirement conceals both owner read modes and refuses fresh mutations, while admitted exact receipts remain replayable.
-
-The installed checklist composition pages the actual inverse `schema:isPartOf` work-parts stream, then inspects its
-exact `links[].subject` IDs through the generated `episodes.get` method. Missing/currently concealed Subjects remain
-redacted with `completed:null`; temporary Semantic failure remains `503 semantic_not_ready`. The existing session
-response presents `state:"retired"` separately from original meaning and current `presentation.recording.state`,
-while retired Episode reads and fresh writes remain 404. No new client declaration, catalogue, or background worker
-is introduced.
 
 ## VNDB retained-source admission and retry
 
