@@ -40,3 +40,16 @@ A disappearing or concealed thread retires its row actions and returns keyboard 
 feed heading. Board, sort, viewer or reading replacement retires the old cohort and frontier.
 
 Slow mode and watch keep their existing owners. Settings watch and Inbox stay Performance-owned.
+
+Decision: `BoardPinAdviceWire` is the minimal public selected-advice consumer seam until retained complete-input publication installs the method; an absent method stays unavailable.
+
+`BoardPinProducer.inspectSelected` binds the optional published `pin-advice.post` through a private no-store
+server read. It copies and freezes at most 25 exact displayed sources before session preparation, and passes only
+`selected` and optional `pinRevision` to Content. The receiver binds the native account viewer, Board, requested
+generation and exact selected IDs. Denied, stale, absent and malformed results provide no controls; full-capacity
+advice keeps only the explicit supplied actions. Aborting an inspection withholds late completion. This seam imports
+no private producer types and leaves the retained Board opening composition intact. Its tests establish wire
+validation, not native execution or rendered management. Connecting the mounted manager and source lifetime,
+keyboard focus, stories and native management/growth acceptance remains continuation work. The publication owner
+continues the retained lineage through `416-retained-content-publication.md`; this consumer does not generate or
+install declarations and makes no declaration-head claim.

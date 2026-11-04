@@ -1,4 +1,5 @@
 import type { ReceivedBoardOpeningPage } from '../board-opening';
+import type { BoardPinAdviceQuery, BoardPinAdviceResult } from './advice';
 
 export type BoardPinAction = 'pin' | 'unpin';
 
@@ -78,6 +79,8 @@ export type BoardPinBoardRead =
   | Readonly<{ state: 'malformed' }>;
 
 export type BoardPinProducer = Readonly<{
+  /** Inspect only displayed exact sources; the Board opening remains the reading owner. */
+  inspectSelected?(query: BoardPinAdviceQuery): Promise<BoardPinAdviceResult>;
   /** Read statuses for the exact ordinary feed page; no directory or second feed is requested. */
   readPage(input: { boardId: string; threadIds: readonly string[]; signal: AbortSignal }): Promise<BoardPinReadResult>;
   /** Re-read the native board page, including the pinned section. Absence keeps the decorator-only refresh. */

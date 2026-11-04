@@ -4,11 +4,46 @@ import { env } from 'cloudflare:workers';
 import { kernelClient } from '../../kernel/client';
 import type { SessionEnv } from '../../session/client.ts';
 import { validBoardPinId, type BoardPinAction, type BoardPinBoardRead, type BoardPinCommandResult } from './contract';
-import { changeBoardPinRequest, readBoardPinBoardRequest } from './native';
+import { changeBoardPinRequest, readBoardPinBoardRequest, readBoardPinAdviceRequest } from './native';
+import { boardPinAdviceInput, type BoardPinAdviceInput, type BoardPinAdviceResult } from './advice';
 
 function kernelOriginConfigured(): boolean {
   return Boolean((env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN);
 }
+
+function validateAdvice(input: unknown): BoardPinAdviceInput & { boardId: string; viewerId: string } {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('boardId' in input) ||
+    !validBoardPinId(input.boardId) ||
+    !('viewerId' in input) ||
+    !validBoardPinId(input.viewerId) ||
+    !('selected' in input) ||
+    Object.keys(input).some((key) => !['boardId', 'viewerId', 'selected', 'pinRevision'].includes(key))
+  )
+    throw new Error('Invalid board pin inspection');
+  const selected = boardPinAdviceInput(input.boardId, {
+    selected: input.selected,
+    ...('pinRevision' in input ? { pinRevision: input.pinRevision } : {}),
+  });
+  if (!selected) throw new Error('Invalid board pin inspection');
+  return { boardId: input.boardId, viewerId: input.viewerId, ...selected };
+}
+
+export const readBoardPinAdvice = createServerFn({ method: 'POST' })
+  .validator(validateAdvice)
+  .handler(async ({ data }): Promise<BoardPinAdviceResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    return readBoardPinAdviceRequest(
+      { ...data, signal: request.signal },
+      request,
+      env as Partial<SessionEnv>,
+      kernelClient(),
+      kernelOriginConfigured(),
+    );
+  });
 
 function validateBoardRead(input: unknown): { boardId: string; sort?: 'active' | 'hot' | 'new'; cursor?: string } {
   if (!input || typeof input !== 'object' || !('boardId' in input) || !validBoardPinId(input.boardId))
