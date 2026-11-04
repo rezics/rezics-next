@@ -142,13 +142,9 @@ test('a sourced quotation keeps exact text, work, speaker and Access-derived cor
   expect(editorPage.status).toBe(200);
   expect(editorPage.headers.get('cache-control')).toContain('no-store');
   expect(editorPage.body.viewer).toEqual({ kind: 'account' });
-  expect(editorPage.body.actions).toEqual(
-    expect.arrayContaining([
-      { action: 'statement:propose', operationId: 'subject.propose', state: 'allowed' },
-      { action: 'context:accept', operationId: 'subject.accept_candidate', state: 'denied' },
-      { action: 'context:adopt', operationId: 'subject.adopt', state: 'denied' },
-    ]),
-  );
+  expect(editorPage.body.actions).toEqual([
+    { action: 'statement:propose', operationId: 'subject.propose', state: 'allowed' },
+  ]);
   const facts = pageSubject(editorPage.body);
   const document = facts.documents[quotation.statements['schema:text'][0].id];
   expect(document.language).toBe('en');
@@ -160,17 +156,13 @@ test('a sourced quotation keeps exact text, work, speaker and Access-derived cor
 
   const anonymous = await readPage(null, quotation.id);
   expect(anonymous.body.viewer).toEqual({ kind: 'anonymous' });
-  expect(anonymous.body.actions).toEqual(
-    expect.arrayContaining([{ action: 'statement:propose', operationId: 'subject.propose', state: 'denied' }]),
-  );
+  expect(anonymous.body.actions).toEqual([
+    { action: 'statement:propose', operationId: 'subject.propose', state: 'denied' },
+  ]);
   const acceptor = await readPage('acceptor', quotation.id);
-  expect(acceptor.body.actions).toEqual(
-    expect.arrayContaining([
-      { action: 'statement:propose', operationId: 'subject.propose', state: 'denied' },
-      { action: 'context:accept', operationId: 'subject.accept_candidate', state: 'allowed' },
-      { action: 'context:adopt', operationId: 'subject.adopt', state: 'allowed' },
-    ]),
-  );
+  expect(acceptor.body.actions).toEqual([
+    { action: 'statement:propose', operationId: 'subject.propose', state: 'denied' },
+  ]);
   const book = await readPage('editor', work.id);
   expect(book.status).toBe(200);
   expect(book.body).not.toHaveProperty('viewer');

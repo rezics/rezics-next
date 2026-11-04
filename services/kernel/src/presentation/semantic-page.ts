@@ -8,10 +8,10 @@ import {
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
-import { viewerActionReadTime } from '../access/index.ts';
 import { classifyUnavailability, CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
+import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, prepareReadDecisions, type Access, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { activeRelease, GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { globalReadEligibility, relatedReadEligibility } from '../semantic/eligibility.ts';
@@ -21,11 +21,9 @@ import statesRead from '../semantic/subject-summary-states.sql';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { activeProfile } from './profiles.ts';
 
-/** Native correction operations on an admitted quotation; Type descriptors never grant these. */
+/** Native correction operation on an admitted quotation; Type descriptors never grant this. */
 export const quotationCorrectionActions = [
   { action: 'statement:propose', operationId: 'subject.propose' },
-  { action: 'context:accept', operationId: 'subject.accept_candidate' },
-  { action: 'context:adopt', operationId: 'subject.adopt' },
 ] as const;
 
 export type PageViewer = { kind: 'anonymous' } | { kind: 'account' };
@@ -79,46 +77,21 @@ export async function readQuotationPageAuthority(deps: {
   deadline: number;
 }): Promise<{ viewer: PageViewer; actions: PageAction[] }> {
   const viewer: PageViewer = { kind: deps.actor.kind === 'account' ? 'account' : 'anonymous' };
-  const unavailable = quotationCorrectionActions.map((entry) => ({
-    action: entry.action,
-    operationId: entry.operationId,
-    state: 'unavailable' as const,
-  }));
-  const context = { pool: deps.pool, deadline: deps.deadline };
+  const [propose] = quotationCorrectionActions;
+  const unavailable = [{ action: propose.action, operationId: propose.operationId, state: 'unavailable' as const }];
   try {
-    const decisions = await prepareReadDecisions(deps.access, {
-      actor: deps.actor,
-      actions: new Set(quotationCorrectionActions.map((entry) => entry.action)),
-      context,
-    });
-    const time = viewerActionReadTime(deps.access, context);
-    const actions = await withReadTransaction(
-      deps.pool,
-      async (client) => {
-        const result: PageAction[] = [];
-        for (const entry of quotationCorrectionActions) {
-          try {
-            const answers = await decisions.decide(
-              client,
-              { action: entry.action, resourceType: 'semantic.context', ids: [GLOBAL_CONTEXT] },
-              time,
-            );
-            result.push({
-              action: entry.action,
-              operationId: entry.operationId,
-              state: answers[GLOBAL_CONTEXT]?.allowed ? 'allowed' : 'denied',
-            });
-          } catch (error) {
-            if (classifyUnavailability(error))
-              result.push({ action: entry.action, operationId: entry.operationId, state: 'unavailable' });
-            else throw error;
-          }
-        }
-        return result;
-      },
-      deps.deadline,
+    const check = await accessCheck(
+      deps.access,
+      deps.actor,
+      propose.action,
+      { route: 0, id: GLOBAL_CONTEXT },
+      { pool: deps.pool, deadline: deps.deadline },
     );
-    return { viewer, actions };
+    const allowed = await withConnection(deps.pool, (client) => check(client));
+    return {
+      viewer,
+      actions: [{ action: propose.action, operationId: propose.operationId, state: allowed ? 'allowed' : 'denied' }],
+    };
   } catch (error) {
     if (classifyUnavailability(error)) return { viewer, actions: unavailable };
     throw error;
