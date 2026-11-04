@@ -312,7 +312,9 @@ export function crossMediaDumpCacheRoot(env: NodeJS.ProcessEnv = process.env): s
 }
 
 /** Fetch and validate both pinned source dumps, reusing verified archive and extraction caches. */
-export async function fetchCrossMediaDumps(options: FetchOptions & { cacheRoot?: string } = {}): Promise<CrossMediaDumpPaths> {
+export async function fetchCrossMediaDumps(
+  options: FetchOptions & { cacheRoot?: string } = {},
+): Promise<CrossMediaDumpPaths> {
   const cacheRoot = resolve(options.cacheRoot ?? crossMediaDumpCacheRoot());
   const bangumiArchive = join(cacheRoot, 'downloads', 'dump-2026-10-20.210332Z.zip');
   const vndbArchive = join(cacheRoot, 'downloads', 'vndb-db-2026-10-25.tar.zst');

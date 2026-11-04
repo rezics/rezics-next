@@ -8,12 +8,14 @@ function requiredEnvironment(name: string, env: NodeJS.ProcessEnv): string {
   return value;
 }
 
-export async function runDevelopmentSeed(options: {
-  env?: NodeJS.ProcessEnv;
-  fetchDumps?: typeof fetchCrossMediaDumps;
-  runSeed?: typeof runCrossMediaSeedCli;
-  root?: string;
-} = {}): Promise<void> {
+export async function runDevelopmentSeed(
+  options: {
+    env?: NodeJS.ProcessEnv;
+    fetchDumps?: typeof fetchCrossMediaDumps;
+    runSeed?: typeof runCrossMediaSeedCli;
+    root?: string;
+  } = {},
+): Promise<void> {
   const env = options.env ?? process.env;
   const accountKey = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT_KEY', env);
   const account = requiredEnvironment('REZICS_DEV_PERSONA_ACCOUNT', env);
