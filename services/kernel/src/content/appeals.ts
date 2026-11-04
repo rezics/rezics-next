@@ -270,7 +270,7 @@ function sourceView(anchor: AppealReviewAnchor) {
 function provenance(
   context: ReadContext,
   anchor: AppealReviewAnchor,
-  sourceObservations: readonly { appealId: string; source: ReturnType<typeof sourceView> }[],
+  sourceObservations: { appealId: string; source: ReturnType<typeof sourceView> }[],
 ) {
   if (context.actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   return {
