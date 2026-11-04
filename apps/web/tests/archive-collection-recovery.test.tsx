@@ -247,7 +247,12 @@ function visit(subject = 'viewer-a', csrfToken = 'epoch-a'): RecoveryVisit {
 }
 
 function fakePort(
-  options: { uncertainApply?: boolean; uncertainUpload?: boolean; staleReview?: boolean; sourceRecordCount?: number } = {},
+  options: {
+    uncertainApply?: boolean;
+    uncertainUpload?: boolean;
+    staleReview?: boolean;
+    sourceRecordCount?: number;
+  } = {},
 ) {
   const calls: {
     upload: unknown[];
@@ -467,7 +472,9 @@ test('replacement, read failure, and retired visits cannot hand off a stale arch
       });
       const retryInput = await selectFile(retryView.host, retryFile);
       await submitFile(retryView.host);
-      expect(retryView.host.querySelector('[role=alert]')?.textContent).toContain(m.library_archive_recovery_upload_read_failed());
+      expect(retryView.host.querySelector('[role=alert]')?.textContent).toContain(
+        m.library_archive_recovery_upload_read_failed(),
+      );
       expect((retryInput.files?.[0] as File).name).toBe('retry.json');
       await submitFile(retryView.host);
       expect(reads.count).toBe(2);
@@ -516,7 +523,9 @@ test('empty and over-limit files remain local without a read or native upload', 
     Object.defineProperty(oversized, 'arrayBuffer', { value: () => (reads++, Promise.resolve(new ArrayBuffer(1))) });
     await selectFile(view.host, oversized);
     await submitFile(view.host);
-    expect(view.host.querySelector('[role=alert]')?.textContent).toContain(m.library_archive_recovery_upload_too_large());
+    expect(view.host.querySelector('[role=alert]')?.textContent).toContain(
+      m.library_archive_recovery_upload_too_large(),
+    );
     expect(input.disabled).toBe(false);
     expect(reads).toBe(0);
     expect(fake.calls.upload).toHaveLength(0);

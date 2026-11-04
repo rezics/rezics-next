@@ -160,11 +160,7 @@ export function ArchiveCollectionRecoveryUpload({
         {m.library_archive_recovery_upload_title()}
       </h2>
       <p>{m.library_archive_recovery_upload_help({ megabytes: 34 })}</p>
-      <form
-        className="grid gap-4"
-        aria-busy={preparing || undefined}
-        onSubmit={(event) => void submit(event)}
-      >
+      <form className="grid gap-4" aria-busy={preparing || undefined} onSubmit={(event) => void submit(event)}>
         <label className="grid gap-2">
           <span className="font-medium">{m.library_archive_recovery_file()}</span>
           <input
@@ -200,11 +196,7 @@ export function ArchiveCollectionRecoveryUpload({
                 : m.library_archive_recovery_upload_read_failed()}
           </p>
         ) : null}
-        <button
-          className={actionClass}
-          type="submit"
-          disabled={!hasFile || busy || locked || preparing}
-        >
+        <button className={actionClass} type="submit" disabled={!hasFile || busy || locked || preparing}>
           {preparing
             ? m.library_archive_recovery_preparing()
             : busy
