@@ -37,6 +37,12 @@ mock.module('@rezics/ui/shadcn/dialog', () => ({
   DialogContent: Part,
   DialogTitle: Part,
   DialogDescription: Part,
+  DialogClose: Part,
+  DialogHeader: Part,
+  DialogFooter: Part,
+  DialogTrigger: Part,
+  DialogPortal: Part,
+  DialogOverlay: Part,
 }));
 const { createRoot } = await import('react-dom/client');
 const { ConsolidationWorkspace } = await import('../src/library/label-consolidation/workspace');

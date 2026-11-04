@@ -175,6 +175,7 @@ export function usePrivateReportOrigin(
           // Cleanup only retires. A later setup cannot restore any captured episode.
           mounted++;
           read();
+          watchers.forEach((watch) => watch());
           navigation?.();
           cache();
           session();
