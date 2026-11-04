@@ -22,11 +22,11 @@
 //
 //   KERNEL_CHECK_REMOTE=<hosts file> bun scripts/remote-check.ts [--cwd <directory>] [--slots <n>] [--estimate-ms <n>] [--max-ms <n>] [--gate] <workspace> -- <command...>
 //
-// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot, performance: true }] }.
+// The hosts file is local configuration: { "hosts": [{ name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, processorsPerSlot, performance: true, dependencyArtifactBudgetBytes, freeDiskFloorBytes }] }.
 // The command runs in <directory> (relative to the workspace root, default the root) after `bun install`, inside the
 // host's capped systemd slice, and its exit code is this script's exit code. The workspace uploads before a run takes
 // <n> slots (default 1) on that host; those slots cover only the remote command, not upload, output retrieval or cleanup.
-// Admission depends on free slots, held memory reservations and slice headroom that counts inactive file cache.
+// Admission depends on free slots, held memory reservations, slice headroom that counts inactive file cache, and free disk.
 // Each run has a nested slice shared with its containers; its cpu.stat and memory.peak report CPU seconds, average
 // cores and peak memory.
 import { createHash, randomUUID } from 'node:crypto';
@@ -231,6 +231,10 @@ export type Host = {
   fallback?: boolean;
   performance?: boolean;
   processorsPerSlot: number;
+  /** Max allocated bytes for source and native dependency artifacts. Omitted: 20% of the filesystem. */
+  dependencyArtifactBudgetBytes?: number;
+  /** Skip the host when free bytes on /srv/rezics-check are below this after eviction. Omitted: 32 GiB. */
+  freeDiskFloorBytes?: number;
 };
 
 export type PinnedBun = { binary: string; version: string; revision: string };
@@ -777,6 +781,8 @@ export const CHECK_HOST_MIN_AVAILABLE_BYTES = 4 * 2 ** 30;
 export const CHECK_HOST_MIN_TMP_BYTES = 4 * 2 ** 30;
 export const CHECK_HOST_MIN_TMP_INODES = 65_536;
 export const CHECK_HOST_MAX_LOAD_PER_PROCESSOR = 1.5;
+export const CHECK_HOST_DEFAULT_FREE_DISK_FLOOR_BYTES = 32 * 2 ** 30;
+export const CHECK_HOST_DEFAULT_ARTIFACT_BUDGET_FRACTION = 0.2;
 const MAX_WAIT_RECORD_MS = 60_000;
 export const BASE_REFRESH_INTERVAL_SECONDS = 30 * 60;
 export const BASE_RETENTION_SECONDS = 2 * 60 * 60;
@@ -920,6 +926,8 @@ export function readHosts(file: string): Host[] {
   return parsed.hosts.map((entry: Record<string, unknown>, index) => {
     const { name, address, identity, memoryMaxGiB, cpuQuotaPercent, slots, fallback, performance } = entry;
     const processorsPerSlot = entry.processorsPerSlot === undefined ? CHECK_SLOT_PROCESSORS : entry.processorsPerSlot;
+    const dependencyArtifactBudgetBytes = entry.dependencyArtifactBudgetBytes;
+    const freeDiskFloorBytes = entry.freeDiskFloorBytes;
     // An address starting with a dash would be read as an ssh option.
     if (typeof address !== 'string' || !/^[\w.-]+@[\w.:-]+$/.test(address))
       throw new Error(`host ${index}: bad address`);
@@ -934,6 +942,18 @@ export function readHosts(file: string): Host[] {
     if (fallback !== undefined && typeof fallback !== 'boolean') throw new Error(`host ${name}: bad fallback`);
     if (typeof processorsPerSlot !== 'number' || !Number.isFinite(processorsPerSlot) || processorsPerSlot <= 0)
       throw new Error(`host ${name}: bad processorsPerSlot`);
+    if (
+      dependencyArtifactBudgetBytes !== undefined &&
+      (typeof dependencyArtifactBudgetBytes !== 'number' ||
+        !Number.isSafeInteger(dependencyArtifactBudgetBytes) ||
+        dependencyArtifactBudgetBytes < 1)
+    )
+      throw new Error(`host ${name}: bad dependencyArtifactBudgetBytes`);
+    if (
+      freeDiskFloorBytes !== undefined &&
+      (typeof freeDiskFloorBytes !== 'number' || !Number.isSafeInteger(freeDiskFloorBytes) || freeDiskFloorBytes < 1)
+    )
+      throw new Error(`host ${name}: bad freeDiskFloorBytes`);
     return {
       name,
       address,
@@ -944,6 +964,8 @@ export function readHosts(file: string): Host[] {
       ...(fallback ? { fallback: true } : {}),
       ...(performance === undefined ? {} : { performance }),
       processorsPerSlot,
+      ...(dependencyArtifactBudgetBytes === undefined ? {} : { dependencyArtifactBudgetBytes }),
+      ...(freeDiskFloorBytes === undefined ? {} : { freeDiskFloorBytes }),
     };
   });
 }
@@ -1037,6 +1059,11 @@ tmp_bytes=$(df -P -B1 /tmp 2>/dev/null | awk 'NR == 2 { print $4; exit }' || tru
 case "$tmp_bytes" in ''|*[!0-9]*) tmp_bytes= ;; esac
 tmp_inodes=$(df -P -i /tmp 2>/dev/null | awk 'NR == 2 { print $4; exit }' || true)
 case "$tmp_inodes" in ''|*[!0-9]*) tmp_inodes= ;; esac
+if [ -f ${ROOT}/cache-maintenance.py ]; then
+  python3 ${ROOT}/cache-maintenance.py admit ${ROOT}/dependency-artifacts${host.dependencyArtifactBudgetBytes === undefined ? '' : ` ${host.dependencyArtifactBudgetBytes}`} || true
+fi
+disk_bytes=$(df -P -B1 ${ROOT} 2>/dev/null | awk 'NR == 2 { print $4; exit }' || true)
+case "$disk_bytes" in ''|*[!0-9]*) disk_bytes= ;; esac
 slice_cgroup=$(systemctl show --property=ControlGroup --value ${SLICE} 2>/dev/null || true)
 case "$slice_cgroup" in /*) ;; *) slice_cgroup= ;; esac
 current=
@@ -1061,7 +1088,7 @@ else
   [ -n "$available" ] || exit 1
   printf 'MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM %s\\nMEMORY_RECLAIMABLE 0\\n' "$available"
 fi
-printf 'AVAILABLE %s\\nTMP_BYTES %s\\nTMP_INODES %s\\n' "\${available:--}" "\${tmp_bytes:--}" "\${tmp_inodes:--}"
+printf 'AVAILABLE %s\\nTMP_BYTES %s\\nTMP_INODES %s\\nDISK_FREE %s\\n' "\${available:--}" "\${tmp_bytes:--}" "\${tmp_inodes:--}" "\${disk_bytes:--}"
 slice_processors=
 set -- $cpu_max
 if [ "$#" -eq 2 ]; then
@@ -1892,6 +1919,12 @@ def inventory(root, allocated=None):
     return result
 
 
+def dependency_inputs(entries):
+    names = {'package.json', 'bun.lock', 'bun.lockb', 'bunfig.toml'}
+    return {name: value for name, value in entries.items()
+            if Path(name).name in names or name.startswith('patches/')}
+
+
 def remove(path):
     if path.is_symlink() or path.is_file():
         path.unlink()
@@ -2008,7 +2041,7 @@ def touch_artifacts(entry):
 
 
 # Credit belongs to one maintenance ownership interval. A new process always starts at zero.
-# Foreground publishers have no credit and never scan old entries to obtain any.
+# Foreground publishers have no credit; they evict from .cache-bytes under per-key locks only.
 RECLAIM_CREDIT = 0
 RECLAIM_LIMIT = 64 * 1024 * 1024
 MAINTENANCE_STOP = False
@@ -2464,6 +2497,87 @@ def schedule_maintenance(root, source):
         print('remote-check: cache registration unavailable: ' + str(error), file=sys.stderr, flush=True)
 
 
+def artifact_budget_bytes(cache):
+    configured = os.environ.get('REMOTE_CHECK_ARTIFACT_BUDGET_BYTES', '').strip()
+    if configured:
+        value = int(configured)
+        if value < 1:
+            raise RuntimeError('artifact budget must be a positive integer')
+        return value
+    return max(1, int(shutil.disk_usage(cache).total * ${CHECK_HOST_DEFAULT_ARTIFACT_BUDGET_FRACTION}))
+
+
+def cache_entry_size(entry):
+    try:
+        size = int((entry / '.cache-bytes').read_text().strip())
+        return size if size >= 0 else None
+    except (OSError, ValueError):
+        return None
+
+
+def listed_budget_entries(cache):
+    known = []
+    for namespace in [cache, cache / 'native']:
+        try:
+            names = os.listdir(namespace)
+        except FileNotFoundError:
+            continue
+        for name in names:
+            if not re.fullmatch(r'[a-f0-9]{64}', name):
+                continue
+            entry = namespace / name
+            try:
+                info = entry.lstat()
+                if not stat.S_ISDIR(info.st_mode) or retirement_marker(entry).exists():
+                    continue
+                size = cache_entry_size(entry)
+                if size is None:
+                    continue
+                known.append((info.st_mtime_ns, info.st_dev, info.st_ino, entry, size))
+            except FileNotFoundError:
+                continue
+    known.sort(key=lambda item: item[0])
+    return known
+
+
+def evict_for_budget(cache, needed):
+    # Foreground LRU uses .cache-bytes and per-key locks. It never waits on a held lock or walks payloads.
+    cache.mkdir(parents=True, exist_ok=True)
+    budget = artifact_budget_bytes(cache)
+    known = listed_budget_entries(cache)
+    used = sum(item[4] for item in known)
+    for last_use, device, inode, entry, size in known:
+        if used + needed <= budget:
+            return True
+        lock_path = entry.parent / (entry.name + '.lock')
+        try:
+            with lock_path.open('a') as lock:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    continue
+                if retirement_marker(entry).exists() or not entry.exists():
+                    continue
+                info = entry.lstat()
+                if [info.st_mtime_ns, info.st_dev, info.st_ino] != [last_use, device, inode]:
+                    continue
+                if cache_entry_size(entry) != size:
+                    continue
+                remove(entry)
+                (entry.parent / (entry.name + '.invalid')).unlink(missing_ok=True)
+                used -= size
+        except FileNotFoundError:
+            continue
+    return used + needed <= budget
+
+
+def admit_cache(cache):
+    if len(sys.argv) > 3 and sys.argv[3].isdigit():
+        os.environ['REMOTE_CHECK_ARTIFACT_BUDGET_BYTES'] = sys.argv[3]
+    needed = int(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4].isdigit() else 0
+    return 0 if evict_for_budget(cache, needed) else 1
+
+
 def publish_artifacts(root, entry, manifest):
     cache = Path(os.environ['REMOTE_CHECK_PREPARATION_CACHE'])
     stage = None
@@ -2485,6 +2599,9 @@ def publish_artifacts(root, entry, manifest):
         size = allocated[0] + sum(path.lstat().st_blocks * 512 for path in
             [stage, stage / 'payload', stage / 'manifest.json', stage / '.cache-bytes'])
         (stage / '.cache-bytes').write_text(str(size))
+        if not evict_for_budget(cache, size):
+            print('remote-check: dependency artifacts publication skipped: cache budget', file=sys.stderr, flush=True)
+            return
         stage.rename(entry)
         touch_artifacts(entry)
     except OSError as error:
@@ -2502,7 +2619,7 @@ def install():
         raise RuntimeError('absolute preparation deadline exceeded')
     preparation_progress(root, 'source-inventory')
     before = inventory(root)
-    identity = {'schema': 2, 'inputs': before,
+    identity = {'schema': 2, 'inputs': dependency_inputs(before),
                 'platform': [sys.platform, platform.machine(), platform.libc_ver()],
                 'revision': os.environ['REMOTE_CHECK_PREPARATION_REVISION'],
                 'build': os.environ['REMOTE_CHECK_PREPARATION_BUILD']}
@@ -2524,9 +2641,7 @@ def install():
         hit = manifest is not None
         native_hit = None
         if not hit:
-            native_identity = dict(identity, inputs={name: value for name, value in before.items()
-                if Path(name).name in ['package.json', 'bun.lock', 'bun.lockb', 'bunfig.toml'] or name.startswith('patches/')})
-            native_key = hashlib.sha256(json.dumps(native_identity, sort_keys=True).encode()).hexdigest()
+            native_key = key
             native_cache = cache / 'native'
             native_cache.mkdir(exist_ok=True)
             native_entry = native_cache / native_key
@@ -3138,7 +3253,7 @@ if sys.argv[1] == 'phase':
     preparation_progress(Path(sys.argv[2]), sys.argv[3])
     sys.exit(0)
 try:
-    sys.exit(maintain(Path(sys.argv[2]), sys.argv[1] == 'maintain') if sys.argv[1] in ['sweep', 'maintain'] else register_maintenance(Path(sys.argv[2])) if sys.argv[1] == 'register' else install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else supervise())
+    sys.exit(maintain(Path(sys.argv[2]), sys.argv[1] == 'maintain') if sys.argv[1] in ['sweep', 'maintain'] else register_maintenance(Path(sys.argv[2])) if sys.argv[1] == 'register' else install() if sys.argv[1] == 'install' else lifetime() if sys.argv[1] == 'lifetime' else local_command() if sys.argv[1] == 'local' else admit_cache(Path(sys.argv[2])) if sys.argv[1] == 'admit' else supervise())
 except Exception as error:
     stop_owned(signal.SIGKILL)
     while True:
@@ -3424,6 +3539,7 @@ export function runScript(
   gitManifestSha256?: string,
   prepare: { cwd: string; command: string[] }[] = [],
   expectedSourceSha256?: string,
+  artifactBudgetBytes?: number,
 ): string {
   const lifetimeMs = effectiveRunLifetimeMs(estimateMs, maxMs);
   const { version: pinnedBunVersion, revision: pinnedBunRevision } = runtime;
@@ -3488,6 +3604,7 @@ export function runScript(
 export TMPDIR=${quote(`${directory}/.temp/tmp`)} TMP=${quote(`${directory}/.temp/tmp`)} TEMP=${quote(`${directory}/.temp/tmp`)}
 export NODE_DISABLE_COMPILE_CACHE=1
 unset NODE_COMPILE_CACHE
+${artifactBudgetBytes === undefined ? '' : `export REMOTE_CHECK_ARTIFACT_BUDGET_BYTES=${quote(String(artifactBudgetBytes))}\n`}
 preparation_phase() {
   python3 ${quote(`${wrapperDirectory}/prepare.py`)} phase ${quote(directory)} "$1"
 }
@@ -3555,7 +3672,7 @@ host=$REMOTE_CHECK_HOST
     "$bun" install --frozen-lockfile
     code=$?
     bun=$real_bun
-    unset REMOTE_CHECK_PREPARER_BIN REMOTE_CHECK_REAL_BUN REMOTE_CHECK_PREPARATION_REVISION REMOTE_CHECK_PREPARATION_BUILD REMOTE_CHECK_PREPARATION_VERSION REMOTE_CHECK_PREPARATION_CACHE REMOTE_CHECK_PREPARATION_DEADLINE
+    unset REMOTE_CHECK_PREPARER_BIN REMOTE_CHECK_REAL_BUN REMOTE_CHECK_PREPARATION_REVISION REMOTE_CHECK_PREPARATION_BUILD REMOTE_CHECK_PREPARATION_VERSION REMOTE_CHECK_PREPARATION_CACHE REMOTE_CHECK_PREPARATION_DEADLINE REMOTE_CHECK_ARTIFACT_BUDGET_BYTES
     if [ "$code" -eq 0 ]; then [ -f ${quote(`${directory}/.bun-install-complete`)} ] || touch ${quote(`${directory}/.bun-install-complete`)}; fi
     install_finished=$(date +%s%N)
     awk -v elapsed="$((install_finished - install_started))" -v host="$host" 'BEGIN { printf "remote-check: bun install %.3f s on %s\\n", elapsed / 1000000000, host }' >&2
@@ -3929,6 +4046,7 @@ type HostProbe = {
   availableMemory: number;
   tmpBytes: number;
   tmpInodes: number;
+  diskFree: number;
   memoryHeadroom: number;
   memoryReclaimable: number;
   memoryReserved: number;
@@ -3960,6 +4078,7 @@ type RankedHost = {
   ordinarySlotsUsed: number;
   expressSlotUsed: boolean;
   landingWaitingSlots: number;
+  diskFree: number;
 };
 
 function hostCapacity(host: Host, probe: HostProbe): number {
@@ -4065,7 +4184,12 @@ function rankHost(
     ordinarySlotsUsed: probe.ordinarySlotsUsed,
     expressSlotUsed: probe.expressSlotUsed,
     landingWaitingSlots: probe.landingWaitingSlots,
+    diskFree: probe.diskFree,
   };
+}
+
+function hostFreeDiskFloor(host: Host): number {
+  return host.freeDiskFloorBytes ?? CHECK_HOST_DEFAULT_FREE_DISK_FLOOR_BYTES;
 }
 
 function requestedSlotCap(ranked: RankedHost[], shortRun: boolean, requestedSlots: number): number {
@@ -4103,6 +4227,7 @@ function parseProbe(output: string): HostProbe | null {
   const availableValue = value('AVAILABLE');
   const tmpBytesValue = value('TMP_BYTES');
   const tmpInodesValue = value('TMP_INODES');
+  const diskFreeValue = value('DISK_FREE');
   const headroomValue = value('MEMORY_HEADROOM');
   const reclaimableValue = value('MEMORY_RECLAIMABLE');
   const reservedValue = value('MEMORY_RESERVED');
@@ -4112,6 +4237,7 @@ function parseProbe(output: string): HostProbe | null {
   const availableMemory = Number(availableValue);
   const tmpBytes = Number(tmpBytesValue);
   const tmpInodes = Number(tmpInodesValue);
+  const diskFree = Number(diskFreeValue);
   const memoryHeadroom = Number(headroomValue);
   const memoryReclaimable = Number(reclaimableValue);
   const memoryReserved = Number(reservedValue);
@@ -4146,6 +4272,7 @@ function parseProbe(output: string): HostProbe | null {
     availableValue === null ||
     tmpBytesValue === null ||
     tmpInodesValue === null ||
+    diskFreeValue === null ||
     headroomValue === null ||
     reclaimableValue === null ||
     reservedValue === null ||
@@ -4161,6 +4288,8 @@ function parseProbe(output: string): HostProbe | null {
     tmpBytes < 0 ||
     !Number.isSafeInteger(tmpInodes) ||
     tmpInodes < 0 ||
+    !Number.isSafeInteger(diskFree) ||
+    diskFree < 0 ||
     !Number.isSafeInteger(memoryHeadroom) ||
     memoryHeadroom < 0 ||
     !Number.isSafeInteger(memoryReclaimable) ||
@@ -4206,6 +4335,7 @@ function parseProbe(output: string): HostProbe | null {
     availableMemory,
     tmpBytes,
     tmpInodes,
+    diskFree,
     memoryHeadroom,
     memoryReclaimable,
     memoryReserved,
@@ -4471,11 +4601,13 @@ async function rankedHosts(
         ? `${entry.host.name}: load ${probe.load} exceeds limit ${limit}`
         : probe.availableMemory < CHECK_HOST_MIN_AVAILABLE_BYTES
           ? `${entry.host.name}: MemAvailable ${probe.availableMemory} bytes is under ${CHECK_HOST_MIN_AVAILABLE_BYTES} bytes`
-          : probe.tmpBytes < CHECK_HOST_MIN_TMP_BYTES
-            ? `${entry.host.name}: /tmp ${probe.tmpBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`
-            : probe.tmpInodes < CHECK_HOST_MIN_TMP_INODES
-              ? `${entry.host.name}: /tmp ${probe.tmpInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`
-              : undefined;
+          : probe.diskFree < hostFreeDiskFloor(entry.host)
+            ? `${entry.host.name}: free disk ${probe.diskFree} bytes is under ${hostFreeDiskFloor(entry.host)} bytes`
+            : probe.tmpBytes < CHECK_HOST_MIN_TMP_BYTES
+              ? `${entry.host.name}: /tmp ${probe.tmpBytes} free bytes is under ${CHECK_HOST_MIN_TMP_BYTES} required bytes`
+              : probe.tmpInodes < CHECK_HOST_MIN_TMP_INODES
+                ? `${entry.host.name}: /tmp ${probe.tmpInodes} free inodes is under ${CHECK_HOST_MIN_TMP_INODES} required inodes`
+                : undefined;
     if (!reason) continue;
     skipped.push({ host: entry.host, probe });
     loggedSkips.set(entry.host.name, reason);
@@ -4815,8 +4947,8 @@ async function acquire(
     const state = waitingHosts.length
       ? waitingHosts
           .map(
-            ({ host, freeSlots, slotLimit, memoryReserved, memoryReclaimable }) =>
-              `${host.name} ${freeSlots}/${slotLimit} free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${(slots * memoryReservationBytes) / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB, ${memoryReclaimable / 2 ** 30} GiB reclaimable file cache`,
+            ({ host, freeSlots, slotLimit, memoryReserved, memoryReclaimable, diskFree }) =>
+              `${host.name} ${freeSlots}/${slotLimit} free, disk ${diskFree} bytes free, memory ${memoryReserved / 2 ** 30} GiB reserved + ${(slots * memoryReservationBytes) / 2 ** 30} GiB requested of ${host.memoryMaxGiB} GiB, ${memoryReclaimable / 2 ** 30} GiB reclaimable file cache`,
           )
           .join(', ')
       : 'no responding hosts';
@@ -5411,6 +5543,28 @@ function reportDuration(phase: string, started: number, host: string, bytesSent?
   );
 }
 
+function parseCheckGitPhaseTimings(
+  output: string,
+): { sharedStoreLockFetchSeconds: number; checkoutSeconds: number } | null {
+  const phases = new Map<'shared-store lock/fetch' | 'checkout', number>();
+  for (const line of output.slice(-4096).split(/\r?\n/)) {
+    const match = /^REMOTE_CHECK_PHASE\t(shared-store lock\/fetch|checkout)\t(\d+)$/.exec(line);
+    if (!match) continue;
+    const phase = match[1] as 'shared-store lock/fetch' | 'checkout';
+    const nanoseconds = Number(match[2]);
+    if (phases.has(phase) || !Number.isSafeInteger(nanoseconds) || nanoseconds < 0) return null;
+    phases.set(phase, nanoseconds / 1e9);
+  }
+  const sharedStoreLockFetchSeconds = phases.get('shared-store lock/fetch');
+  const checkoutSeconds = phases.get('checkout');
+  if (sharedStoreLockFetchSeconds === undefined || checkoutSeconds === undefined) return null;
+  return { sharedStoreLockFetchSeconds, checkoutSeconds };
+}
+
+function reportObservedDuration(phase: string, seconds: number, host: string): void {
+  console.error(`remote-check: ${phase} ${seconds.toFixed(3)} s on ${host}`);
+}
+
 function reportCancelledSlotWait(started: number): void {
   console.error(
     `remote-check: slot wait ${((performance.now() - started) / 1000).toFixed(3)} s (cancelled before a slot was acquired)`,
@@ -5825,6 +5979,8 @@ async function uploadRun(
   try {
     let uploadFiles = [...files];
     let fetchedGit = false;
+    let fetchedPublished = false;
+    let rejectedIdentity = false;
     if (options.expectedSourceManifest) {
       const manifestBytes = Buffer.from(`${JSON.stringify(options.expectedSourceManifest)}\n`);
       const temporaryRoot = join(resolve(options.workspace), '.temp', 'check-host');
@@ -5842,7 +5998,12 @@ async function uploadRun(
       if (!lstatSync(localTemp).isDirectory())
         throw new Error('remote-check: local Git staging directory is unavailable');
       const gitStageStarted = performance.now();
-      const { stageCheckGit, fetchCheckGitScript } = await import('./check-git.ts');
+      const {
+        stageCheckGit,
+        fetchCheckGitScript,
+        CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION,
+        CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT,
+      } = await import('./check-git.ts');
       if (!transfer.stage) {
         const directory = mkdtempSync(join(localTemp, `remote-check-git-${id}-`));
         try {
@@ -5876,7 +6037,21 @@ async function uploadRun(
             'GitHub fetch',
             transferLimit,
           );
-          if (result.code !== 0) throw new Error('check-git: host fetch failed');
+          if (result.code === CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT) {
+            rejectedIdentity = true;
+            throw new Error('remote-check: run identity is active or already published');
+          }
+          if (result.code !== 0) {
+            if (!result.output.includes(CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION))
+              throw new RemoteTransportError(host.name, 'GitHub fetch', result.code);
+            throw new Error('check-git: host fetch failed');
+          }
+          fetchedPublished = true;
+          const gitPhases = parseCheckGitPhaseTimings(result.output);
+          if (gitPhases) {
+            reportObservedDuration('shared-store lock/fetch', gitPhases.sharedStoreLockFetchSeconds, host.name);
+            reportObservedDuration('checkout', gitPhases.checkoutSeconds, host.name);
+          } else console.error(`remote-check: GitHub fetch phase details unavailable on ${host.name}`);
           const overlay = gitWorkspaceOverlay(options.workspace, files);
           if (overlay.removed.length) {
             const deleted = await boundedSsh(
@@ -5894,16 +6069,23 @@ async function uploadRun(
           console.error(`remote-check: fetched native Git snapshot on ${host.name}`);
         } catch (error) {
           if (signal.aborted) throw new Aborted();
+          if (rejectedIdentity || (error instanceof RemoteTransportError && !fetchedPublished)) throw error;
           console.error(`remote-check: GitHub fetch unavailable on ${host.name}; using full snapshot upload`);
-          // A successful fetch followed by failed preparation must not leave Git metadata for pack restoration.
-          const cleared = await boundedSsh(
-            host,
-            connectionId,
-            `rm -rf -- ${quote(directory)}`,
-            'Git fallback cleanup',
-            transferLimit,
-          );
-          if (cleared.code !== 0) throw new RemoteTransportError(host.name, 'Git fallback cleanup', cleared.code);
+          if (fetchedPublished) {
+            try {
+              const cleared = await boundedSsh(
+                host,
+                connectionId,
+                `rm -rf -- ${quote(directory)}`,
+                'Git fallback cleanup',
+                transferLimit,
+              );
+              if (cleared.code !== 0) throw new Error('remote-check: Git fallback cleanup failed');
+            } catch {
+              console.error('remote-check: Git fallback cleanup failed; preserving the primary preparation failure');
+              throw error;
+            }
+          }
         } finally {
           reportDuration('GitHub fetch', fetchStarted, host.name);
         }
@@ -6411,6 +6593,7 @@ async function runLeased(
         prepared.gitManifestSha256,
         options.prepare,
         options.expectedSourceSha256,
+        host.dependencyArtifactBudgetBytes,
       ),
     );
     const launch = () =>
@@ -6748,11 +6931,13 @@ async function runWithTransportRetries(
       ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
     };
     let managedByRun = false;
+    let uploaded = false;
     try {
       await options.allocated?.({ host: host.name, run: id });
       assertExecutionAllowed(options, signal);
       prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
       Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
+      uploaded = true;
       assertExecutionAllowed(options, signal);
       const slotWaitStarted = performance.now();
       const lease = await acquire(
@@ -6784,7 +6969,7 @@ async function runWithTransportRetries(
       managedByRun = true;
       return await runLeased(lease, prepared, options, slotWaitStarted, signal);
     } catch (error) {
-      if (!managedByRun) await cleanupPreparedRun(prepared);
+      if (!managedByRun && uploaded) await cleanupPreparedRun(prepared);
       assertExecutionAllowed(options, signal);
       if (
         !(error instanceof RemoteTransportError) ||
@@ -6871,9 +7056,11 @@ async function tryRemoteCheckOwned(
     connectionId: randomUUID().slice(0, 8),
     ...(options.expectedSourceSha256 === undefined ? {} : { expectedSourceSha256: options.expectedSourceSha256 }),
   };
+  let uploaded = false;
   try {
     prepared.connectionId = await probeControl(host, prepared.connectionId, controlProbeTimeout(options));
     Object.assign(prepared, await uploadRun(host, prepared.connectionId, id, options, files, signal, transfer));
+    uploaded = true;
     assertExecutionAllowed(options, signal);
     const current = hostsForRound().find(
       ({ name, address, identity }) => name === host.name && address === host.address && identity === host.identity,
@@ -6906,7 +7093,7 @@ async function tryRemoteCheckOwned(
       code: await runLeased(lease, prepared, options, performance.now(), signal),
     };
   } catch (error) {
-    await cleanupPreparedRun(prepared);
+    if (uploaded) await cleanupPreparedRun(prepared);
     throw error;
   }
 }

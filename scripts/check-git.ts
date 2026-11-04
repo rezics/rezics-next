@@ -27,6 +27,8 @@ const FORMAT = 'rezics-native-git-snapshot-v2';
 const OBJECT_FORMATS = ['sha1', 'sha256'] as const;
 // Dozens of workers pack concurrently on a loaded host; two minutes was too short at load 70.
 const GIT_OPERATION_TIMEOUT_MS = 600_000;
+export const CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION = 'check-git: preparation failed before publication';
+export const CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT = 73;
 
 type ObjectFormat = (typeof OBJECT_FORMATS)[number];
 type Manifest = {
@@ -46,7 +48,7 @@ function shell(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-/** Fetch, ref verify and the preparing pin take the store lock; checkout is per-run; daily gc takes a second short lock. */
+/** The store lock serializes ref changes and per-run lock-file lifecycle; checkout is per-run. */
 export function fetchCheckGitScript(
   publication: CheckGitPublication,
   checkout: string,
@@ -72,21 +74,21 @@ store=${shell(storePath)}
 root=${shell(rootPath)}
 preparing_dir=${shell(preparingDir)}
 if [ ! -f "$store/gc.timestamp" ] || [ "$(date +%s)" -gt "$(($(stat -c %Y "$store/gc.timestamp" 2>/dev/null || echo 0) + 86400))" ]; then
+  mkdir -p "$preparing_dir"
   git --git-dir="$store" for-each-ref --format='%(refname)' refs/check-runs/ | while read -r ref; do
     case "$ref" in refs/check-runs/[a-zA-Z0-9-]*) ;; *) continue ;; esac
-    published="$(dirname "$root")/\${ref##*/}"
-    pin="$preparing_dir/\${ref##*/}"
-    if [ -d "$published" ]; then continue; fi
-    if [ -e "$pin" ]; then
-      exec 7>>"$pin"
-      if flock -n 7; then
-        git --git-dir="$store" update-ref -d "$ref"
+    run="$(basename "$ref")"
+    published="$(dirname "$root")/$run"
+    if [ -e "$published" ] || [ -L "$published" ]; then continue; fi
+    pin="$preparing_dir/$run"
+    exec 7>>"$pin"
+    if flock -n 7; then
+      if [ ! -e "$published" ] && [ ! -L "$published" ]; then
         rm -f -- "$pin"
+        git --git-dir="$store" update-ref -d "$ref"
       fi
-      exec 7>&-
-    else
-      git --git-dir="$store" update-ref -d "$ref"
     fi
+    exec 7>&-
   done
   git --git-dir="$store" gc --quiet --prune=7.days.ago
   touch "$store/gc.timestamp"
@@ -101,20 +103,58 @@ lock=${shell(lock)}
 preparing_dir=${shell(preparingDir)}
 preparing=${shell(preparing)}
 mkdir -p ${shell(dirname(storePath))} "$(dirname "$root")"
+store_fetch_started=$(python3 -c 'import time; print(time.monotonic_ns())')
 exec 9>>"$lock"
 flock -x 9
+mkdir -p "$preparing_dir"
+if [ -e "$root" ] || [ -L "$root" ]; then
+  echo 'check-git: run identity is already published' >&2
+  exit ${CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT}
+fi
+exec 8>>"$preparing"
+if ! flock -n 8; then
+  echo 'check-git: run identity is already active' >&2
+  exit ${CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT}
+fi
+stage=''
+prep_owned=1
+published=0
+store_locked=1
+cleanup() {
+  result=$?
+  trap - EXIT
+  cleanup_ok=1
+  if [ -n "$stage" ]; then rm -rf -- "$stage" || cleanup_ok=0; fi
+  if [ "$store_locked" -eq 0 ]; then
+    if flock -x 9; then store_locked=1; else cleanup_ok=0; fi
+  fi
+  if [ "$prep_owned" -eq 1 ] && [ "$store_locked" -eq 1 ]; then
+    exec 8>&- || cleanup_ok=0
+    rm -f -- "$preparing" || cleanup_ok=0
+    prep_owned=0
+  fi
+  if [ "$store_locked" -eq 1 ]; then
+    flock -u 9 || cleanup_ok=0
+    store_locked=0
+  fi
+  if [ "$published" -eq 0 ] && [ "$result" -ne 0 ] && [ "$cleanup_ok" -eq 1 ] && [ ! -e "$root" ] && [ ! -L "$root" ]; then
+    printf '%s\\n' 'check-git: preparation failed before publication' >&2
+  fi
+  exit "$result"
+}
+trap cleanup EXIT
 if [ ! -d "$store" ]; then git init --bare --quiet --template= --object-format=${objectFormat} "$store"; fi
-git --git-dir="$store" -c gc.auto=0 fetch --no-tags --no-write-fetch-head ${shell(origin)} ${shell(`+${remote.ref}:refs/check-runs/${run}`)}
+if git --git-dir="$store" -c gc.auto=0 fetch --no-tags --no-write-fetch-head ${shell(origin)} ${shell(`+${remote.ref}:refs/check-runs/${run}`)}; then :; else fetch_status=$?; exit "$fetch_status"; fi
 test "$(git --git-dir="$store" rev-parse ${shell(`refs/check-runs/${run}`)})" = ${shell(remote.commit)}
 test "$(git --git-dir="$store" rev-parse ${shell(`${remote.commit}^{tree}`)})" = ${shell(indexTree)}
 git --git-dir="$store" cat-file -e ${shell(`${head}^{commit}`)}
 ${dev ? `git --git-dir="$store" cat-file -e ${shell(`${dev}^{commit}`)}` : ''}
-mkdir -p "$preparing_dir"
-exec 8>>"$preparing"
-flock -x 8
+store_locked=0
 flock -u 9
+store_fetch_finished=$(python3 -c 'import time; print(time.monotonic_ns())')
+printf 'REMOTE_CHECK_PHASE\\tshared-store lock/fetch\\t%s\\n' "$((store_fetch_finished - store_fetch_started))"
+checkout_started=$(python3 -c 'import time; print(time.monotonic_ns())')
 stage=$(mktemp -d "$root.fetch-XXXXXX")
-trap 'rm -rf -- "$stage"' EXIT
 git init --quiet --template= --object-format=${objectFormat} "$stage"
 printf '%s\\n' "$store/objects" > "$stage/.git/objects/info/alternates"
 printf '%s\\n' ${shell(shallow)} > "$stage/.git/shallow"
@@ -131,11 +171,18 @@ ${dev ? `test "$(git -C "$stage" merge-base HEAD dev)" = ${shell(shallow)}` : ''
 mkdir -p "$stage/.git/info"
 printf '%s\\n' '/.alive' '/.bun-install-complete' '/.remote-check-slot-count' '/bun-runtime-transpiler-cache/' '/command-phases.tsv' '/command-started' '/exit-status' >> "$stage/.git/info/exclude"
 mv -T -- "$stage" "$root"
-trap - EXIT
-flock -u 8
-rm -f -- "$preparing"
+stage=''
+published=1
+checkout_finished=$(python3 -c 'import time; print(time.monotonic_ns())')
+printf 'REMOTE_CHECK_PHASE\\tcheckout\\t%s\\n' "$((checkout_finished - checkout_started))"
+flock -x 9
+store_locked=1
 exec 8>&-
+rm -f -- "$preparing"
+prep_owned=0
+store_locked=0
 flock -u 9
+trap - EXIT
 exec 9>&-
 flock -x ${shell(lock)} sh -c ${shell(gcBody)} || echo 'check-git: store age pruning deferred' >&2
 `;

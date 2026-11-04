@@ -316,6 +316,7 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
       'operationsManager',
       'checkScriptReaderRoot',
       'devPrelandingTypecheck',
+      'devLandingBootCheck',
       'hourlyReportNotifier',
     ],
     'integration',
@@ -463,6 +464,15 @@ function settingsFromLocal(value: unknown, { env, initialMain, localFile }: Sett
               if (typeof integration.devPrelandingTypecheck !== 'boolean')
                 throw new Error('devPrelandingTypecheck must be a boolean');
               return integration.devPrelandingTypecheck;
+            })(),
+          }),
+      ...(integration.devLandingBootCheck === undefined
+        ? {}
+        : {
+            devLandingBootCheck: (() => {
+              if (typeof integration.devLandingBootCheck !== 'boolean')
+                throw new Error('devLandingBootCheck must be a boolean');
+              return integration.devLandingBootCheck;
             })(),
           }),
       tmuxCommand: text(integration.tmuxCommand, 'tmuxCommand'),

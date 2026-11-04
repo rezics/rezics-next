@@ -51,6 +51,10 @@
   "bootSmoke": {
     "tests": ["services/kernel/test/boot/kernel-boots.test.ts", "apps/web/tests/boot/client-graph.test.ts"]
   },
+  "devLandingBoot": {
+    "paths": ["services/kernel/**", "services/auth/**", "packages/**"],
+    "command": ["bun", "test", "services/kernel/test/boot"]
+  },
   "integrationChecks": [
     {
       "paths": [
@@ -147,7 +151,8 @@
       "wallMs": 43200000
     },
     "termspacesCommand": "termspaces",
-    "devPrelandingTypecheck": false
+    "devPrelandingTypecheck": false,
+    "devLandingBootCheck": false
   },
   "codex": {
     "serviceTier": "default",
@@ -463,6 +468,7 @@
       "checkTimeoutMs": 600000,
       "affectedTransportAttempts": 2,
       "typecheckAttempts": 2,
+      "bootCheckTimeoutMs": 120000,
       "advanceAttempts": 5,
       "candidateGitBufferBytes": 262144,
       "candidateDetailCharacters": 800,
