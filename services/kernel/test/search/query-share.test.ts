@@ -55,7 +55,7 @@ import { afterAll, beforeAll } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import type { Access } from '../../src/request/access.ts';
-import type { SearchService } from '../../src/search/http/routes.ts';
+import type { SearchService } from '../../src/search/service-scope.ts';
 const pool = createPool(process.env.DATABASE_URL!);
 const opening = Bun.randomUUIDv7();
 beforeAll(async () => {
@@ -81,6 +81,9 @@ const access: Access = {
   },
 };
 const search: SearchService = {
+  async releaseGroups() {
+    throw new Error('grouped release search is not used by this fixture');
+  },
   async search(_principal, _request, _now, _release, context) {
     executions++;
     const page = { subjects: [], next: null, as_of: new Date().toISOString() };
