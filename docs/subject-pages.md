@@ -2001,3 +2001,31 @@ Session observation changes retire the reading until a replacement page source a
 
 The remaining Terms return/focus handoff, current Terms action aggregate, native producer budget derivation and
 three-scale composition acceptance are a continuation; the public disclosure does not grant correction authority.
+
+## Person and Character supplied names
+
+The existing public Person and Character profiles expose one compact supplied-names disclosure. The selected page
+label and a supplied fallback are distinguished from supplied labels and aliases. Matching text never joins a Person
+to a Character or implies a legal name, persona, romanization, original language or provider verification. Language
+groups use native language labels and text direction. Exact duplicates retain each supplied language and label/alias
+role. Names have no inferred statement-level source attribution.
+
+The people view imports the work-name grouping/admission producer, with work-only original-title metadata excluded.
+It admits the entire labels/aliases response within the same 262,144-byte UTF-8 presentation budget; oversized,
+malformed, empty, retired and empty-filter results have separate states. The limit does not establish a native
+producer bound. Filtering searches only admitted spellings, without normalizing punctuation, scripts or diacritics.
+No catalogue-wide or provider completeness is implied. At most eight groups and 24 rows per group are mounted, with
+explicit local continuation. All admitted groups and names remain reachable. Copy results are announced beside the
+originating control; late callbacks cannot update a replacement visit.
+
+The finite projection and filter result retain O(B + E) local string/group references, where B is admitted UTF-8 bytes
+and E is the number of encoded name/language entries. Mounted name rows are independently bounded at 192. Filter
+text is at most 250 UTF-16 code units (at most 1,000 UTF-8 bytes); no filter or name state is added to URLs or shared
+caches. Opening, filtering, paging and copying perform no native requests. Current Terms advice uses the existing
+bounded mounted-operation authority read once per visit and once per explicit retry. Unavailable, refused and
+signed-out advice leave public names and Sources usable. The existing Terms owner reads its original Subject and
+retains its own candidate, command and draft state; the names projection is never a replacement edit payload.
+
+Decision: until the shared names-return handoff is delivered, people names use the existing page Context link adapter
+for Terms and Sources and do not promise restoration of a former group, filter or focus. That handoff and its exact
+return acceptance remain a continuation; public name expansion grants no editor permission.
