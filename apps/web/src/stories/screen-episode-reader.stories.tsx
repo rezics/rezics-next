@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ScreenEpisodeList } from '../features/catalogue/screen-episode-reader/view';
 import type { ScreenEpisodeRead } from '../features/catalogue/screen-episode-reader/read';
 
