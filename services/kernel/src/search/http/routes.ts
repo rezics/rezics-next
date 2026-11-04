@@ -399,7 +399,13 @@ export function searchRoutes<App>(
           object,
         ),
         response: {
-          200: t.Union([searchResponse, DiscoveryPageSchema, releaseGroupsResponse, releaseChildrenResponse, QueryShareSchema]),
+          200: t.Union([
+            searchResponse,
+            DiscoveryPageSchema,
+            releaseGroupsResponse,
+            releaseChildrenResponse,
+            QueryShareSchema,
+          ]),
           400: problemSchema('invalid_request'),
           401: unauthorized,
           403: problemSchema('forbidden'),

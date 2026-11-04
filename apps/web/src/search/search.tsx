@@ -304,10 +304,13 @@ const prepareShareWithLocale = createServerFn({ method: 'GET' })
     const reader = await readScopedSearchReader(getRequest());
     if ((data.reader ?? undefined) !== reader?.owner) return shareUnavailable();
     const body = discoveryRequest({ ...requestParams(data), cursor: undefined }, requestLanguages(data.locale));
-    const response = await kernelClient(data.locale).subjects.$search.post({ ...body, prepareShare: true }, {
-      ...(reader ? { headers: { authorization: reader.authorization } } : {}),
-      fetch: { signal: getRequest().signal },
-    });
+    const response = await kernelClient(data.locale).subjects.$search.post(
+      { ...body, prepareShare: true },
+      {
+        ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+        fetch: { signal: getRequest().signal },
+      },
+    );
     return response.status === 200 ? parseQueryShare(response.data) : shareUnavailable();
   });
 
@@ -1198,18 +1201,32 @@ export function SearchPage({
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <PageHeading>{m.search_heading({}, options)}</PageHeading>
-      {data?.recovery?.status === 'ready' && data.queryState && <QuerySharePreview
-        key={JSON.stringify([stateKey, locale, session])}
-        locale={locale}
-        changed={editing}
-        prepare={() => prepareShareWithLocale({ data: {
-          query: committedState.query, locale, facetValues: committedState.facets,
-          type: committedState.type, kinds: committedState.kinds, languages: committedState.languages,
-          condition: committedState.condition, ranges: committedState.ranges, filter: committedState.filter,
-          sort: committedState.sort, resourceScope: committedState.resourceScope,
-          ratingPopulation: committedState.ratingPopulation, reader: session ?? undefined,
-        } })}
-      />}
+      {data?.recovery?.status === 'ready' && data.queryState && (
+        <QuerySharePreview
+          key={JSON.stringify([stateKey, locale, session])}
+          locale={locale}
+          changed={editing}
+          prepare={() =>
+            prepareShareWithLocale({
+              data: {
+                query: committedState.query,
+                locale,
+                facetValues: committedState.facets,
+                type: committedState.type,
+                kinds: committedState.kinds,
+                languages: committedState.languages,
+                condition: committedState.condition,
+                ranges: committedState.ranges,
+                filter: committedState.filter,
+                sort: committedState.sort,
+                resourceScope: committedState.resourceScope,
+                ratingPopulation: committedState.ratingPopulation,
+                reader: session ?? undefined,
+              },
+            })
+          }
+        />
+      )}
       {hasFilterPanel ? (
         <>
           {filterEntrance}

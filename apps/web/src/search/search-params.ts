@@ -32,12 +32,7 @@ export const searchParams = v.objectWithRest(
       ),
     ),
     condition: v.optional(v.string()),
-    filter: v.optional(
-      v.union([
-        v.string(),
-        v.pipe(v.array(v.pipe(v.string(), v.maxLength(16384))), v.maxLength(8)),
-      ]),
-    ),
+    filter: v.optional(v.union([v.string(), v.pipe(v.array(v.pipe(v.string(), v.maxLength(16384))), v.maxLength(8))])),
     sort: v.optional(
       v.pipe(
         v.union([v.picklist(['rating']), v.literal('')]),
@@ -96,7 +91,8 @@ function filterInputsFromSearch(search: Record<string, unknown>): {
   };
 
   if (search.condition !== undefined) {
-    if (typeof search.condition === 'string' && new TextEncoder().encode(search.condition).length > 16384) invalid('condition', search.condition);
+    if (typeof search.condition === 'string' && new TextEncoder().encode(search.condition).length > 16384)
+      invalid('condition', search.condition);
     else if (typeof search.condition !== 'string') invalid('condition', search.condition);
     else {
       try {

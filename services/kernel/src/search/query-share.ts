@@ -10,16 +10,36 @@ export type QueryShare = {
   selections: { value: string; language: string }[];
 };
 const bytes = (value: string) => new TextEncoder().encode(value).length;
-export function unavailableQueryShare(reason: QueryShare['reason'], action: QueryShare['action'] = 'disabled'): QueryShare {
+export function unavailableQueryShare(
+  reason: QueryShare['reason'],
+  action: QueryShare['action'] = 'disabled',
+): QueryShare {
   return { action, reason, document: null, parameters: null, selections: [] };
 }
 
 /** Called only after ordinary native execution admits this exact request. No principal or continuation is copied. */
 export function prepareQueryShare(
-  request: { text?: string; filter?: unknown; languages?: string[]; sort?: string; population?: unknown; spaceId?: string; work?: string; spoilerThreshold?: number; representation?: string },
+  request: {
+    text?: string;
+    filter?: unknown;
+    languages?: string[];
+    sort?: string;
+    population?: unknown;
+    spaceId?: string;
+    work?: string;
+    spoilerThreshold?: number;
+    representation?: string;
+  },
   labels: Record<string, Record<string, string>> = {},
 ): QueryShare {
-  if (request.population !== undefined || request.spaceId !== undefined || request.work !== undefined || request.spoilerThreshold !== undefined || request.representation === 'release-groups-v1') return unavailableQueryShare('private_context');
+  if (
+    request.population !== undefined ||
+    request.spaceId !== undefined ||
+    request.work !== undefined ||
+    request.spoilerThreshold !== undefined ||
+    request.representation === 'release-groups-v1'
+  )
+    return unavailableQueryShare('private_context');
   const raw = JSON.stringify(request.filter ?? null);
   if (bytes(raw) > QUERY_SHARE_LIMITS.documentBytes) return unavailableQueryShare('oversized');
   let filter;
@@ -39,7 +59,10 @@ export function prepareQueryShare(
         selections.push({ value: available[language]!, language });
     }
     if (!node || typeof node !== 'object') return;
-    if (Array.isArray(node)) { for (const child of node) visit(child); return; }
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
     for (const [key, value] of Object.entries(node)) {
       // Resource scope portability needs a public owner projection. Never infer it from the current reader's grant.
       if (['owner', 'library', 'collection', 'zone', 'realm', 'saved'].includes(key)) privateContext = true;
@@ -67,15 +90,32 @@ export function prepareQueryShare(
       const condition = conditions.length === 1 ? conditions[0] : conditions.length ? { and: conditions } : undefined;
       try {
         if (condition) params.set('condition', JSON.stringify(parseFilter(condition)));
-        for (const kind of kindLeaves.flatMap((node) => 'kind' in node ? node.kind.in : [])) params.append('kinds', kind);
-      } catch { params.delete('condition'); params.set('filter', document.filter!); }
+        for (const kind of kindLeaves.flatMap((node) => ('kind' in node ? node.kind.in : [])))
+          params.append('kinds', kind);
+      } catch {
+        params.delete('condition');
+        params.set('filter', document.filter!);
+      }
     } else params.set('filter', document.filter!);
   }
   for (const language of document.languages) params.append('language', language);
   if (document.sort === 'rating') params.set('sort', document.sort);
-  else if ((document.sort === 'name' && document.text) || (document.sort && document.sort !== 'relevance' && document.sort !== 'name')) return unavailableQueryShare('unsupported');
+  else if (
+    (document.sort === 'name' && document.text) ||
+    (document.sort && document.sort !== 'relevance' && document.sort !== 'name')
+  )
+    return unavailableQueryShare('unsupported');
   const parameters = params.toString();
-  if (bytes(JSON.stringify(document)) > QUERY_SHARE_LIMITS.documentBytes || bytes(parameters) + 128 > QUERY_SHARE_LIMITS.urlBytes)
+  if (
+    bytes(JSON.stringify(document)) > QUERY_SHARE_LIMITS.documentBytes ||
+    bytes(parameters) + 128 > QUERY_SHARE_LIMITS.urlBytes
+  )
     return unavailableQueryShare('oversized');
-  return { action: 'allowed', reason: 'ready', document, parameters, selections: selections.slice(0, QUERY_SHARE_LIMITS.labels) };
+  return {
+    action: 'allowed',
+    reason: 'ready',
+    document,
+    parameters,
+    selections: selections.slice(0, QUERY_SHARE_LIMITS.labels),
+  };
 }

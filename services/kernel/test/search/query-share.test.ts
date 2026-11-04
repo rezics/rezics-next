@@ -2,8 +2,16 @@ import { expect, test } from 'bun:test';
 import { prepareQueryShare } from '../../src/search/query-share.ts';
 
 test('portable projection preserves raw text and branches while excluding cursor and authority', () => {
-  const filter = { and: [{ or: [{ type: { in: ['book'] } }, { not: { type: { in: ['film'] } } }] }, { kind: { in: ['book'] } }] };
-  const request = { text: '  "a phrase" | -other ', filter, languages: ['ja', 'en'], cursor: 'secret', principal: 'private' };
+  const filter = {
+    and: [{ or: [{ type: { in: ['book'] } }, { not: { type: { in: ['film'] } } }] }, { kind: { in: ['book'] } }],
+  };
+  const request = {
+    text: '  "a phrase" | -other ',
+    filter,
+    languages: ['ja', 'en'],
+    cursor: 'secret',
+    principal: 'private',
+  };
   const result = prepareQueryShare(request, { book: { en: 'Book', ja: '本' } });
   expect(result.action).toBe('allowed');
   expect(result.document?.text).toBe(request.text);
@@ -14,12 +22,20 @@ test('portable projection preserves raw text and branches while excluding cursor
   expect(params.getAll('kinds')).toEqual(['book']);
   expect(JSON.stringify(result)).not.toContain('secret');
   expect(JSON.stringify(result)).not.toContain('principal');
-  const replay = prepareQueryShare({ text: params.get('q')!, languages: params.getAll('language'), filter: { and: [JSON.parse(params.get('condition')!), { kind: { in: params.getAll('kinds') } }] } });
+  const replay = prepareQueryShare({
+    text: params.get('q')!,
+    languages: params.getAll('language'),
+    filter: { and: [JSON.parse(params.get('condition')!), { kind: { in: params.getAll('kinds') } }] },
+  });
   expect(replay.parameters).toBe(result.parameters);
 });
 
 test('private, unknown and oversized queries never emit partial portable documents', () => {
-  for (const filter of [{ owner: { presence: true } }, { future: {} }, { collection: { id: '00000000-0000-4000-8000-000000000001' } }]) {
+  for (const filter of [
+    { owner: { presence: true } },
+    { future: {} },
+    { collection: { id: '00000000-0000-4000-8000-000000000001' } },
+  ]) {
     const result = prepareQueryShare({ filter });
     expect(result.action).toBe('disabled');
     expect(result.document).toBeNull();
@@ -38,22 +54,44 @@ import type { SearchService } from '../../src/search/http/routes.ts';
 const pool = createPool(process.env.DATABASE_URL!);
 const opening = Bun.randomUUIDv7();
 beforeAll(async () => {
-  for (const group of ['search', 'search_advanced']) await pool.query(
-    `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ($1, tstzrange('2000-01-01', NULL, '[)'), $2)`, [group, opening]);
+  for (const group of ['search', 'search_advanced'])
+    await pool.query(
+      `INSERT INTO access.exposure_opening ("group", valid, transaction_id) VALUES ($1, tstzrange('2000-01-01', NULL, '[)'), $2)`,
+      [group, opening],
+    );
 });
-afterAll(async () => { await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]); await pool.end(); });
+afterAll(async () => {
+  await pool.query('DELETE FROM access.exposure_opening WHERE transaction_id = $1', [opening]);
+  await pool.end();
+});
 let permitted = true;
 let executions = 0;
-const access: Access = { async authenticate() { throw new Error('not used'); }, async authorize() { return permitted; } };
-const search = { async search(_principal, _request, _now, _release, context) {
-  executions++;
-  const page = { subjects: [], next: null, as_of: new Date().toISOString() };
-  await context?.complete(page);
-  return page;
-} } satisfies Pick<SearchService, 'search'>;
+const access: Access = {
+  async authenticate() {
+    throw new Error('not used');
+  },
+  async authorize() {
+    return permitted;
+  },
+};
+const search = {
+  async search(_principal, _request, _now, _release, context) {
+    executions++;
+    const page = { subjects: [], next: null, as_of: new Date().toISOString() };
+    await context?.complete(page);
+    return page;
+  },
+} satisfies Pick<SearchService, 'search'>;
 const app = createKernel({ pool, access, routeKey: new Uint8Array(32), search: search as SearchService });
 test('mounted preparation executes native admission and a recipient denial cannot acquire a portable query', async () => {
-  const send = () => app.handle(new Request('http://kernel.test/v1/subjects:search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'reader', languages: ['en'], prepareShare: true }) }));
+  const send = () =>
+    app.handle(
+      new Request('http://kernel.test/v1/subjects:search', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'reader', languages: ['en'], prepareShare: true }),
+      }),
+    );
   const response = await send();
   expect(response.status).toBe(200);
   expect((await response.json()).action).toBe('allowed');
