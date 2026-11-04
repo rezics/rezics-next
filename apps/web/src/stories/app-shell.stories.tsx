@@ -48,7 +48,18 @@ function ShellPreview({
           count ? (
             <NotificationsLink
               pathname="/library"
-              badge={<UnreadBadgeView data={{ signedIn: true, state: 'ready', count: 23, capped: false }} />}
+              badge={
+                <UnreadBadgeView
+                  data={{
+                    signedIn: true,
+                    state: 'ready',
+                    count: 23,
+                    capped: false,
+                    basis: 'current-visible-unread',
+                    witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+                  }}
+                />
+              }
             />
           ) : undefined
         }

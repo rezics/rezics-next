@@ -144,7 +144,14 @@ const ready = (ids = ['newest'], next: string | null = continuation): InboxPage 
   items: ids.map((id) => notice(id)),
   next,
 });
-const count = (value: number): UnreadCount => ({ signedIn: true, state: 'ready', count: value, capped: false });
+const count = (value: number): UnreadCount => ({
+  signedIn: true,
+  state: 'ready',
+  count: value,
+  capped: false,
+  basis: 'current-visible-unread',
+  witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+});
 const tick = () =>
   act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));

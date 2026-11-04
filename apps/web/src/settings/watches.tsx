@@ -6,14 +6,34 @@ import { m } from '../paraglide/messages.js';
 import { useSettingsDisposal, useSettingsSessionOwner } from './settings-session-owner';
 import { useSettingsNavigationDraft } from './reading-navigation';
 import { WatchController } from './watch-controller';
-import { unavailableWatchManagement, type WatchManagementIO } from './watch-native';
+import { readWatchInventory, removeWatchSubscription } from './actions';
+import type { WatchManagementIO } from './watch-native';
 
 const controlClass = 'h-auto min-h-11 max-w-full whitespace-normal break-words px-4 py-2 text-start leading-5';
 
+const nativeWatchManagement: WatchManagementIO = {
+  read: ({ accountId, kind, limit, cursor, signal }) =>
+    readWatchInventory({ data: { accountId, kind, limit, cursor }, signal }),
+  stop: (input, csrfToken) =>
+    removeWatchSubscription({
+      data: { ...input, csrfToken },
+      headers: { 'X-CSRF-Token': csrfToken },
+    }),
+};
+
 /** Visited Settings panels keep this controller and its unresolved command alive across category changes. */
-export function WatchesSection({ io = unavailableWatchManagement }: { io?: WatchManagementIO | undefined }) {
+export function WatchesSection({ io = nativeWatchManagement }: { io?: WatchManagementIO | undefined }) {
   const owner = useSettingsSessionOwner(undefined);
-  const [controller] = useState(() => (owner ? new WatchController(io, owner) : null));
+  const [controller] = useState(() =>
+    owner
+      ? new WatchController(io, {
+          subject: owner.subject ?? '',
+          readCurrent: owner.readCurrent,
+          credential: owner.credential,
+          subscribe: owner.subscribe,
+        })
+      : null,
+  );
   if (!controller || !owner) return null;
   return <OwnedWatches controller={controller} />;
 }
@@ -40,6 +60,28 @@ function OwnedWatches({ controller }: { controller: WatchController }) {
           <CardDescription>{m.settings_watches_text()}</CardDescription>
         </CardHeader>
         <CardContent className="min-w-0 space-y-5">
+          <div role="group" aria-label={m.settings_watches_heading()} className="flex min-w-0 flex-wrap gap-2">
+            <Button
+              type="button"
+              className={controlClass}
+              variant="outline"
+              aria-pressed={state.kind === 'thread'}
+              disabled={state.read === 'loading' || state.command !== null || state.write === 'sending'}
+              onClick={() => void controller.selectKind('thread')}
+            >
+              {m.settings_watches_thread()}
+            </Button>
+            <Button
+              type="button"
+              className={controlClass}
+              variant="outline"
+              aria-pressed={state.kind === 'board'}
+              disabled={state.read === 'loading' || state.command !== null || state.write === 'sending'}
+              onClick={() => void controller.selectKind('board')}
+            >
+              {m.settings_watches_board()}
+            </Button>
+          </div>
           {state.write === 'sending' ? <p role="status">{m.settings_watches_stopping()}</p> : null}
           {state.write === 'removed' ? <p role="status">{m.settings_watches_removed()}</p> : null}
           {state.write === 'rejected' ? (

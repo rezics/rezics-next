@@ -31,6 +31,13 @@ import {
 } from './preferences';
 import type { CollectionVisibility } from '../library/reads';
 import { collectionPrivacyRead, type CollectionPrivacyRead } from './collection-privacy-data';
+import {
+  readWatchInventoryNative,
+  removeWatchNative,
+  type StopWatchResult,
+  type WatchKind,
+  type WatchRead,
+} from './watch-native';
 
 /** One bounded owner read for one page, made only by the browser query. */
 export const readOwnedCollectionsPage = createServerFn({ method: 'GET' })
@@ -155,4 +162,84 @@ export const readManagedAccountsInventory = createServerFn({ method: 'GET' })
     } catch (error) {
       return managedAccountsException(error);
     }
+  });
+
+function validWatchIdentity(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && !/[\s/\\?#%]/.test(value) && value !== '.' && value !== '..';
+}
+
+function watchKind(value: unknown): value is WatchKind {
+  return value === 'thread' || value === 'board';
+}
+
+export const readWatchInventory = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (!input || typeof input !== 'object') throw new Error('Invalid watch page');
+    const value = input as Record<string, unknown>;
+    if (
+      !validWatchIdentity(value.accountId) ||
+      !watchKind(value.kind) ||
+      !Number.isSafeInteger(value.limit) ||
+      value.limit !== 20 ||
+      !(value.cursor === null || (typeof value.cursor === 'string' && value.cursor.length > 0 && value.cursor.length <= 4096))
+    )
+      throw new Error('Invalid watch page');
+    return { accountId: value.accountId, kind: value.kind, limit: value.limit as 20, cursor: value.cursor as string | null };
+  })
+  .handler(async ({ data }): Promise<WatchRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (!authorization || !accountId || accountId !== data.accountId) return { kind: 'unavailable' };
+    const page = await readWatchInventoryNative(
+      kernelClient(undefined, authorization),
+      accountId,
+      authorization,
+      data,
+      request.signal,
+    );
+    return { kind: 'page', page };
+  });
+
+export const removeWatchSubscription = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    if (!input || typeof input !== 'object') throw new Error('Invalid watch removal');
+    const value = input as Record<string, unknown>;
+    if (
+      !validWatchIdentity(value.accountId) ||
+      !validWatchIdentity(value.watchId) ||
+      !watchKind(value.kind) ||
+      !Number.isSafeInteger(value.expectedRevision) ||
+      (value.expectedRevision as number) < 1 ||
+      typeof value.idempotencyKey !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.idempotencyKey) ||
+      typeof value.csrfToken !== 'string' ||
+      !value.csrfToken
+    )
+      throw new Error('Invalid watch removal');
+    return {
+      accountId: value.accountId,
+      watchId: value.watchId,
+      kind: value.kind,
+      expectedRevision: value.expectedRevision as number,
+      idempotencyKey: value.idempotencyKey,
+      csrfToken: value.csrfToken,
+    };
+  })
+  .handler(async ({ data }): Promise<StopWatchResult> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    await prepareSession(request, env as Partial<SessionEnv>);
+    const authorization = viewerCredential(request);
+    const accountId = sessionSubject(request);
+    if (
+      !authorization ||
+      !accountId ||
+      accountId !== data.accountId ||
+      requestCsrfToken(request) !== data.csrfToken
+    )
+      return { kind: 'rejected' };
+    return removeWatchNative(kernelClient(undefined, authorization), authorization, data);
   });

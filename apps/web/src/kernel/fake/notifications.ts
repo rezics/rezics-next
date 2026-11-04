@@ -136,8 +136,20 @@ const list: FakeRoute = {
     if (url.pathname.endsWith('/count')) {
       const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
       return fixture === 'many'
-        ? { status: 200, count: 100, capped: false }
-        : (recordings['notifications-count'] ?? { status: 200, count: 0, capped: false });
+        ? {
+            status: 200,
+            count: 100,
+            capped: false,
+            basis: 'current-visible-unread',
+            witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+          }
+        : (recordings['notifications-count'] ?? {
+            status: 200,
+            count: 0,
+            capped: false,
+            basis: 'current-visible-unread',
+            witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+          });
     }
     const fixture = url.searchParams.get('fixture') ?? storyFixture(request);
     if (fixture === 'seen-access-recovery') {
@@ -212,7 +224,15 @@ const list: FakeRoute = {
   },
   fixture: ({ request }) => {
     const path = new URL(request.url).pathname;
-    return path.endsWith('/count') ? { status: 200, count: 0, capped: false } : { status: 200, items: [], next: null };
+    return path.endsWith('/count')
+      ? {
+          status: 200,
+          count: 0,
+          capped: false,
+          basis: 'current-visible-unread',
+          witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+        }
+      : { status: 200, items: [], next: null };
   },
 };
 

@@ -44,10 +44,18 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     kind: 'page',
     page: {
       watches: [
-        { subscriptionId: 'hidden-owner-id', kind: 'board', target: null },
+        {
+          subscriptionId: 'hidden-owner-id',
+          kind: 'thread',
+          revision: 8,
+          createdAt: '2026-11-02T10:00:00.000Z',
+          target: null,
+        },
         {
           subscriptionId: 'readable-owner-id',
           kind: 'thread',
+          revision: 9,
+          createdAt: '2026-11-03T10:00:00.000Z',
           target: { title: 'Readable thread', href: '/threads/a/readable' },
         },
       ],
