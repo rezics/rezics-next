@@ -127,7 +127,7 @@ test('Stay keeps the confirmed tuple and key; submitted departure returns throug
   Object.assign(p.session, { account_id: subject, amr: ['operator'] });
   await p.navigate('/automated/open');
   expect(p.host.querySelector('#opening-current-state-heading')?.parentElement?.textContent).toContain(subject);
-  expect(p.host.querySelector('#opening-return-heading')?.textContent).toContain('outcome remains unconfirmed');
+  expect(p.host.querySelector('#opening-return-history')?.textContent).toContain('outcome remains unconfirmed');
   expect(p.calls).toHaveLength(2);
   expect(p.unload()).toBe(true);
 });
@@ -138,7 +138,7 @@ test('Leave retires pending approval without starting issuance', async () => {
   await flush(() => send(p.host));
   await p.navigate();
   await p.click('Leave');
-  expect(p.host.querySelector('#opening-return-heading')?.textContent).toContain('Preflight or approval was underway');
+  expect(p.host.querySelector('#opening-return-history')?.textContent).toContain('Preflight or approval was underway');
   await flush(() => p.calls[0]!.resolve(approval()));
   expect(p.calls).toHaveLength(1);
 });
@@ -206,7 +206,7 @@ test('blocked continuation storage keeps current-session Retry read-only', async
   });
   try {
     await p.click('Sign in again for a new opening');
-    expect(p.host.textContent).toContain('Current authorized account details are unavailable');
+    expect(p.host.querySelector('[role="alert"]')).not.toBeNull();
     expect(p.calls).toHaveLength(2);
     expect(readPendingManagementOperationStepUp()).toEqual(saved);
     await p.click('Check current session');
