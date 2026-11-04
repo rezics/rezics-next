@@ -8725,5 +8725,14 @@
   "library_copy_filter_unavailable": "過去の意味を確認できません",
   "library_copy_filter_history": "保存された所蔵コピーの値です。過去の値も含まれます。",
   "library_copy_filter_none": "この絞り込みには保存された選択肢がありません。",
-  "library_copy_filter_options_unavailable": "絞り込みの選択肢は一時的に利用できません。選択中の ID は保持されます。"
+  "library_copy_filter_options_unavailable": "絞り込みの選択肢は一時的に利用できません。選択中の ID は保持されます。",
+  "quotation_retry": "この読み込みを再試行",
+  "quotation_restart": "引用を最初から読む",
+  "quotation_previous": "前のページ",
+  "quotation_refresh": "このページを更新",
+  "quotation_selected": "引用 {id}",
+  "quotation_context_concealed": "この文脈は非表示です。",
+  "quotation_context_restricted": "この文脈は閲覧が制限されています。",
+  "quotation_context_missing": "この文脈は見つかりません。",
+  "quotation_context_withheld": "この文脈は公開されていません。"
 }

@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuotationVisit } from './quotation-reading/visit';
 import { pickText } from '@rezics/composition';
 import { Button } from '@rezics/ui/shadcn/button';
 import { DocumentBody } from '../../document-body';
@@ -46,9 +45,12 @@ function contextRole(kind: QuotationContext['kind'], locale: string) {
 function contextText(context: QuotationContext, locale: string) {
   const o = option(locale);
   if (context.status === 'unknown') return m.quotation_unknown_context({}, o);
-  if (context.status === 'concealed' || context.status === 'withheld') return m.quotation_concealed_context({}, o);
+  if (context.status === 'concealed') return m.quotation_context_concealed({}, o);
+  if (context.status === 'withheld') return m.quotation_context_withheld({}, o);
   if (context.status === 'restricted' && context.kind === 'speaker') return m.quotation_restricted_speaker({}, o);
   if (context.status === 'missing' && context.kind === 'speaker') return m.quotation_missing_speaker({}, o);
+  if (context.status === 'restricted') return m.quotation_context_restricted({}, o);
+  if (context.status === 'missing') return m.quotation_context_missing({}, o);
   if (context.status === 'unsupported') return m.quotation_unsupported({}, o);
   if (context.status === 'current') return context.label ?? m.quotation_concealed_context({}, o);
   return m.quotation_unknown_context({}, o);
@@ -212,7 +214,7 @@ function QuotationStatement({ text, locale }: { text: QuotationText; locale: str
   );
 }
 
-export function QuotationView({
+function QuotationVisitView({
   id,
   locale,
   quote,
@@ -228,85 +230,32 @@ export function QuotationView({
   initial?: QuotationRead | undefined;
 }) {
   const o = option(locale);
-  const queryClient = useQueryClient();
-  const failureRef = useRef<HTMLParagraphElement>(null);
-  const selectedRef = useRef<HTMLElement>(null);
-  const requestSequence = useRef(0);
-  const focusSelection = useRef(false);
-  const [pending, setPending] = useState(false);
-  const queryKey = ['quotation-explore', id, locale, quote] as const;
-  const query = useQuery({
-    queryKey,
-    queryFn: () => transport.read({ quote }),
-    ...(initial === undefined ? {} : { initialData: initial, refetchOnMount: false }),
-    retry: false,
-    staleTime: 0,
-    gcTime: 0,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-  });
-  useEffect(() => {
-    requestSequence.current += 1;
-    setPending(false);
-    focusSelection.current = false;
-    return () => {
-      requestSequence.current += 1;
-    };
-  }, [id, locale, quote]);
-
-  const current = !pending && !query.isFetching && !query.isError ? query.data : undefined;
-  const read = current?.ok ? current : undefined;
-  const error =
-    current && !current.ok
-      ? current
-      : query.isError
-        ? { ok: false as const, reason: 'unavailable' as const }
-        : undefined;
+  const visit = useQuotationVisit({ id, locale, quote, returnTo, transport, initial });
+  const { read, error, loading, selectedRef } = visit;
   const title = pickText(read?.public.subject.labels ?? {}, locale);
   const factsHref = subjectHref({ id, label: title.text }, locale).href;
-  const origin = returnTo ?? factsHref;
+  const origin = visit.safeOrigin ?? factsHref;
   const selected = read?.selected;
 
-  useEffect(() => {
-    if (error) failureRef.current?.focus();
-  }, [error?.reason]);
-
-  useEffect(() => {
-    if (!pending && selected && focusSelection.current) {
-      focusSelection.current = false;
-      selectedRef.current?.focus();
-    }
-  }, [pending, selected?.id, selected?.observation]);
-
-  async function request(input: Parameters<QuotationTransport['read']>[0]) {
-    const sequence = ++requestSequence.current;
-    focusSelection.current = true;
-    setPending(true);
-    let result: QuotationRead;
-    try {
-      result = await transport.read(input);
-    } catch {
-      result = { ok: false, reason: 'unavailable' };
-    }
-    if (sequence !== requestSequence.current) return;
-    queryClient.setQueryData<QuotationRead>(queryKey, result);
-    setPending(false);
-  }
-
-  const loading = pending || query.isPending || query.isFetching;
   return (
     <article className="mx-auto w-full min-w-0 max-w-4xl space-y-6 [overflow-wrap:anywhere]" aria-busy={loading}>
       <ViewHeading label={m.quotation_title({}, o)} headingClassName="font-sans" />
       <p className="max-w-prose text-muted-foreground">{m.quotation_intro({}, o)}</p>
       {loading && <p role="status">{m.quotation_loading({}, o)}</p>}
       {error && (
-        <p ref={failureRef} role="alert" tabIndex={-1}>
+        <p role="alert">
           {error.reason === 'denied'
             ? m.quotation_denied({}, o)
             : error.reason === 'stale'
               ? m.quotation_stale({}, o)
               : m.quotation_unavailable({}, o)}
         </p>
+      )}
+      {error && (
+        <div className="flex flex-wrap gap-3">
+          {error.reason === 'unavailable' && <Button className={actionClass} onClick={() => void visit.retry()}>{m.quotation_retry({}, o)}</Button>}
+          <Button variant="outline" className={actionClass} onClick={() => void visit.restart()}>{m.quotation_restart({}, o)}</Button>
+        </div>
       )}
       {read && !read.admitted && (
         <section className="space-y-3" aria-live="polite">
@@ -321,14 +270,14 @@ export function QuotationView({
             <nav aria-label={m.quotation_title({}, o)}>
               <ol className="space-y-2">
                 {read.rows.map((row, index) => (
-                  <li key={row.id}>
+                  <li key={`${row.id}:${index}`}>
                     <Button
                       type="button"
                       variant={selected?.id === row.id ? 'default' : 'outline'}
                       className={actionClass}
                       aria-pressed={selected?.id === row.id}
                       disabled={loading}
-                      onClick={() => void request({ quote: row.id, session: read.session })}
+                      onClick={() => void visit.select(row.id)}
                     >
                       {m.quotation_open({ number: index + 1 }, o)}
                     </Button>
@@ -343,20 +292,28 @@ export function QuotationView({
               variant="outline"
               className={actionClass}
               disabled={loading}
-              onClick={() => void request({ cursor: read.next ?? undefined, session: read.session })}
+              onClick={() => void visit.more()}
             >
               {m.quotation_more({}, o)}
             </Button>
           )}
+          <div className="flex flex-wrap gap-3">
+            {visit.hasPrevious && <Button variant="outline" className={actionClass} onClick={() => void visit.previous()}>{m.quotation_previous({}, o)}</Button>}
+            <Button variant="outline" className={actionClass} onClick={() => void visit.refresh()}>{m.quotation_refresh({}, o)}</Button>
+            <Button variant="outline" className={actionClass} onClick={() => void visit.restart()}>{m.quotation_restart({}, o)}</Button>
+          </div>
           {selected && (
             <section
-              ref={selectedRef}
-              tabIndex={-1}
+              key={`${visit.observation}:${selected.id}:${selected.observation}`}
+              onClickCapture={visit.depart}
+              onAuxClickCapture={visit.depart}
               aria-label={m.quotation_text({}, o)}
               className="min-w-0 space-y-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
               data-quotation-id={selected.id}
               data-source-observation={selected.observation}
             >
+              <h2 ref={selectedRef} tabIndex={-1} className="font-semibold">{m.quotation_selected({ id: selected.id }, o)}</h2>
+              {selected.statements.length === 0 && <p role="status">{m.quotation_unavailable({}, o)}</p>}
               {selected.statements.map((statement) => (
                 <QuotationStatement
                   key={statement.statementId ?? statement.property}
@@ -375,7 +332,7 @@ export function QuotationView({
                     {context.status === 'current' && context.id && context.label ? (
                       <a
                         className={linkClass}
-                        href={subjectHref({ id: context.id, label: context.label }, locale).href}
+                        href={`${subjectHref({ id: context.id, label: context.label }, locale).href}?${new URLSearchParams({ returnTo: visit.returnHref })}`}
                       >
                         {contextText(context, locale)}
                       </a>
@@ -385,23 +342,27 @@ export function QuotationView({
                   </li>
                 ))}
               </ul>
-              {correctionControl(read, selected, locale, origin, title.text)}
+              {correctionControl(read, selected, locale, visit.returnHref, title.text)}
             </section>
           )}
         </div>
       )}
-      {read && (
+      {
         <nav aria-label={m.quotation_return({}, o)} className="flex flex-wrap gap-3">
           <a className={linkClass} href={origin}>
             {m.quotation_return({}, o)}
           </a>
-          {!read.admitted && (
+          {(!read || !read.admitted) && (
             <a className={linkClass} href={factsHref}>
               {m.quotation_facts({}, o)}
             </a>
           )}
         </nav>
-      )}
+      }
     </article>
   );
+}
+
+export function QuotationView(props: Parameters<typeof QuotationVisitView>[0]) {
+  return <QuotationVisitView key={`${props.id}:${props.locale}`} {...props} />;
 }

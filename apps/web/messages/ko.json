@@ -8725,5 +8725,14 @@
   "library_copy_filter_unavailable": "과거 의미 확인 불가",
   "library_copy_filter_history": "과거 값을 포함하여 저장된 소장 사본의 값입니다.",
   "library_copy_filter_none": "이 필터에 저장된 선택 항목이 없습니다.",
-  "library_copy_filter_options_unavailable": "필터 선택 항목을 일시적으로 불러올 수 없습니다. 선택한 ID는 유지됩니다."
+  "library_copy_filter_options_unavailable": "필터 선택 항목을 일시적으로 불러올 수 없습니다. 선택한 ID는 유지됩니다.",
+  "quotation_retry": "이 읽기 다시 시도",
+  "quotation_restart": "인용 처음부터 보기",
+  "quotation_previous": "이전 페이지",
+  "quotation_refresh": "이 페이지 새로 고침",
+  "quotation_selected": "인용 {id}",
+  "quotation_context_concealed": "이 맥락은 숨겨져 있습니다.",
+  "quotation_context_restricted": "이 맥락은 접근이 제한됩니다.",
+  "quotation_context_missing": "이 맥락이 없습니다.",
+  "quotation_context_withheld": "이 맥락은 공개되지 않았습니다."
 }

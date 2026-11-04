@@ -8725,5 +8725,14 @@
   "library_copy_filter_unavailable": "Signification historique indisponible",
   "library_copy_filter_history": "Les choix décrivent vos exemplaires enregistrés, y compris les valeurs historiques.",
   "library_copy_filter_none": "Aucun choix enregistré pour ce filtre.",
-  "library_copy_filter_options_unavailable": "Les choix des filtres sont temporairement indisponibles. Les identifiants sélectionnés sont conservés."
+  "library_copy_filter_options_unavailable": "Les choix des filtres sont temporairement indisponibles. Les identifiants sélectionnés sont conservés.",
+  "quotation_retry": "Réessayer la lecture",
+  "quotation_restart": "Recommencer les citations",
+  "quotation_previous": "Page précédente",
+  "quotation_refresh": "Actualiser cette page",
+  "quotation_selected": "Citation {id}",
+  "quotation_context_concealed": "Ce contexte est masqué.",
+  "quotation_context_restricted": "Ce contexte est restreint.",
+  "quotation_context_missing": "Ce contexte est manquant.",
+  "quotation_context_withheld": "Ce contexte est retenu."
 }

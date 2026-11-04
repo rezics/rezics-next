@@ -8725,5 +8725,14 @@
   "library_copy_filter_unavailable": "Significado histórico no disponible",
   "library_copy_filter_history": "Las opciones describen tus ejemplares guardados, incluidos los valores históricos.",
   "library_copy_filter_none": "No hay opciones guardadas para este filtro.",
-  "library_copy_filter_options_unavailable": "Las opciones de filtro no están disponibles temporalmente. Se conservan los ID seleccionados."
+  "library_copy_filter_options_unavailable": "Las opciones de filtro no están disponibles temporalmente. Se conservan los ID seleccionados.",
+  "quotation_retry": "Reintentar la lectura",
+  "quotation_restart": "Reiniciar las citas",
+  "quotation_previous": "Página anterior",
+  "quotation_refresh": "Actualizar esta página",
+  "quotation_selected": "Cita {id}",
+  "quotation_context_concealed": "Este contexto está oculto.",
+  "quotation_context_restricted": "Este contexto está restringido.",
+  "quotation_context_missing": "Falta este contexto.",
+  "quotation_context_withheld": "Este contexto está reservado."
 }

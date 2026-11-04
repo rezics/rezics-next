@@ -8817,5 +8817,14 @@
   "library_copy_filter_unavailable": "Historical meaning unavailable",
   "library_copy_filter_history": "Choices describe your stored holdings, including historical values.",
   "library_copy_filter_none": "There are no stored choices for this filter.",
-  "library_copy_filter_options_unavailable": "Filter choices are temporarily unavailable. Selected IDs are retained."
+  "library_copy_filter_options_unavailable": "Filter choices are temporarily unavailable. Selected IDs are retained.",
+  "quotation_retry": "Retry this read",
+  "quotation_restart": "Restart quotations",
+  "quotation_previous": "Previous page",
+  "quotation_refresh": "Refresh this page",
+  "quotation_selected": "Quotation {id}",
+  "quotation_context_concealed": "This context is concealed.",
+  "quotation_context_restricted": "This context is restricted.",
+  "quotation_context_missing": "This context is missing.",
+  "quotation_context_withheld": "This context is withheld."
 }
