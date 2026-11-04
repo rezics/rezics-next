@@ -287,6 +287,9 @@ Copy/share destinations use the existing post locator, including posts outside t
 existing author/report overflow ceremony. `PostActions.extraEntries` adds the shared unavailable mute/hide entries
 without changing report submission, verification, session retirement or copy recovery.
 
+Decision: an uncertain report keeps its original body, sender, credential and idempotency key in the `PostActions`
+owner; its recovery region offers deliberate retry or discard without echoing the private report text.
+
 Decision: Work Library actions navigate to the existing Subject Library slot; post actions create no Library mutation
 or mount read. Browser share/copy results belong to the current session/source visit. The board owner consumes the
 exported port as described in [feed actions](../features/feed/README.md#card-actions), retaining pins and slow mode.
