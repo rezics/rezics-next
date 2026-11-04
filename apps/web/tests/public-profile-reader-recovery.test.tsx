@@ -143,7 +143,7 @@ for (const view of ['overview', 'posts'] as const) {
       recovered.work.resolve(runtime.result('show'));
       await waitForStatus('preferences are applied');
       expect(status().textContent).toContain('preferences are applied');
-      expect(host.querySelector('[data-slot="cover"][data-state="withheld"]')).toBeNull();
+      expect(host.querySelector('[data-slot="cover"][data-state="withheld"]') === null).toBe(true);
       expect(publicLink.isConnected).toBe(true);
       expect(window.document.activeElement === publicLink).toBe(true);
       expect(host.querySelector('[data-slot="contribution-return-recovery"]') === recovery).toBe(true);
