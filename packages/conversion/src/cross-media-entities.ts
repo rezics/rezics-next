@@ -683,9 +683,8 @@ function releasedCharacterQuantity(
 ): boolean {
   const character = bundledRelease.types['wd:Q95074'];
   const definition = bundledRelease.properties[property];
-  const amountPattern = (
-    definition?.value as { properties?: { amount?: { pattern?: unknown } } } | undefined
-  )?.properties?.amount?.pattern;
+  const amountPattern = (definition?.value as { properties?: { amount?: { pattern?: unknown } } } | undefined)
+    ?.properties?.amount?.pattern;
   return (
     character?.properties.includes(property) === true &&
     definition?.datatype === 'quantity' &&

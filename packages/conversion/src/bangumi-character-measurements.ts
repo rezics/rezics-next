@@ -135,7 +135,8 @@ function braces(line: string, depth: number): { depth: number; exceeded: boolean
   for (let i = 0; i < line.length; i++) {
     if (line.startsWith('{{', i)) {
       nextDepth++;
-      if (nextDepth > bangumiCharacterMeasurementLimits.maxTemplateDepth) return { depth: nextDepth, exceeded: true, invalid: false };
+      if (nextDepth > bangumiCharacterMeasurementLimits.maxTemplateDepth)
+        return { depth: nextDepth, exceeded: true, invalid: false };
       i++;
     } else if (line.startsWith('}}', i)) {
       nextDepth--;
@@ -155,7 +156,13 @@ function quantityFor(field: MeasurementField, sourceValue: string): { quantity?:
   if (!value || unknownValues.has(value)) return { code: 'unknown_source_value' };
   if (/^(?:about|approx(?:imately)?|circa|约|約|大约|大約)/iu.test(value)) return { code: 'approximate_quantity' };
   if (/[\-–—~～至到]/u.test(value)) return { code: 'quantity_range_unavailable' };
-  if (value.includes('{{') || value.includes('}}') || value.includes('[[') || value.includes(']]') || value.includes('|'))
+  if (
+    value.includes('{{') ||
+    value.includes('}}') ||
+    value.includes('[[') ||
+    value.includes(']]') ||
+    value.includes('|')
+  )
     return { code: 'unsupported_quantity_markup' };
 
   if (numericValue.test(value)) return { code: 'missing_explicit_unit' };
@@ -169,10 +176,7 @@ function quantityFor(field: MeasurementField, sourceValue: string): { quantity?:
   const unitName = /^[a-z]+$/iu.test(rawUnit) ? rawUnit.toLowerCase() : rawUnit;
   const admittedUnit = unitRows.find((row) => (row.names as readonly string[]).includes(unitName));
   if (!admittedUnit) return { code: 'unsupported_quantity_unit' };
-  const propertyUnits =
-    field === 'height'
-      ? new Set([centimeter, meter])
-      : new Set([kilogram, gram]);
+  const propertyUnits = field === 'height' ? new Set([centimeter, meter]) : new Set([kilogram, gram]);
   if (!propertyUnits.has(admittedUnit.unit)) return { code: 'unit_not_admitted_for_field' };
   return { quantity: { amount: `+${amount}`, unit: admittedUnit.unit } };
 }
@@ -180,7 +184,11 @@ function quantityFor(field: MeasurementField, sourceValue: string): { quantity?:
 /** Parses only the pinned, line-oriented Infobox Crt fields for physical profile evidence. */
 export function projectBangumiCharacterMeasurements(infobox: unknown): BangumiCharacterMeasurementProjection {
   const sink = diagnosticsSink();
-  const empty = (): BangumiCharacterMeasurementProjection => ({ measurements: [], evidence: [], diagnostics: sink.diagnostics });
+  const empty = (): BangumiCharacterMeasurementProjection => ({
+    measurements: [],
+    evidence: [],
+    diagnostics: sink.diagnostics,
+  });
   if (infobox === undefined || infobox === null) return empty();
   if (typeof infobox !== 'string' || !infobox.isWellFormed()) {
     sink.add('/infobox', 'unsupported_infobox_structure');
@@ -375,7 +383,8 @@ export function projectBangumiCharacterMeasurements(infobox: unknown): BangumiCh
           quantity,
         });
       } else {
-        if (parsed.code !== 'unknown_source_value') sink.add(occurrence.pointer, parsed.code ?? 'unsupported_quantity_format');
+        if (parsed.code !== 'unknown_source_value')
+          sink.add(occurrence.pointer, parsed.code ?? 'unsupported_quantity_format');
         else if (sourceValue.replace(horizontalSpace, '')) sink.add(occurrence.pointer, parsed.code);
         outcome = parsed.code === 'unknown_source_value' ? 'unknown' : 'unavailable';
       }
@@ -391,5 +400,9 @@ export function projectBangumiCharacterMeasurements(infobox: unknown): BangumiCh
     });
   }
 
-  return { measurements: measurements.slice(0, bangumiCharacterMeasurementLimits.maxQuantityFacts), evidence, diagnostics: sink.diagnostics };
+  return {
+    measurements: measurements.slice(0, bangumiCharacterMeasurementLimits.maxQuantityFacts),
+    evidence,
+    diagnostics: sink.diagnostics,
+  };
 }

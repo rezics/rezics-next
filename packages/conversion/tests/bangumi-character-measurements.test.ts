@@ -151,9 +151,7 @@ test('physical projection rejects exceeded source and value bounds before quanti
   expect(tooManyFields.measurements).toEqual([]);
   expect(tooManyFields.diagnostics).toContainEqual({ pointer: '/infobox', code: 'infobox_field_limit' });
 
-  const tooDeep = projectBangumiCharacterMeasurements(
-    '{{Infobox Crt\n|metadata={{a|{{b}}}}\n|身高=172cm\n}}',
-  );
+  const tooDeep = projectBangumiCharacterMeasurements('{{Infobox Crt\n|metadata={{a|{{b}}}}\n|身高=172cm\n}}');
   expect(tooDeep.measurements).toEqual([]);
   expect(tooDeep.diagnostics).toContainEqual({ pointer: '/infobox/fields/0', code: 'infobox_depth_limit' });
 

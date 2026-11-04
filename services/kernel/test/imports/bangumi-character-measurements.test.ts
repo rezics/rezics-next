@@ -71,8 +71,7 @@ function tables(infobox: string): CrossMediaTables {
 }
 
 function values(read: unknown, property: string): unknown[] {
-  const subject = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } })
-    .subject;
+  const subject = (read as { subject?: { statements?: Record<string, { value?: { content?: unknown } }[]> } }).subject;
   return (subject?.statements?.[property] ?? []).map((statement) => statement.value?.content);
 }
 
@@ -126,9 +125,7 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
 
   try {
     const first = await importSelected('{{Infobox Crt\n|血型=A\n|身高=172cm\n|体重=56kg\n}}');
-    expect(first.result.readings.find((entry) => entry.externalId === characterId)?.subject.subject?.id).toBe(
-      first.id,
-    );
+    expect(first.result.readings.find((entry) => entry.externalId === characterId)?.subject.subject?.id).toBe(first.id);
     expect(first.result.readings.some((entry) => entry.externalId === 'character:201')).toBe(false);
     const initialHeight = await runtime.importTransport.reviewedCandidates(first.id, {
       property: 'schema:height',
@@ -140,12 +137,8 @@ test('default Bangumi seed publicly adopts selected character quantities and doe
       context: globalContext,
       limit: 100,
     });
-    const heightCandidate = initialHeight.candidates.find(
-      (candidate) => candidate.source?.external_id === characterId,
-    );
-    const weightCandidate = initialWeight.candidates.find(
-      (candidate) => candidate.source?.external_id === characterId,
-    );
+    const heightCandidate = initialHeight.candidates.find((candidate) => candidate.source?.external_id === characterId);
+    const weightCandidate = initialWeight.candidates.find((candidate) => candidate.source?.external_id === characterId);
     if (!heightCandidate || !weightCandidate) throw new Error('Selected physical candidates are missing');
     expect(heightCandidate.source).toMatchObject({
       source: crossMediaAliases.bangumi,
