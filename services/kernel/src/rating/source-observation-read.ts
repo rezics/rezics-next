@@ -222,7 +222,14 @@ function readCursor(
   const decoded = decodeCursor(dependencies.tokens, binding, value, (dependencies.clock?.() ?? new Date()).getTime());
   if (!decoded.ok || decoded.after.length !== 6 || decoded.after.some((part) => typeof part !== 'string'))
     return invalidCursor();
-  const [format, kind, order, digest, nativeCeiling, legacyCeiling] = decoded.after as string[];
+  const [format, kind, order, digest, nativeCeiling, legacyCeiling] = decoded.after as [
+    string,
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
   const normalizedOrder = order === '' ? null : order;
   const normalizedNativeCeiling = nativeCeiling === '' ? null : nativeCeiling;
   const normalizedLegacyCeiling = legacyCeiling === '' ? null : legacyCeiling;
