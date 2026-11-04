@@ -24,6 +24,10 @@ const sourceSchema = t.Object(
   { partition: t.Integer(), epoch: t.Integer(), position: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) },
   { additionalProperties: false },
 );
+const sourceObservationSchema = t.Object(
+  { appealId: t.String(), source: sourceSchema },
+  { additionalProperties: false },
+);
 const appellantIdentitySchema = t.Union([
   t.Object(
     {
@@ -133,6 +137,7 @@ const exampleAppeal = {
   },
   source: exampleSource,
 };
+const exampleSourceObservation = { appealId: exampleAppeal.id, source: exampleSource };
 const examplePage = {
   appeals: [exampleAppeal],
   next: null,
@@ -140,11 +145,12 @@ const examplePage = {
     actorId: '01900000-0000-7000-8000-000000000007',
     session: { clientId: 'moderation-client', authnEpoch: 1 },
     source: exampleSource,
+    sourceObservations: [exampleSourceObservation],
   },
 };
 const reviewExamples = [
   examplePage,
-  { ...examplePage, appeals: [] },
+  { ...examplePage, appeals: [], provenance: { ...examplePage.provenance, sourceObservations: [] } },
   { ...examplePage, appeals: [{ ...exampleAppeal, targetContext: { state: 'concealed' } }] },
   {
     ...examplePage,
@@ -156,6 +162,7 @@ const reviewExamples = [
   {
     ...examplePage,
     appeals: [],
+    provenance: { ...examplePage.provenance, sourceObservations: [exampleSourceObservation] },
     selectedAppeal: {
       ...exampleAppeal,
       canResolve: false,
@@ -284,6 +291,7 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
                 actorId: t.String(),
                 session: t.Object({ clientId: t.String(), authnEpoch: t.Integer() }, { additionalProperties: false }),
                 source: sourceSchema,
+                sourceObservations: t.Array(sourceObservationSchema, { maxItems: 101 }),
               },
               { additionalProperties: false },
             ),

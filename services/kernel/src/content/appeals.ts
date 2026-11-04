@@ -267,12 +267,17 @@ function sourceView(anchor: AppealReviewAnchor) {
   return { partition: anchor.partition, epoch: anchor.epoch, position: anchor.position.toString() };
 }
 
-function provenance(context: ReadContext, anchor: AppealReviewAnchor) {
+function provenance(
+  context: ReadContext,
+  anchor: AppealReviewAnchor,
+  sourceObservations: readonly { appealId: string; source: ReturnType<typeof sourceView> }[],
+) {
   if (context.actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
   return {
     actorId: context.actor.accountId,
     session: { clientId: context.actor.clientId, authnEpoch: context.actor.authnEpoch },
     source: sourceView(anchor),
+    sourceObservations,
   };
 }
 
@@ -440,6 +445,8 @@ export async function listAppeals(
   await readAppealReviewIdentities(deps, appellantIds, context.deadline);
   const targetObservation = await observeAppealReviewTargetContexts(deps, targets, context);
   const finalIdentities = await readAppealReviewIdentities(deps, appellantIds, context.deadline);
+  // Finish foreign destination disclosure before the final source reads and the independent parent authorization.
+  const finalTargets = await targetObservation.verify();
   const qualified: Array<{ row: AppealSourceRow; anchor: AppealReviewAnchor; canTakedown: boolean }> = [];
   for (const item of admitted) {
     const sourceRoute = routeOf(item.row.appeal_id)!;
@@ -477,9 +484,6 @@ export async function listAppeals(
       canTakedown: current.value.outcome === null ? (await canAct(deps, current.value, context)).value : false,
     };
   }
-  // Only these final ordinary native reads supply serialized destinations. Queue
-  // authority and retained case ownership never substitute for target disclosure.
-  const finalTargets = await targetObservation.verify();
   const projectCurrent = (item: (typeof qualified)[number]) =>
     projectAppeal(
       item.row,
@@ -495,6 +499,10 @@ export async function listAppeals(
   const exact = selectedCurrent
     ? { ...projectCurrent(selectedCurrent), resolution: retainedResolution(selectedCurrent.row) }
     : undefined;
+  const sourceObservations = [
+    ...appeals.map((appeal) => ({ appealId: appeal.id, source: appeal.source })),
+    ...(exact ? [{ appealId: exact.id, source: exact.source }] : []),
+  ];
   const final = await appealReviewSnapshot(deps.pool, route, context.deadline, (client) => check(client));
   if (!final.value) throw missing();
   const last = selected.at(-1);
@@ -507,7 +515,7 @@ export async function listAppeals(
           ? encodeCursor(ring, binding, { epoch: final.anchor.epoch, after: [last.created_at!, last.appeal_id] })
           : null,
       ...(exact ? { selectedAppeal: exact } : {}),
-      provenance: provenance(context, final.anchor),
+      provenance: provenance(context, final.anchor, sourceObservations),
     },
     anchor: final.anchor,
     selectedAnchor: selectedCurrent?.anchor,
