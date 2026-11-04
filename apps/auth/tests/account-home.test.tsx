@@ -25,11 +25,12 @@ for (const [name, value] of Object.entries(globals))
 const { createRoot } = await import('react-dom/client');
 const { AccountHome } = await import('../src/account-home-view');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const { applyDocumentLocale, initializeDocumentLocale } = await import('../src/locale-observation');
 overwriteGetLocale(() => 'en');
 
 type Mounted = {
   host: HTMLDivElement;
-  render: (source: AccountIdentitySource) => Promise<void>;
+  render: (source?: AccountIdentitySource) => Promise<void>;
 };
 const mounted: Array<{ root: ReturnType<typeof createRoot>; host: HTMLDivElement }> = [];
 const originalFetch = globalThis.fetch;
@@ -43,7 +44,7 @@ async function flush(action: () => void = () => {}) {
   });
 }
 
-async function mount(source: AccountIdentitySource): Promise<Mounted> {
+async function mount(source?: AccountIdentitySource): Promise<Mounted> {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
@@ -124,7 +125,7 @@ test('signed-out, denied, unavailable and missing-email states stay distinct', a
   expect(signedOut.host.querySelector('[role="status"]')?.textContent).toContain('You are signed out');
   for (const href of ['/login', '/signup', '/recovery'])
     expect(signedOut.host.querySelector(`a[href="${href}"]`)).not.toBeNull();
-  for (const href of ['/security', '/account/rename', '/account/delete'])
+  for (const href of ['/security', '/account/rename', '/account/delete', '/organizations/new', '/automated/new'])
     expect(signedOut.host.querySelector(`a[href="${href}"]`)).not.toBeNull();
   expect(signedOut.host.textContent).toContain('does not promise an action is available');
 
@@ -135,6 +136,7 @@ test('signed-out, denied, unavailable and missing-email states stay distinct', a
   const unavailable = await mount(async () => ({ kind: 'unavailable' }));
   expect(unavailable.host.querySelector('[role="status"]')?.textContent).toContain('status is unknown');
   expect(unavailable.host.querySelector('button')?.textContent).toContain('Retry account check');
+  expect(unavailable.host.querySelector('a[href="/recovery"]')).not.toBeNull();
 
   const missingEmail = await mount(async () => identity('sample-account', null));
   expect(missingEmail.host.textContent).toContain('No email address is available');
@@ -189,7 +191,11 @@ test('Retry focuses status, and pagehide/return clears and renews the observatio
   );
   await flush();
   expect(returning.host.textContent).toContain('before@example.test');
-  await flush(() => window.dispatchEvent(new dom.Event('pagehide')));
+  await act(async () => {
+    window.dispatchEvent(new dom.Event('pagehide'));
+    expect(returning.host.textContent).not.toContain('before@example.test');
+    expect(returning.host.textContent).not.toContain('before-return');
+  });
   expect(returning.host.textContent).not.toContain('before@example.test');
   const pageshow = new dom.Event('pageshow');
   Object.defineProperty(pageshow, 'persisted', { value: true });
@@ -199,4 +205,79 @@ test('Retry focuses status, and pagehide/return clears and renews the observatio
   renewed.resolve(identity('after-return', 'after@example.test'));
   await flush();
   expect(returning.host.textContent).toContain('after@example.test');
+});
+
+test('one installed identity observation, public tasks and read Retry never prepare work', async () => {
+  const calls: string[] = [];
+  const pendingKey = 'rezics.account-operation.pending';
+  window.sessionStorage.setItem(pendingKey, 'owned-by-destination');
+  globalThis.fetch = (async (input, init) => {
+    calls.push(String(input));
+    expect(init?.body).toBe('{}');
+    expect(init?.method).toBe('POST');
+    return new Response(null, { status: 503 });
+  }) as typeof fetch;
+  const page = await mount();
+  expect(calls).toEqual(['/account-identity']);
+  const task = page.host.querySelector<HTMLAnchorElement>('a[href="/automated/new"]')!;
+  await flush(() => {
+    window.dispatchEvent(new dom.Event('focus'));
+    task.focus();
+    task.addEventListener('click', (event) => event.preventDefault());
+    task.click();
+  });
+  expect(document.activeElement).toBe(task);
+  expect(calls).toHaveLength(1);
+  expect(window.sessionStorage.getItem(pendingKey)).toBe('owned-by-destination');
+  await flush(() => page.host.querySelector<HTMLButtonElement>('button')!.click());
+  expect(calls).toEqual(['/account-identity', '/account-identity']);
+  expect(document.activeElement).toBe(page.host.querySelector('[role="status"]'));
+  expect(window.location.pathname).toBe('/');
+  task.focus();
+  await page.render();
+  expect(document.activeElement).toBe(task);
+  expect(calls).toHaveLength(2);
+  window.sessionStorage.removeItem(pendingKey);
+});
+
+test('replacement hides a ready identity while pending, and unrelated renders keep task focus', async () => {
+  const page = await mount(async () => identity('former-id', 'former@example.test'));
+  const replacement = deferred<AccountIdentityResult>();
+  const source: AccountIdentitySource = () => replacement.promise;
+  await page.render(source);
+  expect(page.host.textContent).not.toContain('former@example.test');
+  expect(page.host.textContent).not.toContain('former-id');
+  const link = page.host.querySelector<HTMLAnchorElement>('a[href="/organizations/new"]')!;
+  link.focus();
+  await page.render(source);
+  expect(document.activeElement).toBe(link);
+  replacement.resolve({ kind: 'denied' });
+  await flush();
+  expect(document.activeElement).toBe(link);
+  expect(page.host.querySelector('details')).toBeNull();
+  expect(page.host.querySelector('.auth-home-guide')?.textContent).not.toContain('former');
+});
+
+test('a mounted language change updates the public guide without another identity read', async () => {
+  initializeDocumentLocale('en');
+  let calls = 0;
+  const page = await mount(async () => {
+    calls++;
+    return identity('own-id', 'own@example.test');
+  });
+  const task = page.host.querySelector<HTMLAnchorElement>('a[href="/automated/new"]')!;
+  task.focus();
+  try {
+    await flush(() => {
+      applyDocumentLocale('ja');
+    });
+    expect(task.textContent).toContain('自動化アカウントの作成を確認');
+    expect(document.activeElement).toBe(task);
+    expect(page.host.textContent).toContain('own@example.test');
+    expect(calls).toBe(1);
+  } finally {
+    await flush(() => {
+      applyDocumentLocale('en');
+    });
+  }
 });

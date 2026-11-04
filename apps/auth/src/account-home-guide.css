@@ -1,0 +1,65 @@
+.auth-home-guide {
+  display: grid;
+  gap: 1.75rem;
+  min-width: 0;
+}
+
+.auth-home-guide p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.auth-home-guide .auth-home-delete {
+  border-inline-start: 4px solid var(--foreground);
+  background: var(--muted);
+}
+
+.auth-home-selection {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.auth-home-selection section {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-selection h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.auth-home-selection p,
+.auth-home-identity-note {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-home-selection a,
+.auth-home-location a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.5rem;
+  color: var(--foreground);
+  text-underline-offset: 0.2em;
+}
+
+.auth-home-selection a:focus-visible,
+.auth-home-location a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+@media (min-width: 640px) {
+  .auth-home-selection {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

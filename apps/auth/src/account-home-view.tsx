@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { AccountIdentitySource, AccountIdentityState } from './account-identity';
 import { useAccountHomeIdentity } from './account-home';
+import { AccountHomeGuide } from './account-home-guide';
+import { useInterfaceLocale } from './locale-observation';
 import { AuthButton } from './button';
 import { AuthPage } from './frame';
 import { m } from './paraglide/messages.js';
@@ -19,6 +21,7 @@ export function AccountHomeView({
   retry: () => void;
   retryFocusVersion: number;
 }) {
+  useInterfaceLocale();
   const status = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
     if (retryFocusVersion > 0) status.current?.focus({ preventScroll: true });
@@ -39,12 +42,18 @@ export function AccountHomeView({
     <AuthPage heading={m.auth_home_heading()}>
       <div className="auth-account-home">
         <p className="auth-account-home-intro">{m.auth_home_intro()}</p>
+        <nav className="auth-home-location" aria-label={m.auth_home_heading()}>
+          <a href="/" aria-current="page">
+            {m.auth_home_heading()} · {m.auth_home_current()}
+          </a>
+        </nav>
 
         <section className="auth-account-identity" aria-labelledby="auth-home-identity-heading">
           <h2 id="auth-home-identity-heading">{m.auth_home_identity_heading()}</h2>
           <p ref={status} className="auth-account-home-status" role="status" tabIndex={-1}>
             {identityMessage}
           </p>
+          <p className="auth-home-identity-note">{m.auth_home_identity_note()}</p>
           {state.kind === 'ready' ? (
             <dl className="auth-account-home-email">
               <div>
@@ -68,7 +77,7 @@ export function AccountHomeView({
           ) : null}
         </section>
 
-        {state.kind === 'signed-out' ? (
+        {state.kind === 'signed-out' || state.kind === 'unavailable' ? (
           <section className="auth-home-entries" aria-labelledby="auth-home-signed-out-heading">
             <h2 id="auth-home-signed-out-heading">{m.auth_home_signed_out_heading()}</h2>
             <p>{m.auth_home_signed_out_description()}</p>
@@ -80,37 +89,7 @@ export function AccountHomeView({
           </section>
         ) : null}
 
-        <section className="auth-home-settings" aria-labelledby="auth-home-settings-heading">
-          <h2 id="auth-home-settings-heading">{m.auth_home_settings_heading()}</h2>
-          <p>{m.auth_home_settings_description()}</p>
-          <nav aria-label={m.auth_home_navigation_label()}>
-            <a className="auth-home-link" href="/" aria-current="page">
-              <span>
-                <strong>{m.auth_home_heading()}</strong>
-                <small>{m.auth_home_intro()}</small>
-              </span>
-              <span className="auth-home-current">{m.auth_home_current()}</span>
-            </a>
-            <a className="auth-home-link" href="/security">
-              <span>
-                <strong>{m.auth_home_security()}</strong>
-                <small>{m.auth_home_security_description()}</small>
-              </span>
-            </a>
-            <a className="auth-home-link" href="/account/rename">
-              <span>
-                <strong>{m.auth_home_rename()}</strong>
-                <small>{m.auth_home_rename_description()}</small>
-              </span>
-            </a>
-            <a className="auth-home-link" href="/account/delete">
-              <span>
-                <strong>{m.auth_home_delete()}</strong>
-                <small>{m.auth_home_delete_description()}</small>
-              </span>
-            </a>
-          </nav>
-        </section>
+        <AccountHomeGuide />
       </div>
     </AuthPage>
   );

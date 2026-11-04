@@ -25,13 +25,36 @@ states with an accessible busy indicator. Error text uses ink blue, with red res
 
 The Auth brand and `/` open the localized account home. It uses one existing private `POST /account-identity` read to
 show only the current own account, with a missing email left missing. Signed-out, refused and unavailable reads stay
-distinct; unavailable has an explicit Retry. The technical account ID is behind a disclosure. Security, rename and
-deletion links open their existing review pages; each page checks its own current native guidance, so navigation does
-not promise that an action is available. The home never loads an inventory, changes state or resumes an operation.
+distinct; unavailable has an explicit Retry and sign-in/recovery exits without assuming the visitor is signed out.
+The technical account ID is behind a disclosure; email and ID are display-only and establish no permissions, human
+kind or operator status. Public task groups remain usable in every read state. Destructive deletion has a distinct
+review entry with consequence guidance, never a submit control.
 
-Decision: the home links to Security, account rename and account deletion. It omits organization membership because
-that route needs a selected organization ID, and organization creation because it is a command entry rather than a
-review destination.
+Security, handle rename, personal deletion, organization creation and automated-account creation use ordinary links
+to the installed zero-selector review pages. Destination-native advice determines current action availability and
+authentication requirements. Home availability is unknown; even a successful private identity read grants nothing.
+Creation keeps the native forms, deliberate review, continuation markers and Stay/Leave protections with their owners.
+
+Decision: group identity/lifecycle, security and account creation separately; exact-target tasks get explanations and
+attached Security exits because Auth has no admitted local directory entry to reuse.
+
+Membership needs an exact organization selection; organization deletion needs its exact ID. Operator transfer needs
+the exact actor/source/destination request and destination acceptance before source submission. Session opening needs
+the exact automated actor/current operator and replaces the browser session. These are explained without linking empty
+selectors, guessing public-profile targets or preparing drafts. Native authentication, permission and consequence
+checks remain on their owning flows. An uncertain result is never presented as deletion or cleanup completion.
+
+Whole-call home cost: server rendering, task navigation and language changes perform zero home requests. Each mount,
+explicit read Retry or persisted `pageshow` performs one installed `POST /account-identity` with `{}` and a five-second
+deadline through response-body completion. `pagehide` synchronously clears private data and aborts the old generation;
+source replacement retires the prior read and makes one fresh observation. Late results cannot restore old identity.
+There is no focus polling or automatic retry, inventory fan-out, command prepare, approval or write. Links perform no
+background preflight and accept no operands or workflow keys. Read Retry only refreshes the observation, focuses its
+current status and never navigates or starts authentication.
+
+The local guide has phone/desktop and light/dark stories for current identity, missing email, loading, signed-out,
+denied, unavailable and current-read replacement. The mounted language chooser updates all guide copy without a reload
+or a required preference write. Native/browser and integrated acceptance remain controller-owned.
 
 ## Sign-in
 
