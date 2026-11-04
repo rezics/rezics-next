@@ -668,7 +668,9 @@ function MangaCreate({
             viewerKey={viewerKey}
             viewerState={identityIntake.viewerState}
             hasType={!!read?.release.types[type]}
-            typeLabel={read?.release.types[type] ? definitionText(read.release.types[type]!.labels, locale).text : undefined}
+            {...(read?.release.types[type]
+              ? { typeLabel: definitionText(read.release.types[type]!.labels, locale).text }
+              : {})}
             typeCurrent={!!read?.release.types[type] && !!read.releaseDigest}
             disabled={locked}
             confirmed={identityConfirmed}
@@ -1098,14 +1100,14 @@ function MangaCreateReviewView({
                 {m.catalogue_create_language({}, o)}: <code>{language}</code>
               </p>
               <p lang={language}>{label}</p>
-              {review.item.descriptions[language] && (
+              {(review.item.descriptions ?? {})[language] && (
                 <p className="text-sm text-muted-foreground" lang={language}>
-                  {review.item.descriptions[language]}
+                  {(review.item.descriptions ?? {})[language]}
                 </p>
               )}
-              {review.item.aliases[language]?.length ? (
+              {(review.item.aliases ?? {})[language]?.length ? (
                 <p className="text-sm text-muted-foreground" lang={language}>
-                  {review.item.aliases[language]!.join(' · ')}
+                  {(review.item.aliases ?? {})[language]!.join(' · ')}
                 </p>
               ) : null}
             </li>
@@ -1157,7 +1159,7 @@ function MangaCreateReviewView({
                       <dt className="font-medium">{m.authored_original({}, o)}</dt>
                       <dd>{row?.original ? '✓' : '—'}</dd>
                     </dl>
-                    {authored.document && typeof authored.document === 'object' && (
+                    {!!authored.document && typeof authored.document === 'object' && (
                       <p className="whitespace-pre-wrap break-words" lang={String(authored.language ?? '')}>
                         {documentText(authored.document as DocumentSnapshot)}
                       </p>

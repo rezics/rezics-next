@@ -258,7 +258,12 @@ export const IndependentMounts: Story = {
           <MangaCorrections
             locale={getLocale()}
             disabled={false}
-            read={{ ok: true, release: fixture.release, public: fixture.reads.get(mangaVolumeId)! }}
+            read={{
+              ok: true,
+              release: fixture.release,
+              releaseDigest: 'manga-fixture-release',
+              public: fixture.reads.get(mangaVolumeId)!,
+            }}
             ports={{
               facts: { read: async () => ({ ok: false, reason: 'unavailable' }), propose: fixture.propose },
               review: () => ({
