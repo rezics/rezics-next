@@ -1,11 +1,19 @@
-import { expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { afterAll, expect, mock, test } from 'bun:test';
+import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { initialHeaderSearchState } from '../src/search/header-search/state';
-import { HeaderSearchView } from '../src/search/header-search/header-search';
 import { UnavailableAccountAction } from '../src/shell/top-bar';
 import { loadPrivatePage, SessionUnavailablePrompt } from '../src/session/private-page';
 import { m } from '../src/paraglide/messages.js';
+
+mock.module('../src/kernel/exposure', () => ({
+  Exposure: ({ children }: { children: ReactNode }) => children,
+  operationIsAdmitted: () => false,
+  useOperation: () => false,
+}));
+const { HeaderSearchView } = await import('../src/search/header-search/header-search');
+
+afterAll(() => mock.restore());
 
 test('unresolved private destinations show a localized sign-in prompt without starting private reads', async () => {
   const paths = ['/en/library', '/en/realms', '/en/settings', '/en/creator/sales'];

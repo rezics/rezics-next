@@ -9,6 +9,7 @@ import { m } from '../src/paraglide/messages.js';
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
+const { useIsMobile } = await import('@rezics/ui/hooks/use-mobile');
 
 test('selection review hydrates to a phone sheet, crosses to Base UI dialog and restores its current opener', async () => {
   const browser = new Window({ url: 'https://site.test/en/library', width: 390, height: 844 });
@@ -40,11 +41,9 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  for (const [key, value] of Object.entries(globals))
-    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
   function Harness() {
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(true);
     const launcher = useRef<HTMLButtonElement>(null);
     return (
       <>
@@ -71,17 +70,17 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
     );
   }
 
-  const { useIsMobile } = await import('@rezics/ui/hooks/use-mobile');
   const host = browser.document.createElement('main');
   host.innerHTML = renderToString(createElement(Harness));
   browser.document.body.append(host);
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   let root: Root | undefined;
   try {
     await act(async () => {
       root = hydrateRoot(host, createElement(Harness));
     });
     expect(host.querySelector('output')?.getAttribute('data-mobile')).toBe('true');
-    await act(async () => host.querySelector('button')?.click());
     expect(browser.document.querySelector('[data-slot="drawer-popup"]')).not.toBeNull();
 
     await act(async () => {

@@ -40,7 +40,11 @@ mock.module('../src/library/copies-actions', () => ({
   undoCopy() {},
 }));
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'current' }) }));
-mock.module('../src/kernel/exposure', () => ({ Exposure: ({ children }: { children: ReactNode }) => children }));
+mock.module('../src/kernel/exposure', () => ({
+  Exposure: ({ children }: { children: ReactNode }) => children,
+  operationIsAdmitted: () => false,
+  useOperation: () => false,
+}));
 mock.module('@rezics/ui/hooks/use-mobile', () => ({ useIsMobile: () => mobile }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
 mock.module('@rezics/ui/shadcn/dialog', () => ({
