@@ -101,7 +101,7 @@ export function createShowcaseBangumiGenreLookup(
   const reference = reviewedReferenceKey(bangumiPublicTagScheme, HAREM_EDITOR_TAG);
   const lookup: ImportIdentifierLookup = {
     async resolve({ owner, conversion, signal }) {
-      if (owner.source !== sourceAlias || conversion.source !== sourceAlias) return {};
+      if (owner.source !== sourceAlias || conversion.source !== 'bangumi') return {};
       const record = conversion.normalized as { meta_tags?: unknown };
       if (!Array.isArray(record.meta_tags) || !record.meta_tags.includes(HAREM_EDITOR_TAG)) return {};
       const adapted = { ...conversion, source: 'bangumi' } as typeof conversion;
