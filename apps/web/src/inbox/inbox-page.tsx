@@ -906,7 +906,7 @@ export function ViewerInboxPage({
             {offerSeenRetry ? (
               <fieldset className="min-w-0 max-w-full space-y-2">
                 <legend className={seenNeedsAccess ? 'sr-only' : 'text-sm text-muted-foreground'}>
-                  {m.inbox_seen_retry()}
+                  {seenNeedsAccess ? m.inbox_seen_retry() : m.inbox_retry()}
                 </legend>
                 <Button
                   variant="outline"
