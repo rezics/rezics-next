@@ -126,6 +126,7 @@ function NewThreadEditor({
     readerAdmission,
   );
   const { lifetime, ticket, current, bound } = visit;
+  const { credentialMode } = Route.useRouteContext();
   const [destinationReader] = useState(() => createCompositionDestinationReader());
   const destinationBinding = useRef<{ boardId: string; projection: CompositionDestinationProjection } | null>(null);
   const destination = current && bound && board.id === origin.boardId ? destinationReader.read(board) : undefined;
@@ -261,6 +262,15 @@ function NewThreadEditor({
                 titleRequired
                 canSubmit={current && canSubmitThread(origin.purpose, subjectId)}
                 boardId={origin.boardId}
+                slowModeScopeKey={JSON.stringify([
+                  'new-thread',
+                  origin.boardId,
+                  origin.purpose,
+                  subjectId,
+                  getLocale(),
+                  credentialMode,
+                ])}
+                slowModeCredentialMode={credentialMode}
                 submissionContext={submissionContext}
                 onIntentLockChange={handleIntentLockChange}
                 onSubmit={async ({

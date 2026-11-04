@@ -1494,18 +1494,6 @@ export async function readContentReadingPage(
       watch = { state: 'unavailable', retryable: true };
     }
   }
-  if (slowMode.state === 'current') {
-    try {
-      const finalSlowMode = await readBoardSlowMode(dependencies, actor, thread.boardId, deadline);
-      if (slowModeWitness(finalSlowMode) !== slowModeWitness(slowMode))
-        slowMode = { state: 'unavailable', retryable: true };
-    } catch (error) {
-      if (classifyUnavailability(error) === undefined && !(error instanceof BoardSlowAdmissionUnavailableError))
-        throw error;
-      slowMode = { state: 'unavailable', retryable: true };
-    }
-  }
-
   const finalThread = await (actor.kind === 'account'
     ? withThreadReadAdmission(
         async () => {
@@ -1533,6 +1521,18 @@ export async function readContentReadingPage(
       replyWitness(finalSelection.replies, finalSelection.page.nextCursor !== null)
   )
     throw new ProblemError('dependency_unavailable', { detail: 'The reading page changed during hydration' });
+
+  if (slowMode.state === 'current') {
+    try {
+      const finalSlowMode = await readBoardSlowMode(dependencies, actor, thread.boardId, deadline);
+      if (slowModeWitness(finalSlowMode) !== slowModeWitness(slowMode))
+        slowMode = { state: 'unavailable', retryable: true };
+    } catch (error) {
+      if (classifyUnavailability(error) === undefined && !(error instanceof BoardSlowAdmissionUnavailableError))
+        throw error;
+      slowMode = { state: 'unavailable', retryable: true };
+    }
+  }
 
   if (actionRuntime && actionState === 'current') {
     projected = projectedReferences(

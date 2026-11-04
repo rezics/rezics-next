@@ -104,7 +104,14 @@ function BoardPage() {
           )}
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
           postingInterval={
-            session === 'signed-in' ? <SlowModeSetting boardId={id} onApplied={() => void router.invalidate()} /> : null
+            session === 'signed-in' ? (
+              <SlowModeSetting
+                boardId={id}
+                scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
+                credentialMode={router.options.context.credentialMode}
+                onApplied={() => void router.invalidate()}
+              />
+            ) : null
           }
         />
       )}

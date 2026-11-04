@@ -1030,12 +1030,12 @@ export async function readBoardSlowMode(
     let pending = false;
     if (actor.kind === 'account' && !exempt) {
       const state = await client.query<{ posted_at: string | null; pending: boolean }>(
-        `SELECT a.posted_at::text,
+        `SELECT (SELECT a.posted_at::text FROM content.board_slow_actor a
+                 WHERE a.route=$1 AND a.board_id=$2 AND a.actor_key IN ($3,$4)
+                 ORDER BY a.posted_at DESC NULLS LAST LIMIT 1) AS posted_at,
            EXISTS (SELECT 1 FROM content.board_slow_permit p
                    WHERE p.route=$1 AND p.board_id=$2 AND p.actor_key IN ($3,$4)
-                     AND p.state IN ('reserved','in_flight','reconciling')) AS pending
-         FROM content.board_slow_actor a WHERE a.route=$1 AND a.board_id=$2 AND a.actor_key IN ($3,$4)
-         ORDER BY a.posted_at DESC NULLS LAST LIMIT 1`,
+                     AND p.state IN ('reserved','in_flight','reconciling')) AS pending`,
         [board.route, board.id, actorKey(deps, actor), legacyActorKey(deps.routeKey, boardId, actor)],
       );
       const row = state.rows[0];

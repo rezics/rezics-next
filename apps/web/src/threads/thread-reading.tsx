@@ -507,6 +507,7 @@ export function ThreadReading({
                 }
                 containerId={thread.id}
                 boardId={thread.boardId}
+                credentialMode={session === 'signed-in' ? 'session' : 'anonymous'}
                 parentId={replyTarget.parentId}
                 parents={replyParents}
                 focusRequest={replyTarget.focusRequest}
