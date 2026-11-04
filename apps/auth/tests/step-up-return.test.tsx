@@ -94,8 +94,7 @@ test('Retry reads only current advice; Continue rechecks it and navigates only a
 
   await flush(() => button(page.host, m.auth_login_retry())!.click());
   await settle();
-  const status = page.host.querySelector<HTMLParagraphElement>('p[role=status][tabindex="-1"]')!;
-  expect(document.activeElement).toBe(status);
+  expect(document.activeElement).toBe(page.host.querySelector('[role="alert"]'));
   expect(page.host.textContent).toContain(m.auth_failure_unavailable());
   await flush(() => button(page.host, m.auth_login_retry())!.click());
   await settle();

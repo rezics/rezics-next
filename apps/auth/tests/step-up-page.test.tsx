@@ -1,10 +1,16 @@
-import { afterEach, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import { m } from '../src/paraglide/messages.js';
 import type { PasskeySignInResult } from '../src/passkeys';
 
 creationFixture();
+const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+Object.defineProperty(globalThis, 'scrollTo', { value: () => {}, configurable: true, writable: true });
+afterAll(() => {
+  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
 let cleanup = () => {};
 afterEach(() => cleanup());
 const { createRootRoute, createRoute, createRouter, createBrowserHistory, RouterProvider } =
