@@ -46,13 +46,17 @@ export type ShowcaseWorkLinkHandoff = {
     | { status: 'current'; provider: 'bangumi'; externalId: string; subject: CurrentWorkRead };
 };
 
-function admittedBangumiWorkId(site: string, value: string): { id?: string; reason?: string } {
-  if (site !== 'website') return { reason: 'VNDB external-link site does not admit a public website assertion' };
+type BangumiWorkIdAdmission = { status: 'admitted'; id: string } | { status: 'unsupported'; reason: string };
+
+function admittedBangumiWorkId(site: string, value: string): BangumiWorkIdAdmission {
+  if (site !== 'website')
+    return { status: 'unsupported', reason: 'VNDB external-link site does not admit a public website assertion' };
   const cited = citedProviderBinding(value);
-  if (cited?.provider !== 'bangumi') return { reason: 'Source website does not cite an admitted Bangumi work' };
+  if (cited?.provider !== 'bangumi')
+    return { status: 'unsupported', reason: 'Source website does not cite an admitted Bangumi work' };
   if (!/^[1-9][0-9]*$/.test(cited.key) || !Number.isSafeInteger(Number(cited.key)))
-    return { reason: 'Cited Bangumi identifier is not a work identity' };
-  return { id: cited.key };
+    return { status: 'unsupported', reason: 'Cited Bangumi identifier is not a work identity' };
+  return { status: 'admitted', id: cited.key };
 }
 
 /** Join only bounded selected VN rows to their exact dictionary entries. */
@@ -127,10 +131,12 @@ export function attachShowcaseWorkLinks(input: {
         value: external.value.value,
         candidateDigest: sourceDigest(rawSourceRecord),
         semanticDigest: sourceDigest(semanticSourceRecord),
-        ...(reference.id === undefined ? { bridgeReason: reference.reason } : { bangumiExternalId: reference.id }),
+        ...(reference.status === 'unsupported'
+          ? { bridgeReason: reference.reason }
+          : { bangumiExternalId: reference.id }),
       };
       links.push(item);
-      if (reference.id !== undefined)
+      if (reference.status === 'admitted')
         edges.push({
           source: 'vndb',
           alias: input.alias,
