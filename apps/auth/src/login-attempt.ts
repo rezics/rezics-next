@@ -8,6 +8,7 @@ type Method = 'password' | 'passkey' | 'autofill';
 export class LoginAttempt {
   private active = true;
   private current: { method: Method } | null = null;
+  private pageGeneration = 0;
 
   begin(method: Method) {
     if (!this.active) return null;
@@ -15,6 +16,7 @@ export class LoginAttempt {
       if (method !== 'password' || this.current.method !== 'passkey') return null;
     }
     this.cancel();
+    this.pageGeneration += 1;
     const token = { method };
     this.current = token;
     const isCurrent = () => this.active && this.current === token;
@@ -28,6 +30,25 @@ export class LoginAttempt {
     };
   }
 
+  beginPageRead() {
+    if (!this.active) return null;
+    const generation = ++this.pageGeneration;
+    let finished = false;
+    const isCurrent = () => this.active && !finished && this.pageGeneration === generation;
+    return {
+      isCurrent,
+      finish: () => {
+        if (!isCurrent()) return false;
+        finished = true;
+        return true;
+      },
+      retire: () => {
+        finished = true;
+        if (this.pageGeneration === generation) this.pageGeneration += 1;
+      },
+    };
+  }
+
   private cancel() {
     const previous = this.current;
     this.current = null;
@@ -36,6 +57,7 @@ export class LoginAttempt {
 
   retire() {
     this.active = false;
+    this.pageGeneration += 1;
     this.cancel();
   }
 }

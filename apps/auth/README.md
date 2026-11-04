@@ -20,17 +20,35 @@ states with an accessible busy indicator. Error text uses ink blue, with red res
 
 ## Sign-in
 
-The sign-in page has labelled email and password fields with password-manager autocomplete. `src/sign-in.ts` holds the
+The sign-in page first reads `POST /signin/page` with only its current route query; the entered email is never sent to
+this read. Auth returns the installed password and passkey methods, the current viewer from the existing native session
+authority, and a bounded same-origin continuation. A signed-in visitor sees the account's own email as a private label
+and can continue or open the existing sign-in form to switch accounts. A `prompt=login` continuation requires an
+interactive sign-in. The projection is advice only; `/authorize` and `/signin` still evaluate the current native
+session and request when used.
+
+The page read accepts at most 4,096 UTF-8 query bytes and returns at most 16 KiB. It projects two fixed method flags,
+zero or one current viewer, and at most one account identity row sought by its full user primary key. It sends no
+credential inventory or entered email. An Auth or Access read failure returns an unavailable page with a retry; it
+never becomes an empty method list or a signed-out result inferred from a transport failure.
+
+The sign-in form has labelled email and password fields with password-manager autocomplete. `src/sign-in.ts` holds the
 provisional client id (`login`) and scope (`[]`). It uses the shared `src/api.ts` client to send JSON to same-origin
 `/signin` with same-origin credentials. The browser supplies the issuer `Origin`; redirects fail closed, and network
-failures become an unavailable result.
+failures become an unavailable result. Browser-unsupported passkeys, a missing native passkey method and an actual
+native credential refusal have separate localized messages.
+
+Decision: label a verified current-session continuation with that account's own email as private display context; never
+derive the viewer from the address entered into the sign-in form.
 
 After successful sign-in, the browser navigates to `/authorize` with the received query, preserving repeated and empty
 parameters and removing every `sig`, `exp`, `prompt` and `return_to`. It keeps `max_age`. Without a remaining query it
 navigates to `/security`, or to the `return_to` path when it is on the fixed list of Auth page paths (now only
 `/security`, `/account/delete` and `/organizations/new`, plus `/consent` with exactly one nonempty `client_id` and one `scope`);
-it is never forwarded to `/authorize` and never an absolute URL or another origin. The response body never
-supplies a navigation target. Recovery links to `/recovery`; sign-up preserves the login query.
+it is never forwarded to `/authorize` and never an absolute URL or another origin. Form success still uses this client
+validation and the native handler does not return a navigation target. The page-read continuation is a separate
+same-origin hint for an already signed-in visitor; the native authorization route checks the session again on use.
+Recovery links to `/recovery`; sign-up preserves the login query.
 
 Where the browser has WebAuthn, the page also offers passkeys. `src/passkeys.ts` holds every WebAuthn call, using
 `@simplewebauthn/browser` and the shared `authPost`. A "Sign in with a passkey" button asks `POST /signin/passkey/options`
@@ -384,7 +402,9 @@ Production does not set AUTH_ORIGIN.
 
 The static page frames make zero K, D, R and A calls. Development forwarding makes one Auth request per forwarded
 request, streams both bodies, and buffers nothing. Both costs are constant per request.
-The sign-in page makes no server reads. A sign-in adds one browser `POST /signin` and one navigation on success.
+The sign-in page makes one Auth `POST /signin/page` read on entry and one more only when Retry is selected. A password
+sign-in adds one `POST /signin` and one navigation on success. A passkey sign-in remains two Auth requests and one
+navigation on success. The page read adds no kernel calls and carries no preparation token into submission.
 Recovery makes no kernel reads and adds one Auth request per submit.
 Auth pages make no kernel reads. Step-up is one `POST /signin` per submit.
 Sign-up makes no kernel reads. A successful submit is one browser `POST /signup` and one browser `POST /signin`.

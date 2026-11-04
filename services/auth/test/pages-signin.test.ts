@@ -114,6 +114,13 @@ async function signIn(body: Record<string, unknown>, session = '') {
     body: JSON.stringify({ client_id: 'login', scope: [], ...body }),
   });
 }
+async function readSignInPage(query: string, session = '') {
+  return fetch(`${issuer}/signin/page`, {
+    method: 'POST',
+    headers: { origin: issuer, 'content-type': 'application/json', cookie: session },
+    body: JSON.stringify({ query }),
+  });
+}
 function authorizeQuery(extra: Record<string, string> = {}) {
   const verifier = randomBytes(32).toString('base64url');
   const state = randomBytes(24).toString('base64url');
@@ -245,6 +252,21 @@ test('pages sign in with the login client resumes authorization and replaces the
   const first = await signIn({ email: `${person}@example.test`, password });
   expect(first.status).toBe(200);
   const firstCookie = cookie(first);
+  const page = await readSignInPage('client_id=rezics-website&scope=media%3Aread&prompt=login&sig=old&exp=1', firstCookie);
+  expect(page.status).toBe(200);
+  expect(await page.json()).toEqual({
+    methods: { password: true, passkey: true },
+    viewer: { kind: 'signed-in', account_id: person, email: `${person}@example.test` },
+    continuation: { href: '/authorize?client_id=rezics-website&scope=media%3Aread', requires_sign_in: true },
+  });
+  const anonymousPage = await readSignInPage('');
+  expect((await anonymousPage.json()).viewer).toEqual({ kind: 'signed-out' });
+  const enumeratingPage = await fetch(`${issuer}/signin/page`, {
+    method: 'POST',
+    headers: { origin: issuer, 'content-type': 'application/json' },
+    body: JSON.stringify({ query: '', email: `${person}@example.test` }),
+  });
+  expect(enumeratingPage.status).toBe(400);
   const firstSessions = await sessionIds();
   expect(firstSessions).toHaveLength(1);
 
@@ -265,6 +287,10 @@ test('pages sign in with the login client resumes authorization and replaces the
   expect(replacedProof.auth_time).toBeGreaterThan(aged);
   expect(replacedProof.amr).toEqual(['pwd']);
   const replacedCookie = cookie(replaced);
+  const retiredPage = await readSignInPage('', firstCookie);
+  expect(retiredPage.status).toBe(200);
+  expect((await retiredPage.json()).viewer).toEqual({ kind: 'signed-out' });
+  expect((await readSignInPage('', replacedCookie)).status).toBe(200);
   const replacedSessions = await sessionIds();
   expect(replacedSessions).toEqual([expect.any(String)]);
   expect(replacedSessions).not.toContain(firstSessions[0]);
