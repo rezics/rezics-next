@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AccountRenameRegion, AccountSafetyCard } from '../src/settings/account-safety';
+import { sessionQuery } from '../src/session/query';
+import { AccountRenameRegion, AccountSafetyCard, AccountSafetySection } from '../src/settings/account-safety';
 import { m } from '../src/paraglide/messages.js';
 
 test('rename recovery refreshes only its read and retires expired credentials before dispatch', async () => {
@@ -83,6 +85,37 @@ test('failed and uncertain native sign-out recover independently without replay 
   };
   const reload = `button[aria-label="${m.settings_reload()}: ${m.account_sign_out()}"]`;
   try {
+    const managedClient = new QueryClient();
+    managedClient.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: null });
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={managedClient}>
+          <AccountSafetySection state="signed-in" accountId="alice" csrfToken={null}
+            securityHref="https://auth.test/security" onReload={async () => {}} />
+        </QueryClientProvider>,
+      ),
+    );
+    const security = host.querySelector<HTMLAnchorElement>('a[href="https://auth.test/security"]')!;
+    const deletion = host.querySelector<HTMLAnchorElement>('a[href="https://auth.test/account/delete"]')!;
+    const visit = (link: HTMLAnchorElement, type: 'click' | 'auxclick', button = 0) => {
+      const event = new window.MouseEvent(type, { bubbles: true, cancelable: true, button });
+      link.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    let liveNavigationAllowed = false;
+    security.addEventListener('click', (event) => {
+      liveNavigationAllowed = !event.defaultPrevented;
+      event.preventDefault();
+    }, { once: true });
+    visit(security, 'click');
+    expect(liveNavigationAllowed).toBe(true);
+    await act(async () => {
+      managedClient.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
+      expect(security.isConnected).toBe(true);
+      expect(visit(security, 'click')).toBe(true);
+      expect(visit(deletion, 'auxclick', 1)).toBe(true);
+    });
+
     await act(async () =>
       root.render(
         <AccountSafetyCard
@@ -125,9 +158,12 @@ test('failed and uncertain native sign-out recover independently without replay 
     await click('button[type="submit"]');
     expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
     expect(host.querySelector('button[type="submit"]')?.hasAttribute('disabled')).toBe(true);
+    current = false;
     await click(reload);
     expect(submitted).toBe(2);
+    expect(refreshed).toBe(3);
     expect(renamed).toBe(1);
+    expect(host.textContent).toContain(m.settings_account_sign_out_uncertain());
   } finally {
     await act(async () => root.unmount());
     await window.happyDOM.close();
