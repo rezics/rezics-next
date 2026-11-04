@@ -82,7 +82,9 @@ test('native rows open one exact membership inspection and accepted navigation c
     await mounted.render({ ...exampleAddress, locale: 'en', source: {}, reader: null, transport, initial });
     expect(mounted.host.textContent).toContain(initial.album.label.text);
     expect(mounted.host.textContent).toContain(initial.stream.property);
-    expect(mounted.host.textContent).toContain(m.work_parts_order_forward());
+    expect(mounted.host.textContent).toContain(
+      initial.stream.direction === 'forward' ? m.work_parts_order_forward() : m.work_parts_order_inverse(),
+    );
     expect(mounted.host.textContent).toContain(m.work_parts_slice());
     expect(mounted.host.textContent).toContain(initial.caughtUp ? m.album_tracks_current() : m.work_parts_pending());
     if (initial.count) {
