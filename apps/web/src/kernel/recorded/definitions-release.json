@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:1ded81205f3588d10a0cb5dab75bfaec1fcb22cac3e2e54809cf0086f54806f7",
+  "digest": "sha256:2c483d7a7ffc0438fab47b16ef679036a1100538ddfd3361792d5896b5720619",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -1987,6 +1987,48 @@
           "zh-Hans": "带有目录号、载体、日期和有序录音的音乐专辑具体发行版。与专辑作品、个人藏本、播放文件和单条录音分开。",
           "zh-Hant": "帶有目錄號、載體、日期與有序錄音的音樂專輯具體發行版。與專輯作品、個人藏本、播放檔與單條錄音分開。"
         }
+      },
+      "schema:Quotation": {
+        "iri": "http://schema.org/Quotation",
+        "labels": {
+          "de": "Zitat",
+          "en": "quotation",
+          "es": "cita",
+          "fr": "citation",
+          "ja": "引用",
+          "ko": "인용",
+          "zh-Hans": "引文",
+          "zh-Hant": "引文"
+        },
+        "mappings": ["wd:Q815341"],
+        "bases": ["schema:Thing"],
+        "properties": [
+          "schema:about",
+          "schema:abstract",
+          "schema:actor",
+          "schema:creator",
+          "schema:image",
+          "schema:inLanguage",
+          "schema:name",
+          "schema:sameAs",
+          "schema:spokenByCharacter",
+          "schema:text",
+          "schema:url"
+        ],
+        "facets": ["schema:inLanguage"],
+        "coverRatio": "5:7",
+        "listPresentation": { "imageAspect": "portrait", "keyFacts": [] },
+        "schemaOrgType": "https://schema.org/Quotation",
+        "descriptions": {
+          "de": "Ein verfasstes Zitat aus einem Werk, mit getrenntem Sprecher, genannter Urheberschaft und belegter Quelle.",
+          "en": "An authored quotation of a work, with its speaker, credited creator and cited source kept distinct.",
+          "es": "Una cita escrita de una obra, con orador, creador acreditado y fuente citados por separado.",
+          "fr": "Une citation rédigée d’une œuvre, avec locuteur, créateur crédité et source tenus distincts.",
+          "ja": "作品からの引用。話者、クレジットされた作者、出典を分けて保持します。",
+          "ko": "작품에서 가져온 인용문입니다. 화자, 표기된 창작자, 출처를 구분합니다.",
+          "zh-Hans": "作品中的引文，说话者、具名创作者与出处分开保存。",
+          "zh-Hant": "作品中的引文，說話者、具名創作者與出處分開保存。"
+        }
       }
     },
     "format": "https://rezics.com/definitions/release/1",
@@ -2509,7 +2551,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.4" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.5" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
@@ -7621,6 +7663,219 @@
           "ko": "이 등장에만 해당하는 나이를 0 이상 연수(wd:Q577)로 적습니다. 출처 전체의 나이는 이 한정자가 아닙니다.",
           "zh-Hans": "该登场陈述上的年龄，以非负年数（wd:Q577）记录；来源整体年龄不是此限定。",
           "zh-Hant": "該登場陳述上的年齡，以非負年數（wd:Q577）記錄；來源整體年齡不是此限定。"
+        }
+      },
+      "schema:about": {
+        "iri": "http://schema.org/about",
+        "labels": {
+          "de": "Werk",
+          "en": "work",
+          "es": "obra",
+          "fr": "œuvre",
+          "ja": "作品",
+          "ko": "작품",
+          "zh-Hans": "作品",
+          "zh-Hant": "作品"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["rezics:spoilerLevel", "wdt:P518"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "membership",
+          "order": "name",
+          "inverse": "schema:subjectOf",
+          "acyclic": true,
+          "inverseLabels": {
+            "de": "Zitate",
+            "en": "Quotations",
+            "es": "Citas",
+            "fr": "Citations",
+            "ja": "引用",
+            "ko": "인용",
+            "zh-Hans": "引文",
+            "zh-Hant": "引文"
+          }
+        },
+        "targets": ["schema:CreativeWork"],
+        "descriptions": {
+          "de": "Das Werk, das dieses Zitat belegt. Die genaue Werk- oder Teilidentität gilt; eine Teilzeichenkette erzeugt keine Beziehung.",
+          "en": "The creative work this quotation cites. Exact work or part identity is required; a substring match is not a relationship.",
+          "es": "La obra que cita esta cita. Se exige la identidad exacta de la obra o parte; una coincidencia parcial no crea relación.",
+          "fr": "L’œuvre que cette citation cite. L’identité exacte de l’œuvre ou de la partie est requise ; une sous-chaîne ne crée pas de relation.",
+          "ja": "この引用が示す作品です。作品または部分の正確な同一性を要し、部分文字列の一致では関係になりません。",
+          "ko": "이 인용이 가리키는 작품입니다. 작품 또는 부분의 정확한 정체성이 필요하며, 부분 문자열 일치로는 관계가 생기지 않습니다.",
+          "zh-Hans": "这段引文所指向的作品。需要准确的作品或部分身份；子串匹配不会建立关系。",
+          "zh-Hant": "這段引文所指向的作品。需要準確的作品或部分身分；子串比對不會建立關係。"
+        }
+      },
+      "schema:actor": {
+        "iri": "http://schema.org/actor",
+        "labels": {
+          "de": "Stimme",
+          "en": "performing voice",
+          "es": "voz",
+          "fr": "voix",
+          "ja": "声",
+          "ko": "목소리",
+          "zh-Hans": "配音",
+          "zh-Hant": "配音"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["wdt:P1932"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:quotationsVoiced",
+          "inverseLabels": {
+            "de": "Vertonte Zitate",
+            "en": "Quotations voiced",
+            "es": "Citas interpretadas",
+            "fr": "Citations interprétées",
+            "ja": "声を当てた引用",
+            "ko": "목소리 인용",
+            "zh-Hans": "配音的引文",
+            "zh-Hant": "配音的引文"
+          }
+        },
+        "targets": ["schema:Person"],
+        "descriptions": {
+          "de": "Eine optionale Stimme. Ein Sprecher impliziert ohne qualifizierte Quellenaussage keine Stimme.",
+          "en": "An optional performing voice. A speaker never implies a voice actor without a qualified source assertion.",
+          "es": "Una voz interpretativa opcional. Un locutor no implica un actor de voz sin una afirmación de fuente cualificada.",
+          "fr": "Une voix interprétée facultative. Un locuteur n’implique pas un comédien de voix sans assertion de source qualifiée.",
+          "ja": "任意の演じる声です。話者から、出典に基づく主張なしに声優を推論しません。",
+          "ko": "선택적인 연기 목소리입니다. 화자만으로 출처 주장 없이 성우를 추론하지 않습니다.",
+          "zh-Hans": "可选的配音。说话者不会在没有合格来源断言时被当成配音。",
+          "zh-Hant": "可選的配音。說話者不會在沒有合格來源斷言時被當成配音。"
+        }
+      },
+      "schema:creator": {
+        "iri": "http://schema.org/creator",
+        "labels": {
+          "de": "genannte Urheberschaft",
+          "en": "credited creator",
+          "es": "creador acreditado",
+          "fr": "créateur crédité",
+          "ja": "クレジットされた作者",
+          "ko": "표기된 창작자",
+          "zh-Hans": "具名创作者",
+          "zh-Hant": "具名創作者"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["wdt:P1932"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "association",
+          "order": "name",
+          "inverse": "rezics:quotationsCreated",
+          "inverseLabels": {
+            "de": "Zugeschriebene Zitate",
+            "en": "Quotations credited to",
+            "es": "Citas acreditadas a",
+            "fr": "Citations créditées à",
+            "ja": "クレジットされた引用",
+            "ko": "표기된 인용",
+            "zh-Hans": "具名的引文",
+            "zh-Hant": "具名的引文"
+          }
+        },
+        "targets": ["schema:Organization", "schema:Person"],
+        "descriptions": {
+          "de": "Eine Person oder Organisation, der dieses Zitat zugeschrieben wird, getrennt vom fiktiven Sprecher.",
+          "en": "A person or organization credited for this quotation, kept separate from the fictional speaker.",
+          "es": "Una persona u organización acreditada por esta cita, distinta del locutor ficticio.",
+          "fr": "Une personne ou une organisation créditée pour cette citation, distincte du locuteur fictif.",
+          "ja": "この引用にクレジットされた人物または組織です。架空の話者とは別に保持します。",
+          "ko": "이 인용에 표기된 사람 또는 조직이며, 허구 화자와 따로 둡니다.",
+          "zh-Hans": "这段引文具名的人物或组织，与虚构说话者分开。",
+          "zh-Hant": "這段引文具名的人物或組織，與虛構說話者分開。"
+        }
+      },
+      "schema:text": {
+        "iri": "http://schema.org/text",
+        "labels": {
+          "de": "Text",
+          "en": "text",
+          "es": "texto",
+          "fr": "texte",
+          "ja": "本文",
+          "ko": "본문",
+          "zh-Hans": "正文",
+          "zh-Hant": "正文"
+        },
+        "mappings": [],
+        "datatype": "document",
+        "multivalued": false,
+        "qualifiers": [],
+        "value": {
+          "type": "object",
+          "required": ["language", "document"],
+          "additionalProperties": false,
+          "properties": {
+            "language": { "type": "string", "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$" },
+            "document": { "type": "object" }
+          }
+        },
+        "descriptions": {
+          "de": "Das genaue verfasste Zitatdokument. Ein Dokumentwert, kein Beziehungslabel und kein anderes Textfeld.",
+          "en": "The exact authored quotation document. Supply a document value rather than a relation label or a different text field.",
+          "es": "El documento exacto de la cita. Use un valor de documento, no una etiqueta de relación ni otro campo de texto.",
+          "fr": "Le document exact de la citation. Fournissez une valeur document, pas une étiquette de relation ni un autre champ de texte.",
+          "ja": "引用の本文ドキュメントです。関係のラベルや別のテキスト欄ではなく、ドキュメント値を渡します。",
+          "ko": "인용의 정확한 본문 문서입니다. 관계 이름이나 다른 텍스트 칸이 아니라 문서 값을 넣습니다.",
+          "zh-Hans": "引文的准确正文文档。使用文档值，而不是关系标签或其他文本栏。",
+          "zh-Hant": "引文的準確正文文件。使用文件值，而不是關係標籤或其他文字欄。"
+        }
+      },
+      "schema:spokenByCharacter": {
+        "iri": "http://schema.org/spokenByCharacter",
+        "labels": {
+          "de": "Sprecher",
+          "en": "speaker",
+          "es": "locutor",
+          "fr": "locuteur",
+          "ja": "話者",
+          "ko": "화자",
+          "zh-Hans": "说话者",
+          "zh-Hant": "說話者"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["rezics:spoilerLevel"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "appearance",
+          "order": "name",
+          "inverse": "rezics:spokenQuotations",
+          "inverseLabels": {
+            "de": "Gesprochene Zitate",
+            "en": "Spoken quotations",
+            "es": "Citas habladas",
+            "fr": "Citations parlées",
+            "ja": "発話した引用",
+            "ko": "말한 인용",
+            "zh-Hans": "说出的引文",
+            "zh-Hant": "說出的引文"
+          }
+        },
+        "targets": ["wd:Q95074"],
+        "descriptions": {
+          "de": "Die fiktive Figur, die dieses Zitat spricht. Keine genannte Urheberschaft und keine Stimme.",
+          "en": "The fictional character who speaks this quotation. This is not a credited creator or a voice actor.",
+          "es": "El personaje ficticio que pronuncia esta cita. No es el creador acreditado ni un actor de voz.",
+          "fr": "Le personnage fictif qui prononce cette citation. Ce n’est ni le créateur crédité ni un comédien de voix.",
+          "ja": "この引用を話す架空のキャラクターです。クレジットされた作者や声優ではありません。",
+          "ko": "이 인용을 말하는 허구 인물입니다. 표기된 창작자나 성우가 아닙니다.",
+          "zh-Hans": "说出这段引文的虚构角色。不是具名创作者，也不是配音。",
+          "zh-Hant": "說出這段引文的虛構角色。不是具名創作者，也不是配音。"
         }
       }
     },
