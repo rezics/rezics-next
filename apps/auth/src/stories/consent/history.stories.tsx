@@ -23,7 +23,11 @@ function Visit({ mode }: { mode: Mode }) {
   const [ready, setReady] = useState(false);
   const [router] = useState(() => {
     const parent = createRootRoute();
-    const consent = createRoute({ getParentRoute: () => parent, path: '/consent', component: Route.options.component! });
+    const consent = createRoute({
+      getParentRoute: () => parent,
+      path: '/consent',
+      component: Route.options.component!,
+    });
     return createRouter({
       routeTree: parent.addChildren([consent]),
       history: createMemoryHistory({ initialEntries: ['/consent?client_id=story-consent&scope=openid'] }),
