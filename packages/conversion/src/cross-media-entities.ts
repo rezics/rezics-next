@@ -1165,12 +1165,6 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   let minimumAge: Projected['minimumAge'];
   const diagnostics: ConversionDiagnostic[] = [];
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
-  if (kind === 'bangumi-character') {
-    const characterKind = own(raw, 'type', '/type');
-    if (characterKind !== undefined) normalized.type = characterKind;
-    const summary = own(raw, 'summary', '/summary');
-    if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
-  }
   if (kind === 'bangumi-person') {
     type = personType(raw);
     normalized.type = own(raw, 'type', '/type');

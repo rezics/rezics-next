@@ -163,8 +163,13 @@ test('default selected Bangumi character names publish, retain adoption, and ref
       })}`,
     );
     expect(sourced.status).toBe(200);
-    const citation = (sourced.body as { candidates: { statement: { references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[] }[] })
-      .candidates.find((candidate) => candidate.statement.references?.length)?.statement.references;
+    const sourcedBody = sourced.body as {
+      candidates: {
+        statement: { references?: { parts: { property: { id: string }; value: { content: unknown } }[] }[] };
+      }[];
+    };
+    const citation = sourcedBody.candidates.find((candidate) => candidate.statement.references?.length)?.statement
+      .references;
     expect(citation?.[0]?.parts).toContainEqual({
       property: { id: 'schema:url' },
       value: { type: 'value', content: 'https://bgm.tv/character/12393' },
