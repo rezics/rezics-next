@@ -210,8 +210,8 @@ export async function applyEntryImportMetadataCommands(input: {
   const confirmation = input.confirmation;
   let permanentlyUnattempted = false;
   if (confirmation.outcome) return { outcome: confirmation.outcome, complete: true };
-  if (confirmation.annotationStatus === 'unattempted') confirmation.annotationStatus = undefined;
-  if (confirmation.provenanceStatus === 'unattempted') confirmation.provenanceStatus = undefined;
+  if (confirmation.annotationStatus === 'unattempted') delete confirmation.annotationStatus;
+  if (confirmation.provenanceStatus === 'unattempted') delete confirmation.provenanceStatus;
 
   if (!confirmation.annotationStarted && !confirmation.provenanceStarted) {
     const current = await native.readPersonalEntry(actor, subjectId);
@@ -338,7 +338,7 @@ export async function applyEntryImportMetadataCommands(input: {
       );
       await persist(confirmation);
     }
-    if (confirmation.annotationStatus && confirmation.annotationStatus !== 'unattempted') {
+    if (confirmation.annotationStatus) {
       for (const selection of eligibleAnnotation)
         result.set(selection.field, { field: selection.field, status: confirmation.annotationStatus });
       await persistFields();
@@ -405,7 +405,7 @@ export async function applyEntryImportMetadataCommands(input: {
 
   const eligibleProvenance = provenance.filter((selection) => !result.has(selection.field));
   if (eligibleProvenance.length) {
-    if (confirmation.provenanceStatus && confirmation.provenanceStatus !== 'unattempted') {
+    if (confirmation.provenanceStatus) {
       for (const selection of eligibleProvenance)
         result.set(selection.field, { field: selection.field, status: confirmation.provenanceStatus });
     } else {
@@ -416,9 +416,11 @@ export async function applyEntryImportMetadataCommands(input: {
         result.set(selection.field, {
           field: selection.field,
           status: 'unsupported',
-          reason: observation
-            ? proposals[selection.field].reason
-            : 'A source observation must exist before a native clear.',
+          ...(observation
+            ? proposals[selection.field].reason === undefined
+              ? {}
+              : { reason: proposals[selection.field].reason }
+            : { reason: 'A source observation must exist before a native clear.' }),
         });
       let create = false;
       if (!observation && validSelections.length) {
