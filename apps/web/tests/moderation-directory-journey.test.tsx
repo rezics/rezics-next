@@ -15,6 +15,7 @@ const globals = {
   Element: browser.Element,
   Node: browser.Node,
   MutationObserver: browser.MutationObserver,
+  scrollTo: browser.scrollTo.bind(browser),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const saved = Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const);
@@ -109,6 +110,7 @@ test('served discovery selects a direct Board or independent Global queue, inspe
     path: '/moderation/workbench',
     getParentRoute: () => parent,
     beforeLoad: () => {},
+    head: () => ({}),
     loader: createWorkbenchLoader(read),
   } as never);
   const inspected: string[] = [];
@@ -116,6 +118,7 @@ test('served discovery selects a direct Board or independent Global queue, inspe
     path: '/moderation/cases/$id',
     getParentRoute: () => parent,
     beforeLoad: () => {},
+    head: () => ({}),
     loader: async ({
       params,
       deps,
@@ -157,7 +160,6 @@ test('served discovery selects a direct Board or independent Global queue, inspe
     context: { queryClient: client },
     history: createMemoryHistory({ initialEntries: [workbenchQueueHref(original)] }),
   });
-  await router.load();
   const host = document.createElement('main');
   document.body.replaceChildren(host);
   const root = createRoot(host);
@@ -167,13 +169,16 @@ test('served discovery selects a direct Board or independent Global queue, inspe
     await act(() => router.navigate({ href: url.pathname + url.search }));
   };
   try {
-    await act(() =>
+    await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
           <RouterProvider router={router} />
         </QueryClientProvider>,
       ),
     );
+    await act(async () => {
+      await router.load();
+    });
     expect(host.textContent).toContain('Direct Board');
     const select = host.querySelector<HTMLButtonElement>(
       '[aria-label="Direct Board: ' + m.moderation_workbench_queue_reports() + '"]',
