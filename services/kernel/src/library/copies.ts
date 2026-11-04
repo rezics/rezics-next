@@ -217,7 +217,10 @@ function parseUpdate(input: unknown): CopyPatch {
 }
 
 function conditionFields(input: CopyConditionPatch): CopyConditionPatch {
-  const fields: { mediaCondition?: CopyConditionPatch['mediaCondition']; packagingCondition?: CopyConditionPatch['packagingCondition'] } = {};
+  const fields: {
+    mediaCondition?: Exclude<CopyConditionPatch['mediaCondition'], undefined>;
+    packagingCondition?: Exclude<CopyConditionPatch['packagingCondition'], undefined>;
+  } = {};
   if (Object.hasOwn(input, 'mediaCondition') && input.mediaCondition !== undefined)
     fields.mediaCondition = input.mediaCondition;
   if (Object.hasOwn(input, 'packagingCondition') && input.packagingCondition !== undefined)
