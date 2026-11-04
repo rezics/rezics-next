@@ -78,6 +78,8 @@ export async function loadThreadPage(
   verification: VerificationConfig,
   credentialMode: ReadCredentialMode = 'session',
 ): Promise<LoadedThreadPage | ThreadSlugRedirect> {
+  const signal = request.signal;
+  signal.throwIfAborted();
   let authorization: string | null = null;
   let viewerId: string | undefined;
   if (credentialMode === 'session') {
@@ -91,6 +93,7 @@ export async function loadThreadPage(
       viewerId = undefined;
     }
   }
+  signal.throwIfAborted();
   let linkedPostUnavailable = false;
   const readReadingPage = async () => {
     let cursor = data.cursor;
@@ -100,8 +103,9 @@ export async function loadThreadPage(
         .posts({ postId: data.post })
         .location.get({
           ...(authorization ? { headers: { authorization } } : {}),
-          fetch: { cache: 'no-store' },
+          fetch: { cache: 'no-store', signal },
         });
+      signal.throwIfAborted();
       if (result.status === 404) {
         linkedPostUnavailable = true;
         cursor = undefined;
@@ -116,13 +120,15 @@ export async function loadThreadPage(
       ...(cursor === undefined ? {} : { query: { cursor } }),
       ...(authorization ? { headers: { authorization } } : {}),
     };
-    return client.threads({ id: data.id })['reading-page'].get({ ...options, fetch: { cache: 'no-store' } });
+    return client.threads({ id: data.id })['reading-page'].get({ ...options, fetch: { cache: 'no-store', signal } });
   };
   let readingPageRead = data.expectedSlug === undefined ? readReadingPage() : undefined;
   if (data.expectedSlug !== undefined) {
-    const threadResult = authorization
-      ? await client.threads({ id: data.id }).get({ headers: { authorization } })
-      : await client.threads({ id: data.id }).get();
+    const threadResult = await client.threads({ id: data.id }).get({
+      ...(authorization ? { headers: { authorization } } : {}),
+      fetch: { cache: 'no-store', signal },
+    });
+    signal.throwIfAborted();
     const thread = checkRead<Thread>(threadResult, 'thread');
     if (thread.thread.id !== data.id) throw notFound();
     if (!sameThreadSlug(data.expectedSlug, thread.thread.title))
@@ -130,6 +136,7 @@ export async function loadThreadPage(
   }
   readingPageRead ??= readReadingPage();
   const readingPageResult = await readingPageRead;
+  signal.throwIfAborted();
   if (readingPageResult.status === 400 && boardProblemCode(readingPageResult.error) === 'invalid_cursor')
     throw new ThreadPageCursorError('invalid_cursor');
   const readingPage = checkRead<ReadingPage>(readingPageResult, 'thread reading page');
@@ -146,12 +153,15 @@ export async function loadThreadPage(
   };
   const readContext = () =>
     thread.boardId
-      ? (authorization
-          ? client.boards({ id: thread.boardId }).get({ headers: { authorization } })
-          : client.boards({ id: thread.boardId }).get()
-        )
+      ? client
+          .boards({ id: thread.boardId })
+          .get({
+            ...(authorization ? { headers: { authorization } } : {}),
+            fetch: { cache: 'no-store', signal },
+          })
           .catch(() => null)
           .then(async (result) => {
+            signal.throwIfAborted();
             const board = result?.data?.board;
             if (!board || board.id !== thread.boardId) return {};
             const realm = await readBoardRealm(client, boardRealmId(board), authorization);
@@ -159,6 +169,7 @@ export async function loadThreadPage(
           })
       : Promise.resolve({});
   const context = await readContext();
+  signal.throwIfAborted();
   if (
     data.post !== undefined &&
     !posts.posts.some((post) => post.id === data.post && post.availability === 'available')
@@ -171,6 +182,7 @@ export async function loadThreadPage(
     ),
     readThreadDocumentMedia(client, posts.posts, authorization),
   ]);
+  signal.throwIfAborted();
   // Only identities named by readable posts can enter this page's byline map.
   const disclosed = new Set(posts.posts.flatMap((post) => (post.availability === 'available' ? [post.authorId] : [])));
   const authors =

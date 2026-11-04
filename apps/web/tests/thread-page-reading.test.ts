@@ -64,6 +64,7 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
   const paths: string[] = [];
   let failed = false;
   let missingLocation = false;
+  let abortRead: AbortController | undefined;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const url = new URL(new Request(input, init).url);
@@ -73,8 +74,14 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
         return missingLocation
           ? new Response(null, { status: 404 })
           : Response.json({ cursor: 'selected-reply-cursor' });
-      if (url.pathname.endsWith('/reading-page'))
+      if (url.pathname.endsWith('/reading-page')) {
+        if (abortRead) {
+          expect(init?.signal?.aborted).toBe(false);
+          abortRead.abort(new Error('Reading visit ended'));
+          expect(init?.signal?.aborted).toBe(true);
+        }
         return failed ? Response.json({ code: 'invalid_cursor' }, { status: 400 }) : Response.json(response);
+      }
       if (url.pathname === `/v1/threads/${threadId}`) return Response.json({ thread: response.thread });
       if (url.pathname === `/v1/boards/${boardId}`) return Response.json({});
       throw new Error(`Unexpected Kernel read: ${url.pathname}`);
@@ -184,4 +191,13 @@ test('the Web receiver maps the mounted page while preserving a selected reply a
     'anonymous',
   );
   expect(redirect).toEqual({ redirect: { id: threadId, title: 'A changed title' } });
+
+  abortRead = new AbortController();
+  const request = new Request('https://web.test/', { signal: abortRead.signal });
+  const beforeAbort = paths.length;
+  const read = () => loadThreadPage(client, request, {}, { id: threadId }, { sitekey: '', scriptUrl: '' }, 'anonymous');
+  await expect(read()).rejects.toThrow('Reading visit ended');
+  expect(paths.slice(beforeAbort)).toEqual([`/v1/threads/${threadId}/reading-page`]);
+  await expect(read()).rejects.toThrow('Reading visit ended');
+  expect(paths).toHaveLength(beforeAbort + 1);
 });
