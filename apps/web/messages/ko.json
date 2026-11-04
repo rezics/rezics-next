@@ -9222,5 +9222,12 @@
   "game_reader_current_subject": "현재 Subject 열기",
   "game_reader_retired": "이 읽기가 종료되었습니다. 근거와 선택이 더 이상 현재 상태가 아닙니다.",
   "game_reader_recover": "현재 Subject 다시 불러오기",
-  "game_reader_recovery_failed": "현재 Subject를 다시 불러오지 못했습니다. 다시 시도하거나 세부 정보를 여세요."
+  "game_reader_recovery_failed": "현재 Subject를 다시 불러오지 못했습니다. 다시 시도하거나 세부 정보를 여세요.",
+  "concept_visit_identity": "원본 식별 정보 및 릴리스",
+  "concept_visit_assertion": "원본 주장",
+  "concept_visit_holder": "보유 주제",
+  "concept_visit_property": "속성",
+  "concept_visit_inverse_evidence": "이 역방향 행의 제한된 읽기에는 확인할 수 있는 주장이 없습니다.",
+  "concept_visit_oversized": "출처 또는 근거가 읽기 한도를 초과합니다. 이 페이지를 다시 시도하세요.",
+  "concept_visit_follow_sign_in": "로그인하여 이 개념 팔로우"
 }

@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { subjectReaderQuery } from '../../pages/subject-queries';
 import { candidateSession, useCatalogueLifetime } from '../../../subject/candidate-lifetime';
 import { useSession } from '../../../session/query';
 import { csrfHeaders } from '../../../threads/composer';
@@ -26,6 +28,10 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
   const work = useCatalogueLifetime(JSON.stringify(['concept-explore', id, locale, role]));
   const { state } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
+  const preferences = useQuery({
+    ...subjectReaderQuery(id, locale, { reader: expectedReader, admission: work.generation, view: 'concepts', cacheEpoch: 0, isCurrent: work.active }),
+    enabled: state === 'signed-in',
+  });
   if (state === 'unknown') return <p>{m.concept_explore_loading({}, { locale: locale as never })}</p>;
   return (
     <SourceConceptView
@@ -33,6 +39,7 @@ export const SourceConceptSession = candidateSession(function SourceConceptSessi
       id={id}
       locale={locale}
       role={role}
+      reader={preferences.data?.preferences}
       returnTo={returnTo}
       {...(pinUnsupported === undefined ? {} : { pinUnsupported })}
       worksRoute={worksRoute}

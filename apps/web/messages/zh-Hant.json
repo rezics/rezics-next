@@ -9222,5 +9222,12 @@
   "game_reader_current_subject": "開啟目前Subject",
   "game_reader_retired": "本次讀取已退役。其證據和選取不再有效。",
   "game_reader_recover": "重新載入目前Subject",
-  "game_reader_recovery_failed": "無法重新載入目前Subject。請重試或開啟其詳細資料。"
+  "game_reader_recovery_failed": "無法重新載入目前Subject。請重試或開啟其詳細資料。",
+  "concept_visit_identity": "原始身分與發布版本",
+  "concept_visit_assertion": "原始斷言",
+  "concept_visit_holder": "所屬主體",
+  "concept_visit_property": "屬性",
+  "concept_visit_inverse_evidence": "此反向列的有界讀取未提供可檢查的斷言。",
+  "concept_visit_oversized": "來源或其證據超過讀取上限。請重試此頁。",
+  "concept_visit_follow_sign_in": "登入以關注此概念"
 }

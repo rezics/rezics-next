@@ -9222,5 +9222,12 @@
   "game_reader_current_subject": "Abrir Subject actual",
   "game_reader_retired": "Esta lectura ha caducado. Sus pruebas y selección ya no están vigentes.",
   "game_reader_recover": "Recargar Subject actual",
-  "game_reader_recovery_failed": "No se pudo recargar el Subject actual. Reintenta o abre sus detalles."
+  "game_reader_recovery_failed": "No se pudo recargar el Subject actual. Reintenta o abre sus detalles.",
+  "concept_visit_identity": "Identidad y versión originales",
+  "concept_visit_assertion": "Afirmación original",
+  "concept_visit_holder": "Sujeto",
+  "concept_visit_property": "Propiedad",
+  "concept_visit_inverse_evidence": "Esta fila inversa no incluye una afirmación inspeccionable en la lectura limitada.",
+  "concept_visit_oversized": "La fuente o sus pruebas superan el límite de lectura. Vuelve a intentar esta página.",
+  "concept_visit_follow_sign_in": "Inicia sesión para seguir este concepto"
 }

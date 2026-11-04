@@ -2,6 +2,8 @@ import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { facetProperties, type FilterRelease } from '@rezics/filter';
+import { spoilerLevel } from '../../pages/shared';
+import { personEvidenceFits } from '../person-reader/model';
 import { candidateFailure, type CandidateFailure } from '../../../subject/candidates';
 import { CONCEPT_PAGE_CAP, typeExtends } from '../../pages/graph-browser';
 import { conditionMetadata, type ConditionMetadata } from '../../../search/condition-editor-model';
@@ -47,7 +49,7 @@ export type ConceptWorksAdmission =
     }
   | { state: 'unsupported'; types: []; properties: []; metadata: null };
 export type ConceptRead =
-  | CandidateFailure
+  | (CandidateFailure & { oversized?: true })
   | {
       ok: true;
       public: SubjectRead;
@@ -71,6 +73,43 @@ export type ConceptRead =
       spoiler: boolean;
       session?: string | undefined;
     };
+
+export type ConceptStatement = SubjectRead['subject']['statements'][string][number];
+export const conceptEvidenceBounds = { bytes: 1024 * 1024, statements: 4096 };
+
+/** Admit the whole source before expanding aliases, assertions or nested disclosed summaries. */
+export function conceptSourceFits(read: SubjectRead): boolean {
+  const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).byteLength;
+  let expanded = bytes(read);
+  if (expanded > conceptEvidenceBounds.bytes) return false;
+  let count = 0;
+  const summaries = new Map<string, number>();
+  for (const statements of Object.values(read.subject.statements)) {
+    count += statements.length;
+    if (count > conceptEvidenceBounds.statements) return false;
+    for (const statement of statements) {
+      if (!personEvidenceFits(statement)) return false;
+      for (const part of [statement, ...statement.qualifiers, ...statement.references.flatMap((ref) => ref.parts)]) {
+        const content = part.value.type === 'value' ? part.value.content : undefined;
+        const targets = [part.property.id];
+        if (part.property.data_type === 'wikibase-item' && typeof content === 'string') targets.push(content);
+        if (part.property.data_type === 'quantity' && isRecord(content) && typeof content.unit === 'string')
+          targets.push(content.unit);
+        for (const target of targets) {
+          if (!Object.hasOwn(read.related, target)) continue;
+          let size = summaries.get(target);
+          if (size === undefined) {
+            size = bytes(read.related[target]);
+            summaries.set(target, size);
+          }
+          expanded += size;
+          if (expanded > conceptEvidenceBounds.bytes) return false;
+        }
+      }
+    }
+  }
+  return true;
+}
 
 type Definitions = Pick<Release, 'types' | 'properties'> & {
   digest?: string;
@@ -194,6 +233,7 @@ export async function readSourceConcept(
     const current = await client.subjects({ id }).get({ query, headers });
     if (current.status !== 200 || !current.data) return candidateFailure(current.status);
     if (current.data.subject.id !== id) return candidateFailure(400);
+    if (!conceptSourceFits(current.data)) return { ok: false, reason: 'unavailable', oversized: true };
     const admitted = conceptTypeAdmitted(release, current.data.subject.type);
     let session = tokenOf(current) ?? input.session;
     const viewerActions = actionState(current.data);
@@ -224,12 +264,15 @@ export async function readSourceConcept(
     }
 
     const retired = release.digest ? current.data.subject.release !== release.digest : null;
-    const aliases = Object.entries(current.data.subject.aliases)
-      .flatMap(([lang, values]) => values.map((text) => ({ text, lang })))
-      .filter(
-        (alias, index, list) =>
-          list.findIndex((entry) => entry.text === alias.text && entry.lang === alias.lang) === index,
-      );
+    const seenAliases = new Set<string>();
+    const aliases = Object.entries(current.data.subject.aliases).flatMap(([lang, values]) =>
+      values.flatMap((text) => {
+        const key = JSON.stringify([lang, text]);
+        if (seenAliases.has(key)) return [];
+        seenAliases.add(key);
+        return [{ text, lang }];
+      }),
+    );
     const definition = pickText(current.data.subject.descriptions, locale);
     const schemes: ConceptSchemeRef[] = [];
     const schemeIds = new Set<string>();
@@ -315,6 +358,9 @@ export async function readSourceConcept(
           headers: headersOf(authorization, session),
         });
         if (page.status === 200 && page.data && 'links' in page.data) {
+          if (page.data.links.length > CONCEPT_PAGE_CAP ||
+            new TextEncoder().encode(JSON.stringify(page.data)).byteLength > conceptEvidenceBounds.bytes)
+            return { ok: false, reason: 'unavailable', oversized: true };
           session = tokenOf(page) ?? session;
           narrower = {
             state: page.data.freshness.caught_up ? 'available' : 'lagging',
@@ -350,11 +396,7 @@ export async function readSourceConcept(
       }
     }
     const spoiler = Object.values(current.data.subject.statements).some((statements) =>
-      statements.some((statement) =>
-        statement.qualifiers.some(
-          (part) => part.property.id === 'rezics:spoiler' && part.value.type === 'value' && part.value.content === true,
-        ),
-      ),
+      statements.some((statement) => spoilerLevel(statement) > 0),
     );
     return {
       ok: true,
