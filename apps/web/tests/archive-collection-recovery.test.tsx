@@ -533,7 +533,7 @@ async function chooseCurrentTarget(host: HTMLElement) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
   setter?.call(input, target.title);
   await act(async () => input!.dispatchEvent(new window.InputEvent('input', { bubbles: true, data: target.title })));
-  await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 500)));
   const option = [...window.document.querySelectorAll('[role=option]')].find((item) =>
     item.textContent?.includes(target.title),
   );
