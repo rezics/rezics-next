@@ -75,7 +75,11 @@ function Fixture({ mode, dark }: { mode: Mode; dark: boolean }) {
     };
   }, [mode]);
   return (
-    <div className={dark ? 'dark min-h-screen bg-background text-foreground' : 'min-h-screen bg-background text-foreground'}>
+    <div
+      className={
+        dark ? 'dark min-h-screen bg-background text-foreground' : 'min-h-screen bg-background text-foreground'
+      }
+    >
       <AuthShell>{ready ? <AutomatedAccountCreatePage /> : null}</AuthShell>
     </div>
   );
@@ -143,6 +147,7 @@ export const UnknownWithUnavailableReturnPhoneDark = {
     window.dispatchEvent(new PageTransitionEvent('pagehide'));
     window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
     await waitFor(() => canvasElement.textContent?.includes(m.auth_automated_unavailable()));
-    if (canvasElement.querySelector('#automated-confirm')) throw new Error('Unavailable return exposed private review.');
+    if (canvasElement.querySelector('#automated-confirm'))
+      throw new Error('Unavailable return exposed private review.');
   },
 };

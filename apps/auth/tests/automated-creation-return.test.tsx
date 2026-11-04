@@ -84,7 +84,15 @@ test('native acknowledgement survives synchronous retirement and an unavailable 
   expect(page.host.textContent).toContain(created);
 
   await flush(leave);
-  expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', created, attempt.operationKey, attempt.reference!]);
+  expectPrivateViewCleared(page.host, [
+    human,
+    operator.id,
+    operator.handle,
+    'private-handle',
+    created,
+    attempt.operationKey,
+    attempt.reference!,
+  ]);
   expect(page.host.textContent).toContain('The native creation workflow acknowledged completion.');
   expect(page.host.querySelector('a[href="/security"]')).not.toBeNull();
   expect(page.host.querySelector('a[href="/"]')).not.toBeNull();
@@ -135,7 +143,14 @@ test('current matching advice and a later acknowledgement keep an earlier unknow
   const retained = restoreAutomatedAttempt();
   if (!retained || retained === 'invalid') throw new Error('Expected the submitted continuation to remain stored.');
   await flush(leave);
-  expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', created, retained!.operationKey]);
+  expectPrivateViewCleared(page.host, [
+    human,
+    operator.id,
+    operator.handle,
+    'private-handle',
+    created,
+    retained!.operationKey,
+  ]);
   expect(page.host.textContent).toContain('A creation may have been sent; its result remains unresolved.');
   expect(page.host.textContent).toContain('The native creation workflow acknowledged completion.');
   expect(restoreAutomatedAttempt()).toMatchObject({
@@ -263,6 +278,13 @@ test('pagehide clears credentials from an interrupted authentication review', as
     fill(page.host.querySelector('#automated-password')!, 'private-password');
   });
   await flush(leave);
-  expectPrivateViewCleared(page.host, [human, operator.id, operator.handle, 'private-handle', 'person@example.com', 'private-password']);
+  expectPrivateViewCleared(page.host, [
+    human,
+    operator.id,
+    operator.handle,
+    'private-handle',
+    'person@example.com',
+    'private-password',
+  ]);
   expect(page.host.textContent).toContain('The creation review was interrupted before anything was sent.');
 });

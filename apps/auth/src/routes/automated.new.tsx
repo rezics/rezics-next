@@ -208,15 +208,20 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
         noteStoredContinuation(possiblySent(saved) ? saved : previous.attempt);
       else if (previous.attempt || previous.draft || previous.operatorId.trim() || previous.handle.trim())
         noteFact('interrupted');
-      if (
-        cached &&
-        historyRef.current === previousHistory &&
-        (historyRef.current.length > 0 || historyDismissed)
-      )
+      if (cached && historyRef.current === previousHistory && (historyRef.current.length > 0 || historyDismissed))
         setHistoryFocusRequest((value) => value + 1);
       work.current = {
-        accountId: '', attempt: null, draft: null, page: null, ready: false, created: '', busy: false,
-        operatorId: '', handle: '', email: '', password: '',
+        accountId: '',
+        attempt: null,
+        draft: null,
+        page: null,
+        ready: false,
+        created: '',
+        busy: false,
+        operatorId: '',
+        handle: '',
+        email: '',
+        password: '',
       };
       setAccountId('');
       setOperatorId('');
@@ -563,174 +568,176 @@ export function AutomatedAccountCreatePage({ initial }: { initial?: ManagementSe
             <a href="/">{m.auth_home_heading()}</a>
           </div>
         </div>
-      ) : <div className="space-y-5" aria-busy={busy}>
-        <p>{m.auth_automated_intro()}</p>
-        <AutomatedCreationReturnView
-          history={history}
-          dismissed={historyDismissed}
-          focusRequest={historyFocusRequest}
-          onDismiss={dismissHistory}
-        />
-        {busy ? (
-          <p role="status" aria-live="polite">
-            {m.auth_automated_pending()}
-          </p>
-        ) : null}
-        {status ? (
-          <ErrorAlert ref={feedback} tabIndex={-1}>
-            {notice(status)}
-          </ErrorAlert>
-        ) : null}
-        {!ready ? (
-          <div className="space-y-3">
-            {!status ? <p role="status">{m.auth_inventory_loading()}</p> : null}
-            {status === 'signed-out' ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
-            {status ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  setRetired(false);
-                  setReload((value) => value + 1);
-                }}
-              >
-                {m.auth_account_delete_retry()}
-              </Button>
-            ) : null}
-            <div className="flex flex-wrap gap-4">
+      ) : (
+        <div className="space-y-5" aria-busy={busy}>
+          <p>{m.auth_automated_intro()}</p>
+          <AutomatedCreationReturnView
+            history={history}
+            dismissed={historyDismissed}
+            focusRequest={historyFocusRequest}
+            onDismiss={dismissHistory}
+          />
+          {busy ? (
+            <p role="status" aria-live="polite">
+              {m.auth_automated_pending()}
+            </p>
+          ) : null}
+          {status ? (
+            <ErrorAlert ref={feedback} tabIndex={-1}>
+              {notice(status)}
+            </ErrorAlert>
+          ) : null}
+          {!ready ? (
+            <div className="space-y-3">
+              {!status ? <p role="status">{m.auth_inventory_loading()}</p> : null}
+              {status === 'signed-out' ? <a href="/login">{m.auth_security_sign_in()}</a> : null}
+              {status ? (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setRetired(false);
+                    setReload((value) => value + 1);
+                  }}
+                >
+                  {m.auth_account_delete_retry()}
+                </Button>
+              ) : null}
+              <div className="flex flex-wrap gap-4">
+                <a href="/security">{m.auth_security_heading()}</a>
+                <a href="/">{m.auth_home_heading()}</a>
+              </div>
+            </div>
+          ) : created ? (
+            <div role="status" className="space-y-3">
+              <p className="break-all">{m.auth_automated_created({ account: created })}</p>
+              <p>{m.auth_automated_result()}</p>
               <a href="/security">{m.auth_security_heading()}</a>
               <a href="/">{m.auth_home_heading()}</a>
             </div>
-          </div>
-        ) : created ? (
-          <div role="status" className="space-y-3">
-            <p className="break-all">{m.auth_automated_created({ account: created })}</p>
-            <p>{m.auth_automated_result()}</p>
-            <a href="/security">{m.auth_security_heading()}</a>
-            <a href="/">{m.auth_home_heading()}</a>
-          </div>
-        ) : !selection ? (
-          <form noValidate onSubmit={(event) => void review(event)} className="space-y-4">
-            <Field data-invalid={errors.operator || undefined}>
-              <FieldLabel htmlFor="automated-operator">{m.auth_automated_operator()}</FieldLabel>
-              <Input
-                id="automated-operator"
-                value={operatorId}
-                required
-                disabled={busy}
-                autoComplete="off"
-                aria-invalid={errors.operator}
-                aria-describedby={errors.operator ? 'automated-operator-error' : undefined}
-                onChange={(event) => {
-                  work.current = { ...work.current, operatorId: event.target.value };
-                  setOperatorId(event.target.value);
-                  setErrors((value) => ({ ...value, operator: false }));
-                }}
-              />
-              {errors.operator ? <p id="automated-operator-error">{m.auth_automated_operator_invalid()}</p> : null}
-            </Field>
-            <Field data-invalid={errors.handle || undefined}>
-              <FieldLabel htmlFor="automated-handle">{m.auth_signup_handle()}</FieldLabel>
-              <Input
-                id="automated-handle"
-                value={handle}
-                required
-                disabled={busy}
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                aria-invalid={errors.handle}
-                aria-describedby={`automated-handle-help${errors.handle ? ' automated-handle-error' : ''}`}
-                onChange={(event) => {
-                  work.current = { ...work.current, handle: event.target.value };
-                  setHandle(event.target.value);
-                  setErrors((value) => ({ ...value, handle: false }));
-                }}
-              />
-              <p id="automated-handle-help">
-                {m.auth_signup_handle_requirement({
-                  minimum: page!.handleRules.minLength,
-                  maximum: page!.handleRules.maxLength,
+          ) : !selection ? (
+            <form noValidate onSubmit={(event) => void review(event)} className="space-y-4">
+              <Field data-invalid={errors.operator || undefined}>
+                <FieldLabel htmlFor="automated-operator">{m.auth_automated_operator()}</FieldLabel>
+                <Input
+                  id="automated-operator"
+                  value={operatorId}
+                  required
+                  disabled={busy}
+                  autoComplete="off"
+                  aria-invalid={errors.operator}
+                  aria-describedby={errors.operator ? 'automated-operator-error' : undefined}
+                  onChange={(event) => {
+                    work.current = { ...work.current, operatorId: event.target.value };
+                    setOperatorId(event.target.value);
+                    setErrors((value) => ({ ...value, operator: false }));
+                  }}
+                />
+                {errors.operator ? <p id="automated-operator-error">{m.auth_automated_operator_invalid()}</p> : null}
+              </Field>
+              <Field data-invalid={errors.handle || undefined}>
+                <FieldLabel htmlFor="automated-handle">{m.auth_signup_handle()}</FieldLabel>
+                <Input
+                  id="automated-handle"
+                  value={handle}
+                  required
+                  disabled={busy}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  aria-invalid={errors.handle}
+                  aria-describedby={`automated-handle-help${errors.handle ? ' automated-handle-error' : ''}`}
+                  onChange={(event) => {
+                    work.current = { ...work.current, handle: event.target.value };
+                    setHandle(event.target.value);
+                    setErrors((value) => ({ ...value, handle: false }));
+                  }}
+                />
+                <p id="automated-handle-help">
+                  {m.auth_signup_handle_requirement({
+                    minimum: page!.handleRules.minLength,
+                    maximum: page!.handleRules.maxLength,
+                  })}
+                </p>
+                {errors.handle ? <p id="automated-handle-error">{m.auth_signup_handle_invalid()}</p> : null}
+              </Field>
+              <Button type="submit" disabled={busy}>
+                {page?.action === 'authenticate' ? m.auth_members_reauthenticate() : m.auth_automated_review()}
+              </Button>
+            </form>
+          ) : (
+            <section className="space-y-4" aria-labelledby="automated-confirmation">
+              <h2 id="automated-confirmation" ref={confirmation} tabIndex={-1}>
+                {m.auth_automated_confirm_heading()}
+              </h2>
+              <p className="break-all">
+                {m.auth_automated_confirm({
+                  handle: selection.handle,
+                  operator:
+                    page?.operator?.displayName?.trim() ||
+                    page?.operator?.handle?.trim() ||
+                    m.auth_automated_operator_unlabelled(),
+                  id: selection.operatorId,
                 })}
               </p>
-              {errors.handle ? <p id="automated-handle-error">{m.auth_signup_handle_invalid()}</p> : null}
-            </Field>
-            <Button type="submit" disabled={busy}>
-              {page?.action === 'authenticate' ? m.auth_members_reauthenticate() : m.auth_automated_review()}
-            </Button>
-          </form>
-        ) : (
-          <section className="space-y-4" aria-labelledby="automated-confirmation">
-            <h2 id="automated-confirmation" ref={confirmation} tabIndex={-1}>
-              {m.auth_automated_confirm_heading()}
-            </h2>
-            <p className="break-all">
-              {m.auth_automated_confirm({
-                handle: selection.handle,
-                operator:
-                  page?.operator?.displayName?.trim() ||
-                  page?.operator?.handle?.trim() ||
-                  m.auth_automated_operator_unlabelled(),
-                id: selection.operatorId,
-              })}
-            </p>
-            <p className="break-all">{m.auth_automated_initiator({ account: selection.accountId })}</p>
-            <p>{m.auth_automated_authority()}</p>
-            <p>{m.auth_automated_responsibility()}</p>
-            {reauth ? (
-              <form onSubmit={(event) => void authenticate(event)} className="space-y-4">
-                <Field>
-                  <FieldLabel htmlFor="automated-email">{m.auth_login_email()}</FieldLabel>
-                  <Input
-                    id="automated-email"
-                    type="email"
-                    autoComplete="username"
-                    required
-                    disabled={busy}
-                    value={email}
-                    onChange={(event) => {
-                      work.current = { ...work.current, email: event.target.value };
-                      setEmail(event.target.value);
-                    }}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="automated-password">{m.auth_login_password()}</FieldLabel>
-                  <PasswordInput
-                    id="automated-password"
-                    autoComplete="current-password"
-                    required
-                    disabled={busy}
-                    value={password}
-                    onChange={(event) => {
-                      work.current = { ...work.current, password: event.target.value };
-                      setPassword(event.target.value);
-                    }}
-                  />
-                </Field>
-                <Button type="submit" disabled={busy}>
-                  {m.auth_members_reauthenticate()}
-                </Button>
-              </form>
-            ) : (
-              <form onSubmit={(event) => void submit(event)} className="space-y-4">
-                <label className="flex items-start gap-3">
-                  <input
-                    id="automated-confirm"
-                    type="checkbox"
-                    checked={confirmed}
-                    disabled={busy}
-                    onChange={(event) => setConfirmed(event.target.checked)}
-                  />
-                  {m.auth_automated_confirm_check()}
-                </label>
-                <Button type="submit" disabled={busy || !confirmed} aria-busy={busy}>
-                  {m.auth_automated_submit()}
-                </Button>
-              </form>
-            )}
-          </section>
-        )}
-      </div>}
+              <p className="break-all">{m.auth_automated_initiator({ account: selection.accountId })}</p>
+              <p>{m.auth_automated_authority()}</p>
+              <p>{m.auth_automated_responsibility()}</p>
+              {reauth ? (
+                <form onSubmit={(event) => void authenticate(event)} className="space-y-4">
+                  <Field>
+                    <FieldLabel htmlFor="automated-email">{m.auth_login_email()}</FieldLabel>
+                    <Input
+                      id="automated-email"
+                      type="email"
+                      autoComplete="username"
+                      required
+                      disabled={busy}
+                      value={email}
+                      onChange={(event) => {
+                        work.current = { ...work.current, email: event.target.value };
+                        setEmail(event.target.value);
+                      }}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="automated-password">{m.auth_login_password()}</FieldLabel>
+                    <PasswordInput
+                      id="automated-password"
+                      autoComplete="current-password"
+                      required
+                      disabled={busy}
+                      value={password}
+                      onChange={(event) => {
+                        work.current = { ...work.current, password: event.target.value };
+                        setPassword(event.target.value);
+                      }}
+                    />
+                  </Field>
+                  <Button type="submit" disabled={busy}>
+                    {m.auth_members_reauthenticate()}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={(event) => void submit(event)} className="space-y-4">
+                  <label className="flex items-start gap-3">
+                    <input
+                      id="automated-confirm"
+                      type="checkbox"
+                      checked={confirmed}
+                      disabled={busy}
+                      onChange={(event) => setConfirmed(event.target.checked)}
+                    />
+                    {m.auth_automated_confirm_check()}
+                  </label>
+                  <Button type="submit" disabled={busy || !confirmed} aria-busy={busy}>
+                    {m.auth_automated_submit()}
+                  </Button>
+                </form>
+              )}
+            </section>
+          )}
+        </div>
+      )}
     </AuthPage>
   );
 }
