@@ -13,9 +13,9 @@ import type {
   CrossMediaMember,
   CrossMediaTables,
   Franchise,
-  GraphEdgeDraft,
 } from './cross-media-seed.ts';
 import type { CrossMediaPort } from './cross-media-seed.ts';
+import type { GraphEdgeDraft } from './cross-media-bindings.ts';
 import type { Owner } from './record-bindings.ts';
 import type { ImportConversion } from './import-contract.ts';
 import type { ImporterOptions } from './importer.ts';

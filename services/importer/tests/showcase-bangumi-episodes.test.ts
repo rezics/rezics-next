@@ -157,7 +157,7 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
   const composed = composeVocabularyAdmissions(retainedAdmission, {
     request: () => ({ bindings: currentVocabulary, rows: [] }),
   });
-  expect(composed?.request({
+  expect(composed?.request?.({
     owner: { source: 'bangumi_cross_media', external_id: 'episode:900001' },
     conversion: { normalized: { type: 0 } } as never,
     subject: randomUUID(),
@@ -184,11 +184,11 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
     expect(result.episodeDiagnostics).toContainEqual(
       expect.objectContaining({ sourceKey: 'episode:900002', reason: 'unbound_concept' }),
     );
-    expect(result.gaps.some((gap) => gap.externalId === 'episode:999999')).toBe(true);
+    expect(result.gaps.some((gap) => 'externalId' in gap && gap.externalId === 'episode:999999')).toBe(true);
 
     const source = (command: BatchCommand) => command.source.external_id;
     const value = (command: Extract<BatchCommand, { op: 'propose' }>) =>
-      command.statement.value.type === 'value' || command.statement.value.type === 'subject'
+      command.statement.value.type === 'value'
         ? command.statement.value.content
         : undefined;
     expect(
