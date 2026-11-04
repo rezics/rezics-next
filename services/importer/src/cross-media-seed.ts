@@ -3438,6 +3438,19 @@ export async function runCrossMediaSeedCli(
           path: statePath,
           port,
           destination: { origin: api },
+          ...(journal && publicClient
+            ? {
+                journal,
+                review: importPort,
+                publicClient,
+                ...(creditResolution?.publication
+                  ? { prior: creditResolution.publication }
+                  : priorShowcase
+                    ? { prior: priorShowcase }
+                    : {}),
+                readPublicSubject: (subjectId: string) => publicClient.readSubject(subjectId),
+              }
+            : {}),
         });
     if (books) {
       const bookCross = showcaseBooksToCrossMediaPlan(books.planned);
@@ -3482,6 +3495,7 @@ export async function runCrossMediaSeedCli(
     }
     const vocabularyRequirements = [
       ...(result.creditVocabularyRequirements ?? []),
+      ...(books?.creditVocabularyRequirements ?? []),
       ...(bangumiVocabularyRequirements ?? []),
       ...tagVocabularyRequirements,
       ...characterVocabularyRequirements,
@@ -3490,7 +3504,12 @@ export async function runCrossMediaSeedCli(
     if (journal && publicClient)
       showcase = await publishShowcase({
         plan: publicationPlan,
-        result: { ...combinedResult, readings: publicationReadings },
+        result: {
+          ...combinedResult,
+          readings: publicationReadings,
+          creditRoles: [...(combinedResult.creditRoles ?? []), ...(books?.creditRoles ?? [])],
+          ...(vocabularyRequirements.length ? { creditVocabularyRequirements: vocabularyRequirements } : {}),
+        },
         aliases: crossMediaAliases,
         journal,
         review: importPort,
@@ -3517,8 +3536,11 @@ export async function runCrossMediaSeedCli(
                   selected: books.selected,
                   conversions: books.conversions,
                   identities: books.identities,
+                  status: books.status,
                   gaps: books.gaps,
                   creditGaps: books.creditGaps,
+                  creditRoles: books.creditRoles ?? [],
+                  creditVocabularyRequirements: books.creditVocabularyRequirements ?? [],
                 },
               }
             : {}),

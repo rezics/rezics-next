@@ -62,7 +62,10 @@ function tables() {
       { subject_id: 27, related_subject_id: 499, relation_type: 1002, order: 0 },
       { subject_id: 499, related_subject_id: 9002, relation_type: 1003, order: 9 },
     ],
-    'bangumi/subject-persons': [{ person_id: 6023, subject_id: 499, position: 2001, appear_eps: '' }],
+    'bangumi/subject-persons': [
+      { person_id: 6023, subject_id: 499, position: 2001, appear_eps: '' },
+      { person_id: 6023, subject_id: 26, position: 2001, appear_eps: '' },
+    ],
     'bangumi/person': [author],
   };
   return {
@@ -79,6 +82,13 @@ test('reader keeps book, volume and author identities after accept, adopt and on
   const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
   try {
     const editor = await openApiObserver(runtime);
+    const grant = await editor.http('/v1/grants', {
+      resource: { route: 0, id: globalContext },
+      subject: { kind: 'account', id: runtime.identity.bulk.accountId },
+      actions: ['context:accept', 'context:adopt'],
+      valid: '(,)',
+    });
+    expect(grant.status).toBe(201);
     const publicClient = createPublicBulkClient({
       origin,
       fetch: (async (input: RequestInfo | URL) => {
@@ -86,11 +96,15 @@ test('reader keeps book, volume and author identities after accept, adopt and on
         return runtime.request(`${url.pathname}${url.search}`);
       }) as typeof fetch,
     });
+    const port = captureShowcaseCommands(runtime.importTransport, journal);
     const first = await importShowcaseBooks({
       tables: tables(),
       path: join(directory, 'import.sqlite'),
-      port: captureShowcaseCommands(runtime.importTransport, journal),
+      port,
       destination: { origin },
+      journal,
+      review: runtime.importTransport,
+      publicClient,
     });
     expect(first.family).toEqual(showcaseBookFamily);
     expect(first.selected).toEqual({
@@ -107,15 +121,7 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     expect(first.planned.members.some((row) => row.role === 'missing' && row.key === '9002')).toBe(true);
     expect(JSON.stringify(first.selected)).not.toContain('9001');
     expect(JSON.stringify(first.selected)).not.toContain('9003');
-    expect(first.creditGaps.some((item) => 'reason' in item)).toBe(true);
-
-    const grant = await editor.http('/v1/grants', {
-      resource: { route: 0, id: globalContext },
-      subject: { kind: 'account', id: runtime.identity.bulk.accountId },
-      actions: ['context:accept', 'context:adopt'],
-      valid: '(,)',
-    });
-    expect(grant.status).toBe(201);
+    expect(first.creditRoles).toEqual([expect.objectContaining({ code: '2001', property: 'schema:author' })]);
     const published = await publishShowcase({
       plan: showcaseBooksToCrossMediaPlan(first.planned),
       result: first,
@@ -123,8 +129,14 @@ test('reader keeps book, volume and author identities after accept, adopt and on
       journal,
       review: runtime.importTransport,
       publicClient,
+      ...(first.creditVocabularyRequirements
+        ? { vocabularyRequirements: first.creditVocabularyRequirements }
+        : {}),
     });
-    expect(published.status).toBe('published');
+    expect(published.published.some((row) => row.sourceKey === '499' && row.nativeType === 'schema:BookSeries')).toBe(
+      true,
+    );
+    expect(published.published.some((row) => row.sourceKey === '26' && row.nativeType === 'schema:Book')).toBe(true);
 
     const seriesId = first.identities['499']!.id;
     const volumeId = first.identities['26']!.id;
@@ -136,15 +148,21 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     expect((volumeRead.subject as { type: string }).type).toBe('schema:Book');
     expect((personRead.subject as { type: string }).type).toBe('schema:Person');
     expect(JSON.stringify(volumeRead.subject)).not.toContain('9784757728066');
-    const membership = (volumeRead.subject as { statements?: Record<string, { value?: { content?: string } }[]> })
-      .statements?.['wdt:P179'];
-    expect(membership?.some((row) => row.value?.content === seriesId)).toBe(true);
+    const seriesSubject = seriesRead.subject as { statements?: Record<string, { value?: { content?: string } }[]> };
+    const volumeSubject = volumeRead.subject as { statements?: Record<string, { value?: { content?: string } }[]> };
+    expect(volumeSubject.statements?.['wdt:P179']?.some((row) => row.value?.content === seriesId)).toBe(true);
+    expect(seriesSubject.statements?.['schema:author']?.some((row) => row.value?.content === personId)).toBeFalsy();
+    expect(volumeSubject.statements?.['schema:author']?.some((row) => row.value?.content === personId)).toBe(true);
 
     const again = await importShowcaseBooks({
       tables: tables(),
       path: join(directory, 'import.sqlite'),
       port: captureShowcaseCommands(runtime.importTransport, journal),
       destination: { origin },
+      journal,
+      review: runtime.importTransport,
+      publicClient,
+      prior: published,
     });
     expect(again.identities['499']?.id).toBe(seriesId);
     expect(again.identities['26']?.id).toBe(volumeId);

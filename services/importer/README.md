@@ -1723,9 +1723,9 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 ### Default Bangumi novel/book showcase seed
 
-- Touches: streamed `subject`, `subject-relations`, `subject-persons` and `person` rows for the documented Book Girl seeds (499, 26) and their 1002/1003 novel members, ordinary `convertBangumi` grain, the existing creator-credit helper and graph delivery. Titles do not select. Manga, adaptations and same-title extras stay excluded. P2635 counts do not create volumes.
-- Bound: O(file bytes) stream plus at most 32 volumes, 16 authors and the existing relation/credit/journal budgets. Missing source volumes and missing staff-role bindings stay explicit gaps. ISBN, publisher and pages stay off Book/BookSeries.
-- Growth check: `tests/showcase-books.test.ts` covers selection completeness, Book/BookSeries grain, membership direction and refresh identity. The connected native file `services/kernel/test/imports/showcase-books.test.ts` is registered and not executed in this attempt.
+- Touches: streamed `subject`, `subject-relations`, `subject-persons` and `person` rows for the documented Book Girl seeds (499, 26) and their 1002/1003 novel members, ordinary `convertBangumi` grain, type-1 author role 2001 only, existing Bangumi creator-credit preparation and current binding readers, the common journal/manifest/publisher, and graph delivery. Titles do not select. Manga, adaptations, translators, illustrators and same-title extras stay excluded. P2635 counts do not create volumes. Fresh seed publishes the author Concept and current `schema:Book` `schema:author` references without a manual binding file. BookSeries does not admit `schema:author`; those series rows stay explicit `property_not_admitted` gaps rather than a guessed `schema:contributor`.
+- Bound: O(file bytes) stream plus at most 32 volumes, 16 authors, one staff scheme, the selected author role Concept, and the existing relation/credit/journal budgets. Current type/`schema:url`/`schema:sameAs`/`skos:inScheme` is reread before author admission. Deduplicated current reads stay inside their existing freshness lifetime. Missing, wrong-type, retracted or unavailable author evidence withholds only that claim. Book author gaps stay in the books result so they do not fail Steins;Gate publication. ISBN, publisher and pages stay off Book/BookSeries. Unrelated source libraries are not materialized.
+- Growth check: `tests/showcase-books.test.ts` covers selection completeness, Book/BookSeries grain, membership direction, Japanese/Chinese names, default author publication, withheld non-author roles, retracted/missing author evidence, refresh identity and exact journal replay. The connected native file `services/kernel/test/imports/showcase-books.test.ts` is registered and not executed in this attempt.
 
 ### Import authored VNDB producer parent and subsidiary rows
 
@@ -2264,6 +2264,8 @@ The default real-dump seed also runs
 That adapter keeps the documented Book Girl novel family (series 499, first
 volume 26) from the pinned dump relation check, walks only 1002/1003 novel
 members, and delivers authors through the existing creator-credit helper.
+The helper prepares type-1 author role 2001 and current `schema:author`
+references after rereading source URI, type and `skos:inScheme`.
 The ordinary broad CLI retains this separate Book Girl source family.
 `task seed:dev` elects its directly selected Bangumi Official Book root as part
 of the five-work showcase. Decision: type 1 Book/BookSeries dispatch uses the
@@ -2272,7 +2274,9 @@ and Game player-count while adding TVAnime work evidence. Decision: one Bangumi 
 identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
 selected Book Girl records join the common showcase manifest; book review
 gaps stay in the seed books section so they do not fail Steins;Gate
-publication.
+publication. Author-credit gaps stay in that same books section. Decision:
+Book author selection admits only source person.type 1 individuals and author
+role 2001; company, band, translator and illustrator rows are explicit omissions.
 
 The real-dump seed acquires `tags`, `tags_parents` and `tags_vn` from the same
 checksum-verified current VNDB archive. The ordinary broad CLI runs
@@ -2319,6 +2323,35 @@ digests still include the bounded infobox projection.
   bounded unsupported value. The related public-read journey is
   `services/kernel/test/imports/bangumi-official-websites.test.ts`; native
   execution remains controller-owned.
+
+### Bangumi Book-template subject names
+
+Ordinary Bangumi registration and the selected-family importer share one pure
+extractor for Book title fields. It requires the selected native profile
+`schema:Book` and the exact pinned `{{Infobox animanga/Book` header. The
+source-defined `Novel`, `Manga`, `PhotoBook` and `BookSeries` templates do not
+inherit this mapping. Both Book `中文名` and `别名` become additional
+`schema:name` candidates; explicit Chinese names use `zh`, and unqualified
+aliases use `und`. A malformed field is withheld as a whole while independent
+source names and summary proposals remain available.
+
+The ordinary importer remains proposal-only. The default selected-family path
+uses its existing `cross-media-entities@11+bangumi@12` registration, record bindings,
+finite showcase manifest and publication journal. Local review accepts and
+adopts current candidates through separate native commands; corrected source
+names create new proposals on the acknowledged Book UUID, and ordinary refresh
+does not rewrite adopted names. Record citations, the unversioned marker,
+source digest and field-pointer command identity remain attached.
+
+- Touches: one selected Book record, at most 24 distinct name values and 16
+  shared omission diagnostics.
+- Bound: the 65,536-byte projection/infobox caps, 64 visited field occurrences,
+  existing source journal and native batch limits; no catalogue scan is added.
+- Growth check: `services/importer/tests/bangumi-book-names.test.ts` covers
+  ordinary/default conversion, atomic malformed-field handling, same-UUID
+  refresh and same-title source identity separation. The native publication and
+  public-read scenario is `services/kernel/test/imports/bangumi-book-names.test.ts`;
+  its execution remains controller-owned.
 
 ### Bangumi television original run
 
@@ -2420,9 +2453,10 @@ association supplies it; `person-characters.summary` remains commentary and
 does not become `wdt:P1932`. Voice credits keep the bound character on
 `wdt:P453` for that performer and work. Music and live-action staff, unprofiled
 type-3/type-6 roles, and stale or wrong-scheme role bindings remain exact gaps.
-The same exported role-binding helper accepts type 1 or 4 for a future book
-caller; book selection and author assignment remain that worker's ownership.
-Ordinary imports without explicit showcase state remain proposal-only.
+The default Book adapter derives type-1 author role 2001 through this helper;
+Game type-4 staff remains a later caller. Book selection, grain and membership
+stay with the Book adapter. Ordinary imports without explicit showcase state
+remain proposal-only.
 
 - Touches: at most 64 staff and 64 voice association rows per Bangumi work;
   only selected source types 1, 2 and 4 use the finite staff inventory, and the
@@ -2475,6 +2509,52 @@ Decision: The default character vocabulary and appearance adapter follows Bangum
   unavailable wrong-scheme binding. The native public-read and restart scenario
   is `services/kernel/test/imports/showcase-bangumi-characters.test.ts`;
   browser pages and inverse projections remain Web and Semantic ownership.
+
+### Bangumi character source names
+
+The default cross-media selection follows selected anime `subject-characters`
+and `person-characters` endpoints, then keeps each selected `character` JSONL
+row intact through `planCrossMediaSeed`. The shared entity converter reads the
+bounded `Crt` source-name fields and creates ordinary cited `schema:name` and
+`schema:alternateName` assertions on the exact Bangumi Character identity. The
+common `publishShowcase` manifest remains responsible for independent candidate
+acceptance, adoption and anonymous public reads; local plan output alone proves
+neither publication nor Search indexing.
+
+Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level `name` is `und`, `name_cn` is `zh`, and `简体中文名` is `zh-Hans`; within nicknames only the observed full-width comma splits entries and slash sequences stay intact.
+
+- Touches: one selected character record and its source-owned name candidate
+  set; no new source table, page, publisher or native lookup is added.
+- Bound: source rows remain under the existing 1 MiB line cap; infobox parsing
+  is limited to 32 KiB, depth 2, 64 fields, 64 aliases, 4 KiB/500 codepoints per
+  name, 16 diagnostics and at most 85 commands, including up to two existing
+  physical-profile facts. Structurally malformed alias groups are withheld as a
+  whole; unsupported custom labels are omitted with diagnostics while
+  supported aliases, names and summary remain.
+- Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
+  covers exact language mapping and changed alias removal;
+  `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
+  default selected payload through same-state importer refresh, common
+  publication and an anonymous public read.
+
+### Bangumi character physical profile
+
+The default `planCrossMediaSeed` path already selects a character by the
+selected work's `subject-characters` relation and passes that exact `character`
+row to the ordinary `bangumi_cross_media` registration. The conversion adds
+bounded Crt physical evidence on that existing path; the common finite
+publication manifest remains responsible for exact candidate acceptance,
+independent property adoption and the current public read. An acknowledgement
+alone does not make a quantity public. Source attribution and metadata rights
+remain independent of summary permission.
+
+Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
+
+Decision: Book-template names, character names and physical profile stay under Registered source vocabulary mapping and are not repeated under Explicit local showcase publication.
+
+- Touches: at most one height and one weight quantity per selected `character:<id>`, the exact scalar and `/infobox/fields/<n>` evidence, and bounded sanitized diagnostics. Existing names, kind, appearance and summary behavior stay on their current paths.
+- Bound: 65,536 UTF-8 infobox bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 emitted quantity facts and 16 diagnostics. Explicit centimetres/metres and kilograms/grams retain their source units; missing units are never guessed. The existing source journal, publication manifest and command ceiling still apply.
+- Growth check: `packages/conversion/tests/bangumi-character-measurements.test.ts` covers exact unit meaning, unknown and unsupported values, independent removal and the parser bounds. `services/kernel/test/imports/bangumi-character-measurements.test.ts` covers default selected identity, exact citation, proposal versus public adoption, reopen and changed-source suppression under a current facts fence. Kernel execution remains controller-owned and is deferred to integration.
 
 ### Default Bangumi anime episodes
 
@@ -2583,23 +2663,6 @@ The result carries provider and native type bindings, source keys, source and co
 - Bound: work is limited to the exact five roots, their direct cast and episodes, at most 64 people/organizations per provider, reviewed VNDB trait/tag codes i23/i30 and g105/g249, exact local candidate IDs and required current subject/property reads. Cover lookup remains sequential over selected Bangumi roots with a shared 1 MiB response cap; media send/status uses the ordinary authenticated transport, exact importer bindings and current cover fence. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-media.test.ts` covers source validation and same-state media recovery; `services/importer/tests/showcase-publication.test.ts` retains candidate journal coverage; `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution. The native showcase media and genre checks in `services/kernel/test/imports/` remain controller-owned; no native pass or database growth series is claimed here.
 
-### Bangumi character physical profile
-
-The default `planCrossMediaSeed` path already selects a character by the
-selected work's `subject-characters` relation and passes that exact `character`
-row to the ordinary `bangumi_cross_media` registration. The conversion adds
-bounded Crt physical evidence on that existing path; the common finite
-publication manifest remains responsible for exact candidate acceptance,
-independent property adoption and the current public read. An acknowledgement
-alone does not make a quantity public. Source attribution and metadata rights
-remain independent of summary permission.
-
-Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
-
-- Touches: at most one height and one weight quantity per selected `character:<id>`, the exact scalar and `/infobox/fields/<n>` evidence, and bounded sanitized diagnostics. Existing names, kind, appearance and summary behavior stay on their current paths.
-- Bound: 65,536 UTF-8 infobox bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 emitted quantity facts and 16 diagnostics. Explicit centimetres/metres and kilograms/grams retain their source units; missing units are never guessed. The existing source journal, publication manifest and command ceiling still apply.
-- Growth check: `packages/conversion/tests/bangumi-character-measurements.test.ts` covers exact unit meaning, unknown and unsupported values, independent removal and the parser bounds. `services/kernel/test/imports/bangumi-character-measurements.test.ts` covers default selected identity, exact citation, proposal versus public adoption, reopen and changed-source suppression under a current facts fence. Kernel execution remains controller-owned and is deferred to integration.
-
 ### Bangumi TVAnime official websites
 
 The official-website projection runs through ordinary `bangumi@12` and the
@@ -2627,62 +2690,6 @@ splitting decision is recorded in `packages/conversion/README.md`.
   source shape. `services/kernel/test/imports/bangumi-official-websites.test.ts`
   covers separate acceptance/adoption, public read, restart and fencing; native
   execution is controller-owned and the M1 walkthrough remains separate.
-
-### Bangumi character source names
-
-The default cross-media selection follows selected anime `subject-characters`
-and `person-characters` endpoints, then keeps each selected `character` JSONL
-row intact through `planCrossMediaSeed`. The shared entity converter reads the
-bounded `Crt` source-name fields and creates ordinary cited `schema:name` and
-`schema:alternateName` assertions on the exact Bangumi Character identity. The
-common `publishShowcase` manifest remains responsible for independent candidate
-acceptance, adoption and anonymous public reads; local plan output alone proves
-neither publication nor Search indexing.
-
-Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `纯假名` use `ja`, `罗马字` uses `und-Latn`, and `昵称` uses `und`; top-level `name` is `und`, `name_cn` is `zh`, and `简体中文名` is `zh-Hans`; within nicknames only the observed full-width comma splits entries and slash sequences stay intact.
-
-- Touches: one selected character record and its source-owned name candidate
-  set; no new source table, page, publisher or native lookup is added.
-- Bound: source rows remain under the existing 1 MiB line cap; infobox parsing
-  is limited to 32 KiB, depth 2, 64 fields, 64 aliases, 4 KiB/500 codepoints per
-  name, 16 diagnostics and at most 85 commands, including up to two existing
-  physical-profile facts. Structurally malformed alias groups are withheld as a
-  whole; unsupported custom labels are omitted with diagnostics while
-  supported aliases, names and summary remain.
-- Growth check: `packages/conversion/tests/bangumi-character-names.test.ts`
-  covers exact language mapping and changed alias removal;
-  `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
-  default selected payload through same-state importer refresh, common
-  publication and an anonymous public read.
-
-### Bangumi Book-template subject names
-
-Ordinary Bangumi registration and the selected-family importer share one pure
-extractor for Book title fields. It requires the selected native profile
-`schema:Book` and the exact pinned `{{Infobox animanga/Book` header. The
-source-defined `Novel`, `Manga`, `PhotoBook` and `BookSeries` templates do not
-inherit this mapping. Both Book `中文名` and `别名` become additional
-`schema:name` candidates; explicit Chinese names use `zh`, and unqualified
-aliases use `und`. A malformed field is withheld as a whole while independent
-source names and summary proposals remain available.
-
-The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@11+bangumi@12` registration, record bindings,
-finite showcase manifest and publication journal. Local review accepts and
-adopts current candidates through separate native commands; corrected source
-names create new proposals on the acknowledged Book UUID, and ordinary refresh
-does not rewrite adopted names. Record citations, the unversioned marker,
-source digest and field-pointer command identity remain attached.
-
-- Touches: one selected Book record, at most 24 distinct name values and 16
-  shared omission diagnostics.
-- Bound: the 65,536-byte projection/infobox caps, 64 visited field occurrences,
-  existing source journal and native batch limits; no catalogue scan is added.
-- Growth check: `services/importer/tests/bangumi-book-names.test.ts` covers
-  ordinary/default conversion, atomic malformed-field handling, same-UUID
-  refresh and same-title source identity separation. The native publication and
-  public-read scenario is `services/kernel/test/imports/bangumi-book-names.test.ts`;
-  its execution remains controller-owned.
 
 ### Bangumi TVAnime work evidence
 

@@ -25,6 +25,15 @@ import {
   type CrossMediaSeedResult,
   type CrossMediaTables,
 } from './cross-media-seed.ts';
+import type { ReviewedSubjectRead } from './import-client.ts';
+import type { PublicBulkClient } from './public-bulk-client.ts';
+import {
+  currentBangumiCreatorCreditBindings,
+  prepareBangumiCreatorCreditBindings,
+  type BangumiCreditPriorPublication,
+  type BangumiCreditVocabularyResolution,
+} from './showcase-bangumi-credits.ts';
+import type { ShowcaseJournal, ShowcaseReviewPort } from './showcase-publication.ts';
 
 type Row = Record<string, unknown>;
 const SERIES_ID = 499;
@@ -247,9 +256,18 @@ export async function planShowcaseBooks(input: {
   }
 
   const people: SourceRecord[] = [];
+  const rejectedAuthors = new Set<string>();
   for await (const row of input.tables.rows('bangumi', 'person')) {
     const id = asId(row.id);
     if (id === undefined || !authorIds.has(id)) continue;
+    if (row.type !== 1) {
+      rejectedAuthors.add(`person:${id}`);
+      authorIds.delete(id);
+      gaps.push(
+        gap('person', row, 'Author identity is not an individual person', { property: 'schema:author' }),
+      );
+      continue;
+    }
     people.push({ source: 'bangumi', key: `person:${id}`, revision: null, payload: row });
     members.push({ key: `person:${id}`, role: 'author' });
   }
@@ -257,6 +275,7 @@ export async function planShowcaseBooks(input: {
     if (!people.some((row) => row.key === `person:${id}`))
       gaps.push(gap('person', { id }, 'Author identity is missing from the dump', { property: 'schema:author' }));
   }
+  const admittedCredits = credits.filter((draft) => !rejectedAuthors.has(draft.person));
 
   const records: SourceRecord[] = [];
   if (seriesRow && isNovelSeries(seriesRow))
@@ -333,7 +352,7 @@ export async function planShowcaseBooks(input: {
     family: showcaseBookFamily,
     records,
     people,
-    credits,
+    credits: admittedCredits,
     edges,
     members,
     conversions,
@@ -385,6 +404,41 @@ function readingIdentity(reading: CrossMediaReading): { id: string; type: string
   return { id: subject.id, type: typeof subject.type === 'string' ? subject.type : '' };
 }
 
+async function rereadBookAuthorBindings(input: {
+  planned: ShowcaseBookPlan;
+  seeded: CrossMediaSeedResult;
+  resolution: BangumiCreditVocabularyResolution;
+  journal: ShowcaseJournal;
+  read(subjectId: string): Promise<ReviewedSubjectRead | null>;
+}): Promise<Pick<CrossMediaSeedResult, 'creditGaps' | 'creditRoles' | 'creditVocabularyRequirements' | 'status'>> {
+  const current = await currentBangumiCreatorCreditBindings({
+    resolution: input.resolution,
+    acknowledgements: input.journal.acknowledgedCommands(),
+    read: input.read,
+  });
+  const currentCodes = new Set(current.roles.map((role) => role.code));
+  const creditGaps = [...input.seeded.creditGaps];
+  for (const role of input.resolution.roles) {
+    if (currentCodes.has(role.code)) continue;
+    for (const draft of input.planned.credits) {
+      if (draft.kind !== 'staff' || String(draft.roleCode) !== role.code) continue;
+      creditGaps.push({
+        provider: 'bangumi',
+        path: draft.path,
+        code: role.code,
+        reason: 'missing_concept',
+        property: role.property,
+      });
+    }
+  }
+  return {
+    creditGaps,
+    creditRoles: current.roles,
+    creditVocabularyRequirements: current.requirements,
+    status: creditGaps.length || input.seeded.status === 'imported-with-gaps' ? 'imported-with-gaps' : input.seeded.status,
+  };
+}
+
 /** Default book adapter: documented family, ordinary conversion, then the shared seed/credit/graph path. */
 export async function importShowcaseBooks(input: {
   tables: CrossMediaTables;
@@ -392,6 +446,11 @@ export async function importShowcaseBooks(input: {
   port: CrossMediaPort;
   bindings?: SourceVocabularyBindings;
   destination?: { origin: string };
+  journal?: ShowcaseJournal;
+  review?: ShowcaseReviewPort;
+  publicClient?: PublicBulkClient;
+  prior?: BangumiCreditPriorPublication;
+  readPublicSubject?(subjectId: string): Promise<ReviewedSubjectRead>;
   manifest?: {
     recordBooks?(input: {
       family: typeof showcaseBookFamily;
@@ -448,18 +507,60 @@ export async function importShowcaseBooks(input: {
     selected: planned.selected,
     conversions: planned.conversions,
   });
-  const seeded = await seedCrossMedia(
-    showcaseBooksToCrossMediaPlan(planned),
-    input.path,
-    input.port,
-    input.destination,
-    {
-      providers: ['bangumi'],
-      entitiesFirst: true,
-      mediaDeadlineMs: 120_000,
-      sourceVocabulary: input.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
-    },
-  );
+  const plan = showcaseBooksToCrossMediaPlan(planned);
+  const showcase =
+    input.journal && input.review && input.publicClient
+      ? { journal: input.journal, review: input.review, publicClient: input.publicClient }
+      : undefined;
+  let resolution: BangumiCreditVocabularyResolution | undefined;
+  const readPublic = (subjectId: string) =>
+    input.readPublicSubject
+      ? input.readPublicSubject(subjectId)
+      : showcase
+        ? showcase.publicClient.readSubject(subjectId)
+        : input.port.readReviewedSubject(subjectId);
+  const seeded = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+    providers: ['bangumi'],
+    entitiesFirst: true,
+    mediaDeadlineMs: 120_000,
+    sourceVocabulary: input.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
+    ...(showcase
+      ? {
+          readPublicSubject: readPublic,
+          prepareBangumiCreatorCreditBindings: async ({ result, drafts, read }) => {
+            resolution = await prepareBangumiCreatorCreditBindings({
+              plan,
+              result,
+              drafts,
+              port: input.port,
+              journal: showcase.journal,
+              review: showcase.review,
+              publicClient: showcase.publicClient,
+              ...(input.prior ? { prior: input.prior } : {}),
+              subjectTypes: [1],
+              read,
+            });
+            return resolution;
+          },
+        }
+      : {}),
+  });
+  const current =
+    resolution && showcase
+      ? await rereadBookAuthorBindings({
+          planned,
+          seeded,
+          resolution,
+          journal: showcase.journal,
+          read: async (subjectId) => {
+            try {
+              return await readPublic(subjectId);
+            } catch {
+              return null;
+            }
+          },
+        })
+      : undefined;
   const identities: Record<string, { id: string; type: string; route: string }> = {};
   for (const reading of seeded.readings) {
     const identity = readingIdentity(reading);
@@ -468,6 +569,7 @@ export async function importShowcaseBooks(input: {
   }
   return {
     ...seeded,
+    ...(current ?? {}),
     family: planned.family,
     selected: planned.selected,
     conversions: planned.conversions,
