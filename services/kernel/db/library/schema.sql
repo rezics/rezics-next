@@ -2104,6 +2104,215 @@ END $$;
 
 
 --
+-- Name: reading_insights_current_progress_apply(integer, uuid, text, jsonb, numeric, numeric, integer); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_current_progress_apply(p_route integer, p_account_id uuid, p_scope text, p_meaning jsonb, p_current numeric, p_total numeric, p_delta integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE present boolean; remaining bigint;
+BEGIN
+  IF p_delta NOT IN (-1,1) THEN RAISE EXCEPTION 'Invalid current-progress delta'; END IF;
+  IF p_delta=1 THEN
+    SELECT EXISTS(SELECT 1 FROM library.reading_insights_current_progress_group
+      WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning) INTO present;
+    IF present THEN
+      UPDATE library.reading_insights_current_progress_group SET
+        occurrences=occurrences+1,
+        current_known=current_known+(p_current IS NOT NULL)::integer,
+        current_sum=current_sum+COALESCE(p_current,0),
+        total_known=total_known+(p_total IS NOT NULL)::integer,
+        total_sum=total_sum+COALESCE(p_total,0)
+        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning;
+    ELSE
+      INSERT INTO library.reading_insights_current_progress_group
+        (route,account_id,scope,meaning,occurrences,current_known,current_sum,total_known,total_sum)
+        VALUES(p_route,p_account_id,p_scope,p_meaning,1,(p_current IS NOT NULL)::integer,
+          COALESCE(p_current,0),(p_total IS NOT NULL)::integer,COALESCE(p_total,0));
+      UPDATE library.reading_insights_current_progress_scope SET group_count=group_count+1
+        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
+    END IF;
+  ELSE
+    UPDATE library.reading_insights_current_progress_group SET
+      occurrences=occurrences-1,
+      current_known=current_known-(p_current IS NOT NULL)::integer,
+      current_sum=current_sum-COALESCE(p_current,0),
+      total_known=total_known-(p_total IS NOT NULL)::integer,
+      total_sum=total_sum-COALESCE(p_total,0)
+      WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning
+      RETURNING occurrences INTO remaining;
+    IF remaining IS NULL THEN RAISE EXCEPTION 'Missing current-progress receiver group'; END IF;
+    IF remaining=0 THEN
+      DELETE FROM library.reading_insights_current_progress_group
+        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning;
+      UPDATE library.reading_insights_current_progress_scope SET group_count=group_count-1
+        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
+    END IF;
+  END IF;
+  UPDATE library.reading_insights_current_progress_scope SET
+    occurrences=occurrences+p_delta,
+    current_known=current_known+p_delta*(p_current IS NOT NULL)::integer,
+    total_known=total_known+p_delta*(p_total IS NOT NULL)::integer
+    WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
+END $$;
+
+
+--
+-- Name: reading_insights_current_progress_receive(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_current_progress_receive() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP='DELETE' THEN
+    PERFORM library.reading_insights_current_progress_refresh(OLD.route,OLD.session_id);
+    RETURN OLD;
+  END IF;
+  PERFORM library.reading_insights_current_progress_refresh(NEW.route,NEW.session_id);
+  RETURN NEW;
+END $$;
+
+
+--
+-- Name: reading_insights_current_progress_refresh(integer, uuid); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_current_progress_refresh(p_route integer, p_session_id uuid) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+DECLARE prior library.reading_insights_current_progress_session%ROWTYPE;
+        source library.progress_session%ROWTYPE;
+        projected record;
+        next_scope text;
+        next_covered boolean := false;
+BEGIN
+  SELECT * INTO prior FROM library.reading_insights_current_progress_session
+    WHERE route=p_route AND session_id=p_session_id FOR UPDATE;
+  IF FOUND THEN
+    PERFORM 1 FROM library.reading_insights_current_progress_owner
+      WHERE route=prior.route AND account_id=prior.account_id FOR UPDATE;
+    FOR projected IN
+      DELETE FROM library.reading_insights_current_progress_value
+        WHERE route=prior.route AND session_id=prior.session_id
+        RETURNING account_id,scope,meaning,current_value,total_value
+    LOOP
+      PERFORM library.reading_insights_current_progress_apply(
+        prior.route,projected.account_id,projected.scope,projected.meaning,
+        projected.current_value,projected.total_value,-1);
+    END LOOP;
+    IF prior.scope IS NOT NULL THEN
+      UPDATE library.reading_insights_current_progress_scope SET
+        session_count=session_count-1,
+        covered_sessions=covered_sessions-prior.covered::integer
+        WHERE route=prior.route AND account_id=prior.account_id AND scope=prior.scope;
+      DELETE FROM library.reading_insights_current_progress_scope
+        WHERE route=prior.route AND account_id=prior.account_id AND scope=prior.scope
+          AND session_count=0 AND group_count=0;
+    END IF;
+    UPDATE library.reading_insights_current_progress_owner SET
+      initialized_sessions=initialized_sessions-1,
+      current_sessions=current_sessions-(prior.scope IS NOT NULL)::integer,
+      covered_sessions=covered_sessions-(prior.scope IS NOT NULL AND prior.covered)::integer,
+      active_sessions=active_sessions-COALESCE((prior.scope='active')::integer,0),
+      backlog_sessions=backlog_sessions-COALESCE((prior.scope='backlog')::integer,0),
+      revision=gen_random_uuid()
+      WHERE route=prior.route AND account_id=prior.account_id;
+    DELETE FROM library.reading_insights_current_progress_session
+      WHERE route=prior.route AND session_id=prior.session_id;
+    DELETE FROM library.reading_insights_current_progress_owner
+      WHERE route=prior.route AND account_id=prior.account_id AND initialized_sessions=0
+        AND current_sessions=0 AND covered_sessions=0 AND active_sessions=0 AND backlog_sessions=0;
+  END IF;
+
+  SELECT * INTO source FROM library.progress_session WHERE route=p_route AND session_id=p_session_id;
+  IF NOT FOUND OR source.state='retired' THEN RETURN; END IF;
+  INSERT INTO library.reading_insights_current_progress_owner
+    (route,account_id,initialized_sessions,current_sessions,covered_sessions,
+     active_sessions,backlog_sessions,revision)
+    VALUES(source.route,source.account_id,0,0,0,0,0,gen_random_uuid())
+    ON CONFLICT(route,account_id) DO NOTHING;
+  PERFORM 1 FROM library.reading_insights_current_progress_owner
+    WHERE route=source.route AND account_id=source.account_id FOR UPDATE;
+
+  next_scope := CASE source.state WHEN 'active' THEN 'active' WHEN 'abandoned' THEN 'backlog' ELSE NULL END;
+  INSERT INTO library.reading_insights_current_progress_session(route,session_id,account_id,state,scope,covered)
+    VALUES(source.route,source.session_id,source.account_id,source.state,next_scope,false);
+  IF next_scope IS NOT NULL THEN
+    INSERT INTO library.reading_insights_current_progress_scope(route,account_id,scope)
+      VALUES(source.route,source.account_id,next_scope) ON CONFLICT(route,account_id,scope) DO NOTHING;
+    FOR projected IN
+      WITH operands AS (
+        SELECT source.unit AS unit,source.amount AS current_value,source.total AS total_value,NULL::text AS locator
+          WHERE source.mode='scalar_amount'
+        UNION ALL
+        SELECT item->>'unit',NULLIF(item->>'amount','')::numeric,NULLIF(item->>'total','')::numeric,NULL::text
+          FROM jsonb_array_elements(source.additional_measures) item WHERE source.mode='scalar_amount'
+        UNION ALL
+        SELECT source.unit,source.position,NULL::numeric,source.locator WHERE source.mode='cursor_position'
+        UNION ALL
+        SELECT source.unit,source.completed_unit_count::numeric,NULL::numeric,NULL::text WHERE source.mode='completed_units'
+      )
+      SELECT jsonb_build_object(
+          'profilePin',m.profile_pin,
+          'unitId',m.unit_id,
+          'meaningRevision',m.meaning_revision,
+          'mode',m.mode,
+          'unit',operands.unit,
+          'dimension',m.dimension,
+          'precision',m.precision,
+          'minimum',m.minimum::text,
+          'maximum',m.maximum::text,
+          'totalPolicy',m.total_policy,
+          'identityKind',m.identity_kind,
+          'structureKind',m.structure_kind,
+          'locator',operands.locator
+        ) AS meaning,operands.current_value,operands.total_value
+      FROM operands JOIN library.reading_insights_progress_meaning m
+        ON m.route=source.route AND m.session_id=source.session_id AND m.unit_id=operands.unit AND m.mode=source.mode
+    LOOP
+      next_covered := true;
+      INSERT INTO library.reading_insights_current_progress_value
+        (route,account_id,session_id,scope,meaning,current_value,total_value)
+        VALUES(source.route,source.account_id,source.session_id,next_scope,projected.meaning,
+          projected.current_value,projected.total_value);
+      PERFORM library.reading_insights_current_progress_apply(
+        source.route,source.account_id,next_scope,projected.meaning,
+        projected.current_value,projected.total_value,1);
+    END LOOP;
+    UPDATE library.reading_insights_current_progress_session SET covered=next_covered
+      WHERE route=source.route AND session_id=source.session_id;
+    UPDATE library.reading_insights_current_progress_scope SET
+      session_count=session_count+1,covered_sessions=covered_sessions+next_covered::integer
+      WHERE route=source.route AND account_id=source.account_id AND scope=next_scope;
+  END IF;
+  UPDATE library.reading_insights_current_progress_owner SET
+    initialized_sessions=initialized_sessions+1,
+    current_sessions=current_sessions+(next_scope IS NOT NULL)::integer,
+    covered_sessions=covered_sessions+(next_scope IS NOT NULL AND next_covered)::integer,
+    active_sessions=active_sessions+COALESCE((next_scope='active')::integer,0),
+    backlog_sessions=backlog_sessions+COALESCE((next_scope='backlog')::integer,0),
+    revision=gen_random_uuid()
+    WHERE route=source.route AND account_id=source.account_id;
+END $$;
+
+
+--
+-- Name: reading_insights_current_progress_truncate(); Type: FUNCTION; Schema: library; Owner: -
+--
+
+CREATE FUNCTION library.reading_insights_current_progress_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  TRUNCATE library.reading_insights_current_progress_owner,library.reading_insights_current_progress_scope,
+    library.reading_insights_current_progress_group,library.reading_insights_current_progress_session,
+    library.reading_insights_current_progress_value;
+  RETURN NULL;
+END $$;
+
+
+--
 -- Name: reading_insights_progress_meaning_delete(); Type: FUNCTION; Schema: library; Owner: -
 --
 
@@ -2675,6 +2884,7 @@ CREATE TABLE library.bangumi_upload (
     upload_id uuid NOT NULL,
     cancelled boolean DEFAULT false NOT NULL,
     expires_at timestamp with time zone DEFAULT (clock_timestamp() + '7 days'::interval) NOT NULL,
+    recovery_until timestamp with time zone,
     CONSTRAINT bangumi_upload_route_check CHECK (((route >= 0) AND (route <= 65535)))
 );
 
@@ -5573,7 +5783,6 @@ CREATE TABLE library.published_log (
 CREATE TABLE library.reading_insights_assessment_installation (
     singleton boolean NOT NULL,
     version integer NOT NULL,
-    CONSTRAINT reading_insights_current_progress_installation_pkey PRIMARY KEY (singleton),
     CONSTRAINT reading_insights_assessment_installation_singleton_check CHECK (singleton),
     CONSTRAINT reading_insights_assessment_installation_version_check CHECK ((version = 1))
 );
@@ -5625,6 +5834,118 @@ CREATE TABLE library.reading_insights_assessment_value (
     CONSTRAINT reading_insights_assessment_value_meaning_revision_check CHECK (((meaning_revision >= 1) AND (meaning_revision <= 16))),
     CONSTRAINT reading_insights_assessment_value_occurrences_check CHECK ((occurrences > 0)),
     CONSTRAINT reading_insights_assessment_value_units_check CHECK (((units >= 0) AND (units <= 20)))
+);
+
+
+--
+-- Name: reading_insights_current_progress_group; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_current_progress_group (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    scope text NOT NULL,
+    meaning jsonb NOT NULL,
+    occurrences bigint NOT NULL,
+    current_known bigint NOT NULL,
+    current_sum numeric NOT NULL,
+    total_known bigint NOT NULL,
+    total_sum numeric NOT NULL,
+    CONSTRAINT reading_insights_current_progress_group_current_known_check CHECK ((current_known >= 0)),
+    CONSTRAINT reading_insights_current_progress_group_meaning_check CHECK ((jsonb_typeof(meaning) = 'object'::text)),
+    CONSTRAINT reading_insights_current_progress_group_occurrences_check CHECK ((occurrences > 0)),
+    CONSTRAINT reading_insights_current_progress_group_scope_check CHECK ((scope = ANY (ARRAY['active'::text, 'backlog'::text]))),
+    CONSTRAINT reading_insights_current_progress_group_total_known_check CHECK ((total_known >= 0))
+);
+
+
+--
+-- Name: reading_insights_current_progress_installation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_current_progress_installation (
+    singleton boolean CONSTRAINT reading_insights_current_progress_installati_singleton_not_null NOT NULL,
+    version integer NOT NULL,
+    CONSTRAINT reading_insights_current_progress_installation_singleton_check CHECK (singleton),
+    CONSTRAINT reading_insights_current_progress_installation_version_check CHECK ((version = 1))
+);
+
+
+--
+-- Name: reading_insights_current_progress_owner; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_current_progress_owner (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    initialized_sessions bigint DEFAULT 0 CONSTRAINT reading_insights_current_progress_initialized_sessions_not_null NOT NULL,
+    current_sessions bigint DEFAULT 0 CONSTRAINT reading_insights_current_progress_own_current_sessions_not_null NOT NULL,
+    covered_sessions bigint DEFAULT 0 CONSTRAINT reading_insights_current_progress_own_covered_sessions_not_null NOT NULL,
+    active_sessions bigint DEFAULT 0 CONSTRAINT reading_insights_current_progress_owne_active_sessions_not_null NOT NULL,
+    backlog_sessions bigint DEFAULT 0 CONSTRAINT reading_insights_current_progress_own_backlog_sessions_not_null NOT NULL,
+    revision uuid NOT NULL,
+    CONSTRAINT reading_insights_current_progress_ow_initialized_sessions_check CHECK ((initialized_sessions >= 0)),
+    CONSTRAINT reading_insights_current_progress_owner_active_sessions_check CHECK ((active_sessions >= 0)),
+    CONSTRAINT reading_insights_current_progress_owner_backlog_sessions_check CHECK ((backlog_sessions >= 0)),
+    CONSTRAINT reading_insights_current_progress_owner_covered_sessions_check CHECK ((covered_sessions >= 0)),
+    CONSTRAINT reading_insights_current_progress_owner_current_sessions_check CHECK ((current_sessions >= 0))
+);
+
+
+--
+-- Name: reading_insights_current_progress_scope; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_current_progress_scope (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    scope text NOT NULL,
+    session_count bigint DEFAULT 0 NOT NULL,
+    covered_sessions bigint DEFAULT 0 CONSTRAINT reading_insights_current_progress_sco_covered_sessions_not_null NOT NULL,
+    group_count bigint DEFAULT 0 NOT NULL,
+    occurrences bigint DEFAULT 0 NOT NULL,
+    current_known bigint DEFAULT 0 NOT NULL,
+    total_known bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT reading_insights_current_progress_scope_covered_sessions_check CHECK ((covered_sessions >= 0)),
+    CONSTRAINT reading_insights_current_progress_scope_current_known_check CHECK ((current_known >= 0)),
+    CONSTRAINT reading_insights_current_progress_scope_group_count_check CHECK ((group_count >= 0)),
+    CONSTRAINT reading_insights_current_progress_scope_occurrences_check CHECK ((occurrences >= 0)),
+    CONSTRAINT reading_insights_current_progress_scope_scope_check CHECK ((scope = ANY (ARRAY['active'::text, 'backlog'::text]))),
+    CONSTRAINT reading_insights_current_progress_scope_session_count_check CHECK ((session_count >= 0)),
+    CONSTRAINT reading_insights_current_progress_scope_total_known_check CHECK ((total_known >= 0))
+);
+
+
+--
+-- Name: reading_insights_current_progress_session; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_current_progress_session (
+    route integer NOT NULL,
+    session_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    state text NOT NULL,
+    scope text,
+    covered boolean NOT NULL,
+    CONSTRAINT reading_insights_current_progress_session_scope_check CHECK (((scope IS NULL) OR (scope = ANY (ARRAY['active'::text, 'backlog'::text])))),
+    CONSTRAINT reading_insights_current_progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text])))
+);
+
+
+--
+-- Name: reading_insights_current_progress_value; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.reading_insights_current_progress_value (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    session_id uuid NOT NULL,
+    scope text NOT NULL,
+    meaning jsonb NOT NULL,
+    current_value numeric,
+    total_value numeric,
+    CONSTRAINT reading_insights_current_progress_value_meaning_check CHECK ((jsonb_typeof(meaning) = 'object'::text)),
+    CONSTRAINT reading_insights_current_progress_value_scope_check CHECK ((scope = ANY (ARRAY['active'::text, 'backlog'::text])))
 );
 
 
@@ -7745,6 +8066,54 @@ ALTER TABLE ONLY library.reading_insights_assessment_value
 
 
 --
+-- Name: reading_insights_current_progress_group reading_insights_current_progress_group_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_current_progress_group
+    ADD CONSTRAINT reading_insights_current_progress_group_pkey PRIMARY KEY (route, account_id, scope, meaning);
+
+
+--
+-- Name: reading_insights_current_progress_installation reading_insights_current_progress_installation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_current_progress_installation
+    ADD CONSTRAINT reading_insights_current_progress_installation_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: reading_insights_current_progress_owner reading_insights_current_progress_owner_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_current_progress_owner
+    ADD CONSTRAINT reading_insights_current_progress_owner_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: reading_insights_current_progress_scope reading_insights_current_progress_scope_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_current_progress_scope
+    ADD CONSTRAINT reading_insights_current_progress_scope_pkey PRIMARY KEY (route, account_id, scope);
+
+
+--
+-- Name: reading_insights_current_progress_session reading_insights_current_progress_session_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_current_progress_session
+    ADD CONSTRAINT reading_insights_current_progress_session_pkey PRIMARY KEY (route, session_id);
+
+
+--
+-- Name: reading_insights_current_progress_value reading_insights_current_progress_value_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.reading_insights_current_progress_value
+    ADD CONSTRAINT reading_insights_current_progress_value_pkey PRIMARY KEY (route, session_id, scope, meaning);
+
+
+--
 -- Name: reading_insights_installation reading_insights_installation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -8100,7 +8469,14 @@ ALTER TABLE ONLY library.yearly_completion_goal
 -- Name: bangumi_upload_expiry; Type: INDEX; Schema: library; Owner: -
 --
 
-CREATE INDEX bangumi_upload_expiry ON library.bangumi_upload USING btree (expires_at, route, account_id, upload_id);
+CREATE INDEX bangumi_upload_expiry ON library.bangumi_upload USING btree (expires_at, route, account_id, upload_id) WHERE (recovery_until IS NULL);
+
+
+--
+-- Name: bangumi_upload_recovery_expiry; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX bangumi_upload_recovery_expiry ON library.bangumi_upload USING btree (recovery_until, route, account_id, upload_id) WHERE (recovery_until IS NOT NULL);
 
 
 --
@@ -9434,6 +9810,13 @@ CREATE INDEX published_log_owner ON library.published_log USING btree (route, ac
 
 
 --
+-- Name: reading_insights_current_progress_group_top; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX reading_insights_current_progress_group_top ON library.reading_insights_current_progress_group USING btree (route, account_id, scope, occurrences DESC, meaning);
+
+
+--
 -- Name: reading_insights_profile_top; Type: INDEX; Schema: library; Owner: -
 --
 
@@ -10421,6 +10804,20 @@ CREATE TRIGGER reading_insights_assessment_truncate AFTER TRUNCATE ON library.pr
 
 
 --
+-- Name: progress_session reading_insights_current_progress_receive; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_current_progress_receive AFTER INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.reading_insights_current_progress_receive();
+
+
+--
+-- Name: progress_session reading_insights_current_progress_truncate; Type: TRIGGER; Schema: library; Owner: -
+--
+
+CREATE TRIGGER reading_insights_current_progress_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.reading_insights_current_progress_truncate();
+
+
+--
 -- Name: progress_session reading_insights_progress_meaning_delete; Type: TRIGGER; Schema: library; Owner: -
 --
 
@@ -11191,340 +11588,6 @@ ALTER TABLE ONLY library.vndb_label_adoption
 
 
 --
--- Name: reading_insights_current_progress_installation; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.reading_insights_current_progress_installation (
-    singleton boolean NOT NULL,
-    version integer NOT NULL,
-    CONSTRAINT reading_insights_current_progress_installation_singleton_check CHECK (singleton),
-    CONSTRAINT reading_insights_current_progress_installation_version_check CHECK ((version = 1))
-);
-
-
--- Name: reading_insights_current_progress_owner; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.reading_insights_current_progress_owner (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    initialized_sessions bigint DEFAULT 0 NOT NULL,
-    current_sessions bigint DEFAULT 0 NOT NULL,
-    covered_sessions bigint DEFAULT 0 NOT NULL,
-    active_sessions bigint DEFAULT 0 NOT NULL,
-    backlog_sessions bigint DEFAULT 0 NOT NULL,
-    revision uuid NOT NULL,
-    CONSTRAINT reading_insights_current_progress_owner_pkey PRIMARY KEY (route, account_id),
-    CONSTRAINT reading_insights_current_progress_owner_initialized_sessions_check CHECK ((initialized_sessions >= 0)),
-    CONSTRAINT reading_insights_current_progress_owner_current_sessions_check CHECK ((current_sessions >= 0)),
-    CONSTRAINT reading_insights_current_progress_owner_covered_sessions_check CHECK ((covered_sessions >= 0)),
-    CONSTRAINT reading_insights_current_progress_owner_active_sessions_check CHECK ((active_sessions >= 0)),
-    CONSTRAINT reading_insights_current_progress_owner_backlog_sessions_check CHECK ((backlog_sessions >= 0))
-);
-
-
--- Name: reading_insights_current_progress_scope; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.reading_insights_current_progress_scope (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    scope text NOT NULL,
-    session_count bigint DEFAULT 0 NOT NULL,
-    covered_sessions bigint DEFAULT 0 NOT NULL,
-    group_count bigint DEFAULT 0 NOT NULL,
-    occurrences bigint DEFAULT 0 NOT NULL,
-    current_known bigint DEFAULT 0 NOT NULL,
-    total_known bigint DEFAULT 0 NOT NULL,
-    CONSTRAINT reading_insights_current_progress_scope_pkey PRIMARY KEY (route, account_id, scope),
-    CONSTRAINT reading_insights_current_progress_scope_scope_check CHECK ((scope = ANY (ARRAY['active'::text, 'backlog'::text]))),
-    CONSTRAINT reading_insights_current_progress_scope_session_count_check CHECK ((session_count >= 0)),
-    CONSTRAINT reading_insights_current_progress_scope_covered_sessions_check CHECK ((covered_sessions >= 0)),
-    CONSTRAINT reading_insights_current_progress_scope_group_count_check CHECK ((group_count >= 0)),
-    CONSTRAINT reading_insights_current_progress_scope_occurrences_check CHECK ((occurrences >= 0)),
-    CONSTRAINT reading_insights_current_progress_scope_current_known_check CHECK ((current_known >= 0)),
-    CONSTRAINT reading_insights_current_progress_scope_total_known_check CHECK ((total_known >= 0))
-);
-
-
--- Name: reading_insights_current_progress_group; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.reading_insights_current_progress_group (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    scope text NOT NULL,
-    meaning jsonb NOT NULL,
-    occurrences bigint NOT NULL,
-    current_known bigint NOT NULL,
-    current_sum numeric NOT NULL,
-    total_known bigint NOT NULL,
-    total_sum numeric NOT NULL,
-    CONSTRAINT reading_insights_current_progress_group_pkey PRIMARY KEY (route, account_id, scope, meaning),
-    CONSTRAINT reading_insights_current_progress_group_scope_check CHECK ((scope = ANY (ARRAY['active'::text, 'backlog'::text]))),
-    CONSTRAINT reading_insights_current_progress_group_meaning_check CHECK ((jsonb_typeof(meaning) = 'object'::text)),
-    CONSTRAINT reading_insights_current_progress_group_occurrences_check CHECK ((occurrences > 0)),
-    CONSTRAINT reading_insights_current_progress_group_current_known_check CHECK ((current_known >= 0)),
-    CONSTRAINT reading_insights_current_progress_group_total_known_check CHECK ((total_known >= 0))
-);
-
-
--- Name: reading_insights_current_progress_group_top; Type: INDEX; Schema: library; Owner: -
---
-
-CREATE INDEX reading_insights_current_progress_group_top ON library.reading_insights_current_progress_group USING btree (route, account_id, scope, occurrences DESC, meaning);
-
-
--- Name: reading_insights_current_progress_session; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.reading_insights_current_progress_session (
-    route integer NOT NULL,
-    session_id uuid NOT NULL,
-    account_id uuid NOT NULL,
-    state text NOT NULL,
-    scope text,
-    covered boolean NOT NULL,
-    CONSTRAINT reading_insights_current_progress_session_pkey PRIMARY KEY (route, session_id),
-    CONSTRAINT reading_insights_current_progress_session_state_check CHECK ((state = ANY (ARRAY['active'::text, 'completed'::text, 'abandoned'::text]))),
-    CONSTRAINT reading_insights_current_progress_session_scope_check CHECK (((scope IS NULL) OR (scope = ANY (ARRAY['active'::text, 'backlog'::text])))),
-);
-
-
--- Name: reading_insights_current_progress_value; Type: TABLE; Schema: library; Owner: -
---
-
-CREATE TABLE library.reading_insights_current_progress_value (
-    route integer NOT NULL,
-    account_id uuid NOT NULL,
-    session_id uuid NOT NULL,
-    scope text NOT NULL,
-    meaning jsonb NOT NULL,
-    current_value numeric,
-    total_value numeric,
-    CONSTRAINT reading_insights_current_progress_value_pkey PRIMARY KEY (route, session_id, scope, meaning),
-    CONSTRAINT reading_insights_current_progress_value_scope_check CHECK ((scope = ANY (ARRAY['active'::text, 'backlog'::text]))),
-    CONSTRAINT reading_insights_current_progress_value_meaning_check CHECK ((jsonb_typeof(meaning) = 'object'::text))
-);
-
-
--- Name: reading_insights_current_progress_apply(integer, uuid, text, jsonb, numeric, numeric, integer); Type: FUNCTION; Schema: library; Owner: -
---
-
-CREATE FUNCTION library.reading_insights_current_progress_apply(p_route integer, p_account_id uuid, p_scope text, p_meaning jsonb, p_current numeric, p_total numeric, p_delta integer) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE present boolean; remaining bigint;
-BEGIN
-  IF p_delta NOT IN (-1,1) THEN RAISE EXCEPTION 'Invalid current-progress delta'; END IF;
-  IF p_delta=1 THEN
-    SELECT EXISTS(SELECT 1 FROM library.reading_insights_current_progress_group
-      WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning) INTO present;
-    IF present THEN
-      UPDATE library.reading_insights_current_progress_group SET
-        occurrences=occurrences+1,
-        current_known=current_known+(p_current IS NOT NULL)::integer,
-        current_sum=current_sum+COALESCE(p_current,0),
-        total_known=total_known+(p_total IS NOT NULL)::integer,
-        total_sum=total_sum+COALESCE(p_total,0)
-        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning;
-    ELSE
-      INSERT INTO library.reading_insights_current_progress_group
-        (route,account_id,scope,meaning,occurrences,current_known,current_sum,total_known,total_sum)
-        VALUES(p_route,p_account_id,p_scope,p_meaning,1,(p_current IS NOT NULL)::integer,
-          COALESCE(p_current,0),(p_total IS NOT NULL)::integer,COALESCE(p_total,0));
-      UPDATE library.reading_insights_current_progress_scope SET group_count=group_count+1
-        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
-    END IF;
-  ELSE
-    UPDATE library.reading_insights_current_progress_group SET
-      occurrences=occurrences-1,
-      current_known=current_known-(p_current IS NOT NULL)::integer,
-      current_sum=current_sum-COALESCE(p_current,0),
-      total_known=total_known-(p_total IS NOT NULL)::integer,
-      total_sum=total_sum-COALESCE(p_total,0)
-      WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning
-      RETURNING occurrences INTO remaining;
-    IF remaining IS NULL THEN RAISE EXCEPTION 'Missing current-progress receiver group'; END IF;
-    IF remaining=0 THEN
-      DELETE FROM library.reading_insights_current_progress_group
-        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope AND meaning=p_meaning;
-      UPDATE library.reading_insights_current_progress_scope SET group_count=group_count-1
-        WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
-    END IF;
-  END IF;
-  UPDATE library.reading_insights_current_progress_scope SET
-    occurrences=occurrences+p_delta,
-    current_known=current_known+p_delta*(p_current IS NOT NULL)::integer,
-    total_known=total_known+p_delta*(p_total IS NOT NULL)::integer
-    WHERE route=p_route AND account_id=p_account_id AND scope=p_scope;
-END $$;
-
-
--- Name: reading_insights_current_progress_refresh(integer, uuid); Type: FUNCTION; Schema: library; Owner: -
---
-
-CREATE FUNCTION library.reading_insights_current_progress_refresh(p_route integer, p_session_id uuid) RETURNS void
-    LANGUAGE plpgsql
-    AS $$
-DECLARE prior library.reading_insights_current_progress_session%ROWTYPE;
-        source library.progress_session%ROWTYPE;
-        projected record;
-        next_scope text;
-        next_covered boolean := false;
-BEGIN
-  SELECT * INTO prior FROM library.reading_insights_current_progress_session
-    WHERE route=p_route AND session_id=p_session_id FOR UPDATE;
-  IF FOUND THEN
-    PERFORM 1 FROM library.reading_insights_current_progress_owner
-      WHERE route=prior.route AND account_id=prior.account_id FOR UPDATE;
-    FOR projected IN
-      DELETE FROM library.reading_insights_current_progress_value
-        WHERE route=prior.route AND session_id=prior.session_id
-        RETURNING account_id,scope,meaning,current_value,total_value
-    LOOP
-      PERFORM library.reading_insights_current_progress_apply(
-        prior.route,projected.account_id,projected.scope,projected.meaning,
-        projected.current_value,projected.total_value,-1);
-    END LOOP;
-    IF prior.scope IS NOT NULL THEN
-      UPDATE library.reading_insights_current_progress_scope SET
-        session_count=session_count-1,
-        covered_sessions=covered_sessions-prior.covered::integer
-        WHERE route=prior.route AND account_id=prior.account_id AND scope=prior.scope;
-      DELETE FROM library.reading_insights_current_progress_scope
-        WHERE route=prior.route AND account_id=prior.account_id AND scope=prior.scope
-          AND session_count=0 AND group_count=0;
-    END IF;
-    UPDATE library.reading_insights_current_progress_owner SET
-      initialized_sessions=initialized_sessions-1,
-      current_sessions=current_sessions-(prior.scope IS NOT NULL)::integer,
-      covered_sessions=covered_sessions-(prior.scope IS NOT NULL AND prior.covered)::integer,
-      active_sessions=active_sessions-COALESCE((prior.scope='active')::integer,0),
-      backlog_sessions=backlog_sessions-COALESCE((prior.scope='backlog')::integer,0),
-      revision=gen_random_uuid()
-      WHERE route=prior.route AND account_id=prior.account_id;
-    DELETE FROM library.reading_insights_current_progress_session
-      WHERE route=prior.route AND session_id=prior.session_id;
-    DELETE FROM library.reading_insights_current_progress_owner
-      WHERE route=prior.route AND account_id=prior.account_id AND initialized_sessions=0
-        AND current_sessions=0 AND covered_sessions=0 AND active_sessions=0 AND backlog_sessions=0;
-  END IF;
-
-  SELECT * INTO source FROM library.progress_session WHERE route=p_route AND session_id=p_session_id;
-  IF NOT FOUND OR source.state='retired' THEN RETURN; END IF;
-  INSERT INTO library.reading_insights_current_progress_owner
-    (route,account_id,initialized_sessions,current_sessions,covered_sessions,
-     active_sessions,backlog_sessions,revision)
-    VALUES(source.route,source.account_id,0,0,0,0,0,gen_random_uuid())
-    ON CONFLICT(route,account_id) DO NOTHING;
-  PERFORM 1 FROM library.reading_insights_current_progress_owner
-    WHERE route=source.route AND account_id=source.account_id FOR UPDATE;
-
-  next_scope := CASE source.state WHEN 'active' THEN 'active' WHEN 'abandoned' THEN 'backlog' ELSE NULL END;
-  INSERT INTO library.reading_insights_current_progress_session(route,session_id,account_id,state,scope,covered)
-    VALUES(source.route,source.session_id,source.account_id,source.state,next_scope,false);
-  IF next_scope IS NOT NULL THEN
-    INSERT INTO library.reading_insights_current_progress_scope(route,account_id,scope)
-      VALUES(source.route,source.account_id,next_scope) ON CONFLICT(route,account_id,scope) DO NOTHING;
-    FOR projected IN
-      WITH operands AS (
-        SELECT source.unit AS unit,source.amount AS current_value,source.total AS total_value,NULL::text AS locator
-          WHERE source.mode='scalar_amount'
-        UNION ALL
-        SELECT item->>'unit',NULLIF(item->>'amount','')::numeric,NULLIF(item->>'total','')::numeric,NULL::text
-          FROM jsonb_array_elements(source.additional_measures) item WHERE source.mode='scalar_amount'
-        UNION ALL
-        SELECT source.unit,source.position,NULL::numeric,source.locator WHERE source.mode='cursor_position'
-        UNION ALL
-        SELECT source.unit,source.completed_unit_count::numeric,NULL::numeric,NULL::text WHERE source.mode='completed_units'
-      )
-      SELECT jsonb_build_object(
-          'profilePin',m.profile_pin,
-          'unitId',m.unit_id,
-          'meaningRevision',m.meaning_revision,
-          'mode',m.mode,
-          'unit',operands.unit,
-          'dimension',m.dimension,
-          'precision',m.precision,
-          'minimum',m.minimum::text,
-          'maximum',m.maximum::text,
-          'totalPolicy',m.total_policy,
-          'identityKind',m.identity_kind,
-          'structureKind',m.structure_kind,
-          'locator',operands.locator
-        ) AS meaning,operands.current_value,operands.total_value
-      FROM operands JOIN library.reading_insights_progress_meaning m
-        ON m.route=source.route AND m.session_id=source.session_id AND m.unit_id=operands.unit AND m.mode=source.mode
-    LOOP
-      next_covered := true;
-      INSERT INTO library.reading_insights_current_progress_value
-        (route,account_id,session_id,scope,meaning,current_value,total_value)
-        VALUES(source.route,source.account_id,source.session_id,next_scope,projected.meaning,
-          projected.current_value,projected.total_value);
-      PERFORM library.reading_insights_current_progress_apply(
-        source.route,source.account_id,next_scope,projected.meaning,
-        projected.current_value,projected.total_value,1);
-    END LOOP;
-    UPDATE library.reading_insights_current_progress_session SET covered=next_covered
-      WHERE route=source.route AND session_id=source.session_id;
-    UPDATE library.reading_insights_current_progress_scope SET
-      session_count=session_count+1,covered_sessions=covered_sessions+next_covered::integer
-      WHERE route=source.route AND account_id=source.account_id AND scope=next_scope;
-  END IF;
-  UPDATE library.reading_insights_current_progress_owner SET
-    initialized_sessions=initialized_sessions+1,
-    current_sessions=current_sessions+(next_scope IS NOT NULL)::integer,
-    covered_sessions=covered_sessions+(next_scope IS NOT NULL AND next_covered)::integer,
-    active_sessions=active_sessions+COALESCE((next_scope='active')::integer,0),
-    backlog_sessions=backlog_sessions+COALESCE((next_scope='backlog')::integer,0),
-    revision=gen_random_uuid()
-    WHERE route=source.route AND account_id=source.account_id;
-END $$;
-
-
--- Name: reading_insights_current_progress_receive(); Type: FUNCTION; Schema: library; Owner: -
---
-
-CREATE FUNCTION library.reading_insights_current_progress_receive() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF TG_OP='DELETE' THEN
-    PERFORM library.reading_insights_current_progress_refresh(OLD.route,OLD.session_id);
-    RETURN OLD;
-  END IF;
-  PERFORM library.reading_insights_current_progress_refresh(NEW.route,NEW.session_id);
-  RETURN NEW;
-END $$;
-
-
--- Name: reading_insights_current_progress_truncate(); Type: FUNCTION; Schema: library; Owner: -
---
-
-CREATE FUNCTION library.reading_insights_current_progress_truncate() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  TRUNCATE library.reading_insights_current_progress_owner,library.reading_insights_current_progress_scope,
-    library.reading_insights_current_progress_group,library.reading_insights_current_progress_session,
-    library.reading_insights_current_progress_value;
-  RETURN NULL;
-END $$;
-
-
--- Name: reading_insights_current_progress_receive; Type: TRIGGER; Schema: library; Owner: -
---
-
-CREATE TRIGGER reading_insights_current_progress_receive AFTER INSERT OR DELETE OR UPDATE ON library.progress_session FOR EACH ROW EXECUTE FUNCTION library.reading_insights_current_progress_receive();
-
-
--- Name: reading_insights_current_progress_truncate; Type: TRIGGER; Schema: library; Owner: -
---
-
-CREATE TRIGGER reading_insights_current_progress_truncate AFTER TRUNCATE ON library.progress_session FOR EACH STATEMENT EXECUTE FUNCTION library.reading_insights_current_progress_truncate();
-
-
 -- PostgreSQL database dump complete
 --
 
