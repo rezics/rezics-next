@@ -188,3 +188,17 @@ test('current release changes refuse new create, while lost acknowledgement repl
   expect((await json(owner, 'POST', `${path}/${cancelledId}/apply`, pending.confirmation)).collectionId).toBeNull();
   await f.activate(f.originalDigest);
 }, 120000);
+
+test('Collection archive recovery journals each duplicate occurrence with withheld Subject context', async () => {
+  const owner = await f.identity(scopes),
+    id = (await upload(owner)).uploadId;
+  const chosen = await review(owner, id, 'ex:Child');
+  const recovered = await json(owner, 'POST', `${path}/${id}/apply`, chosen.confirmation);
+  const history = await json(owner, 'GET', `/v1/collections/${recovered.collectionId}/structure-history`);
+  const additions = history.changes.filter((change: { operation: string }) => change.operation === 'added');
+  expect(additions).toHaveLength(2);
+  expect(new Set(additions.map((change: { occurrenceId: string }) => change.occurrenceId)).size).toBe(2);
+  expect(additions.every((change: { subjectContext: { state: string } }) => change.subjectContext.state === 'withheld'))
+    .toBe(true);
+  await json(owner, 'DELETE', `/v1/collections/${recovered.collectionId}`);
+}, 120000);

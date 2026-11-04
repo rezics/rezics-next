@@ -307,4 +307,10 @@ test('pre-installation coverage is unknown, pruning retires addresses, and publi
       ])
     ).rowCount,
   ).toBe(0);
+  const retiredHistory = await f.send(
+    owner.bearer,
+    'GET',
+    `/v1/collections/${retiredOwnerCollection.id}/structure-history`,
+  );
+  expect(retiredHistory.status).not.toBe(200);
 });
