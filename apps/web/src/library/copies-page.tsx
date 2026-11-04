@@ -511,7 +511,8 @@ export function CopyForm({
         if (confirming && event.key === 'Escape') {
           event.preventDefault();
           event.stopPropagation();
-          if (current()) setConfirming(false);
+          if (pending) requestClose();
+          else if (current()) setConfirming(false);
         }
       }}
     >
@@ -710,6 +711,7 @@ export function CopyForm({
               ref={cancelDelete}
               type="button"
               className={quiet}
+              disabled={pending}
               onClick={() => current() && setConfirming(false)}
             >
               {m.library_copy_cancel()}
