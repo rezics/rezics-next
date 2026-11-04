@@ -711,8 +711,7 @@ Exact quantities also withhold the entire measurement when any qualifier is
 unmapped, unsupported, unresolved or narrowed, including loss during projection.
 That rejection survives normalized-record serialization and rebinding. Item
 qualifiers, new mappings and whole-holder word evidence remain unsupported.
-Pure controls remain in `tests/wikidata-exact-quantity.test.ts`; connected source
-and native scenarios are linked from the [Importer owner](../../services/importer/README.md#wikidata-released-time-and-quantity).
+See the [Importer scenarios](../../services/importer/README.md#wikidata-released-time-and-quantity); exact-quantity controls remain unchanged.
 
 The current bundle admits schema:wordCount with exact P6570 mapping, integer
 amount, unit 1, minimum 0 and qualifiers[]. Its mapping alone is unsafe provider
