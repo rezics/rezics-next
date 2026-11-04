@@ -17,11 +17,15 @@ existing correction reader. No local date, disc position, target type, release a
 Missing configuration is unavailable, distinct from an admitted empty page. A missing summary stays withheld:
 there is no guessed title or destination. A failed continuation retains the previous admitted window and retries
 only that exact opaque address; withheld/invalid results retire its rows. Repeated cursors and over-bound pages
-are unavailable. There is no refill, accumulated page history, per-row hydration or automatic retry. Restart and
-stream selection deliberately request a new first window. Currentness copy reflects native eventual freshness.
+are unavailable. There is no refill, accumulated page bodies or targets, per-row hydration, prefetch or automatic
+retry. The only retained history is the eight most recent prior exact native addresses; Previous performs that exact
+read and the oldest address leaves first. Start and stream selection request a new first window. Currentness copy
+reflects native eventual freshness.
 
 Decision: exact subject destinations and existing membership correction open in a new tab, keeping the album
 window mounted; returning restores the keyboard origin when it is still meaningful, otherwise the region heading.
+
+Decision: One selected membership opens a single in-page inspection, and every accepted page replacement clears it.
 
 The destination uses the ordinary Subject reader until a specialized Recording reader is installed. Membership
 correction goes to the existing holder's relation editor with its normal recovery and context restrictions;

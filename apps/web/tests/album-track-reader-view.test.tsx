@@ -6,9 +6,7 @@ import * as start from '../.storybook/react-start';
 import {
   albumTrackExample,
   exampleAddress,
-  exampleAlbum,
   exampleRecording,
-  exampleOtherRecording,
 } from '../src/features/catalogue/album-track-reader/examples';
 import type { AlbumTrackRead, AlbumTrackTransport } from '../src/features/catalogue/album-track-reader/model';
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -70,34 +68,76 @@ async function ui() {
   return { host, client, render, click, close };
 }
 
-test('keyboard continuation retries the exact window and keeps target/correction return context', async () => {
+test('native rows open one exact membership inspection and accepted navigation clears it', async () => {
   const mounted = await ui();
   try {
     const fixture = albumTrackExample('continuation-unavailable');
     const initial = await fixture.read();
+    if (!initial.ok || !initial.stream) throw new Error('Expected admitted album contents');
     const addresses: unknown[] = [];
     const transport: AlbumTrackTransport = (address) => {
       addresses.push(address);
       return fixture.read(address);
     };
     await mounted.render({ ...exampleAddress, locale: 'en', source: {}, reader: null, transport, initial });
-    const targets = Array.from(mounted.host.querySelectorAll<HTMLAnchorElement>('a')).filter(
-      (node) => node.textContent === m.album_tracks_open(),
+    expect(mounted.host.textContent).toContain(initial.album.label.text);
+    expect(mounted.host.textContent).toContain(initial.stream.property);
+    expect(mounted.host.textContent).toContain(m.work_parts_order_forward());
+    expect(mounted.host.textContent).toContain(m.work_parts_slice());
+    expect(mounted.host.textContent).toContain(initial.caughtUp ? m.album_tracks_current() : m.work_parts_pending());
+    if (initial.count) {
+      expect(mounted.host.textContent).toContain(initial.count.exact ? m.work_parts_exact() : m.work_parts_at_least());
+      expect(mounted.host.textContent).toContain(String(initial.count.value));
+    }
+    expect(Array.from(mounted.host.querySelector('nav')!.querySelectorAll('button')).map((button) => button.textContent)).toEqual(
+      initial.streams.map((stream) => stream.label.text || stream.property),
     );
-    expect(targets.length).toBe(3);
-    expect(targets.map((node) => node.href)).toEqual(
-      [exampleRecording, exampleOtherRecording, exampleRecording].map(
-        (id) => `https://site.example/en/subjects/${id}/harbour`,
+    const rowButtons = Array.from(mounted.host.querySelectorAll<HTMLButtonElement>('[data-slot="album-track-inspect"]'));
+    expect(rowButtons.map((button) => button.getAttribute('aria-label'))).toEqual(
+      initial.rows.map(
+        (row) => `${m.album_tracks_inspect()}: ${row.summary?.label?.value || m.work_parts_unresolved()}; ${row.holder}; ${row.statementId}`,
       ),
     );
-    expect(targets.every((node) => node.target === '_blank' && node.rel === 'noopener')).toBe(true);
-    expect(mounted.host.textContent).toContain('source:unknownPosition');
-    expect(mounted.host.textContent).toContain('A-02?');
-    expect(mounted.host.querySelector(`a[href*="${exampleRecording}"][href$="relation-edit"]`)).not.toBeNull();
-    targets[0]!.focus();
-    targets[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+    const repeated = initial.rows.filter((row) => row.summary?.id === exampleRecording);
+    expect(repeated.length).toBe(2);
+    const firstIndex = initial.rows.indexOf(repeated[0]!);
+    const secondIndex = initial.rows.indexOf(repeated[1]!);
+    const inspect = async (index: number) => {
+      const button = rowButtons[index]!;
+      button.focus();
+      await act(async () => button.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 })));
+      return button;
+    };
+    const firstOpener = await inspect(firstIndex);
+    let inspection = mounted.host.querySelector<HTMLElement>('[data-slot="album-track-inspection"]')!;
+    expect(inspection.textContent).toContain(repeated[0]!.holder);
+    expect(inspection.textContent).toContain(repeated[0]!.statementId);
+    expect(inspection.textContent).toContain('source:unknownPosition');
+    expect(inspection.textContent).toContain('A-02?');
+    const sourceGroup = Array.from(inspection.querySelectorAll('details')).find(
+      (details) => details.querySelector('summary')?.textContent === m.sources_citations(),
+    );
+    expect(sourceGroup).not.toBeNull();
+    expect(sourceGroup?.textContent).toContain('source:unknownPosition');
+    const target = inspection.querySelector<HTMLAnchorElement>(`a[href*="${exampleRecording}"]`)!;
+    expect(target.href).toBe(`https://site.example/en/subjects/${exampleRecording}/harbour`);
+    expect(target.target).toBe('_blank');
+    expect(target.rel).toBe('noopener');
+    expect(inspection.querySelector(`a[href*="${repeated[0]!.holder}"][href$="relation-edit"]`)).not.toBeNull();
+    await mounted.click(m.candidate_close());
+    expect(mounted.host.querySelector('[data-slot="album-track-inspection"]')).toBeNull();
+    expect(document.activeElement).toBe(firstOpener);
+    await inspect(secondIndex);
+    inspection = mounted.host.querySelector<HTMLElement>('[data-slot="album-track-inspection"]')!;
+    expect(inspection.textContent).toContain(repeated[1]!.holder);
+    expect(inspection.textContent).toContain(repeated[1]!.statementId);
+    expect(repeated[0]!.statementId).not.toBe(repeated[1]!.statementId);
+    const selectedTarget = inspection.querySelector<HTMLAnchorElement>(`a[href*="${exampleRecording}"]`)!;
+    selectedTarget.focus();
+    selectedTarget.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
     window.dispatchEvent(new Event('focus'));
-    expect(document.activeElement).toBe(targets[0]);
+    expect(document.activeElement).toBe(selectedTarget);
+    await mounted.click(m.candidate_close());
     await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.album_tracks_next_unavailable());
     expect(mounted.host.querySelectorAll('[data-slot="album-track-row"]').length).toBe(3);
@@ -105,6 +145,7 @@ test('keyboard continuation retries the exact window and keeps target/correction
     await mounted.click(m.album_tracks_retry());
     expect(addresses[1]).toEqual(addresses[0]);
     expect(mounted.host.querySelectorAll('[data-slot="album-track-row"]').length).toBe(1);
+    expect(mounted.host.querySelector('[data-slot="album-track-inspection"]')).toBeNull();
     expect(mounted.host.textContent).toContain(m.album_tracks_complete());
     expect(document.activeElement?.textContent).toBe(m.album_tracks_title());
     const retained = mounted.host.textContent;
@@ -119,38 +160,34 @@ test('keyboard continuation retries the exact window and keeps target/correction
   }
 });
 
-test('replacement observations retire delayed continuations and removed keyboard targets without reviving on away/back', async () => {
-  const mounted = await ui();
-  try {
-    const fixture = albumTrackExample();
-    const initial = await fixture.read();
-    let finish!: (value: AlbumTrackRead) => void;
-    const delayed = new Promise<AlbumTrackRead>((resolve) => {
-      finish = resolve;
-    });
-    const source = {};
-    const props = { ...exampleAddress, locale: 'en', source, reader: null, initial, transport: () => delayed };
-    await mounted.render(props);
-    await mounted.click(m.work_parts_more());
-    await act(async () => {
-      mounted.client.setQueryData(['session'], { state: 'signed-in', subject: exampleRecording, csrfToken: 'changed' });
-      mounted.client.setQueryData(['session'], { state: 'signed-out' });
-    });
-    expect(mounted.host.querySelectorAll('a').length).toBe(0);
-    expect(mounted.host.textContent).toContain(m.album_tracks_unavailable());
-    expect(document.activeElement?.textContent).toBe(m.album_tracks_title());
-    await act(async () => {
-      finish(await fixture.read());
-    });
-    expect(mounted.host.querySelectorAll('a').length).toBe(0);
-    const fresh = { ...props, source: {} };
-    await mounted.render(fresh);
-    expect(mounted.host.querySelectorAll('[data-slot="album-track-row"]').length).toBe(3);
-    await mounted.render({ ...fresh, locale: 'ja' });
-    expect(mounted.host.querySelectorAll('a').length).toBe(0);
-    await mounted.render(fresh);
-    expect(mounted.host.querySelectorAll('a').length).toBe(0);
-  } finally {
-    await mounted.close();
+test('unsupported, empty and withheld album windows remain different states', async () => {
+  for (const [scenario, expected] of [
+    ['unconfigured', m.album_tracks_unconfigured()],
+    ['empty', m.work_parts_empty()],
+    ['withheld', m.album_tracks_withheld()],
+  ] as const) {
+    const mounted = await ui();
+    try {
+      const fixture = albumTrackExample(scenario);
+      const initial = await fixture.read();
+      await mounted.render({
+        ...exampleAddress,
+        locale: 'en',
+        source: {},
+        reader: null,
+        transport: fixture.read,
+        initial,
+      });
+      expect(mounted.host.textContent).toContain(expected);
+      expect(mounted.host.querySelectorAll('[data-slot="album-track-row"]')).toHaveLength(0);
+      expect(mounted.host.querySelectorAll('[data-slot="album-track-inspection"]')).toHaveLength(0);
+      if (scenario === 'withheld') {
+        expect(mounted.host.querySelector('a')?.textContent).toBe(m.album_tracks_subject_recovery());
+        expect(Array.from(mounted.host.querySelectorAll('button')).some((button) => button.textContent === m.work_parts_restart())).toBe(true);
+      }
+    } finally {
+      await mounted.close();
+    }
   }
 });
+
