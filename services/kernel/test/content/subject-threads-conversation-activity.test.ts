@@ -92,7 +92,10 @@ test.serial('Subject cards keep public reply activity current through edits, rem
       ),
     );
     await runtime.consume(edit.envelopes);
-    expect(await read()).toMatchObject({ count: { kind: 'exact', value: 2 }, lastActivityAt: second.value.post.createdAt });
+    expect(await read()).toMatchObject({
+      count: { kind: 'exact', value: 2 },
+      lastActivityAt: second.value.post.createdAt,
+    });
 
     const removed = await world.capture(partition, () =>
       world.call('DELETE', `/v1/posts/${second.value.post.id}`, {
@@ -102,7 +105,10 @@ test.serial('Subject cards keep public reply activity current through edits, rem
     );
     requireStatus(removed.value, 204);
     await runtime.consume(removed.envelopes);
-    expect(await read()).toMatchObject({ count: { kind: 'exact', value: 1 }, lastActivityAt: first.value.post.createdAt });
+    expect(await read()).toMatchObject({
+      count: { kind: 'exact', value: 1 },
+      lastActivityAt: first.value.post.createdAt,
+    });
 
     const restored = await world.capture(partition, () =>
       world.call('POST', `/v1/posts/${second.value.post.id}:restore`, {
@@ -112,7 +118,10 @@ test.serial('Subject cards keep public reply activity current through edits, rem
     );
     requireStatus(restored.value, 204);
     await runtime.consume(restored.envelopes);
-    expect(await read()).toMatchObject({ count: { kind: 'exact', value: 2 }, lastActivityAt: second.value.post.createdAt });
+    expect(await read()).toMatchObject({
+      count: { kind: 'exact', value: 2 },
+      lastActivityAt: second.value.post.createdAt,
+    });
   } finally {
     await runtime?.stop();
     await world.base.system.close();

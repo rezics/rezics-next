@@ -15,7 +15,10 @@ import {
 import { readSubjectThread } from './reads.ts';
 import type { ReactionCountFreshness, ThreadView } from './reads.ts';
 import type { SubjectThreadWithReactions } from './subject-threads-reactions.ts';
-import { staleSubjectThreadActivity, type SubjectThreadConversationActivity } from './subject-threads-conversation-activity.ts';
+import {
+  staleSubjectThreadActivity,
+  type SubjectThreadConversationActivity,
+} from './subject-threads-conversation-activity.ts';
 
 export type SubjectThreadCardDependencies = ReadingPageDependencies & MediaDependencies;
 

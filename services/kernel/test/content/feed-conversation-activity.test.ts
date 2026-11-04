@@ -56,66 +56,71 @@ test('Feed binds duplicate Home references once and projects exact, lower-bound 
   });
   expect(thread.summary).toHaveProperty('conversationActivity', review.summary.conversationActivity);
 
-  projectFeedConversationActivity([review, thread], [
-    { threadId, status: 'withheld', reason: 'coverage' } as ConversationActivitySelection,
-  ]);
+  projectFeedConversationActivity(
+    [review, thread],
+    [{ threadId, status: 'withheld', reason: 'coverage' } as ConversationActivitySelection],
+  );
   expect(review.summary).toHaveProperty('conversationActivity', { state: 'withheld' });
   expect(thread.summary).toHaveProperty('conversationActivity', { state: 'withheld' });
 });
 
-test.serial('Home Feed shows command-created public conversation activity through real Access and delivery', async () => {
-  const world = await createRankingWorld();
-  let runtime: RankingRuntime | undefined;
-  try {
-    await world.time(world.start);
-    const boardId = await world.board();
-    const board = await world.pool.query<{ subject_id: string }>(
-      'SELECT subject_id FROM content.board WHERE route=$1 AND board_id=$2',
-      [routeOf(boardId), boardId],
-    );
-    const subjectId = board.rows[0]!.subject_id;
-    const follow = await world.call('PUT', `/v1/follows/${subjectId}`, {
-      bearer: world.base.other.bearer,
-      key: randomUUID(),
-    });
-    requireStatus(follow, 200);
+test.serial(
+  'Home Feed shows command-created public conversation activity through real Access and delivery',
+  async () => {
+    const world = await createRankingWorld();
+    let runtime: RankingRuntime | undefined;
+    try {
+      await world.time(world.start);
+      const boardId = await world.board();
+      const board = await world.pool.query<{ subject_id: string }>(
+        'SELECT subject_id FROM content.board WHERE route=$1 AND board_id=$2',
+        [routeOf(boardId), boardId],
+      );
+      const subjectId = board.rows[0]!.subject_id;
+      const follow = await world.call('PUT', `/v1/follows/${subjectId}`, {
+        bearer: world.base.other.bearer,
+        key: randomUUID(),
+      });
+      requireStatus(follow, 200);
 
-    const idempotencyKey = randomUUID();
-    const target = threadTarget(world.base.system.routeKey, world.base.author.accountId, idempotencyKey);
-    const partition = partitionOf(target.route);
-    runtime = await startRankingWorker(world, [partition]);
-    const created = await world.capture(partition, () =>
-      world.command(
-        'POST',
-        '/v1/threads',
-        {
-          title: `Home activity ${idempotencyKey}`,
-          body: fromPlainText('Opening contribution'),
-          licence: 'CC0-1.0',
-          subjectIds: [subjectId],
-          boardId,
-        },
-        world.base.author,
-        201,
-        idempotencyKey,
-      ),
-    );
-    await runtime.consume(created.envelopes);
+      const idempotencyKey = randomUUID();
+      const target = threadTarget(world.base.system.routeKey, world.base.author.accountId, idempotencyKey);
+      const partition = partitionOf(target.route);
+      runtime = await startRankingWorker(world, [partition]);
+      const created = await world.capture(partition, () =>
+        world.command(
+          'POST',
+          '/v1/threads',
+          {
+            title: `Home activity ${idempotencyKey}`,
+            body: fromPlainText('Opening contribution'),
+            licence: 'CC0-1.0',
+            subjectIds: [subjectId],
+            boardId,
+          },
+          world.base.author,
+          201,
+          idempotencyKey,
+        ),
+      );
+      await runtime.consume(created.envelopes);
 
-    const page = await world.call('GET', '/v1/feedItems?stream=home&limit=20', { bearer: world.base.other.bearer });
-    requireStatus(page, 200);
-    if (!page.value) throw new Error('Home feed response omitted its body');
-    const card = page.value.feedItems.find(
-      (item: { source: string; key: { owner: string } }) => item.source === 'following' && item.key.owner === 'content',
-    );
-    expect(card?.summary.conversationActivity).toMatchObject({
-      state: 'current',
-      cohort: 'public',
-      count: { kind: 'exact', value: 0 },
-      lastActivityAt: created.value.thread.createdAt,
-    });
-  } finally {
-    await runtime?.stop();
-    await world.base.system.close();
-  }
-});
+      const page = await world.call('GET', '/v1/feedItems?stream=home&limit=20', { bearer: world.base.other.bearer });
+      requireStatus(page, 200);
+      if (!page.value) throw new Error('Home feed response omitted its body');
+      const card = page.value.feedItems.find(
+        (item: { source: string; key: { owner: string } }) =>
+          item.source === 'following' && item.key.owner === 'content',
+      );
+      expect(card?.summary.conversationActivity).toMatchObject({
+        state: 'current',
+        cohort: 'public',
+        count: { kind: 'exact', value: 0 },
+        lastActivityAt: created.value.thread.createdAt,
+      });
+    } finally {
+      await runtime?.stop();
+      await world.base.system.close();
+    }
+  },
+);

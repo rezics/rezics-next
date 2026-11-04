@@ -768,7 +768,10 @@ export function createFeedReads(deps: FeedDependencies): FeedReads {
           const finalActivity = await conversationActivity.confirm(initialActivity, deadline);
           const staleThreads = staleFeedActivityThreads(finalActivity);
           if (staleThreads.size) {
-            rewindActivityLanes(feedActivityLanesForThreads(activityReferences, staleThreads), new ProblemError('dependency_unavailable'));
+            rewindActivityLanes(
+              feedActivityLanesForThreads(activityReferences, staleThreads),
+              new ProblemError('dependency_unavailable'),
+            );
           } else projectFeedConversationActivity(feedItems, finalActivity);
         } catch (error) {
           rewindActivityLanes(

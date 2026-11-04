@@ -1,8 +1,5 @@
 import type { Pool } from 'pg';
-import {
-  createConversationActivityBatch,
-  type ConversationActivitySelection,
-} from './conversation-activity.ts';
+import { createConversationActivityBatch, type ConversationActivitySelection } from './conversation-activity.ts';
 
 export type SubjectThreadConversationActivity = Readonly<{
   selected: readonly ConversationActivitySelection[];
@@ -20,8 +17,6 @@ export async function selectSubjectThreadConversationActivity(
   return Object.freeze({ selected, confirm: (currentDeadline) => batch.confirm(selected, currentDeadline) });
 }
 
-export function staleSubjectThreadActivity(
-  selections: readonly ConversationActivitySelection[],
-): boolean {
+export function staleSubjectThreadActivity(selections: readonly ConversationActivitySelection[]): boolean {
   return selections.some((selection) => selection.status === 'withheld' && selection.reason === 'stale');
 }

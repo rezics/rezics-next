@@ -232,7 +232,10 @@ const discoveryCollectionSummary = t.Unsafe<PublicCollectionDiscoverySummary>(
 );
 const discoveryReviewSummary = t.Unsafe<
   PublicReviewDiscoverySummary &
-    Pick<FeedContentSummary, 'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext' | 'conversationActivity'>
+    Pick<
+      FeedContentSummary,
+      'reactionTarget' | 'reactions' | 'viewerReaction' | 'reviewContext' | 'conversationActivity'
+    >
 >(
   t.Object(
     {

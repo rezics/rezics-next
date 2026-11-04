@@ -40,8 +40,7 @@ export function feedActivityLanesForThreads(
   threadIds: ReadonlySet<string>,
 ): ReadonlySet<FeedActivityLane> {
   const lanes = new Set<FeedActivityLane>();
-  for (const threadId of threadIds)
-    for (const lane of references.sourcesByThread.get(threadId) ?? []) lanes.add(lane);
+  for (const threadId of threadIds) for (const lane of references.sourcesByThread.get(threadId) ?? []) lanes.add(lane);
   return lanes;
 }
 
