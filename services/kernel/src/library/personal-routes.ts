@@ -29,13 +29,7 @@ import {
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
 import { createLoanCommands, loanPeopleDisplay } from './loan-commands.ts';
 import { loanDueBoundary, type LoanDueBoundary } from './loan-date.ts';
-import {
-  LoanConflictError,
-  LoanInvalidError,
-  LoanNotFoundError,
-  loanState,
-  type Loan,
-} from './loan-model.ts';
+import { LoanConflictError, LoanInvalidError, LoanNotFoundError, loanState, type Loan } from './loan-model.ts';
 import { attachCopyListContext } from './copy-list-context.ts';
 import {
   createEntryCommands,
@@ -448,12 +442,7 @@ const loanResponse = t.Object(
     dueOn: nullable,
     returnedOn: nullable,
     revision: loanRevision,
-    state: t.Union([
-      t.Literal('overdue'),
-      t.Literal('due'),
-      t.Literal('undated'),
-      t.Literal('returned'),
-    ]),
+    state: t.Union([t.Literal('overdue'), t.Literal('due'), t.Literal('undated'), t.Literal('returned')]),
     viewer: t.Object({ state: t.Literal('owner') }, closed),
     actions: t.Object({ extend: loanActionResponse, return: loanActionResponse }, closed),
   },
@@ -538,7 +527,13 @@ const loanWriteFailures = {
   400: problemSchema('invalid_request', 'invalid_cursor'),
   409: problemSchema('conflict', 'stale_cursor'),
   422: problemSchema('idempotency_conflict', 'unsupported_library_profile'),
-  503: problemSchema('dependency_unavailable', 'overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  503: problemSchema(
+    'dependency_unavailable',
+    'overloaded',
+    'partition_unavailable',
+    'transaction_retry_exhausted',
+    'deadline_exceeded',
+  ),
 };
 const shelfFailures = {
   ...failures,
@@ -1596,7 +1591,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
           admission.run('normal', job, () => command(() => loans().listLoans(actor, requestInput)));
         const page = await readPage();
         const membership = (value: typeof page) =>
-          JSON.stringify(value.items.map((item) => [item.loan.id, item.loan.revision, item.copy.revision, item.copy.state]));
+          JSON.stringify(
+            value.items.map((item) => [item.loan.id, item.loan.revision, item.copy.revision, item.copy.state]),
+          );
         const revalidate = async () => {
           const current = await readPage();
           if (
@@ -1614,11 +1611,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const selectedCopies = page.items.flatMap((item) =>
           item.copy.subjectId === null ? [] : [{ id: item.loan.id, subjectId: item.copy.subjectId }],
         );
-        const contexts = await attachCopyListContext(
-          { ...config(), actor, deadline: job.deadline },
-          selectedCopies,
-          { languages, revalidate },
-        );
+        const contexts = await attachCopyListContext({ ...config(), actor, deadline: job.deadline }, selectedCopies, {
+          languages,
+          revalidate,
+        });
         if (!selectedCopies.length) await revalidate();
         const contextByLoan = new Map(contexts.map((context) => [context.id, context]));
         return {
@@ -1634,7 +1630,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
               revision: item.copy.revision,
               kind: item.copy.kind,
               status: item.copy.status,
-              context: context?.context ?? { state: item.copy.subjectId === null ? 'missing' as const : 'unavailable' as const },
+              context: context?.context ?? {
+                state: item.copy.subjectId === null ? ('missing' as const) : ('unavailable' as const),
+              },
             };
             return {
               loan: loanView(item.loan, page.boundary, people, item.actions.extend.allowed),
@@ -1649,7 +1647,10 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       {
         headers,
         body: loanWriteBody,
-        response: { 201: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed), ...loanWriteFailures },
+        response: {
+          201: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
+          ...loanWriteFailures,
+        },
         detail: detail('copy-loan.create', 'copy:create', true),
       },
       async ({ actor, body, headers, admission, job, request, set, session }) => {
@@ -1662,7 +1663,13 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
         const people =
           result.value.counterparty.kind === 'person'
-            ? await loanPeopleDisplay(config(), actor, [result.value.counterparty.personId], job.deadline, languageRanges(request.headers.get('accept-language')))
+            ? await loanPeopleDisplay(
+                config(),
+                actor,
+                [result.value.counterparty.personId],
+                job.deadline,
+                languageRanges(request.headers.get('accept-language')),
+              )
             : new Map<string, string | null>();
         return { loan: loanView(result.value, boundary, people), boundary };
       },
@@ -1673,19 +1680,30 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         params: t.Object({ loanId: id }),
         headers,
         body: loanExtendBody,
-        response: { 200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed), ...loanWriteFailures },
+        response: {
+          200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
+          ...loanWriteFailures,
+        },
         detail: detail('copy-loan.extend', 'copy:update', true),
       },
       async ({ actor, params, body, headers, admission, job, request, set, session }) => {
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run('normal', job, () => command(() => loans().extendLoan(actor, params.loanId, body, key)));
+        const result = await admission.run('normal', job, () =>
+          command(() => loans().extendLoan(actor, params.loanId, body, key)),
+        );
         session.record(result);
         set.headers['cache-control'] = 'private, no-store';
         const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
         const people =
           result.value.counterparty.kind === 'person'
-            ? await loanPeopleDisplay(config(), actor, [result.value.counterparty.personId], job.deadline, languageRanges(request.headers.get('accept-language')))
+            ? await loanPeopleDisplay(
+                config(),
+                actor,
+                [result.value.counterparty.personId],
+                job.deadline,
+                languageRanges(request.headers.get('accept-language')),
+              )
             : new Map<string, string | null>();
         return { loan: loanView(result.value, boundary, people), boundary };
       },
@@ -1696,19 +1714,30 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         params: t.Object({ loanId: id }),
         headers,
         body: loanReturnBody,
-        response: { 200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed), ...loanWriteFailures },
+        response: {
+          200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed),
+          ...loanWriteFailures,
+        },
         detail: detail('copy-loan.return', 'copy:update', true),
       },
       async ({ actor, params, body, headers, admission, job, request, set, session }) => {
         account(actor);
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
-        const result = await admission.run('normal', job, () => command(() => loans().returnLoan(actor, params.loanId, body, key)));
+        const result = await admission.run('normal', job, () =>
+          command(() => loans().returnLoan(actor, params.loanId, body, key)),
+        );
         session.record(result);
         set.headers['cache-control'] = 'private, no-store';
         const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
         const people =
           result.value.counterparty.kind === 'person'
-            ? await loanPeopleDisplay(config(), actor, [result.value.counterparty.personId], job.deadline, languageRanges(request.headers.get('accept-language')))
+            ? await loanPeopleDisplay(
+                config(),
+                actor,
+                [result.value.counterparty.personId],
+                job.deadline,
+                languageRanges(request.headers.get('accept-language')),
+              )
             : new Map<string, string | null>();
         return { loan: loanView(result.value, boundary, people), boundary };
       },

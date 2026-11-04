@@ -40,7 +40,9 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   const created = await native.send('owner', 'POST', '/v1/copy-loans', input, createKey);
   expect(created.status).toBe(201);
   const original = await created.json();
-  expect(original).toMatchObject({ loan: { direction: 'lent', counterparty: { kind: 'name', name: '  Kai  ' }, state: 'due' } });
+  expect(original).toMatchObject({
+    loan: { direction: 'lent', counterparty: { kind: 'name', name: '  Kai  ' }, state: 'due' },
+  });
   const replay = await native.send('owner', 'POST', '/v1/copy-loans', input, createKey);
   expect(replay.status).toBe(201);
   expect(await replay.json()).toEqual(original);
@@ -60,28 +62,20 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   expect(await overdue.json()).toMatchObject({ items: [{ loan: { state: 'overdue' } }] });
 
   const loan = (original as { loan: { id: string } }).loan;
-  const extended = await native.send(
-    'owner',
-    'PATCH',
-    `/v1/copy-loans/${loan.id}`,
-    { revision: 1, dueOn: '2026-10-28' },
-  );
+  const extended = await native.send('owner', 'PATCH', `/v1/copy-loans/${loan.id}`, {
+    revision: 1,
+    dueOn: '2026-10-28',
+  });
   expect(extended.status).toBe(200);
   expect(await extended.json()).toMatchObject({ loan: { revision: 2, dueOn: '2026-10-28', state: 'due' } });
-  const stale = await native.send(
-    'owner',
-    'PATCH',
-    `/v1/copy-loans/${loan.id}`,
-    { revision: 1, dueOn: '2026-10-29' },
-  );
+  const stale = await native.send('owner', 'PATCH', `/v1/copy-loans/${loan.id}`, { revision: 1, dueOn: '2026-10-29' });
   expect(stale.status).toBe(409);
 
-  const disposal = await native.send(
-    'owner',
-    'PATCH',
-    `/v1/copies/${copy.id}`,
-    { revision: 1, status: 'disposed', disposedOn: '2026-10-27' },
-  );
+  const disposal = await native.send('owner', 'PATCH', `/v1/copies/${copy.id}`, {
+    revision: 1,
+    status: 'disposed',
+    disposedOn: '2026-10-27',
+  });
   expect(disposal.status).toBe(409);
   const deletion = await native.send('owner', 'DELETE', `/v1/copies/${copy.id}?revision=1`);
   expect(deletion.status).toBe(409);
@@ -105,12 +99,10 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
     returnKey,
   );
   expect(await returnReplay.json()).toEqual(returnedBody);
-  const repeatedReturn = await native.send(
-    'owner',
-    'POST',
-    `/v1/copy-loans/${loan.id}/return`,
-    { revision: 3, returnedOn: '2026-10-27' },
-  );
+  const repeatedReturn = await native.send('owner', 'POST', `/v1/copy-loans/${loan.id}/return`, {
+    revision: 3,
+    returnedOn: '2026-10-27',
+  });
   expect(repeatedReturn.status).toBe(409);
 
   const cleared = await native.send('owner', 'DELETE', `/v1/copies/${copy.id}?revision=1`);
@@ -118,6 +110,8 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   const history = await native.send('owner', 'GET', '/v1/copy-loans?filter=history&limit=20');
   expect(history.status).toBe(200);
   expect(await history.json()).toMatchObject({
-    items: [{ loan: { id: loan.id, counterparty: { name: '  Kai  ' }, state: 'returned' }, copy: { state: 'deleted' } }],
+    items: [
+      { loan: { id: loan.id, counterparty: { name: '  Kai  ' }, state: 'returned' }, copy: { state: 'deleted' } },
+    ],
   });
 });

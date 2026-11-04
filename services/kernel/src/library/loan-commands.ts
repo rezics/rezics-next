@@ -13,7 +13,12 @@ import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { admitEntryAttempt } from './entry-lifecycle.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, sameAccountRoute, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import {
+  createLibraryCommandRunner,
+  LibraryNotFoundError,
+  sameAccountRoute,
+  WORK_STEP_DEADLINE_MS,
+} from './command-support.ts';
 import {
   assertLoanCopyOperand,
   createLoanRecord,
@@ -172,10 +177,11 @@ async function readCopy(client: Pick<PoolClient, 'query'>, route: number, accoun
 }
 
 async function lockCopy(tx: CommandTransaction, route: number, accountId: string, copyId: string) {
-  await tx.query(
-    'SELECT copy_id FROM library.copy WHERE route=$1 AND account_id=$2 AND copy_id=$3 FOR UPDATE',
-    [route, accountId, copyId],
-  );
+  await tx.query('SELECT copy_id FROM library.copy WHERE route=$1 AND account_id=$2 AND copy_id=$3 FOR UPDATE', [
+    route,
+    accountId,
+    copyId,
+  ]);
   return readCopy(tx, route, accountId, copyId);
 }
 
@@ -214,7 +220,14 @@ function rowItem(row: LoanRow, boundary: LoanDueBoundary): LoanPageItem {
     viewer: Object.freeze({ state: 'owner' as const }),
     actions: Object.freeze({ extend: action, return: action }),
     copy: Object.freeze({
-      state: row.copySubjectId === null ? 'missing' : row.copyDeletionId !== null ? 'deleted' : available ? 'available' : 'missing',
+      state:
+        row.copySubjectId === null
+          ? 'missing'
+          : row.copyDeletionId !== null
+            ? 'deleted'
+            : available
+              ? 'available'
+              : 'missing',
       id: row.copyId,
       revision: row.copyRevision === null ? null : Number(row.copyRevision),
       kind: row.copyKind,
@@ -238,7 +251,12 @@ function cursorBinding(accountId: string, filter: LoanFilter): CursorBinding {
 
 function cursorAfter(tokens: KeyRing, binding: CursorBinding, token: string, generation: number, filter: LoanFilter) {
   const cursor = decodeCursor(tokens, binding, token);
-  if (!cursor.ok || cursor.after.length !== 2 || typeof cursor.after[0] !== 'string' || typeof cursor.after[1] !== 'string')
+  if (
+    !cursor.ok ||
+    cursor.after.length !== 2 ||
+    typeof cursor.after[0] !== 'string' ||
+    typeof cursor.after[1] !== 'string'
+  )
     throw new ProblemError('invalid_cursor');
   if (cursor.epoch !== generation) throw new ProblemError('stale_cursor');
   const day = cursor.after[0];
@@ -288,10 +306,11 @@ async function lockLoan(tx: CommandTransaction, route: number, accountId: string
   if (!copyId) throw new LoanNotFoundError();
   // Use the same lock order as copy disposal and loan creation: exact copy, then loan.
   await lockCopy(tx, route, accountId, copyId);
-  await tx.query(
-    'SELECT loan_id FROM library.copy_loan WHERE route=$1 AND account_id=$2 AND loan_id=$3 FOR UPDATE',
-    [route, accountId, loanId],
-  );
+  await tx.query('SELECT loan_id FROM library.copy_loan WHERE route=$1 AND account_id=$2 AND loan_id=$3 FOR UPDATE', [
+    route,
+    accountId,
+    loanId,
+  ]);
   const row = await readLoan(tx, route, accountId, loanId);
   if (!row) throw new LoanNotFoundError();
   if (
@@ -334,22 +353,31 @@ async function currentCopyForPreparation(pool: Pool, owner: AccountActor, route:
   return readOnly(pool, owner, (client) => readCopy(client, route, owner.accountId, copyId));
 }
 
-async function personReferenceAdmitted(deps: Dependencies, actor: Actor, personId: string, deadline: number): Promise<boolean> {
+async function personReferenceAdmitted(
+  deps: Dependencies,
+  actor: Actor,
+  personId: string,
+  deadline: number,
+): Promise<boolean> {
   const accountRoute = actor.kind === 'account' ? routeOf(actor.accountId) : null;
   const personRoute = routeOf(personId);
-  if (accountRoute === null || personRoute === null || partitionOf(personRoute) !== partitionOf(accountRoute)) return false;
+  if (accountRoute === null || personRoute === null || partitionOf(personRoute) !== partitionOf(accountRoute))
+    return false;
   const before = await readIdentityMappings(deps.pool, [personId]);
   const mapping = before[0];
   if (mapping?.state !== 'mapped') return false;
-  const summary = (await readSubjectSummaries(
-    { pool: deps.pool, routeKey: deps.routeKey, access: deps.access, actor, deadline },
-    [mapping.terminal],
-  )).get(mapping.terminal);
+  const summary = (
+    await readSubjectSummaries({ pool: deps.pool, routeKey: deps.routeKey, access: deps.access, actor, deadline }, [
+      mapping.terminal,
+    ])
+  ).get(mapping.terminal);
   const after = await readIdentityMappings(deps.pool, [personId]);
   if (stableJson(before) !== stableJson(after)) return false;
   return Boolean(
     summary &&
-      (summary.type === 'schema:Person' || summary.types.includes('schema:Person') || summary.types.includes('foaf:Person')),
+    (summary.type === 'schema:Person' ||
+      summary.types.includes('schema:Person') ||
+      summary.types.includes('foaf:Person')),
   );
 }
 
@@ -365,7 +393,8 @@ export async function loanPeopleDisplay(
   languages: readonly string[] = [],
 ): Promise<Map<string, string | null>> {
   const selected = [...new Set(personIds)];
-  if (selected.length > MAX_PRESENTATION_ROWS) throw new RangeError('Loan person presentation exceeds the bounded page');
+  if (selected.length > MAX_PRESENTATION_ROWS)
+    throw new RangeError('Loan person presentation exceeds the bounded page');
   if (!selected.length) return new Map();
   const concealed = () => new Map(selected.map((id) => [id, null]));
   try {
@@ -378,23 +407,27 @@ export async function loanPeopleDisplay(
       { languages },
     );
     const after = await readIdentityMappings(deps.pool, selected);
-    const stable = new Map(selected.map((id, index) => [id, stableJson(mappings.get(id)) === stableJson(after[index])]));
+    const stable = new Map(
+      selected.map((id, index) => [id, stableJson(mappings.get(id)) === stableJson(after[index])]),
+    );
     return new Map(
       selected.map((id) => {
         const mapping = mappings.get(id);
         const summary = mapping?.state === 'mapped' ? summaries.get(mapping.terminal) : null;
         const isPerson =
           summary &&
-          (summary.type === 'schema:Person' || summary.types.includes('schema:Person') || summary.types.includes('foaf:Person'));
-        return [id, stable.get(id) && isPerson ? summary.label?.value ?? null : null];
+          (summary.type === 'schema:Person' ||
+            summary.types.includes('schema:Person') ||
+            summary.types.includes('foaf:Person'));
+        return [id, stable.get(id) && isPerson ? (summary.label?.value ?? null) : null];
       }),
     );
   } catch (error) {
     const unavailable = classifyUnavailability(error);
     if (
-      error instanceof ProblemError && SOFT_SEMANTIC_FAILURES.has(error.code) ||
-      error instanceof AccessUnavailableError && error.reason !== 'deadline' ||
-      unavailable !== undefined && unavailable !== 'deadline'
+      (error instanceof ProblemError && SOFT_SEMANTIC_FAILURES.has(error.code)) ||
+      (error instanceof AccessUnavailableError && error.reason !== 'deadline') ||
+      (unavailable !== undefined && unavailable !== 'deadline')
     )
       return concealed();
     throw error;
@@ -444,12 +477,7 @@ export function createLoanCommands(config: Dependencies) {
         if (!prepared.copy || !prepared.source) throw new LibraryNotFoundError();
         const copy = await lockCopy(tx, route, owner.accountId, parsed.copyId);
         assertLoanCopyOperand(owner.accountId, parsed, copy);
-        if (
-          !copy ||
-          copy.subjectId !== prepared.copy.subjectId ||
-          copy.deletionId !== null ||
-          copy.status !== 'owned'
-        )
+        if (!copy || copy.subjectId !== prepared.copy.subjectId || copy.deletionId !== null || copy.status !== 'owned')
           throw new LoanConflictError('copy_unavailable');
         if (
           prepared.source.subjectId !== copy.subjectId ||
@@ -504,7 +532,8 @@ export function createLoanCommands(config: Dependencies) {
         kind: 'library.copy-loan.extend',
         requestKey,
         input: { loanId, ...parsed },
-        prepare: (attempt) => admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
+        prepare: (attempt) =>
+          admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
       },
       async (tx, command) => {
         const current = await lockLoan(tx, route, owner.accountId, loanId);
@@ -531,7 +560,8 @@ export function createLoanCommands(config: Dependencies) {
         kind: 'library.copy-loan.return',
         requestKey,
         input: { loanId, ...parsed },
-        prepare: (attempt) => admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
+        prepare: (attempt) =>
+          admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
       },
       async (tx, command) => {
         const current = await lockLoan(tx, route, owner.accountId, loanId);
@@ -546,7 +576,10 @@ export function createLoanCommands(config: Dependencies) {
     );
   }
 
-  async function listLoans(actor: Actor, input: { filter: LoanFilter; cursor?: string; limit: number }): Promise<LoanPage> {
+  async function listLoans(
+    actor: Actor,
+    input: { filter: LoanFilter; cursor?: string; limit: number },
+  ): Promise<LoanPage> {
     const owner = requireActor(actor, 'copy:list');
     const route = routeOf(owner.accountId)!;
     const filter = input.filter;
@@ -585,19 +618,34 @@ export function createLoanCommands(config: Dependencies) {
               WHERE l.route=$1 AND l.account_id=$2 AND l.returned_on IS NOT NULL
                 AND ($3::date IS NULL OR (l.returned_on,l.loan_id)<($3::date,$4::uuid))
               ORDER BY l.returned_on DESC,l.loan_id DESC LIMIT $5`;
-      const rows = await client.query<LoanRow>(sql, [route, owner.accountId, after?.day ?? null, after?.id ?? null, size + 1]);
+      const rows = await client.query<LoanRow>(sql, [
+        route,
+        owner.accountId,
+        after?.day ?? null,
+        after?.id ?? null,
+        size + 1,
+      ]);
       const visible = rows.rows.slice(0, size);
       const last = visible.at(-1);
-      const nextCursor = rows.rows.length > size && last
-        ? encodeCursor(tokens, binding, {
-            epoch: generation,
-            after: [filter === 'open' ? (dateText(last.dueOn) ?? UNDATED_SORT_DAY) : dateText(last.returnedOn)!, last.loanId],
-          })
-        : null;
-      return Object.freeze({ filter, boundary, generation, items: Object.freeze(visible.map((row) => rowItem(row, boundary))), nextCursor });
+      const nextCursor =
+        rows.rows.length > size && last
+          ? encodeCursor(tokens, binding, {
+              epoch: generation,
+              after: [
+                filter === 'open' ? (dateText(last.dueOn) ?? UNDATED_SORT_DAY) : dateText(last.returnedOn)!,
+                last.loanId,
+              ],
+            })
+          : null;
+      return Object.freeze({
+        filter,
+        boundary,
+        generation,
+        items: Object.freeze(visible.map((row) => rowItem(row, boundary))),
+        nextCursor,
+      });
     });
   }
 
   return { createLoan, extendLoan, returnLoan, listLoans };
 }
-
