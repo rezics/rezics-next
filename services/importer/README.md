@@ -1426,7 +1426,7 @@ bounds belong to the linked owners; conversion itself has no purge work.
 ### Import authored Bangumi television original-run and episode count
 
 - Touches: one admitted type-2 TVAnime infobox on the ordinary Bangumi JSON-lines
-  registration, the shared `bangumi@8` converter, and ordinary public
+  registration, the shared `bangumi@9` converter, and ordinary public
   batch/fence/candidate paths on that TVSeries. Selected-family seed reuses the
   same registration; this adds no publisher.
 - Bound: at most 64 infobox keys and three run facts inside the existing 64 KiB
@@ -2209,8 +2209,7 @@ for these source Concepts.
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@8`.
-`cross-media-entities@8` revision while the ordinary caller uses `bangumi@9`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2231,7 +2230,7 @@ revision exists, the normalized digest and the acknowledged native UUID.
 ### Bangumi television original run
 
 Ordinary Bangumi JSON-lines registration converts pinned TVAnime infobox
-`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@8`, advancing the
+`放送开始`, `播放结束` and `话数` on type 2 through `bangumi@9`, advancing the
 `bangumi@7` name extraction. Selected-family seed uses that same converter; this
 journey adds no publisher. Native read is the acknowledged TVSeries. Weekday
 schedule text, custom keys and OVA/Movie templates remain diagnostics. An end
@@ -2486,7 +2485,7 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@6`.
+`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
 additional seed publisher or identity lookup is involved. The importer keeps the
@@ -2530,3 +2529,31 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   `services/kernel/test/imports/bangumi-character-names.test.ts` exercises the
   default selected payload through same-state importer refresh, common
   publication and an anonymous public read.
+### Bangumi Book-template subject names
+
+Ordinary Bangumi registration and the selected-family importer share one pure
+extractor for Book title fields. It requires the selected native profile
+`schema:Book` and the exact pinned `{{Infobox animanga/Book` header. The
+source-defined `Novel`, `Manga`, `PhotoBook` and `BookSeries` templates do not
+inherit this mapping. Both Book `中文名` and `别名` become additional
+`schema:name` candidates; explicit Chinese names use `zh`, and unqualified
+aliases use `und`. A malformed field is withheld as a whole while independent
+source names and summary proposals remain available.
+
+The ordinary importer remains proposal-only. The default selected-family path
+uses its existing `cross-media-entities@9` registration, record bindings,
+finite showcase manifest and publication journal. Local review accepts and
+adopts current candidates through separate native commands; corrected source
+names create new proposals on the acknowledged Book UUID, and ordinary refresh
+does not rewrite adopted names. Record citations, the unversioned marker,
+source digest and field-pointer command identity remain attached.
+
+- Touches: one selected Book record, at most 24 distinct name values and 16
+  shared omission diagnostics.
+- Bound: the 65,536-byte projection/infobox caps, 64 visited field occurrences,
+  existing source journal and native batch limits; no catalogue scan is added.
+- Growth check: `services/importer/tests/bangumi-book-names.test.ts` covers
+  ordinary/default conversion, atomic malformed-field handling, same-UUID
+  refresh and same-title source identity separation. The native publication and
+  public-read scenario is `services/kernel/test/imports/bangumi-book-names.test.ts`;
+  its execution remains controller-owned.

@@ -9,7 +9,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
-import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
+import { bangumiDiagnosticLimit, extractBangumiSubjectNames } from './bangumi-subject-names.ts';
 import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import { bangumiGamePlayerCount } from './bangumi-game-player-count.ts';
 import {
@@ -180,7 +180,16 @@ function retainedFieldDiagnostics(
               ? 'unsupported_infobox_mapping'
               : `catalogue_has_no_${field}_property`,
     }));
-  return [...retained, ...nameDiagnostics];
+  return [...nameDiagnostics, ...retained];
+}
+
+function boundedDiagnostics(diagnostics: readonly { pointer: string; code: string }[]) {
+  return diagnostics.length <= bangumiDiagnosticLimit
+    ? diagnostics
+    : [
+        ...diagnostics.slice(0, bangumiDiagnosticLimit - 1),
+        { pointer: '/record', code: 'additional_conversion_omissions' },
+      ];
 }
 
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
@@ -272,11 +281,16 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     value: { type: 'value', content },
     references: references(),
   });
-  const extractedNames = extractBangumiSubjectNames(record);
-  const facts = [
-    fact('wdt:P5732', input.external_id),
-    ...extractedNames.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
-  ];
+  const bookTitleProfile = record.type === 1 && profile.type === 'schema:Book';
+  const extractedNames = extractBangumiSubjectNames(record, profile.type);
+  const nameFields = new Map<BatchStatement, string>();
+  const facts = [fact('wdt:P5732', input.external_id)];
+  for (const name of extractedNames.names) {
+    const statement = fact(name.property, { language: name.language, text: name.text });
+    if (bookTitleProfile && name.pointer.startsWith('/infobox/'))
+      nameFields.set(statement, `name:${name.pointer}:${name.property}:${name.language}:${name.text}`);
+    facts.push(statement);
+  }
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
     const dictionary = context.resolvedReferences;
@@ -334,14 +348,15 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     for (const [index, statement] of facts.entries()) {
       const property = statement.property.id;
       const content = statement.value.type === 'value' ? statement.value.content : undefined;
-      const field =
+      const field = nameFields.get(statement) ?? (
         (property === 'schema:name' || property === 'schema:alternateName') &&
         content &&
         typeof content === 'object' &&
         'language' in content &&
         'text' in content
           ? `name:${property}:${String(content.language)}:${String(content.text)}`
-          : `fact:${index}`;
+          : `fact:${index}`
+      );
       proposals.push(propose(statement, 'facts', field));
     }
     if (record.type === 3 || record.type === 6) {
@@ -413,13 +428,15 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
     diagnostics: [
-      ...retainedFieldDiagnostics(
-        record,
-        extractedNames.diagnostics,
-        television.handledInfobox || playerCount.handledInfobox,
-      ),
-      ...television.diagnostics,
-      ...playerCount.diagnostics,
+      ...boundedDiagnostics([
+        ...retainedFieldDiagnostics(
+          record,
+          extractedNames.diagnostics,
+          television.handledInfobox || playerCount.handledInfobox || bookTitleProfile,
+        ),
+        ...television.diagnostics,
+        ...playerCount.diagnostics,
+      ]),
     ],
     coverAssets,
     mediaImportIntents,

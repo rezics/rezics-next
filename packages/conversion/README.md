@@ -256,7 +256,7 @@ refreshes under this revision. Unknown or invalid types still fail with
 and retry keys. Platform and community tools use this same pure module;
 importer skipped-count accounting is separate.
 
-Bangumi revision `bangumi@8` converts the pinned TVAnime infobox fields
+Bangumi revision `bangumi@9` converts the pinned TVAnime infobox fields
 `放送开始`, `播放结束` and `话数` on type 2 through the same bound proposal
 path, preserving `bangumi@7` TVAnime name extraction. Start and end keep
 Gregorian year/month/day precision, including explicit `年月日` spellings;
@@ -917,9 +917,9 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 
 ## Bangumi TVAnime subject names
 
-`bangumi@7` consumes only `中文名` and `别名` from the exact pinned
-`{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
-Bangumi converter and selected-family registrations share this pure extraction.
+`bangumi@9` consumes only `中文名` and `别名` from the exact pinned
+`{{Infobox animanga/TVAnime` template on Bangumi type 2 `schema:TVSeries` records.
+The ordinary Bangumi converter and selected-family registrations share this pure extraction.
 The existing top-level `name` and `name_cn` bootstrap labels keep their current
 meanings; infobox names become cited native name facts after subject binding and
 do not set `inLanguage`. The complete infobox remains in the existing bounded
@@ -930,10 +930,10 @@ because the pinned template defines no alias-language syntax. Equal property,
 language and exact-text tuples deduplicate; other spellings remain separate.
 Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
 omissions, with no source prose copied into diagnostics. Parsing scans at most 64
-field occurrences, retains at most 24 distinct name values, and emits at most 16
-omission diagnostics. Each field occurrence is staged until its complete scalar
-or bullet-list form is known; malformed or mixed occurrences contribute no names.
-omission diagnostics.
+field occurrences, retains at most 24 distinct name values, and shares a 16-item
+diagnostic cap with retained source-field and TVAnime run omissions. Each field
+occurrence is staged until its complete scalar or bullet-list form is known;
+malformed or mixed occurrences contribute no names.
 
 ### Bangumi character physical profile
 
@@ -968,3 +968,28 @@ rights follow their current paths.
   deferred to integration.
 
 Decision: keep only explicitly unit-bearing released quantities, preserve source units and literal zero, and withhold Bangumi blood type until a current native Concept binding exists.
+## Bangumi Book-template subject names
+
+`bangumi@9` extracts Book titles only when the selected converter profile is
+`schema:Book` and the first nonempty infobox line is the exact pinned
+[`{{Infobox animanga/Book`](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L67-L85)
+head. **Decision:** separately inventoried `Novel`, `Manga`, `PhotoBook` and
+`BookSeries` templates stay excluded from this title mapping. The reviewed Book
+mapping sends both `中文名` and `别名` to additional `schema:name` facts; TVAnime
+aliases remain `schema:alternateName`.
+
+The scalar `中文名` supplies `zh`. A scalar alias or flat `*` list supplies `und`;
+the converter infers no language or preferred label from spelling or list order.
+It stages each complete field before emitting it, so mixed scalar/list values,
+nested markup and malformed list entries withhold that field while independently
+valid top-level names and other fields remain available. Book infobox field
+pointers participate in command identity, while assertions keep the Bangumi
+record URL citation and bounded source digest.
+
+Touches: one selected Book record, at most 24 distinct name values and 16 shared
+omission diagnostics. Bound: the existing 65,536-byte projection/infobox limits,
+64 field occurrences, and existing command and journal caps. Growth check:
+`services/importer/tests/bangumi-book-names.test.ts` exercises ordinary and
+selected-family import, malformed-to-corrected refresh, citations and stable
+identity; the connected native acceptance is
+`services/kernel/test/imports/bangumi-book-names.test.ts`.
