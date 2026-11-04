@@ -21,6 +21,7 @@ function visible() {
   const scope = { source: 'wikidata', context: fixture.publicRead.subject.context, status: 'unreviewed' };
   const rows = Array.from({ length: 5 }, (_, index) => ({
     subject: fixture.id,
+    operations: ['subject.accept_candidate', 'subject.reject_candidate'],
     label: 'The Little Prince',
     propertyLabel: 'Publication date',
     href: '/en/subjects/example',

@@ -88,7 +88,7 @@ export function providerRowIsSelectable(row: ProviderDecisionRow, scope: Provide
 
 export function providerRowAllows(row: ProviderDecisionRow, operation: ProviderDecision['operation']): boolean {
   return (
-    (row.operations === undefined || row.operations.includes(`subject.${operation}_candidate`)) &&
+    row.operations?.includes(`subject.${operation}_candidate`) === true &&
     (operation === 'accept' ? row.candidate.decision !== 'accepted' : row.candidate.decision !== 'rejected')
   );
 }

@@ -46,6 +46,7 @@ export function providerReviewFixture(scenario: ProviderReviewScenario = 'ready'
         href: subjectHref({ id: fixture.id, label }, locale).href,
         propertyLabel: pickText(definitions.release.properties['schema:datePublished'].labels, locale).text,
         related: fixture.publicRead.related,
+        operations: ['subject.accept_candidate', 'subject.reject_candidate'],
         reading: { ok: true as const, current: fixture.publicRead },
       };
     }),
