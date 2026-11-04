@@ -94,51 +94,82 @@ function sameBasis(
 }
 
 export function CollectionMetadataHistory({ collectionId, isCurrent, source = defaultSource }: Props) {
+  // Keep the captured admission callback: replacing it with a fresh callback could revive private results.
+  const [visit, setVisit] = useState(() => ({ collectionId, source, isCurrent, generation: 0 }));
+  if (!isCurrent()) return null;
+  if (visit.collectionId !== collectionId || visit.source !== source || !visit.isCurrent()) {
+    setVisit({ collectionId, source, isCurrent, generation: visit.generation + 1 });
+    return null;
+  }
+  return (
+    <MetadataHistoryVisit
+      key={visit.generation}
+      collectionId={collectionId}
+      source={source}
+      isCurrent={visit.isCurrent}
+    />
+  );
+}
+
+function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource }: Props) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [page, setPage] = useState<ReadState<CollectionMetadataHistoryPage>>({ state: 'loading' });
   const [selected, setSelected] = useState<number[]>([]);
   const [comparison, setComparison] = useState<ReadState<CollectionMetadataHistoryChange[]>>({ state: 'loading' });
-  const current = useRef(isCurrent);
+  const generation = useRef(0);
   const basis = useRef<CollectionMetadataHistoryPage['basis'] | null>(null);
-  current.current = isCurrent;
-  basis.current = page.state === 'available' ? page.value.basis : null;
 
-  useEffect(() => {
-    let live = true;
+  function retireResults() {
+    generation.current++;
+    basis.current = null;
     setPage({ state: 'loading' });
     setSelected([]);
     setComparison({ state: 'loading' });
+  }
+
+  function readPage(nextCursor: string | null) {
+    if (!isCurrent()) return;
+    retireResults();
+    setCursor(nextCursor);
+    setAttempt((value) => value + 1);
+  }
+
+  useEffect(() => {
+    retireResults();
+    const operation = generation.current;
     void source
       .readPage({ collectionId, cursor, limit: 25 })
       .then((result) => {
-        if (!live || !current.current()) return;
-        setPage(
-          result.state === 'available' && currentPage(result.value, collectionId)
-            ? { state: 'available', value: result.value }
-            : { state: 'unavailable' },
-        );
+        if (operation !== generation.current || !isCurrent()) return;
+        if (result.state === 'available' && currentPage(result.value, collectionId)) {
+          basis.current = result.value.basis;
+          setPage({ state: 'available', value: result.value });
+        } else setPage({ state: 'unavailable' });
       })
       .catch(() => {
-        if (live && current.current()) setPage({ state: 'unavailable' });
+        if (operation === generation.current && isCurrent()) setPage({ state: 'unavailable' });
       });
     return () => {
-      live = false;
+      generation.current++;
+      basis.current = null;
     };
   }, [attempt, collectionId, cursor, source]);
 
   async function compareSelected() {
     const reviewedBasis = basis.current;
-    if (!current.current() || selected.length !== 2 || reviewedBasis === null) return;
+    if (!isCurrent() || selected.length !== 2 || reviewedBasis === null) return;
+    const operation = ++generation.current;
+    const revisions = [...selected];
     setComparison({ state: 'loading' });
     try {
-      const results = await Promise.all(selected.map((revision) => source.readChange({ collectionId, revision })));
-      if (!current.current()) return;
+      const results = await Promise.all(revisions.map((revision) => source.readChange({ collectionId, revision })));
+      if (operation !== generation.current || !isCurrent()) return;
       if (
         results.some(
           (result, index) =>
             result.state !== 'available' ||
-            !currentChange(result.value, collectionId, selected[index]!) ||
+            !currentChange(result.value, collectionId, revisions[index]!) ||
             !sameBasis(result.value.basis, reviewedBasis),
         ) ||
         !basis.current ||
@@ -152,7 +183,7 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
         value: results.flatMap((result) => (result.state === 'available' ? [result.value] : [])),
       });
     } catch {
-      if (current.current()) setComparison({ state: 'unavailable' });
+      if (operation === generation.current && isCurrent()) setComparison({ state: 'unavailable' });
     }
   }
 
@@ -168,9 +199,14 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
         {page.state === 'unavailable' ? (
           <div role="alert" className="space-y-2">
             <p>{m.library_collection_metadata_history_unavailable()}</p>
-            <Button type="button" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+            <Button type="button" variant="outline" onClick={() => readPage(cursor)}>
               {m.library_collection_move_retry()}
             </Button>
+            {cursor !== null ? (
+              <Button type="button" variant="outline" onClick={() => readPage(null)}>
+                {m.library_collection_metadata_history_first_page()}
+              </Button>
+            ) : null}
           </div>
         ) : null}
         {page.state === 'available' ? (
@@ -194,7 +230,8 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
                           disabled={!checked && selected.length >= 2}
                           aria-label={m.library_collection_metadata_history_select({ revision: item.revision })}
                           onChange={(event) => {
-                            if (!current.current()) return;
+                            if (!isCurrent()) return;
+                            generation.current++;
                             setSelected((previous) =>
                               event.target.checked
                                 ? [...previous, item.revision].slice(-2)
@@ -225,13 +262,13 @@ export function CollectionMetadataHistory({ collectionId, isCurrent, source = de
               >
                 {m.library_collection_metadata_history_compare()}
               </Button>
-              {cursor ? (
-                <Button type="button" variant="outline" onClick={() => setCursor(null)}>
+              {cursor !== null ? (
+                <Button type="button" variant="outline" onClick={() => readPage(null)}>
                   {m.library_collection_metadata_history_first_page()}
                 </Button>
               ) : null}
               {page.value.next ? (
-                <Button type="button" variant="outline" onClick={() => setCursor(page.value.next)}>
+                <Button type="button" variant="outline" onClick={() => readPage(page.value.next)}>
                   {m.library_collection_metadata_history_next_page()}
                 </Button>
               ) : null}
