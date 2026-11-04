@@ -41,15 +41,16 @@ feed heading. Board, sort, viewer or reading replacement retires the old cohort 
 
 Slow mode and watch keep their existing owners. Settings watch and Inbox stay Performance-owned.
 
-Decision: `BoardPinAdviceWire` is the minimal public selected-advice consumer seam until retained complete-input publication installs the method; an absent method stays unavailable.
+Decision: The production selected-advice receiver stays unavailable until retained complete-input publication exposes the installed root-derived KernelClient callable; a method-shaped runtime bridge does not establish that client contract.
 
-`BoardPinProducer.inspectSelected` binds the optional published `pin-advice.post` through a private no-store
-server read. It copies and freezes at most 25 exact displayed sources before session preparation, and passes only
-`selected` and optional `pinRevision` to Content. The receiver binds the native account viewer, Board, requested
-generation and exact selected IDs. Denied, stale, absent and malformed results provide no controls; full-capacity
-advice keeps only the explicit supplied actions. Aborting an inspection withholds late completion. This seam imports
-no private producer types and leaves the retained Board opening composition intact. Its tests establish wire
-validation, not native execution or rendered management. Connecting the mounted manager and source lifetime,
-keyboard focus, stories and native management/growth acceptance remains continuation work. The publication owner
-continues the retained lineage through `416-retained-content-publication.md`; this consumer does not generate or
-install declarations and makes no declaration-head claim.
+`BoardPinProducer.inspectSelected` remains unavailable until that callable is published. The bounded input and
+response validators remain ready for the existing private no-store native advice route. The mounted manager now
+prepares and displays controls only from its exact selected response, and retains the original command intent
+through explicit retry and refresh while source, cohort and browser-session retirement close old controls. The Board
+page still lacks the observed `pinRevision`, so production selection remains unavailable until the publication
+adds it. Tests establish bounded selection, response validation and mounted consumer behavior, not native
+management/growth. The publication owner continues the retained lineage through
+`416-retained-content-publication.md`; this consumer does not generate or install declarations and makes no
+declaration-head claim.
+
+Decision: Advice uses each displayed available opening post's native `revisionId` as `sourceRevisionId`; pin actions stay unavailable until the Board page supplies its observed `pinRevision`.

@@ -17,11 +17,11 @@ import {
   useBoardPinPage,
   useBoardPinVisit,
 } from './board-pins/controller';
-import { pinnedIdentitySet } from './board-pins/contract';
 import { productionBoardPinProducer } from './board-pins/producer';
-import type { BoardPinProducer, BoardPinReadResult, BoardPinSender, BoardPinThread } from './board-pins/contract';
+import type { BoardPinProducer, BoardPinSender, BoardPinThread } from './board-pins/contract';
 import {
   authorsForCurrentReading,
+  boardPinAdviceSelection,
   boardPinThreadIds,
   boardThreadPreview,
   nativePinnedSection,
@@ -238,8 +238,6 @@ type BoardFeedProps = {
   actions?: ReactNode;
   cursor?: string;
   onOpeningRead?: (page: ReceivedBoardOpeningPage) => void;
-  /** Native-format seam inputs for a future Content binding and its focused stories. */
-  initialPinRead?: BoardPinReadResult;
   pinProducer?: BoardPinProducer;
   pinSender?: BoardPinSender;
 };
@@ -251,6 +249,7 @@ function applyBoardPinReading(
     threads: readonly unknown[];
     next: string | null;
     rankRefreshedAt: string | null;
+    pinRevision?: string;
   },
 ): BoardThreadPage {
   return {
@@ -259,6 +258,7 @@ function applyBoardPinReading(
     threads: result.threads as BoardThreadPage['threads'],
     next: result.next,
     rankRefreshedAt: result.rankRefreshedAt,
+    pinRevision: result.pinRevision,
   };
 }
 
@@ -269,7 +269,6 @@ export function BoardFeed(props: BoardFeedProps) {
     boardId: props.boardId,
     sort: props.sort,
     ...(props.cursor === undefined ? {} : { cursor: props.cursor }),
-    ...(props.initialPinRead === undefined ? {} : { initial: props.initialPinRead }),
     producer: pinProducer,
     visit,
   });
@@ -293,7 +292,6 @@ function BoardFeedVisit({
   now,
   actions,
   cursor,
-  initialPinRead,
   onOpeningRead,
   pinProducer,
   visit,
@@ -305,6 +303,12 @@ function BoardFeedVisit({
   const pinHeadingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const focusRecoveryTarget = useRef<HTMLDivElement>(null);
+  const pinFocusIntent = useRef<{
+    threadId: string;
+    control: 'toggle' | 'retry' | 'refresh';
+  } | null>(null);
+  const [focusRecovery, setFocusRecovery] = useState(false);
   const locale = getLocale();
   const location = useLocation();
   const router = useRouter();
@@ -317,32 +321,31 @@ function BoardFeedVisit({
     boardId,
     sort,
     ...(cursor === undefined ? {} : { cursor }),
-    ...(initialPinRead === undefined ? {} : { initial: initialPinRead }),
     producer: pinProducer,
     visit,
   });
   const threadIds = useMemo(() => boardPinThreadIds(reading), [reading]);
-  const pinnedIds = useMemo(() => pinnedIdentitySet(reading.pinnedThreads), [reading]);
+  const adviceSelection = boardPinAdviceSelection(boardId, reading);
   const pins = useBoardPinPage({
     boardId,
     threadIds,
-    pinnedIds,
     sort,
     ...(cursor === undefined ? {} : { cursor }),
-    ...(initialPinRead === undefined ? {} : { initial: initialPinRead }),
+    ...(adviceSelection === undefined ? {} : { adviceSelection }),
     producer: pinProducer,
     visit,
     onBoardRead: (result) => {
+      const next = applyBoardPinReading(page, result);
       if (result.opening && onOpeningRead) {
         onOpeningRead(result.opening);
-        return;
+        return boardPinAdviceSelection(boardId, next);
       }
       setCards(result.opening?.openingCards);
-      const next = applyBoardPinReading(page, result);
       setReading(next);
       const ordinary = ordinaryBoardThreads(next);
       const ids = disclosedBoardAuthorIds(next.pinnedThreads, ordinary.threads);
       setAuthors((previous) => authorsForCurrentReading(previous, result.authors as PageAuthors | null, ids));
+      return boardPinAdviceSelection(boardId, next);
     },
   });
   const ordinary = pins.needsRestart ? { ...ordinarySource, next: null } : ordinarySource;
@@ -390,9 +393,35 @@ function BoardFeedVisit({
     const row = focused.closest('[data-thread-id]');
     const id = row?.getAttribute('data-thread-id');
     if (!id || threadIds.includes(id)) return;
-    const next = list.current.querySelector<HTMLElement>('[data-thread-id]');
-    (next ?? heading.current)?.focus();
+    setFocusRecovery(true);
   }, [threadIds]);
+  useLayoutEffect(() => {
+    const intent = pinFocusIntent.current;
+    if (!intent) return;
+    const status = pins.rowStatuses[intent.threadId];
+    if (pins.state.state === 'preparing' || status?.state === 'submitting') return;
+    const row = [...(list.current?.querySelectorAll<HTMLElement>('[data-thread-id]') ?? [])].find(
+      (item) => item.dataset.threadId === intent.threadId,
+    );
+    const control =
+      status?.state === 'unknown' || status?.state === 'unavailable'
+        ? 'retry'
+        : status?.state === 'denied' || status?.state === 'conflict'
+          ? 'refresh'
+          : intent.control;
+    const target =
+      row?.querySelector<HTMLElement>(`[data-board-pin-focus="${control}"]`) ??
+      row?.querySelector<HTMLElement>('[data-board-pin-focus="toggle"]') ??
+      row?.querySelector<HTMLElement>('a[href]');
+    pinFocusIntent.current = null;
+    if (target) {
+      target.focus();
+      setFocusRecovery(false);
+    } else setFocusRecovery(true);
+  }, [pins.state, pins.rowStatuses, pins.needsRestart, reading]);
+  useLayoutEffect(() => {
+    if (focusRecovery) focusRecoveryTarget.current?.focus();
+  }, [focusRecovery]);
   const refreshedAt =
     sort !== 'new' && reading.rankRefreshedAt && !Number.isNaN(Date.parse(reading.rankRefreshedAt))
       ? reading.rankRefreshedAt
@@ -420,6 +449,18 @@ function BoardFeedVisit({
       state: { boardReadingReturn: { ...returnAddress, ...(focusThreadId ? { focusThreadId } : {}) } } as never,
     });
   };
+  const beginPinChange = (threadId: string, action: 'pin' | 'unpin') => {
+    pinFocusIntent.current = { threadId, control: 'toggle' };
+    if (!pins.start(threadId, action)) pinFocusIntent.current = null;
+  };
+  const retryPinChange = (threadId: string) => {
+    pinFocusIntent.current = { threadId, control: 'retry' };
+    if (!pins.retry(threadId)) pinFocusIntent.current = null;
+  };
+  const refreshPinChange = (threadId: string) => {
+    pinFocusIntent.current = { threadId, control: 'refresh' };
+    pins.refresh();
+  };
   const card = (thread: BoardFeedThread, pinnedRow?: BoardPinThread) => {
     const row =
       pinnedRow ??
@@ -435,9 +476,9 @@ function BoardFeedVisit({
           management={pins.state.state === 'ready' ? pins.state.management : null}
           sender={pins.sender}
           {...(rowStatus === undefined ? {} : { status: rowStatus })}
-          onChange={(action) => pins.start(thread.id, action)}
-          onRetry={() => pins.retry(thread.id)}
-          onRefresh={pins.refresh}
+          onChange={(action) => beginPinChange(thread.id, action)}
+          onRetry={() => retryPinChange(thread.id)}
+          onRefresh={() => refreshPinChange(thread.id)}
         />
       ) : null;
     return (
@@ -482,6 +523,17 @@ function BoardFeedVisit({
           </details>
         ) : null}
       </div>
+      {focusRecovery ? (
+        <div
+          ref={focusRecoveryTarget}
+          data-slot="board-pin-focus-recovery"
+          role="status"
+          tabIndex={-1}
+          className="min-w-0 max-w-full text-sm text-muted-foreground"
+        >
+          {m.board_pin_focus_recovery()}
+        </div>
+      ) : null}
       {pins.malformed ? (
         <div className="flex min-w-0 flex-wrap items-center gap-2" data-slot="board-reading-malformed" role="status">
           <p className="min-w-0 text-sm text-muted-foreground">{m.board_reading_malformed()}</p>

@@ -1,4 +1,4 @@
-import { validBoardPinId, type BoardPinThread } from './contract';
+import { validBoardPinId, validBoardPinRevision, type BoardPinThread } from './contract';
 
 export type BoardPinAdviceReference = Readonly<{
   threadId: string;
@@ -8,6 +8,10 @@ export type BoardPinAdviceReference = Readonly<{
 export type BoardPinAdviceInput = Readonly<{
   selected: readonly BoardPinAdviceReference[];
   pinRevision?: string;
+}>;
+export type BoardPinAdviceSelection = Readonly<{
+  selected: readonly BoardPinAdviceReference[];
+  pinRevision: string;
 }>;
 export type BoardPinAdviceQuery = BoardPinAdviceInput &
   Readonly<{
@@ -26,25 +30,13 @@ export type BoardPinAdviceResult =
     }>
   | Readonly<{ state: 'stale' | 'denied' | 'unavailable' }>;
 
-/** Minimal public consumer seam pending retained complete-input publication. */
-export type BoardPinAdviceWire = Readonly<{
-  post(
-    input: BoardPinAdviceInput,
-    options: {
-      headers: { authorization: string };
-      fetch: { signal: AbortSignal; cache: 'no-store' };
-    },
-  ): Promise<{ status: number; data?: unknown; error?: unknown }>;
-}>;
-
 const selectionLimit = 25;
 const responseBytes = 16 * 1024;
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const keys = (value: Record<string, unknown>, expected: readonly string[]) =>
   Object.keys(value).length === expected.length && expected.every((key) => Object.hasOwn(value, key));
-const revision = (value: unknown): value is string =>
-  typeof value === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n;
+const revision = validBoardPinRevision;
 
 /** Validate and copy before session preparation or transport; duplicates never collapse into a new cohort. */
 export function boardPinAdviceInput(boardId: string, input: unknown): BoardPinAdviceInput | undefined {
@@ -73,13 +65,6 @@ export function boardPinAdviceInput(boardId: string, input: unknown): BoardPinAd
     selected: Object.freeze(selected),
     ...(revision(input.pinRevision) ? { pinRevision: input.pinRevision } : {}),
   });
-}
-
-/** Resolve only a published method. There is no path fallback or private producer type. */
-export function nativeBoardPinAdvice(board: unknown): BoardPinAdviceWire | undefined {
-  if (!record(board)) return undefined;
-  const wire = board['pin-advice'];
-  return record(wire) && typeof wire.post === 'function' ? (wire as BoardPinAdviceWire) : undefined;
 }
 
 function receive(query: BoardPinAdviceQuery, input: BoardPinAdviceInput, body: unknown): BoardPinAdviceResult {
@@ -132,29 +117,14 @@ function receive(query: BoardPinAdviceQuery, input: BoardPinAdviceInput, body: u
   });
 }
 
-export async function inspectBoardPinAdvice(
-  query: BoardPinAdviceQuery,
-  wire: BoardPinAdviceWire | undefined,
-  authorization: string | undefined,
-): Promise<BoardPinAdviceResult> {
+/** Validate a response from the eventual root-derived callable without defining a client envelope. */
+export function receiveBoardPinAdvice(query: BoardPinAdviceQuery, status: number, body: unknown): BoardPinAdviceResult {
   const input = boardPinAdviceInput(query.boardId, {
     selected: query.selected,
     ...(query.pinRevision === undefined ? {} : { pinRevision: query.pinRevision }),
   });
-  if (!input || !validBoardPinId(query.viewerId) || !wire || query.signal.aborted) return { state: 'unavailable' };
-  if (!authorization) return { state: 'denied' };
-  // Capture the expected identity before awaiting a transport that can outlive a visit.
-  const bound = Object.freeze({ ...query, selected: input.selected });
-  try {
-    const response = await wire.post(input, {
-      headers: { authorization },
-      fetch: { signal: query.signal, cache: 'no-store' },
-    });
-    if (query.signal.aborted) return { state: 'unavailable' };
-    if ([401, 403, 404].includes(response.status)) return { state: 'denied' };
-    if (response.status !== 200 || response.error) return { state: 'unavailable' };
-    return receive(bound, input, response.data);
-  } catch {
-    return { state: 'unavailable' };
-  }
+  if (!input || !validBoardPinId(query.viewerId) || query.signal.aborted) return { state: 'unavailable' };
+  if ([401, 403, 404].includes(status)) return { state: 'denied' };
+  if (status !== 200) return { state: 'unavailable' };
+  return receive(Object.freeze({ ...query, selected: input.selected }), input, body);
 }

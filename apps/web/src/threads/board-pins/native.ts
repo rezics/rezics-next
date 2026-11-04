@@ -4,13 +4,7 @@ import type { SessionEnv } from '../../session/client.ts';
 import { prepareSession, viewerCredential } from '../../session/request.ts';
 import { receiveBoardOpeningPage } from '../board-opening';
 import { isInvalidBoardCursor, isMalformedBoardQuery } from '../board-reading';
-import {
-  boardPinAdviceInput,
-  inspectBoardPinAdvice,
-  nativeBoardPinAdvice,
-  type BoardPinAdviceQuery,
-  type BoardPinAdviceResult,
-} from './advice';
+import type { BoardPinAdviceResult } from './advice';
 import {
   parseBoardPinBoard,
   parseBoardPinCommandResult,
@@ -36,27 +30,9 @@ type NativeResult = Promise<{
 type NativeBoardThreads = { get: (options: NativeOptions) => NativeResult };
 type NativeBoardPin = { post: (body: { pinned: boolean }, options: NativeOptions) => NativeResult };
 
-export async function readBoardPinAdviceRequest(
-  query: BoardPinAdviceQuery,
-  request: Request,
-  sessionEnv: Partial<SessionEnv>,
-  client: KernelClient,
-  originConfigured: boolean,
-): Promise<BoardPinAdviceResult> {
-  const input = boardPinAdviceInput(query.boardId, {
-    selected: query.selected,
-    ...(query.pinRevision === undefined ? {} : { pinRevision: query.pinRevision }),
-  });
-  if (!input || !validBoardPinId(query.viewerId) || !originConfigured || query.signal.aborted)
-    return { state: 'unavailable' };
-  try {
-    const wire = nativeBoardPinAdvice(client.boards({ id: query.boardId }));
-    if (!wire) return { state: 'unavailable' };
-    await prepareSession(request, sessionEnv);
-    return inspectBoardPinAdvice({ ...query, ...input }, wire, viewerCredential(request) ?? undefined);
-  } catch {
-    return { state: 'unavailable' };
-  }
+/** Keep selected advice closed until the published KernelClient exposes its root-derived callable. */
+export async function readBoardPinAdviceRequest(): Promise<BoardPinAdviceResult> {
+  return { state: 'unavailable' };
 }
 
 /** Bind generated Content methods when present. Do not invent a path or a successful body. */

@@ -54,6 +54,10 @@ export function validBoardPinId(value: unknown): value is string {
   return typeof value === 'string' && pinId.test(value);
 }
 
+export function validBoardPinRevision(value: unknown): value is string {
+  return typeof value === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(value) && BigInt(value) <= 9223372036854775807n;
+}
+
 export type BoardPinBoardQuery = Readonly<{
   boardId: string;
   sort?: 'active' | 'hot' | 'new';
@@ -66,6 +70,7 @@ export type BoardPinBoardRead =
       state: 'ready';
       boardId: string;
       management: 'allowed' | 'denied';
+      pinRevision?: string;
       opening?: ReceivedBoardOpeningPage;
       pinnedThreads: readonly BoardPinJsonRecord[];
       threads: readonly BoardPinJsonRecord[];
@@ -92,10 +97,12 @@ export type BoardPinFeedState =
   | Readonly<{ state: 'empty' }>
   | Readonly<{ state: 'preparing' }>
   | Readonly<{ state: 'denied' }>
+  | Readonly<{ state: 'stale' }>
   | Readonly<{ state: 'unavailable' }>
   | Readonly<{
       state: 'ready';
       management: 'allowed' | 'denied';
+      capacityFull: boolean;
       byThreadId: ReadonlyMap<string, BoardPinThread>;
     }>;
 
@@ -138,7 +145,14 @@ export function joinBoardPinPage(
     byThreadId.set(thread.threadId, thread);
   }
   if (threadIds.some((threadId) => !byThreadId.has(threadId))) return { state: 'unavailable' };
-  return { state: 'ready', management: result.management, byThreadId };
+  return {
+    state: 'ready',
+    management: result.management,
+    capacityFull:
+      result.management === 'allowed' &&
+      result.threads.some((thread) => !thread.pinned && !thread.actions.includes('pin')),
+    byThreadId,
+  };
 }
 
 export function pinnedIdentitySet(pinned: unknown): ReadonlySet<string> {
@@ -232,11 +246,27 @@ export function parseBoardPinBoard(boardId: string, body: unknown): BoardPinBoar
   const next = body.next === null || typeof body.next === 'string' ? body.next : undefined;
   const rankRefreshedAt =
     body.rankRefreshedAt === null || typeof body.rankRefreshedAt === 'string' ? body.rankRefreshedAt : undefined;
-  if (next === undefined || rankRefreshedAt === undefined) return { state: 'unavailable' };
+  const pinRevision = body.pinRevision;
+  if (
+    next === undefined ||
+    rankRefreshedAt === undefined ||
+    (Object.hasOwn(body, 'pinRevision') && !validBoardPinRevision(pinRevision))
+  )
+    return { state: 'unavailable' };
   const management = body.management === 'allowed' ? 'allowed' : 'denied';
   const authors = body.authors === undefined ? null : authorMap(body.authors);
   if (authors === undefined) return { state: 'unavailable' };
-  return { state: 'ready', boardId, management, pinnedThreads, threads, next, rankRefreshedAt, authors };
+  return {
+    state: 'ready',
+    boardId,
+    management,
+    ...(pinRevision === undefined ? {} : { pinRevision }),
+    pinnedThreads,
+    threads,
+    next,
+    rankRefreshedAt,
+    authors,
+  };
 }
 
 /** Owns exact-command recovery for one mounted board/session visit. Retiring it never cancels a sent command. */

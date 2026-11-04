@@ -1,5 +1,11 @@
 import type { BoardPageAuthor, loadBoardPageWithAuthors } from '../identity/page-loaders';
-import { BOARD_PINNED_SECTION_LIMIT, pinnedIdentitySet } from './board-pins/contract';
+import {
+  BOARD_PINNED_SECTION_LIMIT,
+  pinnedIdentitySet,
+  validBoardPinId,
+  validBoardPinRevision,
+} from './board-pins/contract';
+import type { BoardPinAdviceSelection, BoardPinAdviceReference } from './board-pins/advice';
 import type { PageAuthors } from '../identity/read';
 
 type LoadedCommunityBoardPage = Awaited<ReturnType<typeof loadBoardPageWithAuthors>>;
@@ -117,4 +123,30 @@ export function boardPinThreadIds(page: BoardThreadPage): string[] {
   const ids = section.state === 'ready' ? section.threads.map((thread) => thread.id) : [];
   for (const thread of ordinary.threads) ids.push(thread.id);
   return ids;
+}
+
+/** Build advice only from the exact disclosed rows and generation supplied with this page. */
+export function boardPinAdviceSelection(boardId: string, page: BoardThreadPage): BoardPinAdviceSelection | undefined {
+  if (!validBoardPinId(boardId) || !validBoardPinRevision(page.pinRevision)) return undefined;
+  const section = nativePinnedSection(page.pinnedThreads);
+  if (section.state === 'unavailable') return undefined;
+  const ordinary = ordinaryBoardThreads(page);
+  const rows = [
+    ...(section.state === 'ready' ? section.threads : []),
+    ...ordinary.threads.filter((thread) => thread.availability === 'available'),
+  ];
+  if (rows.length === 0 || rows.length > 25) return undefined;
+  const selected: BoardPinAdviceReference[] = [];
+  for (const thread of rows) {
+    const opening = record(thread) ? thread.firstPost : undefined;
+    if (
+      !validBoardPinId(thread.id) ||
+      !record(opening) ||
+      opening.availability !== 'available' ||
+      !validBoardPinId(opening.revisionId)
+    )
+      return undefined;
+    selected.push({ threadId: thread.id, placeId: boardId, sourceRevisionId: opening.revisionId });
+  }
+  return Object.freeze({ selected: Object.freeze(selected), pinRevision: page.pinRevision });
 }

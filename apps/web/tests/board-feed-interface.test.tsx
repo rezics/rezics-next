@@ -16,7 +16,7 @@ import { setLocale } from '../src/paraglide/runtime.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { BoardFeed } = await import('../src/threads/board-feed');
-import type { BoardPinProducer, BoardPinReadResult, BoardPinSender } from '../src/threads/board-pins/contract';
+import type { BoardPinProducer, BoardPinSender } from '../src/threads/board-pins/contract';
 import type { BoardFeedThread, CommunityBoardPage } from '../src/threads/board-feed-data';
 import type { BoardSort } from '../src/threads/board-sort';
 import { fullDateTime } from '../src/threads/byline';
@@ -27,7 +27,6 @@ const now = '2026-11-01T00:00:00.000Z';
 type Feed = {
   page: CommunityBoardPage;
   sort: BoardSort;
-  pinRead?: BoardPinReadResult;
   pinProducer?: BoardPinProducer;
   pinSender?: BoardPinSender;
 };
@@ -38,7 +37,7 @@ async function render(feeds: Feed[]) {
       createElement(
         Fragment,
         null,
-        feeds.map(({ page, sort, pinRead, pinProducer, pinSender }, index) =>
+        feeds.map(({ page, sort, pinProducer, pinSender }, index) =>
           createElement(BoardFeed, {
             key: index,
             boardId: page.board.id,
@@ -46,7 +45,6 @@ async function render(feeds: Feed[]) {
             page: page.threads,
             authors: page.authors,
             now,
-            ...(pinRead === undefined ? {} : { initialPinRead: pinRead }),
             ...(pinProducer === undefined ? {} : { pinProducer }),
             ...(pinSender === undefined ? {} : { pinSender }),
           }),
@@ -286,7 +284,7 @@ test('rank explanation requires a supplied valid ranked date, never a fabricated
   expect(markup).toContain(m.board_feed_order_help());
 });
 
-test('native pin states decorate the ordinary feed in its supplied order with only explicit row actions', async () => {
+test('ordinary Board order stays intact and membership alone does not grant pin controls', async () => {
   setLocale('en', { reload: false });
   const { page } = await fixture();
   const first = page.threads.threads[0]!;
@@ -299,21 +297,10 @@ test('native pin states decorate the ordinary feed in its supplied order with on
     ...page,
     threads: { ...page.threads, threads: [first, second] },
   };
-  const pinRead: BoardPinReadResult = {
-    state: 'ready',
-    boardId: page.board.id,
-    management: 'allowed',
-    // Reverse order on purpose. These statuses decorate rows and never order them.
-    threads: [
-      { threadId: second.id, pinned: false, actions: ['pin'] },
-      { threadId: first.id, pinned: true, actions: ['unpin'] },
-    ],
-  };
   const markup = await render([
     {
       page: orderedPage,
       sort: 'active',
-      pinRead,
       pinSender: { subject: 'moderator', csrfToken: 'private-csrf' },
     },
   ]);
@@ -321,23 +308,11 @@ test('native pin states decorate the ordinary feed in its supplied order with on
     (match) => match[1],
   );
   expect(titles).toEqual([first.title, second.title]);
-  expect(markup.match(new RegExp(m.board_pin_badge(), 'gu'))).toHaveLength(1);
-  expect(markup).toContain(m.board_pin_unpin());
-  expect(markup).toContain(m.board_pin_pin());
+  expect(markup).toContain(m.board_pin_unavailable());
+  expect(markup).not.toContain(m.board_pin_badge());
+  expect(markup).not.toContain(m.board_pin_unpin());
+  expect(markup).not.toContain(m.board_pin_pin());
   expect(markup.match(/<ul\b/gu)).toHaveLength(1);
   expect(markup).not.toContain('private-csrf');
   expect(markup).not.toContain('moderator');
-});
-
-test('denied and unavailable pin reads keep ordinary discussions visible and never invent pin badges', async () => {
-  setLocale('en', { reload: false });
-  const { page } = await fixture();
-  for (const pinRead of [{ state: 'denied' }, { state: 'unavailable' }] as const) {
-    const markup = await render([{ page, sort: 'active', pinRead }]);
-    expect(markup).toContain(page.threads.threads[0]!.title!);
-    expect(markup).toContain(pinRead.state === 'denied' ? m.board_pin_read_denied() : m.board_pin_unavailable());
-    expect(markup).not.toContain('group/badge');
-    expect(markup).not.toContain(m.board_pin_pin());
-    expect(markup).toContain(m.board_community_retry());
-  }
 });
