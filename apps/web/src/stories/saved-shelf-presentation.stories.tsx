@@ -174,13 +174,13 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
             </h2>
             <div data-testid="library-preview" data-layout={resolved.display.layout}>
               <PersonalLibraryPage
-                page={{
+                page={libraryPage.signedIn ? {
                   ...libraryPage,
                   sort: resolved.sort,
                   ...(resolved.sort.orderBy === 'personalScore'
                     ? { readState: 'score-unavailable', entries: [], next: null }
                     : {}),
-                }}
+                } : libraryPage}
                 continueState={{ state: 'loaded', entries: [], next: null }}
                 locale={getLocale()}
                 display={resolved.display}

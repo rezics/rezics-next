@@ -375,7 +375,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
         m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }),
       );
 
-      for (const [index, direction] of [[2, m.library_score_lowest()], [5, m.library_score_highest()]] as const) {
+      for (const [index, direction] of [[7, m.library_score_lowest()], [4, m.library_score_highest()]] as const) {
         const option = host.querySelectorAll<HTMLSelectElement>('select')[index]!.selectedOptions[0]!;
         expect(option.disabled).toBe(true);
         expect(option.textContent).toContain(direction);
