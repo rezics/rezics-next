@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { routeOf } from '../../src/route/route.ts';
 import { assertMemberPageCurrent } from '../../src/library/member-viewer-currentness.ts';
+import { assertShelfPageCurrent } from '../../src/library/shelf-viewer-currentness.ts';
 import { createCollectionListFactsFixture } from './support/collection-list-facts-fixture.ts';
 
 let fixture: Awaited<ReturnType<typeof createCollectionListFactsFixture>>;
@@ -83,37 +84,99 @@ test('member currentness preserves occurrence identity and refuses changed or un
   expect(() => assertMemberPageCurrent(observed, { preparing: true })).toThrow();
 });
 
-test('Collection route withholds duplicate occurrence facts when one admitted row disappears during viewer overlay', async () => {
+test.serial(
+  'Collection route withholds duplicate occurrence facts when one admitted row disappears during viewer overlay',
+  async () => {
+    const book = await fixture.create('schema:Book');
+    await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
+    const collection = await fixture.collection([book, book]);
+    const initial = await fixture.get(collection.id);
+    const initialPage = (await initial.json()) as {
+      members: Array<{ id: string; subjectId: string }>;
+      viewerFacts?: { state: string; rows?: Array<{ rowKey: string }> };
+    };
+    expect(initialPage.members.map((member) => member.subjectId)).toEqual([book, book]);
+    expect(initialPage.members[0]!.id).not.toBe(initialPage.members[1]!.id);
+    if (initialPage.viewerFacts?.state === 'current')
+      expect(initialPage.viewerFacts.rows?.map(({ rowKey }) => rowKey)).toEqual(
+        initialPage.members.map(({ id }) => id),
+      );
+
+    const removed = initialPage.members[1]!;
+    const interleave = interleaveViewerEntries(() =>
+      fixture.db.admin.query(
+        'DELETE FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=$3',
+        [routeOf(collection.id), collection.id, removed.id],
+      ),
+    );
+    let response: Response;
+    try {
+      response = await fixture.get(collection.id);
+    } finally {
+      interleave.restore();
+    }
+    expect(interleave.interleaved()).toBe(true);
+    expect(response!.status).toBe(409);
+    const problem = await response!.json();
+    expect(problem).toMatchObject({ code: 'stale_cursor' });
+    expect(problem).not.toHaveProperty('members');
+    expect(problem).not.toHaveProperty('viewerFacts');
+  },
+);
+
+test('shelf currentness preserves the original cursor and rejects changed rows or unavailable state', () => {
+  const observed = {
+    entries: [{ subjectId: 'book', state: 'completed', revision: 1 }],
+    next: 'original-expiring-cursor',
+    scoreQuestion: { id: 'question' },
+  };
+  expect(() =>
+    assertShelfPageCurrent(observed, {
+      ...observed,
+      entries: [...observed.entries],
+      next: 'fresh-cursor-bytes',
+    }),
+  ).not.toThrow();
+  expect(() =>
+    assertShelfPageCurrent(observed, {
+      ...observed,
+      entries: [{ ...observed.entries[0]!, state: 'paused' }],
+    }),
+  ).toThrow();
+  expect(() => assertShelfPageCurrent(observed, { entries: [], next: null })).toThrow();
+});
+
+test.serial('shelf route withholds a row whose native Entry changes during viewer overlay', async () => {
   const book = await fixture.create('schema:Book');
   await fixture.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'completed' }, 'editor');
-  const collection = await fixture.collection([book, book]);
-  const initial = await fixture.get(collection.id);
-  const initialPage = (await initial.json()) as {
-    members: Array<{ id: string; subjectId: string }>;
-    viewerFacts?: { state: string; rows?: Array<{ rowKey: string }> };
-  };
-  expect(initialPage.members.map((member) => member.subjectId)).toEqual([book, book]);
-  expect(initialPage.members[0]!.id).not.toBe(initialPage.members[1]!.id);
-  if (initialPage.viewerFacts?.state === 'current')
-    expect(initialPage.viewerFacts.rows?.map(({ rowKey }) => rowKey)).toEqual(initialPage.members.map(({ id }) => id));
+  const editor = await fixture.deps('editor');
+  if (editor.actor.kind !== 'account') throw new Error('Editor fixture must authenticate');
+  const token = await fixture.credential(editor.actor.scopes);
+  const path = '/v1/libraryEntries?view=FULL&orderBy=createdAt&direction=desc&limit=10';
+  const read = () =>
+    fixture.kernel.handle(new Request(`http://kernel.test${path}`, { headers: { authorization: `Bearer ${token}` } }));
+  const initial = await read();
+  expect(initial.status).toBe(200);
+  expect(((await initial.json()) as { libraryEntries: Array<{ subjectId: string }> }).libraryEntries).toMatchObject([
+    { subjectId: book },
+  ]);
 
-  const removed = initialPage.members[1]!;
   const interleave = interleaveViewerEntries(() =>
     fixture.db.admin.query(
-      'DELETE FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND member_id=$3',
-      [routeOf(collection.id), collection.id, removed.id],
+      "UPDATE library.entry SET state='paused', revision=revision+1, updated_at=now() WHERE route=$1 AND account_id=$2 AND subject_id=$3",
+      [routeOf(fixture.accounts.editor), fixture.accounts.editor, book],
     ),
   );
   let response: Response;
   try {
-    response = await fixture.get(collection.id);
+    response = await read();
   } finally {
     interleave.restore();
   }
   expect(interleave.interleaved()).toBe(true);
-  expect(response!.status).toBe(409);
+  expect(response!.status).toBe(503);
   const problem = await response!.json();
-  expect(problem).toMatchObject({ code: 'stale_cursor' });
-  expect(problem).not.toHaveProperty('members');
+  expect(problem).toMatchObject({ code: 'semantic_not_ready' });
+  expect(problem).not.toHaveProperty('libraryEntries');
   expect(problem).not.toHaveProperty('viewerFacts');
 });
