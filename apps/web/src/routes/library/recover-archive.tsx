@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { setResponseHeader } from '@tanstack/react-start/server';
+import { preparePrivatePage } from '../../kernel/client';
 import { prepareExposure } from '../../kernel/exposure';
 import { ArchiveEntryRecoveryPage } from '../../library/archive-entry-recovery';
 import { archiveRecoveryAdmission } from '../../library/archive-entry-recovery/native';
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/library/recover-archive')({
     await prepareExposure(context.context.queryClient);
   },
   loader: () => {
-    setResponseHeader('cache-control', 'private, no-store');
+    preparePrivatePage();
     return archiveRecoveryAdmission();
   },
   staleTime: 0,

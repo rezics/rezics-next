@@ -3,7 +3,11 @@ import { readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
 const src = join(import.meta.dir, '../../src');
-const serverModules = new Set(['cloudflare:workers', '@tanstack/react-start/server', '@tanstack/react-start/server-only']);
+const serverModules = new Set([
+  'cloudflare:workers',
+  '@tanstack/react-start/server',
+  '@tanstack/react-start/server-only',
+]);
 
 function isFile(path: string): boolean {
   try {
@@ -72,7 +76,9 @@ function importedNames(clause: string): string[] {
   const named = clause.match(/\{([^}]+)\}/);
   if (named)
     for (const part of named[1]!.split(',')) {
-      const name = part.trim().split(/\s+as\s+/).at(-1);
+      const trimmed = part.replace(/^type\s+/, '').trim();
+      if (!trimmed) continue;
+      const name = trimmed.split(/\s+as\s+/).at(-1);
       if (name) names.push(name);
     }
   const defaultName = clause.match(/^([A-Za-z_$][\w$]*)/);
@@ -80,27 +86,37 @@ function importedNames(clause: string): string[] {
   return names;
 }
 
-function staticImports(source: string): Array<{ spec: string; names: string[]; index: number }> {
-  const imports: Array<{ spec: string; names: string[]; index: number }> = [];
-  const pattern =
-    /(?:^|\n)import\s+(type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
+function staticImports(source: string): Array<{ spec: string; names: string[]; start: number; end: number }> {
+  const imports: Array<{ spec: string; names: string[]; start: number; end: number }> = [];
+  const pattern = /(?:^|\n)import\s+(type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
   for (const match of source.matchAll(pattern)) {
     if (match[1]) continue;
-    imports.push({ spec: match[3]!, names: importedNames(match[2] ?? ''), index: match.index ?? 0 });
+    const start = match.index ?? 0;
+    imports.push({
+      spec: match[3]!,
+      names: importedNames(match[2] ?? ''),
+      start,
+      end: start + match[0].length,
+    });
   }
   return imports;
 }
 
-function usedOutsideServer(source: string, names: string[], ranges: Array<[number, number]>): boolean {
-  if (names.length === 0) return true;
+function usedOutsideServer(
+  source: string,
+  names: string[],
+  ranges: Array<[number, number]>,
+  importSpan: [number, number],
+): boolean {
+  if (names.length === 0) return !covered(importSpan[0], ranges);
   const body = source
     .replace(/\/\*[\s\S]*?\*\//g, (block) => ' '.repeat(block.length))
     .replace(/(?<!:)\/\/.*$/gm, (line) => ' '.repeat(line.length));
   return names.some((name) => {
-    const pattern = new RegExp(`\\b${name}\\b`, 'g');
+    const pattern = new RegExp(`(?<![.\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
     for (const match of body.matchAll(pattern)) {
       const index = match.index ?? 0;
-      if (body.slice(Math.max(0, index - 20), index).includes('import ')) continue;
+      if (index >= importSpan[0] && index < importSpan[1]) continue;
       if (!covered(index, ranges)) return true;
     }
     return false;
@@ -129,10 +145,12 @@ test('no module reachable from the client entry imports a server-only module', (
     const ranges = serverRanges(source);
     for (const item of staticImports(source)) {
       const serverFile = /\.server(\.[cm]?[jt]sx?)?$/.test(item.spec);
+      const leaked = usedOutsideServer(source, item.names, ranges, [item.start, item.end]);
       if (serverModules.has(item.spec) || serverFile) {
-        if (usedOutsideServer(source, item.names, ranges)) violations.push(`${path}: ${item.spec}`);
+        if (leaked) violations.push(`${path}: ${item.spec}`);
         continue;
       }
+      if (!leaked) continue;
       const resolved = resolveLocal(file, item.spec);
       if (resolved) queue.push(resolved);
     }
