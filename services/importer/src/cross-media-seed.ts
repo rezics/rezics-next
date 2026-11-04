@@ -30,6 +30,8 @@ import {
   citedProviderBinding,
   combineSourceVocabularyRequests,
   graphEdgeKey,
+  type GraphEdgeEvidence,
+  type ReleaseEndpointCurrentness,
   type GraphEdgeDraft,
 } from './cross-media-bindings.ts';
 import {
@@ -65,7 +67,7 @@ import {
   vndbCharacterProfileAdmission,
   type VndbCharacterProfileReferences,
 } from './vndb-character-profile.ts';
-import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
+import { createImportTransport, ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import { createPublicBulkClient } from './public-bulk-client.ts';
 import {
   captureShowcaseCommands,
@@ -95,7 +97,6 @@ import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from './vndb-tables.ts';
 import {
   planVndbReleasePlatforms,
-  vndbReleaseAssociationReleaseCap,
   vndbReleasePlatformPayload,
   type VndbReleasePlatformFacts,
 } from './vndb-release-platforms.ts';
@@ -149,7 +150,18 @@ export function crossMediaFranchise(...names: unknown[]): Franchise | undefined 
 }
 
 export interface CrossMediaTables {
-  rows(provider: Provider, table: string): AsyncIterable<Row>;
+  rows(provider: Provider, table: string, limits?: CrossMediaTableScanLimits): AsyncIterable<Row>;
+}
+export type CrossMediaTableScanLimits = {
+  maxRows: number;
+  maxBytes: number;
+  consumeRow?: (bytes: number) => void;
+};
+export class CrossMediaTableScanLimitError extends Error {
+  constructor(readonly provider: Provider, readonly table: string) {
+    super(`Cross-media ${provider}/${table} exceeded its bounded scan`);
+    this.name = 'CrossMediaTableScanLimitError';
+  }
 }
 export type SelectedVndbCharacterNameRows = {
   names: Map<string, Row[]>;
@@ -1189,41 +1201,19 @@ export async function planCrossMediaSeed(
   const releases = new Set<string>(),
     chars = new Set<string>(),
     aliases = new Set<string>();
-  let releaseOverflowReported = false;
-  for await (const row of input.rows('vndb', 'releases_vn')) {
-    if (selection?.includeReleases === false || !vnIds.has(text(row, 'vid'))) continue;
-    const id = text(row, 'id');
-    if (releases.has(id)) continue;
-    if (releases.size >= vndbReleaseAssociationReleaseCap) {
-      if (!releaseOverflowReported) {
-        gap('vndb', 'releases_vn', { id }, 'Selected VNDB releases exceed the bounded import cap');
-        releaseOverflowReported = true;
-      }
-      continue;
-    }
-    releases.add(id);
-  }
-  for await (const row of input.rows('vndb', 'releases_vn')) {
-    if (!releases.has(text(row, 'id'))) continue;
-    edge({
-      source: 'vndb',
-      alias: crossMediaAliases.vndb,
-      table: 'releases_vn',
-      holder: text(row, 'id'),
-      target: text(row, 'vid'),
-      property: 'schema:exampleOfWork',
-      url: vndbRecordUrl(text(row, 'id')),
-      membership: 'referenced',
-      record: row,
-      fields: fieldsOf('releases_vn', row),
+  if (selection?.includeReleases !== false && vnIds.size) {
+    const releasePlan = await (await import('./vndb-release-fidelity.ts')).planVndbReleaseFidelity(input, {
+      selectedWorkIds: [...vnIds],
     });
-    member({
-      source: 'vndb',
-      key: text(row, 'id'),
-      kind: 'release',
-      membership: 'referenced',
-      ...tagged(vnFamily.get(text(row, 'vid'))),
-    });
+    const existingWorkRecords = new Set(plan.records.vndb.map((record) => record.key));
+    plan.records.vndb.push(...releasePlan.records.vndb.filter((record) => !existingWorkRecords.has(record.key)));
+    plan.entities.vndb.push(...releasePlan.entities.vndb);
+    plan.edges.push(...releasePlan.edges);
+    plan.gaps.push(...releasePlan.gaps);
+    for (const item of releasePlan.members) member(item);
+    plan.releaseFacts = releasePlan.facts;
+    plan.releasePlatforms = releasePlan.releasePlatforms;
+    for (const entity of releasePlan.entities.vndb) releases.add(entity.key);
   }
   for await (const row of input.rows('vndb', 'vn_staff')) {
     if (!vnIds.has(text(row, 'id'))) continue;
@@ -1468,27 +1458,6 @@ export async function planCrossMediaSeed(
       payload: { ...row, aliases: staffAliasLists.get(id) ?? [] },
     });
   }
-  const releaseTitleRows: Row[] = [];
-  for await (const row of input.rows('vndb', 'releases_titles')) {
-    if (typeof row.id !== 'string' || !releases.has(row.id)) continue;
-    releaseTitleRows.push(row);
-  }
-  for await (const row of input.rows('vndb', 'releases'))
-    if (releases.has(text(row, 'id'))) {
-      const bound = collectSelectedReleaseTitles(text(row, 'id'), releaseTitleRows);
-      for (const extra of bound.overflow)
-        gap('vndb', 'releases_titles', extra, 'Release titles exceed the bounded import cap');
-      for (const extra of bound.duplicates)
-        gap('vndb', 'releases_titles', extra, 'Duplicate selected VNDB release title');
-      if (!bound.titles.length)
-        gap('vndb', 'releases_titles', { id: text(row, 'id') }, 'Missing selected VNDB release title');
-      plan.entities.vndb.push({
-        source: 'vndb',
-        key: text(row, 'id'),
-        revision: null,
-        payload: bound.titles.length ? { ...row, releases_titles: bound.titles } : row,
-      });
-    }
   for await (const row of input.rows('vndb', 'vn_anime'))
     if (vnIds.has(text(row, 'id')))
       gap('vndb', 'vn_anime', row, 'VNDB anime.aid is an AniDB identifier, not a Bangumi or native subject identity');
@@ -1529,17 +1498,6 @@ export async function planCrossMediaSeed(
       });
     if (!developer && !publisher)
       gap('vndb', 'releases_producers', row, 'Release producer role flags do not select a native credit');
-  }
-  for await (const row of input.rows('vndb', 'releases_supersedes')) {
-    if (!releases.has(text(row, 'id'))) continue;
-    releases.add(text(row, 'rid') as string);
-    member({ source: 'vndb', key: text(row, 'rid'), kind: 'release', membership: 'referenced' });
-    gap(
-      'vndb',
-      'releases_supersedes',
-      row,
-      'Release-to-release supersession is not representable on the shared follows term',
-    );
   }
   for await (const row of input.rows('vndb', 'vn_extlinks')) {
     const owner = text(row, 'id');
@@ -1870,7 +1828,9 @@ export async function planCrossMediaSeed(
   const availableVocabularyRows = new Map(
     selectedReleaseIds.map((id) => [id, Math.max(0, sourceVocabularyLimits.rows - 1 - (releaseLinks.get(id) ?? 0))]),
   );
-  const releasePlatformPlan = await planVndbReleasePlatforms(input, selectedReleaseIds, availableVocabularyRows);
+  const releasePlatformPlan = plan.releasePlatforms
+    ? { byRelease: plan.releasePlatforms, gaps: [] }
+    : await planVndbReleasePlatforms(input, selectedReleaseIds, availableVocabularyRows);
   plan.releasePlatforms = releasePlatformPlan.byRelease;
   plan.gaps.push(...releasePlatformPlan.gaps);
   for (const row of plan.entities.vndb) {
@@ -1916,8 +1876,18 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     private readonly bangumi: string,
     private readonly vndb: string,
   ) {}
-  async *rows(provider: Provider, table: string): AsyncGenerator<Row> {
+  async *rows(
+    provider: Provider,
+    table: string,
+    limits?: CrossMediaTableScanLimits,
+  ): AsyncGenerator<Row> {
     ensure(/^[a-z][a-z_-]*$/.test(table), 'Invalid dump table name');
+    if (
+      limits &&
+      (!Number.isSafeInteger(limits.maxRows) || limits.maxRows < 1 ||
+        !Number.isSafeInteger(limits.maxBytes) || limits.maxBytes < 1)
+    )
+      throw new TypeError('Invalid cross-media table scan limit');
     const file = provider === 'bangumi' ? join(this.bangumi, `${table}.jsonlines`) : join(this.vndb, 'db', table);
     const requiredLinkTable = provider === 'vndb' && (table === 'vn_extlinks' || table === 'extlinks');
     let header: Buffer | null = null;
@@ -1969,10 +1939,20 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
       pending += decoder.decode();
       if (pending) yield pending;
     }
+    let rowsRead = 0;
+    let bytesRead = 0;
     try {
       for await (const line of lines()) {
         if (!line) continue;
-        ensure(Buffer.byteLength(line) <= 1024 * 1024, 'Dump row exceeds seed input limit');
+        const rowBytes = Buffer.byteLength(line) + 1;
+        ensure(rowBytes <= 1024 * 1024, 'Dump row exceeds seed input limit');
+        if (limits) {
+          if (rowsRead >= limits.maxRows || bytesRead + rowBytes > limits.maxBytes)
+            throw new CrossMediaTableScanLimitError(provider, table);
+          rowsRead += 1;
+          bytesRead += rowBytes;
+          limits.consumeRow?.(rowBytes);
+        }
         if (columns) {
           const cells = line.split('\t');
           ensure(cells.length === columns.length, `Invalid VNDB column count: ${table}`);
@@ -2036,6 +2016,7 @@ export type CrossMediaSeedResult = {
   characterDiagnostics: SourceVocabularyGap[];
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
+  releaseSupersessions?: GraphEdgeEvidence[];
   bangumiGenrePublication?: BangumiGenrePublication;
 };
 
@@ -2055,6 +2036,40 @@ function currentWorkRead(read: ReviewedSubjectRead): CurrentWorkRead | undefined
   )
     return undefined;
   return { subjectId, route: subjectRoute(read) };
+}
+
+function currentReleaseReadFailure(error: unknown): ReleaseEndpointCurrentness {
+  if (!(error instanceof ImportTransportError)) return 'unavailable';
+  if (error.status === 401 || error.status === 403) return 'refused';
+  if (error.status === 404 || error.status === 410) return 'missing';
+  if (error.status === undefined || error.status >= 500) return 'unavailable';
+  return 'unknown';
+}
+
+function currentReleaseEndpoint(
+  read: ReviewedSubjectRead | null,
+  externalId: string,
+  nativeSubjectId: string,
+  expectedType: string | undefined,
+  failure?: unknown,
+): ReleaseEndpointCurrentness {
+  if (!read) return failure === undefined ? 'unavailable' : currentReleaseReadFailure(failure);
+  const subject = (read as {
+    subject?: {
+      id?: unknown;
+      type?: unknown;
+      statements?: Record<string, readonly { value?: { type?: unknown; content?: unknown } }[] | undefined>;
+    };
+  }).subject;
+  if (!subject) return 'unknown';
+  if (typeof expectedType !== 'string' || expectedType !== 'wd:Q20631656') return 'wrong_type';
+  if (subject.id !== nativeSubjectId) return 'identity_mismatch';
+  if (subject.type !== expectedType) return 'wrong_type';
+  const identities = subject.statements?.['wdt:P3180'];
+  if (!Array.isArray(identities)) return 'unknown';
+  return identities.some((statement) => statement.value?.type === 'value' && statement.value.content === externalId)
+    ? 'current'
+    : 'identity_mismatch';
 }
 
 export type CrossMediaSeedExtras = {
@@ -2356,10 +2371,14 @@ export async function seedCrossMedia(
     }
     const nativeTypes = new Map<string, string>();
     const currentReads = new Map<string, Promise<ReviewedSubjectRead | null>>();
+    const currentReadFailures = new Map<string, unknown>();
     const readCurrent = (subjectId: string): Promise<ReviewedSubjectRead | null> => {
       let pending = currentReads.get(subjectId);
       if (!pending) {
-        pending = port.readReviewedSubject(subjectId).catch(() => null);
+        pending = port.readReviewedSubject(subjectId).catch((error: unknown) => {
+          currentReadFailures.set(subjectId, error);
+          return null;
+        });
         currentReads.set(subjectId, pending);
       }
       return pending;
@@ -2424,10 +2443,26 @@ export async function seedCrossMedia(
     }
     const graph = new CrossMediaGraph(importer.session.store.database);
     const graphEdges = vndbCredits?.deliveryEdges(plan.edges) ?? plan.edges;
+    const releaseSupersessionDrafts = graphEdges.filter(
+      (draft) =>
+        draft.source === 'vndb' &&
+        draft.table === 'releases_supersedes' &&
+        draft.property === 'rezics:releaseSupersedes',
+    );
     graph.remember(graphEdges);
     const delivered = await graph.deliver({
       claim: (owner) => importer.session.bindings.claim(owner),
       nativeType: (externalId, alias) => nativeTypes.get(`${alias ?? crossMediaAliases.bangumi}\u0000${externalId}`),
+      async currentReleaseEndpoint(externalId, nativeSubjectId) {
+        const read = await readCurrent(nativeSubjectId);
+        return currentReleaseEndpoint(
+          read,
+          externalId,
+          nativeSubjectId,
+          nativeTypes.get(`${crossMediaAliases.vndb}\u0000${externalId}`),
+          currentReadFailures.get(nativeSubjectId),
+        );
+      },
       fence: (input) => port.fence(input),
       batch: (request) => port.batch(request),
       journal: {
@@ -2457,6 +2492,23 @@ export async function seedCrossMedia(
       const claim = importer.session.bindings.claim({ source: sourceAlias, external_id: record.key });
       if (claim?.state !== 'bound') continue;
       const subjectRead = await readCurrent(claim.subject);
+      if (!subjectRead && provider === 'vndb' && /^r[1-9][0-9]*$/u.test(record.key)) {
+        const status = currentReleaseEndpoint(
+          subjectRead,
+          record.key,
+          claim.subject,
+          nativeTypes.get(`${sourceAlias}\u0000${record.key}`),
+          currentReadFailures.get(claim.subject),
+        );
+        sourceIdentityGaps.push({
+          source: 'vndb',
+          fields: ['wdt:P3180'],
+          record: { external_id: record.key },
+          reason: `Current VNDB release descriptor is ${status}`,
+          property: 'wdt:P3180',
+        });
+        continue;
+      }
       ensure(subjectRead, 'Current bound source subject is unavailable');
       if (provider === 'bangumi') {
         const subject = subjectRead.subject as
@@ -2483,6 +2535,24 @@ export async function seedCrossMedia(
               reason: 'Current source identity association is missing or mismatched',
               property: identity.property,
             });
+          continue;
+        }
+      }
+      if (provider === 'vndb' && /^r[1-9][0-9]*$/u.test(record.key)) {
+        const status = currentReleaseEndpoint(
+          subjectRead,
+          record.key,
+          claim.subject,
+          nativeTypes.get(`${sourceAlias}\u0000${record.key}`),
+        );
+        if (status !== 'current') {
+          sourceIdentityGaps.push({
+            source: 'vndb',
+            fields: ['wdt:P3180'],
+            record: { external_id: record.key },
+            reason: `Current VNDB release descriptor is ${status}`,
+            property: 'wdt:P3180',
+          });
           continue;
         }
       }
@@ -2542,6 +2612,7 @@ export async function seedCrossMedia(
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
+      releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
     };
     const vocabulary = extras?.prepareBangumiCreatorCreditBindings
       ? await extras.prepareBangumiCreatorCreditBindings({
@@ -2742,6 +2813,7 @@ export async function seedCrossMedia(
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
+      releaseSupersessions: graph.evidence(releaseSupersessionDrafts),
       ...(bangumiGenrePublication ? { bangumiGenrePublication } : {}),
     };
   } finally {

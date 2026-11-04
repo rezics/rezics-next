@@ -16,6 +16,7 @@ import {
   converter_revision as entityRevision,
   relationStatement,
   vndbProducerParentEnds,
+  vndbRecordUrl,
 } from '@rezics/conversion/cross-media-entities';
 import type { Claim } from './record-bindings.ts';
 
@@ -59,6 +60,20 @@ export type GraphEdgeDraft = {
 };
 export type UnresolvedEdge = GraphEdgeDraft & { reason: string };
 export type ProposedEdge = { key: string; holder: string; target: string; property: string; subject: string };
+export type GraphEdgeEvidence = {
+  draft: GraphEdgeDraft;
+  status: 'planned' | 'unresolved' | 'proposed';
+  command?: BatchCommand;
+  candidate?: string;
+};
+export type ReleaseEndpointCurrentness =
+  | 'current'
+  | 'missing'
+  | 'refused'
+  | 'unknown'
+  | 'wrong_type'
+  | 'identity_mismatch'
+  | 'unavailable';
 export type GraphMappingGap = SourceVocabularyGap & {
   sourceSubject: string;
   sourceEndpoint: string;
@@ -176,6 +191,10 @@ export function graphEdgeKey(draft: GraphEdgeDraft): string {
   ]);
 }
 
+function isVndbReleaseSupersession(draft: GraphEdgeDraft): boolean {
+  return draft.source === 'vndb' && draft.table === 'releases_supersedes' && draft.property === 'rezics:releaseSupersedes';
+}
+
 export class CrossMediaGraph {
   constructor(private readonly database: Database) {
     database.exec(`CREATE TABLE IF NOT EXISTS cross_media_graph (
@@ -233,6 +252,27 @@ export class CrossMediaGraph {
     return rows.map((row) => JSON.parse(row.payload) as GraphEdgeDraft);
   }
 
+  evidence(drafts: readonly GraphEdgeDraft[]): GraphEdgeEvidence[] {
+    const read = this.database.prepare(
+      'SELECT status,command_payload AS command,native_candidate AS candidate FROM cross_media_graph WHERE edge_key=?',
+    );
+    return drafts.map((draft) => {
+      const row = read.get(graphEdgeKey(draft)) as
+        | { status: string; command: string | null; candidate: string | null }
+        | null;
+      const status = row?.status === 'proposed' ? 'proposed' : row?.status === 'unresolved' ? 'unresolved' : 'planned';
+      const command = row?.command
+        ? ((JSON.parse(row.command) as { commands?: BatchCommand[] }).commands?.[0] ?? undefined)
+        : undefined;
+      return {
+        draft,
+        status,
+        ...(command === undefined ? {} : { command }),
+        ...(row?.candidate === null || row?.candidate === undefined ? {} : { candidate: row.candidate }),
+      };
+    });
+  }
+
   private command(edgeKey: string): { key: string; bytes: string | null } | null {
     return this.database
       .prepare('SELECT command_key AS key, command_payload AS bytes FROM cross_media_graph WHERE edge_key=?')
@@ -257,6 +297,10 @@ export class CrossMediaGraph {
   async deliver(input: {
     claim(owner: { source: string; external_id: string }): Claim | null;
     nativeType(externalId: string, alias?: string): string | undefined;
+    currentReleaseEndpoint?: (
+      externalId: string,
+      nativeSubjectId: string,
+    ) => Promise<ReleaseEndpointCurrentness>;
     fence(input: {
       source: string;
       externalId: string;
@@ -279,7 +323,9 @@ export class CrossMediaGraph {
     const unresolved: UnresolvedEdge[] = [];
     const gaps: GraphMappingGap[] = [];
     let unchanged = 0;
-    const mark = this.database.prepare(`UPDATE cross_media_graph SET status=?, command_key=? WHERE edge_key=?`);
+    const mark = this.database.prepare(
+      `UPDATE cross_media_graph SET status=?, command_key=COALESCE(?,command_key) WHERE edge_key=?`,
+    );
     const commands: {
       draft: GraphEdgeDraft;
       command: BatchCommand;
@@ -290,17 +336,45 @@ export class CrossMediaGraph {
       bytes: string;
     }[] = [];
     for (const draft of drafts) {
+      const releaseSupersession = isVndbReleaseSupersession(draft);
       const holder = input.claim({ source: draft.alias, external_id: draft.holder });
       const target =
         draft.targetKind === 'literal'
           ? { state: 'bound' as const, subject: draft.target }
           : input.claim({ source: draft.alias, external_id: draft.target });
       if (holder?.state !== 'bound' || target?.state !== 'bound') {
-        const reason =
-          holder?.state !== 'bound' ? `missing_holder:${draft.holder}` : `missing_endpoint:${draft.target}`;
+        const unresolvedOwner = holder?.state !== 'bound' ? holder : target;
+        const externalId = holder?.state !== 'bound' ? draft.holder : draft.target;
+        const reason = releaseSupersession
+          ? unresolvedOwner?.state === 'taken-down'
+            ? `endpoint_refused:${externalId}`
+            : unresolvedOwner?.state === 'pending'
+              ? `endpoint_unknown:${externalId}`
+              : `missing_endpoint:${externalId}`
+          : holder?.state !== 'bound'
+            ? `missing_holder:${draft.holder}`
+            : `missing_endpoint:${draft.target}`;
         unresolved.push({ ...draft, reason });
         mark.run('unresolved', null, graphEdgeKey(draft));
         continue;
+      }
+      if (releaseSupersession) {
+        let endpointFailure: { id: string; status: ReleaseEndpointCurrentness } | undefined;
+        for (const [externalId, nativeSubjectId] of [
+          [draft.holder, holder.subject],
+          [draft.target, target.subject],
+        ] as const) {
+          const status = await input.currentReleaseEndpoint?.(externalId, nativeSubjectId);
+          if (status !== 'current') {
+            endpointFailure = { id: externalId, status: status ?? 'unavailable' };
+            break;
+          }
+        }
+        if (endpointFailure) {
+          unresolved.push({ ...draft, reason: `current_release_${endpointFailure.status}:${endpointFailure.id}` });
+          mark.run('unresolved', null, graphEdgeKey(draft));
+          continue;
+        }
       }
       if (
         draft.fenceFacts &&
@@ -562,12 +636,22 @@ export class CrossMediaGraph {
         const bound = input.claim({ source: draft.alias, external_id: qualifier.content });
         return bound?.state === 'bound' ? { ...qualifier, content: bound.subject } : qualifier;
       });
-      const statement = relationStatement({
+      const statementBase = relationStatement({
         property: draft.property,
         target: target.subject,
         url: draft.url,
         qualifiers,
       });
+      const statement =
+        isVndbReleaseSupersession(draft)
+          ? {
+              ...statementBase,
+              references: [
+                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: vndbRecordUrl(draft.holder) } }] },
+                { parts: [{ property: { id: 'schema:url' }, value: { type: 'value' as const, content: vndbRecordUrl(draft.target) } }] },
+              ],
+            }
+          : statementBase;
       const command: BatchCommand = {
         op: 'propose',
         key: commandKey([draft.alias, draft.holder, graphEdgeKey(draft), 'relation']),
@@ -582,7 +666,34 @@ export class CrossMediaGraph {
         subject: holder.subject,
         statement,
       };
-      const retained = this.retainCommand(graphEdgeKey(draft), command);
+      const edgeKey = graphEdgeKey(draft);
+      const prior = releaseSupersession ? this.command(edgeKey) : null;
+      let sealedCommand = command;
+      if (prior?.bytes) {
+        const exact = (JSON.parse(prior.bytes) as { commands?: BatchCommand[] }).commands?.[0];
+        if (!exact || exact.op !== 'propose' || prior.key !== exact.key)
+          throw new TypeError('Cross-media release journal is invalid');
+        const exactTarget = exact.statement.value.type === 'value' ? exact.statement.value.content : undefined;
+        if (
+          exact.source.source !== draft.alias ||
+          exact.source.external_id !== draft.holder ||
+          exact.source.digest !== sourceDigest(draft.record) ||
+          exact.subject !== holder.subject ||
+          exact.statement.property.id !== draft.property ||
+          exactTarget !== target.subject
+        ) {
+          unresolved.push({ ...draft, reason: 'journaled_native_identity_changed' });
+          mark.run('unresolved', prior.key, edgeKey);
+          continue;
+        }
+        sealedCommand = exact;
+      } else if (releaseSupersession && input.journal) {
+        const prepared = input.journal.prepare(command);
+        const exact = (JSON.parse(prepared.bytes) as { commands?: BatchCommand[] }).commands?.[0];
+        if (!exact || exact.op !== 'propose') throw new TypeError('Cross-media release journal is invalid');
+        sealedCommand = exact;
+      }
+      const retained = this.retainCommand(edgeKey, sealedCommand);
       commands.push({
         draft,
         command: JSON.parse(retained.bytes).commands[0] as BatchCommand,
@@ -594,7 +705,8 @@ export class CrossMediaGraph {
       });
     }
     const groups = [
-      commands.filter((entry) => !entry.draft.producerParent),
+      commands.filter((entry) => !entry.draft.producerParent && !isVndbReleaseSupersession(entry.draft)),
+      commands.filter((entry) => isVndbReleaseSupersession(entry.draft)),
       commands.filter((entry) => Boolean(entry.draft.producerParent)),
     ];
     for (const group of groups) {
@@ -606,7 +718,9 @@ export class CrossMediaGraph {
         for (const [index, entry] of page.entries()) {
           const receipt = result.results[index];
           const status = receipt?.status;
-          const journaled = !!(entry.draft.relation || entry.draft.producerParent);
+          const journaled = !!(
+            entry.draft.relation || entry.draft.producerParent || isVndbReleaseSupersession(entry.draft)
+          );
           if (status === 200) {
             unchanged++;
             if (journaled && (!receipt || !('value' in receipt) || !('candidate' in receipt.value)))
@@ -626,6 +740,19 @@ export class CrossMediaGraph {
             continue;
           }
           if (status !== 201) {
+            if (isVndbReleaseSupersession(entry.draft)) {
+              mark.run('unresolved', entry.command.key, graphEdgeKey(entry.draft));
+              const reason =
+                status === undefined
+                  ? 'unknown_delivery'
+                  : status === 401 || status === 403
+                    ? 'endpoint_refused'
+                    : status === 404 || status === 410
+                      ? 'missing_endpoint'
+                      : 'endpoint_unavailable';
+              unresolved.push({ ...entry.draft, reason });
+              continue;
+            }
             if (entry.draft.producerParent && receipt === undefined) {
               mark.run('unresolved', entry.command.key, graphEdgeKey(entry.draft));
               unresolved.push({ ...entry.draft, reason: 'unknown_delivery' });
