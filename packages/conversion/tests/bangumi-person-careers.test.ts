@@ -35,8 +35,8 @@ function mapCareers(
   type = 'schema:Person',
   currentBindings = bindings,
 ) {
-  const codes = Array.isArray(result.normalized.career)
-    ? result.normalized.career.filter((code): code is string => typeof code === 'string')
+  const codes = Array.isArray(result.normalizedRecord.career)
+    ? result.normalizedRecord.career.filter((code): code is string => typeof code === 'string')
     : [];
   return mapBangumiVocabulary({
     metadata: {
@@ -67,8 +67,8 @@ test('selected Bangumi Person careers use current source Concepts and released o
     (command): command is Extract<BatchCommand, { op: 'propose' }> =>
       command.op === 'propose' && command.statement.property.id === 'wdt:P106',
   );
-  expect(valid.normalized.career).toEqual(['producer']);
-  expect(valid.normalized.summary).toBe('A source biography.');
+  expect(valid.normalizedRecord.career).toEqual(['producer']);
+  expect(valid.normalizedRecord.summary).toBe('A source biography.');
   expect(proposals).toHaveLength(1);
   expect(proposals[0]?.op === 'propose' ? proposals[0].subject : undefined).toBe(subject);
   expect(proposals[0]?.op === 'propose' ? proposals[0].statement.value : undefined).toEqual({ type: 'value', content: concept });
