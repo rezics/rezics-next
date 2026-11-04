@@ -37,7 +37,9 @@ export type AuthorPostEntry = Extract<ItemView, { availability: 'available' }> &
 export type AuthorThreadEntry = ThreadView & Partial<AuthorItemContext>;
 export type AuthorItemDependencies = ContentReadDependencies & { cursorNow?: () => number };
 export type AuthorPage<T> = {
-  entries: readonly T[]; nextCursor: string | null; anchors: readonly AnchoredPosition[];
+  entries: readonly T[];
+  nextCursor: string | null;
+  anchors: readonly AnchoredPosition[];
   actionSelection?: AuthorContributionSelection;
 };
 type Key = { createdAt: string; itemId: string };
@@ -333,12 +335,19 @@ async function listAuthorItems(
   return {
     entries: entries.map((entry) => ({ ...entry, ...contexts.get(entry.id) })),
     anchors,
-    ...(context.actor.kind === 'anonymous' && selected.length > 0 ? {
-      actionSelection: issueAuthorContributionSelection(
-        dependencies.tokens, accountId, list === 'posts' ? 'posts' : kind === 'review' ? 'reviews' : 'discussion',
-        input.cursor, selected, final, now,
-      ),
-    } : {}),
+    ...(context.actor.kind === 'anonymous' && selected.length > 0
+      ? {
+          actionSelection: issueAuthorContributionSelection(
+            dependencies.tokens,
+            accountId,
+            list === 'posts' ? 'posts' : kind === 'review' ? 'reviews' : 'discussion',
+            input.cursor,
+            selected,
+            final,
+            now,
+          ),
+        }
+      : {}),
     nextCursor: hasMore && last ? encodeAuthorItemKey(dependencies.tokens, scope, last, page.anchor.epoch, now) : null,
   };
 }

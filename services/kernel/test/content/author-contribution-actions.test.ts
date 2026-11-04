@@ -12,8 +12,13 @@ test('one native author page admits a private exact cohort without changing its 
     const created = await f.call('POST', '/v1/threads', {
       bearer: f.author.bearer,
       body: {
-        kind: 'review', title: 'Selected contribution', body: fromPlainText('Public opening'),
-        licence: 'CC0-1.0', boardId: f.boardId, subjectIds: [f.subjectId], visibility: 'published',
+        kind: 'review',
+        title: 'Selected contribution',
+        body: fromPlainText('Public opening'),
+        licence: 'CC0-1.0',
+        boardId: f.boardId,
+        subjectIds: [f.subjectId],
+        visibility: 'published',
       },
     });
     expect(created.response.status, created.text).toBe(201);
@@ -38,7 +43,8 @@ test('one native author page admits a private exact cohort without changing its 
       expect(result.value.watch.items[0].threadId).toBe(created.value.thread.id);
     }
     for (const body of [
-      { ...input, view: 'discussion' }, { ...input, cursor: 'another-page' },
+      { ...input, view: 'discussion' },
+      { ...input, cursor: 'another-page' },
       { ...input, references: [...input.references, ...input.references] },
       { ...input, references: Array(21).fill(input.references[0]) },
       { ...input, references: [{ ...input.references[0], sourceRevisionId: f.subjectId }] },
@@ -47,15 +53,20 @@ test('one native author page admits a private exact cohort without changing its 
       expect(result.response.status, result.text).toBe(400);
     }
     const wrongAuthor = await f.call('POST', `/v1/accounts/${f.other.accountId}/contribution-actions`, {
-      bearer: f.other.bearer, body: input,
+      bearer: f.other.bearer,
+      body: input,
     });
     expect(wrongAuthor.response.status, wrongAuthor.text).toBe(404);
     await f.admin.query('UPDATE access.account SET public_views=$3::jsonb WHERE route=$1 AND account_id=$2', [
-      routeOf(f.author.accountId), f.author.accountId, JSON.stringify({ posts: false, reviews: false }),
+      routeOf(f.author.accountId),
+      f.author.accountId,
+      JSON.stringify({ posts: false, reviews: false }),
     ]);
     const hidden = await f.call('POST', path, { bearer: f.author.bearer, body: input });
     expect(hidden.response.status, hidden.text).toBe(404);
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 }, 240_000);
 
 test('publication withdrawal during private assembly retires all advice', async () => {
@@ -64,25 +75,46 @@ test('publication withdrawal during private assembly retires all advice', async 
   try {
     const created = await f.call('POST', '/v1/threads', {
       bearer: f.author.bearer,
-      body: { kind: 'review', title: 'Withdrawal', body: fromPlainText('Opening'), licence: 'CC0-1.0',
-        boardId: f.boardId, subjectIds: [f.subjectId], visibility: 'published' },
+      body: {
+        kind: 'review',
+        title: 'Withdrawal',
+        body: fromPlainText('Opening'),
+        licence: 'CC0-1.0',
+        boardId: f.boardId,
+        subjectIds: [f.subjectId],
+        visibility: 'published',
+      },
     });
     expect(created.response.status, created.text).toBe(201);
     const page = await f.call('GET', `/v1/accounts/${f.author.accountId}/threads?kind=review`);
     const gate = observer.hold({ statement: views.sql }, 'after');
     const pending = readAuthorContributionActions(
-      { pool: f.system.database.pool, access: f.system.access, tokens: f.system.tokenKeys,
-        routeKey: new Uint8Array(32).fill(7) },
-      f.author.accountId, { view: 'reviews', cursor: null, ...page.value.actionSelection },
-      f.system.actors.other.actor, Date.now() + 120_000,
+      {
+        pool: f.system.database.pool,
+        access: f.system.access,
+        tokens: f.system.tokenKeys,
+        routeKey: new Uint8Array(32).fill(7),
+      },
+      f.author.accountId,
+      { view: 'reviews', cursor: null, ...page.value.actionSelection },
+      f.system.actors.other.actor,
+      Date.now() + 120_000,
     );
     // Observe the rejection immediately, including while the SQL gate is held.
-    const outcome = pending.then(() => null, (error: unknown) => error);
+    const outcome = pending.then(
+      () => null,
+      (error: unknown) => error,
+    );
     await gate.entered;
     await f.admin.query('UPDATE access.account SET public_views=$3::jsonb WHERE route=$1 AND account_id=$2', [
-      routeOf(f.author.accountId), f.author.accountId, JSON.stringify({ posts: false, reviews: false }),
+      routeOf(f.author.accountId),
+      f.author.accountId,
+      JSON.stringify({ posts: false, reviews: false }),
     ]);
     gate.release();
     expect(await outcome).toMatchObject({ code: 'dependency_unavailable' });
-  } finally { await observer.close(); await f.close(); }
+  } finally {
+    await observer.close();
+    await f.close();
+  }
 }, 240_000);

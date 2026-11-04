@@ -9,17 +9,23 @@ import type { Actor } from '../request/access.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { AuthorContextReference } from './author-item-context.ts';
-import type { AuthorContributionActionsInput, AuthorContributionSelection } from './author-contribution-actions-schema.ts';
+import type {
+  AuthorContributionActionsInput,
+  AuthorContributionSelection,
+} from './author-contribution-actions-schema.ts';
 import { readThread, readPost } from './reads.ts';
 import type { AnchoredPosition } from './model.ts';
 import {
-  createContentReadingCardBatch, normalizeSelectedReadingCardReferences,
-  type ReadingPageDependencies, type SelectedReadingCardReference,
+  createContentReadingCardBatch,
+  normalizeSelectedReadingCardReferences,
+  type ReadingPageDependencies,
+  type SelectedReadingCardReference,
 } from './reading-page.ts';
 
 type View = AuthorContributionActionsInput['view'];
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const changed = () => new ProblemError('dependency_unavailable', { detail: 'The selected author contribution changed' });
+const changed = () =>
+  new ProblemError('dependency_unavailable', { detail: 'The selected author contribution changed' });
 const publicItem = (item: { availability: string; visibility?: string }) =>
   item.availability === 'available' && (item.visibility === 'published' || item.visibility === 'protected');
 const sourceRevision = (item: { availability: string; revisionId?: string }) => {
@@ -29,40 +35,76 @@ const sourceRevision = (item: { availability: string; revisionId?: string }) => 
 };
 
 function referencesOf(selected: readonly AuthorContextReference[]): AuthorContributionSelection['references'] {
-  return selected.map(({ thread, post }) => post ? {
-    type: 'content.post', id: post.id, threadId: thread.id, placeId: thread.boardId,
-    threadRevisionId: sourceRevision(thread.firstPost), sourceRevisionId: sourceRevision(post),
-  } : {
-    type: 'content.thread', id: thread.id, placeId: thread.boardId,
-    sourceRevisionId: sourceRevision(thread.firstPost),
-  });
+  return selected.map(({ thread, post }) =>
+    post
+      ? {
+          type: 'content.post',
+          id: post.id,
+          threadId: thread.id,
+          placeId: thread.boardId,
+          threadRevisionId: sourceRevision(thread.firstPost),
+          sourceRevisionId: sourceRevision(post),
+        }
+      : {
+          type: 'content.thread',
+          id: thread.id,
+          placeId: thread.boardId,
+          sourceRevisionId: sourceRevision(thread.firstPost),
+        },
+  );
 }
 
 // Only native observations enter the digest. No authored body is retained in a token.
 const observation = (selected: readonly AuthorContextReference[]) =>
   hash(selected.map(({ thread, post }) => ({ thread, post: post ?? null })));
-const canonical = (references: readonly SelectedReadingCardReference[]) => references.map((reference) =>
-  reference.type === 'content.thread' ? {
-    type: reference.type, id: reference.id, placeId: reference.placeId, sourceRevisionId: reference.sourceRevisionId,
-  } : {
-    type: reference.type, id: reference.id, threadId: reference.threadId, placeId: reference.placeId,
-    threadRevisionId: reference.threadRevisionId, sourceRevisionId: reference.sourceRevisionId,
-  });
+const canonical = (references: readonly SelectedReadingCardReference[]) =>
+  references.map((reference) =>
+    reference.type === 'content.thread'
+      ? {
+          type: reference.type,
+          id: reference.id,
+          placeId: reference.placeId,
+          sourceRevisionId: reference.sourceRevisionId,
+        }
+      : {
+          type: reference.type,
+          id: reference.id,
+          threadId: reference.threadId,
+          placeId: reference.placeId,
+          threadRevisionId: reference.threadRevisionId,
+          sourceRevisionId: reference.sourceRevisionId,
+        },
+  );
 const scope = (references: readonly SelectedReadingCardReference[]) => ({
-  operation: 'author.contribution.selection', parameters: { references: hash(canonical(references)) },
+  operation: 'author.contribution.selection',
+  parameters: { references: hash(canonical(references)) },
 });
 
 /** Called only by the anonymous author reader after its final native disclosure/publication checks. */
 export function issueAuthorContributionSelection(
-  tokens: KeyRing, accountId: string, view: View, cursor: string | undefined,
-  selected: readonly AuthorContextReference[], anchor: AnchoredPosition, now: number,
+  tokens: KeyRing,
+  accountId: string,
+  view: View,
+  cursor: string | undefined,
+  selected: readonly AuthorContextReference[],
+  anchor: AnchoredPosition,
+  now: number,
 ): AuthorContributionSelection {
   if (selected.length === 0 || selected.length > 20) throw new RangeError('Select 1 to 20 author contributions');
   const references = referencesOf(selected);
   normalizeSelectedReadingCardReferences(references);
-  return { references, proof: encodeCursor(tokens, scope(references), {
-    epoch: anchor.epoch, after: [accountId, view, cursor ?? '', observation(selected)],
-  }, now) };
+  return {
+    references,
+    proof: encodeCursor(
+      tokens,
+      scope(references),
+      {
+        epoch: anchor.epoch,
+        after: [accountId, view, cursor ?? '', observation(selected)],
+      },
+      now,
+    ),
+  };
 }
 
 /** A public token is admission to a selected read, never authority for a command. */
@@ -74,40 +116,56 @@ function admission(tokens: KeyRing, accountId: string, input: AuthorContribution
   if (!decoded.ok || decoded.after.length !== 4) throw new ProblemError('invalid_request');
   const [author, view, cursor, witness] = decoded.after;
   if (author !== accountId) throw new ProblemError('not_found');
-  if (view !== input.view || cursor !== (input.cursor ?? '') ||
-      typeof witness !== 'string' || !/^[a-f0-9]{64}$/.test(witness))
+  if (
+    view !== input.view ||
+    cursor !== (input.cursor ?? '') ||
+    typeof witness !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(witness)
+  )
     throw new ProblemError('invalid_request');
   return { references, epoch: decoded.epoch, witness };
 }
 
 async function publication(
-  dependencies: ReadingPageDependencies, accountId: string, view: View, epoch: number, deadline: number,
+  dependencies: ReadingPageDependencies,
+  accountId: string,
+  view: View,
+  epoch: number,
+  deadline: number,
 ): Promise<AnchoredPosition> {
   const route = routeOf(accountId);
   if (route === null) throw new ProblemError('not_found');
-  return within(deadline, () => withConnection(dependencies.pool, async (connection) => {
-    const client = deadlineClient(connection, deadline);
-    try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      await client.query("SET LOCAL statement_timeout = '3000ms'");
-      const partition = await readPartition(client, partitionOf(route));
-      if (!partition || partition.writeState === 'moved' || partition.epoch !== epoch) throw changed();
-      const views = (await readPublicViews(client, [accountId])).get(accountId);
-      if (!(view === 'reviews' ? views?.reviews : views?.posts)) throw new ProblemError('not_found');
-      await client.query('COMMIT');
-      return { partition, epoch: partition.epoch, position: partition.position };
-    } catch (error) {
-      try { await connection.query('ROLLBACK'); }
-      catch (rollback) { discardConnection(connection, rollback as Error); }
-      throw error;
-    }
-  }));
+  return within(deadline, () =>
+    withConnection(dependencies.pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        await client.query("SET LOCAL statement_timeout = '3000ms'");
+        const partition = await readPartition(client, partitionOf(route));
+        if (!partition || partition.writeState === 'moved' || partition.epoch !== epoch) throw changed();
+        const views = (await readPublicViews(client, [accountId])).get(accountId);
+        if (!(view === 'reviews' ? views?.reviews : views?.posts)) throw new ProblemError('not_found');
+        await client.query('COMMIT');
+        return { partition, epoch: partition.epoch, position: partition.position };
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollback) {
+          discardConnection(connection, rollback as Error);
+        }
+        throw error;
+      }
+    }),
+  );
 }
 
 /** Reuse exact native source/ancestry/place disclosure as anonymous, even for an author or editor. */
 async function sources(
-  dependencies: ReadingPageDependencies, accountId: string, view: View,
-  references: readonly SelectedReadingCardReference[], deadline: number,
+  dependencies: ReadingPageDependencies,
+  accountId: string,
+  view: View,
+  references: readonly SelectedReadingCardReference[],
+  deadline: number,
 ) {
   const context = { actor: { kind: 'anonymous' as const }, deadline };
   const threads = new Map<string, Awaited<ReturnType<typeof readThread>>>();
@@ -124,16 +182,30 @@ async function sources(
     const thread = read.value;
     if (!thread || !publicItem(thread) || thread.boardId !== reference.placeId) throw changed();
     if (reference.type === 'content.thread') {
-      if (view === 'posts' || thread.kind !== (view === 'reviews' ? 'review' : 'discussion') ||
-          thread.authorId !== accountId || !publicItem(thread.firstPost)) throw changed();
+      if (
+        view === 'posts' ||
+        thread.kind !== (view === 'reviews' ? 'review' : 'discussion') ||
+        thread.authorId !== accountId ||
+        !publicItem(thread.firstPost)
+      )
+        throw changed();
       selected.push({ thread });
     } else {
-      if (view !== 'posts' || reference.id === thread.firstPost.id ||
-          (thread.firstPost.availability !== 'erased' && !publicItem(thread.firstPost))) throw changed();
+      if (
+        view !== 'posts' ||
+        reference.id === thread.firstPost.id ||
+        (thread.firstPost.availability !== 'erased' && !publicItem(thread.firstPost))
+      )
+        throw changed();
       const post = await readPost(dependencies, threadId, reference.id, context);
       anchors.push(post.anchor);
-      if (!post.value || post.value.availability !== 'available' || !publicItem(post.value) ||
-          post.value.authorId !== accountId) throw changed();
+      if (
+        !post.value ||
+        post.value.availability !== 'available' ||
+        !publicItem(post.value) ||
+        post.value.authorId !== accountId
+      )
+        throw changed();
       selected.push({ thread, post: post.value });
     }
   }
@@ -143,8 +215,11 @@ async function sources(
 
 /** One admitted page, one retained native batch, and complete public disclosure on both sides of assembly. */
 export async function readAuthorContributionActions(
-  dependencies: ReadingPageDependencies, accountId: string, input: AuthorContributionActionsInput,
-  actor: Actor, deadline: number,
+  dependencies: ReadingPageDependencies,
+  accountId: string,
+  input: AuthorContributionActionsInput,
+  actor: Actor,
+  deadline: number,
 ) {
   const selected = admission(dependencies.tokens, accountId, input, Date.now());
   const firstPublication = await publication(dependencies, accountId, input.view, selected.epoch, deadline);
@@ -155,8 +230,9 @@ export async function readAuthorContributionActions(
   const final = await sources(dependencies, accountId, input.view, selected.references, deadline);
   if (final.witness !== selected.witness) throw changed();
   let lastPublication: AnchoredPosition;
-  try { lastPublication = await publication(dependencies, accountId, input.view, selected.epoch, deadline); }
-  catch (error) {
+  try {
+    lastPublication = await publication(dependencies, accountId, input.view, selected.epoch, deadline);
+  } catch (error) {
     if (error instanceof ProblemError && error.code === 'not_found') throw changed();
     throw error;
   }
@@ -165,9 +241,13 @@ export async function readAuthorContributionActions(
       viewer: result.viewer,
       selected: result.selected.map(({ reference, state, reply }) => ({ reference, state, reply })),
       reactions: { ...result.reactions, items: [...result.reactions.items] },
-      actions: { ...result.actions, references: result.actions.references.map((reference) => ({
-        ...reference, operations: [...reference.operations],
-      })) },
+      actions: {
+        ...result.actions,
+        references: result.actions.references.map((reference) => ({
+          ...reference,
+          operations: [...reference.operations],
+        })),
+      },
       watch: { ...result.watch, items: [...result.watch.items] },
       currentness: result.currentness,
     },
