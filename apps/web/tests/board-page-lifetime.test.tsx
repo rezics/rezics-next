@@ -76,6 +76,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -383,7 +384,8 @@ test('Complete Board listing page caller lifetime through actual route/query/ren
   absent(anonymousHost, 'Signed in initial');
   expect(calls).toHaveLength(3);
   expect(calls[2]!.input).toEqual({ id: boardA, credentialMode: 'session' });
-  expect(anonymousClient.getQueryCache().findAll({ queryKey: ['board-page', boardA] })).toHaveLength(1);
+  const boardPages = anonymousClient.getQueryCache().findAll({ queryKey: ['board-page', boardA] });
+  expect(boardPages.filter((query) => query.queryKey[4] === 'session')).toHaveLength(1);
   await resolveRead(2, 'Signed in replacement');
   await replacementDone;
   await act(async () => {

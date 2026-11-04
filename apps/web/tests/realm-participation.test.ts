@@ -273,7 +273,7 @@ test('current membership plus uncertain leave intent cannot carry across a known
     finishOldRead({ state: 'member', idempotencyKey });
     await oldRead;
     const denied = await renderMembershipEntries(queries);
-    expect(denied).toContain(m.realm_banned());
+    expect(denied.replaceAll('&#x27;', "'")).toContain(m.realm_banned());
     expect(denied).not.toContain(`>${m.realm_leave()}</button>`);
     expect(denied).toContain(m.board_start_thread());
     expect(queries.getQueryData(current.queryKey)).toEqual({ state: 'banned', idempotencyKey: 'current-key' });
@@ -334,6 +334,7 @@ test('The default failed membership journey explains an unconfirmed change witho
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
     Node: window.Node,
+    scrollTo: () => {},
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
