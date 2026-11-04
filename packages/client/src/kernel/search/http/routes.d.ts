@@ -17,7 +17,8 @@ export type EmptyRecoveryAction =
 export type EmptyRecovery = {
     status: "ready" | "preparing" | "unavailable";
     alternatives: { query: string; label: string }[];
-    actions: EmptyRecoveryAction[];};
+    actions: EmptyRecoveryAction[];
+};
 export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
     kind: import("typebox").TLiteral<"item">;
     id: import("typebox").TString;
@@ -675,7 +676,8 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                     };
                                     resolvedSubjectId?: string;
                                 }[];
-                            } | null;                        } | {
+                            } | null;
+                        } | {
                             subjects: {
                                 id: string;
                                 type: string;
@@ -839,7 +841,6 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             next: string | null;
                             as_of: string;
                             emptyRecovery?: EmptyRecovery;
-                        } | import("../query-share.ts").QueryShare;
                         } | import("../query-share.ts").QueryShare | {
                             status: "preparing" | "ready";
                             groups: ({
