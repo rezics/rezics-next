@@ -313,6 +313,120 @@ body {
   border-radius: 0.25rem;
 }
 
+.auth-card:has(.auth-account-home) {
+  width: min(100%, 42rem);
+}
+
+.auth-card:has(.auth-account-home) h1 {
+  margin-bottom: 1.25rem;
+}
+
+.auth-account-home {
+  display: grid;
+  gap: 1.75rem;
+  text-align: start;
+}
+
+.auth-account-home-intro,
+.auth-home-settings > p,
+.auth-home-entries > p {
+  color: var(--muted-foreground);
+}
+
+.auth-account-home-status:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+  border-radius: 0.25rem;
+}
+
+.auth-account-home-email {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.auth-account-home-email dt {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-account-home-email dd {
+  font-weight: 600;
+}
+
+.auth-account-home details p {
+  overflow-wrap: anywhere;
+}
+
+.auth-home-settings,
+.auth-home-entries {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.auth-home-settings h2,
+.auth-home-entries h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.auth-home-settings nav,
+.auth-home-entries nav {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.auth-home-link,
+.auth-home-entries nav a {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  color: var(--foreground);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-link:hover,
+.auth-home-entries nav a:hover {
+  background: color-mix(in oklab, var(--accent) 50%, var(--card));
+}
+
+.auth-home-link:focus-visible,
+.auth-home-entries nav a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.auth-home-link > span:first-child {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.auth-home-link small {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.auth-home-link[aria-current='page'] {
+  border-color: color-mix(in oklab, var(--ring) 55%, var(--border));
+  background: color-mix(in oklab, var(--accent) 38%, var(--card));
+}
+
+.auth-home-current {
+  flex: none;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
 .auth-security-page section {
   display: grid;
   gap: 1rem;

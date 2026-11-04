@@ -172,9 +172,9 @@ test(
   timeout,
 );
 
-// Implement transparent AUTH_ORIGIN forwarding for every non-page path to turn this into test(...).
+// Implement page admission by method while preserving every other Auth request byte for byte.
 test(
-  'every path that is not a page reaches Auth unchanged',
+  'root page requests and native protocol methods route by path and method',
   async () => {
     let startError: unknown;
     const origin = await site().catch((error: unknown) => {
@@ -217,6 +217,20 @@ test(
           headers: { cookie: expected.cookie!, origin: expected.origin!, 'content-type': 'application/octet-stream' },
           ...(hasBody ? { body } : {}),
         });
+        if (path === '/' && (method === 'GET' || method === 'HEAD')) {
+          expect(received.slice(before), `${method} ${target} is a page`).toEqual([]);
+          expect(response.status, `${method} ${target}`).toBe(200);
+          expect(response.headers.get('content-type')).toStartWith('text/html');
+          expect(response.headers.get('cache-control')).toBe('private, no-store');
+          expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+          const html = await response.text();
+          if (method === 'HEAD') expect(html).toBe('');
+          else {
+            expect(html).toContain('lang="ja"');
+            expect(html).toContain('aria-current="page"');
+          }
+          continue;
+        }
         expect(received.slice(before), `${method} ${target}`).toEqual([expected]);
         expect(response.status, `${method} ${path}`).toBe(path === '/authorize' ? 302 : path === '/token' ? 401 : 207);
         expect(response.headers.getSetCookie()).toEqual(cookies);

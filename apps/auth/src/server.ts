@@ -3,6 +3,7 @@ import { paraglideMiddleware } from './paraglide/server.js';
 import { installAuthLocaleNegotiation } from './locale-choice';
 
 const pagePaths = new Set([
+  '/',
   '/login',
   '/signup',
   '/consent',

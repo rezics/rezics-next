@@ -18,6 +18,18 @@ lists also use shadcn items and badges. Password reveal buttons have localized s
 until hydration. Native form submissions keep their fields and actions; scripted actions retain their pending
 states with an accessible busy indicator. Error text uses ink blue, with red reserved for the brand mark.
 
+## Account home
+
+The Auth brand and `/` open the localized account home. It uses one existing private `POST /account-identity` read to
+show only the current own account, with a missing email left missing. Signed-out, refused and unavailable reads stay
+distinct; unavailable has an explicit Retry. The technical account ID is behind a disclosure. Security, rename and
+deletion links open their existing review pages; each page checks its own current native guidance, so navigation does
+not promise that an action is available. The home never loads an inventory, changes state or resumes an operation.
+
+Decision: the home links to Security, account rename and account deletion. It omits organization membership because
+that route needs a selected organization ID, and organization creation because it is a command entry rather than a
+review destination.
+
 ## Sign-in
 
 The sign-in page first reads `POST /signin/page` with only its current route query; the entered email is never sent to
@@ -512,9 +524,11 @@ X-Frame-Options: DENY.
 
 ## Production routes
 
-The Worker is attached to auth.rezics.com only for /login, /signup, /consent, /recovery, /security, /step-up and the
-/auth-assets/* static asset prefix. Auth's own issuer endpoints stay on that host without passing through this Worker.
-Production does not set AUTH_ORIGIN.
+The Worker is attached to auth.rezics.com for `/`, `/login`, `/signup`, `/consent`, `/recovery`, `/security`,
+`/step-up`, `/account/delete`, `/account/rename`, `/organizations/new`, `/automated/new`, `/automated/open`,
+`/organizations/delete`, `/organizations/members`, `/operators/transfer` and the `/auth-assets/*` static asset
+prefix. Auth's own issuer endpoints stay on that host without passing through this Worker. Production does not set
+`AUTH_ORIGIN`.
 
 ## Cost
 
@@ -527,6 +541,12 @@ navigation on success. The page read adds no kernel calls and carries no prepara
 Recovery makes no kernel reads and adds one Auth request per submit.
 Auth pages make no kernel reads. Step-up is one `POST /signin` per submit.
 Sign-up makes no kernel reads. A successful submit is one browser `POST /signup` and one browser `POST /signin`.
+
+### Account home
+
+- **Touches:** one same-origin `POST /account-identity` on entry, explicit Retry or BFCache return; the existing transport deadline is five seconds through response-body validation
+- **Bound:** 1 Auth read per entry or renewal, 0 kernel reads and 0 mutations; no inventory reads
+- **Growth check:** `tests/account-home.test.tsx`: separate viewers and each explicit renewal own one independent read
 
 ### Passkey sign-in
 
