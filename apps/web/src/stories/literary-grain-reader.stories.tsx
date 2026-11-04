@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LiteraryReaderEntry } from '../features/catalogue/literary-reader/entry';
-import { literaryGrainExample } from '../features/catalogue/literary-reader/examples';
+import { literaryGrainExample, literaryIds, literaryStatement } from '../features/catalogue/literary-reader/examples';
 
 const client = new QueryClient();
 const meta = {
@@ -57,3 +57,38 @@ export const TraditionalChinese: Story = {
     },
   },
 };
+const multipleStreams = () => {
+  const input = literaryGrainExample();
+  const member = input.windows[0]!;
+  const assertion = literaryStatement('schema:exampleOfWork', literaryIds.series);
+  return {
+    ...input,
+    windows: [
+      member,
+      { ...member, node: 'members-secondary' },
+      {
+        ...member,
+        node: 'editions-supplied',
+        property: 'schema:exampleOfWork',
+        direction: 'inverse' as const,
+        rows: [
+          {
+            subject: literaryIds.edition,
+            property: 'schema:exampleOfWork',
+            statement: assertion.id,
+            assertion,
+            label: 'Harbour edition',
+            type: 'bf:Instance',
+            related: {},
+            summary: {
+              id: literaryIds.edition,
+              type: 'bf:Instance',
+              label: { value: 'Harbour edition', language: 'en' },
+            },
+          },
+        ],
+      },
+    ],
+  };
+};
+export const MultipleStreams: Story = { args: multipleStreams() };

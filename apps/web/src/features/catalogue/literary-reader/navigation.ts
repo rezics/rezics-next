@@ -15,16 +15,24 @@ export function literaryAddress(input: {
   context?: SelectedContext | null | undefined;
   node?: string | undefined;
   continuation?: PageContinuation | undefined;
+  stream?: { node: string; property: string; direction: 'forward' | 'inverse' } | undefined;
   focus?: string | undefined;
   previous?: readonly LiteraryPreviousAddress[] | undefined;
 }): string {
   const url = new URL(subjectViewHref(input, input.locale, input.view), 'https://rezics.invalid');
   if (input.realm) url.searchParams.set('realm', input.realm);
   if (input.context?.id) url.searchParams.set('context', input.context.id);
-  if (input.node) url.searchParams.set('node', input.node);
-  if (input.continuation) {
-    url.searchParams.set('node', input.continuation.node);
-    url.searchParams.set('cursor', input.continuation.cursor);
+  if (input.stream) {
+    url.searchParams.set('node', input.stream.node);
+    url.searchParams.set('streamProperty', input.stream.property);
+    url.searchParams.set('streamDirection', input.stream.direction);
+    if (input.continuation?.node === input.stream.node) url.searchParams.set('cursor', input.continuation.cursor);
+  } else {
+    if (input.node) url.searchParams.set('node', input.node);
+    if (input.continuation) {
+      url.searchParams.set('node', input.continuation.node);
+      url.searchParams.set('cursor', input.continuation.cursor);
+    }
   }
   if (input.focus) url.searchParams.set('focus', input.focus);
   let previous = [...(input.previous ?? [])].slice(-8);

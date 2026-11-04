@@ -135,29 +135,26 @@ export function literarySelected(subject: Subject, property: string, reader: Rea
   );
 }
 
-const memberProperties = new Set(['wdt:P179', 'schema:isPartOf', 'bf:hasPart']);
+export type LiteraryWindowKind = 'members' | 'editions';
+
 const editionProperties = new Set(['schema:exampleOfWork', 'schema:workExample', 'rezics:representativeEdition']);
-export function literaryWindowKind(window: ProfileRelationWindow, definitions: LiteraryDefinitions) {
+export function literaryWindowKind(
+  window: ProfileRelationWindow,
+  definitions: LiteraryDefinitions,
+): LiteraryWindowKind | undefined {
   const property = definitions.properties[window.property];
   if (!property?.relation || property.datatype !== 'wikibase-item') return;
-  if (memberProperties.has(window.property) && property.relation.group === 'membership') return 'members';
+  if (property.relation.group === 'membership') return 'members';
   if (editionProperties.has(window.property)) return 'editions';
   return;
 }
 
-/** At most one current native member window and one edition window; prefer the explicitly continued node. */
+/** Every supplied released membership or edition window stays available in the source's native order. */
 export function literaryWindows(
   windows: readonly ProfileRelationWindow[],
   definitions: LiteraryDefinitions,
-  node?: string,
 ): ProfileRelationWindow[] {
-  const result: ProfileRelationWindow[] = [];
-  for (const kind of ['members', 'editions']) {
-    const candidates = windows.filter((window) => literaryWindowKind(window, definitions) === kind);
-    const selected = candidates.find((window) => window.node === node) ?? candidates[0];
-    if (selected) result.push(selected);
-  }
-  return result;
+  return windows.filter((window) => literaryWindowKind(window, definitions) !== undefined);
 }
 
 function statement(value: unknown, property: string): value is Stmt {
@@ -180,6 +177,26 @@ export function literaryWindow(
   locale: string,
   reader: Reader,
 ): LiteraryWindow {
+  return projectLiteraryWindow(native, root, locale, reader, true);
+}
+
+/** Validate a supplied stream for its choice state without retaining a second page of row projections. */
+export function literaryWindowState(
+  native: ProfileRelationWindow,
+  root: string,
+  locale: string,
+  reader: Reader,
+): LiteraryState {
+  return projectLiteraryWindow(native, root, locale, reader, false).state;
+}
+
+function projectLiteraryWindow(
+  native: ProfileRelationWindow,
+  root: string,
+  locale: string,
+  reader: Reader,
+  retainRows: boolean,
+): LiteraryWindow {
   const result: LiteraryWindow = { native, state: 'unavailable', rows: [], withheld: false };
   if (native.status === undefined) return { ...result, state: 'loading' };
   if (native.status === 202) return { ...result, state: 'preparing' };
@@ -195,8 +212,8 @@ export function literaryWindow(
   const rows = relationItemRows(native.rows, native.direction === 'inverse' ? 'links' : 'relations');
   if (!rows) return result;
   const invalid = () => ({ ...result, state: 'unavailable' as const, rows: [] });
-  const keys = new Set<string>();
-  for (const row of rows) {
+  let disclosed = 0;
+  for (const [index, row] of rows.entries()) {
     const assertion = native.direction === 'inverse' ? row.assertion : row.statement;
     if (
       !statement(assertion, native.property) ||
@@ -211,9 +228,8 @@ export function literaryWindow(
       continue;
     }
     if (typeof id !== 'string' || row.summary.id !== id || typeof row.summary.type !== 'string') return invalid();
-    const key = `${native.node}:${native.direction}:${native.property}:${assertion.id}`;
-    if (keys.has(key)) return invalid();
-    keys.add(key);
+    disclosed++;
+    if (!retainRows) continue;
     const label =
       isRecord(row.summary.label) && typeof row.summary.label.value === 'string'
         ? {
@@ -223,12 +239,19 @@ export function literaryWindow(
         : pageText(row.label, locale);
     // This projection is scoped to this assertion. It never resolves a parent or hydrates a row.
     const related = (isRecord(row.related) ? row.related : {}) as Related;
-    result.rows.push({ id, key, label, type: row.summary.type, statement: assertion, related });
+    result.rows.push({
+      id,
+      key: `${native.node}:${native.direction}:${native.property}:${assertion.id}:${index}`,
+      label,
+      type: row.summary.type,
+      statement: assertion,
+      related,
+    });
   }
   result.state =
     native.caughtUp === false
       ? 'preparing'
-      : result.rows.length
+      : disclosed > 0
         ? 'ready'
         : result.withheld
           ? 'withheld'

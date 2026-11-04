@@ -123,13 +123,41 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
   shouldReload: true,
   errorComponent: SubjectViewError,
   // Validate the cursor in the loader so invalid input answers the not-found document.
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>) => {
+    const node = validatePageNode(search.node);
+    const streamProperty = search.streamProperty;
+    const streamDirection = search.streamDirection;
+    const validatedStreamDirection: 'forward' | 'inverse' | undefined =
+      streamDirection === 'forward' || streamDirection === 'inverse' ? streamDirection : undefined;
+    if (
+      (search.cursor !== undefined && node === undefined) ||
+      (streamProperty !== undefined &&
+        (typeof streamProperty !== 'string' ||
+          !streamProperty.trim() ||
+          streamProperty.length > 256 ||
+          /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
+      (streamDirection !== undefined && streamDirection !== 'forward' && streamDirection !== 'inverse') ||
+      ((streamProperty !== undefined || streamDirection !== undefined) &&
+        (node === undefined || streamProperty === undefined || streamDirection === undefined))
+    )
+      throw notFound();
+    return {
+      cursor: search.cursor,
+      realm: validatePageRealm(search.realm),
+      node,
+      ...(typeof streamProperty === 'string' ? { streamProperty } : {}),
+      ...(validatedStreamDirection ? { streamDirection: validatedStreamDirection } : {}),
+      via: subjectVisitReturn(search.via, getLocale()),
+    };
+  },
+  loaderDeps: ({ search }) => ({
     cursor: search.cursor,
-    realm: validatePageRealm(search.realm),
-    node: validatePageNode(search.node),
-    via: subjectVisitReturn(search.via, getLocale()),
+    realm: search.realm,
+    node: search.node,
+    streamProperty: search.streamProperty,
+    streamDirection: search.streamDirection,
+    via: search.via,
   }),
-  loaderDeps: ({ search }) => ({ cursor: search.cursor, realm: search.realm, node: search.node, via: search.via }),
   loader: async ({ params, location, context, deps }) => {
     const reader = await subjectRequestReader({ data: { realm: deps.realm } });
     if (!isView(params.view) || params.view === 'overview') throw notFound();
@@ -213,6 +241,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       nextHref,
       realm: deps.realm,
       node: deps.node,
+      streamProperty: deps.streamProperty,
+      streamDirection: deps.streamDirection,
     };
   },
   head: ({ loaderData, match }) =>
@@ -242,6 +272,9 @@ function SubjectViewRoute() {
     cursor,
     nextHref,
     realm,
+    node,
+    streamProperty,
+    streamDirection,
     reader: initialReader,
     page,
     verification,
@@ -266,6 +299,9 @@ function SubjectViewRoute() {
   return (
     <SubjectViewPage
       page={page}
+      selectedNode={node}
+      selectedStreamProperty={streamProperty}
+      selectedStreamDirection={streamDirection}
       {...(search.via ? { returnTo: search.via } : {})}
       subjectLabel={frame.title.text}
       curation={

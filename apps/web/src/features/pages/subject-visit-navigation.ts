@@ -34,7 +34,7 @@ function validLiteraryHistory(value: string): boolean {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
         const item = entry as Record<string, unknown>;
         return (
-          Object.keys(item).every((key) => ['view', 'node', 'cursor', 'focus'].includes(key)) &&
+          Object.keys(item).every((key) => ['view', 'node', 'cursor', 'streamProperty', 'streamDirection', 'focus'].includes(key)) &&
           (item.view === 'overview' || item.view === 'contents' || item.view === 'editions') &&
           (item.node === undefined || (typeof item.node === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(item.node))) &&
           (item.cursor === undefined ||
@@ -43,7 +43,18 @@ function validLiteraryHistory(value: string): boolean {
               item.cursor.length > 0 &&
               item.cursor.length <= 8192 &&
               !/[\u0000-\u001f\u007f]/u.test(item.cursor))) &&
-          (item.view !== 'overview' || (item.node === undefined && item.cursor === undefined)) &&
+          ((item.streamProperty === undefined && item.streamDirection === undefined) ||
+            (item.node !== undefined &&
+              typeof item.streamProperty === 'string' &&
+              !!item.streamProperty.trim() &&
+              item.streamProperty.length <= 256 &&
+              !/[\u0000-\u001f\u007f]/u.test(item.streamProperty) &&
+              (item.streamDirection === 'forward' || item.streamDirection === 'inverse'))) &&
+          (item.view !== 'overview' ||
+            (item.node === undefined &&
+              item.cursor === undefined &&
+              item.streamProperty === undefined &&
+              item.streamDirection === undefined)) &&
           (item.focus === undefined ||
             (typeof item.focus === 'string' && /^[A-Za-z0-9:._~-]{1,256}$/u.test(item.focus)))
         );
@@ -620,6 +631,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       'history',
       'focus',
       'property',
+      'streamProperty',
+      'streamDirection',
       'screenCursor',
       'screenSelection',
     ]);
@@ -637,6 +650,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const history = url.searchParams.get('history');
     const focus = url.searchParams.get('focus');
     const property = url.searchParams.get('property');
+    const streamProperty = url.searchParams.get('streamProperty');
+    const streamDirection = url.searchParams.get('streamDirection');
     const screenCursor = url.searchParams.get('screenCursor');
     const screenSelection = url.searchParams.get('screenSelection');
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
@@ -647,11 +662,16 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null &&
-        (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
+        (!subject?.[2] || node === null || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
       (property !== null &&
         (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f\u007f]/u.test(property))) ||
       (history !== null && (url.hash !== '#literary-reader' || !validLiteraryHistory(history))) ||
       (focus !== null && (url.hash !== '#literary-reader' || !/^[A-Za-z0-9:._~-]{1,256}$/u.test(focus))) ||
+      (streamProperty !== null &&
+        (!subject?.[2] || node === null || !streamProperty.trim() || streamProperty.length > 256 || /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
+      (streamDirection !== null &&
+        (!subject?.[2] || node === null || streamProperty === null || !['forward', 'inverse'].includes(streamDirection))) ||
+      (streamProperty !== null && streamDirection === null) ||
       (screenReturn &&
         (subject?.[2] !== undefined ||
           (screenCursor !== null &&

@@ -134,8 +134,10 @@ export function LiteraryNativeWindow({
   context,
   rootLabel,
   nextHref,
+  retryHref,
   restartHref,
   previousHref,
+  continued = false,
 }: {
   window: LiteraryWindow;
   definitions: LiteraryDefinitions;
@@ -145,8 +147,10 @@ export function LiteraryNativeWindow({
   context?: SelectedContext | null | undefined;
   rootLabel: string;
   nextHref?: string | undefined;
+  retryHref?: string | undefined;
   restartHref?: string | undefined;
   previousHref?: string | undefined;
+  continued?: boolean | undefined;
 }) {
   const { native, state } = window;
   const property = definitions.properties[native.property];
@@ -164,6 +168,16 @@ export function LiteraryNativeWindow({
         {title.text || m.subject_relations({}, o)}
       </h3>
       <LiteraryStatus state={state} locale={locale} />
+      {continued && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.literary_grain_stream_continued({}, o)}
+        </p>
+      )}
+      {native.next && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.literary_grain_stream_truncated({}, o)}
+        </p>
+      )}
       {(state === 'ready' || state === 'preparing') && window.rows.length > 0 && (
         <ul className="divide-y divide-border">
           {window.rows.map((row) => {
@@ -210,6 +224,11 @@ export function LiteraryNativeWindow({
         {previousHref && (
           <a href={previousHref} className={action}>
             {m.literary_visit_previous({}, o)}
+          </a>
+        )}
+        {retryHref && state === 'unavailable' && (
+          <a href={retryHref} className={action}>
+            {m.subject_section_retry({}, o)}
           </a>
         )}
         {nextHref &&
