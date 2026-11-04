@@ -150,7 +150,12 @@ test('native release supersession keeps direction, chronology, Context, source e
   const global = subject(await fixture.read(current));
   expect(global.statements['wdt:P155']?.map((item) => item.value.content)).toEqual([prior.id]);
   expect(global.statements[relationProperty]?.map((item) => item.value.content)).toEqual([prior.id]);
-  expect((subject(await fixture.read(prior))).statements['schema:datePublished']?.[0]?.value.type).toBe('somevalue');
+  const priorReading = body(await fixture.read(prior));
+  expect(
+    (priorReading.subject as { statements: Record<string, { value: { type: string } }[]> }).statements[
+      'schema:datePublished'
+    ]?.[0]?.value.type,
+  ).toBe('somevalue');
   const forward = body(
     await fixture.request(
       'anonymous',
@@ -210,10 +215,10 @@ test('native release supersession keeps direction, chronology, Context, source e
     .toHaveProperty(relationProperty);
   expect(composed.viewer).toMatchObject({ state: 'anonymous', actions: { statementPropose: 'denied' } });
 
-  await fixture.grant('alice', ['moderation:hide'], prior.id);
+  await fixture.grant('editor', ['moderation:hide'], prior.id);
   body(
     await fixture.request(
-      'alice',
+      'editor',
       'POST',
       `/v1/subjects/${prior.id}:hide`,
       { reason: 'Withhold the exact replaced release' },
