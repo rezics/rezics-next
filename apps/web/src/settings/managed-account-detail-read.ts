@@ -1,4 +1,5 @@
 import { withManagedReadDeadline } from './managed-read-deadline';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 import type { ManagedReaderCurrent } from './managed-session-reader';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
@@ -200,6 +201,7 @@ type SectionState<T> = {
   failure?: DetailFailure | undefined;
 };
 export type DetailSnapshot = {
+  retryAt?: number | undefined;
   detail?: (Pick<ManagementDetail, 'account' | 'self' | 'role' | 'operator'> & { operated: boolean }) | undefined;
   authNavigation?: ManagedAuthNavigation | undefined;
   pending: boolean;
@@ -256,6 +258,8 @@ export class ManagedAccountReader {
   }
   async load(section?: DetailSection, cursor?: string) {
     if (!this.live()) return;
+    // All controls, including callbacks captured before the response, share this endpoint wait.
+    if ((this.state.retryAt ?? 0) > Date.now()) return;
     if (this.state.pending || (section && this.state[section].pending)) return;
     if (!section && (this.state.members.pending || this.state.responsibilities.pending)) return;
     const generation = this.generation;
@@ -296,10 +300,13 @@ export class ManagedAccountReader {
       result = { ok: false, failure: detailFailure(401) };
     if (!result.ok) {
       const { failure } = result;
+      // Observe once on receipt. A sibling reply cannot shorten an already observed wait.
+      const retryAt = Math.max(this.state.retryAt ?? 0, preferenceRetryDeadline(failure.retryAfter));
       if ([401, 403, 404].includes(failure.status ?? 0) || !section) {
         if (!failure.transient) this.generation++;
         this.publish({
           ...(failure.transient ? this.state : empty()),
+          retryAt,
           authNavigation: undefined,
           pending: false,
           failure,
@@ -307,6 +314,7 @@ export class ManagedAccountReader {
       } else
         this.publish({
           ...this.state,
+          retryAt,
           authNavigation: undefined,
           [section]: {
             ...this.state[section],
@@ -323,6 +331,7 @@ export class ManagedAccountReader {
     // An authority loss observed by either feed invalidates other in-flight pages as well.
     if (restricted) this.generation++;
     this.publish({
+      retryAt: this.state.retryAt,
       // An older feed reply cannot restore an entry after a newer read removed its proof.
       authNavigation: observation === this.actionObservation ? result.authNavigation : this.state.authNavigation,
       detail: {
