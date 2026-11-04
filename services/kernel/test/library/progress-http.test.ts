@@ -2,6 +2,7 @@ import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { deriveAccess } from '../../src/access/derived-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { Buffer } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -11,7 +12,7 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject as createSemanticSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const issuer = 'https://auth.progress.test';
 const audience = 'https://kernel.progress.test';
@@ -62,18 +63,18 @@ async function request(
   return { response, body: (await response.json()) as Record<string, any> };
 }
 
-async function createSubject(): Promise<string> {
+async function createSubject(accountId = owner): Promise<string> {
   const requestKey = randomUUID();
   const created = await createSemanticSubject(db.pool, {
     actor: {
       kind: 'account',
-      accountId: owner,
+      accountId,
       clientId: 'web',
       scopes,
       requestedBy: null,
       authnEpoch: 1,
     },
-    target: subjectTarget(new Uint8Array(32).fill(23), owner, requestKey),
+    target: subjectTarget(new Uint8Array(32).fill(23), accountId, requestKey),
     idempotencyKey: requestKey,
     digest: createHash('sha256').update(requestKey).digest(),
     item: { type: 'schema:Book', labels: { en: `Progress subject ${serial}` } },
@@ -83,8 +84,14 @@ async function createSubject(): Promise<string> {
   return created.subject.id;
 }
 
-async function start(subjectId: string, mode: string, unit: string, extras: Record<string, unknown> = {}) {
-  const result = await request('owner', 'POST', '/v1/progressSessions', { subjectId, mode, unit, ...extras });
+async function start(
+  subjectId: string,
+  mode: string,
+  unit: string,
+  extras: Record<string, unknown> = {},
+  as: 'owner' | 'other' = 'owner',
+) {
+  const result = await request(as, 'POST', '/v1/progressSessions', { subjectId, mode, unit, ...extras });
   expect(result.response.status).toBe(201);
   return result.body.progressSession as Record<string, any>;
 }
@@ -699,4 +706,93 @@ test('owner discovery pages exact occurrences across subjects and rejects stale 
   );
   const restored = await request('owner', 'GET', '/v1/progressSessionDiscovery?mode=completed_units');
   expect(restored.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toContain(active.id);
+});
+
+test('owner discovery request cost stays bounded as a private library grows to 4096 sessions', async () => {
+  const subjectId = await createSubject(other);
+  const template = await start(subjectId, 'scalar_amount', 'minute', {}, 'other');
+  const route = routeOf(other)!;
+  const measurements: {
+    scale: number;
+    statements: number;
+    requestBytes: number;
+    responseBytes: number;
+    sqlRows: number;
+    sqlBlocks: number;
+    serializedBytes: number;
+    backends: number;
+    backgroundStatements: number;
+  }[] = [];
+  let previous = 1;
+
+  for (const scale of [64, 512, 4096]) {
+    const ids = Array.from({ length: scale - previous }, () => newId(route));
+    await db.admin.query(
+      `INSERT INTO library.progress_session
+       SELECT (jsonb_populate_record(NULL::library.progress_session,
+         to_jsonb(template) || jsonb_build_object('session_id', copy.session_id))).*
+       FROM library.progress_session AS template
+       CROSS JOIN unnest($3::uuid[]) AS copy(session_id)
+       WHERE template.route = $1 AND template.session_id = $2`,
+      [route, template.id, ids],
+    );
+    await db.admin.query('ANALYZE library.progress_session');
+    const count = await db.admin.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM library.progress_session WHERE route = $1 AND account_id = $2',
+      [route, other],
+    );
+    expect(Number(count.rows[0]?.count)).toBe(scale);
+
+    const result = await capture(
+      db,
+      () => request('other', 'GET', '/v1/progressSessionDiscovery?limit=50'),
+      { includeBackends: true },
+    );
+    expect(result.value.response.status).toBe(200);
+    expect(result.value.body.viewerState).toBe('signed_in');
+    expect(result.value.body.progressSessions).toHaveLength(50);
+    expect(typeof result.value.body.next).toBe('string');
+    expect(new Set(result.value.body.progressSessions.map((row: Record<string, unknown>) => row['id'])).size).toBe(50);
+    expect(result.value.body.progressSessions.every((row: Record<string, unknown>) => row['subject'] !== null)).toBe(
+      true,
+    );
+
+    const captured = result.capture;
+    const cost = costOf(captured);
+    const sum = (values: readonly number[] | undefined) => (values ?? []).reduce((total, value) => total + value, 0);
+    measurements.push({
+      scale,
+      statements: captured.statements.length + (captured.backgroundStatements?.length ?? 0),
+      requestBytes: sum(captured.requestBytes) + sum(captured.backgroundRequestBytes),
+      responseBytes: sum(captured.responseBytes) + sum(captured.backgroundResponseBytes),
+      sqlRows: cost.rows + (cost.backgroundRows ?? 0),
+      sqlBlocks: cost.blocks + (cost.backgroundBlocks ?? 0),
+      serializedBytes: Buffer.byteLength(JSON.stringify(result.value.body), 'utf8'),
+      backends: new Set(captured.statementBackends ?? []).size,
+      backgroundStatements: captured.backgroundStatements?.length ?? 0,
+    });
+    previous = scale;
+  }
+
+  const [small, medium, large] = measurements;
+  expect(medium).toMatchObject({
+    statements: small!.statements,
+    requestBytes: small!.requestBytes,
+    responseBytes: small!.responseBytes,
+    sqlRows: small!.sqlRows,
+    serializedBytes: small!.serializedBytes,
+    backends: small!.backends,
+    backgroundStatements: small!.backgroundStatements,
+  });
+  expect(large).toMatchObject({
+    statements: small!.statements,
+    requestBytes: small!.requestBytes,
+    responseBytes: small!.responseBytes,
+    sqlRows: small!.sqlRows,
+    serializedBytes: small!.serializedBytes,
+    backends: small!.backends,
+    backgroundStatements: small!.backgroundStatements,
+  });
+  expect(Math.max(small!.sqlBlocks, medium!.sqlBlocks, large!.sqlBlocks) - small!.sqlBlocks).toBeLessThanOrEqual(32);
+  console.info('progress discovery scale cost', measurements);
 });
