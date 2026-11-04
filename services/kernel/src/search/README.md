@@ -1989,6 +1989,7 @@ future released identities are recognized by this reader, but no album is promot
 association is synthesized. Current Edition, VideoGameRelease and AnimeRelease producers supply real release
 identity today. The separate Web homonym journey must consume the generated field; its mounted receiving and
 navigation acceptance remains an integration check, not evidence supplied by source review or native tests.
+
 ## Reader coverage and freshness
 
 Catalogue and mixed result pages optionally publish `freshness.state`: `current`, `catching-up`, or `unavailable`.
