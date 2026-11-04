@@ -722,6 +722,9 @@ test('live mixed host binds native adapters, reconciles duplicate rows once, and
     window.scrollTo(0, 210);
     await act(async () => host.querySelector('form')!.requestSubmit());
     expect(host.querySelectorAll('select')[1]!.getAttribute('aria-disabled')).toBe('true');
+    const tab = new window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    select.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(false);
     const clear = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
       button.textContent?.includes('Clear'),
     )!;

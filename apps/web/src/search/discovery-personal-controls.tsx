@@ -123,7 +123,7 @@ export function DiscoveryPersonalControls({
               disabled={!hydrated}
               aria-disabled={!active}
               onKeyDown={(event) => {
-                if (!active) event.preventDefault();
+                if (!active && event.key !== 'Tab' && event.key !== 'Escape') event.preventDefault();
               }}
               value={suppressed ? '' : draft}
               onChange={(event) => {
