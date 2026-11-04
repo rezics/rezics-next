@@ -150,6 +150,7 @@ function expandServerRanges(source: string, ranges: Array<[number, number]>): Ar
       for (const match of searchable.matchAll(pattern)) {
         const index = match.index ?? 0;
         if (index === body.nameIndex) continue;
+        if (/^\s*:/.test(searchable.slice(index + body.name.length))) continue;
         if (!covered(index, ranges)) {
           onlyServer = false;
           break;
@@ -230,6 +231,7 @@ function usedOutsideServer(
     for (const match of body.matchAll(pattern)) {
       const index = match.index ?? 0;
       if (index >= importSpan[0] && index < importSpan[1]) continue;
+      if (/^\s*:/.test(body.slice(index + name.length))) continue;
       if (!covered(index, ranges)) return true;
     }
     return false;
