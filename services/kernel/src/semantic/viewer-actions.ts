@@ -21,7 +21,15 @@ export async function readSubjectPublicStates(client: AccessClient, ids: readonl
 
 /** Register the released semantic catalogue, including namespaced type identifiers. */
 export const subjectViewerActionResources: ViewerActionResources = new Map(
-  Object.keys(bundledRelease.types).map((type) => [
+  [
+    ['semantic.subject', {
+      readAction: 'subject:read',
+      async read(client, ids) {
+        const rows = await readSubjectPublicStates(client, ids);
+        return Object.fromEntries(rows.filter((row) => row.visibility === 'visible').map((row) => [row.id, true]));
+      },
+    }],
+    ...Object.keys(bundledRelease.types).map((type): [string, ViewerActionResource] => [
     type,
     {
       readAction: 'subject:read',
@@ -34,6 +42,7 @@ export const subjectViewerActionResources: ViewerActionResources = new Map(
       },
     },
   ]),
+  ],
 );
 
 /** Native Context resolver shares the exact directory lifecycle reader; candidates and creators never grant. */

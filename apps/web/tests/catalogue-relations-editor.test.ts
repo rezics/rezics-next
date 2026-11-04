@@ -252,3 +252,30 @@ test('stale exact-slot decisions retain the intended statement and require rerea
     expect(blocked.calls.some((call) => call.path.endsWith(':adopt'))).toBe(false);
   }
 });
+
+test('relationship eligibility batches exact disclosure with separate mounted operations and unavailable components', async () => {
+  const fixture = relationFixture();
+  fixture.setActions(['subject.propose']);
+  const read = await fixture.transport.read(fixture.slot);
+  if (!read.ok) throw new Error('Expected readable relationship');
+  expect(read.viewer).toBe('signed-in');
+  expect(read.authority).toEqual({
+    actions: { state: 'available', context: candidateContext, operations: ['subject.propose'] },
+    disclosure: 'available',
+  });
+  expect(fixture.calls.filter((call) => call.path === '/v1/viewerActions')).toEqual([
+    expect.objectContaining({ body: { resources: [
+      { type: 'semantic.context', id: candidateContext },
+      ...[fixture.id, relationActor, relationRole].map((id) => ({ type: 'semantic.subject', id })),
+    ] } }),
+  ]);
+  fixture.concealSubjects([relationActor]);
+  const concealed = await fixture.transport.read(fixture.slot);
+  expect(concealed.ok && concealed.authority.disclosure).toBe('unreadable');
+  fixture.setActions(null);
+  const unavailable = await fixture.transport.read(fixture.slot);
+  expect(unavailable.ok && unavailable.authority.actions).toEqual({ state: 'unavailable' });
+  fixture.setActions([]);
+  const denied = await fixture.transport.read(fixture.slot);
+  expect(denied.ok && denied.authority.actions).toEqual({ state: 'available', context: candidateContext, operations: [] });
+});

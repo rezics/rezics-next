@@ -8103,5 +8103,8 @@
   "search_share_oversized": "Esta búsqueda es demasiado grande para un enlace. Sigue editándola para reducirla.",
   "search_share_private": "Esta búsqueda contiene condiciones privadas o no transferibles. Elimínalas explícitamente antes de compartir.",
   "search_share_unavailable": "No se puede compartir ahora. Tu búsqueda se conserva; vuelve a intentarlo.",
-  "search_share_close": "Cerrar vista previa"
+  "search_share_close": "Cerrar vista previa",
+  "relation_actions_unavailable": "No se pudieron leer las acciones actuales de la relación. Vuelve a cargar para reintentar.",
+  "relation_actions_read_only": "Puedes comparar relaciones. Proponer requiere un permiso vigente.",
+  "relation_participants_unreadable": "No se puede leer un participante de la relación. Elige una identidad accesible o vuelve a cargar."
 }

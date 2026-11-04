@@ -8103,5 +8103,8 @@
   "search_share_oversized": "링크로 공유하기에는 검색이 너무 큽니다. 편집하여 줄이세요.",
   "search_share_private": "비공개 또는 이전할 수 없는 조건이 있습니다. 공유 전에 명시적으로 제거하세요.",
   "search_share_unavailable": "공유할 수 없습니다. 검색은 유지됩니다. 다시 시도하세요.",
-  "search_share_close": "미리보기 닫기"
+  "search_share_close": "미리보기 닫기",
+  "relation_actions_unavailable": "현재 관계 작업을 불러올 수 없습니다. 다시 불러와 주세요.",
+  "relation_actions_read_only": "관계를 비교할 수 있습니다. 제안하려면 현재 권한이 필요합니다.",
+  "relation_participants_unreadable": "관계 참여자를 현재 읽을 수 없습니다. 읽을 수 있는 대상을 선택하거나 다시 불러오세요."
 }

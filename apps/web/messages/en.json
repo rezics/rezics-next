@@ -8195,5 +8195,8 @@
   "search_share_oversized": "This query is too large for a link. Keep editing to reduce it.",
   "search_share_private": "This query has private or nonportable conditions. Remove them explicitly before sharing.",
   "search_share_unavailable": "Sharing is unavailable. Your query is preserved; try again.",
-  "search_share_close": "Close preview"
+  "search_share_close": "Close preview",
+  "relation_actions_unavailable": "Current relationship actions could not be read. Reload to try again.",
+  "relation_actions_read_only": "You can compare relationships. Proposing requires current permission.",
+  "relation_participants_unreadable": "A relationship participant cannot currently be read. Choose a readable identity or reload."
 }
