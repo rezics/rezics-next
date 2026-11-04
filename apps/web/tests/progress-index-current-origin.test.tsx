@@ -234,30 +234,10 @@ const tick = (fn: () => unknown = () => {}) =>
     await fn();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
-function hostProps<T>(element: Element): T {
-  for (let node: object | null = element; node; node = Object.getPrototypeOf(node)) {
-    const keys = Reflect.ownKeys(node);
-    const propsKey = keys.find((key) => typeof key === 'string' && key.startsWith('__reactProps$'));
-    if (typeof propsKey === 'string') return (node as Record<string, unknown>)[propsKey] as T;
-    const fiberKey = keys.find((key) => typeof key === 'string' && key.startsWith('__reactFiber$'));
-    if (typeof fiberKey === 'string') {
-      const fiber = (node as Record<string, unknown>)[fiberKey] as {
-        memoizedProps?: T;
-        pendingProps?: T;
-      };
-      if (fiber.memoizedProps) return fiber.memoizedProps;
-      if (fiber.pendingProps) return fiber.pendingProps;
-    }
-  }
-  throw new Error('React props are not attached to the rendered test element');
-}
 function formCallback(host: HTMLDivElement) {
   const form = host.querySelector('form');
   if (!form) throw new Error('Progress start form is not rendered');
-  const props = hostProps<{
-    onSubmit: (event: { preventDefault(): void }) => void;
-  }>(form);
-  return () => props.onSubmit({ preventDefault() {} });
+  return () => form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 }
 async function mount() {
   writes.length = reads.length = choices.length = pickers.length = menus.length = buttons.length = modes.length = 0;
@@ -580,11 +560,11 @@ test('healthy same-viewer rotation and equivalent refresh retain exact uncertain
           await tick(() => modes.at(-1)!.onValueChange(mode));
           if (mode !== 'completed_units')
             await tick(() => {
-              const input = h.host.querySelector('[name="total"]')!;
-              const props = hostProps<{
-                onChange: (event: { currentTarget: { value: string } }) => void;
-              }>(input);
-              props.onChange({ currentTarget: { value: '0' } });
+              const input = h.host.querySelector<HTMLInputElement>('[name="total"]')!;
+              const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+              setter.call(input, '0');
+              input.dispatchEvent(new window.Event('input', { bubbles: true }));
+              input.dispatchEvent(new window.Event('change', { bubbles: true }));
             });
         }
         const first = await h.start(kind);
