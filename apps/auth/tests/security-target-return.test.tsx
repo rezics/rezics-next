@@ -34,7 +34,12 @@ test('pagehide keeps generic uncertainty through sign-out and ignores the retire
     },
   };
   const ui = await open(
-    <SecurityPage initial={initial} identitySource={unavailableIdentity} inventorySource={populatedInventory} securitySource={source} />,
+    <SecurityPage
+      initial={initial}
+      identitySource={unavailableIdentity}
+      inventorySource={populatedInventory}
+      securitySource={source}
+    />,
     {},
   );
   await flush(() => button(ui.host, m.auth_security_passkey_remove())!.click());
@@ -63,7 +68,12 @@ test('a denied read retires target details but keeps its earlier unknown outcome
     read: async (): Promise<SecurityReadback> => ({ kind: 'denied' }),
   };
   const ui = await open(
-    <SecurityPage initial={initial} identitySource={unavailableIdentity} inventorySource={populatedInventory} securitySource={source} />,
+    <SecurityPage
+      initial={initial}
+      identitySource={unavailableIdentity}
+      inventorySource={populatedInventory}
+      securitySource={source}
+    />,
     {},
   );
   await flush(() => button(ui.host, m.auth_security_passkey_remove())!.click());
@@ -101,7 +111,11 @@ test('a replacement viewer receives generic history and only its own inventory',
   other.accountId = 'replacement-account';
   other.sessions = other.sessions.map((row) => ({ ...row, id: 'replacement-session' }));
   if (other.passkeys.kind === 'ready')
-    other.passkeys.passkeys = other.passkeys.passkeys.map((row) => ({ ...row, id: 'replacement-passkey', name: 'New viewer key' }));
+    other.passkeys.passkeys = other.passkeys.passkeys.map((row) => ({
+      ...row,
+      id: 'replacement-passkey',
+      name: 'New viewer key',
+    }));
   if (other.page) {
     other.page.viewer.account_id = other.accountId;
     other.page.viewer.session_id = 'replacement-session';
@@ -158,7 +172,12 @@ test('a current read remains separate from an acknowledged session command', asy
     }),
   };
   const ui = await open(
-    <SecurityPage initial={data} identitySource={unavailableIdentity} inventorySource={populatedInventory} securitySource={source} />,
+    <SecurityPage
+      initial={data}
+      identitySource={unavailableIdentity}
+      inventorySource={populatedInventory}
+      securitySource={source}
+    />,
     {},
   );
   const row = [...ui.host.querySelectorAll('li')].find((item) => item.textContent?.includes('Desk browser'))!;
@@ -204,7 +223,12 @@ test('a later refused retry leaves the mounted route honest about the earlier un
     }),
   };
   const ui = await open(
-    <SecurityPage initial={data} identitySource={unavailableIdentity} inventorySource={populatedInventory} securitySource={source} />,
+    <SecurityPage
+      initial={data}
+      identitySource={unavailableIdentity}
+      inventorySource={populatedInventory}
+      securitySource={source}
+    />,
     {},
   );
   await flush(() => button(ui.host, m.auth_security_passkey_remove())!.click());

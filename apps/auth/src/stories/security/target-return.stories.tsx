@@ -14,7 +14,11 @@ import {
 } from '../accounts-operations/story';
 import { initial } from '../accounts-security/security/security.stories';
 
-export default { title: 'Pages/Account/Security request return', parameters: reviewParameters, decorators: [authLocale] };
+export default {
+  title: 'Pages/Account/Security request return',
+  parameters: reviewParameters,
+  decorators: [authLocale],
+};
 
 function replacementAccount() {
   const data = structuredClone(initial) as Extract<SecurityLoadResult, { kind: 'ready' }>;
@@ -94,7 +98,10 @@ function retiredAttemptStory(returned: SecurityLoadResult) {
 }
 
 export const UnknownAfterSignOut = retiredAttemptStory({ kind: 'signed-out' });
-export const UnknownWithReadFailure = retiredAttemptStory({ kind: 'failure', message: 'Security status is unavailable.' });
+export const UnknownWithReadFailure = retiredAttemptStory({
+  kind: 'failure',
+  message: 'Security status is unavailable.',
+});
 export const ReplacementViewer = retiredAttemptStory(replacementAccount());
 
 export const TruncatedCurrentInventory = {
