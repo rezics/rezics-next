@@ -9,6 +9,7 @@ import { subjectHref } from '../../subject/subject-href';
 import { realmCatalogueReturnHref } from '../../search/realm-catalogue-handoff';
 import { isView } from '@rezics/composition';
 import { copiesSubjectId } from '../../library/copies-query';
+import { mangaOccurrenceFromFragment } from '../catalogue/manga-reader/navigation';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+(?:/([^/?#]+))?$`);
@@ -673,6 +674,11 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       !(subject && workCastVisitReturn(fragment)) &&
       !(subject && summaryReadingReturn(fragment)) &&
       fragment !== '#manga-reader' &&
+      !(
+        subject &&
+        (!subject[2] || subject[2] === 'contents' || subject[2] === 'editions') &&
+        mangaOccurrenceFromFragment(fragment)
+      ) &&
       !(subject && (fragment === '#work-tags' || workTagReturn(fragment))) &&
       !(subject && subjectCommunityFragment.test(fragment)) &&
       fragment !== '#screen-episode-list' &&
