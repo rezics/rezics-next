@@ -95,7 +95,8 @@ test('mounted work tags paginate, retain source assertions, gate each spoiler, a
     );
   const previous = new Map(globals.map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
   for (const name of globals) {
-    const value = name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[name as keyof typeof window];
+    const value =
+      name === 'window' ? window : name === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[name as keyof typeof window];
     Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
   }
 
@@ -107,7 +108,12 @@ test('mounted work tags paginate, retain source assertions, gate each spoiler, a
     const conceptIds = Array.from({ length: 30 }, (_, index) => uuid(index + 100));
     conceptIds[1] = conceptIds[0]!;
     const statements = conceptIds.map((id, index) =>
-      statement(index, id, index === 0 || index === 14 ? (index === 0 ? '+2.6' : '+2.1') : undefined, index === 14 || index === 18 ? 2 : 0),
+      statement(
+        index,
+        id,
+        index === 0 || index === 14 ? (index === 0 ? '+2.6' : '+2.1') : undefined,
+        index === 14 || index === 18 ? 2 : 0,
+      ),
     );
     const longLabel = '連続した日本語タグ名称'.repeat(12);
     const relatedEntries = [...new Set(conceptIds.slice(0, 29))].map((id, index) => ({
@@ -121,7 +127,7 @@ test('mounted work tags paginate, retain source assertions, gate each spoiler, a
               ? 'Secret plot tag eighteen'
               : id === conceptIds[22]
                 ? longLabel
-              : `Theme ${index}`,
+                : `Theme ${index}`,
       ...(id === conceptIds[22] ? { lang: 'ja' } : {}),
       ...(id === conceptIds[0] ? { redirect: uuid(999) } : {}),
     }));
@@ -166,11 +172,16 @@ test('mounted work tags paginate, retain source assertions, gate each spoiler, a
     expect(new URL(firstConcept.href).pathname).toContain(conceptIds[0]!);
     expect(new URL(firstConcept.href).pathname).not.toContain(uuid(999));
 
-    const more = () => [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'More tags');
+    const more = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (button) => button.textContent?.trim() === 'More tags',
+      );
     await act(async () => more()!.click());
     expect(host.textContent).toContain(longLabel);
     expect(host.innerHTML).toContain('lang="ja"');
-    expect([...host.querySelectorAll('a')].some((link) => link.textContent?.trim() === 'Why this tag applies')).toBe(true);
+    expect([...host.querySelectorAll('a')].some((link) => link.textContent?.trim() === 'Why this tag applies')).toBe(
+      true,
+    );
     expect(host.innerHTML).not.toContain('Secret plot tag fourteen');
     expect(host.innerHTML).not.toContain('https://vndb.org/v15');
     expect(host.innerHTML).not.toContain(conceptIds[14]!);

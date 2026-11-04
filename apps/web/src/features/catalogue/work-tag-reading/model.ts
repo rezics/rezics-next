@@ -88,7 +88,8 @@ export function projectWorkTags(input: {
   const { subject, related, definitions, locale, spoilerThreshold } = input;
   const workHref = subjectHref({ id: subject.id, label: pageText(subject.labels, locale).text }, locale).href;
   const sourceKey = workTagSourceKey(input);
-  if (!definitions) return { state: 'unavailable', rows: [], disclosedCount: 0, hasUnavailable: false, workHref, sourceKey };
+  if (!definitions)
+    return { state: 'unavailable', rows: [], disclosedCount: 0, hasUnavailable: false, workHref, sourceKey };
   if (!definitions.types[subject.type])
     return { state: 'unavailable', rows: [], disclosedCount: 0, hasUnavailable: false, workHref, sourceKey };
   if (!typeExtends(definitions, subject.type, 'schema:CreativeWork'))

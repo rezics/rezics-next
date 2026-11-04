@@ -34,9 +34,7 @@ function assertion(index: number, targetId: string, spoiler = 0): Stmt {
     rank: 'normal',
     property: { id: property, data_type: 'wikibase-item' },
     value: { type: 'value', content: targetId },
-    qualifiers: spoiler
-      ? [snak('rezics:spoilerLevel', 'quantity', { amount: `+${spoiler}`, unit: '1' })]
-      : [],
+    qualifiers: spoiler ? [snak('rezics:spoilerLevel', 'quantity', { amount: `+${spoiler}`, unit: '1' })] : [],
     references: [],
   } as unknown as Stmt;
 }
@@ -94,13 +92,13 @@ test('empty, unsupported and unavailable facet readings stay distinct', () => {
   const unsupported = projectWorkTags({
     subject: subject([]),
     related: related([]),
-    definitions: ({
+    definitions: {
       types: {
         'schema:CreativeWork': { bases: [], facets: [] },
         'schema:Book': { bases: ['schema:CreativeWork'], facets: [] },
       },
       properties: {},
-    }) as unknown as Pick<Release, 'types' | 'properties'>,
+    } as unknown as Pick<Release, 'types' | 'properties'>,
     locale: 'en',
     spoilerThreshold: 0,
   });

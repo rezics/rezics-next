@@ -38,8 +38,8 @@ export function WorkTagReading({
   );
   if (!model) return null;
   const workHref = currentHref ?? (realm ? contextHref(model.workHref, realm) : model.workHref);
-  const returnFor = returnToFor ?? ((selection: WorkTagReturnSelection) =>
-    workTagReturnHref(currentHref, workHref, locale, selection));
+  const returnFor =
+    returnToFor ?? ((selection: WorkTagReturnSelection) => workTagReturnHref(currentHref, workHref, locale, selection));
   return (
     <WorkTagReadingView
       key={model.sourceKey}
