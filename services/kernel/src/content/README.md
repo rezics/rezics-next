@@ -2,6 +2,65 @@
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
+
+## Native moderation directory
+
+Decision: mount `GET /v1/me/moderation-directory` as additive public source for the complete-input publisher;
+retain unavailable discovery until native actor-resource coverage is admitted. Ordinary membership, a readable
+Board and Access's known-resource role directory cannot establish that coverage.
+
+The mounted `moderation.directory` operation requires a signed-in account and declares public exposure. Its
+closed input accepts `cursor` (opaque, at most 4096 characters), optional exact `realmId` and `limit` (1..20,
+default 20). Its response is owned by `moderation-directory-schemas.ts`, matching the
+[public directory consumer contract](../../../../apps/web/src/moderation/README.md#public-directory-consumer-contract).
+Ready pages have at most 20 distinct scopes, an opaque source of at most 256 characters and an exclusive horizon
+no later than 180 seconds after observation. A sparse ready page can have no items and a continuation. Each safe
+item has a Board or independently authorized Global catalogue scope, label, nullable Realm parent, closed open
+advice and supported queues; catalogue never has a parent or appeals. No counts or private report fields are
+part of this response. Every non-ready state has an empty item tuple and null continuation.
+
+The present native implementation calls `nativeModerationCandidateReferencesUnavailable`; it returns unavailable
+even for a moderator with exact native queue access. It cannot return a complete empty page or permission advice.
+Existing exact Board/catalogue links, queue cursors, case-by-report-ID reads and command owners remain independent.
+The Web consumer keeps `nativeModerationDirectoryUnavailable` until the usable producer and installed declarations
+are delivered. These mounted schemas are publisher inputs, not installed generated declarations.
+
+### Candidate coverage source contract
+
+Access's [current resource role keys](../access/README.md#current-resource-role-keys) enumerate subjects of a known
+resource. The Accounts membership inverse enumerates memberships, not all resources an actor can moderate. Neither
+is an admitted actor-resource inventory. The local unavailable seam performs no foreign calls or history repair.
+The remaining Content-owned projection must register native resources and consume existing owner events through
+the existing worker; Access continues to own grant/membership writes and exact permission evaluation.
+
+Admission of an Accounts source requires a bounded keyset of actor/principal candidate references, explicit complete
+coverage and epoch, source replacement/version and the exclusive next scheduled authority boundary. References
+must include direct Board grants without Realm membership and inherited organization subjects. Membership replacement,
+revocation and future starts/ends must invalidate the observed frontier even before background upkeep catches up.
+Empty references certify empty only under complete coverage. No positive permission flags, labels or case payloads
+may be treated as authority. In the absence of this foreign contract, keep the named local seam unavailable.
+
+The remaining producer must cap raw candidate inspection separately from visible output, seal continuation to actor,
+client/session, filters, coverage/epoch and authority horizon, then obtain exact native Access and parent disclosure
+for each selected scope. Reobserve each source after foreign work; changed, concealed, deleted, renamed or replaced
+sources withhold their labels and controls. A request never repairs grant, membership or resource history. Installation
+uses an explicit finite cut and bounded resumable pages. Duplicate delivery, restart and scheduled-boundary upkeep
+belong to the existing registered projection runner. Native read and runner growth measurements remain separate.
+
+### Cost: unavailable directory read
+
+Touches: shared HTTP authentication, normal request admission, the constant local unavailable seam and serialization
+of one closed empty response. There are no directory storage checkouts, candidate reads, Access preparations/evaluations,
+Accounts/Realm/Subject disclosure calls, retained case bodies or projection runner calls in this operation. Shared
+authentication retains its existing native accounting; this constant seam establishes no bound for that work.
+
+Bound: limit 1..20, cursor at most 4096 characters and filter at most 128 characters. The seam retains zero candidate
+rows, returns zero labels/controls and serializes only state, empty items and null next. A ready page's schema limits
+are public output bounds, not evidence of bounded upstream selection, native proof or upkeep.
+
+Growth check: focused contract tests cover schema bounds and unavailable behavior. Native authenticated read and
+actual runner measurements at independently grown 256/1024/4096 Boards, grants, actor candidates, memberships and
+repair backlog remain part of producer completion; no native Cost result is claimed for this seam.
 ## Public author contribution context
 
 Decision: anonymous native author pages issue a signed exact-cohort selection bound to the author, view,
