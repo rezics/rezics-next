@@ -466,6 +466,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
           sourceSubject: String(sid),
           sourceEndpoint: String(rid),
           mappingRevision,
+          ...(typeof row.order === 'number' && Number.isSafeInteger(row.order) ? { order: row.order } : {}),
           evidence,
         },
       };
@@ -1748,6 +1749,13 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     known: knownTagBindings,
     destination: { origin: api },
   });
+  const { importShowcaseBooks } = await import('./showcase-books.ts');
+  const books = await importShowcaseBooks({
+    tables: input,
+    path: statePath,
+    port,
+    destination: { origin: api },
+  });
   await mkdir(dirname(resultPath), { recursive: true });
   await writeFile(
     resultPath,
@@ -1762,6 +1770,14 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
           adoptedConcepts: publicTags.bindings.concepts.map((item) => item.code),
           gaps: publicTags.gaps,
         },
+        books: {
+          family: books.family,
+          selected: books.selected,
+          conversions: books.conversions,
+          identities: books.identities,
+          gaps: books.gaps,
+          creditGaps: books.creditGaps,
+        },
         sourceDigests: Object.fromEntries(input.digests),
       },
       null,
@@ -1769,6 +1785,6 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     )}\n`,
   );
   process.stdout.write(
-    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + publicTags.gaps.length} review gaps. Result: ${resultPath}\n`,
+    `Imported ${result.readings.length + books.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length + publicTags.gaps.length + books.gaps.length} review gaps. Result: ${resultPath}\n`,
   );
 }

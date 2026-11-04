@@ -8,6 +8,10 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
+import {
+  bangumiEditionFactsWithheldOnWork,
+  parseBangumiBookInfobox,
+} from './bangumi-book-profile.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import {
   checkCoverIntent,
@@ -21,12 +25,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@5';
+export const converter_revision = 'bangumi@6';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Twelve projected top-level fields; at most eight commands, one cover intent,
+// Thirteen projected top-level fields; at most nine commands, one cover intent,
 // and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
@@ -39,6 +43,7 @@ type NormalizedRecord = {
   tags?: { name: string }[];
   meta_tags?: string[];
   platform?: string;
+  series?: boolean;
   infobox?: string;
   nsfw?: boolean;
   date?: string;
@@ -141,6 +146,11 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
   }
   const platform = get('platform');
   if (platform !== undefined) record.platform = platformCode(platform, '/platform');
+  const series = get('series');
+  if (series !== undefined) {
+    if (typeof series !== 'boolean') invalid('/series');
+    record.series = series;
+  }
   for (const key of ['infobox', 'date'] as const) {
     const value = get(key);
     if (value !== undefined) record[key] = string(value, `/${key}`, key === 'infobox' ? 65_536 : 500, true);
@@ -154,23 +164,41 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
   return record;
 }
 
+function citedPublicationDate(record: NormalizedRecord): boolean {
+  return (
+    (record.type === 1 || record.type === 3 || record.type === 6) &&
+    !!record.date?.trim() &&
+    !!bangumiPublicationTime(record.date.trim())
+  );
+}
+
 function retainedFieldDiagnostics(record: NormalizedRecord): { pointer: string; code: string }[] {
-  const citedDate =
-    (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
-  return (['tags', 'platform', 'infobox', 'nsfw', 'date'] as const)
+  const citedDate = citedPublicationDate(record);
+  const parsed = record.type === 1 ? parseBangumiBookInfobox(record.infobox) : undefined;
+  const diagnostics = (['tags', 'platform', 'series', 'infobox', 'nsfw', 'date'] as const)
     .filter((field) => record[field] !== undefined)
     .filter((field) => field !== 'date' || !citedDate)
+    .filter((field) => field !== 'infobox' || record.type !== 1)
     .map((field) => ({
       pointer: `/${field}`,
       code:
         field === 'date'
           ? 'unsupported_date_mapping'
-          : field === 'platform' && (record.type === 3 || record.type === 6)
+          : field === 'platform' && (record.type === 1 || record.type === 3 || record.type === 6)
             ? 'source_platform_selects_profile'
-            : field === 'infobox'
-              ? 'unsupported_infobox_mapping'
-              : `catalogue_has_no_${field}_property`,
+            : field === 'series'
+              ? 'source_series_selects_profile'
+              : field === 'infobox'
+                ? 'unsupported_infobox_mapping'
+                : `catalogue_has_no_${field}_property`,
     }));
+  if (parsed) {
+    diagnostics.push(
+      ...parsed.omitted.map((item) => ({ pointer: `/infobox/${item.key}`, code: item.reason })),
+      ...bangumiEditionFactsWithheldOnWork(parsed),
+    );
+  }
+  return diagnostics;
 }
 
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
@@ -320,7 +348,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     });
   } else {
     for (const [index, statement] of facts.entries()) proposals.push(propose(statement, 'facts', `fact:${index}`));
-    if (record.type === 3 || record.type === 6) {
+    if (record.type === 1 || record.type === 3 || record.type === 6) {
       const published = record.date?.trim() ? bangumiPublicationTime(record.date.trim()) : undefined;
       if (published) proposals.push(propose(fact('schema:datePublished', published), 'facts', 'date'));
     }

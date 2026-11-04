@@ -713,6 +713,15 @@ not additional check requests.
   `rezics:sourceTagWeight` remains a Semantic obligation. Parent relationships and
   unsupported associations stay explicit gaps. Refresh keeps the same native work
   identity.
+- Default local real-dump seed selects the documented Book Girl novel family
+  (Bangumi 499/26) through `services/importer/src/showcase-books.ts`. Local
+  evidence: `services/importer/tests/showcase-books.test.ts`. Connected native
+  file `services/kernel/test/imports/showcase-books.test.ts` is registered and not
+  executed in this attempt; no native pass is claimed. Decision: type 1 dispatches
+  Book versus BookSeries from series/platform/template evidence; manga and
+  same-title extras stay excluded; ISBN does not invent an edition; missing
+  volumes and missing author-role bindings stay gaps. Refresh keeps the same
+  book, volume and person identities.
 - `production operator imports two VNDB staff aliases through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-credits.test.ts`.
   Frozen scenario names:
