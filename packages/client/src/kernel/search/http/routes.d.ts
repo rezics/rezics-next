@@ -164,6 +164,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             $search: {
                 post: {
                     body: {
+                        prepareShare?: boolean;
                         representation?: "discovery-v1";
                         kindPage?: {
                             limit: number;
@@ -518,7 +519,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             };
                             next: string | null;
                             as_of: string;
-                        };
+                        } | import("../query-share.ts").QueryShare;
                         400: Response | {
                             type: unknown;
                             title: unknown;
