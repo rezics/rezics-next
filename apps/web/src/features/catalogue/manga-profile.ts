@@ -22,9 +22,11 @@ export type MangaItem = InitialSubject & { statements: Record<string, StatementI
 export type MangaCommand = { key: string; item: MangaItem; independent: boolean };
 export type MangaRead =
   | { ok: false; reason: 'concealed' | 'invalid' | 'unavailable' }
-  | { ok: true; release: Release; public: SubjectRead | null };
+  | { ok: true; release: Release; releaseDigest: string; public: SubjectRead | null };
 export type MangaTransport = {
   load: () => Promise<MangaRead>;
+  /** Current parent subject.create observation; missing or malformed data never admits a write. */
+  eligibility?: () => Promise<import('./identity-intake').CreateAuthority>;
   create: (command: MangaCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
 };
@@ -99,7 +101,7 @@ export async function readMangaProfile(client: KernelClient, id?: string): Promi
       return { ok: false, reason: 'unavailable' };
     const release = bundle.data.release as Release;
     if (!release.types || !release.properties) return { ok: false, reason: 'unavailable' };
-    return { ok: true, release, public: subject?.data ?? null };
+    return { ok: true, release, releaseDigest: bundle.data.digest, public: subject?.data ?? null };
   } catch {
     return { ok: false, reason: 'unavailable' };
   }

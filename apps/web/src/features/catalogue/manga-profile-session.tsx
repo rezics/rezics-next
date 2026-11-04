@@ -10,7 +10,7 @@ import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { MangaProfileEditor } from './manga-profile-view';
 import { loadMangaProfile, createCatalogueManga } from './manga-profile-actions';
-import { readCreatedCatalogueSubject } from './create-subject-actions';
+import { readCatalogueCreateEligibility, readCreatedCatalogueSubject } from './create-subject-actions';
 import { relationTargetSearch } from './relation-editor-search';
 import { RelationEditorSession } from './relation-editor-session';
 import { submitFactCorrection } from './subject-facts-actions';
@@ -26,7 +26,7 @@ import { EditorFailure } from './statement-editor-view';
 
 function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
   const editorWork = useCatalogueLifetime('transport');
-  const { state } = useSession();
+  const { state, subject, csrfToken } = useSession();
   const session = useQuery({ ...sessionQuery, enabled: false });
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
@@ -42,9 +42,11 @@ function MangaProfileSessionLive({ id, locale }: { id?: string; locale: string }
       search={search}
       transport={{
         load,
+        eligibility: () => readCatalogueCreateEligibility(),
         create: (data) => createCatalogueManga({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         read: (data) => readCreatedCatalogueSubject({ data }),
       }}
+      identityIntake={{ viewerKey: JSON.stringify([state, subject ?? '', csrfToken ?? '']), viewerState: state }}
       correction={
         id
           ? {
