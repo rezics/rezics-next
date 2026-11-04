@@ -171,8 +171,9 @@ export function useStepUpReturnReview(
   advice: StepUpAdviceState,
   isCurrent: () => boolean,
 ) {
-  const [state, setState] = useState<StepUpReturnState>(checking);
+  const [bound, setBound] = useState<{ advice: StepUpAdviceState; state: StepUpReturnState } | null>(null);
   const active = useRef<AbortController | null>(null);
+  const state = bound?.advice === advice ? bound.state : checking;
 
   const retire = useCallback(() => {
     active.current?.abort();
@@ -182,22 +183,22 @@ export function useStepUpReturnReview(
   useEffect(() => {
     retire();
     if (!enabled) {
-      setState(checking);
+      setBound({ advice, state: checking });
       return;
     }
     if (advice.kind === 'loading') {
-      setState(checking);
+      setBound({ advice, state: checking });
       return;
     }
     if (advice.kind === 'unavailable') {
-      setState({ kind: 'unavailable' });
+      setBound({ advice, state: { kind: 'unavailable' } });
       return;
     }
     const request = new AbortController();
     active.current = request;
-    setState(checking);
+    setBound({ advice, state: checking });
     void inspectStepUpReturn(query, origin, advice, request.signal, isCurrent).then((result) => {
-      if (result && !request.signal.aborted) setState(result);
+      if (result && !request.signal.aborted) setBound({ advice, state: result });
     });
     return () => {
       request.abort();
@@ -214,12 +215,12 @@ export function useStepUpReturnReview(
     retire();
     const request = new AbortController();
     active.current = request;
-    setState(checking);
+    setBound({ advice, state: checking });
     const result = await recheckStepUpReturn(query, origin, request.signal, isCurrent, true);
-    if (result && !request.signal.aborted) setState(result);
+    if (result && !request.signal.aborted) setBound({ advice, state: result });
     if (active.current === request) active.current = null;
     return request.signal.aborted ? null : result;
-  }, [isCurrent, origin, query, retire]);
+  }, [advice, isCurrent, origin, query, retire]);
 
   return { state, recheck, retire };
 }

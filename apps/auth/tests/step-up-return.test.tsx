@@ -107,6 +107,39 @@ test('Retry reads only current advice; Continue rechecks it and navigates only a
   page.calls[0]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
 });
 
+test('fresh advice retires a previously available Continue action while its review is pending', async () => {
+  const page = await setup();
+  await beginPendingPassword(page);
+  await pagehide();
+
+  const original = globalThis.fetch;
+  const refresh = Promise.withResolvers<Response>();
+  const started = Promise.withResolvers<void>();
+  let reads = 0;
+  const request = spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    if (String(input) === '/recovery/page') {
+      reads++;
+      if (reads === 1) return Promise.resolve(nativeAdvice());
+      started.resolve();
+      return refresh.promise;
+    }
+    return original(input, init);
+  });
+
+  await pageshow();
+  expect(button(page.host, m.auth_step_up_return_continue())).not.toBeNull();
+  await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+  await started.promise;
+  expect(button(page.host, m.auth_step_up_return_continue())).toBeNull();
+  expect(page.host.textContent).toContain(m.auth_step_up_return_pending());
+
+  refresh.resolve(nativeAdvice());
+  await settle();
+  expect(button(page.host, m.auth_step_up_return_continue())).not.toBeNull();
+  request.mockRestore();
+  page.calls[0]!.resolve(Response.json({ error: 'authentication_denied' }, { status: 401 }));
+});
+
 test('a replaced management marker fails its released read without consuming replacement state', async () => {
   const firstAccount = '00000000-0000-4000-8000-000000000011';
   const replacementAccount = '00000000-0000-4000-8000-000000000022';
