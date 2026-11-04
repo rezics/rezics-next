@@ -300,7 +300,7 @@ test('time qualifiers retain signed native evidence for supported, unsupported, 
       content: {
         time: '+2024-00-00T00:00:00Z',
         precision: 9,
-        calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        calendarmodel: 'https://example.test/unsupported-calendar',
         before: 1,
         after: 2,
       },
