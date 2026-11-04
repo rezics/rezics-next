@@ -582,7 +582,7 @@
   "settings_managed_inventory_retry_wait": "The server has asked you to wait before trying to load your accounts again.",
   "settings_managed_organizations_retry_wait": "The server has asked you to wait before trying this organization page again.",
   "settings_managed_responsibilities_retry_wait": "The server has asked you to wait before trying this responsibility page again.",
-  "settings_managed_load_more": "Load more",
+  "settings_managed_load_more": "Next page",
   "settings_managed_restart_list": "Start at first page",
   "settings_managed_authority_text": "A responsibility hold does not confirm a completed operation or permission to manage the account.",
   "settings_managed_identity_unavailable": "Public account identity is unavailable.",

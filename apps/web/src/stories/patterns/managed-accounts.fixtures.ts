@@ -53,7 +53,7 @@ export function managedAccountsExample(): ManagedAccountsPage {
   };
 }
 
-/** Illustrative IO only, following the current native response contract; no backend proof is claimed. */
+/** Illustrative retained IO only; official current-viewer/navigation publication and native evidence remain pending. */
 export function managedAccountsIO(
   scenario: 'independent' | 'preparing' | 'reconciling' = 'independent',
 ): ManagedAccountsIO {

@@ -4,6 +4,7 @@ import type { KernelClient } from '@rezics/client';
 import * as v from 'valibot';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { MediaProblem } from '../media/kernel';
+import { preferenceRetryDeadline } from './preference-failure-retry';
 
 const id = v.pipe(v.string(), v.uuid());
 const text = v.nullable(v.string());
@@ -138,11 +139,14 @@ type Feed<T> = {
   busy: boolean;
   failure: ManagedAccountsFailure | null;
   restartable: boolean;
+  failedRequest?: ManagedAccountsCursors;
+  retryAt?: number;
 };
 export type ManagedAccountsSnapshot = {
   account: ManagedIdentity | null;
   loading: boolean;
   failure: ManagedAccountsFailure | null;
+  retryAt?: number;
   organizations: Feed<ManagedAccountsPage['organizations']['items'][number]> & { state: 'ready' | 'preparing' };
   responsibilities: Feed<ManagedAccountsPage['responsibilities']['items'][number]>;
 };
@@ -155,8 +159,14 @@ function empty(): ManagedAccountsSnapshot {
     responsibilities: { items: [], next: null, busy: false, failure: null, restartable: false },
   };
 }
-function append<T>(before: T[], after: T[], key: (item: T) => string): T[] {
-  return [...new Map([...before, ...after].map((item) => [key(item), item])).values()];
+/** Native pages scan at most 20 entries. The first occurrence of an identity wins within that page. */
+function pageItems<T>(items: T[], key: (item: T) => string): T[] {
+  const unique = new Map<string, T>();
+  for (const item of items.slice(0, 20)) {
+    const identity = key(item);
+    if (!unique.has(identity)) unique.set(identity, item);
+  }
+  return [...unique.values()];
 }
 
 /** One initial page and one request per explicit feed action. Sibling payloads never advance each other's cursor. */
@@ -171,6 +181,7 @@ export class ManagedAccountsInventory {
     private readonly viewerId: string,
     private readonly read: ManagedAccountsIO,
     private readonly current: ManagedReaderCurrent = () => true,
+    private readonly now: () => number = Date.now,
   ) {}
   snapshot = () => {
     this.live();
@@ -210,10 +221,11 @@ export class ManagedAccountsInventory {
   }
   private deny(failure: ManagedAccountsFailure) {
     this.epoch++;
-    this.publish({ ...empty(), failure });
+    this.publish({ ...empty(), failure, retryAt: preferenceRetryDeadline(failure.retryAfter, this.now()) });
   }
   async load() {
     if (!this.live()) return;
+    if (this.now() < (this.value.retryAt ?? 0)) return;
     if (this.value.loading && this.loadingEpoch === this.epoch) return;
     const epoch = ++this.epoch;
     this.loadingEpoch = epoch;
@@ -231,12 +243,21 @@ export class ManagedAccountsInventory {
       failure: null,
       organizations: {
         ...page.organizations,
-        items: page.organizations.state === 'preparing' ? [] : page.organizations.items,
+        items:
+          page.organizations.state === 'preparing'
+            ? []
+            : pageItems(page.organizations.items, (item) => item.account.id),
         busy: false,
         failure: null,
         restartable: false,
       },
-      responsibilities: { ...page.responsibilities, busy: false, failure: null, restartable: false },
+      responsibilities: {
+        ...page.responsibilities,
+        items: pageItems(page.responsibilities.items, (item) => item.reservationId),
+        busy: false,
+        failure: null,
+        restartable: false,
+      },
     });
   }
   async more(feed: ManagedFeed) {
@@ -249,19 +270,23 @@ export class ManagedAccountsInventory {
     if (!this.live()) return;
     const before = this.value;
     if (!before.account || before.loading || before[feed].busy) return;
+    if (this.now() < (before[feed].retryAt ?? 0)) return;
     const preparing = feed === 'organizations' && before.organizations.state === 'preparing';
     const cursor = before[feed].next;
     if (cursor === null && !preparing) return;
     if (firstPage && (preparing || cursor === null || !before[feed].restartable)) return;
+    // Retry the failed request exactly, including a cursor-free restart which failed transiently.
+    const cursors = firstPage
+      ? {}
+      : (before[feed].failedRequest ??
+        (cursor === null
+          ? {}
+          : feed === 'organizations'
+            ? { organizationsCursor: cursor }
+            : { operatorsCursor: cursor }));
     const epoch = this.epoch;
     this.publish({ ...before, [feed]: { ...before[feed], busy: true } });
-    const result = await this.request(
-      firstPage || cursor === null
-        ? {}
-        : feed === 'organizations'
-          ? { organizationsCursor: cursor }
-          : { operatorsCursor: cursor },
-    );
+    const result = await this.request(cursors);
     if (!this.live() || epoch !== this.epoch) return;
     if (!result.ok) {
       if (result.kind === 'denied') this.deny(result);
@@ -272,6 +297,8 @@ export class ManagedAccountsInventory {
             ...this.value[feed],
             busy: false,
             failure: result,
+            failedRequest: cursors,
+            retryAt: preferenceRetryDeadline(result.retryAfter, this.now()),
             restartable:
               before[feed].restartable ||
               (!preparing && cursor !== null && (result.status === 400 || result.status === 409)),
@@ -287,12 +314,7 @@ export class ManagedAccountsInventory {
         account: firstPage ? current.account : result.page.account,
         organizations: {
           ...next,
-          items:
-            next.state === 'preparing'
-              ? []
-              : firstPage
-                ? next.items
-                : append(preparing ? [] : current.organizations.items, next.items, (item) => item.account.id),
+          items: next.state === 'preparing' ? [] : pageItems(next.items, (item) => item.account.id),
           busy: false,
           failure: null,
           restartable: false,
@@ -305,9 +327,7 @@ export class ManagedAccountsInventory {
         account: firstPage ? current.account : result.page.account,
         responsibilities: {
           ...next,
-          items: firstPage
-            ? next.items
-            : append(current.responsibilities.items, next.items, (item) => item.reservationId),
+          items: pageItems(next.items, (item) => item.reservationId),
           busy: false,
           failure: null,
           restartable: false,

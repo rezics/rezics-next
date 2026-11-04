@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Badge } from '@rezics/ui/shadcn/badge';
@@ -19,7 +19,6 @@ import {
 import { usePreferenceRetry } from './preference-failure-retry';
 import {
   ManagedAccountsInventory,
-  managedAccountHref,
   type ManagedAccountsFailure,
   type ManagedAccountsIO,
   type ManagedAccountsSnapshot,
@@ -36,22 +35,13 @@ const stateClassName = 'h-auto min-h-5 max-w-full shrink whitespace-normal wrap-
 const identityRowClassName =
   'min-h-14 max-w-full wrap-anywhere [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-slot=list-row-link]]:min-h-11';
 
-function IdentityRow({
-  account,
-  settingsHref,
-  children,
-}: {
-  account: ManagedIdentity;
-  settingsHref: string;
-  children?: ReactNode;
-}) {
+function IdentityRow({ account, children }: { account: ManagedIdentity; children?: ReactNode }) {
   const name = account.displayName || (account.handle ? `@${account.handle}` : m.managed_unnamed());
   return (
     <ContentItem
       className={identityRowClassName}
       title={name}
       headingLevel={4}
-      href={managedAccountHref(settingsHref, account.id)}
       visual={
         <Avatar aria-hidden="true">
           <AvatarFallback>{initials(account.displayName || account.handle || '')}</AvatarFallback>
@@ -74,6 +64,7 @@ function Failure({
   busy,
   scope,
   headingId,
+  retryAt,
 }: {
   failure: ManagedAccountsFailure;
   retry: () => void;
@@ -81,6 +72,7 @@ function Failure({
   busy: boolean;
   scope: 'inventory' | ManagedFeed;
   headingId: string;
+  retryAt?: number | undefined;
 }) {
   const id = useId();
   const descriptionId = `${id}-description`;
@@ -89,7 +81,7 @@ function Failure({
     () => ({ status: failure.status, ...(failure.retryAfter ? { retryAfter: failure.retryAfter } : {}) }),
     [failure],
   );
-  const waiting = usePreferenceRetry(retryMetadata);
+  const waiting = usePreferenceRetry(retryMetadata, retryAt);
   return (
     <Alert
       variant="destructive"
@@ -150,7 +142,7 @@ function FeedActions({
   firstPage,
   headingId,
 }: {
-  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable'>;
+  feed: Pick<ManagedAccountsSnapshot['responsibilities'], 'next' | 'busy' | 'failure' | 'restartable' | 'retryAt'>;
   scope: ManagedFeed;
   preparing?: boolean;
   retry: () => void;
@@ -167,6 +159,7 @@ function FeedActions({
           busy={feed.busy}
           scope={scope}
           headingId={headingId}
+          retryAt={feed.retryAt}
         />
       ) : null}
       {!feed.failure && (feed.next !== null || preparing) ? (
@@ -198,7 +191,6 @@ function FeedActions({
 
 export function ManagedAccountsView({
   snapshot,
-  settingsHref,
   more,
   firstPage,
   retry,
@@ -216,6 +208,19 @@ export function ManagedAccountsView({
   const organizationsHeadingId = `${id}-organizations`;
   const responsibilitiesHeadingId = `${id}-responsibilities`;
   const { account, organizations, responsibilities } = snapshot;
+  const previous = useRef(snapshot);
+  useLayoutEffect(() => {
+    const before = previous.current;
+    previous.current = snapshot;
+    if (!current()) return;
+    for (const [feed, heading] of [
+      ['organizations', organizationsHeadingId],
+      ['responsibilities', responsibilitiesHeadingId],
+    ] as const) {
+      if (before[feed].busy && !snapshot[feed].busy && !snapshot[feed].failure && snapshot.account)
+        document.getElementById(heading)?.focus();
+    }
+  }, [snapshot, current, organizationsHeadingId, responsibilitiesHeadingId]);
   return (
     <div
       className="min-w-0 max-w-full space-y-6 wrap-anywhere"
@@ -244,12 +249,16 @@ export function ManagedAccountsView({
               busy={snapshot.loading}
               scope="inventory"
               headingId={viewerHeadingId}
+              retryAt={snapshot.retryAt}
             />
           ) : null}
           {account ? (
             <ul className="min-w-0 max-w-full" aria-label={m.managed_your_account()}>
-              <IdentityRow account={account} settingsHref={settingsHref} />
+              <IdentityRow account={account} />
             </ul>
+          ) : null}
+          {account ? (
+            <p className="mt-3 text-sm text-muted-foreground">{m.settings_managed_navigation_unavailable()}</p>
           ) : null}
         </CardContent>
       </Card>
@@ -263,7 +272,7 @@ export function ManagedAccountsView({
           >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
-                <ContentItemHeading level={3} id={organizationsHeadingId}>
+                <ContentItemHeading level={3} id={organizationsHeadingId} tabIndex={-1}>
                   {m.managed_organizations_title()}
                 </ContentItemHeading>
               </CardTitle>
@@ -277,7 +286,7 @@ export function ManagedAccountsView({
               ) : organizations.items.length ? (
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_organizations_title()}>
                   {organizations.items.map(({ account, role }) => (
-                    <IdentityRow key={account.id} account={account} settingsHref={settingsHref}>
+                    <IdentityRow key={account.id} account={account}>
                       <Badge variant="secondary" className={stateClassName}>
                         {role === 'owner' ? m.managed_owner() : m.managed_member()}
                       </Badge>
@@ -307,7 +316,7 @@ export function ManagedAccountsView({
           >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
-                <ContentItemHeading level={3} id={responsibilitiesHeadingId}>
+                <ContentItemHeading level={3} id={responsibilitiesHeadingId} tabIndex={-1}>
                   {m.managed_operated_title()}
                 </ContentItemHeading>
               </CardTitle>
@@ -320,7 +329,7 @@ export function ManagedAccountsView({
                 <ul className="min-w-0 max-w-full" aria-label={m.managed_operated_title()}>
                   {responsibilities.items.map((item) =>
                     item.account ? (
-                      <IdentityRow key={item.reservationId} account={item.account} settingsHref={settingsHref}>
+                      <IdentityRow key={item.reservationId} account={item.account}>
                         <Badge variant="secondary" className={stateClassName}>
                           {item.state === 'current' ? m.managed_current() : m.managed_reconciling()}
                         </Badge>
@@ -405,7 +414,7 @@ export function ManagedAccounts(props: {
 export function ManagedAccountsSection({ io }: { io?: ManagedAccountsIO | undefined }) {
   const session = useSession();
   const location = useLocation();
-  const owner = useManagedSessionReader(session.subject, session.subject);
+  const owner = useManagedSessionReader(session.subject, session.subject, session.csrfToken);
   if (!owner.isCurrent()) return null;
   if (session.state !== 'signed-in' || !session.subject) return null;
   return (

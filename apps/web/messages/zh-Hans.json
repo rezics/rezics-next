@@ -572,7 +572,7 @@
   "settings_managed_inventory_retry_wait": "服务器要求稍等片刻，再重试加载你的账号。",
   "settings_managed_organizations_retry_wait": "服务器要求稍等片刻，再重试加载此组织页面。",
   "settings_managed_responsibilities_retry_wait": "服务器要求稍等片刻，再重试加载此责任记录页面。",
-  "settings_managed_load_more": "加载更多",
+  "settings_managed_load_more": "下一页",
   "settings_managed_restart_list": "从第一页开始",
   "settings_managed_authority_text": "责任保留记录不代表操作已完成，也不代表有权管理该账户。",
   "settings_managed_identity_unavailable": "无法显示账户的公开身份。",

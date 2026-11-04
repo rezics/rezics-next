@@ -114,10 +114,9 @@ export const Default: Story = {
     const account = within(await within(canvasElement).findByRole('region', { name: m.settings_account_heading() }));
     await account.findByRole('list', { name: m.managed_your_account() });
     await expect(account.getByRole('link', { name: m.account_security_settings() })).toBeVisible();
-    await expect(account.getByRole('link', { name: 'Independent Reading Group' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('managedAccount=019a0000-0000-7000-8000-000000000003'),
-    );
+    await expect(account.getByRole('heading', { level: 4, name: 'Independent Reading Group' })).toBeVisible();
+    await expect(account.queryByRole('link', { name: 'Independent Reading Group' })).toBeNull();
+    await expect(account.getByText(m.settings_managed_navigation_unavailable())).toBeVisible();
     await expect(account.getByText(m.managed_member())).toBeVisible();
     await expect(account.getByText(m.managed_reconciling())).toBeVisible();
   },
@@ -132,11 +131,11 @@ export const SessionRecovery: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByRole('link', { name: 'Independent Reading Group' });
+    await canvas.findByRole('heading', { level: 4, name: 'Independent Reading Group' });
     await userEvent.click(canvas.getByRole('button', { name: 'Session unavailable' }));
-    await expect(canvas.queryByRole('link', { name: 'Independent Reading Group' })).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 4, name: 'Independent Reading Group' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Restore session' }));
-    await canvas.findByRole('link', { name: 'Independent Reading Group' });
+    await canvas.findByRole('heading', { level: 4, name: 'Independent Reading Group' });
   },
 };
 
@@ -144,7 +143,7 @@ export const SessionRecovery: Story = {
 const connectedLongRecoveryPlay: NonNullable<Story['play']> = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
   const account = within(await canvas.findByRole('region', { name: m.settings_account_heading() }));
-  await account.findByRole('link', { name: longName });
+  await account.findByRole('heading', { level: 4, name: longName });
   const organizations = within(account.getByRole('list', { name: m.managed_organizations_title() }).parentElement!);
   const responsibilities = within(account.getByRole('list', { name: m.managed_operated_title() }).parentElement!);
   await userEvent.click(organizations.getByRole('button', { name: m.settings_managed_load_more() }));
@@ -165,12 +164,12 @@ const connectedLongRecoveryPlay: NonNullable<Story['play']> = async ({ canvasEle
   await expect(restart).toHaveFocus();
   await userEvent.keyboard('{Enter}');
   await organizations.findByText(m.managed_no_organizations());
-  await expect(responsibilities.getByRole('link', { name: 'Atlas Indexer' })).toBeVisible();
+  await expect(responsibilities.getByRole('heading', { level: 4, name: 'Atlas Indexer' })).toBeVisible();
   await userEvent.click(canvas.getByRole('button', { name: 'Session unavailable' }));
-  await expect(canvas.queryByRole('link', { name: longName })).toBeNull();
+  await expect(canvas.queryByRole('heading', { level: 4, name: longName })).toBeNull();
   await expect(canvasElement.querySelector('[data-slot="managed-accounts"]')).toBeNull();
   await userEvent.click(canvas.getByRole('button', { name: 'Restore session' }));
-  await canvas.findByRole('link', { name: longName });
+  await canvas.findByRole('heading', { level: 4, name: longName });
 };
 
 export const LongLocaleBoundedRecoveryPhone: Story = {
@@ -315,15 +314,14 @@ export const IndependentRecovery: Story = {
     const org = within(organizations);
     const resp = within(responsibilities);
     const inventory = organizations.closest<HTMLElement>('[data-slot="managed-accounts"]')!;
-    const identity = org.getByRole('link', { name: longAccountName });
+    const identity = org.getByRole('heading', { level: 4, name: longAccountName });
     await expect(identity).toBeVisible();
-    await expect(resp.getByRole('link', { name: `@${longHandle}` })).toBeVisible();
+    await expect(resp.getByRole('heading', { level: 4, name: `@${longHandle}` })).toBeVisible();
     const unavailable = resp.getByRole('heading', { name: m.settings_managed_identity_unavailable() }).closest('li')!;
     await expect(within(unavailable).queryByRole('link')).toBeNull();
     await inventoryGeometry(inventory);
-    identity.focus();
-    await userEvent.tab();
     const more = org.getByRole('button', { name: m.settings_managed_load_more() });
+    more.focus();
     await expect(more).toHaveFocus();
     await expect(more.ownerDocument.defaultView!.getComputedStyle(more).boxShadow).not.toBe('none');
     await expect(more).toHaveAccessibleDescription(m.managed_organizations_title());
@@ -336,7 +334,7 @@ export const IndependentRecovery: Story = {
       m.settings_managed_organizations_retry_wait(),
     );
     await expect(resp.queryByRole('alert')).toBeNull();
-    await expect(org.getByRole('link', { name: longAccountName })).toBe(identity);
+    await expect(org.getByRole('heading', { level: 4, name: longAccountName })).toBe(identity);
     await inventoryGeometry(inventory);
     await waitFor(() => expect(retry).toBeEnabled(), { timeout: 3000 });
     retry.focus();
@@ -352,7 +350,7 @@ export const IndependentRecovery: Story = {
     await userEvent.click(resp.getByRole('button', { name: m.settings_managed_load_more() }));
     const responsibilityRetry = await resp.findByRole('button', { name: m.settings_retry() });
     await expect(responsibilityRetry).toBeDisabled();
-    await expect(org.getByRole('link', { name: longAccountName })).toBeVisible();
+    await expect(org.queryByRole('heading', { level: 4, name: longAccountName })).toBeNull();
     await expect(resp.getByRole('group', { name: m.managed_operated_title() })).toBeVisible();
     await expect(responsibilityRetry).toHaveAccessibleDescription(
       `${m.managed_operated_title()} ${m.managed_unavailable_text()} ${m.settings_managed_responsibilities_retry_wait()}`,
@@ -419,7 +417,7 @@ export const InventoryRecovery: Story = {
     retry.focus();
     await userEvent.keyboard('{Enter}');
     const organizations = await canvas.findByRole('region', { name: m.managed_organizations_title() });
-    await expect(within(organizations).getByRole('link', { name: longAccountName })).toBeVisible();
+    await expect(within(organizations).getByRole('heading', { level: 4, name: longAccountName })).toBeVisible();
     await inventoryGeometry(organizations.closest<HTMLElement>('[data-slot="managed-accounts"]')!);
   },
 };
@@ -433,7 +431,7 @@ export const IndependentMounts: Story = {
   ),
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await waitFor(() => expect(canvas.getAllByRole('link', { name: longAccountName })).toHaveLength(2));
+    await waitFor(() => expect(canvas.getAllByRole('heading', { level: 4, name: longAccountName })).toHaveLength(2));
     const inventories = canvasElement.querySelectorAll<HTMLElement>('[data-slot="managed-accounts"]');
     await expect(inventories).toHaveLength(2);
     const ids = [...canvasElement.querySelectorAll('[id]')].map((node) => node.id);
@@ -454,7 +452,7 @@ export const IndependentMounts: Story = {
     await userEvent.click(org.getByRole('button', { name: m.settings_managed_load_more() }));
     await org.findByRole('button', { name: m.settings_retry() });
     await expect(within(inventories[0]!).queryByRole('alert')).toBeNull();
-    await expect(within(inventories[0]!).getByRole('link', { name: longAccountName })).toBeVisible();
+    await expect(within(inventories[0]!).getByRole('heading', { level: 4, name: longAccountName })).toBeVisible();
     await inventoryGeometry(rtl);
   },
 };

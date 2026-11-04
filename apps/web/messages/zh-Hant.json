@@ -572,7 +572,7 @@
   "settings_managed_inventory_retry_wait": "伺服器要求稍等片刻，再重試載入你的帳號。",
   "settings_managed_organizations_retry_wait": "伺服器要求稍等片刻，再重試載入此組織頁面。",
   "settings_managed_responsibilities_retry_wait": "伺服器要求稍等片刻，再重試載入此責任紀錄頁面。",
-  "settings_managed_load_more": "載入更多",
+  "settings_managed_load_more": "下一頁",
   "settings_managed_restart_list": "從第一頁開始",
   "settings_managed_authority_text": "責任保留紀錄不代表操作已完成，也不代表有權管理該帳戶。",
   "settings_managed_identity_unavailable": "無法顯示帳戶的公開身分。",

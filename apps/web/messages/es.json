@@ -572,7 +572,7 @@
   "settings_managed_inventory_retry_wait": "El servidor te pide que esperes antes de volver a cargar tus cuentas.",
   "settings_managed_organizations_retry_wait": "El servidor te pide que esperes antes de volver a cargar esta página de organizaciones.",
   "settings_managed_responsibilities_retry_wait": "El servidor te pide que esperes antes de volver a cargar esta página de responsabilidades.",
-  "settings_managed_load_more": "Cargar más",
+  "settings_managed_load_more": "Página siguiente",
   "settings_managed_restart_list": "Volver a la primera página",
   "settings_managed_authority_text": "Una reserva de responsabilidad no confirma que una operación haya finalizado ni que tengas permiso para gestionar la cuenta.",
   "settings_managed_identity_unavailable": "La identidad pública de la cuenta no está disponible.",

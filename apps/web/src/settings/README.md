@@ -75,6 +75,10 @@ The existing shelf editor adds exact type-URI layouts to its versioned dirty-fie
 
 ## Account safety
 
+The managed directory retains one successful page of at most 20 rows per feed; Next replaces only that feed and the first duplicate identity within the native page wins. A failed cursor-free restart retries cursor-free, while Retry-After keeps either recovery action unavailable until its original deadline. Successful replacement focuses that feed's heading. Credential, viewer or client replacement retires both feeds before late callbacks can install.
+
+Directory identities, membership roles and responsibility holds supply no detail admission. Until Content's serial successor to `d9c5a408-5c67-4d33-bf97-76a9918a21b5` installs the complete native viewer/navigation envelope and callable/root, identity rows have no detail links and show explicit unavailable feedback; the strict transport decoder continues to reject incompatible responses. This consumer does not publish declarations or infer missing authority.
+
 The Account card reads the current identity from the managed session and keeps rename advice in its separate native profile and viewer-actions read. Security, rename and deletion handoffs use only fixed Auth-owned paths from trusted issuer configuration; they do not grant a destructive command. An unavailable or denied read stays visible until deliberate reload, and native sign-out keeps ordinary POST/redirect behavior with explicit reload recovery and no automatic replay.
 
 **Decision:** A retired managed observation may leave its rendered card visible until React removes it, but every Account destination and recovery callback is synchronously fenced by that original observation; only a newly established session context restores actions.

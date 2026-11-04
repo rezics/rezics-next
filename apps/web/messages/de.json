@@ -572,7 +572,7 @@
   "settings_managed_inventory_retry_wait": "Bitte warte auf Anweisung des Servers, bevor du deine Konten erneut lädst.",
   "settings_managed_organizations_retry_wait": "Bitte warte auf Anweisung des Servers, bevor du diese Organisationsseite erneut lädst.",
   "settings_managed_responsibilities_retry_wait": "Bitte warte auf Anweisung des Servers, bevor du diese Seite mit Verantwortlichkeiten erneut lädst.",
-  "settings_managed_load_more": "Mehr laden",
+  "settings_managed_load_more": "Nächste Seite",
   "settings_managed_restart_list": "Bei der ersten Seite beginnen",
   "settings_managed_authority_text": "Ein Verantwortungsvorbehalt bestätigt weder den Abschluss eines Vorgangs noch die Berechtigung, das Konto zu verwalten.",
   "settings_managed_identity_unavailable": "Die öffentliche Identität des Kontos ist nicht verfügbar.",
