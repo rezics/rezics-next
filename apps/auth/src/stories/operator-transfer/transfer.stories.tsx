@@ -3,10 +3,10 @@ import { OperatorTransferPage } from '../../routes/operators.transfer';
 import { AuthShell } from '../../frame';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
-  OPERATOR_TRANSFER_PAGE_PATH,
   storeTransferAttempt,
   type TransferAttempt,
 } from '../../operator-transfer';
+import { OPERATOR_TRANSFER_PAGE_PATH } from '../../operator-transfer-page';
 import { authLocale, reviewParameters, button, waitFor } from '../accounts-operations/story';
 import { m } from '../../paraglide/messages.js';
 
