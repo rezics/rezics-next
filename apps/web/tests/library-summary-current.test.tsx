@@ -159,7 +159,7 @@ test('eight locales render first-use and count navigation with registered destin
         const label =
           typeof destination.label === 'string'
             ? destination.label
-            : destination.label({ locale: getLocale(), pathname: destination.href });
+            : destination.label({ locale, pathname: destination.href });
         expect(html).toContain(label);
       }
     }
