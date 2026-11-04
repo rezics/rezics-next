@@ -89,7 +89,6 @@ export function OwnVotesReturnProvider({ children }: { children: ReactNode }) {
   const focusVersion = useRef(0);
 
   const publish = useCallback((next: OwnVotesReturnReceipt | null) => {
-    console.log('receipt', receiptRef.current?.phase ?? 'none', '=>', next?.phase ?? 'none');
     receiptRef.current = next;
     setReceipt(next);
   }, []);
@@ -199,7 +198,6 @@ export function useOwnVotesReturnReceipt(historyKey: string, cursor: string | nu
     receipt.owner.locale === locale &&
     receipt.owner.source.length > 0 &&
     currentOwner;
-  if (receipt) console.log('receipt current', receipt.phase, currentOwner, valid);
   useEffect(() => {
     if (receipt && onRatings && receipt.phase !== 'bfcache-away' && !valid) state.clear(receipt.id);
   }, [receipt, valid, onRatings, state]);
@@ -315,7 +313,6 @@ export function useOwnVotesReturn({
       const result = await refresh();
       const ownsAfterRead = ownsRequest();
       const read = ownsAfterRead ? requestOwner.validateResult(result) : null;
-      console.log('read complete', returnReceipt.phase, ownsAfterRead, read?.state ?? 'rejected');
       if (!ownsAfterRead) {
         state.clear(returnReceipt.id);
         return;
@@ -337,7 +334,6 @@ export function useOwnVotesReturn({
             : { kind: 'missing', pair: returnReceipt.pair };
           const focusVersion = state.resolve(returnReceipt.id);
           if (focusVersion === null) return;
-          console.log('resolved inspection', outcome.kind);
           onResolved(outcome, index, read.page, read);
           requestAnimationFrame(() => {
             if (
