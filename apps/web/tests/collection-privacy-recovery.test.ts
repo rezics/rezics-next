@@ -40,7 +40,7 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
     read: async (id) => {
       expect(id).toBe(initial.id);
       reads++;
-      return readback.promise;
+      return reads === 1 ? { ok: true, value: row('unlisted', 9) } : readback.promise;
     },
   });
   await editor.edit('public');
@@ -54,6 +54,13 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   expect(Object.isFrozen(original)).toBe(true);
   expect(editor.snapshot()).toMatchObject({ current: initial, desired: 'public', phase: 'uncertain' });
   await editor.edit('unlisted');
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({
+    current: { revision: 9, visibility: 'unlisted' },
+    desired: 'unlisted',
+    phase: 'uncertain',
+    attempt: original,
+  });
   const retry = editor.retry();
   await editor.retry();
   // Give the replay receipt a chance to start its one native readback.
@@ -65,7 +72,7 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   await editor.edit('private');
   readback.resolve({ ok: true, value: row('unlisted', 10) });
   await retry;
-  expect(reads).toBe(1);
+  expect(reads).toBe(2);
   expect(editor.snapshot()).toMatchObject({
     current: { revision: 10, visibility: 'unlisted' },
     desired: 'private',
@@ -78,6 +85,31 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   expect(commands[2]).toMatchObject({ collectionId: initial.id, revision: 10, visibility: 'private' });
   expect(commands[2]!.idempotencyKey).not.toBe(original.idempotencyKey);
   expect(editor.snapshot().phase).not.toBe('saved'); // The old receipt cannot confirm this new command.
+});
+
+test('explicit local abandonment releases the row without claiming the original save was cancelled or absent', async () => {
+  let saves = 0;
+  const editor = new CollectionPrivacyEditor(initial, {
+    save: async () => {
+      saves++;
+      throw new Error('Response lost');
+    },
+    read: async () => ({ ok: true, value: initial }),
+  });
+  await editor.edit('public');
+  expect(editor.needsListRestartProtection()).toBe(true);
+  editor.abandon();
+  expect(editor.snapshot()).toMatchObject({
+    current: initial,
+    desired: 'private',
+    attempt: null,
+    phase: 'abandoned',
+    outcomeUnknown: true,
+  });
+  expect(editor.needsListRestartProtection()).toBe(false);
+  await editor.edit('public');
+  expect(saves).toBe(1);
+  expect(editor.snapshot().desired).toBe('private');
 });
 
 test('definite conflict and refusal retain the choice until Reload deliberately adopts the current native row', async () => {
@@ -129,24 +161,35 @@ test('pending drafting and unavailable or stale recovery reads never claim saved
     await editor.edit('public');
     const attempt = editor.snapshot().attempt;
     await editor.retry();
-    expect(editor.snapshot()).toMatchObject({ current: initial, desired: 'public', phase: 'uncertain', attempt });
+    const deniedRead = !read.ok && (read.reason === 'closed' || read.reason === 'forbidden');
+    expect(editor.snapshot()).toMatchObject({
+      current: deniedRead ? null : initial,
+      desired: 'public',
+      phase: 'readback',
+      attempt,
+      receipt: { id: initial.id, revision: receipt.revision, visibility: receipt.visibility },
+      outcomeUnknown: false,
+    });
   }
 });
 
 test('Failed owner-list paging retains existing rows/cursor and offers retry without unhandled rejection, duplicate rows or false empty success', async () => {
   const reads: (string | null)[] = [];
   const next = deferred<CollectionPrivacyRead<{ collections: OwnedCollection[]; next: string | null }>>();
+  const firstPage = Array.from({ length: 20 }, (_, index) => ({ ...initial, id: `first-${index}` }));
+  const secondPage = Array.from({ length: 20 }, (_, index) => ({ ...initial, id: `second-${index}` }));
   const pager = new CollectionPrivacyPager(async (cursor) => {
     reads.push(cursor);
-    if (reads.length === 1) return { ok: true, value: { collections: [initial], next: 'opaque+/cursor==' } };
+    if (reads.length === 1) return { ok: true, value: { collections: firstPage, next: 'opaque+/cursor==' } };
     if (reads.length === 2) throw new Error('Next page unavailable');
     return next.promise;
   });
   await pager.load();
   await pager.load();
   expect(pager.snapshot()).toEqual({
-    collections: [initial],
+    collections: firstPage,
     next: 'opaque+/cursor==',
+    window: 1,
     loaded: true,
     loading: false,
     failure: 'unavailable',
@@ -154,12 +197,23 @@ test('Failed owner-list paging retains existing rows/cursor and offers retry wit
   const retry = pager.load();
   await pager.load();
   expect(reads).toEqual([null, 'opaque+/cursor==', 'opaque+/cursor==']);
-  next.resolve({ ok: true, value: { collections: [initial, { ...initial, id: 'collection-2' }], next: null } });
+  next.resolve({ ok: true, value: { collections: secondPage, next: null } });
   await retry;
-  expect(pager.snapshot().collections.map((row) => row.id)).toEqual(['collection-1', 'collection-2']);
-  expect(pager.snapshot()).toMatchObject({ next: null, failure: null, loading: false });
+  expect(pager.snapshot().collections).toEqual(secondPage);
+  expect(pager.snapshot().collections).toHaveLength(20);
+  expect(pager.snapshot()).toMatchObject({ next: null, window: 2, failure: null, loading: false });
   await pager.load();
   expect(reads).toHaveLength(3);
+});
+
+test('duplicate identities within one native page keep the first row', async () => {
+  const duplicate = { ...initial, title: 'Later duplicate' };
+  const pager = new CollectionPrivacyPager(async () => ({
+    ok: true,
+    value: { collections: [initial, duplicate], next: null },
+  }));
+  await pager.load();
+  expect(pager.snapshot().collections).toEqual([initial]);
 });
 
 test('first-page refusal is distinct from genuine empty, and a disposed account cannot populate a new journey', async () => {
@@ -195,7 +249,7 @@ test('a replay refused before receipt lookup cannot discard an earlier unknown-o
     expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', desired: 'unlisted', failure: reason });
     expect(editor.snapshot().attempt).toBe(attempt);
     await editor.reload();
-    expect(editor.snapshot()).toMatchObject({ phase: 'idle', current: receipt, desired: 'public', attempt: null });
+    expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', current: receipt, desired: 'unlisted', attempt });
   }
 });
 
@@ -276,6 +330,7 @@ test('list restart cannot lose an unknown command or a later choice, and native 
   await editor.edit('unlisted');
   // Even choosing the last observed value cannot establish that the unknown command had no effect.
   await editor.edit('private');
+  await pager.load();
   await pager.restart();
   expect(reads).toEqual([null]);
   expect(pager.snapshot().restartBlocked).toBe(true);
@@ -286,6 +341,8 @@ test('list restart cannot lose an unknown command or a later choice, and native 
   await editor.retry();
   expect(commands[1]).toBe(attempt);
   expect(editor.snapshot()).toMatchObject({ current: receipt, desired: 'unlisted', attempt: null, phase: 'review' });
+  await pager.load();
+  expect(reads).toEqual([null]); // A later draft also protects the current page from next-page replacement.
   await pager.restart();
   expect(reads).toEqual([null]); // A resolved original command does not discard the later unsaved choice.
   await editor.reload();
