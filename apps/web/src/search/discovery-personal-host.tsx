@@ -85,7 +85,7 @@ export function useDiscoveryPersonalResults(input: {
   );
   const exposureOwner = exposure.state === 'signed-in' ? exposure.observation : undefined;
   const exposureQuery = viewerExposureQuery(exposureOwner);
-  const exposureResult = useQuery({ ...exposureQuery, enabled: !!connected && exposureQuery.enabled }, client);
+  const exposureResult = useQuery({ ...exposureQuery, enabled: !!connected && !!exposureOwner }, client);
   const admitted = exposureResult.data;
   const requestKey = JSON.stringify(input.request);
   const signature = JSON.stringify([

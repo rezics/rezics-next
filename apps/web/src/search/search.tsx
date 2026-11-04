@@ -589,7 +589,12 @@ export function SearchPage({
     source: data?.discovery,
     request: data?.queryState ? discoveryRequest(data.queryState, requestLanguages(locale)) : undefined,
     locale,
-    returnTo: searchHref ?? discoverySearchHref(locale, data?.queryState ?? { query, facets: {} }),
+    returnTo:
+      searchHref ??
+      discoverySearchHref(
+        locale,
+        data?.queryState ?? { query, facets: {}, type: undefined, cursor: undefined, sort: undefined },
+      ),
     enabled:
       !!data?.discovery &&
       !!data.queryState &&

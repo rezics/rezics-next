@@ -3,7 +3,9 @@ import { prepareSession, requestCsrfToken, sessionSubject, viewerCredential } fr
 
 /** Browser credential evidence may refuse a command; only the prepared native session authorizes it. */
 export type ExpectedReader = { expectedReader: string; expectedCredential: string };
-export function validExpectedReader(value: Partial<ExpectedReader>): value is ExpectedReader {
+export function validExpectedReader(input: unknown): input is ExpectedReader {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
+  const value = input as Record<string, unknown>;
   return (
     typeof value.expectedReader === 'string' &&
     value.expectedReader.length > 0 &&

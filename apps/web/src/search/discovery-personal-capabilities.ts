@@ -60,7 +60,7 @@ export function discoveryMetadataFetch(signal: AbortSignal) {
       const response = await fetcher(input, { ...init, signal, cache: 'no-store' });
       if (!response.body) return response;
       const reader = response.body.getReader();
-      const parts: Uint8Array[] = [];
+      const parts: ArrayBuffer[] = [];
       try {
         while (true) {
           signal.throwIfAborted();
@@ -69,7 +69,7 @@ export function discoveryMetadataFetch(signal: AbortSignal) {
           if (next.done) break;
           remaining -= next.value.byteLength;
           if (remaining < 0) throw new RangeError('Discovery capability metadata exceeds its byte bound');
-          parts.push(next.value);
+          parts.push(Uint8Array.from(next.value).buffer);
         }
         return new Response(new Blob(parts), {
           status: response.status,

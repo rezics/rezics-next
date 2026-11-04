@@ -93,7 +93,8 @@ const voteHeaders = t.Object({
 });
 function voteObservation(value: string | undefined) {
   try {
-    return parseVoteObservation(value);
+    const observation = parseVoteObservation(value);
+    return observation ? { observation } : {};
   } catch {
     throw new ProblemError('invalid_request');
   }
@@ -433,7 +434,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 questionId: params.questionId,
                 targetId: params.id,
                 units: body.units,
-                observation: voteObservation(headers['x-rating-observation']),
+                ...voteObservation(headers['x-rating-observation']),
               },
               key,
             ),
@@ -466,7 +467,7 @@ export function ratingRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
                 questionId: params.questionId,
                 targetId: params.id,
                 units: null,
-                observation: voteObservation(headers['x-rating-observation']),
+                ...voteObservation(headers['x-rating-observation']),
               },
               key,
             ),
