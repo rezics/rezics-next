@@ -48,6 +48,9 @@
   "siblingTests": {
     "command": ["bun", "test"]
   },
+  "bootSmoke": {
+    "tests": ["services/kernel/test/boot/kernel-boots.test.ts", "apps/web/tests/boot/client-graph.test.ts"]
+  },
   "integrationChecks": [
     {
       "paths": [
@@ -445,7 +448,8 @@
       "existingProbes": 8,
       "diagnosticCharacters": 6000,
       "gitBufferBytes": 33554432,
-      "residentPollMs": 60000
+      "residentPollMs": 60000,
+      "bootSmokeTimeoutMs": 120000
     },
     "leases": {
       "waitMs": 30000,
@@ -549,7 +553,17 @@
     "brief": {
       "bytes": 65536,
       "pathCharacters": 65536,
-      "pathMatchStates": 1000000
+      "pathMatchStates": 1000000,
+      "sharedPaths": [
+        "**/README.md",
+        "docs/**",
+        "packages/definitions/release/**",
+        "apps/web/src/kernel/recorded/**",
+        "bun.lock",
+        "services/kernel/db/*/schema.sql",
+        "packages/client/src/kernel/**",
+        "contracts/openapi.json"
+      ]
     },
     "workerPrompt": {
       "characters": 20000,

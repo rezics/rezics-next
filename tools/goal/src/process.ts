@@ -16,7 +16,10 @@ function bootId(procRoot: string): string {
   return id;
 }
 /** A missing or dead process is distinct from process state we cannot inspect. */
-function inspectProcessSnapshot(pid: number, procRoot: string): { identity: ProcessIdentity; dead: boolean } | null {
+function inspectProcessSnapshot(
+  pid: number,
+  procRoot: string,
+): { identity: ProcessIdentity; dead: boolean; cpuTicks?: bigint } | null {
   if (!Number.isSafeInteger(pid) || pid < 1) return null;
   let stat: string;
   try {
@@ -39,9 +42,38 @@ function inspectProcessSnapshot(pid: number, procRoot: string): { identity: Proc
     return {
       identity: { pid, start: fields[19]!, boot, group: Number(fields[2]) },
       dead: fields[0] === 'Z' || fields[0] === 'X',
+      ...(/^\d+$/.test(fields[11] ?? '') && /^\d+$/.test(fields[12] ?? '')
+        ? { cpuTicks: BigInt(fields[11]!) + BigInt(fields[12]!) }
+        : {}),
     };
   } catch (error) {
     throw new Error(`process visibility unknown for PID ${pid}: boot identity unavailable`, { cause: error });
+  }
+}
+/** User plus system ticks for live members of an identified process group; missing when none are visible. */
+export function processGroupCpuTicks(identity: ProcessIdentity | null, procRoot = '/proc'): bigint | undefined {
+  if (!identity) return undefined;
+  try {
+    let total = 0n;
+    let any = false;
+    for (const name of readdirSync(procRoot)) {
+      if (!/^\d+$/.test(name)) continue;
+      let snapshot: ReturnType<typeof inspectProcessSnapshot>;
+      try {
+        snapshot = inspectProcessSnapshot(Number(name), procRoot);
+      } catch {
+        continue;
+      }
+      if (!snapshot || snapshot.dead || snapshot.cpuTicks === undefined) continue;
+      const member = snapshot.identity;
+      if (member.group !== identity.group || member.boot !== identity.boot) continue;
+      if (BigInt(member.start) < BigInt(identity.start)) continue;
+      total += snapshot.cpuTicks;
+      any = true;
+    }
+    return any ? total : undefined;
+  } catch {
+    return undefined;
   }
 }
 export function inspectProcessIdentity(pid = process.pid, procRoot = '/proc'): ProcessIdentity | null {

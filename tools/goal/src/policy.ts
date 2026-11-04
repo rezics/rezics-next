@@ -29,6 +29,15 @@ export function readControlPolicy(value: unknown = {}): ControlPolicy {
             throw new Error(`invalid ${label}`);
           return [key, { ...candidate }];
         }
+        if (label === 'policy.brief.sharedPaths') {
+          if (
+            !Array.isArray(candidate) ||
+            !candidate.length ||
+            candidate.some((path) => typeof path !== 'string' || !path.trim())
+          )
+            throw new Error(`invalid ${label}`);
+          return [key, [...candidate]];
+        }
         if (Array.isArray(fallback)) {
           // Tool retries may deliberately wait zero milliseconds; settlement pauses remain positive.
           const minimum = label === 'policy.worker.toolRetryBackoffMs' ? 0 : 1;
