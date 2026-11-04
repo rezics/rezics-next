@@ -40,9 +40,12 @@ export function admittedOptionalKind(page: PreferencePage, kind: string): boolea
 }
 
 /** Keep only kinds the current page still admits; a removed or compulsory kind is never replayed as a new edit. */
-export function admittedNotificationPatch(intent: NotificationPatch, page: PreferencePage): NotificationPatch | undefined {
+export function admittedNotificationPatch(
+  intent: NotificationPatch | undefined,
+  page: PreferencePage,
+): NotificationPatch | undefined {
+  if (intent === undefined) return undefined;
   if (intent === null) return preferencePageAllows(page, 'reset') ? null : undefined;
-  if (!intent) return undefined;
   const next = Object.fromEntries(
     Object.entries(intent).filter(
       (entry): entry is [string, boolean] => admittedOptionalKind(page, entry[0]) && typeof entry[1] === 'boolean',
