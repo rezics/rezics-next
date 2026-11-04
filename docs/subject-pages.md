@@ -304,9 +304,18 @@ viewer possesses, matched or consumed the file. A file is not an AnimeRelease. G
 from creator credits. File association does not create progress completion. Web does not upload, scan, hash-match,
 synchronize AniDB, download or store a private MyList.
 
-Related episode, release, file and group links keep their admitted direction and kinds. A concealed episode stays
-concealed. Editing uses the exact selected assertion with revision recovery and return to the file. Native subjects,
-links and candidates remain the implementation.
+The ordinary Subject overview also shows an admitted catalogue-file reader. It uses the same typed Subject read and
+only relation rows already disclosed by that page. It groups identifiers, technical and language facts, generic facts,
+group facts and qualified credits; it keeps file identity, release or episode associations, work identity and owned
+copies separate. Statement version, qualifiers, references, exact units, unknown values and source records remain
+visible. A concealed target stays concealed, and a retired relation cannot create a destination link. No target is
+hydrated for this reader.
+
+Related episode, release, file and group links keep their admitted direction and kinds. They open the exact disclosed
+ordinary Subject in the same locale and carry one validated `fileSource` identity back to the reader anchor. The
+existing `/file` profile remains the correction path, with the exact selected assertion, revision recovery and a
+return to that anchor. Correction is offered only for the currently admitted type in the existing candidate context.
+Native subjects, links and candidates remain the implementation.
 
 ## Release and file visit cost
 
@@ -314,6 +323,11 @@ One selected release or file/group visit uses C = 4 installed components: descri
 and at most one explicitly selected detail. Calls per visit are at most C. Web projection and retained response state
 are O(∑ L_i + ∑ B_i) for that visit, independent of catalogue/file history N. Each continuation replaces its page.
 Correction uses a fixed addressed native command/readback sequence.
+
+The ordinary Subject file reader adds C = 2 reads for eligible file/group type candidates: the active descriptor and
+its exact immutable release bundle. The Subject read and finite relation pages are reused from the page composition;
+the reader adds no relation continuation or per-target detail reads. Its association rows are already included in the
+ordinary page's composition bounds.
 
 | Component   | L_i (rows)                                       | B_i (bytes) | Source                                                                                                             |
 | ----------- | ------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -331,6 +345,9 @@ and a selection replacement. Total work across k deliberate page visits is O(k t
 This journey adds no engine query, command, projection or worker path. Existing native engines remain producer-owned.
 
 Decision: companion files follow the existing nested `$id_.$slug_.release.tsx` / `$id_.$slug_.file.tsx` route pattern.
+
+Decision: related destinations open the exact disclosed ordinary Subject in the same locale and carry one validated
+`fileSource` identity back to the reader anchor; only the admitted correction entry opens the existing `/file` profile.
 
 ## Provider queue decisions
 

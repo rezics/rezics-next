@@ -22,12 +22,14 @@ function CatalogueFileProfileSessionLive({
   context,
   realm,
   initialReview,
+  returnSourceId,
 }: {
   id: string;
   locale: string;
   context?: string | undefined;
   realm?: string | undefined;
   initialReview?: { property: string; candidate: string } | undefined;
+  returnSourceId?: string | undefined;
 }) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
@@ -51,6 +53,7 @@ function CatalogueFileProfileSessionLive({
       locale={locale}
       search={search}
       initialReview={initialReview}
+      returnSourceId={returnSourceId}
       transport={{
         read: (stream, cursor, detail, session) =>
           readSubjectCatalogueFile({

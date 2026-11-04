@@ -11,6 +11,8 @@ import { CharacterProfileEntry } from '../catalogue/character-profile-entry';
 import { CharacterRelationshipsEntry } from '../catalogue/character-relationships/entry';
 import { ScreenProfileEntry } from '../catalogue/screen-profile-entry';
 import { ScreenProfileOverview } from '../catalogue/screen-profile-reader';
+import { CatalogueFileReaderOverview, CatalogueFileReturnLink } from '../catalogue/catalogue-file-reader/reader';
+import { catalogueFileSourceId } from '../catalogue/catalogue-file-reader/navigation';
 import { isScreenType } from '../catalogue/screen-profile';
 import { composedSubjectRead } from '../catalogue/music-reader';
 import { MusicAlbumOverview } from '../catalogue/music-reader-view';
@@ -486,6 +488,7 @@ export function SubjectPage({
   subjectLabel,
   framed = false,
   verification,
+  fileSource,
 }: {
   page: SubjectPageData;
   verification?: VerificationConfig;
@@ -495,6 +498,8 @@ export function SubjectPage({
   subjectLabel?: string;
   /** The containing view already renders the subject's identity. */
   framed?: boolean;
+  /** One validated file identity carried by a disclosed same-locale return link. */
+  fileSource?: string | undefined;
   locale: string;
   messages: PageMessages;
   link?: ComponentProps<typeof PageData>['link'];
@@ -525,6 +530,7 @@ export function SubjectPage({
 }) {
   const overview = view === 'overview';
   const read = subjectBody(page);
+  const returnSource = catalogueFileSourceId(fileSource);
   const existingActions = read && actions ? actions({ id: read.subject.id, type: read.subject.type, locale }) : null;
   const realm = subjectPageRealm(page);
   const ContextLink = useMemo(() => {
@@ -728,6 +734,18 @@ export function SubjectPage({
                 locale={locale}
               />
             )}
+            {overview && read && !page.account && returnSource && returnSource !== read.subject.id ? (
+              <CatalogueFileReturnLink id={returnSource} locale={locale} link={ContextLink} />
+            ) : null}
+            {overview && read && !page.account ? (
+              <CatalogueFileReaderOverview
+                page={page}
+                public={composedSubjectRead(read)}
+                locale={locale}
+                link={ContextLink}
+                returning={returnSource === read.subject.id}
+              />
+            ) : null}
             {!overview && bar}
             {overview && !header && afterHeader}
             {overview &&
