@@ -24,9 +24,8 @@ test('selected Board advice preserves sign-in, current denial and unavailable', 
   expect(projectSubjectThreadCreateAdvice(account, 'allowed', true)).toBe('allowed');
 });
 
-test('final selected Board observation withholds entry after its Subject association changes', async () => {
+test('final selected Board observation withholds entry after its read authority changes', async () => {
   const subjectId = newId(0x4567);
-  const otherSubjectId = newId(0x4567);
   const boardId = newId(0x4321);
   await db.admin.query(
     `INSERT INTO content.board (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id)
@@ -60,11 +59,10 @@ test('final selected Board observation withholds entry after its Subject associa
   const selected = await prepareSubjectThreadEntry(dependencies, context, boardId, readContext);
   expect(selected.initial).toMatchObject({ state: 'current', actions: { createThread: 'sign-in' } });
 
-  await db.admin.query('UPDATE content.board SET subject_id = $2 WHERE route = $1 AND board_id = $3', [
-    routeOf(boardId),
-    otherSubjectId,
-    boardId,
-  ]);
+  await db.admin.query(
+    "UPDATE content.board SET visibility = 'taken_down', security_revision = security_revision + 1 WHERE route = $1 AND board_id = $2",
+    [routeOf(boardId), boardId],
+  );
   const final = await selected.finish();
   expect(final.entry).toMatchObject({ state: 'concealed' });
   expect(final.entry).not.toHaveProperty('board');

@@ -18,7 +18,7 @@ let app: ReturnType<typeof createKernel>;
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
-  app = createKernel({ pool: db.pool, routeKey, tokens });
+  app = createKernel({ pool: db.pool, routeKey, tokens, receiptKeys: tokens });
   db.pool.options.max = 1;
 });
 
