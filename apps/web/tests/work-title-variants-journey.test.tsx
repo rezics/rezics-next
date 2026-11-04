@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, createMemoryHistory, RouterProvider, Outlet, useRouterState } from '@tanstack/react-router';
 import { WorkNamesEntry } from '../src/features/catalogue/work-names/entry';
 import { PeopleNamesEntry } from '../src/features/catalogue/people-names/entry';
 import { NamesTermsReturn, namesReturn } from '../src/features/catalogue/work-names/navigation';
@@ -21,7 +21,7 @@ async function mounted(run: (host: HTMLDivElement, draw: (node: React.ReactNode)
   const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
   const window = new Window({ url: 'https://rezics.invalid/' });
   const globals = { window, document: window.document, navigator: window.navigator, HTMLElement: window.HTMLElement,
-    HTMLAnchorElement: window.HTMLAnchorElement, Element: window.Element, Node: window.Node, IS_REACT_ACT_ENVIRONMENT: true };
+    HTMLAnchorElement: window.HTMLAnchorElement, Element: window.Element, Node: window.Node, scrollTo: () => {}, IS_REACT_ACT_ENVIRONMENT: true };
   const previous = new Map(Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value });
   const { createRoot } = await import('react-dom/client');
@@ -80,7 +80,8 @@ test('both actual consumers return through Terms to the original Realm, expanded
     const route = createRoute({ getParentRoute: () => rootRoute, path: '/$', component: Visit });
     const router = createRouter({ routeTree: rootRoute.addChildren([route]), history });
     function Visit() {
-      if (history.location.pathname.endsWith('/terms')) return h(NamesTermsReturn, { id: s.id, locale: 'en', via: new URLSearchParams(history.location.search).get('via') ?? undefined });
+      const location = useRouterState({ select: state => state.location });
+      if (location.pathname.endsWith('/terms')) return h(NamesTermsReturn, { id: s.id, locale: 'en', via: new URLSearchParams(history.location.search).get('via') ?? undefined });
       const Link = (props: { href: string; children: React.ReactNode }) => h('a', { ...props, href: contextHref(props.href, realm) });
       return people ? h(PeopleNamesEntry, { reading: { public: { subject: s, related: {} } as never, locale: 'en', release: definitions.release, link: Link }, adviceLoader: async () => denied })
         : h(WorkNamesEntry, { subject: s as never, source: s, locale: 'en', context: 'global', release: definitions.release as never,

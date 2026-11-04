@@ -1,9 +1,11 @@
-import { expect, test } from 'bun:test';
+import { expect, test, mock } from 'bun:test';
+import { PAGE_GLOBAL_CONTEXT } from '@rezics/composition';
 import { createKernelClient } from '@rezics/client';
 import { checkSubjectStructure } from '@rezics/definitions/validate';
 import { createFakeKernelFetch } from '../src/kernel/fake';
 import fixtures from '../src/kernel/fixtures.json';
-import { loadSubjectPage, subjectBody } from '../src/features/pages/subject';
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { loadSubjectPage, subjectBody } = await import('../src/features/pages/subject');
 import { WORK_NAMES_BYTES, workNames } from '../src/features/catalogue/work-names/model';
 import { NAMES_RETURN_BYTES, namesReturn } from '../src/features/catalogue/work-names/navigation';
 import { readTermsPageAuthority } from '../src/features/catalogue/subject-terms-request';
@@ -30,7 +32,7 @@ test('composition charges page/action/refresh/Terms response bytes at all three 
     const client = createKernelClient('https://kernel.invalid', { fetch: (async (input, init) => {
       const request = new Request(input, init); const path = new URL(request.url).pathname; requests.push(path);
       const response = path.includes('viewer-actions')
-        ? new Response(JSON.stringify(++actionCount === 1 ? { code: 'unavailable' } : { resources: [{ type: 'semantic.context', id: '00000000-0000-0000-0000-000000000001', viewerActions: [] }] }), { status: actionCount === 1 ? 503 : 200, headers: { 'content-type': 'application/json' } })
+        ? new Response(JSON.stringify(++actionCount === 1 ? { code: 'unavailable' } : { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT, viewerActions: [] }] }), { status: actionCount === 1 ? 503 : 200, headers: { 'content-type': 'application/json' } })
         : await local(request);
       responses.push(new TextEncoder().encode(await response.clone().text()).length);
       return response;
@@ -40,7 +42,7 @@ test('composition charges page/action/refresh/Terms response bytes at all three 
     expect(loaded.page.termsAuthority?.actions.state).toBe('unavailable');
     const admitted = subjectBody(loaded.page)!;
     const names = workNames(admitted.subject, 'en'); expect(names.state).toBe('ready');
-    await readTermsPageAuthority(client, 'signed-in', 'Bearer fixture'); // the one explicit failed-section refresh
+    expect((await readTermsPageAuthority(client, 'signed-in', 'Bearer fixture')).actions.state).toBe('ready'); // the one explicit failed-section refresh
     await readSubjectTerms(client, id, 'en', 'Bearer fixture'); // original Terms candidate, never the names projection
     await readTermsPageAuthority(client, 'signed-in', 'Bearer fixture');
     // Definitions are a separate Terms-owned projection. Charge its bytes as well.
