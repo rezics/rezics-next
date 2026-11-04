@@ -781,7 +781,7 @@ uses five metadata-only native envelopes and the ordinary account-key CLI: an ex
 subject, then live action, then returns as a revised Book under the same native key. Complete membership
 stays five; only its actually owned candidates are retracted, its communal identity and immutable bootstrap/old
 receipts survive, and an independent editor selection remains selected. Returning input produces fresh cited
-`bangumi@9` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
+`bangumi@10` candidates; unchanged reopen writes nothing. This is a separate connected transition from the static
 five-record launch checks. Its earlier ignored-type native child is superseded by typed 3/6 conversion.
 [Evidence and limits](../../docs/research/imports-audit/cli-bangumi-scope-transition.md) record the raw native
 log, actual source/receipt anchors and inspected reference source. This isolated pass does not establish promotion.
@@ -2535,6 +2535,18 @@ adopts only explicit candidate intent through separate commands, checks current
 authority and verifies public facts on the acknowledged TVSeries. Changed
 input creates a current proposal on that identity; it does not rewrite adopted
 selections. Missing or unsupported input never retracts adopted facts.
+Ordinary Bangumi registration and selected-family type-2 rows reach the same
+`convertBangumi` profile projection. The `bangumi@10` semantic digest retains
+website meaning alongside existing names and original-run facts; the selected
+TVAnime rows use that same source converter under the current
+`cross-media-entities@10` registration. Every `schema:url` proposal carries the
+exact Bangumi source-record citation; that citation is distinct from the website
+fact and never supplies identity. Ordinary import stays proposal-only. The
+common publisher accepts and adopts only explicit candidate intent through
+separate commands, checks current authority and verifies public facts on the
+acknowledged TVSeries. Changed input creates a proposal on the same identity
+without rewriting adopted selections. Missing or unsupported input never
+retracts adopted facts.
 
 Decision: one literal HTTP(S) `官方网站` value is accepted per field
 occurrence. Exact URL duplicates coalesce; distinct addresses stay separate
