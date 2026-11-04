@@ -1956,9 +1956,13 @@ test('mounted composed advice keeps denied actions inert, seeds watch and slow m
         [viewerId]: { id: viewerId, displayName: 'Composed private author', handle: null, avatar: null },
       };
       await route.settlePage(0, page);
-      expect(
-        route.client.getQueryCache().findAll({ queryKey: ['thread-personal', threadId] })[0]?.queryKey,
-      ).toEqual(['thread-personal', threadId, cursor, false, id(41)]);
+      expect(route.client.getQueryCache().findAll({ queryKey: ['thread-personal', threadId] })[0]?.queryKey).toEqual([
+        'thread-personal',
+        threadId,
+        cursor,
+        false,
+        id(41),
+      ]);
       expect(personalReads[0]!.data).toEqual({ id: threadId, postIds: [], readReactions: false });
       await route.settlePersonal(0, personalFor(threadId, id(41)));
       expect(route.host.textContent).toContain('Composed private author');
