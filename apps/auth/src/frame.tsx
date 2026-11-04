@@ -1,6 +1,7 @@
 import { Card } from '@rezics/ui/shadcn/card';
 import type { ReactNode } from 'react';
 import { m } from './paraglide/messages.js';
+import { LocaleChoice } from './locale-choice-view';
 
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
@@ -13,6 +14,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
             </svg>
             <span>REZICS</span>
           </a>
+          <LocaleChoice />
         </div>
       </header>
       {children}

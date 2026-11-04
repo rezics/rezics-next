@@ -1,6 +1,6 @@
 import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server';
 import { paraglideMiddleware } from './paraglide/server.js';
-import { defineCustomServerStrategy, extractLocaleFromRequestWithStrategies, locales } from './paraglide/runtime.js';
+import { installAuthLocaleNegotiation } from './locale-choice';
 
 const pagePaths = new Set([
   '/login',
@@ -20,17 +20,7 @@ const pagePaths = new Set([
 ]);
 const assetPrefix = '/auth-assets/';
 
-defineCustomServerStrategy('custom-accept-language', {
-  getLocale(request) {
-    if (!request) return undefined;
-    try {
-      return extractLocaleFromRequestWithStrategies(request, ['cookie']);
-    } catch {
-      // Continue to weighted Accept-Language negotiation when the cookie has no supported locale.
-    }
-    return matchUiLocaleTag(request.headers.get('accept-language'));
-  },
-});
+installAuthLocaleNegotiation();
 
 const fetchHandler = createStartHandler(defaultStreamHandler);
 
@@ -78,23 +68,3 @@ export default {
     return new Response('Not Found', { status: 404 });
   },
 };
-
-function matchUiLocaleTag(header: string | null): string | undefined {
-  const entries = (header ?? '').split(',').map((part, index) => ({
-    tag: part.split(';')[0]!.trim().toLowerCase(),
-    index,
-    quality: Number(/;\s*q=([0-9.]+)/i.exec(part)?.[1] ?? 1),
-  }));
-  entries.sort((left, right) => right.quality - left.quality || left.index - right.index);
-  for (const { tag, quality } of entries) {
-    if (quality <= 0) continue;
-    const exact = locales.find((locale) => locale.toLowerCase() === tag);
-    if (exact) return exact;
-    const [language, ...subtags] = tag.split('-');
-    if (language === 'zh')
-      return subtags.some((part) => ['hant', 'tw', 'hk', 'mo'].includes(part)) ? 'zh-Hant' : 'zh-Hans';
-    const base = locales.find((locale) => locale.toLowerCase() === language);
-    if (base) return base;
-  }
-  return undefined;
-}

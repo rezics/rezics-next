@@ -458,6 +458,17 @@ From this directory, run:
 The rezics_locale cookie wins when it names a supported locale. Otherwise Auth negotiates the weighted
 Accept-Language header and falls back to English.
 
+The real shell offers all supported interface languages by their native names. Selecting a language stages a
+choice; Apply changes translated presentation and document `lang`, and Cancel returns focus to the chooser.
+The current language remains active until Apply. A blocked cookie shows that the choice lasts only in this
+document. Hydration starts from the exact server language without depending on cookie access or writing it again.
+
+Decision: apply interface language in the mounted route through a locale subscription, without navigation or
+router invalidation; route component types and keys stay stable, preserving each owner's drafts and attempts.
+No account preference, native read, command or authorization URL participates. Paraglide writes only its existing
+interface cookie, with its existing scope and lifetime. Restored documents may read a newer supported cookie
+without republishing their former choice. Pending local selections are discarded on departure/restoration.
+
 When AUTH_ORIGIN is set during development, every path outside the six pages and /auth-assets/ is sent to that
 origin with its method, path, query, headers and streamed body. Redirects are returned without following them; Auth's
 response headers and body pass through unchanged.

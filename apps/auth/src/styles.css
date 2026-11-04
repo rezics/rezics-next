@@ -43,7 +43,7 @@ body {
 }
 
 .auth-header {
-  height: 4rem;
+  min-height: 4rem;
   border-bottom: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
 }
 
@@ -51,8 +51,47 @@ body {
   display: flex;
   align-items: center;
   width: min(100% - 2.5rem, 72rem);
-  height: 100%;
+  min-height: 4rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding-block: 0.5rem;
   margin-inline: auto;
+}
+
+.auth-locale-choice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-locale-label,
+.auth-locale-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.auth-locale-choice [data-slot='native-select'] {
+  min-height: 2.75rem;
+  max-width: 13rem;
+  border-color: var(--border);
+}
+
+.auth-locale-status {
+  flex-basis: 100%;
+  max-width: 30rem;
+  margin: 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.auth-locale-status:empty {
+  display: none;
 }
 
 .auth-brand {
