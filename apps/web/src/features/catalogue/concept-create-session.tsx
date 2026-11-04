@@ -201,7 +201,9 @@ function ConceptCreateSessionLive({
       current.sourceId,
       current.reader,
       result.id,
-      disclosed && classificationTargetAdmitted(disclosed.type, disclosed.bases, current.targets) ? disclosed : undefined,
+      disclosed && classificationTargetAdmitted(disclosed.type, disclosed.bases, current.targets)
+        ? disclosed
+        : undefined,
     );
     if (!next) {
       setHandoff(undefined);
@@ -265,13 +267,7 @@ function ConceptCreateSessionLive({
         setReturnReadFailure('stale');
         return;
       }
-      const next = recordCreatedClassificationIdentity(
-        current.token,
-        current.sourceId,
-        current.reader,
-        id,
-        identity,
-      );
+      const next = recordCreatedClassificationIdentity(current.token, current.sourceId, current.reader, id, identity);
       if (!next || next.phase !== 'ready') {
         setReturnReadFailure('unavailable');
         setHandoff(undefined);
@@ -428,9 +424,7 @@ function ConceptCreateSessionLive({
               offered: activeTypes,
               unavailable: currentHandoff.targets.filter(
                 (target) =>
-                  !activeTypes.some((entry) =>
-                    classificationTargetAdmitted(entry.id, entry.bases ?? [], [target]),
-                  ),
+                  !activeTypes.some((entry) => classificationTargetAdmitted(entry.id, entry.bases ?? [], [target])),
               ),
               admitType: (type: CreateType) =>
                 classificationTargetAdmitted(type.id, type.bases ?? [], currentHandoff.targets),
@@ -569,13 +563,16 @@ function ConceptCreateSessionLive({
           {m.catalogue_create_loading({}, o)}
         </p>
       )}
-      {currentHandoff && currentHandoff.phase === 'creating' && !currentHandoff.createdId && !restoredAcknowledgementId && (
-        <div className="mx-auto max-w-3xl px-4">
-          <Button type="button" variant="outline" onClick={() => setConfirmLeave(true)}>
-            {m.classification_create_cancel({}, o)}
-          </Button>
-        </div>
-      )}
+      {currentHandoff &&
+        currentHandoff.phase === 'creating' &&
+        !currentHandoff.createdId &&
+        !restoredAcknowledgementId && (
+          <div className="mx-auto max-w-3xl px-4">
+            <Button type="button" variant="outline" onClick={() => setConfirmLeave(true)}>
+              {m.classification_create_cancel({}, o)}
+            </Button>
+          </div>
+        )}
       <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
         <AlertDialogContent>
           <AlertDialogHeader>

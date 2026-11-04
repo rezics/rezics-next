@@ -311,8 +311,8 @@ test('an acknowledged detour resumes by UUID and returns a fresh suggestion with
     .kernelRequests()
     .filter((request) => request.method === 'GET' && request.url === `/v1/subjects/${createdId}`);
   expect(exactReads.length).toBeGreaterThanOrEqual(2);
-  expect(stack.kernelRequests().some((request) => request.method === 'POST' && request.url === '/v1/viewerActions')).toBe(
-    true,
-  );
+  expect(
+    stack.kernelRequests().some((request) => request.method === 'POST' && request.url === '/v1/viewerActions'),
+  ).toBe(true);
   expect(candidateWrites()).toHaveLength(0);
 });
