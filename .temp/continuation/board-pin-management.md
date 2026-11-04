@@ -38,15 +38,15 @@ acceptance:
   command:
     - bun
     - run
-    - "--cwd"
+    - '--cwd'
     - services/kernel
     - check
     - test/content/board-pin-management-journey.test.ts
   placement: default
   tests:
-    - "A current Board curator receives bounded selected pin advice, pins/unpins through the existing native writer and refreshes the same Board cohort under its new pin revision."
-    - "Denied, missing and stale advice never derives authority from Board visibility, membership, pin position or previous selection; unknown writes preserve their original intent."
-    - "Native selected advice is bounded by the displayed cohort and fixed response budget under independent threads, pins, revisions and Access growth."
+    - 'A current Board curator receives bounded selected pin advice, pins/unpins through the existing native writer and refreshes the same Board cohort under its new pin revision.'
+    - 'Denied, missing and stale advice never derives authority from Board visibility, membership, pin position or previous selection; unknown writes preserve their original intent.'
+    - 'Native selected advice is bounded by the displayed cohort and fixed response budget under independent threads, pins, revisions and Access growth.'
   failing: true
 estimate:
   lines: 1600
