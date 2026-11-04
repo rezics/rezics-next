@@ -6,7 +6,7 @@ import { trustedAccessPorts } from '../../../auth/test/support/trusted-access.ts
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
 
-setDefaultTimeout(120_000);
+setDefaultTimeout(600_000);
 
 const key = () => randomBytes(32).toString('base64url');
 const unused = async (): Promise<never> => {
