@@ -17,7 +17,6 @@ import {
   releaseFidelityFixture,
   releaseSubject,
   releaseWork,
-  replacedByProperty,
 } from '../src/kernel/fake/release-fidelity';
 import { m } from '../src/paraglide/messages.js';
 
@@ -70,7 +69,7 @@ test('TBA, partial, exact and absent dates stay distinct, and year zero is not T
   ).toBe('exact');
 });
 
-test('a concrete edition shows work identity, language edition, two directed relations and historical meaning', async () => {
+test('a concrete edition shows work identity, language edition and historical meaning', async () => {
   const fixture = releaseFidelityFixture('ready');
   const page = await fixture.read();
   if (!page.ok) throw new Error('Expected a release page');
@@ -81,9 +80,6 @@ test('a concrete edition shows work identity, language edition, two directed rel
   expect(page.streams.some((stream) => stream.property === basedOnProperty && stream.direction === 'forward')).toBe(
     true,
   );
-  expect(page.streams.some((stream) => stream.property === replacedByProperty && stream.direction === 'forward')).toBe(
-    true,
-  );
   expect(page.streams.some((stream) => stream.property === 'wdt:P155' && stream.direction === 'forward')).toBe(true);
   const based = page.streams.find((stream) => stream.property === basedOnProperty)!;
   const related = await fixture.read(based.key);
@@ -91,8 +87,8 @@ test('a concrete edition shows work identity, language edition, two directed rel
   expect(related.rows[0]?.readability).toBe('readable');
   expect(related.rows[0]?.provenance).toContain('anidb:rel:9999');
   expect(related.rows[1]?.historical).toBe(true);
-  const replaced = await fixture.read(page.streams.find((stream) => stream.property === replacedByProperty)!.key);
-  expect(replaced.ok && replaced.stream?.property).toBe(replacedByProperty);
+  expect(page.release.properties['wdt:P1366']?.targets).toEqual(['schema:Organization']);
+  expect(page.streams.some((stream) => stream.property === 'wdt:P1366')).toBe(false);
   expect(page.statusProperty).toBe('schema:creativeWorkStatus');
   expect(page.work.completeness).toMatchObject({
     id: '00000000-0000-4000-8000-00000000a115',

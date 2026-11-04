@@ -35,7 +35,11 @@ function ReleaseFidelitySessionLive({
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
   );
-  if (realm || (context && context !== candidateContext))
+  const selectedContext = context ?? candidateContext;
+  if (
+    realm ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedContext)
+  )
     return <p role="status">{m.relation_context({}, { locale: locale as never })}</p>;
   if (state !== 'signed-in')
     return (
@@ -48,23 +52,24 @@ function ReleaseFidelitySessionLive({
   return (
     <ReleaseFidelityPage
       id={id}
+      context={selectedContext}
       locale={locale}
       search={search}
       initialReview={initialReview}
       transport={{
         read: (stream, cursor, detail, session) =>
           readSubjectReleaseFidelity({
-            data: editorRequest({ id, stream, cursor, detail, session }, editorWork),
+            data: editorRequest({ id, context: selectedContext, stream, cursor, detail, session }, editorWork),
             headers: csrfHeaders(),
           }),
         facts: {
           read: () => readCorrection({ data: editorRequest({ id }, editorWork), headers: csrfHeaders() }),
           propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
         },
-        relation: (holder) => ({
+        relation: (holder, relationContext = selectedContext) => ({
           read: (slot, cursor, session) =>
             readSubjectRelationEditor({
-              data: editorRequest({ id: holder, slot, cursor, session }, editorWork),
+              data: editorRequest({ id: holder, context: relationContext, slot, cursor, session }, editorWork),
               headers: csrfHeaders(),
             }),
           propose: (data) => proposeSubjectRelation({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),

@@ -25,7 +25,7 @@ test('the committed bundled release is the compilation of the bundled catalogue'
 
 test('book work, edition and recipe are profiles of the catalogue', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.4' });
+  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.5' });
   expect(Object.keys(types)).toEqual(expect.arrayContaining(['bf:Instance', 'schema:Book', 'schema:Recipe']));
   expect(types['schema:Book']).toMatchObject({
     mappings: ['wd:Q47461344'],

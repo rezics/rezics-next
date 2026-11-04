@@ -1523,6 +1523,14 @@ Completeness of a particular software release for its work is `wdt:P31` on
 `CreativeWork`; `VideoGameRelease` is not a `CreativeWork`. Unresolved follow
 targets keep their source code on the existing `schema:sameAs` qualifier.
 
+Decision: VNDB `releases_supersedes.id → rid` maps to the native `rezics:releaseSupersedes` relation; P155 remains chronology, and P1365/P1366 remain Organization replacement.
+
+`rezics:releaseSupersedes` points from the current software release to the exact
+release it replaces. It is a separate directed relation from P155/P156 sequence
+chronology and from P1365/P1366, whose released target remains Organization.
+The mapping is grounded in VNDB's `releases_supersedes(id, rid)` source schema;
+unresolved provider codes are not turned into native assertions.
+
 ## Versioned catalogue distribution
 
 `Release1` remains an immutable, complete, bounded release. The separate catalogue

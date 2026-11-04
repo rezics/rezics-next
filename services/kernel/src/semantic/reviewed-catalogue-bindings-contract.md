@@ -13,6 +13,16 @@ and [source inventory rules](../../../../packages/definitions/sources/README.md)
 remain authoritative. The type file describes evidence, without manufacturing
 native subjects, receipts or readiness.
 
+## VNDB software release replacement
+
+The official VNDB source schema declares `releases_supersedes(id, rid)`: `id` is
+the current/superseding release and `rid` is the exact release it supersedes.
+The released native relation is `rezics:releaseSupersedes`, with both endpoints
+typed as `wd:Q20631656`. Its inverse presentation is “superseded by”. P155/P156
+remain sequence chronology and P1365/P1366 retain their Organization range.
+The source dump and schema pin remain attached to the inventory binding; this
+contract does not guess a release identity from a provider label or code.
+
 ## Required meanings
 
 | Input meaning                                                 | Native assertion and correspondence                                                                                                                              | Excluded inference                                                                                                                             |

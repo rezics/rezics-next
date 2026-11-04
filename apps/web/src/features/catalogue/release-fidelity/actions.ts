@@ -11,6 +11,7 @@ export const readSubjectReleaseFidelity = createServerFn({ method: 'POST', stric
     originalReaderInput(
       (input: {
         id: string;
+        context?: string | undefined;
         stream?: string | undefined;
         cursor?: string | undefined;
         detail?: string | undefined;
@@ -19,6 +20,7 @@ export const readSubjectReleaseFidelity = createServerFn({ method: 'POST', stric
         if (
           !input ||
           !releaseUuid.test(input.id) ||
+          (input.context !== undefined && !releaseUuid.test(input.context)) ||
           (input.stream !== undefined && (typeof input.stream !== 'string' || input.stream.length > 256)) ||
           (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 8192)) ||
           (input.detail !== undefined && !releaseUuid.test(input.detail)) ||
@@ -27,6 +29,7 @@ export const readSubjectReleaseFidelity = createServerFn({ method: 'POST', stric
           throw new Error('Invalid release address');
         return {
           id: input.id,
+          context: input.context,
           stream: input.stream,
           cursor: input.cursor,
           detail: input.detail,
@@ -41,6 +44,7 @@ export const readSubjectReleaseFidelity = createServerFn({ method: 'POST', stric
     if (!authorization) return { ok: false, reason: 'denied' };
     return readReleaseFidelity(kernelClient(), authorization, {
       id: data.id,
+      context: data.context,
       locale: requestLocale() ?? 'en',
       stream: data.stream,
       cursor: data.cursor,

@@ -377,16 +377,20 @@ work and an unreadable work identity are separate states. Work, edition, alterna
 distinct objects.
 
 Release date uses the released time property. Exact day, partial year/month, explicit TBA (`somevalue`), explicit
-no-value and an absent statement remain distinct. TBA is never a missing date, Unix epoch or year zero. Status and
+no-value, an absent statement, invalid concrete values and unsupported precision or calendars remain distinct. Only
+`somevalue` is TBA. Signed and extended years retain their sign and digits without converting through a bounded Date.
+Status and
 region appear only when the current descriptor admits those properties; otherwise the page names them unavailable.
+Decision: Missing release time calendars keep the existing Gregorian reading; explicit non-Gregorian calendars stay unsupported.
 Admitted status is `schema:creativeWorkStatus` on the exact work or release holder; completeness of a particular
 release for its work is the `wdt:P31` qualifier on `schema:exampleOfWork`. A status Concept is never used as a date.
 Historical accepting meaning is the statement's pinned `rezics.release` digest, shown separately from the current
 editor admission. An explicit correction review is required after configuration changes.
 
 Directed release-to-release streams appear only for admitted item properties whose targets are released edition
-types or descendants, including `wdt:P155` once a software-release target is admitted. Work-targeted CreativeWork
-relations stay on the existing relation editor. Unknown source codes stay visible as provenance on the
+types or descendants, including `wdt:P155` chronology and the native `rezics:releaseSupersedes` replacement relation.
+P155 means follows; release replacement does not imply chronology. Work-targeted CreativeWork relations stay on the
+existing relation editor. Unknown source codes stay visible as provenance on the
 `schema:sameAs` qualifier of that follow as an exact http(s) URI; compact source codes are not URL values. Native edition
 creation, source mapping and adoption remain with Imports. Missing producer capability is named unavailable; Web
 does not fork native commands. One composed `POST /v1/pages:read` response carries selected facts with independently
@@ -398,6 +402,8 @@ than a second Access check.
 
 Correction reuses Subject facts and the relation editor for the exact selected assertion, then returns to this
 release. Native-return links keep the work, existing publisher target selection, candidate reader and Changes.
+
+Decision: VNDB `releases_supersedes.id → rid` maps to the native `rezics:releaseSupersedes` relation; P155 remains chronology, and P1365/P1366 remain Organization replacement.
 
 ## Inspect catalogue file metadata and its release group
 

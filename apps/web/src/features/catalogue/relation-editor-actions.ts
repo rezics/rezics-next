@@ -25,12 +25,17 @@ function record(input: unknown): Record<string, unknown> {
 }
 function address(input: unknown) {
   const value = record(input);
-  if (typeof value.id !== 'string' || !uuid.test(value.id) || 'context' in value) throw new Error('Invalid subject');
+  if (
+    typeof value.id !== 'string' ||
+    !uuid.test(value.id) ||
+    (value.context !== undefined && (typeof value.context !== 'string' || !uuid.test(value.context)))
+  )
+    throw new Error('Invalid subject');
   let slot: RelationSlot | undefined;
   if (value.slot !== undefined) {
     const raw = record(value.slot);
     if (
-      Object.keys(raw).some((key) => !['property', 'target', 'sameAs', 'key'].includes(key)) ||
+      Object.keys(raw).some((key) => !['property', 'target', 'sameAs', 'key', 'context'].includes(key)) ||
       !validRelationSlot(raw as RelationSlot)
     )
       throw new Error('Invalid relation slot');
@@ -42,6 +47,7 @@ function address(input: unknown) {
     throw new Error('Invalid session token');
   return {
     id: value.id,
+    ...(typeof value.context === 'string' ? { context: value.context } : {}),
     ...(typeof value.session === 'string' ? { session: value.session } : {}),
     ...(slot ? { slot } : {}),
     ...(typeof value.cursor === 'string' ? { cursor: value.cursor } : {}),
@@ -64,6 +70,7 @@ export const readSubjectRelationEditor = createServerFn({ method: 'POST', strict
         data.slot,
         data.cursor,
         data.session,
+        data.context,
       );
     } catch {
       return { ok: false, reason: 'unavailable' };

@@ -17,7 +17,7 @@ import {
   type CandidateResult,
 } from './candidates';
 
-export type RelationSlot = CandidateSlot & { property: string };
+export type RelationSlot = CandidateSlot & { property: string; context?: string };
 export type RelationQualifier = {
   id: string;
   label: string;
@@ -95,7 +95,8 @@ export function validRelationSlot(slot: RelationSlot): boolean {
       (slot.sameAs !== undefined &&
         slot.target === undefined &&
         /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(slot.sameAs))) &&
-    (slot.key === undefined || (slot.target !== undefined && uuid.test(slot.key)))
+    (slot.key === undefined || (slot.target !== undefined && uuid.test(slot.key))) &&
+    (slot.context === undefined || uuid.test(slot.context))
   );
 }
 
@@ -241,11 +242,12 @@ export async function readRelationEditor(
   slot?: RelationSlot,
   cursor?: string,
   session?: string,
+  context = slot?.context ?? candidateContext,
 ): Promise<RelationRead> {
   if (slot && !validRelationSlot(slot)) return candidateFailure(400);
-  const result = await readCandidates(client, authorization, id, slot?.property, cursor, slot, session);
+  const result = await readCandidates(client, authorization, id, slot?.property, cursor, slot, session, context);
   if (!result.ok) return result;
-  if (result.public.subject.id !== id || result.public.subject.context !== candidateContext)
+  if (result.public.subject.id !== id || result.public.subject.context !== context)
     return candidateFailure(400);
   let exact: RelationTypeDescriptorRead;
   try {
@@ -267,7 +269,7 @@ export async function readRelationEditor(
     authority: await readCandidateAuthority(
       client,
       authorization,
-      candidateContext,
+      context,
       [id, slot?.target, slot?.key].filter((value): value is string => value !== undefined),
     ),
     descriptor: exact.descriptor,
@@ -285,7 +287,17 @@ export async function proposeRelation(
 ): Promise<RelationProposalResult> {
   if (!relationDraftWithinBounds(input.statement)) return candidateFailure(400);
   if (!input.retry) {
-    const current = await readRelationEditor(client, authorization, descriptor, input.id, locale, input.slot);
+    const current = await readRelationEditor(
+      client,
+      authorization,
+      descriptor,
+      input.id,
+      locale,
+      input.slot,
+      undefined,
+      undefined,
+      input.slot.context,
+    );
     if (!current.ok) return current;
     if (!current.descriptor) return candidateFailure(503);
     const field = current.fields.find((field) => field.id === input.slot.property);
@@ -330,6 +342,7 @@ export async function confirmRelation(
     input.cursor,
     input.slot,
     input.session,
+    input.context ?? input.slot.context ?? candidateContext,
   );
   if (!current.ok) return current;
   const candidate = current.page?.candidates.find((candidate) => candidate.id === input.candidate);
@@ -347,7 +360,7 @@ export async function confirmRelation(
       const result = await endpoint
         .candidates({ candidate: input.candidate })
         .$reject.post(
-          { context: candidateContext, expected_head: input.head },
+          { context: input.context ?? input.slot.context ?? candidateContext, expected_head: input.head },
           { headers: { authorization, 'idempotency-key': input.key } as { 'idempotency-key': string } },
         );
       if (result.status !== 200 || !result.data) return candidateFailure(result.status);
@@ -355,9 +368,14 @@ export async function confirmRelation(
       try {
         const session = new Headers(result.headers).get('rezics-session-token');
         const read = await endpoint.get({
+          query: { context: input.context ?? input.slot.context ?? candidateContext },
           headers: { authorization, ...(session ? { 'rezics-session-token': session } : {}) },
         });
-        if (read.status === 200 && read.data?.subject.id === input.id && read.data.subject.context === candidateContext)
+        if (
+          read.status === 200 &&
+          read.data?.subject.id === input.id &&
+          read.data.subject.context === (input.context ?? input.slot.context ?? candidateContext)
+        )
           publicRead = read.data;
       } catch {
         /* Read remains unavailable. */
@@ -369,13 +387,15 @@ export async function confirmRelation(
   }
   const result = await selectCandidate(client, authorization, {
     ...input,
+    context: input.context ?? input.slot.context ?? candidateContext,
     operation: input.operation,
     property: input.slot.property,
   });
   if (
     result.ok &&
     result.public &&
-    (result.public.subject.id !== input.id || result.public.subject.context !== candidateContext)
+    (result.public.subject.id !== input.id ||
+      result.public.subject.context !== (input.context ?? input.slot.context ?? candidateContext))
   )
     return { ...result, public: null, kind: input.operation === 'accept' ? 'accepted' : 'pending' };
   if (

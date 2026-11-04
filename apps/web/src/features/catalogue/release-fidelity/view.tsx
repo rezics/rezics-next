@@ -12,6 +12,7 @@ import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { CandidateValue } from '../../pages/data';
 import { ViewHeading } from '../../pages/view-heading';
 import { subjectHref } from '../../../subject/subject-href';
+import { candidateContext } from '../../../subject/candidates';
 import type { CandidateTransport } from '../../../subject/candidate-review';
 import {
   relationDraft,
@@ -35,7 +36,7 @@ import { type ReleaseFidelityRead, type ReleaseRow } from './read';
 export type ReleaseFidelityTransport = {
   read: (stream?: string, cursor?: string, detail?: string, session?: string) => Promise<ReleaseFidelityRead>;
   facts: FactsTransport;
-  relation: (holder: string) => RelationTransport;
+  relation: (holder: string, context?: string) => RelationTransport;
   review: (property: string, session?: string) => CandidateTransport;
 };
 
@@ -50,7 +51,7 @@ function rowTarget(row: ReleaseRow): string | undefined {
   return row.statement ? (relatedTarget(row.statement) ?? row.holder) : row.holder;
 }
 
-function relationSlot(row: ReleaseRow, stream: ReleaseStream): RelationSlot | undefined {
+function relationSlot(row: ReleaseRow, stream: ReleaseStream, context: string): RelationSlot | undefined {
   if (!row.statement) return;
   const statement = relationDraft(row.statement);
   const key = stream.property;
@@ -58,6 +59,7 @@ function relationSlot(row: ReleaseRow, stream: ReleaseStream): RelationSlot | un
   const external = statement.qualifiers.find((part) => part.property.id === 'schema:sameAs');
   const slot: RelationSlot = {
     property: stream.property,
+    context,
     ...(target
       ? { target }
       : statement.value.type === 'somevalue' &&
@@ -73,12 +75,14 @@ export const ReleaseFidelityPage = catalogueEditor(ReleaseFidelityLive);
 
 function ReleaseFidelityLive({
   id,
+  context,
   locale,
   transport,
   search,
   initialReview,
 }: {
   id: string;
+  context: string;
   locale: string;
   transport: ReleaseFidelityTransport;
   search: EntityPickerSearch;
@@ -88,7 +92,7 @@ function ReleaseFidelityLive({
   const lifetime = useEditorLifetime();
   const o = { locale: locale as never };
   const query = useQuery({
-    queryKey: [...['release-fidelity', id, locale], lifetime.generation],
+    queryKey: [...['release-fidelity', id, context, locale], lifetime.generation],
     queryFn: () => transport.read(),
     retry: false,
     staleTime: 0,
@@ -191,6 +195,9 @@ function ReleaseFidelityLive({
     }
   }, [query.data, page]);
   const title = pickText(read?.public.subject.labels ?? {}, locale);
+  const dateStatement = read?.date.statementId
+    ? read.public.subject.statements['schema:datePublished']?.find((statement) => statement.id === read.date.statementId)
+    : undefined;
   const href = subjectHref({ id, label: title.text }, locale).href;
   const workHref =
     read?.work.id && read.work.readability === 'readable'
@@ -274,6 +281,10 @@ function ReleaseFidelityLive({
               <p>
                 {read.date.kind === 'tba'
                   ? m.release_fidelity_date_tba({}, o)
+                  : read.date.kind === 'invalid'
+                    ? m.release_fidelity_date_invalid({}, o)
+                    : read.date.kind === 'unsupported'
+                      ? m.release_fidelity_date_unsupported({}, o)
                   : read.date.kind === 'absent'
                     ? m.release_fidelity_date_absent({}, o)
                     : read.date.kind === 'none'
@@ -284,6 +295,24 @@ function ReleaseFidelityLive({
               </p>
               {read.date.historical && (
                 <p className="text-sm text-muted-foreground">{m.release_fidelity_historical({}, o)}</p>
+              )}
+              {dateStatement && (
+                <details className="space-y-2">
+                  <summary className={summaryClass}>{m.release_fidelity_date_evidence({}, o)}</summary>
+                  <PartValue part={dateStatement} read={read} locale={locale} />
+                  {dateStatement.qualifiers.map((part, index) => (
+                    <div key={index}>
+                      <PartValue part={part} read={read} locale={locale} />
+                    </div>
+                  ))}
+                  {dateStatement.references.map((reference, index) => (
+                    <div key={index} className="space-y-1 text-sm">
+                      {reference.parts.map((part, at) => (
+                        <PartValue key={at} part={part} read={read} locale={locale} />
+                      ))}
+                    </div>
+                  ))}
+                </details>
               )}
               {!read.statusProperty && <p>{m.release_fidelity_status_unavailable({}, o)}</p>}
               {!read.regionProperty && <p>{m.release_fidelity_region_unavailable({}, o)}</p>}
@@ -349,7 +378,10 @@ function ReleaseFidelityLive({
               <ContentItemHeading level={2} className="text-lg font-semibold">
                 {m.release_fidelity_related({}, o)}
               </ContentItemHeading>
-              {!read.streams.length && <p>{m.release_fidelity_related_empty({}, o)}</p>}
+              {read.streamState === 'unsupported' && <p>{m.release_fidelity_related_unsupported({}, o)}</p>}
+              {read.streamState === 'unavailable' && <p>{m.release_fidelity_related_unavailable({}, o)}</p>}
+              {read.streamState === 'withheld' && <p>{m.release_fidelity_related_withheld({}, o)}</p>}
+              {read.streamState === 'denied' && <p>{m.release_fidelity_related_denied({}, o)}</p>}
               {read.streams.length > 0 && (
                 <Field className="min-w-0">
                   <FieldLabel htmlFor={`${headingId}-stream`}>{m.release_fidelity_related({}, o)}</FieldLabel>
@@ -374,7 +406,7 @@ function ReleaseFidelityLive({
               <p ref={sliceStatus} tabIndex={-1} className="sr-only">
                 {m.release_fidelity_related({}, o)}
               </p>
-              {!read.rows.length && read.stream && <p>{m.release_fidelity_related_empty({}, o)}</p>}
+              {read.streamState === 'empty' && <p>{m.release_fidelity_related_empty({}, o)}</p>}
               <ul className="space-y-3">
                 {read.rows.map((row) => {
                   const target = rowTarget(row);
@@ -419,7 +451,7 @@ function ReleaseFidelityLive({
                             {m.release_fidelity_select_detail({}, o)}
                           </Button>
                         )}
-                        {read.stream && relationSlot(row, read.stream) && row.statement && (
+                        {read.stream && relationSlot(row, read.stream, read.public.subject.context) && row.statement && (
                           <Button
                             type="button"
                             variant="outline"
@@ -427,7 +459,7 @@ function ReleaseFidelityLive({
                             onClick={() =>
                               setDraft({
                                 holder: row.holder,
-                                slot: relationSlot(row, read.stream!)!,
+                                slot: relationSlot(row, read.stream!, read.public.subject.context)!,
                                 statement: relationDraft(row.statement!),
                                 ...(read.session ? { session: read.session } : {}),
                               })
@@ -472,7 +504,7 @@ function ReleaseFidelityLive({
                 id={draft.holder}
                 locale={locale}
                 search={search}
-                transport={transport.relation(draft.holder)}
+                transport={transport.relation(draft.holder, draft.slot.context ?? read.public.subject.context)}
                 composition={{
                   statement: draft.statement,
                   slot: draft.slot,
@@ -492,25 +524,29 @@ function ReleaseFidelityLive({
                 </Button>
               </div>
             )}
-            <details className="space-y-3">
-              <summary className={summaryClass}>{m.release_fidelity_current_edit({}, o)}</summary>
-              <p>{m.release_fidelity_correction_review({}, o)}</p>
-              <SubjectFacts
-                initial={{ ok: true, public: read.public, release: read.release, source: null }}
-                locale={locale}
-                transport={transport.facts}
-                review={transport.review}
-                initialReview={initialReview}
-                embedded
-                profile={{
-                  properties: (current) => scalarFields(current.release, current.public.subject.type),
-                  title: m.release_fidelity_current_edit({}, o),
-                  intro: m.release_fidelity_correction_review({}, o),
-                  empty: m.release_fidelity_empty({}, o),
-                  path: 'release',
-                }}
-              />
-            </details>
+            {read.public.subject.context === candidateContext ? (
+              <details className="space-y-3">
+                <summary className={summaryClass}>{m.release_fidelity_current_edit({}, o)}</summary>
+                <p>{m.release_fidelity_correction_review({}, o)}</p>
+                <SubjectFacts
+                  initial={{ ok: true, public: read.public, release: read.release, source: null }}
+                  locale={locale}
+                  transport={transport.facts}
+                  review={transport.review}
+                  initialReview={initialReview}
+                  embedded
+                  profile={{
+                    properties: (current) => scalarFields(current.release, current.public.subject.type),
+                    title: m.release_fidelity_current_edit({}, o),
+                    intro: m.release_fidelity_correction_review({}, o),
+                    empty: m.release_fidelity_empty({}, o),
+                    path: 'release',
+                  }}
+                />
+              </details>
+            ) : (
+              <p role="status">{m.relation_context({}, o)}</p>
+            )}
             <nav className="flex flex-wrap gap-2" data-slot="release-return">
               {workHref && (
                 <a href={workHref} className={`${buttonVariants({ variant: 'outline', size: 'sm' })} ${actionClass}`}>

@@ -1333,8 +1333,17 @@ table_types:
   wdt:P155:
     status: existing
     mapping: wdt:P155
-    meaning: Predecessor or superseded-release relation.
+    meaning: Prior item in a sequence (follows); it does not mean replacement.
     citations: &id030 ['https://www.wikidata.org/wiki/Property:155', 'https://www.wikidata.org/wiki/Property:P155']
+  rezics:releaseSupersedes:
+    status: existing
+    mapping: rezics:releaseSupersedes
+    meaning: >-
+      Native exact directed release replacement: current release id supersedes the exact release rid. It is not P155
+      chronology or Organization replacement.
+    citations: &id046
+      - https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=3ffec03b6b7cb8967d920ec9b8fd90f78bd8ec41
+      - https://www.wikidata.org/wiki/Property:P155
   wdt:P1552:
     status: proposed
     mapping: wdt:P1552
@@ -2264,20 +2273,20 @@ tables:
         developer: wdt:P178
         publisher: schema:publisher
   - name: releases_supersedes
-    type: wdt:P155
+    type: rezics:releaseSupersedes
     columns:
       - name: id
         status: omitted
-        reason: Release key anchoring the supersession statement.
+        reason: >-
+          Superseding Release subject key. Each row is directed from this release to the exact superseded release in rid.
       - name: rid
         status: existing
-        term: wdt:P155
+        term: rezics:releaseSupersedes
         'on': wd:Q20631656
-        mapping: wdt:P155
+        mapping: rezics:releaseSupersedes
         meaning: >-
-          The superseded software-release endpoint. Keep that exact release; do not retarget it to the represented visual
-          novel.
-        citations: *id030
+          Exact superseded software-release endpoint; the row's id is the current release that supersedes rid.
+        citations: *id046
   - name: releases_titles
     type: schema:name
     columns:

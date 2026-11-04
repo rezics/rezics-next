@@ -8,6 +8,7 @@ properties:
   wdt:P2899: Mindestalter
   wdt:P31: ist ein(e)
   wdt:P155: Vorgänger
+  rezics:releaseSupersedes: ersetzt
   wdt:P437: Auslieferungsmedium
   wdt:P408: Engine
   schema:numberOfPlayers: Spieleranzahl
@@ -18,6 +19,7 @@ inverseProperties:
   wdt:P31: 'Veröffentlichungen dieses Typs'
   wdt:P437: 'Veröffentlichungen in diesem Format'
   wdt:P155: 'Nachfolger'
+  rezics:releaseSupersedes: 'Ersetzt durch'
   wdt:P408: 'Spiele mit dieser Engine'
   wdt:P8646: 'Erweiterungen'
 typeDescriptions:
@@ -100,6 +102,7 @@ propertyDescriptions:
   wdt:P2899: 'Mindestalter der Altersfreigabe als nichtnegative ganzzahlige Menge in Jahren (wd:Q577).'
   wdt:P31: 'Ein Konzept für die Veröffentlichungsart, etwa vollständig, teilweise oder Testversion; nicht der Katalogtyp des Subjekts.'
   wdt:P155: 'Das vorherige Werk oder die vorherige Veröffentlichung, auf die dieses Werk oder diese Veröffentlichung folgt.'
+  rezics:releaseSupersedes: 'Die genaue Softwareveröffentlichung, die diese Veröffentlichung ersetzt; unabhängig von der zeitlichen Reihenfolge.'
   wdt:P437: 'Ein Konzept für Vertriebsform oder physischen Datenträger der Veröffentlichung, etwa eine optische Disc.'
   wdt:P408: 'Ein Konzept, das die verwendete Spiel-Engine bezeichnet.'
   schema:numberOfPlayers: 'Maximale Spielerzahl als einheitenlose ganze Zahl; bei einem angegebenen Bereich die Obergrenze verwenden und die Untergrenze separat qualifizieren.'

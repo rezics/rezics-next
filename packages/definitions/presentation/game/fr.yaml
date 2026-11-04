@@ -8,6 +8,7 @@ properties:
   wdt:P2899: âge minimal
   wdt:P31: nature de l’élément
   wdt:P155: précédé par
+  rezics:releaseSupersedes: remplace
   wdt:P437: format de distribution
   wdt:P408: moteur logiciel
   schema:numberOfPlayers: nombre de joueurs
@@ -18,6 +19,7 @@ inverseProperties:
   wdt:P31: 'Sorties de ce type'
   wdt:P437: 'Sorties dans ce format'
   wdt:P155: 'Suite'
+  rezics:releaseSupersedes: 'Remplacé par'
   wdt:P408: 'Jeux utilisant ce moteur'
   wdt:P8646: 'Extensions'
 typeDescriptions:
@@ -103,6 +105,7 @@ propertyDescriptions:
   wdt:P2899: 'L’âge minimal associé à la classification de l’édition, en quantité entière non négative d’années (wd:Q577).'
   wdt:P31: 'Un concept de catégorie d’édition, comme complète, partielle ou d’essai ; pas le type de catalogue du sujet.'
   wdt:P155: 'L’œuvre ou l’édition précédente à laquelle celle-ci fait suite.'
+  rezics:releaseSupersedes: 'L’édition logicielle exacte que cette édition remplace, indépendamment de l’ordre chronologique.'
   wdt:P437: 'Un concept précisant le format de distribution ou le support physique de l’édition, par exemple un disque optique.'
   wdt:P408: 'Un concept nommant le moteur logiciel utilisé par le jeu.'
   schema:numberOfPlayers: 'Nombre maximal de joueurs, entier sans unité ; pour un intervalle déclaré, employer la borne supérieure et qualifier séparément la borne inférieure.'

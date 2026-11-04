@@ -15,10 +15,11 @@ const identifierDatatypes = new Set(['external-id', 'url']);
 const statusCandidates = ['schema:creativeWorkStatus', 'wdt:P5804', 'rezics:releaseStatus'];
 const regionCandidates = ['schema:contentLocation', 'schema:spatialCoverage', 'wdt:P495', 'wdt:P17'];
 const TIME_PRECISION = { 9: 'year', 10: 'month', 11: 'day' } as const;
+const GREGORIAN_CALENDAR = 'http://www.wikidata.org/entity/Q1985727';
 
 export type ReleaseType = (typeof releaseTypes)[number];
 export type ReleaseGroupId = 'work' | 'classification' | 'credits' | 'identifiers' | 'dates' | 'facts' | 'relations';
-export type DateKind = 'exact' | 'partial' | 'tba' | 'none' | 'absent';
+export type DateKind = 'exact' | 'partial' | 'tba' | 'none' | 'absent' | 'invalid' | 'unsupported';
 export type DateReading = {
   kind: DateKind;
   property: string;
@@ -164,23 +165,62 @@ export function regionProperty(release: Definitions, type: string): string | und
   return regionCandidates.find((id) => admittedProperty(release, type, id));
 }
 
-function timePrecision(content: unknown): DateReading['precision'] | undefined {
-  if (!content || typeof content !== 'object' || !('precision' in content)) return;
-  const precision = (content as { precision?: unknown }).precision;
-  return typeof precision === 'number' && precision in TIME_PRECISION
-    ? TIME_PRECISION[precision as keyof typeof TIME_PRECISION]
-    : undefined;
+type ConcreteTime = Readonly<{
+  precision: NonNullable<DateReading['precision']>;
+  signedYear: string;
+  month?: number;
+  day?: number;
+}>;
+
+function leapYear(year: bigint): boolean {
+  return year % 4n === 0n && (year % 100n !== 0n || year % 400n === 0n);
 }
 
-function timeIso(content: unknown, precision: DateReading['precision']): string | undefined {
-  if (!content || typeof content !== 'object' || typeof (content as { time?: unknown }).time !== 'string') return;
-  const time = (content as { time: string }).time.replace(/^\+/, '');
-  const length = precision === 'year' ? 4 : precision === 'month' ? 7 : precision === 'day' ? 10 : undefined;
-  if (!length) return;
-  const iso = time.slice(0, length);
-  if (precision !== 'year' && iso.endsWith('-00')) return iso.slice(0, 4);
-  if (precision === 'day' && iso.endsWith('-00')) return iso.slice(0, 7);
-  return iso;
+function concreteTime(content: unknown): ConcreteTime | 'invalid' | 'unsupported' {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return 'invalid';
+  const value = content as { time?: unknown; precision?: unknown; calendarmodel?: unknown };
+  if (value.calendarmodel !== undefined && value.calendarmodel !== GREGORIAN_CALENDAR) return 'unsupported';
+  const precision = typeof value.precision === 'number' && value.precision in TIME_PRECISION
+    ? TIME_PRECISION[value.precision as keyof typeof TIME_PRECISION]
+    : undefined;
+  if (!precision) return 'unsupported';
+  if (typeof value.time !== 'string') return 'invalid';
+  const match = /^([+-])(\d{4,64})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z$/.exec(value.time);
+  if (!match) return 'invalid';
+  const signedYear = `${match[1] === '-' ? '-' : ''}${match[2]}`;
+  const year = BigInt(match[2]!);
+  const monthValue = Number(match[3]);
+  const dayValue = Number(match[4]);
+  if (Number(match[5]) > 23 || Number(match[6]) > 59 || Number(match[7]) > 59) return 'invalid';
+  if (monthValue > 12 || dayValue > 31) return 'invalid';
+  if (precision === 'year') {
+    if (monthValue !== 0 || dayValue !== 0) return 'invalid';
+    return { precision, signedYear };
+  }
+  if (monthValue === 0) return 'invalid';
+  const daysInMonth = [31, leapYear(year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (precision === 'month') {
+    if (dayValue !== 0) return 'invalid';
+    return { precision, signedYear, month: monthValue };
+  }
+  if (dayValue === 0) return 'invalid';
+  if (dayValue > daysInMonth[monthValue - 1]!) return 'invalid';
+  return { precision, signedYear, month: monthValue, day: dayValue };
+}
+
+/** Format only the locale's month/day ordering; the payload year never passes through Date or Number. */
+function formatConcreteTime(value: ConcreteTime, locale: string): string {
+  const date = new Date(Date.UTC(2000, (value.month ?? 1) - 1, value.day ?? 1));
+  const formatter = new Intl.DateTimeFormat(locale, {
+    timeZone: 'UTC',
+    year: 'numeric',
+    ...(value.month === undefined ? {} : { month: 'long' as const }),
+    ...(value.day === undefined ? {} : { day: 'numeric' as const }),
+  });
+  return formatter
+    .formatToParts(date)
+    .map((part) => (part.type === 'year' ? value.signedYear : part.value))
+    .join('');
 }
 
 /** TBA is an explicit unknown date. It is never a missing statement, year zero or the Unix epoch. */
@@ -196,26 +236,16 @@ export function dateReading(
   const historical = historicalStatement(statement, currentDigest);
   if (statement.value.type === 'somevalue') return { kind: 'tba', property, statementId: statement.id, historical };
   if (statement.value.type === 'novalue') return { kind: 'none', property, statementId: statement.id, historical };
-  const precision = timePrecision(statement.value.content) ?? 'day';
-  const iso = timeIso(statement.value.content, precision);
-  if (!iso) return { kind: 'tba', property, statementId: statement.id, historical };
-  const match = /^(-?\d{4,})(?:-(\d{2})(?:-(\d{2}))?)?$/.exec(iso);
-  if (!match) return { kind: 'tba', property, statementId: statement.id, historical };
-  const date = new Date(0);
-  date.setUTCFullYear(Number(match[1]), Number(match[2] ?? 1) - 1, Number(match[3] ?? 1));
-  if (!Number.isFinite(date.getTime())) return { kind: 'tba', property, statementId: statement.id, historical };
-  const text = new Intl.DateTimeFormat(locale, {
-    timeZone: 'UTC',
-    year: 'numeric',
-    ...(match[2] ? { month: 'long' } : {}),
-    ...(match[3] ? { day: 'numeric' } : {}),
-  }).format(date);
+  const concrete = concreteTime(statement.value.content);
+  if (concrete === 'invalid' || concrete === 'unsupported')
+    return { kind: concrete, property, statementId: statement.id, historical };
+  const text = formatConcreteTime(concrete, locale);
   return {
-    kind: precision === 'day' ? 'exact' : 'partial',
+    kind: concrete.precision === 'day' ? 'exact' : 'partial',
     property,
     statementId: statement.id,
     text,
-    precision,
+    precision: concrete.precision,
     historical,
   };
 }

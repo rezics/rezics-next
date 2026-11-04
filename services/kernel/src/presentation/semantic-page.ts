@@ -170,6 +170,7 @@ const catalogueFileTypes = ['schema:MediaObject', 'rezics:CatalogueFile', 'wd:Q8
 const catalogueGroupTypes = ['rezics:ReleaseGroup', 'wd:Q55327'];
 const catalogueMusicTypes = ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'];
 const cataloguePeopleTypes = ['schema:Person', 'schema:Organization'];
+const catalogueReleaseTypes = ['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656'];
 
 function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
   if (type === base) return true;
@@ -183,7 +184,7 @@ export function peopleProducerTypeAdmitted(release: CataloguePageDefinitions | u
   return cataloguePeopleTypes.some((base) => release !== undefined && typeIsA(release, type, base));
 }
 
-/** The ordinary page carries the current file, group, music, person or organization descriptor and its directed relation vocabulary. */
+/** The ordinary page carries the current release, file, group, music, person or organization descriptor and relations. */
 export function cataloguePageMetadata(
   release: CataloguePageDefinitions | undefined,
   digest: string | undefined,
@@ -194,14 +195,17 @@ export function cataloguePageMetadata(
     ...catalogueGroupTypes,
     ...catalogueMusicTypes,
     ...cataloguePeopleTypes,
+    ...catalogueReleaseTypes,
   ].includes(type);
   const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
   const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
   const music = catalogueMusicTypes.some((base) => release && typeIsA(release, type, base));
   const people = peopleProducerTypeAdmitted(release, type);
-  if (!candidate && !file && !group && !music && !people) return;
+  const catalogueRelease = catalogueReleaseTypes.some((base) => release && typeIsA(release, type, base));
+  if (!candidate && !file && !group && !music && !people && !catalogueRelease) return;
   if (!release || !digest) return { state: 'unavailable', type };
-  if (!release.types[type] || (!file && !group && !music && !people)) return { state: 'unsupported', type, digest };
+  if (!release.types[type] || (!file && !group && !music && !people && !catalogueRelease))
+    return { state: 'unsupported', type, digest };
 
   const propertyIds = new Set(release.types[type]?.properties ?? []);
   const inversePropertyIds = new Set<string>();

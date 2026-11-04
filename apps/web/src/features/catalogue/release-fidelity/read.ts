@@ -73,6 +73,7 @@ export type ReleaseFidelityRead =
       sources: SubjectRead['subject']['sourceRecords'];
       streams: ReleaseStream[];
       stream?: ReleaseStream;
+      streamState: 'complete' | 'empty' | 'withheld' | 'unsupported' | 'unavailable' | 'denied';
       rows: ReleaseRow[];
       next: string | null;
       count?: ForwardPage['count'];
@@ -83,6 +84,7 @@ export type ReleaseFidelityRead =
 
 export type ReleaseReadQuery = {
   id: string;
+  context?: string | undefined;
   locale: string;
   stream?: string | undefined;
   cursor?: string | undefined;
@@ -201,13 +203,15 @@ export async function readReleaseFidelity(
 ): Promise<ReleaseFidelityRead> {
   if (!releaseUuid.test(query.id) || (query.detail && !releaseUuid.test(query.detail)))
     return { ok: false, reason: 'invalid' };
+  const context = query.context ?? candidateContext;
+  if (!releaseUuid.test(context)) return { ok: false, reason: 'invalid' };
   if (query.cursor && !query.stream) return { ok: false, reason: 'invalid' };
   const headers = { authorization, ...(query.session ? { 'rezics-session-token': query.session } : {}) };
   let work = emptyVisit();
   try {
-    const subject = await client.subjects({ id: query.id }).get({ headers });
+    const subject = await client.subjects({ id: query.id }).get({ query: { context, language: query.locale }, headers });
     if (subject.status !== 200 || !subject.data) return candidateFailure(subject.status);
-    if (subject.data.subject.id !== query.id || subject.data.subject.context !== candidateContext)
+    if (subject.data.subject.id !== query.id || subject.data.subject.context !== context)
       return { ok: false, reason: 'stale' };
     const digest = subject.data.subject.release;
     const bundle = await client.definitions.releases({ digest }).get({ headers });
@@ -239,10 +243,12 @@ export async function readReleaseFidelity(
     let next: string | null = null;
     let count: ForwardPage['count'] | undefined;
     let session: string | undefined;
+    let streamState: 'complete' | 'empty' | 'withheld' | 'unsupported' | 'unavailable' | 'denied' =
+      stream ? 'complete' : streams.length ? 'empty' : 'unsupported';
     if (stream) {
       const pageQuery = {
         property: stream.property,
-        context: candidateContext,
+        context,
         language: query.locale,
         limit: RELEASE_ASSOCIATION_LIMIT,
         ...(query.cursor ? { cursor: query.cursor } : {}),
@@ -251,17 +257,27 @@ export async function readReleaseFidelity(
         stream.direction === 'forward'
           ? await client.subjects({ id: query.id }).relations.get({ query: pageQuery, headers })
           : await client.subjects({ id: query.id }).links.get({ query: pageQuery, headers });
-      if (result.status !== 200 || !result.data) return candidateFailure(result.status);
-      const page = result.data;
-      rows = pageRows(query.id, digest, page, stream.direction);
-      next = page.next;
-      if ('count' in page && page.count) count = page.count;
-      session = new Headers(result.headers).get('rezics-session-token') ?? undefined;
+      if (result.status !== 200 || !result.data) {
+        streamState = result.status === 401 || result.status === 403
+          ? 'denied'
+          : result.status === 404
+            ? 'withheld'
+            : result.status === 400 || result.status === 422
+              ? 'unsupported'
+              : 'unavailable';
+      } else {
+        const page = result.data;
+        rows = pageRows(query.id, digest, page, stream.direction);
+        next = page.next;
+        if ('count' in page && page.count) count = page.count;
+        session = new Headers(result.headers).get('rezics-session-token') ?? undefined;
+        if (!rows.length && !next) streamState = 'empty';
+      }
       work = recordComponent(work, {
         id: 'association',
         calls: 1,
         rows: rows.length,
-        bytes: encodedBytes(page),
+        bytes: result.data ? encodedBytes(result.data) : 0,
         rowCap: RELEASE_VISIT_CAPS.association.rows,
         byteCap: RELEASE_VISIT_CAPS.association.bytes,
       });
@@ -279,7 +295,10 @@ export async function readReleaseFidelity(
     if (query.detail) {
       const listed = listedOnPage(rows, query.detail, query.id);
       if (!listed) return { ok: false, reason: 'invalid' };
-      const selected = await client.subjects({ id: query.detail }).get({ headers });
+      const selected = await client.subjects({ id: query.detail }).get({
+        query: { context, language: query.locale },
+        headers,
+      });
       work = recordComponent(work, {
         id: 'detail',
         calls: 1,
@@ -289,7 +308,8 @@ export async function readReleaseFidelity(
         byteCap: RELEASE_VISIT_CAPS.detail.bytes,
       });
       if (selected.status === 200 && selected.data) {
-        if (selected.data.subject.id !== query.detail) return { ok: false, reason: 'stale' };
+        if (selected.data.subject.id !== query.detail || selected.data.subject.context !== context)
+          return { ok: false, reason: 'stale' };
         detail = selected.data;
       }
     } else {
@@ -329,6 +349,7 @@ export async function readReleaseFidelity(
       sources: subject.data.subject.sourceRecords,
       streams,
       ...(stream ? { stream } : {}),
+      streamState,
       rows,
       next,
       ...(count ? { count } : {}),

@@ -91,6 +91,7 @@ classes:
       - distributionFormat
       - vndbId
       - follows
+      - releaseSupersedes
       - creativeWorkStatus
     annotations:
       library:
@@ -287,6 +288,21 @@ slots:
       datatype: wikibase-item
       relation_group: order
       inverse: wdt:P156
+      relation_order: date
+      acyclic: true
+      qualifiers: sameAs
+  releaseSupersedes:
+    slot_uri: rezics:releaseSupersedes
+    description: >-
+      The exact software release that this release replaces. This directed replacement relation is independent of
+      chronological order (wdt:P155) and organization replacement (wdt:P1365).
+      Source meaning: https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=3ffec03b6b7cb8967d920ec9b8fd90f78bd8ec41.
+    range: VideoGameRelease
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: order
+      inverse: rezics:releaseSupersededBy
       relation_order: date
       acyclic: true
       qualifiers: sameAs
