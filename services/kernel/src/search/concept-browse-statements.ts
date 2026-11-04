@@ -341,9 +341,7 @@ export type ConceptNativeCondition = Readonly<{
   /** The owner reserves the complete read and revalidation before performing native I/O. */
   read(): Promise<ConceptNativeConditionRead>;
 }>;
-export type ConceptNativeConditionResolver = (
-  request: ConceptNativeConditionRequest,
-) => ConceptNativeCondition | null;
+export type ConceptNativeConditionResolver = (request: ConceptNativeConditionRequest) => ConceptNativeCondition | null;
 
 type AdmittedConceptCondition =
   | Readonly<{ kind: 'concept'; request: ConceptStatementRequest; cut: ConceptStatementCut | null }>
@@ -415,8 +413,7 @@ export async function matchNativeConceptFilter(
           attempt.windowLimit(),
         ),
       };
-    if (!resolveNative)
-      throw new TypeError('Native concept conditions require scheme-bound concept leaves');
+    if (!resolveNative) throw new TypeError('Native concept conditions require scheme-bound concept leaves');
     return {
       kind: 'native' as const,
       request: freezeNativeRequest({
