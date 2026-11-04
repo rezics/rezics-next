@@ -222,7 +222,7 @@ export function useDiscoveryPersonalResults(input: {
       current?.page.dispose();
       // Exposure observations are independent of the native entry facts and must agree before mounting writes.
       const accepted = result.capabilities?.exposure === discoveryExposureKey(admitted!.admitted);
-      const state = structuredClone(
+      const state = structuredClone<DiscoveryState>(
         !accepted && result.state.status === 'ready'
           ? {
               ...result.state,
@@ -372,6 +372,7 @@ export function useDiscoveryPersonalResults(input: {
                 unfollow: row.actions.unfollow && operationIsAdmitted('follow.delete', admitted?.admitted),
               },
             }}
+            rowKey={discoveryKey(hit)}
             binding={{
               expectedReader: value.observation.scope.viewer,
               expectedCredential: value.observation.scope.credential,

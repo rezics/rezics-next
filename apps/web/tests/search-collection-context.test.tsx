@@ -53,7 +53,7 @@ function page(): DiscoveryPage {
       truncated: true,
       members: [
         {
-          id: 'occurrence',
+          id: '01a1a000-0000-7000-8000-003000000015',
           subject: {
             id: member,
             type: 'schema:Book',

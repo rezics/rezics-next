@@ -16,6 +16,7 @@ export function CollectionFollowControl({
   current,
   locale,
   write,
+  rowKey,
 }: {
   row: Row;
   binding: ExpectedReader;
@@ -23,11 +24,12 @@ export function CollectionFollowControl({
   current: () => boolean;
   locale: string;
   write: (input: FollowWriteInput & ExpectedReader) => Promise<FollowWriteResult>;
+  rowKey: string;
 }) {
   const [failed, setFailed] = useState(false);
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   return (
-    <div data-slot="collection-follow">
+    <div data-slot="collection-follow" data-discovery-personal-row={rowKey}>
       <FollowControl
         targetId={row.targetId}
         initial={failed ? { state: 'unavailable' } : { state: 'ready', following: row.following }}

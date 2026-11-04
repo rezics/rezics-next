@@ -15,7 +15,7 @@ export const CollectionCuratorSchema = t.Union([
   t.Object(
     {
       state: t.Literal('unavailable'),
-      reason: t.Union(['deidentified', 'withheld', 'native_projection'].map((value) => t.Literal(value))),
+      reason: t.Union((['deidentified', 'withheld', 'native_projection'] as const).map((value) => t.Literal(value))),
     },
     closed,
   ),
@@ -57,7 +57,7 @@ export const FollowDiscoverySchema = t.Union([
   t.Object(
     {
       state: t.Literal('unavailable'),
-      reason: t.Union(['identity', 'scope', 'changed', 'native'].map((reason) => t.Literal(reason))),
+      reason: t.Union((['identity', 'scope', 'changed', 'native'] as const).map((reason) => t.Literal(reason))),
     },
     closed,
   ),

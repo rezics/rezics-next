@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-const id = v.pipe(v.string(), v.minLength(1));
+const id = v.pipe(v.string(), v.regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/));
 export const collectionCurator = v.variant('state', [
   v.strictObject({
     state: v.literal('available'),

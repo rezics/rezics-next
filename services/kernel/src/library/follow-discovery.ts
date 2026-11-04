@@ -133,7 +133,8 @@ export async function readFollowDiscovery(
     if (!before || !final) return { state: 'unavailable', reason: 'identity' };
     if (!isDeepStrictEqual(before, final)) return { state: 'unavailable', reason: 'changed' };
     requireAccessDeadline(deadline);
-    return { state: 'current', accountId: viewer.accountId, partition, rows: final.rows };
+    const result = { state: 'current', accountId: viewer.accountId, partition, rows: final.rows } as const;
+    return Buffer.byteLength(JSON.stringify(result)) <= 32768 ? result : { state: 'unavailable', reason: 'native' };
   } catch (error) {
     if (classifyUnavailability(error) !== undefined) return { state: 'unavailable', reason: 'native' };
     throw error;

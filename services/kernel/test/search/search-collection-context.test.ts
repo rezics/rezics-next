@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readPublicCollectionDiscoverySummaries as hydrate } from '../../src/library/collection-discovery-summaries.ts';
 import { readFollowDiscovery } from '../../src/library/follow-discovery.ts';
+import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
 import {
   createCollectionRulesFixture,
@@ -144,4 +145,41 @@ test('empty, unavailable projection, retained de-identification and changed sour
       deadline: Date.now() + 30000,
     }),
   ).toEqual({ state: 'unavailable', reason: 'changed' });
+}, 120000);
+
+test('dynamic context uses only the admitted published output and never exposes the saved rule', async () => {
+  const subjects = await Promise.all(['Selected A', 'Selected B'].map((title) => f.subject(title)));
+  for (const id of subjects) await f.entry(id);
+  const response = await f.send('POST', '/v1/collections', {
+    title: 'Published selection',
+    visibility: 'private',
+    membershipKind: 'dynamic',
+    rule: { filter: { owner: { presence: true } }, sort: 'id' },
+  });
+  expect(response.status).toBe(201);
+  const { collection } = await response.json();
+  const publication = await f.send('POST', `/v1/collections/${collection.id}:publishSelected`, {
+    revision: collection.revision,
+    subjectIds: subjects,
+  });
+  expect(publication.status).toBe(200);
+  const published = await publication.json();
+  const actor = await f.runtime.identity.access.authenticate(f.owner, {
+    pool: f.database.pool,
+    deadline: Date.now() + 30000,
+  });
+  await createCollectionPublicationEpisodes(dependencies()).begin(
+    actor,
+    { collectionId: collection.id, revision: published.collection.revision, visibility: 'public' },
+    randomUUID(),
+  );
+  const current = await card(collection.id);
+  expect(current).toMatchObject({
+    membershipKind: 'dynamic',
+    outputGeneration: published.publication.generation,
+    preview: { state: 'available', partial: false, truncated: false },
+  });
+  if (current.preview.state !== 'available') throw new Error('Expected published preview');
+  expect(current.preview.members.map((member) => member.subject.id)).toEqual([...subjects].sort());
+  for (const field of ['rule', 'filter', 'memberCount', 'orderEpoch']) expect(current).not.toHaveProperty(field);
 }, 120000);
