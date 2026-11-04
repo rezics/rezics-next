@@ -37,7 +37,8 @@ const cited = (id: string, content: unknown, qualifiers: ReturnType<typeof snak>
 async function create(type: string, label: string) {
   const created = await driver.request('editor', 'POST', '/v1/subjects', { type, labels: { en: label } }, key());
   status(created, 201, `create ${label}`);
-  return created.body.subject.id as string;
+  const subject = created.body.subject as { id: string };
+  return subject.id;
 }
 
 async function adopt(subject: string, statement: ReturnType<typeof cited>) {
@@ -171,14 +172,22 @@ test('a reader follows a Character identity and work appearance ages through nat
   status(anonymous, 200, 'anonymous character page');
   status(editor, 200, 'editor character page');
   status(acceptor, 200, 'acceptor character page');
-  expect(anonymous.body.unavailable).toEqual([]);
-  expect(anonymous.body.meanings[identityProperty].text.length).toBeGreaterThan(0);
-  expect(anonymous.body.viewer).toMatchObject({
+  type PageBody = {
+    unavailable: { id: string }[];
+    meanings: Record<string, { text: string }>;
+    viewer: { signedIn: boolean; actions: Record<string, string> };
+  };
+  const anonymousPage = anonymous.body as PageBody;
+  const editorPage = editor.body as PageBody;
+  const acceptorPage = acceptor.body as PageBody;
+  expect(anonymousPage.unavailable).toEqual([]);
+  expect(anonymousPage.meanings[identityProperty]!.text.length).toBeGreaterThan(0);
+  expect(anonymousPage.viewer).toMatchObject({
     signedIn: false,
     actions: { 'statement:propose': 'denied', 'context:accept': 'denied', 'context:adopt': 'denied' },
   });
-  expect(editor.body.viewer).toMatchObject({ signedIn: true, actions: { 'statement:propose': 'allowed' } });
-  expect(acceptor.body.viewer.actions).toMatchObject({ 'context:accept': 'allowed', 'context:adopt': 'allowed' });
+  expect(editorPage.viewer).toMatchObject({ signedIn: true, actions: { 'statement:propose': 'allowed' } });
+  expect(acceptorPage.viewer.actions).toMatchObject({ 'context:accept': 'allowed', 'context:adopt': 'allowed' });
   expect(anonymous.headers.get('cache-control')).toBe('private, no-store');
 
   const outsider = await driver.fixtures.person('character-outsider');
@@ -195,7 +204,7 @@ test('a reader follows a Character identity and work appearance ages through nat
     languages: ['en'],
   });
   status(outsiderPage, 200, 'outsider character page');
-  expect(outsiderPage.body.viewer.actions['statement:propose']).toBe('denied');
+  expect((outsiderPage.body as PageBody).viewer.actions['statement:propose']).toBe('denied');
 
   const correction = await adopt(
     spring,
