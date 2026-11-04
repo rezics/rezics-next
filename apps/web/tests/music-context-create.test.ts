@@ -1,21 +1,61 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
+import { act, createElement } from 'react';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
-import {
-  musicContextCreateDraft,
-  musicContextCreateFields,
-  musicContextCreateTypes,
-} from '../src/features/catalogue/music-context-create';
-import { musicContextKind } from '../src/features/catalogue/music-context-profile';
+import type { CreateResult, CreatedReader, InitialSubject } from '../src/features/catalogue/create-subject';
+import * as start from '../.storybook/react-start';
+import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const release = bundledRelease;
-const offered = musicContextCreateTypes(release, 'en');
-const typeId = offered.some((entry) => entry.id === 'schema:Place') ? 'schema:Place' : offered[0]!.id;
+const digest = 'sha256:music-context-create-eligibility';
+type Viewer = {
+  state: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  subject: string | null;
+  csrfToken: string | null;
+};
+const signedIn: Viewer = { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-alice' };
+let viewer: Viewer = signedIn;
+let observe: () => Promise<CreateAuthority> = async () => allowedCreateAuthority;
+const commands: { item: InitialSubject; key: string }[] = [];
+let submitImpl: (command: { item: InitialSubject; key: string }) => Promise<CreateResult> = async () => ({
+  ok: false,
+  reason: 'unavailable',
+});
+let readImpl: (id: string) => Promise<CreatedReader> = async () => ({ state: 'unavailable' });
 
-test('music-context creation exposes only real released grains and emitted fields', () => {
+mock.module('../src/session/query', () => ({ useSession: () => viewer }));
+mock.module('../src/features/catalogue/create-subject-actions', () => ({
+  readCatalogueCreateEligibility: () => observe(),
+  readCreatedCatalogueSubject: async ({ data }: { data: string }) => readImpl(data),
+}));
+mock.module('../src/features/catalogue/music-context-create-actions', () => ({
+  loadMusicContextCreate: async () => ({ ok: true as const, digest, release }),
+  createCatalogueMusicContext: async ({ data }: { data: { item: InitialSubject; key: string } }) => {
+    commands.push({ item: data.item, key: data.key });
+    const result = await submitImpl(data);
+    if (!result.ok) return result;
+    const { musicContextCreateAdmitReader } = await import('../src/features/catalogue/music-context-create');
+    return {
+      ...result,
+      reader: musicContextCreateAdmitReader(result.reader, result.id, release, data.item.type),
+    };
+  },
+}));
+mock.module('../src/features/catalogue/relation-editor-search', () => ({ relationTargetSearch: async () => [] }));
+
+test('music-context creation exposes only real released grains and emitted fields', async () => {
+  const {
+    musicContextCreateDraft,
+    musicContextCreateFields,
+    musicContextCreateTypes,
+  } = await import('../src/features/catalogue/music-context-create');
+  const { musicContextKind } = await import('../src/features/catalogue/music-context-profile');
+  const offered = musicContextCreateTypes(release, 'en');
+  const typeId = offered.some((entry) => entry.id === 'schema:Place') ? 'schema:Place' : offered[0]!.id;
   expect(offered.map(({ id }) => id).sort()).toEqual(
     Object.keys(release.types)
       .filter((id) => musicContextKind(release, id) !== 'unsupported')
@@ -47,18 +87,19 @@ test('music-context creation exposes only real released grains and emitted field
   ).toBe(true);
 });
 
-test('generic creation links to the localized music-context visit', () => {
+test('generic creation links to the localized music-context visit', async () => {
+  const { catalogueEntries } = await import('../src/features/catalogue/catalogue-entry');
   expect(catalogueEntries.musicContextCreate({ locale: 'fr' })).toMatchObject({
     group: 'create',
     href: '/fr/catalogue/music-context',
   });
 });
 
-test('a contributor creates an admitted music-context identity with current eligibility', async () => {
+async function musicContextSession(locale = 'en') {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/catalogue/music-context' });
+  const window = new Window({ url: `https://site.test/${locale}/catalogue/music-context` });
   const globals = {
     window,
     document: window.document,
@@ -78,198 +119,272 @@ test('a contributor creates an admitted music-context identity with current elig
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  mock.module('cloudflare:workers', () => ({ env: {} }));
-  const react = await import('react');
-  const act = react.act;
-  const h = react.createElement;
-  const useMemo = react.useMemo;
-  const useRef = react.useRef;
-  const useState = react.useState;
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
   const { within, waitFor } = await import(Bun.resolveSync('@testing-library/dom', storybook));
   const { default: userEvent } = await import(Bun.resolveSync('@testing-library/user-event', storybook));
-  const { allowedCreateAuthority } = await import('../src/features/catalogue/identity-intake');
-  const { CreateSubjectForm } = await import('../src/features/catalogue/create-subject-form');
-  const { MusicContextCreateFields } = await import('../src/features/catalogue/music-context-create-fields');
-  const { MusicContextCreateReview } = await import('../src/features/catalogue/music-context-create-review');
-  const {
-    musicContextCreateControl,
-    musicContextCreateHolders,
-    musicContextCreatePreparedFacts,
-  } = await import('../src/features/catalogue/music-context-create');
+  const { MusicContextCreateSession } = await import('../src/features/catalogue/music-context-create-session');
+  const { musicContextCreateFields, musicContextCreateTypes } =
+    await import('../src/features/catalogue/music-context-create');
   const { m } = await import('../src/paraglide/messages.js');
-  type Authority = typeof allowedCreateAuthority | { state: 'guest' | 'refused' | 'unknown'; reason?: string };
-  type Command = { item: { type: string; labels: Record<string, string>; statements?: Record<string, { rank?: string }[]> }; key: string };
-  const commands: Command[] = [];
-  let observe: () => Promise<Authority> = async () => allowedCreateAuthority;
-  const createdId = '00000000-0000-4000-8000-00000000c401';
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  client.setQueryData(['session'], viewer);
+  window.location.assign = () => undefined;
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const canvas = within(host as unknown as HTMLElement);
   const user = userEvent.setup({ document: window.document, delay: null });
-  const factsId = 'music-context-initial-facts';
-  const typeMeaning = offered.find((entry) => entry.id === typeId);
-  const urlFact = musicContextCreateFields(release, typeId).find((id) => id === 'schema:sameAs' || id === 'schema:url');
-  function Harness({ locale, session }: { locale: string; session: 'signed-in' | 'signed-out' }) {
-    const [factsByType, setFactsByType] = useState<Record<string, { key: string; statement: never }[]>>({});
-    const prepared = useRef<{ release: typeof release; holders: ReturnType<typeof musicContextCreateHolders> }>();
-    const types = musicContextCreateTypes(release, locale);
-    const profile = useMemo(
-      () => ({
-        title: m.music_context_create_title({}, { locale: locale as never }),
-        intro: m.music_context_create_intro({}, { locale: locale as never }),
-        href: `/${locale}/catalogue/music-context`,
-        scope: 'music-context-create',
-        metadata: { ready: true, pending: false, failure: null, types },
-        retainTypeDrafts: true,
-        initialLanguage: '',
-        canEditType: (type: string) =>
-          types.some((entry) => entry.id === type) && musicContextKind(release, type) !== 'unsupported',
-        canCreateType: (type: string) => types.some((entry) => entry.id === type),
-        fields: (type: string, disabled: boolean, canEdit: () => boolean, invalidate?: () => void) =>
-          h(MusicContextCreateFields, {
-            type,
-            release,
-            locale,
-            search: async () => [],
-            facts: factsByType[type] ?? [],
-            disabled,
-            canEdit,
-            invalidate: invalidate ?? (() => undefined),
-            discardTypeDraft: () => undefined,
-            change: (next: { key: string; statement: never }[]) =>
-              setFactsByType((current) => {
-                const copy = { ...current };
-                if (next.length) copy[type] = next;
-                else delete copy[type];
-                return copy;
-              }),
-          }),
-        prepare: (initial: { type: string; labels: Record<string, string> }) => {
-          const facts = musicContextCreatePreparedFacts(factsByType[initial.type] ?? [], release);
-          const result = musicContextCreateDraft(release, initial, facts);
-          prepared.current = { release, holders: musicContextCreateHolders(facts) };
-          return result;
-        },
-        control: (pointer: string, type: string) => {
-          const snapshot = prepared.current;
-          if (!snapshot) return undefined;
-          return musicContextCreateControl(
-            pointer,
-            snapshot.holders,
-            factsByType[type] ?? [],
-            type,
-            snapshot.release,
-            locale,
-            factsId,
-          );
-        },
-        review: (state: { item: { type: string; labels: Record<string, string>; statements?: Record<string, never[]> }; stale: boolean }) => {
-          const snapshot = prepared.current;
-          if (!snapshot) return null;
-          return h(MusicContextCreateReview, {
-            item: state.item,
-            holders: snapshot.holders,
-            release: snapshot.release,
-            locale,
-            stale: state.stale,
-            factsId,
-            onJump: (id: string) => host.querySelector<HTMLElement>(`[id="${id}"]`)?.focus(),
-          });
-        },
-      }),
-      [factsByType, locale, types],
-    );
-    return h(QueryClientProvider, {
+  const types = musicContextCreateTypes(release, locale);
+  const typeId = types.some((entry) => entry.id === 'schema:Place') ? 'schema:Place' : types[0]!.id;
+  function Harness() {
+    return createElement(QueryClientProvider, {
       client,
-      children: h(CreateSubjectForm, {
+      children: createElement(MusicContextCreateSession, {
         locale,
-        session,
-        transport: {
-          eligibility: () => observe(),
-          submit: async (command: Command) => {
-            commands.push(command);
-            return {
-              ok: true,
-              id: createdId,
-              reader: {
-                state: 'ready',
-                href: `/en/subjects/${createdId}/reviewed-place`,
-                identity: { id: createdId, type: command.item.type, label: command.item.labels.en ?? '' },
-              },
-            };
-          },
-          read: async () => ({ state: 'unavailable' }),
-        },
-        onNavigate: () => undefined,
-        profile,
+        initial: { ok: true, digest, release },
       }),
     });
   }
+  await act(async () => root.render(createElement(Harness)));
+  return {
+    window,
+    host,
+    canvas,
+    user,
+    waitFor,
+    client,
+    m,
+    typeId,
+    typeMeaning: types.find((entry) => entry.id === typeId),
+    urlFact: musicContextCreateFields(release, typeId).find((id) => id === 'schema:sameAs' || id === 'schema:url'),
+    async refresh() {
+      client.setQueryData(['session'], viewer);
+      await act(async () => root.render(createElement(Harness)));
+    },
+    async close() {
+      await act(async () => root.unmount());
+      for (const [key, descriptor] of previous)
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+    },
+  };
+}
+
+async function chooseTypeAndName(
+  page: Awaited<ReturnType<typeof musicContextSession>>,
+  type: string,
+  label: string,
+) {
+  await act(async () =>
+    page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() }), type),
+  );
+  await act(async () =>
+    page.user.type(page.canvas.getByRole('textbox', { name: page.m.catalogue_create_language() }), 'en'),
+  );
+  await act(async () =>
+    page.user.type(page.canvas.getByRole('textbox', { name: page.m.catalogue_create_label() }), label),
+  );
+}
+
+test('the mounted music-context visit keeps descriptors when eligibility is refused, unknown, or guest', async () => {
+  commands.length = 0;
+  viewer = signedIn;
+  observe = async () => ({ state: 'refused', reason: 'permission' });
+  const page = await musicContextSession();
   try {
-    observe = async () => ({ state: 'refused', reason: 'permission' });
-    await act(async () => root.render(h(Harness, { locale: 'en', session: 'signed-in' })));
-    await waitFor(() =>
-      expect(canvas.getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    await page.waitFor(() =>
+      expect(page.canvas.getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
     );
-    expect(canvas.getByRole('combobox', { name: m.catalogue_create_type() })).toBeDefined();
-    observe = async () => ({ state: 'unknown', reason: 'unavailable' });
-    await act(async () => user.click(canvas.getByRole('button', { name: m.identity_intake_authority_retry() })));
-    await waitFor(() =>
-      expect(canvas.getByRole('alert').textContent).toContain(m.identity_intake_authority_unknown()),
-    );
-    await act(async () => root.render(h(Harness, { locale: 'en', session: 'signed-out' })));
-    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_guest()));
-    expect((canvas.getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement).disabled).toBe(true);
+    expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
+    await chooseTypeAndName(page, page.typeId, 'Kept draft');
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
     expect(commands).toHaveLength(0);
 
-    observe = async () => allowedCreateAuthority;
-    await act(async () => root.render(h(Harness, { locale: 'en', session: 'signed-in' })));
-    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
-    await act(async () => user.selectOptions(canvas.getByRole('combobox', { name: m.catalogue_create_type() }), typeId));
-    if (typeMeaning?.description) expect(host.textContent).toContain(typeMeaning.description);
-    await act(async () => user.type(canvas.getByRole('textbox', { name: m.catalogue_create_language() }), 'en'));
-    await act(async () => user.type(canvas.getByRole('textbox', { name: m.catalogue_create_label() }), 'Reviewed place'));
-    const dirty = new window.Event('beforeunload', { cancelable: true });
-    window.dispatchEvent(dirty);
+    observe = async () => ({ state: 'unknown', reason: 'unavailable' });
+    await act(async () =>
+      page.user.click(page.canvas.getByRole('button', { name: page.m.identity_intake_authority_retry() })),
+    );
+    await page.waitFor(() =>
+      expect(page.canvas.getByRole('alert').textContent).toContain(page.m.identity_intake_authority_unknown()),
+    );
+    expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    viewer = { state: 'signed-out', subject: null, csrfToken: null };
+    await page.refresh();
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_guest()));
+    expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(commands).toHaveLength(0);
+  } finally {
+    await page.close();
+  }
+});
+
+test('an admitted music-context Type creates once after a current eligibility review', async () => {
+  const createdId = '00000000-0000-4000-8000-00000000c401';
+  viewer = signedIn;
+  observe = async () => allowedCreateAuthority;
+  commands.length = 0;
+  submitImpl = async (command) => ({
+    ok: true,
+    id: createdId,
+    reader: {
+      state: 'ready',
+      href: `/en/subjects/${createdId}/reviewed-place`,
+      identity: { id: createdId, type: command.item.type, label: command.item.labels.en ?? '' },
+    },
+  });
+  const page = await musicContextSession();
+  try {
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
+    await chooseTypeAndName(page, page.typeId, 'Reviewed place');
+    if (page.typeMeaning?.description) expect(page.host.textContent).toContain(page.typeMeaning.description);
+    const dirty = new page.window.Event('beforeunload', { cancelable: true });
+    page.window.dispatchEvent(dirty);
     expect(dirty.defaultPrevented).toBe(true);
-    if (urlFact) {
+    if (page.urlFact) {
       await act(async () =>
-        user.selectOptions(canvas.getByRole('combobox', { name: m.music_context_create_add_fact() }), urlFact),
+        page.user.selectOptions(page.canvas.getByRole('combobox', { name: page.m.music_context_create_add_fact() }), page.urlFact!),
       );
-      const button = canvas
-        .getAllByRole('button', { name: m.music_context_create_add_fact() })
+      const button = page.canvas
+        .getAllByRole('button', { name: page.m.music_context_create_add_fact() })
         .find((node) => !(node as HTMLButtonElement).disabled);
-      await act(async () => user.click(button!));
-      const row = host.querySelector('[data-slot="music-context-initial-fact"]') as HTMLElement;
-      await act(async () => user.type(row.querySelector('input, textarea') as HTMLElement, 'https://example.org/place'));
+      await act(async () => page.user.click(button!));
+      const row = page.host.querySelector('[data-slot="music-context-initial-fact"]') as HTMLElement;
+      await act(async () =>
+        page.user.type(row.querySelector('input, textarea') as HTMLElement, 'https://example.org/place'),
+      );
     }
-    await act(async () => user.click(canvas.getByRole('button', { name: m.catalogue_create_submit() })));
-    await waitFor(() => expect(host.querySelector('[data-music-context-create-review]')).not.toBeNull());
+    await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })));
+    await page.waitFor(() => expect(page.host.querySelector('[data-music-context-create-review]')).not.toBeNull());
     observe = async () => ({ state: 'refused', reason: 'permission' });
-    await act(async () => user.click(canvas.getByRole('button', { name: m.catalogue_create_submit() })));
-    await waitFor(() =>
-      expect(canvas.getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })));
+    await page.waitFor(() =>
+      expect(page.canvas.getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
     );
     expect(commands).toHaveLength(0);
     observe = async () => allowedCreateAuthority;
-    await act(async () => user.click(canvas.getByRole('button', { name: m.identity_intake_authority_retry() })));
-    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
-    await act(async () => user.click(canvas.getByRole('button', { name: m.catalogue_create_submit() })));
-    await waitFor(() => expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());
+    await act(async () =>
+      page.user.click(page.canvas.getByRole('button', { name: page.m.identity_intake_authority_retry() })),
+    );
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
+    await act(async () => page.user.click(page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() })));
+    await page.waitFor(() =>
+      expect(page.canvas.getByRole('link', { name: page.m.catalogue_create_open() })).toBeDefined(),
+    );
     expect(commands).toHaveLength(1);
-    expect(commands[0]!.item.type).toBe(typeId);
-    expect(canvas.getByRole('link', { name: m.catalogue_create_open() }).getAttribute('href')).toBe(
+    expect(commands[0]!.item.type).toBe(page.typeId);
+    expect(page.canvas.getByRole('link', { name: page.m.catalogue_create_open() }).getAttribute('href')).toBe(
       `/en/subjects/${createdId}/reviewed-place`,
     );
   } finally {
-    await act(async () => root.unmount());
-    for (const [key, descriptor] of previous)
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
+    await page.close();
+  }
+});
+
+test('viewer replacement drops a late allowed observation; uncertain retry keeps the exact command', async () => {
+  const createdId = '00000000-0000-4000-8000-00000000c411';
+  viewer = signedIn;
+  commands.length = 0;
+  let pending: ((value: CreateAuthority) => void) | undefined;
+  let calls = 0;
+  observe = () => {
+    calls += 1;
+    if (calls === 1) return new Promise<CreateAuthority>((resolve) => (pending = resolve));
+    return Promise.resolve({ state: 'refused', reason: 'permission' });
+  };
+  const page = await musicContextSession();
+  try {
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_reading()));
+    expect(page.canvas.getByRole('combobox', { name: page.m.catalogue_create_type() })).toBeDefined();
+    viewer = { state: 'signed-in', subject: 'bob', csrfToken: 'csrf-bob' };
+    await page.refresh();
+    await page.waitFor(() =>
+      expect(page.canvas.getByRole('alert').textContent).toContain(
+        page.m.identity_intake_authority_refused_permission(),
+      ),
+    );
+    pending?.(allowedCreateAuthority);
+    await act(async () => undefined);
+    expect(page.canvas.getByRole('alert').textContent).toContain(page.m.identity_intake_authority_refused_permission());
+    expect(
+      (page.canvas.getByRole('button', { name: page.m.catalogue_create_submit() }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(commands).toHaveLength(0);
+  } finally {
+    await page.close();
+  }
+
+  viewer = signedIn;
+  observe = async () => allowedCreateAuthority;
+  commands.length = 0;
+  let lost = true;
+  let reads = 0;
+  submitImpl = async () => {
+    if (lost) {
+      lost = false;
+      throw new TypeError('Response lost');
+    }
+    return { ok: true, id: createdId, reader: { state: 'unavailable' } };
+  };
+  readImpl = async (id) => {
+    reads += 1;
+    expect(id).toBe(createdId);
+    return {
+      state: 'ready',
+      href: `/en/subjects/${createdId}/recovered`,
+      identity: { id: createdId, type: 'schema:Place', label: 'Recovered place' },
+    };
+  };
+  const retryPage = await musicContextSession();
+  try {
+    await retryPage.waitFor(() =>
+      expect(retryPage.host.textContent).toContain(retryPage.m.identity_intake_authority_allowed()),
+    );
+    await chooseTypeAndName(retryPage, retryPage.typeId, 'Uncertain place');
+    await act(async () =>
+      retryPage.user.click(retryPage.canvas.getByRole('button', { name: retryPage.m.catalogue_create_submit() })),
+    );
+    await retryPage.waitFor(() =>
+      expect(retryPage.host.querySelector('[data-music-context-create-review]')).not.toBeNull(),
+    );
+    await act(async () =>
+      retryPage.user.click(retryPage.canvas.getByRole('button', { name: retryPage.m.catalogue_create_submit() })),
+    );
+    await retryPage.waitFor(() =>
+      expect(retryPage.canvas.getByRole('button', { name: retryPage.m.catalogue_create_retry() })).toBeDefined(),
+    );
+    observe = async () => ({ state: 'refused', reason: 'permission' });
+    await act(async () =>
+      retryPage.user.click(retryPage.canvas.getByRole('button', { name: retryPage.m.catalogue_create_retry() })),
+    );
+    await retryPage.waitFor(() => expect(retryPage.host.textContent).toContain(createdId));
+    expect(commands).toHaveLength(2);
+    expect(commands[1]!.key).toBe(commands[0]!.key);
+    expect(commands[1]!.item).toEqual(commands[0]!.item);
+    expect(commands[0]!.item.type).toBe(retryPage.typeId);
+    await act(async () =>
+      retryPage.user.click(retryPage.canvas.getByRole('button', { name: retryPage.m.catalogue_create_retry() })),
+    );
+    await retryPage.waitFor(() =>
+      expect(retryPage.canvas.getByRole('link', { name: retryPage.m.catalogue_create_open() })).toBeDefined(),
+    );
+    expect(reads).toBe(1);
+    expect(commands).toHaveLength(2);
+  } finally {
+    await retryPage.close();
   }
 });
