@@ -39,6 +39,14 @@ import type { CopyPresentation } from './copy-model.ts';
 import { prepareCopyPresentation } from './copy-presentation.ts';
 import { prepareCopyInventory, readCopyInventoryValues } from './copy-inventory.ts';
 import copyDetailRead from './copy-store-read.sql';
+import {
+  CopyConditionInvalidError,
+  copyConditionAdmission,
+  decodeCopyConditionFacts,
+  mergeCopyConditionFields,
+  parseCopyConditionFields,
+  type CopyConditionPatch,
+} from './copy-condition.ts';
 
 const UPDATED_EVENT = 'com.rezics.library.copy.updated.v1';
 const DELETED_EVENT = 'com.rezics.library.copy.deleted.v1';
@@ -51,8 +59,20 @@ const CREATE_FIELDS = [
   'acquiredOn',
   'disposedOn',
   'note',
+  'mediaCondition',
+  'packagingCondition',
 ] as const;
-const UPDATE_FIELDS = ['revision', 'status', 'location', 'source', 'acquiredOn', 'disposedOn', 'note'] as const;
+const UPDATE_FIELDS = [
+  'revision',
+  'status',
+  'location',
+  'source',
+  'acquiredOn',
+  'disposedOn',
+  'note',
+  'mediaCondition',
+  'packagingCondition',
+] as const;
 const TEXT_LIMITS = { location: 200, source: 200, note: 1000 } as const;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -69,8 +89,8 @@ type CopyInput = {
   acquiredOn: string | null;
   disposedOn: string | null;
   note: string | null;
-};
-type CopyPatch = { revision: number } & Partial<CopyChanges>;
+} & CopyConditionPatch;
+type CopyPatch = { revision: number } & Partial<CopyChanges> & CopyConditionPatch;
 type PageOptions = { cursor?: string; limit?: number; subjectId?: string; kind?: string; status?: string };
 
 export class CopyInvalidError extends Error {
@@ -84,6 +104,15 @@ export class CopyConflictError extends Error {
   constructor() {
     super('Copy revision conflicts');
     this.name = 'CopyConflictError';
+  }
+}
+
+function conditionPatch(input: Readonly<Record<string, unknown>>): CopyConditionPatch {
+  try {
+    return parseCopyConditionFields(input);
+  } catch (error) {
+    if (error instanceof CopyConditionInvalidError) throw new CopyInvalidError(error.field);
+    throw error;
   }
 }
 
@@ -168,6 +197,7 @@ function parseCreate(input: unknown): CopyInput {
     acquiredOn: dateValue(Object.hasOwn(value, 'acquiredOn') ? value.acquiredOn : null, 'acquiredOn'),
     disposedOn: dateValue(Object.hasOwn(value, 'disposedOn') ? value.disposedOn : null, 'disposedOn'),
     note: textValue(Object.hasOwn(value, 'note') ? value.note : null, 'note'),
+    ...conditionPatch(value),
   };
 }
 
@@ -182,7 +212,15 @@ function parseUpdate(input: unknown): CopyPatch {
   if (Object.hasOwn(value, 'acquiredOn')) patch.acquiredOn = dateValue(value.acquiredOn, 'acquiredOn');
   if (Object.hasOwn(value, 'disposedOn')) patch.disposedOn = dateValue(value.disposedOn, 'disposedOn');
   if (Object.hasOwn(value, 'note')) patch.note = textValue(value.note, 'note');
+  Object.assign(patch, conditionPatch(value));
   return patch;
+}
+
+function conditionFields(input: CopyConditionPatch): CopyConditionPatch {
+  const fields: { mediaCondition?: CopyConditionPatch['mediaCondition']; packagingCondition?: CopyConditionPatch['packagingCondition'] } = {};
+  if (Object.hasOwn(input, 'mediaCondition')) fields.mediaCondition = input.mediaCondition;
+  if (Object.hasOwn(input, 'packagingCondition')) fields.packagingCondition = input.packagingCondition;
+  return fields;
 }
 
 function merged(current: Copy, patch: CopyPatch): CopyChanges {
@@ -193,6 +231,7 @@ function merged(current: Copy, patch: CopyPatch): CopyChanges {
     acquiredOn: patch.acquiredOn === undefined ? current.acquiredOn : patch.acquiredOn,
     disposedOn: patch.disposedOn === undefined ? current.disposedOn : patch.disposedOn,
     note: patch.note === undefined ? current.note : patch.note,
+    conditionFacts: current.conditionFacts,
   };
 }
 
@@ -317,16 +356,26 @@ export function createCopyCommands(config: Dependencies) {
         if (!source) throw new LibraryNotFoundError();
         if (source.kind !== 'supported' || !hasCopyStatus(source.profile, parsed.kind, parsed.status))
           throw new ProblemError('unsupported_library_profile');
+        const requestedConditions = conditionFields(parsed);
+        let conditionFacts;
+        if (Object.keys(requestedConditions).length) {
+          const acceptedKind = source.profile.copies?.kinds.find((candidate) => candidate.id === parsed.kind);
+          if (!acceptedKind || copyConditionAdmission(acceptedKind).state !== 'supported')
+            throw new ProblemError('unsupported_library_profile');
+          conditionFacts = mergeCopyConditionFields({}, requestedConditions, { kind: acceptedKind, pin: source.pin });
+        }
         const route = requireRoute(owner.accountId);
+        const { mediaCondition: _mediaCondition, packagingCondition: _packagingCondition, ...copyInput } = parsed;
         const copy = await store.insertCopy(
           tx,
           route,
           {
-            ...parsed,
+            ...copyInput,
             status: parsed.status,
             subjectId: source.subjectId,
             id: newId(route),
             accountId: owner.accountId,
+            ...(conditionFacts === undefined ? {} : { conditionFacts }),
           },
           { transactionId: command.transactionId, time: authoritativeTimeValue(command.time) },
           { kind: parsed.kind, pin: source.pin },
@@ -373,12 +422,23 @@ export function createCopyCommands(config: Dependencies) {
           !hasCopyStatus(source.profile, fact.kind, changes.status)
         )
           throw new ProblemError('unsupported_library_profile');
+        const requestedConditions = conditionFields(patch);
+        let conditionFacts = fact.copy.conditionFacts;
+        if (Object.keys(requestedConditions).length) {
+          const acceptedKind = source.profile.copies?.kinds.find((candidate) => candidate.id === fact.kind);
+          if (!acceptedKind || copyConditionAdmission(acceptedKind).state !== 'supported')
+            throw new ProblemError('unsupported_library_profile');
+          conditionFacts = mergeCopyConditionFields(fact.copy.conditionFacts ?? {}, requestedConditions, {
+            kind: acceptedKind,
+            pin: source.pin,
+          });
+        }
         const copy = await store.updateCopy(
           tx,
           route,
           copyId,
           patch.revision,
-          changes,
+          { ...changes, conditionFacts },
           {
             transactionId: command.transactionId,
             time: authoritativeTimeValue(command.time),
@@ -563,11 +623,20 @@ export function createCopyCommands(config: Dependencies) {
             const partition = await readPartition(bounded, partitionOf(route));
             const row = await copyDetailRead.run(bounded, { route, copy_id: copyId, account_id: owner.accountId });
             if (!partition || !row) throw new LibraryNotFoundError();
-            const { libraryProfilePin, kindProfilePin, statusProfilePin, ...value } = row;
+            const {
+              libraryProfilePin,
+              kindProfilePin,
+              statusProfilePin,
+              mediaCondition,
+              packagingCondition,
+              ...value
+            } = row;
+            const conditionFacts = decodeCopyConditionFacts(mediaCondition, packagingCondition);
             const copy: Copy = {
               ...value,
               createdAt: new Date(value.createdAt).toISOString(),
               updatedAt: new Date(value.updatedAt).toISOString(),
+              ...(conditionFacts === undefined ? {} : { conditionFacts }),
             };
             return {
               fact: {

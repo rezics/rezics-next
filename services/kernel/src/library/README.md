@@ -2383,17 +2383,17 @@ frozen acceptance, full Kernel and rendered review remain controller-owned and u
 ### Physical copy condition primitives
 
 `copy-condition.ts` exports the Library-owned `physical-v1` choices, strict optional-field parser,
-`mergeCopyConditionFields`, `copyConditionAdmission` and `presentCopyCondition`. These are pure helpers for the
-existing writer and detail presentation, not a second command path. Their value/label and absent/unknown/clear
-contract is owned by [Library](../../../../docs/library-and-collections.md#physical-copy-condition).
-Each observation carries its own private accepting kind and profile pin; a merge preserves untouched observations.
-The parser preserves original field presence so old receipt hashes need no compatibility rewrite.
+`mergeCopyConditionFields`, `copyConditionAdmission` and `presentCopyCondition`. The existing create/update commands
+use these helpers after whole-Copy revision checks. Each observation is stored in its own nullable JSONB column with
+its accepting kind and profile pin; metadata edits preserve untouched fields, and the parser preserves field presence
+so old receipt hashes need no compatibility rewrite. Restore keeps both observations with the ordinary copy row.
 
-Admission examines only the explicit capability on a released kind; a kind named physical remains unavailable
-without it. The retained Definitions type and closed source schema do not publish that capability yet. No generated
-declaration or client export is added here, and no endpoint or page consumes these primitives yet. Native storage,
-whole-Copy CAS/replay, exact release resolution, retained restore/purge and receiving controls remain implementation
-work. Condition edits must preserve the current loan/disposal authority rather than using a parallel revision.
+Private detail resolves each observation against its exact accepted release and returns distinct not-recorded,
+recorded, cleared and unavailable states plus independent current editing advice. Admission examines only the explicit
+capability on a released kind; a kind named physical remains unavailable without it. The retained Definitions type and
+closed source schema do not publish that capability yet, so condition writes are rejected and no Web control can be
+enabled. No generated declaration or client export is added here. Condition edits preserve loan/disposal authority
+through the original copy revision and command.
 
 Helpers inspect two fields and eight fixed values, with constant CPU/bytes and no pools, SQL, network or history
 walk. This is not a bound on the eventual caller. Its native 64/512/4096 growth cases must include original repeated

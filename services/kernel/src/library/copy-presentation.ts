@@ -3,6 +3,12 @@ import type { AuthoritativeTime } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readRelease } from '../semantic/definitions.ts';
 import { chooseLabel } from '../semantic/language.ts';
+import {
+  COPY_CONDITION_CHOICES,
+  copyConditionAdmission,
+  presentCopyCondition,
+  type CopyConditionDisplay,
+} from './copy-condition.ts';
 import type { CopyPresentation } from './copy-model.ts';
 import type { Copy } from './entry-model.ts';
 import { hasCopyStatus, resolveLibraryProfilePin, type LibraryProfilePin } from './profile.ts';
@@ -21,6 +27,52 @@ export type CopyPresentationFact = {
 };
 type Snapshot = { digest: string; release: Release } | null;
 
+function conditionPresentation(
+  fact: CopyPresentationFact,
+  source: LibraryProfileSource,
+  snapshots: ReadonlyMap<string, Snapshot>,
+) {
+  function acceptedKind(field: 'mediaCondition' | 'packagingCondition') {
+    const observation = fact.copy.conditionFacts?.[field];
+    if (!observation) return null;
+    const snapshot = snapshots.get(observation.pin.releaseDigest);
+    const profile = snapshot && resolveLibraryProfilePin(snapshot, observation.pin);
+    return profile?.copies?.kinds.find((candidate) => candidate.id === observation.kindId) ?? null;
+  }
+
+  const display = (field: 'mediaCondition' | 'packagingCondition'): CopyConditionDisplay =>
+    presentCopyCondition(fact.copy.conditionFacts?.[field], acceptedKind(field));
+  const sameSource = source !== null && source.subjectId === fact.copy.subjectId;
+  let conditionEditing: CopyPresentation['conditionEditing'];
+  if (!sameSource || !source) {
+    conditionEditing = {
+      state: 'unavailable',
+      currentness: 'unavailable',
+      reason: 'current_source_unavailable',
+    };
+  } else if (source.kind !== 'supported') {
+    conditionEditing = { state: 'unavailable', currentness: 'retired', reason: 'retired' };
+  } else {
+    const currentKind = fact.copy.kind
+      ? source.profile.copies?.kinds.find((candidate) => candidate.id === fact.copy.kind)
+      : undefined;
+    if (!currentKind) {
+      conditionEditing = { state: 'unavailable', currentness: 'retired', reason: 'retired' };
+    } else {
+      const admission = copyConditionAdmission(currentKind);
+      conditionEditing =
+        admission.state === 'supported'
+          ? { state: 'supported', currentness: 'current', choices: COPY_CONDITION_CHOICES }
+          : { state: 'unavailable', currentness: 'current', reason: admission.reason };
+    }
+  }
+  return {
+    mediaCondition: display('mediaCondition'),
+    packagingCondition: display('packagingCondition'),
+    conditionEditing,
+  };
+}
+
 /** Accepted vocabulary and current native status choices are independent observations. */
 export function presentCopy(
   fact: CopyPresentationFact,
@@ -28,14 +80,16 @@ export function presentCopy(
   source: LibraryProfileSource,
   languages: readonly string[] = [],
   statusSnapshot: Snapshot = snapshot,
+  conditionSnapshots: ReadonlyMap<string, Snapshot> = new Map(),
 ): CopyPresentation {
   const unavailable = { state: 'unavailable' } as const;
+  const conditions = conditionPresentation(fact, source, conditionSnapshots);
   const kindProfile = fact.kindPin && snapshot && resolveLibraryProfilePin(snapshot, fact.kindPin);
   const statusProfile = fact.statusPin && statusSnapshot && resolveLibraryProfilePin(statusSnapshot, fact.statusPin);
   // Missing provenance is unknown. A required exact release that cannot resolve is unavailable.
   if ((fact.kindPin && !kindProfile) || (fact.statusPin && !statusProfile))
-    return { meaning: 'unavailable', statusEditing: unavailable };
-  if (!kindProfile || !statusProfile) return { meaning: 'unknown', statusEditing: unavailable };
+    return { meaning: 'unavailable', statusEditing: unavailable, ...conditions };
+  if (!kindProfile || !statusProfile) return { meaning: 'unknown', statusEditing: unavailable, ...conditions };
   const { kind, status } = fact.copy;
   // Raw historical IDs, including migrated unspecified holdings, are never inferred from a Type.
   const original =
@@ -62,7 +116,7 @@ export function presentCopy(
     statusEditing =
       statuses.length && statuses.length === current.statuses.length ? { state: 'supported', statuses } : unavailable;
   }
-  if (!original || !acceptedStatus) return { meaning: 'unknown', statusEditing };
+  if (!original || !acceptedStatus) return { meaning: 'unknown', statusEditing, ...conditions };
   const kindLabel = chooseLabel(original.labels, languages);
   const statusLabel = chooseLabel(acceptedStatus.labels, languages);
   return {
@@ -70,6 +124,7 @@ export function presentCopy(
     ...(kindLabel ? { kindLabel: kindLabel.value, kindLabelLanguage: kindLabel.language } : {}),
     ...(statusLabel ? { statusLabel: statusLabel.value, statusLabelLanguage: statusLabel.language } : {}),
     statusEditing,
+    ...conditions,
   };
 }
 
@@ -82,8 +137,14 @@ export async function prepareCopyPresentation(
   const snapshots = new Map<string, Snapshot>();
   let source: LibraryProfileSource = null;
   let anchor: Awaited<ReturnType<typeof readLibraryProfileAnchor>> = null;
-  // At most two exact immutable lookups, deduplicated for fresh copies; never a history walk.
-  for (const pin of [fact.kindPin, fact.statusPin]) {
+  // Resolve only the exact immutable releases that accepted these observations, never a history walk.
+  const pins = [
+    fact.kindPin,
+    fact.statusPin,
+    fact.copy.conditionFacts?.mediaCondition?.pin ?? null,
+    fact.copy.conditionFacts?.packagingCondition?.pin ?? null,
+  ];
+  for (const pin of pins) {
     if (!pin || snapshots.has(pin.releaseDigest)) continue;
     let snapshot: Snapshot = null;
     try {
@@ -113,6 +174,7 @@ export async function prepareCopyPresentation(
       source,
       languages,
       fact.statusPin ? (snapshots.get(fact.statusPin.releaseDigest) ?? null) : null,
+      snapshots,
     ),
     disclosure: { subject: anchor !== null },
     async verify(at: AuthoritativeTime) {

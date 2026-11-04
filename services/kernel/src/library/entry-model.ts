@@ -1,3 +1,5 @@
+import type { CopyConditionFacts } from './copy-condition.ts';
+
 export type EntryState = string;
 export type CopyStatus = string;
 
@@ -54,7 +56,11 @@ export type CopyRow = {
 };
 
 /** Private view of one copy. `id` is the copy id. */
-export type Copy = Omit<CopyRow, 'route' | 'copyId' | 'status'> & { id: string; status: CopyStatus };
+export type Copy = Omit<CopyRow, 'route' | 'copyId' | 'status'> & {
+  id: string;
+  status: CopyStatus;
+  conditionFacts?: CopyConditionFacts;
+};
 
 export type CopyDraft = {
   id: string;
@@ -66,6 +72,7 @@ export type CopyDraft = {
   acquiredOn: string | null;
   disposedOn: string | null;
   note: string | null;
+  conditionFacts?: CopyConditionFacts;
 };
 
 export type CopyChanges = Omit<CopyDraft, 'id' | 'accountId' | 'subjectId'>;

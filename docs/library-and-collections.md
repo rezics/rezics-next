@@ -247,13 +247,13 @@ and format beside the work. It supplies no condition vocabulary. The current Cop
 field errors and preserves exact draft text. No rendered comparison or earlier Collection-item comparison has been
 established by this implementation part.
 
-The native pure vocabulary, parsing, field merge and historical display helpers are implemented in
-`copy-condition.ts`. Persistence, revisioned command integration, native presentation and Web controls are still
-required; existing endpoints do not yet accept these fields. The retained Content publisher must add optional
-`condition: 'physical-v1'` to the Definitions Copy kind source/release schema and type, preserve it through compilation,
-and publish generated native create/update/detail shapes and root exports after integration. The installed contract
-currently has only kind labels/statuses; admission remains unavailable. This document claims no native integration,
-growth, browser or promoted acceptance result.
+The native vocabulary, parsing, field merge and historical display helpers are implemented in `copy-condition.ts` and
+integrated with the existing revisioned create/update commands, private row storage and detail presentation. Each
+observation is stored in its own nullable JSONB column; SQL NULL means not recorded, while an observation value of
+JSON null means intentionally cleared. The retained Content publisher must add optional `condition: 'physical-v1'`
+to the Definitions Copy kind source/release schema and type, preserve it through compilation, and publish generated
+native create/update/detail shapes and root exports. The installed contract currently has only kind labels/statuses,
+so positive admission and Web controls remain unavailable. No growth, browser or promoted acceptance is claimed.
 
 A Collection has one identity, curator, visibility, title/description, follow target, Zone mount and schema.org
 `ItemList` surface. Curated membership stores ordered occurrences, each with its own ID and note; duplicates remain

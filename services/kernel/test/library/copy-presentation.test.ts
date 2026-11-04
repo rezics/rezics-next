@@ -53,6 +53,11 @@ const source: NonNullable<LibraryProfileSource> = {
   pin,
   profile,
 };
+const notRecordedConditions = {
+  mediaCondition: { state: 'not_recorded' },
+  packagingCondition: { state: 'not_recorded' },
+  conditionEditing: expect.objectContaining({ state: 'unavailable' }),
+};
 
 test('exact accepted labels survive a current rename while current native status choices use their own actual language', () => {
   const current: LibraryProfile = {
@@ -88,6 +93,7 @@ test('exact accepted labels survive a current rename while current native status
         { id: 'archived', label: 'Archived', labelLanguage: 'en' },
       ],
     },
+    ...notRecordedConditions,
   });
   expect(copy).toEqual(before);
 });
@@ -96,6 +102,7 @@ test('missing exact release is unavailable, readable retirement is unsupported, 
   expect(presentCopy({ copy, kindPin: pin, statusPin: pin }, null, source)).toEqual({
     meaning: 'unavailable',
     statusEditing: { state: 'unavailable' },
+    ...notRecordedConditions,
   });
   expect(
     presentCopy({ copy, kindPin: pin, statusPin: pin }, { ...snapshot, digest: 'different' }, source).meaning,
@@ -105,6 +112,7 @@ test('missing exact release is unavailable, readable retirement is unsupported, 
     meaning: 'known',
     kindLabel: 'Installation',
     statusEditing: { state: 'unsupported' },
+    ...notRecordedConditions,
   });
   expect(
     presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, {
@@ -131,12 +139,14 @@ test('unknown and unspecified historic holdings retain raw provenance without fa
     expect(presentCopy({ copy: raw, kindPin: pin, statusPin: pin }, snapshot, source)).toEqual({
       meaning: 'unknown',
       statusEditing: { state: 'unsupported' },
+      ...notRecordedConditions,
     });
     expect(raw).toEqual(before);
   }
   expect(presentCopy({ copy, kindPin: null, statusPin: null }, snapshot, source)).toEqual({
     meaning: 'unknown',
     statusEditing: { state: 'unavailable' },
+    ...notRecordedConditions,
   });
   const result = JSON.stringify(presentCopy({ copy, kindPin: pin, statusPin: pin }, snapshot, source));
   for (const secret of [
@@ -178,6 +188,7 @@ test('original kind and explicitly accepted newer status resolve separate exact 
     statusLabel: 'Archivée',
     statusLabelLanguage: 'fr',
     statusEditing: { state: 'supported', statuses: [{ id: 'archived', label: 'Archivée', labelLanguage: 'fr' }] },
+    ...notRecordedConditions,
   });
   expect(
     presentCopy(fact, snapshot, { ...current, subjectId: 'other-source' }, [], statusSnapshot).statusEditing,
@@ -185,14 +196,17 @@ test('original kind and explicitly accepted newer status resolve separate exact 
   expect(presentCopy(fact, snapshot, current, [], null)).toEqual({
     meaning: 'unavailable',
     statusEditing: { state: 'unavailable' },
+    ...notRecordedConditions,
   });
   expect(presentCopy(fact, null, current, [], statusSnapshot)).toEqual({
     meaning: 'unavailable',
     statusEditing: { state: 'unavailable' },
+    ...notRecordedConditions,
   });
   // The old shared mutable pin supplies no creation proof, even when status resolves exactly.
   expect(presentCopy({ ...fact, kindPin: null }, null, current, [], statusSnapshot)).toEqual({
     meaning: 'unknown',
     statusEditing: { state: 'unavailable' },
+    ...notRecordedConditions,
   });
 });
