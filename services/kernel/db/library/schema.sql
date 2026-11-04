@@ -7508,6 +7508,13 @@ CREATE INDEX entry_type_source ON library.entry USING btree (type_source_id, rou
 
 
 --
+-- Name: follow_account_kind_page; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX follow_account_kind_page ON library.follow USING btree (route, account_id, target_type, state, updated_at DESC, target_id);
+
+
+--
 -- Name: follow_account_page; Type: INDEX; Schema: library; Owner: -
 --
 
