@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { act, createElement } from 'react';
 import { createKernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
-import { shelfHref, shelfSort, validateShelfSearch } from '../src/library/shelf-params';
+import { shelfHref, validateShelfSearch } from '../src/library/shelf-params';
 import type { ComponentProps } from 'react';
 
 mock.module('@tanstack/react-start', () => start);
@@ -16,15 +16,27 @@ const { SortControls } = await import('../src/library/entries-current');
 const { resolveShelfPresentation, unsupportedShelfSorts, shelfOrderFromLibrary } =
   await import('../src/library/shelf-preferences');
 
-test('score addresses survive reload while unsupported saved scores never select a native order', () => {
+test('saved score intent survives both directions, per-state defaults and explicit address replacement', () => {
   const saved = {
     sorts: { all: { field: 'rating', direction: 'asc' } },
     layouts: { all: 'list' },
     gridSize: 'large',
   } as const;
   expect(unsupportedShelfSorts(saved)).toEqual([{ tab: 'all', field: 'rating' }]);
-  expect(resolveShelfPresentation({}, saved).sort).toEqual(shelfSort({}));
+  expect(resolveShelfPresentation({}, saved).sort).toEqual({ orderBy: 'personalScore', direction: 'asc' });
   for (const direction of ['asc', 'desc'] as const) {
+    for (const state of [undefined, 'in_progress', 'planned', 'completed', 'paused', 'dropped']) {
+      const tab = state ?? 'all';
+      const defaults = { ...saved, sorts: { [tab]: { field: 'rating' as const, direction } } };
+      const implicit = resolveShelfPresentation({ state, type: 'schema:Book', cursor: 'date-cursor' }, defaults);
+      expect(implicit.sort).toEqual({ orderBy: 'personalScore', direction });
+      expect(implicit.search).toMatchObject({ state, type: 'schema:Book', cursor: undefined });
+      expect(implicit.cursorInvalidated).toBe(true);
+      expect(implicit.display).toMatchObject({ layout: 'list', size: 'l' });
+      const override = { ...implicit.search, orderBy: 'createdAt' as const, direction, cursor: 'date-cursor' };
+      expect(resolveShelfPresentation(override, defaults).search).toEqual(override);
+      expect(resolveShelfPresentation({ state }, defaults).sort).toEqual(implicit.sort);
+    }
     const search = validateShelfSearch({
       type: 'schema:Book',
       state: 'reading.arc-1',
@@ -81,7 +93,7 @@ test('mounted sort form retains score addresses until date selection and replace
       state: 'completed',
       type: 'schema:Book',
       display: { layout: 'table', size: 'l', columns: 'title,status' },
-      sort: { orderBy: 'personalScore', direction },
+      sort: resolveShelfPresentation({}, { sorts: { all: { field: 'rating', direction } } }).sort,
       isCurrent: () => client.getQueryData<{ subject: string }>(['session'])?.subject === 'A',
     };
     await act(async () =>

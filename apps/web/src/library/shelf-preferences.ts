@@ -45,7 +45,9 @@ export function libraryOrderFromShelf(sort: ShelfPreferenceSort | undefined): Sh
         ? 'createdAt'
         : sort.field === 'finished'
           ? 'finishedAt'
-          : undefined;
+          : sort.field === 'rating'
+            ? 'personalScore'
+            : undefined;
   return orderBy ? { orderBy, direction: sort.direction } : undefined;
 }
 
@@ -117,7 +119,7 @@ export function resolveShelfPresentation(
       ...search,
       orderBy,
       direction,
-      ...(!cursorInvalidated && search.cursor ? { cursor: search.cursor } : {}),
+      cursor: cursorInvalidated ? undefined : search.cursor,
     },
     display: {
       ...base,
@@ -135,7 +137,13 @@ export function resolveShelfPresentation(
 
 export function unsupportedShelfSorts(shelf: ShelfPreferences): Array<{ tab: ShelfPreferenceTab; field: string }> {
   return (Object.entries(shelf.sorts ?? {}) as Array<[ShelfPreferenceTab, ShelfPreferenceSort]>).flatMap(
-    ([tab, sort]) => (libraryOrderFromShelf(sort) ? [] : [{ tab, field: sort.field.replaceAll('_', ' ') }]),
+    ([tab, sort]) => {
+      const intent = libraryOrderFromShelf(sort);
+      // Recognizing a saved address does not admit a native whole-shelf order.
+      return intent && intent.orderBy !== 'personalScore'
+        ? []
+        : [{ tab, field: sort.field.replaceAll('_', ' ') }];
+    },
   );
 }
 

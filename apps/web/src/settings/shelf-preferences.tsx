@@ -94,7 +94,7 @@ function draftFrom(shelf: ShelfPreferences): ShelfDraft {
       const order = libraryOrderFromShelf(stored);
       return [
         tab,
-        order
+        order && order.orderBy !== 'personalScore'
           ? `${shelfOrderFromLibrary(order).field}:${order.direction}`
           : stored
             ? `unsupported:${stored.field}`
@@ -497,7 +497,10 @@ export function ShelfPreferencesCard({
                   {current.startsWith('unsupported:') ? (
                     <option value={current} disabled>
                       {m.settings_shelf_unavailable_option({
-                        field: current.slice('unsupported:'.length).replaceAll('_', ' '),
+                        field:
+                          state.known.shelf.sorts?.[tab]?.field === 'rating'
+                            ? `${m.library_score_order()} · ${state.known.shelf.sorts[tab].direction === 'desc' ? m.library_score_highest() : m.library_score_lowest()}`
+                            : current.slice('unsupported:'.length).replaceAll('_', ' '),
                       })}
                     </option>
                   ) : null}

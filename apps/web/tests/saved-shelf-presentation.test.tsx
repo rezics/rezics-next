@@ -179,7 +179,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
   const initialShelf = {
     layouts: { all: 'list', 'https://schema.org/Book': 'grid' },
     sorts: {
-      all: { field: 'added', direction: 'asc' },
+      all: { field: 'rating', direction: 'asc' },
+      completed: { field: 'rating', direction: 'desc' },
       planned: { field: 'title', direction: 'desc' },
     },
     gridSize: 'large',
@@ -374,6 +375,12 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
         m.settings_shelf_order_unavailable({ tab: m.library_state_planned(), field: 'title' }),
       );
 
+      for (const [index, direction] of [[2, m.library_score_lowest()], [5, m.library_score_highest()]] as const) {
+        const option = host.querySelectorAll<HTMLSelectElement>('select')[index]!.selectedOptions[0]!;
+        expect(option.disabled).toBe(true);
+        expect(option.textContent).toContain(direction);
+      }
+
       await select(0, 'table');
       await click(m.settings_shelf_save());
       expect(host.textContent).toContain(m.settings_shelf_conflict());
@@ -396,6 +403,8 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
       });
       expect((current.shelf as typeof initialShelf).sorts.planned).toEqual({ field: 'title', direction: 'desc' });
       expect((current.shelf as typeof initialShelf).tableColumns).toEqual(initialShelf.tableColumns);
+      expect((current.shelf as typeof initialShelf).sorts.all).toEqual(initialShelf.sorts.all);
+      expect((current.shelf as typeof initialShelf).sorts.completed).toEqual(initialShelf.sorts.completed);
       expect(confirmedVersion).toBe(6);
 
       const refreshed = await preferences.shelf.read();
@@ -405,7 +414,7 @@ test('mounted Settings shelf editing uses native versioned adapters and retains 
         refreshed.preferences.shelf,
       );
       expect(implicit.display.layout).toBe('grid');
-      expect(implicit.sort).toEqual({ orderBy: 'createdAt', direction: 'asc' });
+      expect(implicit.sort).toEqual({ orderBy: 'personalScore', direction: 'asc' });
       expect(implicit.cursorInvalidated).toBe(true);
       expect(implicit.search.cursor).toBeUndefined();
       const explicit = resolveShelfPresentation(

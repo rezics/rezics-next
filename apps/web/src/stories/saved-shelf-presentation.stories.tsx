@@ -107,14 +107,19 @@ function mergeShelf(current: ShelfPreferences, patch: ShelfPreferencePatch | nul
   return next;
 }
 
-function SavedShelfJourney() {
+function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc' }) {
   const [queryClient] = useState(() => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: accountId, csrfToken: token });
     return client;
   });
   const [owner] = useState(() => new SettingsSessionOwner(queryClient, token, accountId));
-  const [saved, setSaved] = useState({ shelf: initialShelf, version: 4 });
+  const [saved, setSaved] = useState({
+    shelf: scoreDirection
+      ? { ...initialShelf, sorts: { ...initialShelf.sorts, all: { field: 'rating' as const, direction: scoreDirection } } }
+      : initialShelf,
+    version: 4,
+  });
   const current = useRef(saved);
   current.current = saved;
   const io = useRef<ReadingIO | null>(null);
@@ -169,7 +174,13 @@ function SavedShelfJourney() {
             </h2>
             <div data-testid="library-preview" data-layout={resolved.display.layout}>
               <PersonalLibraryPage
-                page={libraryPage}
+                page={{
+                  ...libraryPage,
+                  sort: resolved.sort,
+                  ...(resolved.sort.orderBy === 'personalScore'
+                    ? { readState: 'score-unavailable', entries: [], next: null }
+                    : {}),
+                }}
                 continueState={{ state: 'loaded', entries: [], next: null }}
                 locale={getLocale()}
                 display={resolved.display}
@@ -201,4 +212,15 @@ export const Desktop1280: Story = {
   render: () => <SavedShelfJourney />,
   globals: { viewport: { value: 'desktop1280' } },
   play: async ({ canvasElement }) => saveLayout(canvasElement, 'grid'),
+};
+
+// Illustrative saved intent, using the same unavailable recovery as the retained native reader.
+export const SavedScoreLowest: Story = {
+  render: () => <SavedShelfJourney scoreDirection="asc" />,
+  globals: { viewport: { value: 'phone390' } },
+};
+
+export const SavedScoreHighest: Story = {
+  render: () => <SavedShelfJourney scoreDirection="desc" />,
+  globals: { viewport: { value: 'desktop1280' } },
 };

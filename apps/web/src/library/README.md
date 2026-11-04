@@ -3,8 +3,12 @@
 Library presentation resolves explicit valid URL choices first, then the current account's native shelf defaults, then
 the existing application defaults. Layouts use an exact absolute-IRI type scope when the address type is an IRI and
 otherwise use `all`; Settings edits only `all`. Grid sizes map `small`/`medium`/`large` to the current `s`/`m`/`l`
-controls. Only `last_activity`, `added` and `finished` map to the currently admitted native Library order operations.
-Title, rating, release-date and progress orders remain saved and are described as unavailable. The table maps the
+controls. `last_activity`, `added` and `finished` map to the currently admitted native Library date orders.
+Saved `rating` maps losslessly to the `personalScore` address and direction for each state, including `all`.
+This preserves intent only: the existing whole-shelf capability fence still reports score ordering unavailable,
+with retry of the same intent or an explicit date-order recovery. Settings shows the retained score direction as a
+disabled saved choice; it does not offer new unsupported orders. Title, release-date and progress orders remain
+saved and are described as unavailable. The table maps the
 currently supplied cover, title, type, status, active progress, added, finished and last-activity fields. Unsupported
 creator, rating and started columns remain in the native preference array and never appear as Library controls.
 
@@ -16,7 +20,16 @@ save can retry only with its original idempotency key; refreshing reads the curr
 draft. A saved sort that changes the loaded order drops the old cursor. Table progress is the supplied active session
 value, preserving its unit and mode; no row reads or local page sorting are added.
 
+Decision: saved rating is a score address intent, while native availability independently controls execution and offered choices.
+
 Decision: Settings edits the reversible `all` layout scope; the resolver uses an exact type scope only for absolute-IRI addresses and otherwise falls back to `all`.
+
+## Cost bounds
+
+Preference resolution uses one bounded native snapshot (at most 32 layout scopes, six per-state sorts and eleven
+column IDs), with no extra requests, row hydration or page-local ordering. Score defaults use the existing
+unavailable reader and recovery without score preparation or vote reads; chronological paging keeps its existing
+20-row default and 100-row maximum. Settings writes only dirty shelf fields through the existing versioned command.
 
 # Library selection review
 
