@@ -32,6 +32,7 @@ mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
 mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { createRoot } = await import('react-dom/client');
+const { readHomeFeedPage } = await import('../src/features/pages/home-feed-read');
 const { HomeFeed } = await import('../src/features/pages/home-feed');
 const { ThreadReactions } = await import('../src/threads/thread-reactions');
 const { useHomeReactionCurrentness } = await import('../src/features/feed/home-reaction-currentness');
@@ -385,4 +386,20 @@ test('uncertain retry keeps the original sender, credential, target, body and ke
   expect(refreshed).toBe(1);
   expect(host.querySelectorAll('[data-slot="vote-control"] button:not([disabled])')).toHaveLength(0);
   expect(host.textContent).not.toContain(m.reaction_discard());
+});
+
+test('public Home rejects private viewer slots and current private advice', async () => {
+  const item = { ...row(0), source: 'discovery' as const };
+  for (const personal of [{ viewerReaction: 'love' }, { reactionAdvice: { state: 'current', allowed: [] } }]) {
+    const publicPage = {
+      ...result.page,
+      sources: { following: 'not_requested', discovery: 'ready', continue: 'not_requested' },
+      feedItems: [{ ...item, summary: { ...item.summary, ...personal } }],
+    };
+    const client = { feedItems: { get: async () => ({ status: 200, data: publicPage }) } };
+    expect(await readHomeFeedPage(client as Parameters<typeof readHomeFeedPage>[0])).toEqual({
+      state: 'unavailable',
+      code: 'invalid_feed_response',
+    });
+  }
 });
