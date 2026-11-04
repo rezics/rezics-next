@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useMemo } from 'react';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { StoryArcReader } from '../features/catalogue/story-arc-reader/view';
 import { arcAddress, arcExample } from '../features/catalogue/story-arc-reader/examples';
 import type { ArcTransport } from '../features/catalogue/story-arc-reader/model';
@@ -43,8 +43,13 @@ const meta = {
 } satisfies Meta<typeof RecoveryStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+async function selectMembers(canvasElement: HTMLElement) {
+  await waitFor(() => expect(canvasElement.querySelector('[data-stream="inverse:rezics:storyArc"]')).toBeVisible());
+  await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-stream="inverse:rezics:storyArc"]')!);
+}
 const more: NonNullable<Story['play']> = async ({ canvasElement }) => {
   const canvas = within(canvasElement);
+  await selectMembers(canvasElement);
   await userEvent.click(await canvas.findByRole('button', { name: m.work_parts_more() }));
   await expect(canvas.findByRole('button', { name: m.arc_reader_discover() })).resolves.toBeVisible();
 };
@@ -55,6 +60,7 @@ export const SelectedMemberAndFilteredAppearances: Story = {
   args: { outcome: 'member' },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await selectMembers(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: m.arc_reader_characters() }));
     await expect(canvas.findByRole('button', { name: m.arc_reader_back() })).resolves.toBeVisible();
     await expect(canvas.getAllByRole('button', { name: m.arc_reader_inspect() })[0]).toHaveAttribute(

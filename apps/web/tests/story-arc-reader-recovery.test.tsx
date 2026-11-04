@@ -18,7 +18,7 @@ test('Previous keeps eight accepted addresses, rereads them, evicts oldest, and 
   const mounted = await ui();
   try {
     const fixture = arcExample();
-    const initial = admitted(await fixture.read());
+    const initial = admitted(await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' }));
     const addresses: ArcAddress[] = [];
     const transport: ArcTransport = async (address) => {
       addresses.push({ ...address });
@@ -46,7 +46,7 @@ test('failed frontier is distinct from prior page; exact Retry, Previous, Start 
   const mounted = await ui();
   try {
     const fixture = arcExample();
-    const initial = admitted(await fixture.read());
+    const initial = admitted(await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' }));
     const addresses: ArcAddress[] = [];
     let failure: 'unavailable' | 'withheld' | 'invalid' | undefined;
     const transport: ArcTransport = async (address) => {
@@ -92,7 +92,7 @@ test('member excursion preserves parent assertion and exact arc filter through P
   const mounted = await ui();
   try {
     const fixture = arcExample();
-    const initial = admitted(await fixture.read());
+    const initial = admitted(await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' }));
     const addresses: ArcAddress[] = [];
     let failure = false;
     const transport: ArcTransport = async (address) => {
@@ -145,7 +145,7 @@ test('pointer opening and late child reads never steal focus or replace a new ch
   const mounted = await ui();
   try {
     const fixture = arcExample();
-    const initial = admitted(await fixture.read());
+    const initial = admitted(await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' }));
     let settle: ((value: ArcRead) => void) | undefined;
     let defer = true;
     const transport: ArcTransport = (address) =>
@@ -192,7 +192,7 @@ test('equal-success browser replacement and departure retire the entire reading;
   const mounted = await ui();
   try {
     const fixture = arcExample();
-    const initial = admitted(await fixture.read());
+    const initial = admitted(await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' }));
     const props = { ...arcAddress, locale: 'en', source: {}, reader: null, initial, transport: fixture.read };
     await mounted.render(props);
     await mounted.click(m.arc_reader_characters());
