@@ -8286,5 +8286,6 @@
   "library_progress_discovery_action_open": "Ouvrir la session",
   "library_progress_discovery_action_available": "Disponible",
   "library_progress_discovery_action_not_active": "Indisponible : la session n’est pas active.",
-  "library_progress_discovery_action_not_authorized": "Indisponible : vous n’êtes pas autorisé à effectuer cette action."
+  "library_progress_discovery_action_not_authorized": "Indisponible : vous n’êtes pas autorisé à effectuer cette action.",
+  "search_review_historical_question_unavailable": "Le libellé et l’échelle historiques sont indisponibles. Il s’agit de la citation enregistrée, pas de la note actuelle."
 }

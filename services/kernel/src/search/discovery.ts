@@ -127,6 +127,8 @@ export type PublicReviewDiscoverySummary = Readonly<{
   author?: Readonly<{ displayName: string | null; handle: string | null }>;
   excerpt?: string;
   subject?: Readonly<{ id: string; title: string | null }> | null;
+  source?: import('./review-context.ts').ReviewContextSource;
+  searchContext?: import('./review-context.ts').SearchReviewContext;
 }>;
 export type PublicSpaceDiscoverySummary = Readonly<{
   id: string;
@@ -221,6 +223,7 @@ export type DiscoveryOwnerMetadataSummary<K extends DiscoveryOwnerKind = Discove
         sourcePosition: string;
         authorId: string;
         subjectId: string;
+        source?: import('./review-context.ts').ReviewContextSource;
       }>
     : Readonly<{
         id: string;
