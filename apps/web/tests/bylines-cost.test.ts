@@ -175,6 +175,7 @@ function recordingClient(
               avatar: null,
             })),
           );
+          page.query.cursor = url.searchParams.get('cursor');
           if (failure) {
             page.authors = { state: 'unavailable', retryable: true, items: [] };
             page.currentness.authors = 'unavailable';
