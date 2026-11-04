@@ -1931,5 +1931,5 @@ Cost: reuse one coalesced `createFreshness` observation per pinned generation. T
 outbox seeks by `(partition_no, position, event_seq=0)` with `LIMIT 1`, returning one aggregate row. No new outbox
 scan or request polling exists. One read runs per reader; arrivals share the following read. Catalogue retains its
 bounded reader cache; mixed retains one cache entry (in-flight readers keep their generation). The public addition
-is at most 35 UTF-8 JSON bytes (`freshness` object plus separator), constant per page, without consumer, partition,
+is at most 36 UTF-8 JSON bytes (`freshness` object plus separator), constant per page, without consumer, partition,
 backlog, raw event time or relay detail. Existing request deadlines and result fan-out limits are unchanged.

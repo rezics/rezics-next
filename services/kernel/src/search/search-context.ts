@@ -2,9 +2,12 @@ import { t } from 'elysia';
 import type { Freshness } from './freshness.ts';
 
 /** Deliberately contains no relay identity, lag count or event timestamp. */
-export const SearchFreshnessSchema = t.Object({
-  state: t.Union([t.Literal('current'), t.Literal('catching-up'), t.Literal('unavailable')]),
-}, { additionalProperties: false });
+export const SearchFreshnessSchema = t.Object(
+  {
+    state: t.Union([t.Literal('current'), t.Literal('catching-up'), t.Literal('unavailable')]),
+  },
+  { additionalProperties: false },
+);
 export type SearchFreshness = { state: 'current' | 'catching-up' | 'unavailable' };
 export type SearchObservation = { as_of: string; freshness: SearchFreshness };
 

@@ -215,12 +215,23 @@ test('sign-out retires a retained scoped request and quarantines its late respon
 test('mounted Search refresh retires its page and restores focus after a sparse fresh observation', async () => {
   await show(viewer());
   await retryCurrent();
-  await settle({ ...ready, discovery: { status: 'ready', page: {
-    hits: [], kinds: { values: [], next: null }, next: 'sparse-frontier',
-    as_of: discoveryExample.as_of, freshness: { state: 'catching-up' },
-  } } });
+  await settle({
+    ...ready,
+    discovery: {
+      status: 'ready',
+      page: {
+        hits: [],
+        kinds: { values: [], next: null },
+        next: 'sparse-frontier',
+        as_of: discoveryExample.as_of,
+        freshness: { state: 'catching-up' },
+      },
+    },
+  });
   expect(host.querySelector('[data-search-coverage]')?.textContent).toContain(m.search_context_catching_up());
-  const refresh = [...host.querySelectorAll('button')].find(button => button.textContent === m.search_context_refresh())!;
+  const refresh = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === m.search_context_refresh(),
+  )!;
   refresh.focus();
   await act(async () => user.keyboard('{Enter}'));
   expect(host.querySelector('[data-search-coverage]')).toBeNull();

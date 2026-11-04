@@ -459,7 +459,9 @@ function executeDiscoverySearch(
             hits,
             kinds: { values, next: null },
             next: null,
-            ...(typeof observed === 'string' ? { as_of: observed, freshness: { state: 'unavailable' as const } } : observed),
+            ...(typeof observed === 'string'
+              ? { as_of: observed, freshness: { state: 'unavailable' as const } }
+              : observed),
           };
           // Owner replies and metadata must pass the actual transport contract before any token is signed.
           admitDiscoveryPage(projected);
