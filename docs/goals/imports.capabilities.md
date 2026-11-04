@@ -1183,24 +1183,34 @@ This delivery does not claim that native command passed.
 
 ## Bangumi character kinds and qualified appearances
 
-Decision: Bangumi character role mappings use exact configured native Concept and ConceptScheme IDs, verify their current adopted source URIs through the public API, and keep missing bindings as review diagnostics; labels never resolve identity.
+Decision: The default character vocabulary and appearance adapter follows Bangumi type-2 anime work rows only.
 
-The cross-media seed caller now imports character kinds as `schema:keywords`
-Concept facts and selected appearances as `schema:character` facts with the
-exact role Concept in `wdt:P3831`. It preserves character summaries through the
-existing attributed document proposal and leaves unsupported source ordering as
-a diagnostic when `schema:position` is not admitted on the work property.
-Character/person profile selection and existing work title proposals continue
-through their registered converters.
+The local showcase journey derives only source-specific character-kind and
+appearance-role codes present in selected anime evidence. The common publisher
+creates and proposes their schemes and Concepts, handles separate acceptance
+and adoption, and orders Concept dependencies after their current scheme. The
+importer rereads acknowledged UUIDs and verifies current type, URI, scheme and
+definition release before rerunning the complete Bangumi generation. Character
+kinds remain `schema:keywords`; each work appearance remains a qualified
+`schema:character` assertion with the exact appearance-role Concept in
+`wdt:P3831`. Source row keys, digests and citations travel with the work fact.
+Missing, malformed, unknown or wrong-scheme meanings stay bounded diagnostics;
+independently useful character identities remain available. The explicit
+`--bangumi-character-bindings` mode and other converter adapters remain
+available without replacing their source-vocabulary requests.
 
-The authored focused scenarios are:
+The focused scenarios are:
 
-- `Bangumi character facts retain source identities, concepts, citation, and unsupported order diagnostics` in the importer workspace.
-- `Bangumi character kinds and appearance roles target exact Concepts; unsupported source order stays diagnostic` in the conversion workspace.
-- `authored Bangumi character kinds and qualified appearances are adopted as current native facts` in the Kernel workspace. It covers current public Concepts, source identities, independent reads, adoption, reopen/reimport idempotence, changed roles, missing role bindings and a fenced work tuple.
+- `default local adapter keeps character kinds separate from each anime appearance role and withholds a wrong-scheme role` in the importer workspace.
+- `selected anime character vocabulary is separately adopted and refreshed through the default adapter` in the Kernel workspace.
 
-The Kernel scenario is authored but its native execution is deferred to the
-controller after integration. This entry records no native pass receipt.
+Touches: at most 64 admitted appearances per selected anime work and at most two
+schemes plus seven Concepts. Bound: actual source rows are streamed, evidence
+bytes are capped before materialization, and vocabulary requests use only the
+selected mappings; no catalogue scan or label lookup occurs. Growth check:
+focused importer and Kernel acceptance only. The Kernel command, broader M1
+walkthrough and public page checks remain controller-owned; import delivery
+does not claim Web or Semantic page/index acceptance.
 
 ## VNDB character traits and selected work appearances
 

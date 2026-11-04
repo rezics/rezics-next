@@ -7,11 +7,16 @@ import type {
   SourceVocabularyRequest,
   SourceVocabularyRow,
 } from '@rezics/conversion';
-import { converter_revision as entityRevision, mapSourceEnumeration } from '@rezics/conversion/cross-media-entities';
+import {
+  bangumiRecordUrl,
+  converter_revision as entityRevision,
+  mapSourceEnumeration,
+} from '@rezics/conversion/cross-media-entities';
 import type { ImportConversion, SourceRegistration } from './import-contract.ts';
 import { ImportTransportError, type ReviewedSubjectRead } from './import-client.ts';
 import type { Importer, ImportRunResult } from './importer.ts';
 import type { BangumiCharacterAppearance } from './cross-media-seed.ts';
+import { bangumiAppearanceSource, combineSourceVocabularyRequests } from './cross-media-bindings.ts';
 import { createSourceRegistration, type SourceAssets } from './source-registry.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -125,7 +130,7 @@ async function nativeIdentity(
   return { id: subject.id, type: subject.type, releaseDigest: bundledDigest };
 }
 
-async function currentVocabularyBindings(
+export async function currentBangumiCharacterVocabularyBindings(
   input: SourceVocabularyBindings,
   port: { readReviewedSubject(id: string): Promise<ReviewedSubjectRead> },
 ): Promise<SourceVocabularyBindings> {
@@ -133,7 +138,13 @@ async function currentVocabularyBindings(
   const currentSchemes = (
     await Promise.all(
       (Object.keys(schemes) as Taxonomy[]).map(async (taxonomy) => {
-        const binding = input.schemes.find((item) => item.taxonomy === taxonomy && item.uri === schemes[taxonomy]);
+        const binding = input.schemes.find(
+          (item) =>
+            item.taxonomy === taxonomy &&
+            item.uri === schemes[taxonomy] &&
+            item.type === 'skos:ConceptScheme' &&
+            item.releaseDigest === bundledDigest,
+        );
         if (!binding) return null;
         const subject = await publicSubject(port, binding.id);
         return subject?.type === 'skos:ConceptScheme' && hasCurrentValue(subject, 'schema:url', schemes[taxonomy])
@@ -148,7 +159,12 @@ async function currentVocabularyBindings(
     return schemeId
       ? codes[taxonomy].flatMap((code) => {
           const binding = input.concepts.find(
-            (item) => item.taxonomy === taxonomy && item.code === code && item.schemeId === schemeId,
+            (item) =>
+              item.taxonomy === taxonomy &&
+              item.code === code &&
+              item.schemeId === schemeId &&
+              item.type === 'skos:Concept' &&
+              item.releaseDigest === bundledDigest,
           );
           const expected = mapSourceEnumeration(
             'bangumi',
@@ -179,17 +195,27 @@ function sourceCode(value: unknown): number | string | null {
 }
 
 function rowForAppearance(
+  sourceAlias: string,
   appearance: BangumiCharacterAppearance,
   work: NativeIdentity | undefined,
   character: NativeIdentity | undefined,
+  roleCode: number | string,
 ): SourceVocabularyRow {
+  const origin = bangumiAppearanceSource(sourceAlias, appearance);
   return {
     kind: 'character-appearance',
     path: `/subject-characters/${appearance.sourceIndex}/type`,
+    origin: {
+      externalId: origin.external_id,
+      revision: origin.record_revision,
+      digest: origin.digest,
+      url: bangumiRecordUrl(appearance.subjectId),
+      converterRevision: origin.converter_revision,
+    },
     ...(work ? { subject: work } : {}),
     ...(character ? { character } : {}),
     characterCode: `character:${appearance.characterId}`,
-    roleCode: appearance.roleCode,
+    roleCode,
     ...(appearance.order === undefined ? {} : { order: appearance.order }),
   };
 }
@@ -210,7 +236,7 @@ export async function runBangumiCharacterFidelity(input: {
   bindings?: SourceVocabularyBindings;
 }): Promise<BangumiCharacterFidelityResult> {
   const configured = configuredBindings(input.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] });
-  const bindings = await currentVocabularyBindings(configured, input.port);
+  const bindings = await currentBangumiCharacterVocabularyBindings(configured, input.port);
   const appearanceByWork = new Map<string, BangumiCharacterAppearance[]>();
   const characterKeys = new Set(input.appearances.map((row) => `character:${row.characterId}`));
   for (const appearance of input.appearances) {
@@ -263,9 +289,24 @@ export async function runBangumiCharacterFidelity(input: {
     }
     for (const appearance of appearanceByWork.get(record.key) ?? []) {
       const roleCode = sourceCode(appearance.roleCode);
-      if (roleCode === null) continue;
+      if (roleCode === null) {
+        inputGaps.push({
+          provider: 'bangumi',
+          path: `/subject-characters/${appearance.sourceIndex}/type`,
+          endpoint: record.key,
+          reason: 'invalid_row',
+          property: 'subject-characters.type',
+        });
+        continue;
+      }
       rows.push(
-        rowForAppearance(appearance, identities.get(record.key), identities.get(`character:${appearance.characterId}`)),
+        rowForAppearance(
+          input.sourceAlias,
+          appearance,
+          identities.get(record.key),
+          identities.get(`character:${appearance.characterId}`),
+          roleCode,
+        ),
       );
     }
     if (rows.length) requests.set(record.key, { bindings, rows });
@@ -279,7 +320,7 @@ export async function runBangumiCharacterFidelity(input: {
   const registration: SourceRegistration<SourceAssets> = {
     ...base,
     convert(record, context): ImportConversion<SourceAssets> {
-      const request = context.sourceVocabulary ?? requests.get(record.external_id);
+      const request = combineSourceVocabularyRequests([context.sourceVocabulary, requests.get(record.external_id)]);
       const conversion = base.convert(record, {
         ...context,
         ...(request ? { sourceVocabulary: request } : {}),
