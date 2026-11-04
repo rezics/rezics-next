@@ -31,6 +31,7 @@ const globals = {
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
   Node: window.Node,
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));

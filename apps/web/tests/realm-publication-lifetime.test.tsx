@@ -22,6 +22,9 @@ const globals = {
   HTMLElement: window.HTMLElement,
   HTMLButtonElement: window.HTMLButtonElement,
   HTMLFormElement: window.HTMLFormElement,
+  HTMLInputElement: window.HTMLInputElement,
+  KeyboardEvent: window.KeyboardEvent,
+  Event: window.Event,
   Element: window.Element,
   Node: window.Node,
   Document: window.Document,
@@ -572,7 +575,8 @@ describe('Complete Realm publication original caller lifetime', () => {
     const option = [...window.document.querySelectorAll<HTMLElement>('[role="option"]')].find((node) =>
       node.textContent?.includes(hostSubject.title),
     );
-    expect(option).toBeDefined();
+    if (!option)
+      throw new Error(`Missing publication option; input=${input!.value}; rendered=${window.document.body.innerHTML.slice(-7000)}`);
     await act(async () => {
       option!.click();
       await tick();
