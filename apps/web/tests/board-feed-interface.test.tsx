@@ -309,7 +309,7 @@ test('ordinary Board order stays intact and membership alone does not grant pin 
   );
   expect(titles).toEqual([first.title, second.title]);
   expect(markup).toContain(m.board_pin_unavailable());
-  expect(markup).not.toContain(m.board_pin_badge());
+  expect(markup).not.toContain('data-board-pin-focus="toggle"');
   expect(markup).not.toContain(m.board_pin_unpin());
   expect(markup).not.toContain(m.board_pin_pin());
   expect(markup.match(/<ul\b/gu)).toHaveLength(1);
