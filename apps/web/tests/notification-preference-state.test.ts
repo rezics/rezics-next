@@ -539,6 +539,23 @@ test('a shorter current-read refusal keeps the original wait and current advice 
 });
 
 test('disposal clears retained notification state and ignores late reads, writes and callbacks', async () => {
+  let current = true;
+  const fenced = new NotificationEditor(
+    page,
+    { save: async () => ({ ok: false, reason: 'unavailable' }), read: async () => ({ signedIn: false }) },
+    false,
+    () => 7,
+    () => current,
+    () => current,
+  );
+  let invalidations = 0;
+  fenced.subscribe(() => invalidations++);
+  const retainedSessionCallback = () => fenced.retry();
+  current = false;
+  await retainedSessionCallback();
+  expect(fenced.snapshot()).toMatchObject({ currentAdvice: null, pending: null, known: { notifications: {} } });
+  expect(invalidations).toBe(1);
+
   let finishWrite!: (result: NotificationWriteResult) => void;
   const writes: NotificationChange[] = [];
   const writer = new NotificationEditor(page, {
