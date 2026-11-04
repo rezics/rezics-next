@@ -13,6 +13,8 @@ import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './a
 import { isPlatformClosedError } from '../kernel/platform-closed';
 
 export const MODERATION_APPEALS_PAGE_SIZE = 20;
+/** Use the installed declaration, including every field its producer supplies. */
+type NativeAppealPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['boards']>['appeals']['get']>>['data']>;
 export type AppealAppellantIdentity =
   | {
       state: 'available';
@@ -36,7 +38,7 @@ export type AppealResolutionSnapshot = {
   statement: string;
   resolvedAt: string;
 };
-export type AppealSource = { partition: number; epoch: number; position: string };
+export type AppealSource = NativeAppealPage['provenance']['source'];
 export type AppealProvenance = {
   actorId: string;
   session: { clientId: string; authnEpoch: number };
@@ -86,9 +88,6 @@ export type AppealTargetReads = {
   post: (id: string) => Promise<ModerationTarget['value']>;
   thread: (id: string) => Promise<ModerationTarget['value']>;
 };
-
-/** Use the installed declaration, including every field its producer supplies. */
-type NativeAppealPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['boards']>['appeals']['get']>>['data']>;
 
 function boundedAppealPage(page: NativeAppealPage | null | undefined): AppealPage {
   if (!page || !Array.isArray(page.appeals) || page.appeals.length > MODERATION_APPEALS_PAGE_SIZE)
@@ -293,6 +292,11 @@ function validSource(source: AppealSource | undefined): source is AppealSource {
   );
 }
 
+/** The installed declaration has only the parent final anchor, so other source homes have no observation. */
+function finalSourceObservation(source: AppealSource, parent: AppealSource): AppealSource | undefined {
+  return source.partition === parent.partition && source.epoch === parent.epoch ? parent : undefined;
+}
+
 export function admitAppealInspection(
   page: AppealPage,
   inspect: string,
@@ -339,11 +343,11 @@ export function admitAppealInspection(
     throw new AppealReadFailure('unavailable');
   for (const appeal of [...page.appeals, selected]) {
     const source = appeal.source;
+    if (!validSource(source)) throw new AppealReadFailure('unavailable');
+    const finalSource = finalSourceObservation(source, provenance.source);
     if (
-      !validSource(source) ||
-      source.partition !== provenance.source.partition ||
-      source.epoch !== provenance.source.epoch ||
-      BigInt(source.position) > BigInt(provenance.source.position) ||
+      !finalSource ||
+      BigInt(source.position) > BigInt(finalSource.position) ||
       appeal.resolutionCommand?.operationId !== 'moderation_appeal.resolve' ||
       appeal.resolutionCommand.method !== 'POST' ||
       appeal.resolutionCommand.path !== `/v1/moderation-appeals/${appeal.id}:resolve`

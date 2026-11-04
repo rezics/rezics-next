@@ -139,6 +139,8 @@ test('composed inspection seam admits only current actor/session, exact outcome,
   ).toBe(resolved);
   for (const invalid of [
     { ...page, appeals: Array.from({ length: 21 }, () => selected) },
+    { ...page, appeals: [{ ...selected, source: { ...source, partition: 1 } }] },
+    { ...page, selectedAppeal: { ...selected, source: { ...source, partition: 1 } } },
     { ...page, provenance: { ...provenance, actorId: 'other' } },
     { ...page, provenance: { ...provenance, session: { clientId: 'other', authnEpoch: 1 } } },
     { ...page, provenance: { ...provenance, session: { clientId: 'web', authnEpoch: 2 } } },
@@ -221,6 +223,7 @@ test('installed board/thread inspection makes one captured request and admits on
       });
       for (body of [
         { ...wire, appeals: [selected], selectedAppeal: undefined },
+        { ...wire, appeals: [{ ...selected, source: { ...source, partition: 1 } }] },
         { ...wire, provenance: { ...provenance, actorId: 'foreign' } },
         { ...wire, selectedAppeal: { ...selected, source: { ...source, partition: 1 } } },
         { ...wire, selectedAppeal: { ...selected, source: { ...source, epoch: 2 } } },
@@ -230,7 +233,7 @@ test('installed board/thread inspection makes one captured request and admits on
       body = wire;
       token = '';
       expect(await read()).toMatchObject({ state: 'unavailable', appeals: [] });
-      expect(requests).toHaveLength(7);
+      expect(requests).toHaveLength(8);
       for (const request of requests) {
         expect(new URL(request.url).pathname).toBe(`/v1/${threadId ? 'threads/thread' : 'boards/board'}/appeals`);
         expect(Object.fromEntries(new URL(request.url).searchParams)).toEqual({

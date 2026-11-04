@@ -88,8 +88,8 @@ original token unchanged. A current resolved observation cannot settle an uncert
 CSRF headers, key, outcome or statement. A changed `canResolve` hint does not prevent that original explicit retry;
 native authorization and idempotency still decide its result.
 
-Decision: a row from a partition or epoch not covered by final page provenance remains unavailable until the native
-producer publishes final observation coverage for that source through the original generated operation.
+Decision: until the installed Board/thread declaration exposes additive final source observations, parent provenance
+covers only its own partition/epoch and position; rows or selections from other or uncovered homes remain unavailable.
 
 The native producer currently projects row source anchors independently from the parent page anchor. Cross-partition
 selections therefore require additive final source coverage from the declaration publisher; Web cannot manufacture
