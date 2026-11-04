@@ -35,6 +35,8 @@ import {
   type Identity,
   type Subject,
 } from './data';
+import { GrantContents, GrantReview, PermissionExpansion } from './grant-review';
+import { permissionPresentation, rolePresentation } from './permission-presentation';
 import { AccessRecovery } from './recovery';
 
 function identityName(identity: Identity | undefined) {
@@ -75,33 +77,6 @@ function SubjectName({ subject, page }: { subject: Subject; page: AccessSnapshot
       ) : null}
     </>
   );
-}
-function roleName(id: string) {
-  const name = id.split('.').at(-1);
-  if (name === 'owner') return m.access_role_owner();
-  if (name === 'standing') return m.access_role_standing();
-  if (name === 'moderator') return m.access_role_moderator();
-  if (name === 'member') return m.access_role_member();
-  return m.access_role_unavailable();
-}
-function actionName(action: string) {
-  const names: Record<string, () => string> = {
-    'collection:read': m.access_permission_read,
-    'space:read': m.access_permission_read,
-    'realm:read': m.access_permission_read,
-    'collection:update': m.access_permission_edit,
-    'space:manage': m.access_permission_manage,
-    'realm:manage': m.access_permission_manage,
-    'collection:delete': m.access_permission_delete,
-    'realm:ban': m.access_permission_ban,
-    'realm:publish': m.access_permission_publish,
-    'board:create': m.access_permission_boards,
-    'access:grant': m.access_permission_access,
-    'moderation:takedown': m.access_permission_moderate,
-    'realm:join': m.access_permission_join,
-    'realm:participate': m.access_permission_participate,
-  };
-  return names[action]?.() ?? m.access_permission_other();
 }
 function dateLabel(value: string | null, fallback: string) {
   return value
@@ -203,9 +178,38 @@ function GrantForm({
   const [groupRole, setGroupRole] = useState<'owner' | 'member'>('member');
   const [startsAt, setStartsAt] = useState(localDate(grant?.startsAt ?? null));
   const [endsAt, setEndsAt] = useState(localDate(grant?.endsAt ?? null));
+  const [permissionFilter, setPermissionFilter] = useState('');
+  const [review, setReview] = useState<{
+    signature: string;
+    advice: string;
+    change: Omit<Change, 'key'>;
+  } | null>(null);
   const signature = JSON.stringify([kind, role, action, recipient, handle, identity, groupRole, startsAt, endsAt]);
+  const advice = JSON.stringify([page.resource, page.authority, page.roles, page.actions, page.grants, page.identities, page.mutationState, grant]);
   const [original] = useState(signature);
   useAccessDraft(signature, signature !== original, retire);
+  useLayoutEffect(() => setReview(null), [signature, advice]);
+
+  const filter = permissionFilter.trim().toLocaleLowerCase();
+  const roles = page.roles.filter((item) => {
+    const name = rolePresentation(item.id);
+    const expansion = item.actions.map((id) => permissionPresentation(id));
+    return `${name.label} ${name.identifier} ${expansion.map((entry) => `${entry.label} ${entry.identifier}`).join(' ')}`
+      .toLocaleLowerCase()
+      .includes(filter);
+  });
+  const selectedRole = page.roles.find((item) => item.id === role);
+  if (selectedRole && !roles.some((item) => item.id === role)) roles.unshift(selectedRole);
+  const actions = page.actions.filter((item) => {
+    const name = permissionPresentation(item);
+    return `${name.label} ${name.identifier} ${name.effect}`.toLocaleLowerCase().includes(filter);
+  });
+  if (page.actions.includes(action) && !actions.includes(action)) actions.unshift(action);
+  const oldRole = grant?.kind === 'role' && grant.role === role ? grant.actions : null;
+  const roleActions = selectedRole?.actions ?? oldRole ?? [];
+  const selectedActionIsAvailable = page.actions.includes(action);
+  const currentReview = review?.signature === signature && review.advice === advice ? review : null;
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const valid = interval(startsAt, endsAt);
@@ -231,7 +235,7 @@ function GrantForm({
       setError(m.access_form_invalid());
       return;
     }
-    onSubmit({
+    const change: Omit<Change, 'key'> = {
       resourceId: page.resource.id,
       operation: grant ? 'change' : 'create',
       kind,
@@ -240,8 +244,25 @@ function GrantForm({
       actions: kind === 'direct' ? [action] : [],
       valid,
       ...(grant ? { previous: { role: grant.role, actions: grant.actions, valid: grant.valid } } : {}),
-    });
+    };
+    setReview({ signature, advice, change });
   };
+
+  const reviewedSubject = currentReview?.change.subject;
+  const reviewedIdentity =
+    reviewedSubject?.kind === 'account' || reviewedSubject?.kind === 'organization'
+      ? (identity?.id === reviewedSubject.id ? identity : page.identities.find((item) => item.id === reviewedSubject.id))
+      : undefined;
+  const recipientLabel = reviewedSubject ? subjectTitle(reviewedSubject, reviewedIdentity) : '';
+  const recipientKind =
+    reviewedSubject?.kind === 'organization'
+      ? m.access_organization_group()
+      : reviewedSubject?.kind === 'active_accounts'
+        ? m.access_active_accounts()
+        : m.access_account();
+  const recipientId =
+    reviewedSubject?.kind === 'account' || reviewedSubject?.kind === 'organization' ? reviewedSubject.id : null;
+
   return (
     <form
       onSubmit={submit}
@@ -252,160 +273,221 @@ function GrantForm({
       <h2 id="access-form-heading" className="text-lg font-semibold">
         {grant ? m.access_edit_grant() : m.access_add_grant()}
       </h2>
-      {grant ? (
-        <p>
-          <SubjectName subject={grant.subject} page={page} />
-        </p>
+      {currentReview ? (
+        <GrantReview
+          page={page}
+          grant={grant}
+          change={currentReview.change}
+          recipientLabel={recipientLabel}
+          recipientKind={recipientKind}
+          recipientId={recipientId}
+          startsAt={startsAt}
+          endsAt={endsAt}
+          onBack={() => setReview(null)}
+          onConfirm={() => onSubmit(currentReview.change)}
+        />
       ) : (
         <>
-          <Field>
-            <FieldLabel htmlFor="access-recipient">{m.access_recipient()}</FieldLabel>
-            <NativeSelect
-              id="access-recipient"
-              value={recipient}
-              onChange={(event) => changeRecipient(event.target.value)}
-            >
-              <NativeSelectOption value="account">{m.access_account()}</NativeSelectOption>
-              <NativeSelectOption value="organization">{m.access_organization_group()}</NativeSelectOption>
-              <NativeSelectOption value="active_accounts">{m.access_active_accounts()}</NativeSelectOption>
-            </NativeSelect>
-          </Field>
-          {recipient !== 'active_accounts' ? (
+          {grant ? (
+            <p>
+              <SubjectName subject={grant.subject} page={page} />
+            </p>
+          ) : (
             <>
               <Field>
-                <FieldLabel htmlFor="access-handle">{m.access_handle()}</FieldLabel>
-                <div className="flex flex-wrap gap-2">
-                  <Input
-                    id="access-handle"
-                    className="min-w-32 flex-1"
-                    value={handle}
-                    onChange={(event) => changeHandle(event.target.value)}
-                    autoComplete="off"
-                    maxLength={64}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={finding || !handle.trim()}
-                    onClick={() => void lookup()}
-                  >
-                    {m.access_find_account()}
-                  </Button>
-                </div>
-                <FieldDescription aria-live="polite">
-                  {identity ? identityName(identity) : m.access_confirm_identity()}
-                </FieldDescription>
+                <FieldLabel htmlFor="access-recipient">{m.access_recipient()}</FieldLabel>
+                <NativeSelect
+                  id="access-recipient"
+                  value={recipient}
+                  onChange={(event) => changeRecipient(event.target.value)}
+                >
+                  <NativeSelectOption value="account">{m.access_account()}</NativeSelectOption>
+                  <NativeSelectOption value="organization">{m.access_organization_group()}</NativeSelectOption>
+                  <NativeSelectOption value="active_accounts">{m.access_active_accounts()}</NativeSelectOption>
+                </NativeSelect>
               </Field>
-              {recipient === 'organization' ? (
-                <Field>
-                  <FieldLabel htmlFor="access-group-role">{m.access_group_membership()}</FieldLabel>
-                  <NativeSelect
-                    id="access-group-role"
-                    value={groupRole}
-                    onChange={(event) => setGroupRole(event.target.value as 'owner' | 'member')}
-                  >
-                    <NativeSelectOption value="member">{m.access_org_members()}</NativeSelectOption>
-                    <NativeSelectOption value="owner">{m.access_org_owners()}</NativeSelectOption>
-                  </NativeSelect>
-                </Field>
-              ) : null}
+              {recipient !== 'active_accounts' ? (
+                <>
+                  <Field>
+                    <FieldLabel htmlFor="access-handle">{m.access_handle()}</FieldLabel>
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                        id="access-handle"
+                        className="min-w-32 flex-1"
+                        value={handle}
+                        onChange={(event) => changeHandle(event.target.value)}
+                        autoComplete="off"
+                        maxLength={64}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={finding || !handle.trim()}
+                        onClick={() => void lookup()}
+                      >
+                        {m.access_find_account()}
+                      </Button>
+                    </div>
+                    <FieldDescription aria-live="polite">
+                      {identity ? identityName(identity) : m.access_confirm_identity()}
+                    </FieldDescription>
+                  </Field>
+                  {recipient === 'organization' ? (
+                    <Field>
+                      <FieldLabel htmlFor="access-group-role">{m.access_group_membership()}</FieldLabel>
+                      <NativeSelect
+                        id="access-group-role"
+                        value={groupRole}
+                        onChange={(event) => setGroupRole(event.target.value as 'owner' | 'member')}
+                      >
+                        <NativeSelectOption value="member">{m.access_org_members()}</NativeSelectOption>
+                        <NativeSelectOption value="owner">{m.access_org_owners()}</NativeSelectOption>
+                      </NativeSelect>
+                    </Field>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">{m.access_active_accounts_description()}</p>
+              )}
             </>
-          ) : (
-            <p className="text-sm text-muted-foreground">{m.access_active_accounts_description()}</p>
           )}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="access-kind">{m.access_grant_kind()}</FieldLabel>
+              <NativeSelect
+                id="access-kind"
+                value={kind}
+                disabled={grant !== null}
+                onChange={(event) => {
+                  setKind(event.target.value as 'role' | 'direct');
+                  setPermissionFilter('');
+                }}
+              >
+                <NativeSelectOption value="role">{m.access_named_role()}</NativeSelectOption>
+                <NativeSelectOption value="direct">{m.access_direct_action()}</NativeSelectOption>
+              </NativeSelect>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="access-role">{kind === 'role' ? m.access_role() : m.access_action()}</FieldLabel>
+              <Input
+                id="access-permission-filter"
+                type="search"
+                value={permissionFilter}
+                onChange={(event) => setPermissionFilter(event.target.value)}
+                aria-label={m.access_search_permissions()}
+                placeholder={m.access_search_permissions()}
+              />
+              <FieldDescription>{m.access_filter_help()}</FieldDescription>
+              <NativeSelect
+                id="access-role"
+                value={kind === 'role' ? role : action}
+                onChange={(event) => (kind === 'role' ? setRole(event.target.value) : setAction(event.target.value))}
+                required
+              >
+                <NativeSelectOption value="" disabled>
+                  {m.access_choose()}
+                </NativeSelectOption>
+                {kind === 'role'
+                  ? roles.map((item) => {
+                      const presented = rolePresentation(item.id);
+                      return (
+                        <NativeSelectOption key={item.id} value={item.id} disabled={!item.delegable}>
+                          {`${presented.label} · ${presented.identifier}${item.delegable ? '' : ` — ${m.access_selection_unavailable()}`}`}
+                        </NativeSelectOption>
+                      );
+                    })
+                  : actions.map((item) => {
+                      const presented = permissionPresentation(item);
+                      return (
+                        <NativeSelectOption key={item} value={item}>
+                          {`${presented.label} · ${presented.identifier}`}
+                        </NativeSelectOption>
+                      );
+                    })}
+              </NativeSelect>
+              {(kind === 'role' ? roles.length : actions.length) === 0 ? (
+                <p role="status" className="text-sm text-muted-foreground">
+                  {m.access_no_permission_matches()}
+                </p>
+              ) : null}
+              {kind === 'role' ? (
+                <div className="space-y-2">
+                  {roleActions.length ? <PermissionExpansion actions={roleActions} /> : null}
+                  {selectedRole && !selectedRole.delegable ? (
+                    <p className="text-sm text-muted-foreground">{m.access_selection_unavailable()}</p>
+                  ) : null}
+                  {roles.some((item) => item.id !== role) ? (
+                    <details className="max-h-64 overflow-y-auto rounded-lg border p-3">
+                      <summary className="cursor-pointer font-medium">{m.access_review_expansion()}</summary>
+                      <ul className="mt-3 grid gap-4">
+                        {roles
+                          .filter((item) => item.id !== role)
+                          .map((item) => {
+                            const presented = rolePresentation(item.id);
+                            return (
+                              <li key={item.id} className="min-w-0">
+                                <p className="font-medium">{presented.label}</p>
+                                <code className="break-all text-xs text-muted-foreground">{presented.identifier}</code>
+                                {!item.delegable ? (
+                                  <p className="text-sm text-muted-foreground">{m.access_selection_unavailable()}</p>
+                                ) : null}
+                                <PermissionExpansion actions={item.actions} />
+                              </li>
+                            );
+                          })}
+                      </ul>
+                    </details>
+                  ) : null}
+                </div>
+              ) : selectedActionIsAvailable ? (
+                <PermissionExpansion actions={[action]} />
+              ) : null}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="access-start">{m.access_starts()}</FieldLabel>
+              <Input
+                id="access-start"
+                type="datetime-local"
+                step="any"
+                value={startsAt}
+                onChange={(event) => setStartsAt(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="access-end">{m.access_ends()}</FieldLabel>
+              <Input
+                id="access-end"
+                type="datetime-local"
+                step="any"
+                value={endsAt}
+                onChange={(event) => setEndsAt(event.target.value)}
+              />
+            </Field>
+          </div>
+          <p className="text-sm text-muted-foreground">{m.access_interval_help()}</p>
+          {finding ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {m.access_loading()}
+            </p>
+          ) : null}
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={finding}>
+              {m.access_review_title()}
+            </Button>
+            <Button type="button" variant="ghost" onClick={onCancel}>
+              {m.access_cancel()}
+            </Button>
+          </div>
         </>
       )}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field>
-          <FieldLabel htmlFor="access-kind">{m.access_grant_kind()}</FieldLabel>
-          <NativeSelect
-            id="access-kind"
-            value={kind}
-            disabled={grant !== null}
-            onChange={(event) => setKind(event.target.value as 'role' | 'direct')}
-          >
-            <NativeSelectOption value="role">{m.access_named_role()}</NativeSelectOption>
-            <NativeSelectOption value="direct">{m.access_direct_action()}</NativeSelectOption>
-          </NativeSelect>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="access-role">{kind === 'role' ? m.access_role() : m.access_action()}</FieldLabel>
-          <NativeSelect
-            id="access-role"
-            value={kind === 'role' ? role : action}
-            onChange={(event) => (kind === 'role' ? setRole(event.target.value) : setAction(event.target.value))}
-            required
-          >
-            <NativeSelectOption value="" disabled>
-              {m.access_choose()}
-            </NativeSelectOption>
-            {kind === 'role'
-              ? page.roles
-                  .filter((item) => item.delegable)
-                  .map((item) => (
-                    <NativeSelectOption key={item.id} value={item.id}>
-                      {roleName(item.id)}
-                    </NativeSelectOption>
-                  ))
-              : page.actions.map((item) => (
-                  <NativeSelectOption key={item} value={item}>
-                    {actionName(item)}
-                  </NativeSelectOption>
-                ))}
-          </NativeSelect>
-          {kind === 'role' ? (
-            <FieldDescription>
-              {page.roles
-                .find((item) => item.id === role)
-                ?.actions.map(actionName)
-                .join(', ')}
-            </FieldDescription>
-          ) : null}
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="access-start">{m.access_starts()}</FieldLabel>
-          <Input
-            id="access-start"
-            type="datetime-local"
-            step="any"
-            value={startsAt}
-            onChange={(event) => setStartsAt(event.target.value)}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="access-end">{m.access_ends()}</FieldLabel>
-          <Input
-            id="access-end"
-            type="datetime-local"
-            step="any"
-            value={endsAt}
-            onChange={(event) => setEndsAt(event.target.value)}
-          />
-        </Field>
-      </div>
-      <p className="text-sm text-muted-foreground">{m.access_interval_help()}</p>
-      {finding ? (
-        <p role="status" className="text-sm text-muted-foreground">
-          {m.access_loading()}
-        </p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={finding}>
-          {m.access_save()}
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          {m.access_cancel()}
-        </Button>
-      </div>
     </form>
   );
 }
-
 export function ResourceAccessPage({ initial, io }: { initial: AccessState; io: AccessIO }) {
   // A loader's resource and complete acting authority own all controller and form state.
   const scope =
@@ -437,9 +519,11 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
   useLayoutEffect(controller.activate, [controller]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot, controller.snapshot);
   const [form, setForm] = useState<Grant | 'new' | null>(null);
-  const [revoke, setRevoke] = useState<Grant | null>(null);
+  const [revoke, setRevoke] = useState<{ grant: Grant; advice: string } | null>(null);
   const [transfer, setTransfer] = useState<Grant | null>(null);
   const page = state.page.status === 'ready' ? state.page.page : null;
+  const advice = page ? JSON.stringify(page) : '';
+  const removalReview = revoke?.advice === advice ? revoke.grant : null;
   const notice =
     state.phase === 'saved'
       ? m.access_saved()
@@ -540,6 +624,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                     onClick={() =>
                       move(() => {
                         setForm(null);
+                        setRevoke(null);
                         setTransfer(null);
                         void controller.reload();
                       })
@@ -625,12 +710,10 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                         className="p-3 sm:p-4 [&_[data-content-item-slot=title]]:line-clamp-none [&_[data-content-item-slot=title]]:[overflow-wrap:anywhere]"
                         title={subjectTitle(subject, identity)}
                         headingLevel={3}
-                        metadata={grant.kind === 'role' ? roleName(grant.role!) : m.access_direct_action()}
+                        metadata={grant.kind === 'role' ? rolePresentation(grant.role!).label : m.access_direct_action()}
                         preview={
                           <>
-                            <p className="break-words text-muted-foreground">
-                              {grant.actions.map(actionName).join(', ') || m.access_role_unavailable()}
-                            </p>
+                            <GrantContents kind={grant.kind} role={grant.role} actions={grant.actions} />
                             <p className="text-muted-foreground">
                               {m.access_valid_interval({
                                 start: dateLabel(grant.startsAt, m.access_no_start()),
@@ -649,7 +732,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                           </>
                         }
                         state={
-                          identity?.state === 'deleted' || grant.state === 'scheduled' ? (
+                          identity?.state === 'deleted' || ['active', 'scheduled', 'expired'].includes(String(grant.state)) ? (
                             <>
                               {identity?.state === 'deleted' ? (
                                 <Tombstone
@@ -659,6 +742,8 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                                 />
                               ) : null}
                               {grant.state === 'scheduled' ? <p>{m.access_scheduled()}</p> : null}
+                              {grant.state === 'active' ? <p>{m.access_active()}</p> : null}
+                              {String(grant.state) === 'expired' ? <p>{m.access_expired()}</p> : null}
                             </>
                           ) : null
                         }
@@ -706,7 +791,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                                     move(() => {
                                       setForm(null);
                                       setTransfer(null);
-                                      setRevoke(grant);
+                                      setRevoke({ grant, advice });
                                     }),
                                 },
                               ]}
@@ -726,6 +811,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                   onClick={() =>
                     move(() => {
                       setForm(null);
+                      setRevoke(null);
                       setTransfer(null);
                       void controller.reload(page.next!);
                     })
@@ -737,7 +823,7 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
             </>
           )}
           <AlertDialog
-            open={revoke !== null}
+            open={removalReview !== null}
             onOpenChange={(open) => {
               if (!open) setRevoke(null);
             }}
@@ -747,12 +833,34 @@ function ResourceAccessEditor({ initial, io }: { initial: AccessState; io: Acces
                 <AlertDialogTitle>{m.access_revoke_title()}</AlertDialogTitle>
                 <AlertDialogDescription>{m.access_revoke_description()}</AlertDialogDescription>
               </AlertDialogHeader>
+              {removalReview && page ? (
+                <div className="space-y-3 [overflow-wrap:anywhere]">
+                  <p>
+                    <SubjectName subject={removalReview.subject} page={page} />
+                  </p>
+                  <GrantContents
+                    kind={removalReview.kind}
+                    role={removalReview.role}
+                    actions={removalReview.actions}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {m.access_valid_interval({
+                      start: dateLabel(removalReview.startsAt, m.access_no_start()),
+                      end: dateLabel(removalReview.endsAt, m.access_no_end()),
+                    })}
+                  </p>
+                  <details className="text-sm">
+                    <summary>{m.access_identity_valid()}</summary>
+                    <code className="break-all">{removalReview.valid}</code>
+                  </details>
+                </div>
+              ) : null}
               <AlertDialogFooter>
                 <AlertDialogCancel>{m.access_cancel()}</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => {
-                    if (!revoke || !page) return;
-                    const { kind, subject, role, actions, valid } = revoke;
+                    if (!removalReview || !page) return;
+                    const { kind, subject, role, actions, valid } = removalReview;
                     if (subject.kind === 'realm') return;
                     setRevoke(null);
                     setForm(null);

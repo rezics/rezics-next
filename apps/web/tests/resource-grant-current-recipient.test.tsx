@@ -86,7 +86,9 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       };
       await act(async () => pending.resolve(current));
       if (boundary === 'handle') await act(async () => old.resolve(snapshot.identities[0]!));
-      await click(m.access_save());
+      await click(m.access_review_title());
+      expect(save).not.toHaveBeenCalled();
+      await click(m.access_review_confirm());
       expect(save.mock.calls[0]?.[0]).toMatchObject({
         resourceId: page.resource.id,
         actions: ['collection:update'],
@@ -96,7 +98,9 @@ for (const boundary of ['handle', 'kind', 'cancel', 'resource', 'actor'] as cons
       await act(async () =>
         user.click(within(window.document.body as unknown as HTMLElement).getByText(m.access_edit_grant())),
       );
-      await click(m.access_save());
+      await click(m.access_review_title());
+      expect(save).toHaveBeenCalledTimes(1);
+      await click(m.access_review_confirm());
       expect(save.mock.calls[1]?.[0]).toMatchObject({
         subject: snapshot.grants[0]!.subject,
         previous: { valid: snapshot.grants[0]!.valid },

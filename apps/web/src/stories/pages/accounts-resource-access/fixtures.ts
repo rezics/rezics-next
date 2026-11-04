@@ -51,3 +51,24 @@ export const snapshot: AccessSnapshot = {
   next: null,
   mutationState: 'ready',
 };
+
+export const permissionSnapshot: AccessSnapshot = {
+  ...snapshot,
+  resource: { ...snapshot.resource, type: 'semantic.context' },
+  roles: [
+    {
+      id: 'semantic.context.owner',
+      actions: ['context:accept', 'context:adopt', 'access:grant', 'context:delete', 'context:restore'],
+      delegable: true,
+    },
+  ],
+  actions: ['context:accept', 'context:adopt', 'access:grant', 'context:delete', 'context:restore'],
+  grants: [
+    {
+      ...snapshot.grants[0]!,
+      kind: 'direct',
+      actions: ['context:accept'],
+      role: null,
+    },
+  ],
+};
