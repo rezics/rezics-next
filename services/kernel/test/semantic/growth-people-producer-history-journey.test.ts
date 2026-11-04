@@ -8,6 +8,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 import { verticalManifests, verticalProfile } from '../support/manifests.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const BASE_ROUTE = 619 * 16;
@@ -57,6 +58,7 @@ beforeAll(async () => {
     writeRate: real.writeRate,
     tokens,
     routeKey,
+    receiptKeys: testReceiptKeys(),
   });
   personId = await create('schema:Person', 'Fixed biography subject');
   studioId = await create('schema:Organization', 'Fixed producer subject');

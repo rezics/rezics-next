@@ -11,6 +11,7 @@ import { setupPresentation } from '../../src/presentation/setup.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
 
 const url = process.env.DATABASE_URL;
@@ -37,6 +38,7 @@ const kernel = createKernel({
   writeRate: real.writeRate,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(81)]]) },
   routeKey: new Uint8Array(32).fill(82),
+  receiptKeys: testReceiptKeys(),
 });
 const projection = linkProjection(pool);
 const relays = startRelays(pool, [projection], { intervalMs: 20 });
