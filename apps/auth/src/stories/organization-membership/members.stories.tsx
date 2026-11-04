@@ -49,7 +49,13 @@ function StoryPage({ page }: { page: typeof ownerPage | typeof memberPage }) {
     <AuthShell>
       <main className="mx-auto w-full max-w-2xl space-y-5 p-6">
         <h1 className="text-2xl font-semibold">Organization members</h1>
-        <OrganizationMembershipRoster page={page} busy={false} pending={false} onSelect={() => {}} onReload={() => {}} />
+        <OrganizationMembershipRoster
+          page={page}
+          busy={false}
+          pending={false}
+          onSelect={() => {}}
+          onReload={() => {}}
+        />
       </main>
     </AuthShell>
   );

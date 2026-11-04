@@ -128,7 +128,12 @@ afterAll(async () => {
 
 test('an unavailable inventory is explicit, reloadable and never presented as empty', async () => {
   await mount();
-  list.mockResolvedValueOnce({ kind: 'ready', organizationId, viewer: { accountId, role: 'owner', leave: 'unavailable' }, members: { state: 'unavailable' } });
+  list.mockResolvedValueOnce({
+    kind: 'ready',
+    organizationId,
+    viewer: { accountId, role: 'owner', leave: 'unavailable' },
+    members: { state: 'unavailable' },
+  });
   await click(m.auth_inventory_reload());
   expect(host.textContent).toContain(m.auth_members_inventory_unavailable());
   expect(host.textContent).not.toContain(m.auth_members_empty_page());
