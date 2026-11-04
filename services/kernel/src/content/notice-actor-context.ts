@@ -1,9 +1,11 @@
 import type { Pool } from 'pg';
+import type { Static } from 'elysia';
 import { readPublicIdentityObservations, type PublicIdentityObservation } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
 import { routeOf } from '../route/route.ts';
 import { readAvatarSummaries, type AvatarSummary } from './avatar.ts';
+import type { AvatarSummarySchema } from './schemas.ts';
 
 export type NoticeActor =
   | Readonly<{
@@ -11,7 +13,7 @@ export type NoticeActor =
       accountId: string;
       displayName: string;
       handle: string | null;
-      avatar: AvatarSummary | null;
+      avatar: Static<typeof AvatarSummarySchema>;
       /** Retained transport field; stored profile URLs are never admitted. */
       avatarUrl: null;
       automated: boolean;
@@ -71,7 +73,8 @@ export async function readNoticeActors(
       result.set(id, {
         state: 'available', accountId: id,
         displayName: current.displayName?.trim() || current.handle || 'Member',
-        handle: current.handle, automated: current.automated, avatar, avatarUrl: null,
+        handle: current.handle, automated: current.automated,
+        avatar: avatar ? { ...avatar, variants: [...avatar.variants] } : null, avatarUrl: null,
       });
     }
     return result;
