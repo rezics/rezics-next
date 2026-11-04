@@ -1672,6 +1672,7 @@
   "own_drafts_return": "返回草稿列表",
   "own_drafts_opening_selection": "正在打开草稿…",
   "own_drafts_selection_unavailable": "此草稿不可用。",
+  "own_drafts_restart_required": "此私密列表已不是最新状态。请重新打开列表以再次读取草稿。",
   "own_drafts_stale_selection": "读取页面后，此草稿已更改。请重新开始列表并选择当前版本。",
   "own_drafts_read_failed": "无法读取所选草稿，正文仍保持私密。",
   "own_drafts_retry_selection": "重试所选草稿",

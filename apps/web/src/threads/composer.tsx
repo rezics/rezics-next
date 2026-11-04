@@ -1332,6 +1332,7 @@ type InlinePostEditorProps = {
     mediaIds: string[];
   }) => Promise<{ ok: true; post: RevisedPost } | EditFailure>;
   onCancel: () => void;
+  onRevisionReplacement?: () => void;
   onSuccess: (post: RevisedPost) => void;
 };
 
@@ -1355,6 +1356,7 @@ function InlinePostEditorContent({
   onSubmit,
   onPublish,
   onCancel,
+  onRevisionReplacement,
   onSuccess,
 }: InlinePostEditorProps) {
   const lifetime = useComposerLifetime();
@@ -1670,6 +1672,10 @@ function InlinePostEditorContent({
       current.body === null
     )
       return;
+    if (onRevisionReplacement) {
+      onRevisionReplacement();
+      return;
+    }
     // The delivered revision owns its media; no discarded upload may rewrite it later.
     for (const source of new Set([...reuploading.current.keys(), ...mediaUpload.copySources()]))
       mediaUpload.removeCopy(source);

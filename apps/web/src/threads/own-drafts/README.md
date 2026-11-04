@@ -9,8 +9,8 @@ remount the private boundary and synchronously abort outstanding reads. A concea
 its metadata and action advice; returning to the inventory requires an explicit retry or restart. Keyboard selection
 focuses the inspection heading and returning restores focus to the corresponding inventory control.
 
-Decision: resume inspection through a typed `OwnDraftReader` seam and bind it only after Content publishes its
-generated own-draft client methods; browser-local writing is not read or replaced by this consumer.
+The typed `OwnDraftReader` binds the installed generated account drafts list and exact selected-read methods
+through the existing authenticated server transport, with abort signals and private/no-store responses.
 
 Decision: Keep browser and server writing as independent sources after every command acknowledgement. Require a
 named body choice before opening the editor, retain the browser copy, and report a later current read separately.
@@ -19,11 +19,14 @@ Decision: Keep the selected revision in the private erase retry intent and use t
 whose native contract accepts an idempotency key but no revision precondition.
 
 The signed-in localized route, account navigation, composer choice, save/publish/erase controls, and current-post
-readback are connected through typed Web actions. The checked-in `@rezics/client` declaration still lacks the
-generated `own_drafts.list` and `own_drafts.resume` methods, so `ownDraftNativeReader` returns unavailable until
-those typed methods are delivered. No advice path becomes a browser fetch destination. Binding that generated
-reader and completing the deferred controller acceptance are in
-`.temp/continuation/own-drafts-native-reader.md`.
+readback are connected through typed Web actions. The list always requests at most 20 metadata rows and the exact
+selected read supplies the strong revision ETag. Account, post, thread, author, visibility and revision are validated
+before selected bytes can enter the composer. Invalid or stale cursors require explicit restart; operational failures
+retry the same cursor or selection. Explicit conflict replacement retires the selected context and its advice before
+requesting a new inventory. Browser-local writing remains independent after replacement or acknowledgement.
+
+Native authorization, mounted producer recordings and physical 256/1024/4096 growth acceptance remain Content-owned
+and deferred until executed; generated declarations and Web fixtures do not establish them.
 
 ## Cost
 

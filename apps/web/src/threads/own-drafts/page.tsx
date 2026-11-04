@@ -25,7 +25,7 @@ import {
 
 type PageState =
   | { requestKey: string; state: 'loading' }
-  | { requestKey: string; state: 'unavailable' | 'denied' }
+  | { requestKey: string; state: 'unavailable' | 'denied' | 'concealed' | 'stale' }
   | { requestKey: string; state: 'ready' | 'preparing'; page: OwnDraftPageData; index: OwnDraftIndex };
 
 type SelectionState =
@@ -184,6 +184,7 @@ function BoundOwnDraftsPage({
   const controlId = useId();
   const selectionHeading = useRef<HTMLHeadingElement>(null);
   const inventoryHeading = useRef<HTMLHeadingElement>(null);
+  const recoveryFocus = useRef<string | null>(null);
   const returnFocus = useRef<{ key: string; id: string } | null>(null);
   const [cursor, setCursor] = useState<{ key: string; value: string | null }>({ key: identityKey, value: null });
   const currentCursor = cursor.key === identityKey ? cursor.value : null;
@@ -262,7 +263,7 @@ function BoundOwnDraftsPage({
       .then((result) => {
         if (controller.signal.aborted || !current() || identityRef.current !== identityKey) return;
         if (typeof result === 'string') {
-          setPageState({ requestKey, state: result === 'denied' ? 'denied' : 'unavailable' });
+          setPageState({ requestKey, state: result });
           return;
         }
         if (
@@ -296,6 +297,8 @@ function BoundOwnDraftsPage({
   }, [active, currentCursor, identity.accountId, identity.authnEpoch, identityKey, reader, requestKey, retry]);
 
   const readySelection = selection?.state === 'ready' ? selection : null;
+  const editorAdmission = useRef({ selection: readySelection?.selection, source: editingSource });
+  editorAdmission.current = { selection: readySelection?.selection, source: editingSource };
   const localWritingKey = readySelection
     ? JSON.stringify([identityKey, readySelection.entry.id, readySelection.selection.revision])
     : null;
@@ -337,6 +340,19 @@ function BoundOwnDraftsPage({
       (document.getElementById(pending.id) ?? inventoryHeading.current)?.focus();
     }
   }, [identityKey, selection]);
+
+  useLayoutEffect(() => {
+    if (eraseState?.state === 'review') document.getElementById(`${controlId}-erase-cancel`)?.focus();
+    else if (recoveryFocus.current) {
+      document.getElementById(recoveryFocus.current)?.focus();
+      recoveryFocus.current = null;
+    }
+  }, [editingSource, eraseState, controlId]);
+
+  const cancelErase = () => {
+    recoveryFocus.current = `${controlId}-erase`;
+    setEraseState(null);
+  };
 
   const selectedId = selection && 'entry' in selection ? selection.entry.id : null;
   useLayoutEffect(() => {
@@ -407,6 +423,7 @@ function BoundOwnDraftsPage({
     setLocalWritingState(null);
     setEditingSource(null);
     setEraseState(null);
+    setCommandFeedback(null);
   };
 
   const retrySelection = () => {
@@ -447,6 +464,13 @@ function BoundOwnDraftsPage({
   };
 
   const retryPage = () => setRetry((value) => value + 1);
+
+  const retireRevision = () => {
+    closeSelection();
+    setPageState({ requestKey, state: 'unavailable' });
+    setSelectionState({ identityKey, state: 'stale' });
+    setCommandFeedback(null);
+  };
 
   const startEditor = (source: 'server' | 'browser') => {
     if (!readySelection || !commands || eraseState?.state === 'uncertain' || eraseState?.state === 'sending') return;
@@ -641,8 +665,16 @@ function BoundOwnDraftsPage({
                 browserWriting={localWriting?.state === 'ready' ? localWriting.writing : null}
                 commands={commands}
                 authority={selection.selection}
-                current={current}
-                onCancel={() => setEditingSource(null)}
+                current={() =>
+                  current() &&
+                  editorAdmission.current.selection === selection.selection &&
+                  editorAdmission.current.source === editingSource
+                }
+                onRevisionReplacement={retireRevision}
+                onCancel={() => {
+                  recoveryFocus.current = `${controlId}-${editingSource}-source`;
+                  setEditingSource(null);
+                }}
                 onAcknowledged={acknowledged}
               />
             ) : (
@@ -689,6 +721,7 @@ function BoundOwnDraftsPage({
                       type="button"
                       className={control}
                       disabled={eraseState?.state === 'uncertain' || eraseState?.state === 'sending'}
+                      id={`${controlId}-server-source`}
                       onClick={() => startEditor('server')}
                     >
                       {m.own_drafts_use_server({}, { locale })}
@@ -724,6 +757,7 @@ function BoundOwnDraftsPage({
                               type="button"
                               className={control}
                               disabled={eraseState?.state === 'uncertain' || eraseState?.state === 'sending'}
+                              id={`${controlId}-browser-source`}
                               onClick={() => startEditor('browser')}
                             >
                               {m.own_drafts_use_browser({}, { locale })}
@@ -740,6 +774,21 @@ function BoundOwnDraftsPage({
               eraseState?.state === 'review' ? (
                 <section
                   role="alertdialog"
+                  aria-modal="true"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      cancelErase();
+                    } else if (event.key === 'Tab') {
+                      const buttons = event.currentTarget.querySelectorAll('button');
+                      const target = event.shiftKey ? buttons[buttons.length - 1] : buttons[0];
+                      const boundary = event.shiftKey ? buttons[0] : buttons[buttons.length - 1];
+                      if (document.activeElement === boundary) {
+                        event.preventDefault();
+                        target?.focus();
+                      }
+                    }
+                  }}
                   aria-labelledby={`${controlId}-erase-title`}
                   className="space-y-3 rounded-lg border border-destructive/50 p-4"
                 >
@@ -748,7 +797,13 @@ function BoundOwnDraftsPage({
                   </h2>
                   <p>{m.own_drafts_erase_description({}, { locale })}</p>
                   <div className="flex flex-wrap gap-2">
-                    <Button type="button" variant="outline" className={control} onClick={() => setEraseState(null)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className={control}
+                      id={`${controlId}-erase-cancel`}
+                      onClick={cancelErase}
+                    >
                       {m.thread_delete_cancel({}, { locale })}
                     </Button>
                     <Button type="button" className={control} onClick={submitErase}>
@@ -784,6 +839,7 @@ function BoundOwnDraftsPage({
                   variant="outline"
                   className={control}
                   disabled={!!editingSource}
+                  id={`${controlId}-erase`}
                   onClick={beginEraseReview}
                 >
                   {m.own_drafts_erase({}, { locale })}
@@ -805,6 +861,15 @@ function BoundOwnDraftsPage({
         <OwnDraftCommandFeedback feedback={commandFeedback} locale={locale} onReadback={checkCurrent} />
       ) : null}
       {!page || page.state === 'loading' ? <p role="status">{m.own_drafts_loading({}, { locale })}</p> : null}
+      {page?.state === 'concealed' ? <p role="status">{m.own_drafts_selection_unavailable({}, { locale })}</p> : null}
+      {page?.state === 'stale' ? (
+        <div role="alert" className="space-y-2">
+          <p>{m.own_drafts_restart_required({}, { locale })}</p>
+          <Button type="button" className={control} onClick={restart}>
+            {m.own_drafts_restart({}, { locale })}
+          </Button>
+        </div>
+      ) : null}
       {page?.state === 'denied' ? <p role="status">{m.own_drafts_denied({}, { locale })}</p> : null}
       {page?.state === 'unavailable' ? (
         <div className="space-y-2" role="alert">

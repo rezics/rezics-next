@@ -1,3 +1,4 @@
+import type { KernelClient } from '@rezics/client';
 import type { DocumentSnapshot } from '@rezics/document';
 import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from '../actions';
 import type { locales } from '../../paraglide/runtime.js';
@@ -5,38 +6,13 @@ import type { SavedWriting } from '../local-writing-draft';
 
 export type OwnDraftLocale = (typeof locales)[number];
 
-export type OwnDraftActionPaths = Readonly<{
-  resume: string;
-  edit: string | null;
-  publish: string | null;
-  erase: string | null;
-}>;
-
-/** The installed native wire page. Bodies are only present on the separate selected read. */
-export type OwnDraftEntry = Readonly<{
-  id: string;
-  threadId: string;
-  firstPostId: string;
-  revisionId: string;
-  authorId: string;
-  kind: 'discussion' | 'review';
-  documentKind: 'opening' | 'reply';
-  title: string | null;
-  savedAt: string;
-  licence: string;
-  language: string | null;
-  subjectIds: readonly string[];
-  mediaIds: readonly string[];
-  board: Readonly<{ id: string; title: string | null; realmId: string | null }>;
-  actions: OwnDraftActionPaths;
-}>;
-
-export type OwnDraftPageData = Readonly<{
-  state: 'ready' | 'preparing';
-  viewer: Readonly<{ accountId: string; authnEpoch: number }>;
-  drafts: readonly OwnDraftEntry[];
-  next: string | null;
-}>;
+type DraftsResource = ReturnType<KernelClient['accounts']>['drafts'];
+export type OwnDraftNativePage = NonNullable<Awaited<ReturnType<DraftsResource['get']>>['data']>;
+export type OwnDraftNativePost = NonNullable<Awaited<ReturnType<ReturnType<DraftsResource>['get']>>['data']>['post'];
+export type OwnDraftEntry = OwnDraftNativePage['drafts'][number];
+export type OwnDraftActionPaths = OwnDraftEntry['actions'];
+/** Keep the generated wire shape, allowing immutable fixtures and the retained in-memory page. */
+export type OwnDraftPageData = Readonly<Omit<OwnDraftNativePage, 'drafts'> & { drafts: readonly OwnDraftEntry[] }>;
 
 export type OwnDraftSelection = Readonly<{
   post: Readonly<

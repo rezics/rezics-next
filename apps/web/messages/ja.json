@@ -1672,6 +1672,7 @@
   "own_drafts_return": "下書き一覧に戻る",
   "own_drafts_opening_selection": "下書きを開いています…",
   "own_drafts_selection_unavailable": "この下書きは利用できません。",
+  "own_drafts_restart_required": "この非公開の一覧は最新ではありません。下書きを再度読むには一覧を最初から開いてください。",
   "own_drafts_stale_selection": "ページの読み込み後に下書きが変更されました。一覧を再開して現在の版を選択してください。",
   "own_drafts_read_failed": "選択した下書きを読み込めませんでした。本文は非公開のままです。",
   "own_drafts_retry_selection": "選択した下書きを再試行",

@@ -1672,6 +1672,7 @@
   "own_drafts_return": "Volver a los borradores",
   "own_drafts_opening_selection": "Abriendo borrador…",
   "own_drafts_selection_unavailable": "Este borrador no está disponible.",
+  "own_drafts_restart_required": "Esta lista privada ya no está actualizada. Reiníciala para volver a leer los borradores.",
   "own_drafts_stale_selection": "Este borrador cambió después de leer la página. Reinicia la lista para seleccionar su versión actual.",
   "own_drafts_read_failed": "No se pudo leer el borrador seleccionado. Su contenido sigue siendo privado.",
   "own_drafts_retry_selection": "Reintentar borrador seleccionado",

@@ -7,6 +7,8 @@ import { isPlatformClosedError } from '../../kernel/platform-closed';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
 import type { CurrentPost, EditFailure, RevisedPost, WriteFailure } from '../actions';
+import { nativeOwnDraftRequests } from './native-requests';
+import type { OwnDraftPageRequest, OwnDraftSelectionRequest } from './model';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -58,6 +60,35 @@ async function authorization(): Promise<string | null> {
   await prepareSession(request, env as Partial<SessionEnv>);
   return viewerCredential(request) ?? null;
 }
+
+function pageInput(value: OwnDraftPageRequest): OwnDraftPageRequest {
+  const accountId = requiredId(value.accountId);
+  if (value.cursor !== undefined && (typeof value.cursor !== 'string' || !value.cursor || value.cursor.length > 32768))
+    throw new Error('Invalid own-draft cursor');
+  return { accountId, ...(value.cursor === undefined ? {} : { cursor: value.cursor }) };
+}
+
+export const listOwnDraftPage = createServerFn({ method: 'GET' })
+  .validator(pageInput)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const credential = await authorization();
+    if (!credential) return 'denied' as const;
+    return nativeOwnDraftRequests(kernelClient(undefined, credential)).list(data, getRequest().signal);
+  });
+
+export const resumeOwnDraftPost = createServerFn({ method: 'GET' })
+  .validator((value: OwnDraftSelectionRequest) => ({
+    accountId: requiredId(value.accountId),
+    id: requiredId(value.id),
+    threadId: requiredId(value.threadId),
+  }))
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const credential = await authorization();
+    if (!credential) return 'denied' as const;
+    return nativeOwnDraftRequests(kernelClient(undefined, credential)).resume(data, getRequest().signal);
+  });
 
 export const publishOwnDraft = createServerFn({ method: 'POST' })
   .validator(publishInput)
@@ -120,7 +151,7 @@ export const readOwnDraftPost = createServerFn({ method: 'GET' })
         return 'unavailable' as const;
       }
       const post = result.data.post;
-      if (post.availability !== 'available') return 'concealed' as const;
+      if (post.id !== data.postId || post.availability !== 'available') return 'concealed' as const;
       const revision = new Headers(result.headers).get('etag')?.replace(/^"|"$/g, '') ?? post.revisionId;
       return {
         state: 'available' as const,

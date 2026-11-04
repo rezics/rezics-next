@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { m } from '../../paraglide/messages.js';
 import type { DocumentSnapshot } from '@rezics/document';
 import { InlinePostEditor } from '../composer';
@@ -22,6 +22,7 @@ export function OwnDraftEditor({
   current,
   onCancel,
   onAcknowledged,
+  onRevisionReplacement,
 }: {
   identity: OwnDraftIdentity;
   entry: OwnDraftEntry;
@@ -33,11 +34,12 @@ export function OwnDraftEditor({
   current: () => boolean;
   onCancel: () => void;
   onAcknowledged: (action: 'save' | 'publish') => void;
+  onRevisionReplacement: () => void;
 }) {
   const key = useRef(crypto.randomUUID());
   const controller = useRef<AbortController | null>(null);
   const lastAction = useRef<'save' | 'publish'>('save');
-  useEffect(() => () => controller.current?.abort(), []);
+  useLayoutEffect(() => () => controller.current?.abort(), []);
   const body = source === 'browser' ? browserWriting?.payload.body : selection.post.body;
   if (!body) return null;
   const mediaIds = source === 'server' ? entry.mediaIds : [];
@@ -54,7 +56,8 @@ export function OwnDraftEditor({
       idempotencyKey: string;
       mediaIds: string[];
     }) => {
-      if (!current()) return { ok: false as const, reason: 'unavailable' as const };
+      if (!current() || revisionId !== selection.revision)
+        return { ok: false as const, reason: 'unavailable' as const };
       if (!admittedOwnDraftAction(entry, identity.accountId, writeAction === 'save' ? 'edit' : 'publish'))
         return { ok: false as const, reason: 'forbidden' as const };
       const request = new AbortController();
@@ -62,7 +65,7 @@ export function OwnDraftEditor({
       controller.current = request;
       lastAction.current = writeAction;
       try {
-        return await commands.write(
+        const result = await commands.write(
           {
             action: writeAction,
             postId: entry.id,
@@ -74,6 +77,18 @@ export function OwnDraftEditor({
           },
           request.signal,
         );
+        if (request.signal.aborted || !current()) return { ok: false as const, reason: 'unavailable' as const };
+        if (!result.ok && result.reason === 'stale' && result.currentPost) {
+          const post = result.currentPost;
+          if (
+            post.id !== entry.id ||
+            post.threadId !== entry.threadId ||
+            post.authorId !== identity.accountId ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(post.revisionId)
+          )
+            return { ok: false as const, reason: 'stale' as const };
+        }
+        return result;
       } catch {
         return { ok: false as const, reason: 'unavailable' as const };
       }
@@ -100,6 +115,7 @@ export function OwnDraftEditor({
         containerId={entry.threadId}
         allowPublish={!!admittedOwnDraftAction(entry, identity.accountId, 'publish')}
         onCancel={onCancel}
+        onRevisionReplacement={onRevisionReplacement}
         onSubmit={submit('save')}
         onPublish={submit('publish')}
         onSuccess={() => {

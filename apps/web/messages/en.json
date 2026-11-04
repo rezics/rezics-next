@@ -1698,6 +1698,7 @@
   "own_drafts_return": "Return to drafts",
   "own_drafts_opening_selection": "Opening this draft…",
   "own_drafts_selection_unavailable": "This draft is unavailable.",
+  "own_drafts_restart_required": "This private inventory is no longer current. Restart it to read drafts again.",
   "own_drafts_stale_selection": "This draft changed after the page was read. Restart the inventory to select its current revision.",
   "own_drafts_read_failed": "The selected draft could not be read. Its body remains private.",
   "own_drafts_retry_selection": "Retry selected draft",

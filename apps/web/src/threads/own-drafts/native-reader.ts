@@ -1,14 +1,8 @@
 import type { OwnDraftReader } from './model';
+import { listOwnDraftPage, resumeOwnDraftPost } from './actions';
 
-/**
- * The installed @rezics/client route type does not yet expose own_drafts.list or own_drafts.resume.
- * Keep the reader seam typed until those generated methods are published; never turn advice into a fetch URL.
- */
+/** Private server functions use the authenticated generated client; no browser query cache is involved. */
 export const ownDraftNativeReader: OwnDraftReader = Object.freeze({
-  async list(): Promise<Awaited<ReturnType<OwnDraftReader['list']>>> {
-    return 'unavailable';
-  },
-  async resume(): Promise<Awaited<ReturnType<OwnDraftReader['resume']>>> {
-    return 'unavailable';
-  },
+  list: (data, signal) => listOwnDraftPage({ data, signal }),
+  resume: (data, signal) => resumeOwnDraftPost({ data, signal }),
 });

@@ -1672,6 +1672,7 @@
   "own_drafts_return": "Retour aux brouillons",
   "own_drafts_opening_selection": "Ouverture du brouillon…",
   "own_drafts_selection_unavailable": "Ce brouillon est indisponible.",
+  "own_drafts_restart_required": "Cette liste privée n’est plus à jour. Recommencez pour consulter à nouveau les brouillons.",
   "own_drafts_stale_selection": "Ce brouillon a changé depuis la lecture de la page. Relancez l’inventaire pour choisir sa version actuelle.",
   "own_drafts_read_failed": "Le brouillon sélectionné n’a pas pu être lu. Son contenu reste privé.",
   "own_drafts_retry_selection": "Réessayer le brouillon sélectionné",

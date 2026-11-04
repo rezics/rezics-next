@@ -1672,6 +1672,7 @@
   "own_drafts_return": "Zurück zu den Entwürfen",
   "own_drafts_opening_selection": "Entwurf wird geöffnet…",
   "own_drafts_selection_unavailable": "Dieser Entwurf ist nicht verfügbar.",
+  "own_drafts_restart_required": "Diese private Übersicht ist nicht mehr aktuell. Starten Sie sie neu, um die Entwürfe erneut zu lesen.",
   "own_drafts_stale_selection": "Dieser Entwurf wurde seit dem Laden der Seite geändert. Starte die Übersicht neu, um die aktuelle Fassung auszuwählen.",
   "own_drafts_read_failed": "Der ausgewählte Entwurf konnte nicht gelesen werden. Sein Inhalt bleibt privat.",
   "own_drafts_retry_selection": "Ausgewählten Entwurf erneut laden",

@@ -135,13 +135,21 @@ function commandsFor(scenario: StoryArgs['scenario']): OwnDraftCommands {
             threadId,
             revisionId: '0192f3a0-6c1e-7b2a-9d4e-000000000008',
             securityRevision: 'story-security-revision',
+            route: 0,
+            authorId: accountId,
+            parentId: null,
+            subjectIds: [subjectId],
+            boardId,
+            visibility: 'draft',
+            sha256: 'story-digest',
+            voteCitation: null,
             body: fromPlainText('Current native head after another edit', 'blocks'),
             mediaIds: [],
             availability: 'available',
             licence: 'LicenseRef-rezics-terms',
             createdAt: '2026-10-28T09:42:00.000Z',
             revisedAt: '2026-10-28T10:42:00.000Z',
-          } as unknown as CurrentPost,
+          } satisfies CurrentPost,
         };
       return { ok: false, reason: 'unavailable' };
     },
@@ -197,7 +205,8 @@ export const LongTraditionalChinese: Story = { args: { locale: 'zh-Hant', scenar
 const selectDraft: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
   const view = within(canvasElement);
   const inspect = await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale: args.locale }) });
-  await userEvent.click(inspect[0]!);
+  inspect[0]!.focus();
+  await userEvent.keyboard('{Enter}');
   const body = await view.findByRole('article');
   await expect(body).toHaveTextContent('The exact selected draft body');
   await expect(view.getByRole('heading', { level: 1 })).toHaveFocus();
@@ -206,7 +215,7 @@ const selectDraft: NonNullable<Story['play']> = async ({ canvasElement, args }) 
 export const Selected: Story = { play: selectDraft };
 const desktop = [
   (Story: ComponentType) => (
-    <div className="min-w-[1024px] bg-background text-foreground">
+    <div className="w-[1280px] bg-background text-foreground">
       <Story />
     </div>
   ),
@@ -232,7 +241,7 @@ export const PreparingDesktopDark: Story = {
   args: { scenario: 'preparing' },
   decorators: [
     (Story) => (
-      <div className="dark min-w-[1024px] bg-background text-foreground">
+      <div className="dark w-[1280px] bg-background text-foreground">
         <Story />
       </div>
     ),
@@ -286,4 +295,19 @@ export const EraseReviewPhoneDark: Story = {
       m.own_drafts_erase_review({}, { locale: args.locale }),
     );
   },
+};
+
+const desktopDark = [
+  (Story: ComponentType) => (
+    <div className="dark w-[1280px] bg-background text-foreground">
+      <Story />
+    </div>
+  ),
+];
+export const ReadyDesktopDark: Story = { decorators: desktopDark };
+export const SelectedDesktopDark: Story = { play: selectDraft, decorators: desktopDark };
+export const DeniedDesktopLight: Story = { args: { scenario: 'denied' }, decorators: desktop };
+export const LongTraditionalChineseDesktopDark: Story = {
+  args: { locale: 'zh-Hant', scenario: 'long' },
+  decorators: desktopDark,
 };
