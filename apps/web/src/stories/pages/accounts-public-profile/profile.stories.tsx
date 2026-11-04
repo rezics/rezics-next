@@ -58,14 +58,19 @@ function Example({
       <AppShell>
         <PublicProfilePage
           page={page}
-          {...(readingState ? { reading: {
-            state: readingState,
-            response: readingState,
-            reader: readingState === 'ready'
-              ? { spoilerLevel: preferences.spoilerLevel, suitability: preferences.suitability }
-              : defaultReader,
-            ...(readingState !== 'conservative' ? { retry: () => {} } : {}),
-          } as ProfileReading } : {})}
+          {...(readingState
+            ? {
+                reading: {
+                  state: readingState,
+                  response: readingState,
+                  reader:
+                    readingState === 'ready'
+                      ? { spoilerLevel: preferences.spoilerLevel, suitability: preferences.suitability }
+                      : defaultReader,
+                  ...(readingState !== 'conservative' ? { retry: () => {} } : {}),
+                } as ProfileReading,
+              }
+            : {})}
           locale={locale}
           messages={subjectPageMessages()}
           tabs={subjectTabs(page)}

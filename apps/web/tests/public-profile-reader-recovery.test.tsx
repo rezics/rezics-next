@@ -6,16 +6,30 @@ import { readerTestRuntime as runtime } from './agent-reader-lifetime.test';
 // Exercise the real caller adapter and public composition; only the existing native transport is deferred.
 for (const view of ['overview', 'posts'] as const) {
   test(`mounted public ${view} recovers preferences without replacing public navigation or return recovery`, async () => {
-    const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
-    const window = new Window({ url: `https://rezics.test/en/@mira${view === 'posts' ? '/posts?cursor=a%2Bb#reading' : ''}` });
+    const { Window } = await import(
+      Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+    );
+    const window = new Window({
+      url: `https://rezics.test/en/@mira${view === 'posts' ? '/posts?cursor=a%2Bb#reading' : ''}`,
+    });
     const restore = runtime.installWindow(window);
-    const [{ createRoot }, { QueryClient, QueryClientProvider }, { useProfileReading }, { PublicProfilePage }, fixtures,
-      { subjectPageMessages, viewTabLabels }, { subjectTabs }, { rememberContribution }] = await Promise.all([
-      import('react-dom/client'), import('@tanstack/react-query'),
+    const [
+      { createRoot },
+      { QueryClient, QueryClientProvider },
+      { useProfileReading },
+      { PublicProfilePage },
+      fixtures,
+      { subjectPageMessages, viewTabLabels },
+      { subjectTabs },
+      { rememberContribution },
+    ] = await Promise.all([
+      import('react-dom/client'),
+      import('@tanstack/react-query'),
       import('../src/accounts/public-profile/reader-presentation/adapter'),
       import('../src/accounts/public-profile/page'),
       import('../src/stories/pages/accounts-public-profile/fixtures'),
-      import('../src/features/pages/route-support'), import('../src/features/pages/views'),
+      import('../src/features/pages/route-support'),
+      import('../src/features/pages/views'),
       import('../src/accounts/public-profile/contributions/navigation'),
     ]);
     runtime.reset();
@@ -32,13 +46,29 @@ for (const view of ['overview', 'posts'] as const) {
     let locale = 'en';
     let enabled = true;
     function Caller() {
-      const reading = useProfileReading({ handle, locale, path: view === 'overview' ? { kind: 'overview' } : { kind: 'view', view }, enabled, owner: page });
-      return enabled ? createElement(PublicProfilePage, {
-        page, locale, reading, messages: subjectPageMessages(), publicRealms: true,
-        tabs: subjectTabs(page), tabLabels: viewTabLabels(), base: `/${locale}/@${handle}`,
-        ...(view === 'posts' ? { view, heading: { title: 'Mira Okabe', label: 'Posts', href: `/${locale}/@${handle}` } } : {}),
-        renderJsonLd: false,
-      }) : createElement('p', null, 'Public page unavailable');
+      const reading = useProfileReading({
+        handle,
+        locale,
+        path: view === 'overview' ? { kind: 'overview' } : { kind: 'view', view },
+        enabled,
+        owner: page,
+      });
+      return enabled
+        ? createElement(PublicProfilePage, {
+            page,
+            locale,
+            reading,
+            messages: subjectPageMessages(),
+            publicRealms: true,
+            tabs: subjectTabs(page),
+            tabLabels: viewTabLabels(),
+            base: `/${locale}/@${handle}`,
+            ...(view === 'posts'
+              ? { view, heading: { title: 'Mira Okabe', label: 'Posts', href: `/${locale}/@${handle}` } }
+              : {}),
+            renderJsonLd: false,
+          })
+        : createElement('p', null, 'Public page unavailable');
     }
     const render = async () => {
       await act(async () => root.render(createElement(QueryClientProvider, { client }, createElement(Caller))));
@@ -53,7 +83,10 @@ for (const view of ['overview', 'posts'] as const) {
     const retry = () => host.querySelector<HTMLButtonElement>('[data-slot="profile-reading"] button')!;
     const safe = () => expect(host.querySelector('[data-slot="cover"][data-state="withheld"]')).not.toBeNull();
     const clickRetry = async () => {
-      await act(async () => { retry().focus(); retry().click(); });
+      await act(async () => {
+        retry().focus();
+        retry().click();
+      });
       await runtime.settle();
     };
     try {
@@ -128,7 +161,8 @@ for (const view of ['overview', 'posts'] as const) {
       runtime.setReader('reader-b');
       await clickRetry();
       const lateRoute = await nextRead(8);
-      handle = 'other'; locale = 'fr';
+      handle = 'other';
+      locale = 'fr';
       await render();
       const currentRoute = await nextRead(9);
       lateRoute.work.resolve(runtime.result('show'));
@@ -166,7 +200,12 @@ for (const view of ['overview', 'posts'] as const) {
       pending.work.resolve(runtime.result('show'));
       await runtime.settle();
       expect(host.textContent).toBe('Public page unavailable');
-      expect(client.getQueryCache().findAll({ queryKey: ['agent-reader'] }).every((query) => !query.state.data)).toBe(true);
+      expect(
+        client
+          .getQueryCache()
+          .findAll({ queryKey: ['agent-reader'] })
+          .every((query) => !query.state.data),
+      ).toBe(true);
     } finally {
       await act(async () => root.unmount());
       await runtime.settle();

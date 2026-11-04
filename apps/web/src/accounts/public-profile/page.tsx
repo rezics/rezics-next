@@ -15,14 +15,18 @@ export function PublicProfilePage({
   return (
     <ContributionActionsPageScope page={props.page} cursor={cursor} view={props.view ?? 'overview'}>
       <ProfileReadingResponse value={reading?.response ?? 'public'}>
-      <SubjectPage
-        {...props}
-        {...(reading ? { reader: reading.reader } : {})}
-        curation={<>
-          {reading && <ProfileReadingStatus reading={reading} locale={props.locale} />}
-          {props.page.account && <PublicAccountLinks handle={props.page.account.handle} locale={props.locale} realms={publicRealms} />}
-        </>}
-      />
+        <SubjectPage
+          {...props}
+          {...(reading ? { reader: reading.reader } : {})}
+          curation={
+            <>
+              {reading && <ProfileReadingStatus reading={reading} locale={props.locale} />}
+              {props.page.account && (
+                <PublicAccountLinks handle={props.page.account.handle} locale={props.locale} realms={publicRealms} />
+              )}
+            </>
+          }
+        />
       </ProfileReadingResponse>
     </ContributionActionsPageScope>
   );

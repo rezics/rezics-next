@@ -56,14 +56,26 @@ export const agentReaderQuery = (handle: string, locale: string, scope: AgentRea
     enabled: typeof window !== 'undefined' && personalRead.enabled && scope.enabled && scope.current(),
     queryFn: async () => {
       const expectedReader = scope.reader;
-      const unavailable = { kind: 'default' as const, reason: 'retired' as const, accountId: null, reader: defaultReader };
+      const unavailable = {
+        kind: 'default' as const,
+        reason: 'retired' as const,
+        accountId: null,
+        reader: defaultReader,
+      };
       if (!expectedReader || !scope.current()) return unavailable;
       try {
         const result = await readAgentReader({ data: { handle, locale, expectedReader } });
         if (!scope.current()) return unavailable;
         if (result.kind !== 'ready' || result.accountId !== expectedReader) {
           scope.retire(result.kind === 'default' ? result.reason : 'rejected');
-          return result.kind === 'default' ? result : { kind: 'default' as const, reason: 'rejected' as const, accountId: result.accountId, reader: defaultReader };
+          return result.kind === 'default'
+            ? result
+            : {
+                kind: 'default' as const,
+                reason: 'rejected' as const,
+                accountId: result.accountId,
+                reader: defaultReader,
+              };
         }
         scope.accept(result);
         return result;
