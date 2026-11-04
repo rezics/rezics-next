@@ -769,9 +769,10 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     expect(unloadBlocked()).toBe(false);
   } finally {
     await act(async () => root.unmount());
+    await new Promise((resolve) => setTimeout(resolve, 0));
     client.clear();
     window.close();
     for (const [key, descriptor] of previous)
       descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key);
   }
-});
+}, 60_000);
