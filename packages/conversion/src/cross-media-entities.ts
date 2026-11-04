@@ -13,6 +13,7 @@ import {
   canonicalLanguageTag,
   commandKey,
   latinLanguageTag,
+  matchesReleasedStringValue,
   sourceDigest,
   sourceEnvelope,
   textDocument,
@@ -20,7 +21,7 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@3';
+export const converter_revision = 'cross-media-entities@4';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxNames: vndbLimits.maxTitleCandidates,
@@ -28,8 +29,32 @@ export const vndbReleaseNameLimits = Object.freeze({
   stringBytes: vndbLimits.stringBytes,
   titleChars: 1500,
   recordBytes: vndbLimits.recordBytes,
-  maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases,
+  maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases + 1,
 });
+/** Dump COPY bigint cell `0`; not a padded barcode and not the JSON API null. */
+export const vndbReleaseGtinUnknown = '0';
+export type VndbReleaseGtin =
+  | { status: 'absent' }
+  | { status: 'unknown'; source: string }
+  | { status: 'invalid'; source: unknown }
+  | { status: 'admitted'; gtin: string };
+
+/** Keep COPY decimal spelling. Safe integers stringify without padding; unsafe numbers stay numbers. */
+export function retainVndbReleaseGtin(value: unknown): unknown {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
+  return value;
+}
+
+/** Admit only the released GTIN lexical contract. Unknown `0` and invalid cells are withheld. */
+export function decodeVndbReleaseGtin(value: unknown): VndbReleaseGtin {
+  if (value === undefined || value === null || value === '') return { status: 'absent' };
+  if (typeof value === 'number' && !Number.isSafeInteger(value)) return { status: 'invalid', source: value };
+  const source = retainVndbReleaseGtin(value);
+  if (typeof source !== 'string' || !source.isWellFormed()) return { status: 'invalid', source };
+  if (source === vndbReleaseGtinUnknown) return { status: 'unknown', source };
+  if (!matchesReleasedStringValue('schema:gtin', source)) return { status: 'invalid', source };
+  return { status: 'admitted', gtin: source };
+}
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
 const episodeOrdinalPattern = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
@@ -515,6 +540,11 @@ function projectReleaseTitles(
   return { titles, names: [...uniqueNames.values()], alternateNames, labels, aliases, diagnostics };
 }
 
+function attachReleaseGtin(raw: object, normalized: Normalized): void {
+  const gtin = own(raw, 'gtin', '/gtin');
+  if (gtin !== undefined) normalized.gtin = retainVndbReleaseGtin(gtin);
+}
+
 function project(kind: EntityKind, input: ConversionInput): Projected {
   const raw = object(input.record, '');
   const idField = kind.startsWith('vndb')
@@ -542,6 +572,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const normalized: Normalized = { id: nativeId, releases_titles: projectedTitles.titles };
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    attachReleaseGtin(raw, normalized);
     if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbReleaseNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     const aliases = Object.keys(projectedTitles.aliases).length ? projectedTitles.aliases : undefined;
@@ -604,6 +635,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   if (kind === 'vndb-release') {
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    attachReleaseGtin(raw, normalized);
   }
   if (kind === 'bangumi-episode') {
     const sort = own(raw, 'sort', '/sort');
@@ -704,6 +736,12 @@ function convert(
     ...(projected.alternateNames ?? []).map((name) => fact('schema:alternateName', name)),
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
+  if (kind === 'vndb-release') {
+    const decoded = decodeVndbReleaseGtin(projected.normalized.gtin);
+    if (decoded.status === 'admitted') facts.push(fact('schema:gtin', decoded.gtin));
+    else if (decoded.status === 'unknown') diagnostics.push({ pointer: '/gtin', code: 'unknown_source_value' });
+    else if (decoded.status === 'invalid') diagnostics.push({ pointer: '/gtin', code: 'invalid_source_value' });
+  }
   let descriptionText: string | undefined;
   if (kind === 'bangumi-episode') {
     const ordinal = episodeOrdinal(projected.normalized.sort);

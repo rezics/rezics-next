@@ -1594,6 +1594,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: at most 64 title rows and 64 KiB per release, 64 names and 64 Romanized alternate names, within the existing per-record candidate and journal budgets. Nonselected owners, missing selected titles, overflow and duplicate associations are review gaps or converter refusals. Machine-translation flags are not a ranking rule.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB release barcodes
+
+- Touches: the same selected-family and date-fidelity operator entry points, plus the COPY `releases.gtin` cell on already selected releases. The barcode shares `convertCrossMediaEntity` and the existing public batch/facts group; it does not invent a second identity, uniqueness registry or SourceRegistration option.
+- Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, one optional `schema:gtin` fact per release inside the existing per-record candidate (≤300) and journal budgets. Unknown `0`, null, malformed, unsupported-length and unsafe numeric cells withhold only that fact. Unrelated releases are not scanned.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import authored VNDB public tag associations
 
 - Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.
@@ -2003,11 +2009,18 @@ facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to T
 and 00/99 omitted components to year or month precision.
 
 The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@3`.
+selected release payload and convert them through `cross-media-entities@4`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
 owned. Decision: label order is language then text; `mtl` never ranks names.
+
+Those callers also keep the COPY `releases.gtin` cell. Admitted 8 or 12–14 digit
+strings become one cited `schema:gtin` fact on the same Release; dump unknown
+`0`, null, malformed, unsupported-length and unsafe JavaScript numbers withhold
+only that field. Decision: COPY bigint decimal spelling is preserved; `0` is
+unknown; leading zeros are not invented; barcode equality does not merge
+subjects.
 
 The production VNDB public-tag operator
 [`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and

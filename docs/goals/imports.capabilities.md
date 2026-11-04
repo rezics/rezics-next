@@ -649,6 +649,15 @@ not additional check requests.
   executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: label order is
   language then text; `mtl` never ranks names; exact-empty `releases_titles.latin` is unadmitted and does not inherit
   the `vn_titles` empty-cell contract; title language is not a whole-release language assertion.
+- `A production COPY/operator import preserves a supported explicit release GTIN on the existing source Release through candidate inspection, independent native acceptance/adoption and current read. Unknown or invalid source values withhold only that fact; changed barcode, deliberate unchanged-input refresh, reopen and a facts fence preserve ordinary importer identity and delivery semantics.`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-identifiers.test.ts`.
+  Frozen scenario names:
+  `operator COPY import preserves a supported release GTIN, withholds unknown and invalid cells, and refreshes through one identity`;
+  `A production COPY/operator import preserves a supported explicit release GTIN on the existing source Release through candidate inspection, independent native acceptance/adoption and current read. Unknown or invalid source values withhold only that fact; changed barcode, deliberate unchanged-input refresh, reopen and a facts fence preserve ordinary importer identity and delivery semantics.`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: dump COPY `gtin` is a
+  bigint decimal cell with unknown sentinel `0`; admitted values keep that spelling under the released 8 or 12–14
+  digit contract; barcode equality does not merge releases.
 - `production operator publishes authored VNDB public tags through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-public-tags.test.ts`.
   Frozen scenario names:

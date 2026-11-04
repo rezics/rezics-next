@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { FIELD_GROUPS, SourceSchema, type FieldGroup, type Source } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest } from '@rezics/definitions/media-import';
 import { documentVersion, normalizeDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
@@ -257,6 +258,17 @@ function compiled(pattern: string): RegExp {
     patterns.set(pattern, expression);
   }
   return expression;
+}
+
+/** Enforce the current released string/external-id contract; no extra checksum or padding. */
+export function matchesReleasedStringValue(propertyId: string, value: string): boolean {
+  const property = bundledRelease.properties[propertyId];
+  if (!property) return false;
+  const schema = property.value as { minLength?: unknown; maxLength?: unknown; pattern?: unknown };
+  if (typeof schema.minLength === 'number' && value.length < schema.minLength) return false;
+  if (typeof schema.maxLength === 'number' && value.length > schema.maxLength) return false;
+  if (typeof schema.pattern === 'string' && compiled(schema.pattern).exec(value)?.[0] !== value) return false;
+  return true;
 }
 
 export function sourceEnvelope(
