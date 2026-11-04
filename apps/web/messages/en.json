@@ -7927,5 +7927,20 @@
   "discovery_personal_unknown": "Checking available Library actions…",
   "discovery_personal_unsupported": "This Subject does not support Library entry actions.",
   "discovery_personal_concealed": "Library entry actions are not exposed to this reader.",
-  "discovery_personal_unavailable": "Library entry actions are unavailable."
+  "discovery_personal_unavailable": "Library entry actions are unavailable.",
+  "music_release_title": "Music release",
+  "music_release_scope": "This edition is separate from the album, media, recordings and files. Relationships retain their supplied direction and order.",
+  "music_release_return": "Destinations open in a new tab. Return here to keep this release window.",
+  "music_release_unconfigured": "Medium and recording relationships are unavailable in the current configuration.",
+  "music_release_unavailable": "This release window is unavailable. Retry the same window.",
+  "music_release_withheld": "This release or relationship is not disclosed to this viewer.",
+  "music_release_next_unavailable": "The next window is unavailable. The previous window remains visible.",
+  "music_release_unsupported": "Music release configuration is unavailable. Read the generic facts or suggest a correction.",
+  "music_release_edition": "Edition",
+  "music_release_field_unavailable": "Field {property} is unavailable in the current configuration.",
+  "music_release_album_unavailable": "An album relationship is unavailable in the current configuration.",
+  "music_release_album": "Album",
+  "music_release_absent": "No value is recorded.",
+  "music_release_generic": "Read generic facts (new tab)",
+  "music_release_correct": "Suggest a correction (new tab)"
 }

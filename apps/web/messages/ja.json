@@ -7852,5 +7852,20 @@
   "discovery_personal_unknown": "利用可能なライブラリ操作を確認しています…",
   "discovery_personal_unsupported": "この対象はライブラリの登録操作に対応していません。",
   "discovery_personal_concealed": "この閲覧者にはライブラリの登録操作が公開されていません。",
-  "discovery_personal_unavailable": "ライブラリの登録操作を利用できません。"
+  "discovery_personal_unavailable": "ライブラリの登録操作を利用できません。",
+  "music_release_title": "音楽リリース",
+  "music_release_scope": "この版はアルバム、媒体、録音、ファイルとは別のものです。関係の方向と順序は提供されたまま保持されます。",
+  "music_release_return": "リンク先は新しいタブで開きます。このタブに戻ると現在のリリース表示を維持できます。",
+  "music_release_unconfigured": "現在の設定では媒体と録音の関係を利用できません。",
+  "music_release_unavailable": "このリリース表示を利用できません。同じ範囲を再試行してください。",
+  "music_release_withheld": "このリリースまたは関係は現在の閲覧者に公開されていません。",
+  "music_release_next_unavailable": "次の範囲を取得できません。前の範囲を引き続き表示しています。",
+  "music_release_unsupported": "音楽リリースの設定を利用できません。一般的な情報を読むか、修正を提案してください。",
+  "music_release_edition": "版",
+  "music_release_field_unavailable": "現在の設定では項目 {property} を利用できません。",
+  "music_release_album_unavailable": "現在の設定ではアルバムとの関係を利用できません。",
+  "music_release_album": "アルバム",
+  "music_release_absent": "値は記録されていません。",
+  "music_release_generic": "一般的な情報を読む（新しいタブ）",
+  "music_release_correct": "修正を提案（新しいタブ）"
 }

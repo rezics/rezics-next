@@ -7852,5 +7852,20 @@
   "discovery_personal_unknown": "사용 가능한 라이브러리 작업을 확인하는 중…",
   "discovery_personal_unsupported": "이 대상은 라이브러리 항목 작업을 지원하지 않습니다.",
   "discovery_personal_concealed": "이 사용자에게는 라이브러리 항목 작업이 공개되지 않았습니다.",
-  "discovery_personal_unavailable": "라이브러리 항목 작업을 사용할 수 없습니다."
+  "discovery_personal_unavailable": "라이브러리 항목 작업을 사용할 수 없습니다.",
+  "music_release_title": "음악 발매판",
+  "music_release_scope": "이 발매판은 앨범, 매체, 녹음 및 파일과 구별됩니다. 관계의 방향과 순서는 제공된 그대로 유지됩니다.",
+  "music_release_return": "대상은 새 탭에서 열립니다. 이 탭으로 돌아오면 현재 발매판 창이 유지됩니다.",
+  "music_release_unconfigured": "현재 설정에서는 매체 및 녹음 관계를 사용할 수 없습니다.",
+  "music_release_unavailable": "이 발매판 창을 사용할 수 없습니다. 같은 창을 다시 시도하세요.",
+  "music_release_withheld": "이 발매판 또는 관계는 현재 열람자에게 공개되지 않습니다.",
+  "music_release_next_unavailable": "다음 창을 사용할 수 없습니다. 이전 창은 계속 표시됩니다.",
+  "music_release_unsupported": "음악 발매판 설정을 사용할 수 없습니다. 일반 정보를 읽거나 수정을 제안하세요.",
+  "music_release_edition": "발매판",
+  "music_release_field_unavailable": "현재 설정에서는 {property} 필드를 사용할 수 없습니다.",
+  "music_release_album_unavailable": "현재 설정에서는 앨범 관계를 사용할 수 없습니다.",
+  "music_release_album": "앨범",
+  "music_release_absent": "기록된 값이 없습니다.",
+  "music_release_generic": "일반 정보 읽기 (새 탭)",
+  "music_release_correct": "수정 제안 (새 탭)"
 }

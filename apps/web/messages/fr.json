@@ -7852,5 +7852,20 @@
   "discovery_personal_unknown": "Vérification des actions disponibles dans la bibliothèque…",
   "discovery_personal_unsupported": "Ce sujet ne prend pas en charge les actions de bibliothèque.",
   "discovery_personal_concealed": "Les actions de bibliothèque ne sont pas accessibles à ce lecteur.",
-  "discovery_personal_unavailable": "Les actions de bibliothèque sont indisponibles."
+  "discovery_personal_unavailable": "Les actions de bibliothèque sont indisponibles.",
+  "music_release_title": "Édition musicale",
+  "music_release_scope": "Cette édition est distincte de l’album, des supports, des enregistrements et des fichiers. Les relations conservent leur direction et leur ordre fournis.",
+  "music_release_return": "Les destinations s’ouvrent dans un nouvel onglet. Revenez ici pour conserver cette fenêtre.",
+  "music_release_unconfigured": "Les relations avec les supports et les enregistrements sont indisponibles dans la configuration actuelle.",
+  "music_release_unavailable": "Cette fenêtre d’édition est indisponible. Réessayez la même fenêtre.",
+  "music_release_withheld": "Cette édition ou relation n’est pas divulguée à ce lecteur.",
+  "music_release_next_unavailable": "La fenêtre suivante est indisponible. La précédente reste visible.",
+  "music_release_unsupported": "La configuration des éditions musicales est indisponible. Consultez les faits génériques ou proposez une correction.",
+  "music_release_edition": "Édition",
+  "music_release_field_unavailable": "Le champ {property} est indisponible dans la configuration actuelle.",
+  "music_release_album_unavailable": "La relation avec un album est indisponible dans la configuration actuelle.",
+  "music_release_album": "Album",
+  "music_release_absent": "Aucune valeur enregistrée.",
+  "music_release_generic": "Lire les faits génériques (nouvel onglet)",
+  "music_release_correct": "Proposer une correction (nouvel onglet)"
 }

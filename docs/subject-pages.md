@@ -51,6 +51,25 @@ retry never creates. A contributor list previews the credits view.
 Decision: MusicAlbum keeps no Library profile; type3 tracks and type6 episode families stay unpublished until those
 immutable native profiles and source bindings are published. Admitted public containment is independently readable through the [album contents owner](../apps/web/src/features/catalogue/album-track-reader/README.md).
 
+## Read a music edition
+
+The ordinary Subject overview offers the [music release reader](../apps/web/src/features/catalogue/music-release-reader/README.md)
+for a native `schema:MusicRelease` identity or descendant, independently of album contents and Recording readers.
+It names this edition's admitted album relationship, format, region, date and directed medium/recording associations.
+TBA, partial/absent dates and unsupported configuration stay distinct. Existing generic facts and correction remain
+available; missing producer music configuration is unavailable and does not publish a music vocabulary.
+
+Decision: music release admission requires the exact released `schema:MusicRelease` identity or a released descendant;
+optional `rezics:MusicMedium` and `schema:MusicRecording` associations use existing native operations until Semantic
+publishes their configuration. Generic release labels and provider codes do not admit them.
+
+### Music edition Cost
+
+The reader repeats at most four reads for one deliberate window: Subject, active pointer, immutable Release and one
+20-row association page. It performs no target hydration or writes. The [reader Cost](../apps/web/src/features/catalogue/music-release-reader/README.md#cost)
+defines subject/page byte bounds, bounded retention and retirement on replacement authority or observation. Existing
+release/file companion costs and release type meanings remain unchanged.
+
 ## Create a catalogue subject
 
 `/{locale}/catalogue/new` is the generic initial-terms form, discoverable in the ordinary subject header's

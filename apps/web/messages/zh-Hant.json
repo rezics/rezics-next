@@ -7852,5 +7852,20 @@
   "discovery_personal_unknown": "正在檢查可用的書庫操作…",
   "discovery_personal_unsupported": "此對象不支援書庫條目操作。",
   "discovery_personal_concealed": "此讀者無法存取書庫條目操作。",
-  "discovery_personal_unavailable": "書庫條目操作暫時無法使用。"
+  "discovery_personal_unavailable": "書庫條目操作暫時無法使用。",
+  "music_release_title": "音樂發行版",
+  "music_release_scope": "此版本與專輯、載體、錄音及檔案是不同的身分。關係保留原有方向和順序。",
+  "music_release_return": "目標會在新分頁開啟。返回此頁可保留目前的發行版視窗。",
+  "music_release_unconfigured": "目前設定不支援載體及錄音關係。",
+  "music_release_unavailable": "此發行版視窗暫時無法使用。請重試同一視窗。",
+  "music_release_withheld": "此發行版或關係未向目前讀者公開。",
+  "music_release_next_unavailable": "下一視窗暫時無法使用。仍顯示上一視窗。",
+  "music_release_unsupported": "音樂發行版設定無法使用。可以閱讀一般事實或提出修正。",
+  "music_release_edition": "發行版",
+  "music_release_field_unavailable": "目前設定不支援欄位 {property}。",
+  "music_release_album_unavailable": "目前設定不支援專輯關係。",
+  "music_release_album": "專輯",
+  "music_release_absent": "尚未記錄任何值。",
+  "music_release_generic": "閱讀一般事實（新分頁）",
+  "music_release_correct": "提出修正（新分頁）"
 }

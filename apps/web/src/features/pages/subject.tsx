@@ -14,6 +14,8 @@ import { ScreenProfileOverview } from '../catalogue/screen-profile-reader';
 import { isScreenType } from '../catalogue/screen-profile';
 import { composedSubjectRead } from '../catalogue/music-reader';
 import { MusicAlbumOverview } from '../catalogue/music-reader-view';
+import { MusicReleaseOverview } from '../catalogue/music-release-reader/entry';
+import { musicReleaseEntry } from '../catalogue/music-release-reader/model';
 import { AlbumTrackOverview } from '../catalogue/album-track-reader/entry';
 import { StoryArcProfileEntry } from '../catalogue/story-arc-profile-entry';
 import { MangaProfileEntry } from '../catalogue/manga-profile-entry';
@@ -757,6 +759,16 @@ export function SubjectPage({
                   realm={realm}
                 />
               </>
+            ) : null}
+            {overview && read && !page.account && musicReleaseEntry(read.subject.type, read.summary?.types) ? (
+              <MusicReleaseOverview
+                source={page}
+                reader={page.requestedReader ?? null}
+                id={read.subject.id}
+                context={page.context?.id ?? read.subject.context}
+                locale={locale}
+                realm={realm}
+              />
             ) : null}
             {overview && read && !page.account && isScreenType(read.subject.type) ? (
               <ScreenProfileOverview
