@@ -23,6 +23,7 @@ export class ConsolidationVisit {
   private unknown = false;
   private command: Command | null = null;
   private confirmationValue: Confirmation | null = null;
+  private rejectionValue: { status: number; code: string | null } | null = null;
   private resultValue: ConsolidationResult | null = null;
   private release: (() => void) | undefined;
 
@@ -52,6 +53,9 @@ export class ConsolidationVisit {
     );
   }
 
+  get rejection() {
+    return structuredClone(this.rejectionValue);
+  }
   get isRetired() {
     return this.retired;
   }
@@ -81,6 +85,7 @@ export class ConsolidationVisit {
       if (!current()) return this.discard();
       if (response.error || !response.data) {
         request.failed();
+        this.rejectionValue = response.error;
         return 'rejected';
       }
       if (!request.accept(response.data)) return this.discard();
@@ -144,7 +149,10 @@ export class ConsolidationVisit {
     try {
       const response = await this.transport(captured.headers).result(this.confirmationValue.confirmationId);
       if (this.retired || !captured.isCurrent()) return this.discard();
-      if (response.error || !response.data) return 'rejected';
+      if (response.error || !response.data) {
+          this.rejectionValue = response.error;
+          return 'rejected';
+        }
       this.acceptResult(response.data);
       return 'accepted';
     } catch {
@@ -165,7 +173,10 @@ export class ConsolidationVisit {
       if (command.operation === 'confirm') {
         const response = await transport.confirm(structuredClone(command.evidence), command.key);
         if (this.retired || !captured.isCurrent()) return this.discard();
-        if (response.error || !response.data) return 'rejected';
+        if (response.error || !response.data) {
+          this.rejectionValue = response.error;
+          return 'rejected';
+        }
         this.confirmationValue = structuredClone(response.data);
       } else {
         const response =
@@ -173,7 +184,10 @@ export class ConsolidationVisit {
             ? await transport.retry(command.confirmationId, command.item, command.key)
             : await transport[command.operation](command.confirmationId, command.key);
         if (this.retired || !captured.isCurrent()) return this.discard();
-        if (response.error || !response.data) return 'rejected';
+        if (response.error || !response.data) {
+          this.rejectionValue = response.error;
+          return 'rejected';
+        }
         this.acceptResult(response.data);
       }
       this.command = null;
@@ -206,6 +220,7 @@ export class ConsolidationVisit {
     this.unknown = false;
     this.confirmationValue = null;
     this.resultValue = null;
+    this.rejectionValue = null;
     this.release?.();
     this.release = undefined;
   }

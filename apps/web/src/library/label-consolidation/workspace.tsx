@@ -241,7 +241,7 @@ export function ConsolidationWorkspace({
                 </div>
               </>}
               {outcome === 'unknown' ? <p role="alert">{m.library_consolidation_unknown()}</p> : null}
-              {outcome === 'rejected' ? <p role="alert">{m.library_consolidation_rejected()}</p> : null}
+              {outcome === 'rejected' ? <p role="alert">{m.library_consolidation_rejected()} {visit.rejection?.code ? <code>{visit.rejection.code}</code> : null}</p> : null}
               {visit.hasRetainedCommand ? <Button disabled={busy} onClick={() => void perform(() => visit.recover())}>{m.library_consolidation_replay()}</Button> : null}
               {result ? <>
                 <p role="status">{consolidationState(result.status)}</p>
