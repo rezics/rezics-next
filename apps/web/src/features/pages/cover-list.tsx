@@ -1,3 +1,8 @@
+import { useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import { m } from '../../paraglide/messages.js';
+import { CreditInspectionSession } from '../catalogue/credit-inspection/session';
+import type { CreditAssertion, CreditVisit } from '../catalogue/credit-inspection/model';
 import {
   fallbackListFactProperties,
   fallbackListPresentation,
@@ -49,6 +54,7 @@ function ItemCard({
   credit = false,
   openExactEdition = false,
   catalogue,
+  inspect,
 }: {
   item: Item;
   value: RowValue;
@@ -57,6 +63,7 @@ function ItemCard({
   credit?: boolean;
   openExactEdition?: boolean;
   catalogue?: CatalogueRowContext;
+  inspect?: (trigger: HTMLButtonElement) => void;
 }) {
   const title = item.label.text || value.unlabelled;
   const subject = coverSubject(item.id, title, item.summary, item.type);
@@ -97,6 +104,9 @@ function ItemCard({
       qualified={item.qualified ?? []}
       value={value}
       openInNewTab={exactEdition}
+      inspection={inspect ? <Button variant="outline" className="mt-2" onClick={(event) => inspect(event.currentTarget)}>
+        {m.credit_inspect({}, { locale: value.locale as never })}
+      </Button> : undefined}
     />
   ) : (
     <CoverCard
@@ -154,6 +164,7 @@ export function CoverList({
   memberFacts,
   openExactEditions = false,
   memberCatalogue,
+  creditVisit,
 }: {
   items: Item[];
   value: RowValue & { subject?: string | null };
@@ -167,6 +178,7 @@ export function CoverList({
   openExactEditions?: boolean;
   /** Current native TypeList rows only; this public seam never carries personal state or actions. */
   memberCatalogue?: Readonly<Record<string, CatalogueRowContext>>;
+  creditVisit?: CreditVisit | undefined;
 }) {
   const context = value.context;
   const disclosure = [
@@ -181,7 +193,25 @@ export function CoverList({
   ];
   const ratio =
     value.ratio ?? sharedRatio(items.map((item) => coverSubject(item.id, item.label.text, item.summary, item.type)));
-  const credits = items.some((item) => (item.qualified?.length ?? 0) > 0);
+  const visitIdentity = contentIdentity([creditVisit, disclosure]);
+  const visitOwner = useRef({ identity: visitIdentity });
+  if (visitOwner.current.identity !== visitIdentity) visitOwner.current = { identity: visitIdentity };
+  const owner = visitOwner.current;
+  const [inspection, setInspection] = useState<{ owner: object; identity: string; credit: CreditAssertion;
+    visit: CreditVisit; title: string; trigger: HTMLButtonElement }>();
+  const liveInspection = inspection?.owner === owner && items.some((item) => contentIdentity(item) === inspection.identity)
+    ? inspection : undefined;
+  function closeInspection() {
+    if (visitOwner.current !== owner || !liveInspection) return;
+    const trigger = liveInspection.trigger;
+    setInspection(undefined);
+    if (trigger.isConnected) trigger.focus();
+  }
+  const inspector = liveInspection ? <CreditInspectionSession key={liveInspection.identity} id={liveInspection.visit.person}
+    address={visitIdentity} credit={liveInspection.credit} visit={liveInspection.visit}
+    title={liveInspection.title} propertyLabel={liveInspection.visit.propertyLabel}
+    locale={value.locale} onClose={closeInspection} /> : null;
+  const credits = !!creditVisit || items.some((item) => (item.qualified?.length ?? 0) > 0);
   const occurrences = new Map<string, number>();
   const cards = items.map((item) => {
     // Item has no revision field: compare its delivered content even when a statement ID is reused.
@@ -198,6 +228,11 @@ export function CoverList({
         item={item}
         value={value}
         credit={credits}
+        {...(item.credit && creditVisit ? { inspect: (trigger: HTMLButtonElement) => {
+          if (visitOwner.current !== owner) return;
+          setInspection({ owner, identity: contentIdentity(item), credit: item.credit!, visit: creditVisit,
+            title: item.label.text || value.unlabelled, trigger });
+        } } : {})}
         openExactEdition={openExactEditions}
         {...(memberCatalogue && Object.hasOwn(memberCatalogue, item.id) ? { catalogue: memberCatalogue[item.id] } : {})}
         {...(listPresentationFor ? { listPresentationFor } : {})}
@@ -220,6 +255,7 @@ export function CoverList({
         <ul aria-label={label} className="grid min-w-0 gap-6 @2xl:grid-cols-2">
           {cards}
         </ul>
+        {inspector}
       </div>
     );
   }

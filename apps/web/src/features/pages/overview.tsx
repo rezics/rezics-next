@@ -32,6 +32,7 @@ import type { Related, Subject, Summary as SubjectCover } from '../../subject/ty
 import { subjectViewHref } from '../../subject/subject-href';
 import type { AccountProfile } from './account-read';
 import { CoverList } from './cover-list';
+import { creditAssertion, creditVisit, type CreditAssertion } from '../catalogue/credit-inspection/model';
 import { listView, readerViewLabel } from './views';
 import { RelationStream } from './relation-stream';
 import { qualifiedNotes, type QualifiedNote } from './qualified-relations';
@@ -187,6 +188,8 @@ export type Item = {
   notes: string[];
   qualified?: QualifiedNote[];
   statement?: string | undefined;
+  /** Original disclosed assertion; the optional slot is identity, never correction authority. */
+  credit?: CreditAssertion | undefined;
   gated: boolean;
   /** The property a relation read found the item by, and the holder's date when the read carries one. */
   property?: string;
@@ -433,6 +436,7 @@ export function holderItems(
                   ? link.assertion.id
                   : undefined,
             notes: [],
+            credit: creditAssertion(link),
             ...(isRecord(link.assertion) && Array.isArray(link.assertion.qualifiers)
               ? { qualified: qualifiedNotes(link.assertion as unknown as Stmt, link.related, locale) }
               : {}),
@@ -629,6 +633,7 @@ function LinkSection(
         value={value}
         label={text.text || title}
         preview={props.paged !== true}
+        creditVisit={creditVisit(value, id, section, view)}
         openExactEditions={view === 'editions' && props.property === 'schema:exampleOfWork'}
       />
       {props.paged === true && section.ok && typeof section.body.next === 'string' && (

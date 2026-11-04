@@ -2307,3 +2307,8 @@ accounts, fences and release activation; Search invokes that entire reader twice
 is four times these source/related bounds. Serialized delivery is separately bounded to three entries per category,
 four qualifier facts per statement, one 256-byte localized label, 16 KiB per hit and 256 KiB per page. There is no
 per-I/O pricing protocol or second writer. Native and mounted-route growth/acceptance remain deferred to integration.
+
+Explicit inverse credit groups retain the original disclosed assertion even when it has no qualifiers. Their optional
+`creditSlot` supplies current slot identity only; it grants no operation and carries no draft. A concealed slot-key
+qualifier never becomes an unqualified correction slot. Other unqualified inverse groups remain compact. The same
+batched current-statement and summary reads supply this projection; it adds no row hydration or history scan.

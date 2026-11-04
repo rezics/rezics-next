@@ -143,6 +143,12 @@ test('one inverse cast window stays fixed across unrelated catalogue growth and 
         'wdt:P453',
         'wdt:P1932',
       ]);
+      const row = page.body.links[0];
+      expect(row.creditSlot).toEqual({ property: 'wdt:P725', target: actor, key: character });
+      const detail = await call(`/v1/subjects/${row.subject}/revisions/${row.assertion.rezics.revision}`);
+      expect(detail.status).toBe(200);
+      expect(detail.body.subject).toBe(row.subject);
+      expect(detail.body.revision.revision).toBe(row.assertion.rezics.revision);
       return { rows: page.body.links.length, next: page.body.next, property: page.body.links[0].property };
     },
   });

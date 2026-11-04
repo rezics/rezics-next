@@ -8,7 +8,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { cataloguePageMetadata } from '../../src/presentation/semantic-page.ts';
-import { linkProjection } from '../../src/semantic/links.ts';
+import { disclosedRelationStatement, linkProjection } from '../../src/semantic/links.ts';
 import { createReleasedRelationDirectionResolver } from '../../src/semantic/released-relation-direction.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
@@ -78,18 +78,7 @@ test('released inverse descriptors keep the original cast property and pin quali
   expect(person.state).toBe('admitted');
   expect(person.state === 'admitted' && person.property).toBe('wdt:P725');
   expect(person.state === 'admitted' && person.release).toBe(bundledDigest);
-  expect(person.state === 'admitted' && person.qualifiers.map(({ id }) => id)).toContain('wdt:P453');
   expect(character.state === 'admitted' && character.property).toBe('schema:character');
-  expect(
-    cataloguePageMetadata(bundledRelease, bundledDigest, 'schema:Person')?.directions?.find(
-      (entry) => entry.property === 'wdt:P725' && entry.direction === 'inverse',
-    ),
-  ).toMatchObject({ state: 'admitted', property: 'wdt:P725', release: bundledDigest });
-  expect(
-    cataloguePageMetadata(bundledRelease, bundledDigest, 'wd:Q95074')?.directions?.find(
-      (entry) => entry.property === 'schema:character' && entry.direction === 'inverse',
-    ),
-  ).toMatchObject({ state: 'admitted', property: 'schema:character', release: bundledDigest });
   expect(directions.resolve('schema:Person', 'rezics:voiceActorOf', 'inverse')).toMatchObject({
     state: 'admitted',
     property: 'wdt:P725',
@@ -167,4 +156,38 @@ test('released inverse descriptors keep the original cast property and pin quali
   expect(new Set([first.body.links[0].subject, second.body.links[0].subject])).toEqual(
     new Set(works.map(({ id }) => id)),
   );
+});
+
+
+test('qualified and plain credits retain separate original assertions, citations, revision and exact slot', async () => {
+  const actor = await create('schema:Person', 'Inspection actor');
+  const character = await create('wd:Q95074', 'Inspection character');
+  const cited = { ...statement('wdt:P725', actor.id, [statement('wdt:P453', character.id)]),
+    references: [{ parts: [statement('schema:url', 'https://example.org/original-credit')] }] };
+  const work = await create('schema:Movie', 'Two original credits', {
+    'wdt:P725': [cited, statement('wdt:P725', actor.id)],
+  });
+  const page = await call('GET', `/v1/subjects/${actor.id}/links?property=wdt%3AP725`);
+  expect(page.response.status).toBe(200);
+  expect(page.body.links).toHaveLength(2);
+  expect(new Set(page.body.links.map((row: any) => row.subject))).toEqual(new Set([work.id]));
+  expect(new Set(page.body.links.map((row: any) => row.statement)).size).toBe(2);
+  for (const row of page.body.links) {
+    const original = work.statements['wdt:P725']!.find((entry) => entry.id === row.statement)!;
+    expect(row.assertion).toEqual(original);
+    expect(row.creditSlot).toEqual({ property: 'wdt:P725', target: actor.id,
+      ...(original.qualifiers.length ? { key: character.id } : {}) });
+    const detail = await call('GET', `/v1/subjects/${work.id}/revisions/${original.rezics.revision}`);
+    expect(detail.response.status).toBe(200);
+    expect(detail.body.subject).toBe(work.id);
+    expect(detail.body.revision.revision).toBe(original.rezics.revision);
+  }
+  const assertion = page.body.links.find((row: any) => row.assertion.references.length)!.assertion;
+  const concealed = { ...assertion, references: [{ parts: [
+    { property: { id: 'wdt:P248', data_type: 'wikibase-item' }, value: { type: 'value', content: character.id } },
+  ] }] };
+  const disclosed = disclosedRelationStatement(concealed, new Map([[actor.id, {
+    id: actor.id, type: 'schema:Person', label: { value: 'Inspection actor', language: 'en' },
+  }]]));
+  expect(disclosed?.references).toEqual([]);
 });

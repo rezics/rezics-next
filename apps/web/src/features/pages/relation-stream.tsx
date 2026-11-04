@@ -9,6 +9,7 @@ import { useSearchRetryWait } from '../../search/search-recovery-retry';
 import { subjectViewHref } from '../../subject/subject-href';
 import { sessionQuery } from '../../session/query';
 import { CoverList } from './cover-list';
+import { creditVisit } from '../catalogue/credit-inspection/model';
 import {
   holderItems,
   pageRepresentation,
@@ -604,7 +605,7 @@ function StreamState({
       {readerUnavailable ? (
         <p role="alert">{m.subject_relation_unavailable({}, options)}</p>
       ) : items.length ? (
-        <CoverList items={items} value={value} label={title} />
+        <CoverList items={items} value={value} label={title} creditVisit={visiblePage ? creditVisit(value, node, visiblePage, view) : undefined} />
       ) : !visibleError ? (
         <p role={!section.ok ? 'status' : undefined}>
           {section.ok ? m.subject_relation_empty_page({}, options) : failure(section.status, value.locale)}

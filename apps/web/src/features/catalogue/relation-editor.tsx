@@ -163,6 +163,8 @@ function RelationEditorLive({
     statement: RelationDraft;
     slot?: RelationSlot;
     positionEditable: boolean;
+    /** Original-credit corrections may edit non-slot qualifiers while keeping holder/property/slot fixed. */
+    qualifiersEditable?: boolean;
     session?: string | undefined;
   };
 }) {
@@ -444,6 +446,7 @@ function RelationEditorLive({
     ['string', 'external-id', 'url', 'wikibase-item'].includes(definition.datatype) &&
     draft.qualifiers.length < 16 &&
     (!composition ||
+      (composition.qualifiersEditable && definition.id !== field?.slotKey) ||
       (composition.positionEditable &&
         definition.id === 'schema:position' &&
         !draft.qualifiers.some((part) => part.property.id === 'schema:position')));
@@ -1707,6 +1710,7 @@ function RelationEditorLive({
                                   <fieldset
                                     disabled={
                                       !!composition &&
+                                      !(composition.qualifiersEditable && snak.property.id !== field.slotKey) &&
                                       (!composition.positionEditable ||
                                         snak.property.id !== 'schema:position' ||
                                         !field.qualifiers.some((item) => item.id === 'schema:position'))
@@ -1736,14 +1740,14 @@ function RelationEditorLive({
                                 </div>
                                 <Button
                                   variant="outline"
-                                  disabled={!!composition}
+                                  disabled={!!composition && (!composition.qualifiersEditable || snak.property.id === field.slotKey)}
                                   ref={(node) => {
                                     if (node) qualifierRemoveButtons.current.set(identity, node);
                                     else qualifierRemoveButtons.current.delete(identity);
                                   }}
                                   aria-label={`${m.relation_remove({}, options)}: ${name(snak.property.id)}`}
                                   onClick={(event) => {
-                                    if (!editable() || composition) return;
+                                    if (!editable() || (composition && (!composition.qualifiersEditable || snak.property.id === field.slotKey))) return;
                                     if (populatedValue(snak.value))
                                       requestDraftDecision(
                                         { kind: 'remove-qualifier', qualifierId: identity, qualifier: snak },

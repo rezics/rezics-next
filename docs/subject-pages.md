@@ -1429,6 +1429,10 @@ retain the original statement property and its exact qualifiers. `wdt:P453` stay
 qualifier, not another assertion. A Person page continuation keeps the release pin, statement, revision, Context and
 current disclosure result. Decision: voice-credit language remains the work's released `schema:inLanguage` fact.
 
+Decision: original Person credit inspection opens disclosed destinations in a separate tab to retain the exact loaded
+window and focus; correction reads one exact slot page and uses only its authorized original candidate payload,
+remaining unavailable when that page cannot supply it. A public empty citation list means no disclosed citations.
+
 ## Scores on pages
 
 A score is never shown without its population, question, scale and count. The installed public headline is the
