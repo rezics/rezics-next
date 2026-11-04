@@ -30,6 +30,7 @@ import { ItemViewSchema, ErasedPlaceholderSchema, ThreadViewSchema } from './sch
 import { routeOf } from '../route/route.ts';
 import { createConversationActivityBatch } from './conversation-activity.ts';
 import { ReadingPageActivitySchema, selectReadingPageActivity } from './reading-page-activity.ts';
+import { prepareReadingPageReviewContext, ReadingPageReviewContextSchema } from './reading-page-context.ts';
 
 const closed = { additionalProperties: false } as const;
 export const READING_PAGE_REPLY_LIMIT = 20;
@@ -217,6 +218,7 @@ export const ReadingPageResponseSchema = t.Object(
       closed,
     ),
     reactionsAsOf: ReactionFreshnessSchema,
+    reviewContext: t.Optional(ReadingPageReviewContextSchema),
     authorErasure: t.Optional(t.Object({ authorId: t.String({ format: 'uuid' }), mayErase: t.Boolean() }, closed)),
   },
   closed,
@@ -1336,6 +1338,10 @@ export async function readContentReadingPage(
   );
   const replies = selected.replies;
   requireSelectedLimit(thread, replies);
+  const reviewContextPreparation = await prepareReadingPageReviewContext(dependencies, thread, replies, {
+    actor,
+    deadline,
+  });
   const identityIds = authorIds(thread.firstPost, replies);
   const actionRefs = [
     { type: 'content.thread' as const, id: thread.id },
@@ -1522,6 +1528,7 @@ export async function readContentReadingPage(
       watch = { state: 'unavailable', retryable: true };
     }
   }
+  const reviewContext = await reviewContextPreparation.finish();
   const confirmedActivity = await activity.confirm();
   const finalThread = await (actor.kind === 'account'
     ? withThreadReadAdmission(
@@ -1613,6 +1620,7 @@ export async function readContentReadingPage(
       slowMode: slowMode.state,
     },
     reactionsAsOf,
+    ...(reviewContext ? { reviewContext } : {}),
     ...(erasure ? { authorErasure: { authorId: erasure.authorId, mayErase: erasure.mayErase } } : {}),
   };
   if (responseBytes(output) > READING_PAGE_RESPONSE_BYTES) throw new ProblemError('content_too_large');

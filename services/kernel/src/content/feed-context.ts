@@ -5,7 +5,7 @@ import type { ContentReadDependencies, PostEntry, ThreadView } from './reads.ts'
 import type { AnchoredPosition, FeedParentAuthor, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
 import type { AccountDiscoverySummary } from '../search/discovery.ts';
 import { readAccountDiscoverySummaries } from '../access/account-discovery-source.ts';
-import { readSubjectSummaries } from '../semantic/summaries.ts';
+import { readSubjectSummaries, readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readVisibleRatingQuestion } from '../rating/question-directory.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -248,9 +248,17 @@ async function loadContent(
 }
 
 type OwnerViews = Readonly<{
-  subjects: Awaited<ReturnType<typeof readSubjectSummaries>>;
+  subjects: Awaited<ReturnType<typeof readSubjectSummaryObservation>>['summaries'];
   accounts: ReadonlyMap<string, AccountDiscoverySummary | null>;
   questions: ReadonlyMap<string, Awaited<ReturnType<typeof readVisibleRatingQuestion>>>;
+  confirmSubjects?: () => Promise<boolean>;
+}>;
+
+type ContextOwnerOptions = Readonly<{
+  /** A current question is not a presentation of the recorded vote revision. */
+  questionMetadata?: 'current' | 'unavailable';
+  confirmSubjects?: boolean;
+  authors?: boolean;
 }>;
 
 async function loadOwners(
@@ -259,6 +267,7 @@ async function loadOwners(
   content: ContentObservation,
   context: ReadContext,
   languages: readonly string[],
+  options: ContextOwnerOptions = {},
 ): Promise<OwnerViews> {
   const subjectIds = new Set<string>();
   const accountIds = new Set<string>();
@@ -266,7 +275,8 @@ async function loadOwners(
   for (const reference of references) {
     const thread = content.threads.get(reference.threadId);
     if (!thread || thread.availability !== 'available') continue;
-    if (thread.firstPost.availability === 'available') accountIds.add(thread.firstPost.authorId);
+    if (options.authors !== false && thread.firstPost.availability === 'available')
+      accountIds.add(thread.firstPost.authorId);
     if (
       thread.kind === 'review' &&
       thread.availability === 'available' &&
@@ -276,15 +286,19 @@ async function loadOwners(
       const openingSubjects = thread.firstPost.subjectIds;
       if (threadSubjects.length === 1 && openingSubjects.length === 1 && threadSubjects[0] === openingSubjects[0])
         subjectIds.add(threadSubjects[0]!);
-      if (readCitationDisclosure(thread.firstPost) === 'visible' && thread.firstPost.voteCitation)
+      if (
+        options.questionMetadata !== 'unavailable' &&
+        readCitationDisclosure(thread.firstPost) === 'visible' &&
+        thread.firstPost.voteCitation
+      )
         questionIds.add(thread.firstPost.voteCitation.questionId);
     }
     if (!reference.postId) continue;
     const selected = content.posts.get(postKey(reference.threadId, reference.postId))?.value;
-    if (selected?.availability === 'available') accountIds.add(selected.authorId);
+    if (options.authors !== false && selected?.availability === 'available') accountIds.add(selected.authorId);
     if (selected?.parentId) {
       const parent = content.parents.get(postKey(reference.threadId, selected.parentId))?.value;
-      if (parent?.availability === 'available') accountIds.add(parent.authorId);
+      if (options.authors !== false && parent?.availability === 'available') accountIds.add(parent.authorId);
     }
   }
   if (subjectIds.size > FEED_CONTEXT_MAX_SUBJECTS) throw new RangeError('Feed context Subject bound exceeded');
@@ -298,9 +312,17 @@ async function loadOwners(
     actor: context.actor,
     deadline: context.deadline,
   };
+  let confirmSubjects: (() => Promise<boolean>) | undefined;
   const [subjects, accounts, questions] = await Promise.all([
     subjectIds.size
-      ? readSubjectSummaries(ownerContext, [...subjectIds], { languages: [...languages] })
+      ? options.confirmSubjects
+        ? readSubjectSummaryObservation(ownerContext, [...subjectIds], { languages: [...languages] }).then(
+            (observation) => {
+              confirmSubjects = observation.current;
+              return observation.summaries;
+            },
+          )
+        : readSubjectSummaries(ownerContext, [...subjectIds], { languages: [...languages] })
       : Promise.resolve(new Map()),
     accountIds.size
       ? readAccountDiscoverySummaries(ownerContext, [...accountIds], { languages: [...languages] })
@@ -316,7 +338,7 @@ async function loadOwners(
       }),
     ).then((rows) => new Map(rows)),
   ]);
-  return { subjects, accounts, questions };
+  return { subjects, accounts, questions, ...(confirmSubjects ? { confirmSubjects } : {}) };
 }
 
 function parentAuthor(id: string | null, accounts: OwnerViews['accounts']): FeedParentAuthor | null {
@@ -446,7 +468,7 @@ export async function prepareFeedContentContext(
   references: readonly FeedContentContextReference[],
   context: ReadContext,
   languages: readonly string[] = [],
-  options: Readonly<{ observeThreads?: FeedThreadObserver }> = {},
+  options: ContextOwnerOptions & Readonly<{ observeThreads?: FeedThreadObserver }> = {},
 ): Promise<FeedContentContextComposition> {
   if (references.length > FEED_CONTEXT_MAX_REFERENCES)
     throw new RangeError('At most 20 selected feed content references');
@@ -464,7 +486,7 @@ export async function prepareFeedContentContext(
   const initialThreads = initialThreadMap(references);
   const initialPosts = initialPostMap(references);
   const initial = await loadContent(dependencies, references, context, initialThreads, initialPosts, undefined, true);
-  await loadOwners(dependencies, references, initial, context, languages);
+  await loadOwners(dependencies, references, initial, context, languages, options);
   let completed = false;
 
   return {
@@ -485,7 +507,8 @@ export async function prepareFeedContentContext(
         const after = current.posts.get(postKey(reference.threadId, reference.postId))?.value;
         if (before && after && before.parentId !== after.parentId) throw new ProblemError('dependency_unavailable');
       }
-      const owners = await loadOwners(dependencies, references, current, context, languages);
+      const owners = await loadOwners(dependencies, references, current, context, languages, options);
+      if (owners.confirmSubjects && !(await owners.confirmSubjects())) throw new ProblemError('dependency_unavailable');
       return { contexts: composeValues(references, current, owners), anchors: current.anchors };
     },
   };

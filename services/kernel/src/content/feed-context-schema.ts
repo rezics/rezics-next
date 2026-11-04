@@ -5,7 +5,7 @@ const closed = { additionalProperties: false } as const;
 const uuid = t.String({ format: 'uuid' });
 const nullable = t.Union([t.String(), t.Null()]);
 
-const reviewTarget = t.Union([
+export const FeedReviewTargetSchema = t.Union([
   t.Object(
     {
       state: t.Literal('available'),
@@ -56,7 +56,7 @@ const reviewCitation = t.Union([
 ]);
 
 export const FeedReviewContextSchema = t.Unsafe<FeedReviewContext>(
-  t.Object({ target: reviewTarget, citation: reviewCitation }, closed),
+  t.Object({ target: FeedReviewTargetSchema, citation: reviewCitation }, closed),
 );
 
 const parentAuthor = t.Object({ id: uuid, displayName: nullable, handle: nullable }, closed);
