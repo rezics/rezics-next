@@ -29,12 +29,33 @@ CreativeWork target is relabelled as a recording or medium. Rows retain holder, 
 identity, including repeated recordings in distinct slots. A withheld summary has no invented destination. Corrections
 open the exact holder's existing membership editor.
 
-Each next, stream or restart replaces one bounded window; unavailable continuation retains the previous window and
-retries the exact pending address. Invalid/withheld results retire it. There is no refill, automatic retry, per-target
-hydration or accumulated history. Subject, Context, Realm, locale, source observation, Query provider, session and
-exposure changes retire the old reading, even across away/back. Delayed responses cannot restore old controls or
-focus. Native destinations and correction open new tabs; keyboard return restores the origin or stable heading.
-Wrapping components, inherited themes and 44px controls serve phone390/desktop1280 and all eight locales.
+A listener selects one exact holder/assertion pair in the accepted window. Repeated targets keep separate inspect
+controls; selecting a recording never selects another occurrence sharing its target. The inspector shows native
+property/direction, holder, assertion, source qualifiers, separate reference groups, rank, revision and pinned accepting
+release using the existing value renderer. Earlier accepting meaning remains separate from current configuration.
+Only a disclosed summary supplies a recording destination. The exact holder supplies the existing membership editor.
+The list keeps supplied order and slot qualifiers, without treating a listing slot as a medium.
+
+Next and Previous replace the single accepted body. Previous rereads the exact prior Subject/Context/stream/direction
+and opaque cursor, retaining at most eight prior addresses. An unavailable operation keeps the accepted window,
+selected occurrence and exact pending operation; retrying Previous consumes its address only on success. Invalid or
+withheld results retire the entire window and its controls. Empty continued, exhausted, stale, unsupported, failed and
+withheld readings remain distinct; the end of a frontier never implies complete release contents.
+Decision: successful Start and stream switches clear the prior-address stack; unavailable attempts preserve the accepted window.
+A successful replacement clears occurrence selection; an intentional stream switch clears it immediately.
+
+Subject, Context, Realm, locale, source observation, Query provider, session and exposure changes retire the old
+reading, even across away/back and equal successful replacement. Explicit recovery runs the ordinary Subject route
+loader through MusicReleaseOverview. The reader requires a newly admitted source before making a fresh first-window
+read; it never reuses a pending request, an initial example body or a retirement flag as new authority. A resolved
+recovery without replacement data stays retired. An environment change during recovery retires that attempt too.
+A direct current-Subject link provides recovery when the embedding surface has no route-loader callback.
+
+Delayed responses cannot restore old controls or focus. Destinations, evidence links and correction use the existing
+new-tab contract. Keyboard return restores only a connected current origin, falling back to the stable heading when
+that origin was removed and focus was lost. Intervening user focus wins. Mouse visits discard keyboard return origins
+and do not steal focus. Keyboard inspection focuses its heading; closing returns to the exact occurrence control.
+Wrapping components, inherited themes and 44px controls serve 390/1440 layouts and all eight locales.
 
 ## Cost
 
@@ -43,11 +64,19 @@ most one native relations/links page: at most four reads and no target reads or 
 1,024 types and 4,096 properties; at most 64 streams are accepted. Subject responses above 2 MiB are unavailable.
 The native page is limited to 20 rows, each at most 128 KiB serialized UTF-8 JSON, and 2,686,976 total bytes. Opaque
 cursors are at most 4,096 UTF-16 units; an immediate repeated cursor, duplicate assertion or mismatched identity is
-unavailable. One accepted response, one pending address and one keyboard origin are retained. Work is O(Release
-metadata + admitted subject/page bytes), independent of total catalogue size. Serialization and runtime object
-allocation add transient memory; producer transport allocation precedes the consumer's bounds.
+unavailable. Retention is one accepted response, its exact address, one pending address/operation, at most eight
+previous addresses, one selected holder/assertion key and one keyboard origin. No prior body or accumulated target
+set is retained. An address has two 36-byte UUIDs, up to 256 stream units and 4,096 cursor units: at most 26,230
+serialized UTF-8 JSON bytes, accounting for six-byte JSON escapes. Eight prior addresses add at most 209,840 bytes.
+The complete navigation envelope (accepted, eight prior and pending addresses plus keys, separators and operation)
+is at most 262,377 bytes. The selected 73-character holder/assertion key adds 75 serialized bytes. Composed with
+the 4,194,304-byte Release, 2,097,152-byte Subject and 2,686,976-byte page, retained source/navigation/selection
+payload is at most 9,240,884 bytes. Derived facts, labels and selected rows refer to that one accepted body and
+bounded definitions; this serialized payload accounting is not a JavaScript heap estimate. Runtime projections,
+serialization, DOM and transport allocations add memory. Work is O(Release metadata + admitted subject/page bytes),
+independent of total catalogue size; producer transport allocation precedes the consumer's bounds.
 
-Focused generated-client tests pin edition identity, dates, configuration, directed slots, continuation recovery and
-observation retirement. Stories describe admitted, TBA, empty, unavailable-continuation and unsupported states; they
+Focused generated-client tests pin edition identity, dates, configuration, directed slots, exact occurrence inspection, bounded Previous, retry and
+explicit recovery after observation retirement. Stories describe admitted, TBA, empty, unavailable-continuation and unsupported states; they
 are source examples and do not establish native configuration or browser acceptance. Integration owns broader
 acceptance, theme/viewport rendering and native publication checks.

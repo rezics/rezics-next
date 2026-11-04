@@ -563,12 +563,15 @@ export function SubjectPage({
   fileSource,
   refreshCommunityAdvice,
   recoverCatalogueFileReader,
+  recoverMusicReleaseReader,
 }: {
   page: SubjectPageData;
   verification?: VerificationConfig;
   refreshCommunityAdvice?: () => Promise<void>;
   /** Re-enter the current Subject route loader for catalogue-file recovery. */
   recoverCatalogueFileReader?: () => Promise<void>;
+  /** Obtain a newly admitted ordinary Subject source before recovering an edition window. */
+  recoverMusicReleaseReader?: () => Promise<void>;
   /** Mounted native connection readers share this visit’s labels, disclosure and selected Context. */
   connections?: ReactNode;
   /** The current frame's label for list-only documents that do not repeat the subject read. */
@@ -1021,6 +1024,7 @@ export function SubjectPage({
             ) : null}
             {overview && read && !page.account && musicReleaseEntry(read.subject.type, read.summary?.types) ? (
               <MusicReleaseOverview
+                recoverCurrentPage={recoverMusicReleaseReader}
                 source={page}
                 reader={page.requestedReader ?? null}
                 id={read.subject.id}

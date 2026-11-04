@@ -50,11 +50,19 @@ type Story = StoryObj<typeof meta>;
 export const AdmittedEdition: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const links = await canvas.findAllByRole('link', { name: m.album_tracks_open() });
-    await expect(links.length).toBe(3);
-    await expect(links[0]).not.toHaveAttribute('href', links[1]!.getAttribute('href'));
+    const occurrences = await canvas.findAllByRole('button', { name: new RegExp(m.music_release_inspect()) });
+    await userEvent.click(occurrences[1]!);
+    const inspector = canvas.getByRole('region', { name: new RegExp(m.music_release_occurrence()) });
+    await expect(within(inspector).getByRole('link', { name: m.album_tracks_open() })).toHaveAttribute(
+      'target',
+      '_blank',
+    );
+    await expect(canvas.getAllByRole('button', { pressed: true }).length).toBe(2);
+    await userEvent.click(canvas.getByRole('button', { name: m.candidate_close() }));
     await userEvent.click(canvas.getByRole('button', { name: m.work_parts_more() }));
     await canvas.findByText(m.album_tracks_complete());
+    await userEvent.click(canvas.getByRole('button', { name: m.album_tracks_previous() }));
+    await canvas.findAllByRole('button', { name: new RegExp(m.music_release_inspect()) });
   },
 };
 export const MissingConfiguration: Story = { args: { scenario: 'unconfigured' } };
@@ -64,8 +72,8 @@ export const UnavailableContinuation: Story = {
     const canvas = within(canvasElement);
     const next = await canvas.findByRole('button', { name: m.work_parts_more() });
     await userEvent.click(next);
-    await canvas.findByText(m.music_release_next_unavailable());
-    await expect(canvas.getAllByRole('link', { name: m.album_tracks_open() }).length).toBe(3);
+    await canvas.findByText(m.music_release_window_unavailable());
+    await expect(canvas.getAllByRole('button', { name: new RegExp(m.music_release_inspect()) }).length).toBe(3);
   },
 };
 export const ExplicitTba: Story = { args: { scenario: 'tba' } };

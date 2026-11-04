@@ -474,6 +474,7 @@ export function SubjectOverview({
                 currentHref={currentHref}
                 refreshCommunityAdvice={() => router.invalidate()}
                 recoverCatalogueFileReader={() => router.invalidate()}
+                recoverMusicReleaseReader={() => router.invalidate()}
                 returnTo={search.via}
                 fileSource={search.fileSource}
                 verification={verification}
