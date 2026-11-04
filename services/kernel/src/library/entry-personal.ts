@@ -4,7 +4,7 @@ import canonicalize from 'canonicalize';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
-import { authoritativeTimeValue, noEffect, type AuthoritativeTime } from '../command/command.ts';
+import { authoritativeTimeValue, noEffect, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 import { withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -13,6 +13,7 @@ import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
 import { newId, routeOf } from '../route/route.ts';
 import {
   createLibraryCommandRunner,
+  libraryCommandReceiptDigestForActor,
   LibraryNotFoundError,
   requireRoute,
   WORK_STEP_DEADLINE_MS,
@@ -67,6 +68,21 @@ type ObservationRow = {
   sourceUpdatedZone: string | null;
   recordedAt: string;
 };
+
+export function entryPersonalAnnotationRequestInput(subjectId: string, input: unknown, admissionInput?: unknown) {
+  const parsed = parseAnnotationInput(input);
+  return { subjectId, ...parsed, ...(admissionInput === undefined ? {} : { importAdmission: admissionInput }) };
+}
+
+export function entryPersonalSourceObservationRequestInput(
+  kind: 'admit' | 'correct',
+  subjectId: string,
+  input: unknown,
+  admissionInput?: unknown,
+) {
+  const parsed = kind === 'admit' ? parseObservationInput(input) : parseObservationCorrection(input);
+  return { subjectId, ...parsed, ...(admissionInput === undefined ? {} : { importAdmission: admissionInput }) };
+}
 
 function owner(actor: Actor, action: string): AccountActor {
   if (actor.kind !== 'account' || !actor.scopes.includes(action)) throw new GrantDeniedError();
@@ -574,6 +590,34 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
   const { pool, access, clock } = dependencies;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
 
+  function receiptDigest(actor: Actor, kind: string, input: unknown): string {
+    return libraryCommandReceiptDigestForActor(actor, kind, input);
+  }
+
+  async function readCommandReceipt(
+    actor: Actor,
+    request: {
+      kind: string;
+      requestKey: string;
+      digest: string;
+      authorize: (tx: CommandTransaction) => Promise<void>;
+    },
+  ) {
+    owner(actor, 'library_entry:update');
+    return runner.ownAccountReceiptOnly<undefined, unknown>(actor, {
+      action: 'library_entry:update',
+      kind: request.kind,
+      requestKey: request.requestKey,
+      digest: request.digest,
+      async prepare() {
+        return undefined;
+      },
+      async authorize(tx) {
+        await request.authorize(tx);
+      },
+    });
+  }
+
   async function readPersonalEntry(actor: Actor, subjectId: string): Promise<PersonalEntry> {
     const account = owner(actor, 'library_entry:read');
     requireRoute(subjectId);
@@ -664,11 +708,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         action: 'library_entry:update',
         kind: 'library.entry.annotations.put',
         requestKey,
-        input: {
-          subjectId,
-          ...parsed,
-          ...(admission?.input === undefined ? {} : { importAdmission: admission.input }),
-        },
+        input: entryPersonalAnnotationRequestInput(subjectId, input, admission?.input),
         async prepare(attempt) {
           try {
             return {
@@ -829,6 +869,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
           before = current.rows[0] ?? before;
           if (before.revision !== parsed.revision) throw new LibraryConflictError();
         }
+        await prepared.admit?.(tx);
         const updated = await tx.query(
           `UPDATE library.entry_personal_fact SET annotation_revision=annotation_revision+1,note=$4,priority=$5,
              annotation_updated_at=$6,annotation_transaction_id=$7,updated_at=$6,transaction_id=$7
@@ -871,10 +912,8 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     const created = timestampColumns(parsed.sourceCreated);
     const updated = timestampColumns(parsed.sourceUpdated);
     const requestInput = {
-      subjectId,
-      ...parsed,
+      ...entryPersonalSourceObservationRequestInput('admit', subjectId, input, admission?.input),
       ...(archiveGuard ? { archiveReviewGuard: archiveGuard } : {}),
-      ...(admission?.input === undefined ? {} : { importAdmission: admission.input }),
     };
     return runner.ownAccountPrepared(
       actor,
@@ -939,6 +978,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
           [route, account.accountId, prepared.subjectId],
         );
         if (Number(count.rows[0]?.total ?? '0') >= MAX_SOURCE_OBSERVATIONS) throw new SourceObservationCapacityError();
+        await prepared.admit?.(tx);
         const inserted = await tx.query(
           `INSERT INTO library.entry_source_observation
             (route,account_id,subject_id,provider,record_id,revision,privacy_status,privacy_meaning,privacy_source_value,
@@ -1004,10 +1044,8 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
     const parsed = parseObservationCorrection(input);
     if (archiveGuard && archiveGuard.expectedRevision !== parsed.revision) throw new LibraryConflictError();
     const requestInput = {
-      subjectId,
-      ...parsed,
+      ...entryPersonalSourceObservationRequestInput('correct', subjectId, input, admission?.input),
       ...(archiveGuard ? { archiveReviewGuard: archiveGuard } : {}),
-      ...(admission?.input === undefined ? {} : { importAdmission: admission.input }),
     };
     return runner.ownAccountPrepared(
       actor,
@@ -1082,6 +1120,7 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
         const createdValues = timestampColumns(sourceCreated);
         const updatedValues = timestampColumns(sourceUpdated);
         const time = authoritativeTimeValue(command.time);
+        await prepared.admit?.(tx);
         const changed = await tx.query(
           `UPDATE library.entry_source_observation SET revision=revision+1,privacy_status=$6,privacy_meaning=$7,
              privacy_source_value=$8,source_created_status=$9,source_created_value=$10,source_created_precision=$11,source_created_zone=$12,
@@ -1133,6 +1172,8 @@ export function createEntryPersonalCommands(dependencies: Dependencies) {
   }
 
   return {
+    receiptDigest,
+    readCommandReceipt,
     readPersonalEntry,
     readSourceObservation: (...args: Parameters<typeof readSourceObservation>) =>
       withRequestDeadline(deadlineFor(WORK_STEP_DEADLINE_MS), () => readSourceObservation(...args)),

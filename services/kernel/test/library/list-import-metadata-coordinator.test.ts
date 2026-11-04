@@ -71,3 +71,34 @@ test('metadata history, selection and progress transitions preserve the original
   const oldVndb = confirmation();
   expect(Object.hasOwn(mergeListImportMetadataConfirmation(oldVndb, oldVndb), 'nativeAdmission')).toBe(false);
 });
+
+test('expiry merge keeps receipt authority and completed outcomes without restoring private operands', () => {
+  const pending = {
+    ...confirmation(),
+    annotationStarted: true,
+    annotationReceiptDigest: 'a'.repeat(64),
+    annotationInput: {
+      revision: 0,
+      note: { op: 'set' as const, value: 'private note' },
+      priority: { op: 'unchanged' as const },
+      effect: true,
+      expectedRevision: 1,
+      expectedNote: 'private note',
+      expectedPriority: null,
+    },
+  };
+  const completed = {
+      ...pending,
+      sourceExpired: true,
+      annotationStatus: 'applied' as const,
+      outcome: { reviewToken: 'first', fields: [{ field: 'note' as const, status: 'applied' as const }] },
+      annotationInput: undefined,
+    },
+    late = { ...pending, annotationStatus: 'unattempted' as const, outcome: undefined };
+  const merged = mergeListImportMetadataConfirmation(completed, late);
+  expect(merged.outcome).toEqual(completed.outcome);
+  expect(merged.annotationStatus).toBe('applied');
+  expect(merged.annotationReceiptDigest).toBe('a'.repeat(64));
+  expect(merged.annotationInput).toBeUndefined();
+  expect(merged.sourceExpired).toBe(true);
+});

@@ -103,9 +103,13 @@ Retained-source continuation preserves note/date/progress/privacy spelling, sepa
 and binds corrected-match label adoption to its reviewed match digest. State, metadata and date lost acknowledgements
 can reconcile original native receipts after source expiry/cancellation while fresh effects and expired evidence reads
 are refused. The native personal command accepts the existing trusted admission protocol without changing other
-providers' request digests. Expired label-preview reconciliation remains unavailable. The source contract derives
-whole-document observations, repeated dispatches and cleanup costs; independent all-pool 64/512/4096, composed V4
-fidelity/recovery refusal and terminal acceptance remain unexecuted integration obligations.
+providers' request digests. Bangumi metadata now uses that boundary for an exact source-row admission check, then
+keeps only opaque original receipt linkage until 24 hours after its unchanged seven-day evidence deadline. The
+mounted retry reads exact native receipts without reopening proposals or source text; a started intent without a
+receipt cannot dispatch. Scheduled cleanup scrubs and finally deletes through two bounded indexed stages, while
+terminal erasure keeps its existing phase. Expired label-preview reconciliation remains unavailable. The source
+contract derives whole-document observations, repeated dispatches and cleanup costs; independent all-pool
+64/512/4096, composed V4 fidelity/recovery refusal and terminal acceptance remain controller integration work.
 
 The Kernel wrappers import the original frozen specifications. These commands are the supported native entry
 points from the worktree root; they are listed as evidence entry points and were not executed here.
