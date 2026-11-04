@@ -2482,8 +2482,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
   onCopy: (member: Member) => void | Promise<void>;
 }) {
   const locale = getLocale();
-  const pageKey =
-    suppliedPageKey ?? collectionReadingPageKey(currentHref, currentHref ?? '/', 0, members);
+  const pageKey = suppliedPageKey ?? collectionReadingPageKey(currentHref, currentHref ?? '/', 0, members);
   const positionScope = suppliedPositionScope ?? collectionPositionScopeFromAddress(currentHref);
   const { admitReferenceReturn, missingOccurrence } = useCollectionComparisonReturn(
     members,

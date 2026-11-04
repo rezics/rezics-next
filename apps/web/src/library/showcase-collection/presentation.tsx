@@ -28,9 +28,7 @@ export function CollectionPresentationSummary({
     >
       <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
         <span className="rounded-md bg-muted px-3 py-1.5">
-          {dynamic
-            ? m.collection_presentation_dynamic({}, options)
-            : m.collection_presentation_ordered({}, options)}
+          {dynamic ? m.collection_presentation_dynamic({}, options) : m.collection_presentation_ordered({}, options)}
         </span>
         {layout ? (
           <span className="rounded-md bg-muted px-3 py-1.5">

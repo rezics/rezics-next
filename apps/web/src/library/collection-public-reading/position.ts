@@ -62,7 +62,9 @@ export function collectionReadingPageKey(
     // The caller's bounded Collection address remains a stable local fallback.
   }
   const renderedMembers = members.map((member, index) =>
-    member.id ? `occurrence:${member.id}` : `display-only:${member.subjectId ?? member.subject?.id ?? 'unknown'}:${index}`,
+    member.id
+      ? `occurrence:${member.id}`
+      : `display-only:${member.subjectId ?? member.subject?.id ?? 'unknown'}:${index}`,
   );
   return JSON.stringify([pageAddress, revision, renderedMembers]);
 }

@@ -98,9 +98,7 @@ async function render(
   const router = createRouter({
     routeTree: route,
     history: createMemoryHistory({
-      initialEntries: [
-        collectionPageAddress('en', sourcePage.id, search.cursor, search.filters, layout ?? 'list'),
-      ],
+      initialEntries: [collectionPageAddress('en', sourcePage.id, search.cursor, search.filters, layout ?? 'list')],
     }),
   });
   await router.load();
@@ -194,8 +192,18 @@ test('mixed reading keeps occurrence positions and notes independent and returns
     filterActive: true,
     memberCount: 5,
     members: [
-      { id: firstOccurrenceId, note: 'Curator note for the first occurrence.', addedAt: stamp, subject: repeatedSubject },
-      { id: secondOccurrenceId, note: 'Curator note for the second occurrence.', addedAt: stamp, subject: repeatedSubject },
+      {
+        id: firstOccurrenceId,
+        note: 'Curator note for the first occurrence.',
+        addedAt: stamp,
+        subject: repeatedSubject,
+      },
+      {
+        id: secondOccurrenceId,
+        note: 'Curator note for the second occurrence.',
+        addedAt: stamp,
+        subject: repeatedSubject,
+      },
       {
         id: thirdOccurrenceId,
         note: null,
@@ -240,8 +248,8 @@ test('mixed reading keeps occurrence positions and notes independent and returns
     expect(html).toContain('A note for an unavailable occurrence.');
     expect(html).not.toMatch(/global rank/i);
 
-    const subjectLinks = [...html.matchAll(/href="([^"]*\/subjects\/[^\"]+)"/g)].map((match) =>
-      new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.test'),
+    const subjectLinks = [...html.matchAll(/href="([^"]*\/subjects\/[^\"]+)"/g)].map(
+      (match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.test'),
     );
     const repeatedLinks = subjectLinks.filter((link) => link.pathname.includes(repeatedSubject.id));
     expect(repeatedLinks).toHaveLength(2);
@@ -253,23 +261,28 @@ test('mixed reading keeps occurrence positions and notes independent and returns
     expect(html).toContain('Curator note for the second occurrence.');
     expect(subjectLinks).toHaveLength(4);
   }
-  expect(collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members.slice(0, 1), true, true)).toBe(
-    'missing',
-  );
-  expect(collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members, true, true)).toBe(
-    'present',
-  );
-  expect(collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members, false, true)).toBe(
-    'waiting',
-  );
+  expect(
+    collectionComparisonReturnState(
+      `#collection-member-${secondOccurrenceId}`,
+      exactPage.members.slice(0, 1),
+      true,
+      true,
+    ),
+  ).toBe('missing');
+  expect(
+    collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members, true, true),
+  ).toBe('present');
+  expect(
+    collectionComparisonReturnState(`#collection-member-${secondOccurrenceId}`, exactPage.members, false, true),
+  ).toBe('waiting');
   expect(collectionPositionScope({ firstPage: true }, false)).toBe('first');
   expect(collectionPositionScope({ firstPage: false }, false)).toBe('continued');
   expect(collectionPositionScope({ firstPage: true }, true)).toBe('filtered-first');
   expect(collectionPositionScope({ firstPage: false }, true)).toBe('filtered-continued');
   expect(collectionPositionScopeFromAddress('/en/collections/reading-shelf?layout=grid')).toBe('first');
-  expect(
-    collectionPositionScopeFromAddress('/en/collections/reading-shelf?f.schema%3Agenre=novel&cursor=next'),
-  ).toBe('filtered-continued');
+  expect(collectionPositionScopeFromAddress('/en/collections/reading-shelf?f.schema%3Agenre=novel&cursor=next')).toBe(
+    'filtered-continued',
+  );
   expect(collectionPageIsFiltered(exactPage, search.filters)).toBe(true);
   const listKey = collectionReadingPageKey(
     collectionPageAddress('en', exactCollectionId, search.cursor, search.filters, 'list'),
