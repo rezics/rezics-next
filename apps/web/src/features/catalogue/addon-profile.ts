@@ -6,6 +6,7 @@ import {
   initialTerms,
   type CreateSubjectCommand,
   type CreateResult,
+  type CreateTransport,
   type CreatedReader,
   type InitialSubject,
   type TermDraft,
@@ -33,7 +34,7 @@ export type AddonTransport = {
   load: (address: AddonAddress) => Promise<AddonRead>;
   create: (command: CreateSubjectCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<CreatedReader>;
-};
+} & Pick<CreateTransport, 'eligibility'>;
 
 /** Presentation intersects the active native profile; it never publishes a profile or changes Library behavior. */
 export function addonFields(release: Release): string[] {

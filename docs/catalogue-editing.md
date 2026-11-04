@@ -344,7 +344,11 @@ choice admitted by the current `game.addon` release, and only native results est
 
 Creation configures the existing game initial-facts and terms controls with the active emitted profile. Only
 explicitly added facts enter native subject POST. The exact work from a `work` query is shown as a suggestion and is
-never staged automatically. A base-work picker resolves the chosen subject through the current public reader and
+never staged automatically. Creation eligibility is the current Global Context `subject.create` observation through
+the shared CreateAuthority; a work suggestion, session presence, definitions, and the existing-subject picker do not
+grant creation. Guest, refused (permission, gate, or suspension), and unknown stay distinct from session availability.
+One parent action observation is independent of field and target count. A stale allowed observation is not an
+authorization bypass; fresh confirmation re-reads eligibility, and the native create command remains final. A base-work picker resolves the chosen subject through the current public reader and
 checks target admission against the current immutable release before staging `wdt:P8646`; an unavailable, concealed,
 stale or unadmitted target leaves the existing draft editable. Contributors can revise or remove the unsent choice,
 then add admitted qualifiers and grouped citations with the shared statement fields. This does not copy base credits,
@@ -363,6 +367,10 @@ citation group onto other editable initial-fact holders in the same visit. Decis
 AddonBaseDraft `{ key, statement }` and does not export a FactDraft holder, so creation-time reference reuse copies
 only among admitted GameInitialFacts rows; the explicit base statement keeps its own evidence editor and is never a
 copy source, copy target, or confirmation of the work-query suggestion.
+Decision: Add-on creation binds the shared `readCatalogueCreateEligibility` observation of mounted `subject.create` on
+the Global Context parent to the creator controls; readable metadata and public targets stay independently useful.
+Cost: one Global Context parent viewer-action read for `subject.create` per observation, independent of initial facts
+and base targets; definitions, public work suggestion, and current add-on reads stay their existing requests.
 
 Correction shows the selected current base-work assertions separately from the route suggestion and gives `wdt:P8646`
 its own filtered view of the existing relation editor. Values, qualifiers, rank, grouped evidence, exact-slot review,

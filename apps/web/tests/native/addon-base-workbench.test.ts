@@ -61,6 +61,7 @@ describe('native add-on base-work workspace', () => {
     });
     expect(creation?.status()).toBe(200);
     await hydrate(page);
+    await playExpect(page.getByText(/you can create a new catalogue identity/i)).toBeVisible();
     await playExpect(page.getByRole('heading', { name: 'Work query suggestion', exact: true })).toBeVisible();
     await playExpect(
       page.getByText('This exact readable work came from page context.', { exact: false }),
