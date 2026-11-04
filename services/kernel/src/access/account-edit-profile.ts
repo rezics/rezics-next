@@ -144,7 +144,9 @@ const serializationBound: AccessWork = {
   bytes:
     profileBound.bytes +
     avatarBound.bytes +
-    Buffer.byteLength(JSON.stringify(accountProfileEditing('x'.repeat(36), { id: 'x'.repeat(36), kind: 'organization' }))),
+    Buffer.byteLength(
+      JSON.stringify(accountProfileEditing('x'.repeat(36), { id: 'x'.repeat(36), kind: 'organization' })),
+    ),
 };
 const profileReadBound = addAccessWork(
   checkoutBound,
