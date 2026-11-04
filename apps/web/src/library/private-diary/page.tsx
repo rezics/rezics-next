@@ -4,7 +4,8 @@ import { Link } from '@tanstack/react-router';
 import { useOperation } from '../../kernel/exposure';
 import { m } from '../../paraglide/messages.js';
 import type { useSession } from '../../session/query';
-import type { PrivateDiaryLoadResult } from './server';
+import type { DiaryPage as KernelDiaryPage } from '../../../../../services/kernel/src/library/diary-model.ts';
+import type { PrivateDiaryLoad, PrivateDiaryLoadResult } from './server';
 import { cancelPrivateDiary } from './server';
 import { PRIVATE_DIARY_PAGE_BYTES, PRIVATE_DIARY_PAGE_LIMIT } from './native';
 import { ReadingOccurrence } from './reading-occurrence';
@@ -12,6 +13,12 @@ import { ReadingPeriod } from './reading-period';
 
 type ReaderSession = ReturnType<typeof useSession>;
 const useReviewCommitEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+type NonPageDiaryRead = Exclude<PrivateDiaryLoad['diary'], { kind: 'ready' }>;
+export type PrivateDiaryReadingLoadResult =
+  | (Omit<PrivateDiaryLoad, 'diary'> & {
+      diary: { kind: 'ready'; page: KernelDiaryPage } | NonPageDiaryRead;
+    })
+  | Exclude<PrivateDiaryLoadResult, PrivateDiaryLoad>;
 
 import { diarySearch, diaryReturnContext, sameDiaryAddress, safeReturnTo, type DiaryAddress } from './address';
 import { ReportedYearPanel } from './year-summary';
@@ -22,7 +29,7 @@ export function PrivateDiaryPage({
   returnTo,
   address = {},
 }: {
-  loaded: PrivateDiaryLoadResult;
+  loaded: PrivateDiaryReadingLoadResult;
   session: ReaderSession;
   returnTo?: string | undefined;
   address?: DiaryAddress;

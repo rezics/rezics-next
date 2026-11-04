@@ -4,10 +4,9 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { formatJournalAssessment, formatJournalDate } from '@rezics/progress';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
+import type { DiaryOccurrence, DiaryPage } from '../../../../../services/kernel/src/library/diary-model.ts';
 import { diaryReturnContext, type DiaryAddress } from './address';
-import type { DiaryPage } from './native';
 
-type DiaryOccurrence = DiaryPage['occurrences'][number];
 type ReportedDate = Extract<DiaryOccurrence['reportedDates'], { availability: 'available' }>['startDate'];
 
 function dateReading(occurrence: DiaryOccurrence, value: ReportedDate) {
@@ -124,7 +123,7 @@ export function ReadingOccurrence({
   return (
     <ContentItem
       title={subjectLabel}
-      titleLang={occurrence.subject?.label ? (occurrence.subject.language ?? undefined) : undefined}
+      {...(occurrence.subject?.label && occurrence.subject.language ? { titleLang: occurrence.subject.language } : {})}
       headingLevel={3}
       className="min-w-0 rounded-lg border px-4"
       metadata={
