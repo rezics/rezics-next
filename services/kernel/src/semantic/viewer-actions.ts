@@ -8,7 +8,6 @@ import {
   type ViewerActionResources,
 } from '../access/viewer-actions.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
-import type { ViewerActionResources } from '../access/viewer-actions.ts';
 import type { Access, AccessClient, Actor } from '../request/access.ts';
 import type { Pool } from 'pg';
 import { routeOf } from '../route/route.ts';
@@ -120,7 +119,7 @@ export async function readSubjectCorrectionActions(input: {
     )
   )
     return { state: 'unavailable' };
-  let witness: 'pending' | 'ready' | 'concealed' | 'stale' = 'pending';
+  const witness: { state: 'pending' | 'ready' | 'concealed' | 'stale' } = { state: 'pending' };
   const inputSubject = input.subject;
   const inputType = input.type;
   const inputRevision = input.revision;
@@ -139,7 +138,7 @@ export async function readSubjectCorrectionActions(input: {
           const subjects = await readSubjectPublicStates(client, [inputSubject]);
           const subject = subjects.find((row) => row.id === inputSubject);
           if (subject?.visibility !== 'visible' || subject.type !== inputType) {
-            witness = 'concealed';
+            witness.state = 'concealed';
             return {};
           }
           const current = await client.query<{ revision: number }>(
@@ -148,10 +147,10 @@ export async function readSubjectCorrectionActions(input: {
             [inputRoute, inputSubject],
           );
           if (current.rows[0]?.revision !== inputRevision) {
-            witness = current.rows.length ? 'stale' : 'concealed';
+            witness.state = current.rows.length ? 'stale' : 'concealed';
             return {};
           }
-          witness = 'ready';
+          witness.state = 'ready';
           return prepared.read(client, ids, at, time);
         },
       };
@@ -174,10 +173,10 @@ export async function readSubjectCorrectionActions(input: {
       [{ type: 'semantic.context', id: GLOBAL_CONTEXT }],
       input.deadline,
     );
-    if (witness === 'concealed') return { state: 'concealed' };
-    if (witness === 'stale') return { state: 'stale' };
+    if (witness.state === 'concealed') return { state: 'concealed' };
+    if (witness.state === 'stale') return { state: 'stale' };
     const selected = result.resources[0];
-    if (!selected || 'error' in selected || witness !== 'ready') return { state: 'unavailable' };
+    if (!selected || 'error' in selected || witness.state !== 'ready') return { state: 'unavailable' };
     return {
       state: 'available',
       actions: selected.viewerActions.filter(
@@ -185,6 +184,6 @@ export async function readSubjectCorrectionActions(input: {
       ),
     };
   } catch {
-    return witness === 'concealed' || witness === 'stale' ? { state: witness } : { state: 'unavailable' };
+    return witness.state === 'concealed' || witness.state === 'stale' ? { state: witness.state } : { state: 'unavailable' };
   }
 }
