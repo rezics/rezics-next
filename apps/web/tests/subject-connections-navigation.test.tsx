@@ -222,16 +222,13 @@ test('a failed Previous keeps its page number and retries the same address with 
   }));
 
 test('caller replacement retires late rows and whole-association spoilers hide captions and evidence', async () =>
-  mounted(async (host, render, client) => {
+  mounted(async (host, render) => {
     let settle!: (visit: ConnectionVisit) => void;
     let count = 0;
     const read: ConnectionRead = async (address) =>
       ++count === 1 ? new Promise((resolve) => { settle = resolve; }) : visit(address);
     await render(read);
-    await act(async () => {
-      client.setQueryData(['session'], { state: 'signed-in', subject: id(8), csrfToken: 'session-b' });
-      client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
-    });
+    await render(read, page(), id(9));
     await act(async () => settle(visit({ id: id(1), locale: 'en' }, { privateTitle: 'Retired private title' })));
     expect(host.textContent).not.toContain('Retired private title');
     expect(host.querySelector(`[data-work-statement="${id(10)}"]`)).toBeTruthy();
