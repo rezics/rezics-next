@@ -2,8 +2,10 @@ import { useMemo } from 'react';
 import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { readReporterStatus } from '../../moderation/reporter-status-read';
 import { prepareReporterStatusRead } from '../../moderation/reporter-status-read-model';
+import { reporterHistoryReturnHref } from '../../moderation/reporter-history/navigation';
 import { ReporterStatusCurrent, ReporterStatusPage } from '../../moderation/reporter-status-view';
 import { m } from '../../paraglide/messages.js';
+import { localizeHref } from '../../paraglide/runtime.js';
 import { requireSignedIn } from '../../session/guard';
 import { pageHead } from '../../shell/head';
 import { pageHeadContext } from '../../shell/head-context';
@@ -32,6 +34,7 @@ export const Route = createFileRoute('/moderation/reports/$id')({
 
 function ReporterStatusRoute() {
   const initial = Route.useLoaderData();
+  const search = Route.useSearch();
   const router = useRouter();
   const navigation = useMemo(
     () => ({
@@ -50,5 +53,13 @@ function ReporterStatusRoute() {
     }),
     [router, initial.navigationKey, initial.generation],
   );
-  return <ReporterStatusCurrent key={initial.generation} initial={initial} navigation={navigation} />;
+  const returnPath = reporterHistoryReturnHref(search, initial.id);
+  return (
+    <ReporterStatusCurrent
+      key={initial.generation}
+      initial={initial}
+      navigation={navigation}
+      {...(returnPath ? { returnHref: localizeHref(returnPath) } : {})}
+    />
+  );
 }

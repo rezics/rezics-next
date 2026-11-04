@@ -20,19 +20,20 @@ type Retry = (activation?: RetryActivation) => void | Promise<void>;
 
 /** The served page and its stories share this composition within the site's AppShell. */
 export function ReporterStatusPage(
-  props:
+  props: (
     | { report: ReporterStatus; isCurrent?: () => boolean; onRefresh?: Retry }
     | { onRetry: Retry }
-    | { state: 'loading' | 'concealed' | 'closed' },
+    | { state: 'loading' | 'concealed' | 'closed' }
+  ) & { returnHref?: string },
 ) {
   return (
     <section className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-10" aria-labelledby="reporter-status-heading">
       <a
-        href={localizeHref('/inbox')}
+        href={props.returnHref ?? localizeHref('/inbox')}
         className="mb-6 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
-        {m.reporter_status_back()}
+        {props.returnHref ? m.reporter_history_return() : m.reporter_status_back()}
       </a>
       {'report' in props ? (
         <ReporterStatusView {...props} />
@@ -49,16 +50,20 @@ const readCurrent: ReporterStatusReader = async (data) =>
   (await import('./reporter-status-read')).readReporterStatus({ data });
 
 /** Default route composition, with synchronous observation of the real browser session cache. */
-export function ReporterStatusCurrent(props: { initial: ReporterStatusRead; navigation?: ReporterStatusNavigation }) {
+export function ReporterStatusCurrent(
+  props: { initial: ReporterStatusRead; navigation?: ReporterStatusNavigation; returnHref?: string },
+) {
   return <ReporterStatusVisit key={props.initial.generation} {...props} />;
 }
 
 function ReporterStatusVisit({
   initial,
   navigation,
+  returnHref,
 }: {
   initial: ReporterStatusRead;
   navigation?: ReporterStatusNavigation;
+  returnHref?: string;
 }) {
   const cache = useQueryClient();
   const [original] = useState({ cache, initial, navigation });
@@ -87,6 +92,7 @@ function ReporterStatusVisit({
         isCurrent={journey.isCurrent}
         retryFocusScope={journey}
         isRetryFocusScopeCurrent={journey.isConnected}
+        returnHref={returnHref}
       />
     </div>
   );
@@ -99,6 +105,7 @@ export function ReporterStatusResultPage({
   isCurrent,
   retryFocusScope,
   isRetryFocusScopeCurrent,
+  returnHref,
 }: {
   result: ReporterStatusResult;
   onRetry: Retry;
@@ -106,6 +113,7 @@ export function ReporterStatusResultPage({
   isCurrent?: () => boolean;
   retryFocusScope?: object;
   isRetryFocusScopeCurrent?: () => boolean;
+  returnHref?: string;
 }) {
   const boundary = useRef<HTMLDivElement>(null);
   const retryFocusGeneration = useRef(0);
@@ -191,11 +199,12 @@ export function ReporterStatusResultPage({
         report={result.report}
         {...(onRefresh ? { onRefresh } : {})}
         {...(isCurrent ? { isCurrent } : {})}
+        {...(returnHref ? { returnHref } : {})}
       />
     ) : result.state === 'unavailable' ? (
-      <ReporterStatusPage onRetry={retry} />
+      <ReporterStatusPage onRetry={retry} {...(returnHref ? { returnHref } : {})} />
     ) : (
-      <ReporterStatusPage state={result.state} />
+      <ReporterStatusPage state={result.state} {...(returnHref ? { returnHref } : {})} />
     );
   return <div ref={boundary}>{page}</div>;
 }

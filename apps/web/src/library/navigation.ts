@@ -1,4 +1,4 @@
-import { BookOpenText, Compass, Download, FolderPlus, Image, Import, ListChecks, Star } from 'lucide-react';
+import { BookOpenText, Compass, Download, Flag, FolderPlus, Image, Import, ListChecks, Star } from 'lucide-react';
 import type { NavigationContribution } from '../shell/navigation';
 import { m } from '../paraglide/messages.js';
 
@@ -14,6 +14,18 @@ export const libraryNavigation: readonly NavigationContribution[] = [
     operation: 'classification_ballot.own_page',
     label: ({ locale }) => m.own_classifications_title({}, { locale }),
     icon: ListChecks,
+  },
+  {
+    id: 'library.own-reports',
+    kind: 'navigation',
+    group: 'personal',
+    order: 14.75,
+    href: '/moderation/reports',
+    match: 'exact',
+    signedIn: true,
+    operation: 'report.own_history',
+    label: ({ locale }) => m.reporter_history_heading({}, { locale }),
+    icon: Flag,
   },
   {
     id: 'library.discover-collections',
