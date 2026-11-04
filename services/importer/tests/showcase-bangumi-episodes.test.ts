@@ -185,6 +185,13 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
   expect(selected).toHaveLength(BATCH_LIMIT);
   expect(selected.some((record) => record.key === 'episode:900003')).toBe(false);
   expect(plan.gaps.find((gap) => gap.externalId === 'episode:999999')?.reason).toContain('delivery window');
+  const deliveryKeys = new Set(['81', 'episode:900001', 'episode:900002']);
+  plan.records.bangumi = [];
+  plan.records.vndb = [];
+  plan.entities.bangumi = plan.entities.bangumi.filter((record) => deliveryKeys.has(record.key));
+  plan.entities.vndb = [];
+  plan.edges = plan.edges.filter((edge) => edge.holder.startsWith('episode:'));
+  plan.credits = [];
 
   const commands: BatchCommand[] = [];
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-episodes-'));
@@ -194,7 +201,11 @@ test('default seed keeps selected Episode identities, current kinds, exact paren
       join(directory, 'state.sqlite'),
       port(commands),
       undefined,
-      { episodeCatalogueSubjects: catalogueSubjects, vocabularyAdmission: retainedAdmission },
+      {
+        episodeCatalogueSubjects: catalogueSubjects,
+        vocabularyAdmission: retainedAdmission,
+        providers: ['bangumi'],
+      },
     );
     expect(result.status).toBe('imported-with-gaps');
     expect(retainedHookCalls).toBeGreaterThan(0);
