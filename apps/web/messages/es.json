@@ -3352,7 +3352,7 @@
   "contribution_invalid": "La solicitud no fue aceptada. Revísala antes de confirmar de nuevo.",
   "contribution_conflict": "La contribución ha cambiado. Consulta su estado actual antes de confirmar de nuevo.",
   "contribution_unavailable": "El servicio de contribuciones no está disponible o el resultado es incierto. Reintenta la misma solicitud para resolverlo.",
-  "contribution_confirm_delete": "¿Retirar solo esta contribución? Dejará de estar disponible. El tema y las demás contribuciones permanecen.",
+  "contribution_confirm_delete": "¿Retirar solo esta contribución? Dejará de estar disponible. El tema y las demás contribuciones permanecen. No se borran las revisiones aceptadas ni las decisiones editoriales independientes de los Contextos.",
   "contribution_confirm_restore": "¿Restaurar esta contribución con los permisos y las reglas actuales? No recupera una selección anterior.",
   "contribution_retry": "Reintentar la misma solicitud",
   "contribution_confirm": "Confirmar",

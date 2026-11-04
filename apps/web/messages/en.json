@@ -3346,7 +3346,7 @@
   "contribution_invalid": "The request was not accepted. Review it before confirming again.",
   "contribution_conflict": "The contribution changed. Read its current state before confirming again.",
   "contribution_unavailable": "The contribution service is unavailable or the outcome is uncertain. Retry the same request to resolve it.",
-  "contribution_confirm_delete": "Withdraw only this contribution? Its availability will be suppressed. The subject and other contributions remain.",
+  "contribution_confirm_delete": "Withdraw only this contribution? Its availability will be suppressed. The subject and other contributions remain. Accepted revisions and independent Context decisions are not erased.",
   "contribution_confirm_restore": "Restore this contribution under current permissions and availability rules? This does not reinstate an earlier selection.",
   "contribution_retry": "Retry same request",
   "contribution_confirm": "Confirm",

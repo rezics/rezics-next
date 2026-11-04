@@ -53,6 +53,25 @@ export function contributionFixture(scenario: ContributionScenario = 'ready', lo
       key,
       body,
     });
+    if (request.method === 'GET' && url.pathname === `${path}/lifecycle`) {
+      if (scenario === 'loading') return new Promise<Response>(() => {});
+      if (scenario === 'withheld' && !deleted) return json({ code: 'not_found' }, 404);
+      return json({
+        subject: base.id,
+        candidate: base.candidate.id,
+        property: base.property,
+        viewer: 'account',
+        state: deleted ? 'deleted' : 'available',
+        selected: false,
+        actions:
+          scenario === 'unavailable'
+            ? { state: 'unavailable' }
+            : {
+                state: 'available',
+                operations: scenario === 'denied' ? [] : [deleted ? 'restore' : 'delete'],
+              },
+      });
+    }
     if (url.pathname === path || url.pathname === `${path}:restoreDeleted`) {
       const operation = url.pathname === path ? 'delete' : 'restore';
       if (request.method !== (operation === 'delete' ? 'DELETE' : 'POST'))

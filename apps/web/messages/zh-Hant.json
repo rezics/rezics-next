@@ -3352,7 +3352,7 @@
   "contribution_invalid": "請求未獲接受，請檢查後重新確認。",
   "contribution_conflict": "貢獻已發生變化，請讀取目前狀態後重新確認。",
   "contribution_unavailable": "貢獻服務無法使用或操作結果尚未確定。請重試同一請求以確認結果。",
-  "contribution_confirm_delete": "只撤回這項貢獻？它將不再可用。條目和其他貢獻仍然保留。",
+  "contribution_confirm_delete": "只撤回這項貢獻？它將不再可用。條目和其他貢獻仍然保留。已接受的修訂和各 Context 獨立的編輯決定不會被抹除。",
   "contribution_confirm_restore": "按照目前權限和可用性規則恢復這項貢獻？這不會還原之前的選用結果。",
   "contribution_retry": "重試同一請求",
   "contribution_confirm": "確認",

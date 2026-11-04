@@ -79,6 +79,9 @@ test('owner restore expires at thirty days and cannot reverse current moderation
   status(await call('DELETE', path(expired), 'owner'), 200);
   setNow(new Date(clock().getTime() + 30 * day));
   status(await call('POST', `${path(expired)}:restoreDeleted`, 'owner', {}), 409);
+  const expiry = await call('GET', `${path(expired)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(expiry, 200);
+  expect(expiry.body).toMatchObject({ state: 'deleted', actions: { state: 'available', operations: [] } });
 });
 
 const initializedAnchors = new Map<string, string[]>();
@@ -147,6 +150,9 @@ test('native compact contribution permits only its original writer through later
   await accept(record);
   await adopt(record, null);
   // An expansion editor and current adopter is still not the original author.
+  const exact = await call('GET', `${path(record)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(exact, 200);
+  expect(exact.body).toMatchObject({ state: 'available', selected: true, actions: { operations: ['delete'] } });
   status(await call('DELETE', path(record), 'editor'), 403);
   status(await call('DELETE', path(record), 'owner'), 200);
   expect(JSON.stringify(await current(record.subject))).not.toContain(record.payload);
@@ -219,6 +225,9 @@ test('512 compact facts create one author grant per write revision and preserve 
     [routeOf(record.subject), anchor],
   );
   expect(wronglyGranted.rows).toEqual([{ subject_id: accounts.owner }]);
+  const exact = await call('GET', `${path(record)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(exact, 200);
+  expect(exact.body).toMatchObject({ state: 'available', selected: true, actions: { operations: ['delete'] } });
   status(await call('DELETE', path(record), 'editor'), 403);
   status(await call('DELETE', path(record), 'owner'), 200);
   status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 200);
@@ -245,6 +254,9 @@ test('real author role revocation denies fresh deletion and restoration and both
     }),
     200,
   );
+  const revoked = await call('GET', `${path(record)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(revoked, 200);
+  expect(revoked.body.actions).toEqual({ state: 'available', operations: [] });
   status(await call('DELETE', path(record), 'owner'), 403);
   status(await call('DELETE', path(record), 'owner', undefined, deletion), 403);
   status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 403);
@@ -284,4 +296,55 @@ test('restoration additionally requires current Global proposal permission while
     );
   }
   status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 200);
+});
+
+test('exact lifecycle recovers a candidate outside the first page with current author authority and no payload', async () => {
+  const subject = await person();
+  for (let i = 0; i < 21; i++) await proposal(subject);
+  const target = await proposal(subject);
+  for (let i = 0; i < 21; i++) await proposal(subject);
+  const page = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl&limit=20`, 'owner');
+  status(page, 200);
+  expect(page.body.candidates.some((candidate: { id: string }) => candidate.id === target.candidate)).toBe(false);
+  const address = `${path(target)}/lifecycle?property=schema%3Aurl`;
+  const available = await call('GET', address, 'owner');
+  status(available, 200);
+  expect(available.body).toMatchObject({
+    subject,
+    candidate: target.candidate,
+    state: 'available',
+    actions: { state: 'available', operations: ['delete'] },
+  });
+  const stranger = await call('GET', address, 'stranger');
+  status(stranger, 200);
+  expect(stranger.body.actions).toEqual({ state: 'available', operations: [] });
+  status(await call('DELETE', path(target), 'owner'), 200);
+  const deleted = await call('GET', address, 'owner');
+  status(deleted, 200);
+  expect(deleted.body).toMatchObject({
+    state: 'deleted',
+    selected: false,
+    actions: { state: 'available', operations: ['restore'] },
+  });
+  expect(JSON.stringify(deleted.body)).not.toContain(target.payload);
+  status(await call('POST', `${path(target)}:restoreDeleted`, 'owner', {}), 200);
+  const restored = await call('GET', address, 'owner');
+  status(restored, 200);
+  expect(restored.body).toMatchObject({ state: 'available', selected: false, actions: { operations: ['delete'] } });
+  expect(JSON.stringify(restored.body)).not.toContain(target.payload);
+});
+
+test('concealed Subject and unknown contribution have the same exact lifecycle outcome', async () => {
+  const target = await proposal(await person());
+  status(await call('DELETE', path(target), 'owner'), 200);
+  status(
+    await call('POST', `/v1/subjects/${target.subject}:takedown`, 'platform', {
+      notice: { complaint: 'Conceal Subject', received_at: clock().toISOString(), scope: '/' },
+    }),
+    200,
+  );
+  const concealed = await call('GET', `${path(target)}/lifecycle?property=schema%3Aurl`, 'owner');
+  status(concealed, 404);
+  expect(JSON.stringify(concealed.body)).not.toContain(target.payload);
+  expect(concealed.body).not.toHaveProperty('state');
 });

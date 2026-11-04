@@ -1017,6 +1017,20 @@ historic rows are not backfilled. The Global formula remains the create/propose 
 custody records the declared revision UUID while imported summary and cover custody retains the actual Global
 anchor. `MAX_CREATION_RESOURCES` remains 16.
 
+The exact candidate lifecycle GET uses the command's original contribution locator in its Subject partition,
+not candidate cursor traversal. It returns only identity, visible lifecycle, independently bounded Global selected
+reading, viewer kind and current mounted operations. Selection reads only the exact compact assertion or the
+bounded current Global adoption metadata; tombstones are unselected without loading any statement payload. Subject authorization, audience disclosure, current author
+account and Source fences apply before disclosure and again at final validation. A concealed or unknown candidate
+has the same not-found outcome; tombstones fetch no statement payload or revision history. Revision-resource
+Access and original write-basis ownership constrain allowed withdrawal/restoration; restoration also requires
+current Global proposal authority and the native strict retention deadline. Commands still reauthorize every replay.
+Action dependency failure is explicit unavailable metadata and does not become a confirmed denial.
+The read uses constant exact locator/lifecycle/disclosure/authority lookups independent of candidate order and
+history. Selection adds exact slot/head probes and at most the existing 32-entry adoption metadata; it does
+not fetch rejected display candidates. Source provenance is bounded to 16 KiB before hydration and fails closed
+when withheld; the original revision author witness also applies before compact assertion expansion.
+
 The contribution lifecycle authority is the existing retention-owned `semantic.record_lifecycle`, keyed by
 `(route, subject, candidate)`. Both current readers and ordinary commands use that same row; `purging` is
 withheld and projects as deleted through the unchanged lifecycle evidence shape. The obsolete
