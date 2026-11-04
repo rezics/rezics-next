@@ -405,7 +405,8 @@ export async function submitMembership(
   if (command.unresolved) {
     const current = await loadSelectedMembership(command.operation.organizationId, command.operation.memberAccountId);
     if (!isActive()) return 'unavailable';
-    if (current.kind !== 'ready') return current.kind === 'denied' || current.kind === 'signed-out' ? 'denied' : 'unavailable';
+    if (current.kind !== 'ready')
+      return current.kind === 'denied' || current.kind === 'signed-out' ? 'denied' : 'unavailable';
     if (!membershipReservationMatches(command, current)) return 'conflict';
   }
   if (!command.reference) {

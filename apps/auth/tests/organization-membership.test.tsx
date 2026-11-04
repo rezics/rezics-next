@@ -459,7 +459,12 @@ test('a replacement descriptor or inaccessible storage fails closed without dele
   root = undefined;
   window.sessionStorage.clear();
   const descriptor = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
-  Object.defineProperty(window, 'sessionStorage', { configurable: true, get: () => { throw new Error('storage denied'); } });
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    get: () => {
+      throw new Error('storage denied');
+    },
+  });
   try {
     await mount();
     expect(host.textContent).toContain(m.auth_members_recovery_unavailable());

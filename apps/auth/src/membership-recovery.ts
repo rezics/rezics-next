@@ -4,19 +4,22 @@ export function isUnresolvedMembership(command: MembershipCommand | null, observ
   return command?.unresolved === true && !observed;
 }
 
-export function sameMembershipCommand(
-  saved: MembershipCommand | null | 'invalid',
-  expected: MembershipCommand,
-) {
+export function sameMembershipCommand(saved: MembershipCommand | null | 'invalid', expected: MembershipCommand) {
   return saved !== null && saved !== 'invalid' && JSON.stringify(saved) === JSON.stringify(expected);
 }
 
 export function membershipPageAllowsCommand(page: MembershipPage, command: MembershipCommand) {
   const operation = command.operation;
-  if (page.kind !== 'ready' || page.organizationId !== operation.organizationId || page.viewer.accountId !== command.accountId)
+  if (
+    page.kind !== 'ready' ||
+    page.organizationId !== operation.organizationId ||
+    page.viewer.accountId !== command.accountId
+  )
     return false;
   if (page.viewer.role === 'member')
-    return operation.role === null && page.viewer.accountId === operation.memberAccountId && page.viewer.leave === 'allowed';
+    return (
+      operation.role === null && page.viewer.accountId === operation.memberAccountId && page.viewer.leave === 'allowed'
+    );
   if (page.viewer.role !== 'owner') return false;
   const target =
     page.members.state === 'ready'

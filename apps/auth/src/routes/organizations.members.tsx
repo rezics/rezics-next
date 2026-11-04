@@ -679,10 +679,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     event.preventDefault();
     const isActive = activity.current;
     if (!isActive() || lock.current || !command || !confirmed) return;
-    if (
-      command.unresolved &&
-      (!reviewCurrent || revoked || !sameMembershipCommand(readMembershipCommand(), command))
-    ) {
+    if (command.unresolved && (!reviewCurrent || revoked || !sameMembershipCommand(readMembershipCommand(), command))) {
       setRecoveryBlocked(true);
       setRecoveryStatus('unavailable');
       setRevoked(true);
@@ -833,7 +830,9 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             outcome={unresolved ? m.auth_members_unknown() : m.auth_members_recovery_unavailable()}
             pending={busy}
             canRetry={!!command && unresolved && !!command.reference && !recoveryBlocked}
-            canSignIn={!reauth && !!command && unresolved && !!command.reference && !recoveryBlocked && !!membershipProfile()}
+            canSignIn={
+              !reauth && !!command && unresolved && !!command.reference && !recoveryBlocked && !!membershipProfile()
+            }
             retry={() => void reviewRecovery()}
             signIn={beginRecoverySignIn}
             headingRef={recoveryHeading}
