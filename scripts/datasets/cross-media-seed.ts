@@ -24,7 +24,6 @@ export async function runDevelopmentSeed(
   options: {
     env?: NodeJS.ProcessEnv;
     fetchDumps?: typeof fetchCrossMediaDumps;
-    seedCatalogue?: typeof seedReviewedCatalogue;
     runSeed?: typeof runCrossMediaSeedCli;
     createTokenProvider?: typeof createAccountTokenProvider;
     seedCatalogue?: typeof seedReviewedCatalogue;
