@@ -303,7 +303,8 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
         (locale !== undefined && importPath[1] !== locale) ||
         url.search ||
         url.hash !== '#vndb-current-library'
-      ) return;
+      )
+        return;
       return `${url.pathname}${url.hash}`;
     }
     const collection = collectionReturn(url, locale);

@@ -29,7 +29,8 @@ function State({ row }: { row: ImportLibraryRow }) {
 
 function Activity({ row, locale }: { row: ImportLibraryRow; locale: string }) {
   // updatedAt is supplied Entry activity; never replace it with the import acknowledgement time.
-  return <RelativeTime value={row.entry.lastActivityAt ?? row.entry.updatedAt} locale={locale} timeZone="UTC" />;
+  const activity = 'lastActivityAt' in row.entry ? row.entry.lastActivityAt : undefined;
+  return <RelativeTime value={activity ?? row.entry.updatedAt} locale={locale} timeZone="UTC" />;
 }
 
 /** Every disclosed Subject association comes from its original native row, never the import's target choices. */
@@ -59,16 +60,17 @@ export function ImportLibraryRows({
       via: m.thread_cover_via(),
     },
   });
-  const inspect = (row: ImportLibraryRow, index: number) => onInspect ? (
-    <VndbAction
-      type="button"
-      variant="outline"
-      aria-label={m.library_vndb_browse_inspect_label({ title: row.title })}
-      onClick={(event) => onInspect(index, event.currentTarget)}
-    >
-      {m.library_vndb_browse_inspect()}
-    </VndbAction>
-  ) : undefined;
+  const inspect = (row: ImportLibraryRow, index: number) =>
+    onInspect ? (
+      <VndbAction
+        type="button"
+        variant="outline"
+        aria-label={m.library_vndb_browse_inspect_label({ title: row.title })}
+        onClick={(event) => onInspect(index, event.currentTarget)}
+      >
+        {m.library_vndb_browse_inspect()}
+      </VndbAction>
+    ) : undefined;
 
   if (layout === 'grid') {
     return (
@@ -168,17 +170,17 @@ export function ImportLibraryRows({
           );
         }
         return (
-          <li
-            key={row.key}
-            className="flex min-w-0 items-center gap-3 py-3"
-            data-vndb-current-entry={index}
-          >
+          <li key={row.key} className="flex min-w-0 items-center gap-3 py-3" data-vndb-current-entry={index}>
             <SubjectCover subject={null} ratio={ratio} />
             <div className="min-w-0 space-y-1">
               <p className="font-medium">{row.title}</p>
-              <p className="text-sm text-muted-foreground"><State row={row} /></p>
+              <p className="text-sm text-muted-foreground">
+                <State row={row} />
+              </p>
               {progress(row) ? <ProgressRow {...progress(row)!} /> : null}
-              <p className="text-xs text-muted-foreground"><Activity row={row} locale={locale} /></p>
+              <p className="text-xs text-muted-foreground">
+                <Activity row={row} locale={locale} />
+              </p>
               {inspect(row, index)}
             </div>
           </li>

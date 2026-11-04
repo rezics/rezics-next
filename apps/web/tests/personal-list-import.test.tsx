@@ -435,22 +435,41 @@ test('Library page reads never replay an uncertain import; its original command 
   const { createImportLibraryBrowser } = await import('../src/library/showcase-import-return/browser');
   const current = visit();
   const commands: VndbCommand[] = [];
-  const journey = createVndbJourney({ visit: current, port: makePort({
-    preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
-    page: async () => ({ kind: 'page', value: pageValue([row(0)]) }),
-    review: async (command) => ({ kind: 'reviewed', value: {
-      reviewId: reviewIds[0]!, status: 'skipped', targetId: null, state: null, baseline: null, replace: false, action: 'state',
-    } }),
-    apply: async (command) => { commands.push(command); return { kind: 'unknown', command }; },
-  }) });
+  const journey = createVndbJourney({
+    visit: current,
+    port: makePort({
+      preview: async () => ({ kind: 'previewed', value: previewValue(1) }),
+      page: async () => ({ kind: 'page', value: pageValue([row(0)]) }),
+      review: async (command) => ({
+        kind: 'reviewed',
+        value: {
+          reviewId: reviewIds[0]!,
+          status: 'skipped',
+          targetId: null,
+          state: null,
+          baseline: null,
+          replace: false,
+          action: 'state',
+        },
+      }),
+      apply: async (command) => {
+        commands.push(command);
+        return { kind: 'unknown', command };
+      },
+    }),
+  });
   await journey.preview('<vndb-export version="1.0"/>');
   await journey.review({ ordinal: 0, action: 'skip' });
   journey.openConfirm();
   await journey.confirm();
   const original = commands[0];
-  const browser = createImportLibraryBrowser({ current: current.current, read: async () => ({
-    state: 'current', page: { libraryEntries: [], next: null },
-  }) });
+  const browser = createImportLibraryBrowser({
+    current: current.current,
+    read: async () => ({
+      state: 'current',
+      page: { libraryEntries: [], next: null },
+    }),
+  });
   await browser.first();
   await browser.refresh();
   await browser.restart();

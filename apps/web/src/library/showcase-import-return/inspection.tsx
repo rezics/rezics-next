@@ -79,12 +79,12 @@ export function ImportLibraryInspection({
             <Fact label={m.library_updated()}>
               <NativeDate value={row.entry.updatedAt} locale={locale} />
             </Fact>
-            {row.entry.lastActivityAt ? (
+            {'lastActivityAt' in row.entry && row.entry.lastActivityAt ? (
               <Fact label={m.library_sort_activity()}>
                 <NativeDate value={row.entry.lastActivityAt} locale={locale} />
               </Fact>
             ) : null}
-            {row.entry.finishedAt ? (
+            {'finishedAt' in row.entry && row.entry.finishedAt ? (
               <Fact label={m.library_sort_finished()}>
                 <NativeDate value={row.entry.finishedAt} locale={locale} />
               </Fact>

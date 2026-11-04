@@ -40,12 +40,7 @@ export function ImportLibraryPageControls({
       {visible ? (
         <>
           {snapshot.previous !== undefined ? (
-            <VndbAction
-              type="button"
-              variant="outline"
-              disabled={disabled || !!failed}
-              onClick={actions.onPrevious}
-            >
+            <VndbAction type="button" variant="outline" disabled={disabled || !!failed} onClick={actions.onPrevious}>
               {m.library_vndb_browse_previous()}
             </VndbAction>
           ) : null}
