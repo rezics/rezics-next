@@ -6,6 +6,11 @@ import { createOwnCountedVoteReader } from '../../../src/rating/own-votes-counte
 import { STANDARD_QUESTION_ID } from '../../../src/rating/votes.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { identityEpochStore } from '../../../src/semantic/identity-epoch-store.ts';
+import {
+  readIdentityEpochCutover,
+  runIdentityEpochBootstrapBatch,
+  stepIdentityEpochBootstrap,
+} from '../../../src/semantic/identity-epoch-bootstrap.ts';
 import * as commandTiming from '../../../src/command/timing.ts';
 import { withReadTransaction } from '../../../src/semantic/read.ts';
 import { createSubject } from '../../../src/semantic/subject.ts';
@@ -47,10 +52,19 @@ function bytes(value: unknown): number {
 
 export async function createCountedGrowthFixture() {
   const db = await openGrowthDatabase();
-  db.pool.options.max = 1;
   try {
-    await bootstrapRelease(db.pool, bundledRelease);
     configureTestReceiptKeys(db.pool);
+    // Drive the existing native bootstrap before creating the fixed inputs; never fixture-write readiness.
+    for (let batch = 0; batch < 100 && (await readIdentityEpochCutover(db.pool)).state !== 'ready'; batch++)
+      await runIdentityEpochBootstrapBatch(db.pool);
+    expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
+    for (const home of [partitionOf(0x6a20), partitionOf(0x6a30)]) {
+      await stepIdentityEpochBootstrap(db.pool, home);
+      const epoch = await withReadTransaction(db.pool, (client) => identityEpochStore.readEpoch(client, home));
+      expect(epoch.state, stringify(epoch)).toBe('published');
+    }
+    db.pool.options.max = 1;
+    await bootstrapRelease(db.pool, bundledRelease);
     const scopes = ['subject:create', 'subject:read', 'definitions:read', 'rating:vote'];
     const accountId = newId(0x23a1);
     const real = await createRealAccess(db.admin, { voter: accountId }, scopes);
