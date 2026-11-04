@@ -117,7 +117,8 @@ test('caller replacement preserves unresolved departure protection and retires p
   expect(page.router.history.location.pathname).toBe('/security');
   await flush(() => page.calls[0]!.resolve(approval()));
   expect(page.calls).toHaveLength(1);
-  expect(page.host.textContent).toContain('Sign in');
+  expect(page.host.textContent).toContain('creation result is still unknown');
+  expect(page.host.querySelector('a[href="/security"]')).not.toBeNull();
 });
 
 test('pagehide clears private review before caching and a late approval cannot execute after return', async () => {
