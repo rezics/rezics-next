@@ -1042,8 +1042,9 @@ delivered tree before typed consumer checks instead of generating another partia
 Decision: the client facade accepts a per-request Authorization header on the appeal command while retaining its generated body, idempotency header and result types.
 
 The call is `KernelClient['moderation-decisions']({ id }).get({ headers: { authorization } })`;
-the source response and OpenAPI contain the retained top-level decision, `viewer` and `targetContext`. Regenerate
-the installed client declarations before Web adopts the added fields. Narrow on
+the source response, generated OpenAPI and installed declarations contain the retained top-level decision,
+`viewer` and `targetContext`. The generated delivery commit is `3c8649474435786d59176800053cc3888458a8fb`.
+Web can adopt these installed fields. Narrow on
 `targetContext.state` before accessing navigation, and on `viewer.appeal.state` before presenting an appeal action.
 The existing `.$appeal.post({ statement }, { headers: { authorization, 'idempotency-key': key } })` command is
 unchanged. Keep the private-reader lifetime, departure and uncertain-submission engines in Web. A board response
