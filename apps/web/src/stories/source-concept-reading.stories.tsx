@@ -75,8 +75,20 @@ function fixture(state: State, locale: string) {
     summary: null,
   };
   const assertion = source.subject.statements['skos:inScheme']![0]!;
-  assertion.references = [{ parts: [{ property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://vndb.org/g1' } }] }];
-  if (state === 'spoiler') assertion.qualifiers = [{ property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: { type: 'value', content: { amount: '1' } } }];
+  assertion.references = [
+    {
+      parts: [
+        { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value', content: 'https://vndb.org/g1' } },
+      ],
+    },
+  ];
+  if (state === 'spoiler')
+    assertion.qualifiers = [
+      {
+        property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+        value: { type: 'value', content: { amount: '1' } },
+      },
+    ];
   Object.assign(source, {
     viewerActions: { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] },
   });
