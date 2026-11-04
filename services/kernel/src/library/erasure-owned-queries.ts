@@ -37,6 +37,8 @@ import purgeTypePreparationHeader from './erasure-owned-type-preparation-header.
 import purgeBulkTarget from './erasure-owned-bulk-target.sql';
 import purgeAniList from './list-import-anilist-erase.sql';
 import purgeDiaryNavigation from './erasure-owned-diary-navigation.sql';
+import purgeCopyLoan from './erasure-owned-copy-loan.sql';
+import purgeCopyLoanGeneration from './erasure-owned-copy-loan-generation.sql';
 
 /** Fixed producer inventory, in child-before-parent order; heads are last. */
 export const ownedQueries: {
@@ -79,6 +81,8 @@ export const ownedQueries: {
   readonly type_preparation_header: typeof purgeTypePreparationHeader;
   readonly bulk_target: typeof purgeBulkTarget;
   readonly diary_navigation: typeof purgeDiaryNavigation;
+  readonly copy_loan: typeof purgeCopyLoan;
+  readonly copy_loan_generation: typeof purgeCopyLoanGeneration;
 } = {
   list_import_anilist: purgeAniList,
   members_preparation_result: purgeMembersPreparationResult,
@@ -120,4 +124,6 @@ export const ownedQueries: {
   type_preparation_header: purgeTypePreparationHeader,
   bulk_target: purgeBulkTarget,
   diary_navigation: purgeDiaryNavigation,
+  copy_loan: purgeCopyLoan,
+  copy_loan_generation: purgeCopyLoanGeneration,
 } as const;

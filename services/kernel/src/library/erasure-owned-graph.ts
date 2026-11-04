@@ -73,6 +73,8 @@ export const OWNED_PHASES = [
   'entry_annotation_review',
   'library_archive_merge',
   'shelf_score_head',
+  'copy_loan',
+  'copy_loan_generation',
 ] as const;
 const childQueries: {
   units: typeof units;

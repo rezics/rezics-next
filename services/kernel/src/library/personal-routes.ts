@@ -27,6 +27,15 @@ import {
   EntryAnnotationCorrectionLimitError,
 } from './entry-annotation-correction.ts';
 import { CopyConflictError, CopyInvalidError, createCopyCommands } from './copies.ts';
+import { createLoanCommands, loanPeopleDisplay } from './loan-commands.ts';
+import { loanDueBoundary, type LoanDueBoundary } from './loan-date.ts';
+import {
+  LoanConflictError,
+  LoanInvalidError,
+  LoanNotFoundError,
+  loanState,
+  type Loan,
+} from './loan-model.ts';
 import { attachCopyListContext } from './copy-list-context.ts';
 import {
   createEntryCommands,
@@ -419,6 +428,78 @@ const correctionPageSchema = t.Object(
 );
 const correctionPageResponse = t.Object({ review: correctionPageSchema }, closed);
 const copyResponse = t.Object({ copy: copySchema }, closed);
+const loanPartyResponse = t.Union([
+  t.Object({ kind: t.Literal('name'), name: t.String({ maxLength: 600 }) }, closed),
+  t.Object({ kind: t.Literal('person'), state: t.Literal('available'), personId: id, displayName: t.String() }, closed),
+  t.Object({ kind: t.Literal('person'), state: t.Literal('concealed') }, closed),
+]);
+const loanActionResponse = t.Object(
+  { allowed: t.Boolean(), reason: t.Union([t.Literal('returned'), t.Literal('copy_unavailable'), t.Null()]) },
+  closed,
+);
+const loanRevision = t.Integer({ minimum: 1, maximum: 2_147_483_647 });
+const loanResponse = t.Object(
+  {
+    id,
+    copyId: id,
+    direction: t.Union([t.Literal('lent'), t.Literal('borrowed')]),
+    counterparty: loanPartyResponse,
+    startedOn: t.String(),
+    dueOn: nullable,
+    returnedOn: nullable,
+    revision: loanRevision,
+    state: t.Union([
+      t.Literal('overdue'),
+      t.Literal('due'),
+      t.Literal('undated'),
+      t.Literal('returned'),
+    ]),
+    viewer: t.Object({ state: t.Literal('owner') }, closed),
+    actions: t.Object({ extend: loanActionResponse, return: loanActionResponse }, closed),
+  },
+  closed,
+);
+const loanCopyResponse = t.Object(
+  {
+    state: t.Union([t.Literal('available'), t.Literal('deleted'), t.Literal('missing')]),
+    id,
+    revision: t.Union([revision, t.Null()]),
+    kind: nullable,
+    status: nullable,
+    context: copyListContextSchema,
+  },
+  closed,
+);
+const loanBoundaryResponse = t.Object(
+  { calendar: t.Literal('gregorian'), zone: t.Literal('UTC'), today: t.String() },
+  closed,
+);
+const loanListResponse = t.Object(
+  {
+    filter: t.Union([t.Literal('open'), t.Literal('history')]),
+    boundary: loanBoundaryResponse,
+    generation: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+    items: t.Array(t.Object({ loan: loanResponse, copy: loanCopyResponse }, closed), { maxItems: 100 }),
+    nextCursor: nullable,
+  },
+  closed,
+);
+const loanWriteBody = t.Object(
+  {
+    copyId: id,
+    copyRevision: revision,
+    direction: t.Union([t.Literal('lent'), t.Literal('borrowed')]),
+    counterparty: t.Union([
+      t.Object({ kind: t.Literal('name'), name: t.String({ maxLength: 600 }) }, closed),
+      t.Object({ kind: t.Literal('person'), personId: id }, closed),
+    ]),
+    startedOn: t.String(),
+    dueOn: t.Optional(nullable),
+  },
+  closed,
+);
+const loanExtendBody = t.Object({ revision: loanRevision, dueOn: t.String() }, closed);
+const loanReturnBody = t.Object({ revision: loanRevision, returnedOn: t.String() }, closed);
 const followResponse = t.Object({ follow: followSchema }, closed);
 const followDestinationSchema = t.Union([
   t.Object({ kind: t.Literal('space'), spaceId: id, address: t.String() }, closed),
@@ -451,6 +532,13 @@ const failures = {
   409: problemSchema('conflict', 'stale_cursor'),
   422: problemSchema('idempotency_conflict'),
   503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+};
+const loanWriteFailures = {
+  ...failures,
+  400: problemSchema('invalid_request', 'invalid_cursor'),
+  409: problemSchema('conflict', 'stale_cursor'),
+  422: problemSchema('idempotency_conflict', 'unsupported_library_profile'),
+  503: problemSchema('dependency_unavailable', 'overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
 };
 const shelfFailures = {
   ...failures,
@@ -520,8 +608,11 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
     if (error instanceof GrantDeniedError) throw new ProblemError(denied);
     if (error instanceof LibraryNotFoundError) throw new ProblemError('not_found');
     if (error instanceof LibraryConflictError || error instanceof CopyConflictError) throw new ProblemError('conflict');
+    if (error instanceof LoanNotFoundError) throw new ProblemError('not_found');
+    if (error instanceof LoanConflictError) throw new ProblemError('conflict');
     if (error instanceof LibraryEntryInvalidError) throw new ProblemError('invalid_request');
     if (error instanceof CopyInvalidError) throw new ProblemError('invalid_request');
+    if (error instanceof LoanInvalidError) throw new ProblemError('invalid_request');
     throw error;
   }
 }
@@ -584,6 +675,40 @@ function copyView({ id, subjectId, kind, status, revision, location, source, acq
     note,
   };
 }
+function loanView(
+  loan: Loan,
+  boundary: LoanDueBoundary,
+  people: ReadonlyMap<string, string | null>,
+  copyAvailable = true,
+) {
+  const state = loanState(loan, boundary);
+  const reason = state === 'returned' ? 'returned' : copyAvailable ? null : 'copy_unavailable';
+  const action = { allowed: reason === null, reason };
+  const counterparty =
+    loan.counterparty.kind === 'name'
+      ? { kind: 'name' as const, name: loan.counterparty.name }
+      : people.get(loan.counterparty.personId)
+        ? {
+            kind: 'person' as const,
+            state: 'available' as const,
+            personId: loan.counterparty.personId,
+            displayName: people.get(loan.counterparty.personId)!,
+          }
+        : { kind: 'person' as const, state: 'concealed' as const };
+  return {
+    id: loan.id,
+    copyId: loan.copyId,
+    direction: loan.direction,
+    counterparty,
+    startedOn: loan.startedOn,
+    dueOn: loan.dueOn,
+    returnedOn: loan.returnedOn,
+    revision: loan.revision,
+    state,
+    viewer: { state: 'owner' as const },
+    actions: { extend: action, return: action },
+  };
+}
 function followView({ targetId, targetType, state, reason, updatedAt }: Follow) {
   return { targetId, targetType, state, reason, updatedAt };
 }
@@ -599,6 +724,7 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
       entries: () => entries(),
     });
   const copies = () => createCopyCommands(config());
+  const loans = () => createLoanCommands(config());
   const follows = () => createFollowCommands(config());
   const shelves = (operation: keyof ShelfReads) => {
     if (!dependencies.shelves) throw new ShelfContractNotImplementedError(operation);
@@ -1440,6 +1566,151 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         );
         session.record(result);
         return { copy: copyView(result.value) };
+      },
+    )
+    .get(
+      '/v1/copy-loans',
+      {
+        query: t.Object(
+          {
+            filter: t.Optional(t.Union([t.Literal('open'), t.Literal('history')])),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+          },
+          closed,
+        ),
+        response: { 200: loanListResponse, ...loanWriteFailures },
+        detail: detail('copy-loan.list', 'copy:list'),
+      },
+      async ({ actor, query, admission, job, request, set }) => {
+        const owner = account(actor);
+        if (!owner.scopes.includes('copy:list')) throw new ProblemError('forbidden');
+        set.headers['cache-control'] = 'private, no-store';
+        const filter = query.filter ?? 'open';
+        const requestInput = {
+          filter,
+          limit: query.limit ?? 20,
+          ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+        };
+        const readPage = () =>
+          admission.run('normal', job, () => command(() => loans().listLoans(actor, requestInput)));
+        const page = await readPage();
+        const membership = (value: typeof page) =>
+          JSON.stringify(value.items.map((item) => [item.loan.id, item.loan.revision, item.copy.revision, item.copy.state]));
+        const revalidate = async () => {
+          const current = await readPage();
+          if (
+            current.generation !== page.generation ||
+            current.nextCursor !== page.nextCursor ||
+            membership(current) !== membership(page)
+          )
+            throw new ProblemError('stale_cursor');
+        };
+        const languages = languageRanges(request.headers.get('accept-language'));
+        const personIds = page.items.flatMap((item) =>
+          item.loan.counterparty.kind === 'person' ? [item.loan.counterparty.personId] : [],
+        );
+        const people = await loanPeopleDisplay(config(), actor, personIds, job.deadline, languages);
+        const selectedCopies = page.items.flatMap((item) =>
+          item.copy.subjectId === null ? [] : [{ id: item.loan.id, subjectId: item.copy.subjectId }],
+        );
+        const contexts = await attachCopyListContext(
+          { ...config(), actor, deadline: job.deadline },
+          selectedCopies,
+          { languages, revalidate },
+        );
+        if (!selectedCopies.length) await revalidate();
+        const contextByLoan = new Map(contexts.map((context) => [context.id, context]));
+        return {
+          filter: page.filter,
+          boundary: page.boundary,
+          generation: page.generation,
+          nextCursor: page.nextCursor,
+          items: page.items.map((item) => {
+            const context = contextByLoan.get(item.loan.id);
+            const copy = {
+              state: item.copy.state,
+              id: item.copy.id,
+              revision: item.copy.revision,
+              kind: item.copy.kind,
+              status: item.copy.status,
+              context: context?.context ?? { state: item.copy.subjectId === null ? 'missing' as const : 'unavailable' as const },
+            };
+            return {
+              loan: loanView(item.loan, page.boundary, people, item.actions.extend.allowed),
+              copy,
+            };
+          }),
+        };
+      },
+    )
+    .post(
+      '/v1/copy-loans',
+      {
+        headers,
+        body: loanWriteBody,
+        response: { 201: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed), ...loanWriteFailures },
+        detail: detail('copy-loan.create', 'copy:create', true),
+      },
+      async ({ actor, body, headers, admission, job, request, set, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () => command(() => loans().createLoan(actor, body, key)));
+        session.record(result);
+        set.status = 201;
+        set.headers['cache-control'] = 'private, no-store';
+        const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
+        const people =
+          result.value.counterparty.kind === 'person'
+            ? await loanPeopleDisplay(config(), actor, [result.value.counterparty.personId], job.deadline, languageRanges(request.headers.get('accept-language')))
+            : new Map<string, string | null>();
+        return { loan: loanView(result.value, boundary, people), boundary };
+      },
+    )
+    .patch(
+      '/v1/copy-loans/:loanId',
+      {
+        params: t.Object({ loanId: id }),
+        headers,
+        body: loanExtendBody,
+        response: { 200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed), ...loanWriteFailures },
+        detail: detail('copy-loan.extend', 'copy:update', true),
+      },
+      async ({ actor, params, body, headers, admission, job, request, set, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () => command(() => loans().extendLoan(actor, params.loanId, body, key)));
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
+        const people =
+          result.value.counterparty.kind === 'person'
+            ? await loanPeopleDisplay(config(), actor, [result.value.counterparty.personId], job.deadline, languageRanges(request.headers.get('accept-language')))
+            : new Map<string, string | null>();
+        return { loan: loanView(result.value, boundary, people), boundary };
+      },
+    )
+    .post(
+      '/v1/copy-loans/:loanId/return',
+      {
+        params: t.Object({ loanId: id }),
+        headers,
+        body: loanReturnBody,
+        response: { 200: t.Object({ loan: loanResponse, boundary: loanBoundaryResponse }, closed), ...loanWriteFailures },
+        detail: detail('copy-loan.return', 'copy:update', true),
+      },
+      async ({ actor, params, body, headers, admission, job, request, set, session }) => {
+        account(actor);
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () => command(() => loans().returnLoan(actor, params.loanId, body, key)));
+        session.record(result);
+        set.headers['cache-control'] = 'private, no-store';
+        const boundary = loanDueBoundary((dependencies.clock ?? systemClock)());
+        const people =
+          result.value.counterparty.kind === 'person'
+            ? await loanPeopleDisplay(config(), actor, [result.value.counterparty.personId], job.deadline, languageRanges(request.headers.get('accept-language')))
+            : new Map<string, string | null>();
+        return { loan: loanView(result.value, boundary, people), boundary };
       },
     )
     .get(
