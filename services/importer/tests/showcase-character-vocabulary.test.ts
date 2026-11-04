@@ -36,7 +36,7 @@ test('default selected-family planning closes only evidenced VNDB character voca
       await writeFile(join(vndb, 'db', table), rows);
     };
     await copy('chars_traits', 'id\ttid\tspoil\tlie', 'c1\ti73\t1\tf\nc2\ti80\t0\tt\nc9\ti99\t0\tf\n');
-    await copy('chars_vns', 'id\tvid\trid\trole\tspoil', 'c1\tv1\t\\N\tmain\t0\nc2\tv1\t\\N\tsupport\t1\nc9\tv2\t\\N\tmain\t0\n');
+    await copy('chars_vns', 'id\tvid\trid\trole\tspoil', 'c1\tv1\t\\N\tmain\t0\nc2\tv1\t\\N\tsupport\t1\nc9\tv4\t\\N\tmain\t0\n');
     await copy(
       'traits',
       'id\tgid\tgorder\tdefaultspoil\tsexual\tsearchable\tapplicable\tname\talias\tdescription',
@@ -45,18 +45,28 @@ test('default selected-family planning closes only evidenced VNDB character voca
     await copy('traits_parents', 'id\tparent\tmain', 'i73\ti10\tt\ni10\ti7\tt\n');
     const raw = new CrossMediaDumpFiles('', vndb);
     const sourceRows: Record<string, Record<string, unknown>[]> = {
-      'bangumi/subject': [{ id: 1, type: 2, name: 'STEINS;GATE', name_cn: null }],
+      'bangumi/subject': [
+        { id: 1, type: 2, name: 'STEINS;GATE', name_cn: null },
+        { id: 2, type: 2, name: 'CLANNAD', name_cn: null },
+        { id: 3, type: 2, name: 'Fate/stay night', name_cn: null },
+      ],
       'vndb/vn_titles': [
         { id: 'v1', lang: 'en', official: 't', title: 'STEINS;GATE', latin: null },
-        { id: 'v2', lang: 'en', official: 't', title: 'An unrelated visual novel', latin: null },
+        { id: 'v2', lang: 'en', official: 't', title: 'CLANNAD', latin: null },
+        { id: 'v3', lang: 'en', official: 't', title: 'Fate/stay night', latin: null },
+        { id: 'v4', lang: 'en', official: 't', title: 'An unrelated visual novel', latin: null },
       ],
       'vndb/vn': [
         { id: 'v1', olang: 'ja', alias: null },
-        { id: 'v2', olang: 'en', alias: null },
+        { id: 'v2', olang: 'ja', alias: null },
+        { id: 'v3', olang: 'ja', alias: null },
+        { id: 'v4', olang: 'en', alias: null },
       ],
       'vndb/entry_meta': [
         { id: 'v1', revision: '1', lastmod: '2026-11-01' },
         { id: 'v2', revision: '1', lastmod: '2026-11-01' },
+        { id: 'v3', revision: '1', lastmod: '2026-11-01' },
+        { id: 'v4', revision: '1', lastmod: '2026-11-01' },
       ],
       'vndb/chars': [
         { id: 'c1', name: 'Selected character', main: null },
@@ -78,7 +88,7 @@ test('default selected-family planning closes only evidenced VNDB character voca
     const vocabulary = await planShowcaseCharacterVocabulary(tables, selected);
     expect(selected.franchises['steins-gate'].vndb).toEqual(['v1']);
     expect(vocabulary.plan.records.vndb.map((record) => record.key)).toEqual(['c1', 'c2']);
-    expect(vocabulary.requirements.selectedWorkIds).toEqual(['v1']);
+    expect(vocabulary.requirements.selectedWorkIds).toEqual(['v1', 'v2', 'v3']);
     expect(vocabulary.requirements.terms.map((term) => term.code).sort()).toEqual(['i10', 'i7', 'i73', 'main']);
     expect(vocabulary.requirements.terms.find((term) => term.code === 'i73')).toMatchObject({
       label: 'Silver hair',
