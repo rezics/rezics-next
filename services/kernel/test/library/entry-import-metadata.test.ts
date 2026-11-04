@@ -717,7 +717,7 @@ for (const provider of ['mal', 'anilist'] as const) {
 
     const incarnation = await setup();
     await bodySend('DELETE', `/v1/libraryEntries/${target}`);
-    await bodySend('PUT', `/v1/libraryEntries/${target}`, { state: 'planned' });
+    await f.commands.putEntry(f.owner.actor, target, { state: 'planned' }, entryKey());
     const afterRecreation = await personal();
     expect((await body(await incarnation.apply())).fields).toEqual([{ field: 'note', status: 'stale' }]);
     expect(await personal()).toEqual(afterRecreation);
