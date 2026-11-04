@@ -103,6 +103,15 @@ export function admitSubjectViewerFacts(page: DiscoveryHttpPage) {
 }
 
 export function snapshotViewerOverlays(page: DiscoveryPage) {
+  const accountFollows: DiscoveryHttpPage['accountFollows'] =
+    page.accountFollows?.state === 'current'
+      ? {
+          ...page.accountFollows,
+          rows: page.accountFollows.rows.map((row) => ({ ...row, actions: { ...row.actions } })),
+        }
+      : page.accountFollows
+        ? { ...page.accountFollows }
+        : undefined;
   const { viewerFacts: originalViewerFacts, collectionFollows: originalFollows } = page;
   const collectionFollows: DiscoveryHttpPage['collectionFollows'] =
     originalFollows?.state === 'current'
@@ -129,7 +138,7 @@ export function snapshotViewerOverlays(page: DiscoveryPage) {
             })),
           };
   return {
-    ...(page.accountFollows === undefined ? {} : { accountFollows: structuredClone(page.accountFollows) }),
+    ...(accountFollows === undefined ? {} : { accountFollows }),
     ...(viewerFacts === undefined ? {} : { viewerFacts }),
     ...(collectionFollows === undefined ? {} : { collectionFollows }),
   };
