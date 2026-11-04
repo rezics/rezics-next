@@ -8641,5 +8641,10 @@
   "thread_attachment_replace_advice": "Wähle eine neue Datei als Ersatz. Beschreibung und Position bleiben erhalten.",
   "thread_attachment_no_recovery": "Die genaue Wiederaufnahme ist nicht verfügbar. Du kannst diesen lokalen Anhang entfernen; das Verlassen bricht die Serveranfrage nicht ab.",
   "thread_attachment_replace": "Bild ersetzen",
-  "thread_attachment_local_remove": "Das Entfernen betrifft nur diesen lokalen Anhang. Ein Upload auf dem Server wird dadurch weder abgebrochen noch gelöscht."
+  "thread_attachment_local_remove": "Das Entfernen betrifft nur diesen lokalen Anhang. Ein Upload auf dem Server wird dadurch weder abgebrochen noch gelöscht.",
+  "discovery_account_automated": "Automatisiertes Konto",
+  "discovery_account_bio_absent": "Keine öffentliche Biografie",
+  "discovery_account_bio_withheld": "Biografie nicht freigegeben",
+  "discovery_account_bio_unavailable": "Biografie nicht verfügbar",
+  "discovery_account_bio_truncated": "Biografie gekürzt"
 }

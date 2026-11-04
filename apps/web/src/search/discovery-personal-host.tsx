@@ -8,6 +8,7 @@ import { normalizeSessionObservation, subscribeBrowserSession, sessionStateSnaps
 import { viewerExposureLifetime, viewerExposureQuery } from '../kernel/viewer-exposure';
 import { operationIsAdmitted } from '../kernel/exposure';
 import { CollectionFollowControl } from './collection-context/follow';
+import { AccountFollowControl } from './account-context/follow';
 import { writeCollectionFollow } from './collection-context/actions';
 import { collectionFollowSource } from './collection-context/schema';
 import { m } from '../paraglide/messages.js';
@@ -235,6 +236,7 @@ export function useDiscoveryPersonalResults(input: {
                 ...result.state.page,
                 viewerFacts: null,
                 collectionFollows: { state: 'unavailable', reason: 'identity' },
+                accountFollows: { state: 'unavailable', reason: 'identity' },
               },
             }
           : result.state,
@@ -289,6 +291,7 @@ export function useDiscoveryPersonalResults(input: {
             ...state.page,
             viewerFacts: { state: 'unavailable', reason: 'response_limit', retryable: false },
             collectionFollows: { state: 'unavailable', reason: 'native' },
+            accountFollows: { state: 'unavailable', reason: 'native' },
           };
       }
       const page = createDiscoveryPersonalPage({
@@ -390,6 +393,7 @@ export function useDiscoveryPersonalResults(input: {
             ...(spaceEntries?.reader === null ? { spaceEntries } : {}),
             viewerFacts: null,
             collectionFollows: { state: 'unavailable' as const, reason: 'identity' as const },
+            accountFollows: { state: 'unavailable' as const, reason: 'identity' as const },
           };
         })()
       : undefined;
@@ -419,16 +423,29 @@ export function useDiscoveryPersonalResults(input: {
       );
     }
     const options = { locale: locales.find((locale) => locale === input.locale) ?? 'en' };
-    if (hit.summary.kind === 'collection') {
-      const card = hit.summary.value.card;
-      const follows = value?.state.status === 'ready' ? value.state.page.collectionFollows : undefined;
+    if (hit.summary.kind === 'collection' || hit.summary.kind === 'account') {
+      const Control = hit.summary.kind === 'account' ? AccountFollowControl : CollectionFollowControl;
+      const target = hit.summary.kind === 'account' ? hit.summary.value.context?.followTarget : undefined;
+      const expected =
+        hit.summary.kind === 'collection'
+          ? { id: hit.key.id, type: 'collection', source: collectionFollowSource(hit.summary.value.card) }
+          : target?.state === 'available'
+            ? { id: target.id, type: 'subject', source: target.source }
+            : undefined;
+      const follows =
+        value?.state.status === 'ready'
+          ? hit.summary.kind === 'account'
+            ? value.state.page.accountFollows
+            : value.state.page.collectionFollows
+          : undefined;
       const row =
         follows?.state === 'current' && follows.accountId === value?.observation.scope.viewer
           ? follows.rows.find(
               (row) =>
-                row.targetId === hit.key.id &&
-                row.targetType === 'collection' &&
-                row.source === collectionFollowSource(card),
+                expected &&
+                row.targetId === expected.id &&
+                row.targetType === expected.type &&
+                row.source === expected.source,
             )
           : undefined;
       if (
@@ -439,7 +456,7 @@ export function useDiscoveryPersonalResults(input: {
         row
       )
         return (
-          <CollectionFollowControl
+          <Control
             key={`${value.observation.scope.page}:${discoveryKey(hit)}:${row.source}`}
             row={{
               ...row,
@@ -464,6 +481,8 @@ export function useDiscoveryPersonalResults(input: {
             }
           />
         );
+      if (hit.summary.kind === 'account' && !expected)
+        return <p role="status">{m.library_follow_unavailable({}, options)}</p>;
       return session.state === 'signed-out' ? (
         <a
           className="inline-flex min-h-11 items-center text-primary underline"

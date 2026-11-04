@@ -8641,5 +8641,10 @@
   "thread_attachment_replace_advice": "새 파일을 선택하여 바꾸세요. 설명과 위치는 유지됩니다.",
   "thread_attachment_no_recovery": "원래 작업을 복구할 수 없습니다. 이 로컬 첨부는 삭제할 수 있지만, 나가도 서버 요청은 취소되지 않습니다.",
   "thread_attachment_replace": "이미지 바꾸기",
-  "thread_attachment_local_remove": "삭제는 이 로컬 첨부에만 적용됩니다. 서버의 업로드를 취소하거나 지우지 않습니다."
+  "thread_attachment_local_remove": "삭제는 이 로컬 첨부에만 적용됩니다. 서버의 업로드를 취소하거나 지우지 않습니다.",
+  "discovery_account_automated": "자동화된 계정",
+  "discovery_account_bio_absent": "공개 소개 없음",
+  "discovery_account_bio_withheld": "소개 비공개",
+  "discovery_account_bio_unavailable": "소개를 불러올 수 없음",
+  "discovery_account_bio_truncated": "소개가 축약됨"
 }

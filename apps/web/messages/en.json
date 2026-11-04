@@ -8733,5 +8733,10 @@
   "thread_attachment_replace_advice": "Choose a fresh file to replace this attachment. Its description and position will be kept.",
   "thread_attachment_no_recovery": "Exact recovery is unavailable here. You can remove this local attachment; leaving does not cancel the native request.",
   "thread_attachment_replace": "Replace image",
-  "thread_attachment_local_remove": "Remove affects only this local attachment. It does not cancel or erase a native upload."
+  "thread_attachment_local_remove": "Remove affects only this local attachment. It does not cancel or erase a native upload.",
+  "discovery_account_automated": "Automated account",
+  "discovery_account_bio_absent": "No public biography",
+  "discovery_account_bio_withheld": "Biography withheld",
+  "discovery_account_bio_unavailable": "Biography unavailable",
+  "discovery_account_bio_truncated": "Biography shortened"
 }

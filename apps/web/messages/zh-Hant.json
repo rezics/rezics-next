@@ -8641,5 +8641,10 @@
   "thread_attachment_replace_advice": "請選擇新檔案來替換此附件，說明和位置會保留。",
   "thread_attachment_no_recovery": "目前無法恢復原操作。你可以移除此本機附件；離開不會取消伺服器上的請求。",
   "thread_attachment_replace": "替換圖片",
-  "thread_attachment_local_remove": "移除只影響這個本機附件，不會取消或刪除伺服器上的上傳。"
+  "thread_attachment_local_remove": "移除只影響這個本機附件，不會取消或刪除伺服器上的上傳。",
+  "discovery_account_automated": "自動化帳號",
+  "discovery_account_bio_absent": "暫無公開簡介",
+  "discovery_account_bio_withheld": "簡介已隱藏",
+  "discovery_account_bio_unavailable": "簡介暫時無法取得",
+  "discovery_account_bio_truncated": "簡介已截短"
 }

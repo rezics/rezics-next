@@ -8641,5 +8641,10 @@
   "thread_attachment_replace_advice": "请选择新文件来替换此附件，说明和位置会保留。",
   "thread_attachment_no_recovery": "目前无法恢复原操作。你可以移除此本地附件；离开不会取消服务器上的请求。",
   "thread_attachment_replace": "替换图片",
-  "thread_attachment_local_remove": "移除只影响这个本地附件，不会取消或删除服务器上的上传。"
+  "thread_attachment_local_remove": "移除只影响这个本地附件，不会取消或删除服务器上的上传。",
+  "discovery_account_automated": "自动化账号",
+  "discovery_account_bio_absent": "暂无公开简介",
+  "discovery_account_bio_withheld": "简介已隐藏",
+  "discovery_account_bio_unavailable": "简介暂不可用",
+  "discovery_account_bio_truncated": "简介已截短"
 }

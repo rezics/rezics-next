@@ -8641,5 +8641,10 @@
   "thread_attachment_replace_advice": "新しいファイルを選んで置き換えてください。説明と位置は保持されます。",
   "thread_attachment_no_recovery": "元の操作を復旧する手段がありません。このローカル添付は削除できますが、離れてもサーバーへのリクエストは取り消されません。",
   "thread_attachment_replace": "画像を置き換える",
-  "thread_attachment_local_remove": "削除されるのはこのローカル添付だけです。サーバー上のアップロードの取り消しや消去は行いません。"
+  "thread_attachment_local_remove": "削除されるのはこのローカル添付だけです。サーバー上のアップロードの取り消しや消去は行いません。",
+  "discovery_account_automated": "自動アカウント",
+  "discovery_account_bio_absent": "公開プロフィール文はありません",
+  "discovery_account_bio_withheld": "プロフィール文は非公開です",
+  "discovery_account_bio_unavailable": "プロフィール文を取得できません",
+  "discovery_account_bio_truncated": "プロフィール文を省略しています"
 }

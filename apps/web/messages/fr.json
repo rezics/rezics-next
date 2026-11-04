@@ -8641,5 +8641,10 @@
   "thread_attachment_replace_advice": "Choisissez un nouveau fichier pour remplacer cette pièce jointe. Sa description et sa position seront conservées.",
   "thread_attachment_no_recovery": "La reprise exacte est indisponible. Vous pouvez retirer cette pièce jointe locale ; quitter n’annule pas la requête au serveur.",
   "thread_attachment_replace": "Remplacer l’image",
-  "thread_attachment_local_remove": "Le retrait ne concerne que cette pièce jointe locale. Il n’annule ni n’efface un envoi au serveur."
+  "thread_attachment_local_remove": "Le retrait ne concerne que cette pièce jointe locale. Il n’annule ni n’efface un envoi au serveur.",
+  "discovery_account_automated": "Compte automatisé",
+  "discovery_account_bio_absent": "Aucune biographie publique",
+  "discovery_account_bio_withheld": "Biographie masquée",
+  "discovery_account_bio_unavailable": "Biographie indisponible",
+  "discovery_account_bio_truncated": "Biographie abrégée"
 }

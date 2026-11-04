@@ -81,6 +81,7 @@ export type DiscoveryDocument =
   | { owner: 'semantic'; kind: string; value: IndexedSubject }
   | { owner: 'accounts'; kind: 'account'; value: IndexedAccount };
 export type AccountDiscoverySummary = {
+  context?: import('./account-context.ts').AccountContext;
   id: string;
   accountKind: 'actor' | 'organization';
   handle: string | null;
@@ -169,6 +170,7 @@ export type DiscoveryKindMetadata = {
   count?: KindCountEvidence;
 };
 export type DiscoveryPage = {
+  accountFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
   collectionFollows?: import('../library/follow-discovery.ts').FollowDiscovery;
   spaceEntries?: import('../community/space-discovery-entry-contract.ts').SpaceEntryPage;
   hits: DiscoveryUnionHit[];
