@@ -120,7 +120,7 @@ function mixedPage(): DiscoveryPage {
 test('mixed and empty native pages preserve the closed wire, defaults, cursors and private envelope distinctions', () => {
   const native = mixedPage();
   const wire = discoveryHttpPage(native);
-  expect(wire).toEqual({
+  expect(wire as unknown).toEqual({
     ...native,
     hits: native.hits.map((hit) => ({
       ...hit,
@@ -158,17 +158,17 @@ test('all response families detach nested identity and profile values from later
         if (summary.value.verifiedAgent) summary.value.verifiedAgent.label = 'Changed';
         break;
       case 'collection':
-        summary.value.card.curator = { state: 'unavailable', reason: 'native_projection' };
+        Reflect.set(summary.value.card.curator, 'state', 'changed');
         break;
       case 'review':
-        if (summary.value.author) summary.value.author.displayName = 'Changed';
+        if (summary.value.author) Reflect.set(summary.value.author, 'displayName', 'Changed');
         break;
       case 'space':
-        if (summary.value.realm) summary.value.realm.title = 'Changed';
+        if (summary.value.realm) Reflect.set(summary.value.realm, 'title', 'Changed');
         break;
     }
   }
-  if (native.viewerFacts?.state === 'current') native.viewerFacts.rows[0]!.rowKey = 'changed';
+  if (native.viewerFacts?.state === 'current') Reflect.set(native.viewerFacts.rows[0]!, 'rowKey', 'changed');
   expect(wire).toEqual(retained);
 });
 
