@@ -272,12 +272,7 @@ function collectionViewAddress(
   cursor: string | undefined,
   search?: Record<string, string | string[]>,
 ) {
-  const [path, query] = collectionPageAddress(getLocale(), id, cursor ?? '', search).split('?');
-  const params = new URLSearchParams(query);
-  if (!cursor) params.delete('cursor');
-  if (layout === 'grid') params.set('layout', 'grid');
-  const suffix = params.toString();
-  return `${path}${suffix ? `?${suffix}` : ''}`;
+  return collectionPageAddress(getLocale(), id, cursor, search, layout);
 }
 
 type BoundaryMove = {

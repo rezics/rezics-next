@@ -53,21 +53,25 @@ type CollectionPresentationInput = Omit<CollectionPresentationData, 'presentatio
 };
 export type CollectionTypeOption = { id: string; label: string };
 export type CollectionListPresentations = Readonly<Record<string, ListPresentation>>;
+export type CollectionLayout = 'grid' | 'list';
 
-/** Keep the one shell filter protocol intact when following a native signed page cursor. */
+/** Keep supported filters and the selected layout intact across a native page continuation. */
 export function collectionPageAddress(
   locale: string,
   id: string,
-  cursor: string,
+  cursor: string | undefined,
   search: Record<string, string | string[]> = {},
+  layout: CollectionLayout = 'list',
 ): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(search)) {
     if (key !== 'type' && !/^[frl]\.[a-zA-Z0-9:_.-]{1,128}$/.test(key)) continue;
     for (const item of Array.isArray(value) ? value : [value]) params.append(key, item);
   }
-  params.set('cursor', cursor);
-  return `/${locale}/collections/${encodeURIComponent(id)}?${params}`;
+  if (layout === 'grid') params.set('layout', 'grid');
+  if (cursor) params.set('cursor', cursor);
+  const query = params.toString();
+  return `/${locale}/collections/${encodeURIComponent(id)}${query ? `?${query}` : ''}`;
 }
 
 /** Copy only public presentation, never configured media identity or private editor data. */
