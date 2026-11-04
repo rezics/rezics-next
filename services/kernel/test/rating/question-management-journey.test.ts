@@ -5,6 +5,9 @@ import { routeOf } from '../../src/route/route.ts';
 import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { readQuestionManagementPage } from '../../src/rating/question-management.ts';
 import { AccessUnavailableError } from '../../src/access/unavailable.ts';
+import labelPage from '../../src/rating/question-label-page.sql';
+import { accountDeletionRuntime, deletePersona } from '../support/account-deletion.ts';
+import { observeSql } from '../content/support/sql-observer.ts';
 import {
   closeCommunityDrivers,
   communityFixtureRuntime,
@@ -229,6 +232,93 @@ test('Realm management advice composes native immutable creation, caption CAS an
         )
       ).status,
     ).toBe(400);
+  } finally {
+    await driver.close();
+    await closeCommunityDrivers();
+  }
+}, 600_000);
+
+test.serial('management keeps deleted caption authors canonical and failed history continuation retryable', async () => {
+  const driver = await createCommunityDriver();
+  try {
+    const fixture = await driver.provision();
+    const { system } = communityFixtureRuntime();
+    const deletion = accountDeletionRuntime(system);
+    const author = await deletion.person();
+    const authorAccount: Account = { id: author.accountId, bearer: author.bearer };
+    const call = (method: Method, path: string, actor: Account | null, body?: unknown, key = randomUUID()) =>
+      driver.request({ method, path, actor, body, key: JSON.stringify(key) });
+    const json = async (response: Response, status = 200) => {
+      if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
+      return response.json();
+    };
+    const space = (await json(await call('POST', '/v1/spaces', fixture.owner, { title: 'Caption history' }), 201)).space;
+    const realmId: string = (
+      await json(
+        await call('POST', '/v1/realms', fixture.owner, {
+          spaceId: space.spaceId,
+          title: 'Deleted caption author',
+          visibility: 'protected',
+          contextId: fixture.contextId,
+        }),
+        201,
+      )
+    ).realm.realmId;
+    await json(await call('POST', `/v1/realms/${realmId}/members`, fixture.owner, { accountId: author.accountId }), 202);
+    await driver.settle();
+    await json(
+      await call('POST', '/v1/grants', fixture.owner, {
+        resource: { route: routeOf(realmId), id: realmId },
+        subject: { kind: 'account', id: author.accountId },
+        actions: ['realm:manage'],
+        valid: '(,)',
+      }),
+      201,
+    );
+    const created = await json(
+      await call('POST', `/v1/realms/${realmId}/rating-questions`, authorAccount, definition),
+      201,
+    );
+    await json(
+      await call('PUT', `/v1/rating-questions/${created.id}/label`, authorAccount, {
+        expectedLabelRevision: 1,
+        label: 'A caption by a retained author',
+      }),
+    );
+    await deletePersona({ pool: system.database.pool, auth: deletion.auth }, author);
+    await driver.settle();
+
+    const management = `/v1/realms/${realmId}/rating-questions/management?selectedQuestionId=${created.id}`;
+    const selected = await json(await call('GET', management, fixture.owner));
+    expect(selected.selected.question).toMatchObject({
+      id: created.id,
+      canonicalLabel: definition.label,
+      label: 'A caption by a retained author',
+      labelRevision: 2,
+      revision: 1,
+    });
+    const historyPath = `${selected.selected.history}?limit=1`;
+    const first = await json(await call('GET', historyPath, fixture.owner));
+    expect(first.labels[0]).toMatchObject({
+      questionId: created.id,
+      labelRevision: 1,
+      label: definition.label,
+      at: null,
+      author: { id: author.accountId, state: 'deleted' },
+    });
+    expect(first.labels[0].author).not.toHaveProperty('displayName');
+    const continuation = `${historyPath}&cursor=${encodeURIComponent(first.next)}`;
+    const expected = await json(await call('GET', continuation, fixture.owner));
+    expect(expected.labels[0].author).toMatchObject({ id: author.accountId, state: 'deleted' });
+
+    const observer = observeSql(system.database.pool);
+    observer.armFault({ match: { statement: labelPage.sql }, boundary: 'before', error: new Error('History page unavailable') });
+    try {
+      expect((await call('GET', continuation, fixture.owner)).status).toBe(503);
+      expect(await json(await call('GET', continuation, fixture.owner))).toEqual(expected);
+    } finally {
+      await observer.close();
+    }
   } finally {
     await driver.close();
     await closeCommunityDrivers();

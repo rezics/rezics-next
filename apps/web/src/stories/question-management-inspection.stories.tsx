@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+import { m } from '../paraglide/messages.js';
 import { QuestionManagementContent } from '../ratings/question-management/page';
-import type { QuestionManagementPageData } from '../ratings/question-management/types';
+import type { QuestionManagementHistoryRead, QuestionManagementPageData } from '../ratings/question-management/types';
 
 const realmId = '019a1b2c-3d4e-7f00-8a00-5ab1ec702001';
 const activeId = '019a1b2c-3d4e-7f00-8a00-5ab1ec702101';
@@ -49,15 +51,83 @@ const page: QuestionManagementPageData = {
   },
 };
 
+const activePage: QuestionManagementPageData = {
+  ...page,
+  directory: { ratingQuestions: page.directory.ratingQuestions, next: null },
+  selected: {
+    question: page.directory.ratingQuestions[0]!,
+    readback: `/v1/rating-questions/${activeId}`,
+    history: `/v1/rating-questions/${activeId}/labels`,
+    actions: {
+      caption: { method: 'PUT', href: `/v1/rating-questions/${activeId}/label`, expectedLabelRevision: 1 },
+      lifecycle: {
+        method: 'POST',
+        href: `/v1/rating-questions/${activeId}/$retire`,
+        expectedLifecycleRevision: 1,
+      },
+    },
+  },
+};
+const unavailablePage: QuestionManagementPageData = {
+  ...page,
+  actions: { create: null },
+  selected: page.selected
+    ? { ...page.selected, actions: { caption: null, lifecycle: null } }
+    : null,
+};
+const captionHistory: QuestionManagementHistoryRead = {
+  state: 'ready',
+  questionId: retiredId,
+  cursor: null,
+  page: {
+    labels: [
+      {
+        questionId: retiredId,
+        labelRevision: 1,
+        label: 'Translation accuracy',
+        at: null,
+        author: { id: '019a1b2c-3d4e-7f00-8a00-5ab1ec702003', kind: 'actor', state: 'deleted' },
+      },
+      {
+        questionId: retiredId,
+        labelRevision: 2,
+        label: 'Translation clarity',
+        at: '2026-11-01T12:00:00.000Z',
+        author: {
+          id: page.viewer.accountId,
+          kind: 'actor',
+          state: 'active',
+          handle: null,
+          displayName: null,
+          automated: false,
+          operatorId: null,
+        },
+      },
+    ],
+    next: 'recorded caption continuation',
+  },
+};
+
 const meta = {
   title: 'Ratings/Realm question management',
   component: QuestionManagementContent,
-  parameters: { layout: 'fullscreen' },
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        component:
+          'Recorded closed management source and caption history values. Command callbacks are presentation-only; the native journeys are covered separately.',
+      },
+    },
+  },
   args: {
     page,
     address: { selectedQuestionId: retiredId, cursor: null },
     onSelect: () => undefined,
     onNext: () => undefined,
+    onCreate: () => undefined,
+    onCaption: () => undefined,
+    onLifecycle: () => undefined,
   },
 } satisfies Meta<typeof QuestionManagementContent>;
 
@@ -65,3 +135,39 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const RetiredDefinitionInspection: Story = {};
+
+export const ActiveSelection: Story = { args: { page: activePage, address: { selectedQuestionId: activeId, cursor: null } } };
+
+export const CreationReview: Story = {
+  args: { page: { ...page, selected: null } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_question_create() }));
+    await userEvent.type(canvas.getByLabelText(m.realm_question_management_meaning()), 'Rate adaptation fidelity independently.');
+    await userEvent.type(canvas.getByLabelText(m.home_question_label()), 'Adaptation fidelity');
+    await userEvent.click(canvas.getByRole('button', { name: m.realm_question_review_definition() }));
+    await expect(canvas.getByRole('button', { name: m.realm_question_confirm_create() })).toBeVisible();
+  },
+};
+
+export const CaptionHistory: Story = { args: { history: captionHistory } };
+
+export const StaleConflict: Story = {
+  args: { commandStates: { caption: 'stale' }, requireFreshInspection: true },
+};
+
+export const StaleHistoryCursor: Story = {
+  args: { history: { state: 'stale-cursor', questionId: retiredId, cursor: 'recorded stale cursor' } },
+};
+
+export const UnavailableAdvice: Story = { args: { page: unavailablePage } };
+
+export const Phone390: Story = {
+  args: { page: activePage, address: { selectedQuestionId: activeId, cursor: null }, history: captionHistory },
+  globals: { viewport: { value: 'phone390', isRotated: false } },
+};
+
+export const Desktop1280: Story = {
+  args: { page, history: captionHistory },
+  globals: { viewport: { value: 'desktop1280', isRotated: false } },
+};
