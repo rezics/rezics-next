@@ -5,7 +5,9 @@ import { copiesSubjectId } from '../../library/copies-query';
 
 const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const subjectDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+(?:/([^/?#]+))?$`);
-const musicContextDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+/music-context$`);
+const musicContextDestination = new RegExp(
+  `^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/subjects/${uuid}/[^/?#]+/music-context$`,
+);
 const realmDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/realms/${uuid}$`);
 const copiesDestination = new RegExp(`^/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)/library/copies$`);
 const returnAddressCap = 32768;

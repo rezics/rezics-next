@@ -129,7 +129,9 @@ test('the mounted music-context reader selects, pages, retries and returns throu
       if (!input.stream && !input.cursor) {
         initialAttempts += 1;
         return Promise.resolve(
-          initialAttempts === 1 ? { ok: false, reason: 'unavailable' } : successful('schema:location', 'Initial row', 'initial-token'),
+          initialAttempts === 1
+            ? { ok: false, reason: 'unavailable' }
+            : successful('schema:location', 'Initial row', 'initial-token'),
         );
       }
       if (input.cursor === 'next-1') {
@@ -204,7 +206,9 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     expect(host.textContent).toContain('last readable page');
     expect(host.textContent).toContain('Current venue');
     expect(host.querySelector('button')?.textContent).toContain('Retry this page');
-    const retry = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Retry this page'));
+    const retry = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Retry this page'),
+    );
     if (!retry) throw new Error('The failed native address did not expose retry');
     await settle(() => retry.click());
     expect(calls.slice(-2)).toEqual([
@@ -219,9 +223,7 @@ test('the mounted music-context reader selects, pages, retries and returns throu
     if (!related) throw new Error('The disclosed endpoint did not become a Subject link');
     const visit = new URL(related.href);
     const via = visit.searchParams.get('via');
-    expect(via).toBe(
-      `/en/subjects/${anchor}/harbor-stage/music-context?stream=schema%3Alocation&cursor=next-1`,
-    );
+    expect(via).toBe(`/en/subjects/${anchor}/harbor-stage/music-context?stream=schema%3Alocation&cursor=next-1`);
     expect(subjectVisitReturn(via, 'en')).toBe(via);
     const correction = [...host.querySelectorAll<HTMLAnchorElement>('a')].find((link) =>
       link.textContent?.includes('Propose a correction'),

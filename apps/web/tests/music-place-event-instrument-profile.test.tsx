@@ -259,94 +259,94 @@ function client(
           relationReads.push({ property: query.property, limit: query.limit, cursor: query.cursor });
           networkReads.push({ resource: 'relations', ...fetch });
           const locationRows = [
-              {
-                statement: {
-                  id: '00000000-0000-4000-8000-00000000e041',
-                  property: { id: 'schema:location', data_type: 'wikibase-item' },
-                  value: { type: 'value', content: eventA },
-                  rank: 'normal',
-                  qualifiers: [
-                    {
-                      property: { id: 'schema:startDate', data_type: 'time' },
-                      value: {
-                        type: 'value',
-                        content: {
-                          time: '+2001-05-00T00:00:00Z',
-                          precision: 10,
-                          calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
-                        },
+            {
+              statement: {
+                id: '00000000-0000-4000-8000-00000000e041',
+                property: { id: 'schema:location', data_type: 'wikibase-item' },
+                value: { type: 'value', content: eventA },
+                rank: 'normal',
+                qualifiers: [
+                  {
+                    property: { id: 'schema:startDate', data_type: 'time' },
+                    value: {
+                      type: 'value',
+                      content: {
+                        time: '+2001-05-00T00:00:00Z',
+                        precision: 10,
+                        calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
                       },
                     },
-                  ],
-                  references: [],
-                },
-                summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
-                related: {},
+                  },
+                ],
+                references: [],
               },
-              {
-                statement: {
-                  id: '00000000-0000-4000-8000-00000000e044',
-                  property: { id: 'schema:location', data_type: 'wikibase-item' },
-                  value: { type: 'value', content: eventA },
-                  rank: 'normal',
-                  qualifiers: [
-                    {
-                      property: { id: 'schema:startDate', data_type: 'time' },
-                      value: {
-                        type: 'value',
-                        content: {
-                          time: '+2001-05-00T00:00:00Z',
-                          precision: 10,
-                          calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
-                        },
+              summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
+              related: {},
+            },
+            {
+              statement: {
+                id: '00000000-0000-4000-8000-00000000e044',
+                property: { id: 'schema:location', data_type: 'wikibase-item' },
+                value: { type: 'value', content: eventA },
+                rank: 'normal',
+                qualifiers: [
+                  {
+                    property: { id: 'schema:startDate', data_type: 'time' },
+                    value: {
+                      type: 'value',
+                      content: {
+                        time: '+2001-05-00T00:00:00Z',
+                        precision: 10,
+                        calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
                       },
                     },
-                  ],
-                  references: [],
-                },
-                summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
-                related: {},
+                  },
+                ],
+                references: [],
               },
-              {
-                statement: {
-                  id: '00000000-0000-4000-8000-00000000e042',
-                  property: { id: 'schema:location', data_type: 'wikibase-item' },
-                  value: { type: 'value', content: eventB },
-                  rank: 'normal',
-                  qualifiers: [
-                    {
-                      property: { id: 'schema:startDate', data_type: 'time' },
-                      value: {
-                        type: 'value',
-                        content: {
-                          time: '+2002-01-01T00:00:00Z',
-                          precision: 11,
-                          calendarmodel: 'https://example.org/calendar',
-                        },
+              summary: { id: eventA, type: 'schema:Event', label: { value: 'Spring concert', language: 'en' } },
+              related: {},
+            },
+            {
+              statement: {
+                id: '00000000-0000-4000-8000-00000000e042',
+                property: { id: 'schema:location', data_type: 'wikibase-item' },
+                value: { type: 'value', content: eventB },
+                rank: 'normal',
+                qualifiers: [
+                  {
+                    property: { id: 'schema:startDate', data_type: 'time' },
+                    value: {
+                      type: 'value',
+                      content: {
+                        time: '+2002-01-01T00:00:00Z',
+                        precision: 11,
+                        calendarmodel: 'https://example.org/calendar',
                       },
                     },
-                  ],
-                  references: [],
-                },
-                summary: { id: eventB, type: 'schema:Event', label: { value: 'Autumn concert', language: 'en' } },
-                related: {},
+                  },
+                ],
+                references: [],
               },
-              {
-                statement: {
-                  id: '00000000-0000-4000-8000-00000000e043',
-                  property: { id: 'schema:location', data_type: 'wikibase-item' },
-                  value: { type: 'value', content: recording },
-                  rank: 'normal',
-                  qualifiers: [{ property: { id: 'schema:startDate', data_type: 'time' }, value: { type: 'novalue' } }],
-                  references: [],
-                },
-                summary:
-                  mode === 'unreadable'
-                    ? null
-                    : { id: recording, type: 'schema:MusicAlbum', label: { value: 'Live', language: 'en' } },
-                related: {},
+              summary: { id: eventB, type: 'schema:Event', label: { value: 'Autumn concert', language: 'en' } },
+              related: {},
+            },
+            {
+              statement: {
+                id: '00000000-0000-4000-8000-00000000e043',
+                property: { id: 'schema:location', data_type: 'wikibase-item' },
+                value: { type: 'value', content: recording },
+                rank: 'normal',
+                qualifiers: [{ property: { id: 'schema:startDate', data_type: 'time' }, value: { type: 'novalue' } }],
+                references: [],
               },
-            ];
+              summary:
+                mode === 'unreadable'
+                  ? null
+                  : { id: recording, type: 'schema:MusicAlbum', label: { value: 'Live', language: 'en' } },
+              related: {},
+            },
+          ];
           return {
             status: 200,
             data: {
@@ -403,12 +403,7 @@ test('music context keeps two events at a place, dated recordings, partial dates
     'somevalue',
     'coordinates-unsupported',
   ]);
-  expect(read.links.map((link) => link.label)).toEqual([
-    'Spring concert',
-    'Spring concert',
-    'Autumn concert',
-    'Live',
-  ]);
+  expect(read.links.map((link) => link.label)).toEqual(['Spring concert', 'Spring concert', 'Autumn concert', 'Live']);
   expect(read.links.map((link) => link.id)).toEqual([eventA, eventA, eventB, '']);
   expect(read.links.map((link) => link.position)).toEqual([1, 2, 3, 4]);
   expect(read.links[0]?.occurrence).not.toBe(read.links[1]?.occurrence);
@@ -416,14 +411,9 @@ test('music context keeps two events at a place, dated recordings, partial dates
   expect(read.links[2]?.date?.time).toMatchObject({ state: 'unsupported', reason: 'calendar' });
   expect(read.links[3]).toMatchObject({ id: '', unreadable: true });
   const otherReads: Array<{ property: string; limit: number; cursor?: string }> = [];
-  const other = await readMusicContext(
-    client('ok', otherReads),
-    'Bearer reader',
-    definitions,
-    place,
-    'en',
-    { stream: 'wdt:P8000' },
-  );
+  const other = await readMusicContext(client('ok', otherReads), 'Bearer reader', definitions, place, 'en', {
+    stream: 'wdt:P8000',
+  });
   expect(other.ok && other.stream).toBe('wdt:P8000');
   expect(otherReads).toEqual([{ property: 'wdt:P8000', limit: MUSIC_CONTEXT_PAGE_CAP, cursor: undefined }]);
   const queryClient = new QueryClient();
@@ -445,14 +435,9 @@ test('music context keeps two events at a place, dated recordings, partial dates
   expect(html).toContain('Unsupported calendar: https://example.org/calendar');
   expect(html).toContain('Unsupported time uncertainty');
   expect(html).not.toContain('Unknown date');
-  const unread = await readMusicContext(
-    client('unreadable'),
-    'Bearer reader',
-    definitions,
-    place,
-    'en',
-    { stream: 'schema:location' },
-  );
+  const unread = await readMusicContext(client('unreadable'), 'Bearer reader', definitions, place, 'en', {
+    stream: 'schema:location',
+  });
   expect(unread.ok && unread.links.some((link) => link.unreadable)).toBe(true);
   expect(await readMusicContext(client('denied'), 'Bearer reader', definitions, place, 'en', {})).toEqual({
     ok: false,
@@ -461,14 +446,9 @@ test('music context keeps two events at a place, dated recordings, partial dates
   const closed = await readMusicContext(client('ok'), 'Bearer reader', bundledRelease, place, 'en', {});
   expect(closed.ok && closed.kind).toBe('unsupported');
   const missingCalls: Array<{ property: string; limit: number; cursor?: string }> = [];
-  const missing = await readMusicContext(
-    client('ok', missingCalls),
-    'Bearer reader',
-    definitions,
-    place,
-    'en',
-    { stream: 'schema:removed' },
-  );
+  const missing = await readMusicContext(client('ok', missingCalls), 'Bearer reader', definitions, place, 'en', {
+    stream: 'schema:removed',
+  });
   expect(missing.ok && missing.streamUnavailable).toBe(true);
   expect(missingCalls).toEqual([]);
   expect(catalogueEntries.musicContext({ id: place, label: 'Hall', locale: 'en' }).href).toContain('/music-context');

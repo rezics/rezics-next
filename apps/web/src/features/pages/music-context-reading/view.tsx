@@ -103,9 +103,7 @@ export function MusicContextReading({
   const [displayAddress, setDisplayAddress] = useState<MusicContextAddress | undefined>(
     seed ? { stream: seed.stream ?? initialStream, cursor: initialCursor } : undefined,
   );
-  const [failure, setFailure] = useState<MusicContextFailure | undefined>(
-    initial && !initial.ok ? initial : undefined,
-  );
+  const [failure, setFailure] = useState<MusicContextFailure | undefined>(initial && !initial.ok ? initial : undefined);
   const [failedAddress, setFailedAddress] = useState<MusicContextAddress | undefined>(
     initial && !initial.ok ? { stream: initialStream, cursor: initialCursor } : undefined,
   );
@@ -273,13 +271,10 @@ export function MusicContextReading({
   const title = profile ? pickText(profile.public.subject.labels, locale).text : '';
   const safeReturn = subjectVisitReturn(returnTo, locale);
   const profileReturn = safeReturn ?? subjectHref({ id, label: title }, locale).href;
-  const visibleAddress = currentAddress(
-    id,
-    title,
-    locale,
-    page ? displayAddress : undefined,
-    { stream: selectedStream, cursor: cursorIntent },
-  );
+  const visibleAddress = currentAddress(id, title, locale, page ? displayAddress : undefined, {
+    stream: selectedStream,
+    cursor: cursorIntent,
+  });
   const canCorrect = !!profile && profile.kind !== 'unsupported';
   const correction = catalogueEntries.facts({ id, label: title, locale }).href;
   const correctionHref = `${correction}?${new URLSearchParams({ returnTo: visibleAddress })}`;
@@ -307,7 +302,10 @@ export function MusicContextReading({
           {profile.facts.length > 0 && (
             <dl className="grid min-w-0 gap-x-5 gap-y-3 sm:grid-cols-[minmax(8rem,0.35fr)_minmax(0,1fr)]">
               {profile.facts.map((fact, index) => (
-                <div className="grid min-w-0 gap-1 sm:col-span-2 sm:grid-cols-subgrid" key={`${fact.property}:${index}`}>
+                <div
+                  className="grid min-w-0 gap-1 sm:col-span-2 sm:grid-cols-subgrid"
+                  key={`${fact.property}:${index}`}
+                >
                   <dt className="font-medium">{fact.label}</dt>
                   <dd className="min-w-0 [overflow-wrap:anywhere]">
                     {fact.time ? (

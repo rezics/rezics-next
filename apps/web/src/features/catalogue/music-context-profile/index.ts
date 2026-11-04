@@ -30,12 +30,14 @@ export type MusicContextLink = {
   position: number;
   occurrence?: string | undefined;
   date?: { property: string; label: string; time: TimePresentation } | undefined;
-  role?: {
-    property: string;
-    label: string;
-    text?: string | undefined;
-    unknown?: 'somevalue' | 'novalue' | 'value' | undefined;
-  } | undefined;
+  role?:
+    | {
+        property: string;
+        label: string;
+        text?: string | undefined;
+        unknown?: 'somevalue' | 'novalue' | 'value' | undefined;
+      }
+    | undefined;
   unreadable?: boolean | undefined;
 };
 export type MusicContextFailure = CandidateFailure | { ok: false; reason: 'preparing' };
@@ -177,7 +179,9 @@ export async function readMusicContext(
       session = tokenOf(page) ?? session;
       next = isMusicContextCursor(page.data.next) ? page.data.next : null;
       const dateField = stream.qualifiers.find((qualifier) => qualifier.datatype === 'time');
-      const roleField = stream.slotKey ? stream.qualifiers.find((qualifier) => qualifier.id === stream.slotKey) : undefined;
+      const roleField = stream.slotKey
+        ? stream.qualifiers.find((qualifier) => qualifier.id === stream.slotKey)
+        : undefined;
       links = page.data.relations
         .filter((row) => row.statement.property.id === stream.id)
         .slice(0, MUSIC_CONTEXT_PAGE_CAP)
