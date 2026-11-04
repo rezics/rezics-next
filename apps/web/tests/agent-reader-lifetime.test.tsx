@@ -614,7 +614,28 @@ test('public account readers retire old admissions across sign-out, replacement,
     expect(client.getQueryCache().find({ queryKey: currentOverviewKey!, exact: true })).toBeDefined();
     expectAdmittedReader();
     // All mounted readers and session consumers use the shared observer's single cache subscription.
-    expect((client.getQueryCache() as unknown as { listeners: Set<unknown> }).listeners.size).toBe(1);
+    const subscriptions = () => (client.getQueryCache() as unknown as { listeners: Set<unknown> }).listeners.size;
+    const beforeProbe = subscriptions();
+    function IndependentReader() {
+      readerModule.useAgentReaderScope({
+        handle: 'another',
+        locale: 'en',
+        path: { kind: 'overview' },
+        enabled: false,
+        session: { state: 'signed-in', subject: alice, csrfToken: null },
+      });
+      return null;
+    }
+    const probe = createRoot(secondHost as unknown as HTMLElement);
+    try {
+      await act(async () =>
+        probe.render(createElement(QueryClientProvider, { client }, createElement(IndependentReader))),
+      );
+      expect(subscriptions()).toBe(beforeProbe);
+    } finally {
+      await act(async () => probe.unmount());
+    }
+    expect(subscriptions()).toBe(beforeProbe);
     await setSession(alice); // Equal successful replacement is a new incarnation.
     expectSafeReader();
     const equalReplacement = await nextRead(22);

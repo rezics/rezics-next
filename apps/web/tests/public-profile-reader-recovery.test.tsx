@@ -55,6 +55,7 @@ for (const view of ['overview', 'posts'] as const) {
     let handle = 'mira';
     let locale = 'en';
     let enabled = true;
+    let currentReading: import('../src/accounts/public-profile/reader-presentation/adapter').ProfileReading;
     function Caller() {
       const reading = useProfileReading({
         handle,
@@ -63,6 +64,7 @@ for (const view of ['overview', 'posts'] as const) {
         enabled,
         owner: page,
       });
+      currentReading = reading;
       return enabled
         ? createElement(PublicProfilePage, {
             page,
@@ -151,6 +153,11 @@ for (const view of ['overview', 'posts'] as const) {
       // A successful cautious preference value still means personalized reading.
       await clickRetry();
       const cautious = await nextRead(3);
+      expect(currentReading!.state).toBe('loading');
+      expect(currentReading!.reader).toEqual({ spoilerLevel: 0, suitability: 'blur' });
+      expect(
+        Array.from(host.querySelectorAll('[data-slot="cover"]')).map((cover) => cover.getAttribute('data-state')),
+      ).toContain('withheld');
       safe();
       cautious.work.resolve(runtime.result('blur'));
       await waitForStatus('preferences are applied');
