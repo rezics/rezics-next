@@ -204,6 +204,17 @@ acknowledgement after invocation becomes unknown. One invocation sends at most o
 undo native work. Target reads use the five-second private-read deadline even if an injected source or browser
 transport ignores abort. Retired waits cannot publish or release another operation.
 
+Passkey enrollment shows options preparation, the browser prompt, registration dispatch, and its confirmed or unknown
+result as separate states. Cancelling before dispatch sends no registration request. After dispatch, a lost response or
+page departure retains only the attempt identity, initiating account and uncertainty in mounted-page memory; restoration
+loads current native advice and requires an explicit bounded passkey review before a new enrollment is available. A
+matching name, visible row, empty list or truncated list never settles the earlier write. Finishing review acknowledges
+only the inventory shown and does not claim whether that write committed. A blank name receives a browser-and-system
+suggestion, which may not identify the saved passkey.
+
+Decision: when the direct passkey review has no explicit completeness flag, a full 32-row result is shown as potentially
+truncated because the read is bounded at the native contract limit.
+
 Security departure is protected by any nonempty new password, a nonblank passkey name, or an unresolved operation;
 Stay keeps the in-memory review and focus, while Leave clears local authority and drafts without claiming to cancel an
 operation already underway. Reload or close warns while protected. Cached-page return reloads the account,

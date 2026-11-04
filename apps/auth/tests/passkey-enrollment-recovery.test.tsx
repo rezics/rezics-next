@@ -25,6 +25,7 @@ let response: ReturnType<typeof Promise.withResolvers<Response>>;
 let review: ReturnType<typeof Promise.withResolvers<PasskeyRegistrationReview>>;
 let reviews: string[];
 const source = {
+  load: async () => initial,
   act: async () => ({ kind: 'failure' as const }),
   read: async () => ({ kind: 'unavailable' as const }),
   reviewRegistration: async (accountId: string) => {
@@ -121,24 +122,26 @@ test('lost acknowledgement requires a successful current inventory and review be
   await mount();
   await flush(submit);
   await flush(() => response.reject(new TypeError('connection lost')));
-  await flush(submit);
+  expect(host.querySelector('#security-passkey-name')).toBeNull();
+  expect(requests.filter(({ path }) => path === '/passkeys/register')).toHaveLength(1);
   expect(locked()).toBe(true);
   await flush(() => {
-    click(m.auth_security_check_current());
-    click(m.auth_security_check_current());
+    click(m.auth_security_passkey_check_current());
+    click(m.auth_security_passkey_check_current());
   });
   expect(reviews).toEqual([initial.kind === 'ready' ? initial.accountId : '']);
   await flush(() => review.resolve({ kind: 'unavailable' }));
   expect(button(host, m.auth_security_passkey_registration_continue())).toBeUndefined();
   expect(host.textContent).toContain(m.auth_security_readback_unavailable());
   review = Promise.withResolvers();
-  await flush(() => click(m.auth_security_check_current()));
+  await flush(() => click(m.auth_security_passkey_check_current()));
   await flush(() =>
     review.resolve({
       kind: 'ready',
       passkeys: [
         { id: 'unrelated-native-id', name: 'Security key', created_at: '2026-11-01T00:00:00Z', last_used_at: null },
       ],
+      truncated: false,
     }),
   );
   expect(host.textContent).toContain(m.auth_security_passkey_registration_reviewed());
@@ -153,13 +156,28 @@ test('lost acknowledgement requires a successful current inventory and review be
   expect(requests.filter(({ path }) => path === '/passkeys/register')).toHaveLength(2);
 });
 
+test('an empty possibly truncated review stays unverified until the person finishes it', async () => {
+  await mount();
+  response.resolve(Response.json(null, { status: 201 }));
+  await flush(submit);
+  await flush(() => click(m.auth_security_passkey_check_current()));
+  review.resolve({ kind: 'ready', passkeys: [], truncated: true });
+  await flush(() => Promise.resolve());
+  expect(host.textContent).toContain(m.auth_security_inventory_truncated());
+  expect(host.textContent).toContain(m.auth_security_passkey_registration_reviewed());
+  expect(host.textContent).toContain(m.auth_security_passkeys_empty());
+  expect(host.textContent).not.toContain(m.auth_security_passkey_added());
+  expect(button(host, m.auth_security_passkey_registration_continue())).toBeDefined();
+  expect(requests.filter(({ path }) => path === '/passkeys/register')).toHaveLength(1);
+});
+
 test.each(['signed-out', 'denied', 'replaced'])(
   '%s authority discards registration recovery and late private rows',
   async (kind) => {
     await mount();
     response.resolve(Response.json(null, { status: 201 }));
     await flush(submit);
-    await flush(() => click(m.auth_security_check_current()));
+    await flush(() => click(m.auth_security_passkey_check_current()));
     if (kind === 'replaced') await render({ kind: 'signed-out' });
     await flush(() =>
       review.resolve(
@@ -169,6 +187,7 @@ test.each(['signed-out', 'denied', 'replaced'])(
               passkeys: [
                 { id: 'old-native-id', name: 'Private old key', created_at: '2026-11-01', last_used_at: null },
               ],
+              truncated: false,
             }
           : { kind },
       ),

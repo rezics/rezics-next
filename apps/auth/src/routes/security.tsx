@@ -26,6 +26,8 @@ import {
   type TargetRecoveryPhase,
 } from '../security-target-review';
 import { addPasskey, passkeysSupported } from '../passkeys';
+import { PasskeyEnrollmentController, type PasskeyEnrollmentSnapshot } from '../passkey-enrollment';
+import { PasskeyEnrollmentView } from '../passkey-enrollment-view';
 import {
   readSecurityTarget,
   performSecurityAction,
@@ -64,8 +66,16 @@ type LoadState = 'loading' | 'ready' | 'signed-out' | 'failure';
 type SecurityOperation =
   | { kind: 'password-review'; binding: PasswordReviewBinding }
   | PasswordChangeOperation
-  | { kind: 'passkey-add' | 'consent' }
-  | { kind: 'registration-review'; accountId: string; phase: 'unknown' | 'reviewed'; reading: boolean }
+  | { kind: 'passkey-add'; attemptId?: number }
+  | { kind: 'consent' }
+  | {
+      kind: 'registration-review';
+      accountId: string;
+      attemptId: number;
+      phase: 'unknown' | 'reviewed';
+      reading: boolean;
+      truncated: boolean;
+    }
   | { kind: 'review'; target: SecurityTarget; generation: number; advice: number; retry: boolean }
   | { kind: 'target'; target: SecurityTarget }
   | { kind: 'recovery'; target: SecurityTarget; phase: TargetRecoveryPhase; reading: boolean };
@@ -150,6 +160,8 @@ function SecurityPageView({
   const [passkeyName, setPasskeyName] = useState('');
   const [passkeyNotice, setPasskeyNotice] = useState('');
   const [passkeyError, setPasskeyError] = useState('');
+  const [enrollment, setEnrollment] = useState<PasskeyEnrollmentSnapshot | null>(null);
+  const enrollmentController = useRef(new PasskeyEnrollmentController());
   const [operation, setOperation] = useState<SecurityOperation | null>(null);
   // The ref closes the boundary synchronously, including two submissions before React renders.
   const activeOperation = useRef<SecurityOperation | null>(null);
@@ -190,6 +202,8 @@ function SecurityPageView({
     accountId,
     authorityGeneration.current,
     (kind) => {
+      enrollmentController.current.retireAuthority();
+      setEnrollment(enrollmentController.current.snapshot());
       clearPrivateData(kind === 'signed-out' ? 'signed-out' : 'failure');
     },
     identitySource,
@@ -248,15 +262,39 @@ function SecurityPageView({
         setPasskeysLoad(result.passkeys);
         if (result.passkeys.kind === 'ready') setPasskeys(result.passkeys.passkeys);
         setPasswordLimits(limits);
-        if (unresolved?.accountId === result.accountId)
+        const restoredEnrollment = enrollmentController.current.restoreFor(result.accountId);
+        setEnrollment(restoredEnrollment);
+        if (unresolved?.accountId === result.accountId) {
           updateOperation({ kind: 'recovery', target: unresolved, phase: 'unknown', reading: false });
+        } else if (
+          restoredEnrollment?.reviewRequired &&
+          restoredEnrollment.accountId === result.accountId &&
+          restoredEnrollment.attemptId !== null
+        ) {
+          updateOperation({
+            kind: 'registration-review',
+            accountId: result.accountId,
+            attemptId: restoredEnrollment.attemptId,
+            phase: 'unknown',
+            reading: false,
+            truncated: false,
+          });
+        } else if (restoredEnrollment?.phase === 'confirmed' && restoredEnrollment.accountId === result.accountId) {
+          setPasskeyNotice(m.auth_security_passkey_added());
+          if (restoredEnrollment.attemptId !== null)
+            enrollmentController.current.clearConfirmed(restoredEnrollment.attemptId);
+          setEnrollment(null);
+        }
         unresolved = null;
         setLoadState('ready');
       } else if (result.kind === 'signed-out') {
         unresolved = null;
+        enrollmentController.current.retireAuthority();
+        setEnrollment(enrollmentController.current.snapshot());
         setLoadState('signed-out');
       } else {
         setLoadMessage(result.message);
+        setEnrollment(enrollmentController.current.snapshot());
         setLoadState('failure');
       }
     }
@@ -266,8 +304,10 @@ function SecurityPageView({
       const held = activeOperation.current;
       if (held?.kind === 'target' || held?.kind === 'recovery') unresolved = held.target;
       pending = false;
+      enrollmentController.current.pagehide();
       // Commit the cleared DOM before the browser freezes this document.
       flushSync(() => {
+        setEnrollment(enrollmentController.current.snapshot());
         clearPrivateData('loading');
         setConsentReduced(false);
       });
@@ -309,9 +349,14 @@ function SecurityPageView({
         document
           .getElementById(kind === 'session' ? 'security-sessions-heading' : 'security-passkeys-heading')
           ?.focus();
-    } else if (recovery || registrationRecovery) recoveryStatus.current?.focus();
+    } else if (
+      recovery ||
+      registrationRecovery ||
+      (enrollment && enrollment.phase !== 'changed-account' && enrollment.phase !== 'authority-unavailable')
+    )
+      recoveryStatus.current?.focus();
     else if (sessionNotice) sessionStatus.current?.focus();
-  }, [operation, recovery, registrationRecovery, sessionNotice]);
+  }, [operation, recovery, registrationRecovery, sessionNotice, enrollment]);
 
   useLayoutEffect(() => {
     if (loadState === 'signed-out' && signedOutNotice) signedOutStatus.current?.focus();
@@ -335,12 +380,17 @@ function SecurityPageView({
       const target = departureFocus.current;
       departureFocus.current = null;
       if (target?.isConnected && !target.hasAttribute('disabled')) target.focus();
-      else if (recovery || registrationRecovery) recoveryStatus.current?.focus();
+      else if (
+        recovery ||
+        registrationRecovery ||
+        (enrollment && enrollment.phase !== 'changed-account' && enrollment.phase !== 'authority-unavailable')
+      )
+        recoveryStatus.current?.focus();
       else if (passwordOperation) document.querySelector<HTMLDivElement>('#security-password-recovery')?.focus();
       else if (passwordInput.current?.value) passwordInput.current.focus();
       else document.querySelector<HTMLInputElement>('#security-passkey-name')?.focus();
     } else if (departure.current.allow) departure.current.allow = false;
-  }, [blocker?.status, departureProtected, recovery, registrationRecovery, passwordOperation]);
+  }, [blocker?.status, departureProtected, recovery, registrationRecovery, passwordOperation, enrollment]);
 
   function updateOperation(next: SecurityOperation | null) {
     activeOperation.current = next;
@@ -400,6 +450,8 @@ function SecurityPageView({
     if (blocker?.status !== 'blocked' || !departure) return;
     departure.current.protected = false;
     departure.current.allow = true;
+    enrollmentController.current.pagehide();
+    setEnrollment(enrollmentController.current.snapshot());
     clearPrivateData('loading');
     blocker.proceed();
   }
@@ -696,43 +748,74 @@ function SecurityPageView({
       window.location.assign(STEP_UP_URL);
       return;
     }
-    updateOperation({ kind: 'passkey-add' });
+    const owner = activeAccount.current;
+    const attemptId = enrollmentController.current.begin(owner);
+    if (attemptId === null) return;
+    setEnrollment(enrollmentController.current.snapshot());
+    updateOperation({ kind: 'passkey-add', attemptId });
     setPasskeyNotice('');
     setPasskeyError('');
-    const owner = accountId;
     const generation = authorityGeneration.current;
-    const result = await addPasskey(passkeyName, lifetime.current.signal);
+    const result = await addPasskey(passkeyName, lifetime.current.signal, (phase) => {
+      if (enrollmentController.current.observe(attemptId, phase))
+        setEnrollment(enrollmentController.current.snapshot());
+    });
     if (authorityGeneration.current !== generation) return;
-    updateOperation(null);
     if (activeAccount.current !== owner) return;
+    const held = activeOperation.current as SecurityOperation | null;
+    if (held?.kind !== 'passkey-add' || held.attemptId !== attemptId) return;
     if (result.ok) {
       // Retire earlier target advice until the native composition has caught up.
       setPasskeys((current) => [...current.map((row) => ({ ...row, remove: 'unavailable' as const })), result.passkey]);
       setPage(null);
-      void refreshRegistrationInventory(owner, generation);
+      void refreshRegistrationInventory(owner, generation, attemptId);
       setPasskeyName('');
       setPasskeyNotice(m.auth_security_passkey_added());
     } else if (result.reason === 'step-up') {
+      updateOperation(null);
+      enrollmentController.current.clearConfirmed(attemptId);
+      setEnrollment(enrollmentController.current.snapshot());
       clearPrivateData('signed-out');
       window.location.assign(STEP_UP_URL);
     } else if (result.reason === 'failure') {
+      updateOperation(null);
+      setEnrollment(enrollmentController.current.snapshot());
       setPasskeyError(result.message);
     } else if (result.reason === 'unknown') {
-      updateOperation({ kind: 'registration-review', accountId: owner, phase: 'unknown', reading: false });
+      setPage(null);
+      setPasskeys([]);
+      setPasskeysLoad({ kind: 'hidden' });
+      updateOperation({
+        kind: 'registration-review',
+        accountId: owner,
+        attemptId,
+        phase: 'unknown',
+        reading: false,
+        truncated: false,
+      });
+    } else {
+      updateOperation(null);
+      setEnrollment(enrollmentController.current.snapshot());
+      setPasskeyNotice(m.auth_security_passkey_registration_cancelled());
     }
   }
 
-  async function refreshRegistrationInventory(owner: string, generation: number) {
+  async function refreshRegistrationInventory(owner: string, generation: number, attemptId?: number) {
     adviceGeneration.current++;
-    updateOperation({ kind: 'passkey-add' });
+    const held: SecurityOperation = { kind: 'passkey-add', ...(attemptId === undefined ? {} : { attemptId }) };
+    updateOperation(held);
     setSessions((current) => current.map((row) => ({ ...row, revoke: 'unavailable' as const })));
     const result = await (securitySource?.load ?? loadSecurity)(passkeysSupported()).catch((): SecurityLoadResult => ({
       kind: 'failure',
       message: m.auth_security_passkeys_failed(),
     }));
     if (authorityGeneration.current !== generation || activeAccount.current !== owner) return;
+    if (activeOperation.current !== held) return;
     updateOperation(null);
     if (result.kind === 'signed-out' || (result.kind === 'ready' && result.accountId !== owner)) {
+      if (result.kind === 'signed-out') enrollmentController.current.retireAuthority();
+      else enrollmentController.current.restoreFor(result.accountId);
+      setEnrollment(enrollmentController.current.snapshot());
       clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure');
       return;
     }
@@ -741,7 +824,13 @@ function SecurityPageView({
       setSessions(result.sessions);
       setPasskeysLoad(result.passkeys);
       setPasskeys(result.passkeys.kind === 'ready' ? result.passkeys.passkeys : []);
+      if (attemptId !== undefined) {
+        enrollmentController.current.clearConfirmed(attemptId);
+        setEnrollment(enrollmentController.current.snapshot());
+      }
     } else {
+      setSessions([]);
+      setPasskeys([]);
       setPasskeysLoad({ kind: 'failure', message: m.auth_security_passkeys_failed() });
     }
   }
@@ -749,36 +838,55 @@ function SecurityPageView({
   async function reviewRegistration() {
     const held = activeOperation.current;
     if (held?.kind !== 'registration-review' || held.reading) return;
-    updateOperation({ ...held, reading: true });
+    if (!enrollmentController.current.beginReview(held.attemptId)) return;
+    setEnrollment(enrollmentController.current.snapshot());
+    const pending: SecurityOperation = { ...held, phase: 'unknown', reading: true, truncated: false };
+    updateOperation(pending);
+    setPasskeys([]);
+    setPasskeysLoad({ kind: 'hidden' });
+    setPage(null);
+    setPasskeyError('');
     const generation = authorityGeneration.current;
     const result = await (securitySource?.reviewRegistration ?? reviewPasskeyRegistration)(
       held.accountId,
       lifetime.current.signal,
     );
-    if (authorityGeneration.current !== generation || activeAccount.current !== held.accountId) return;
+    if (
+      authorityGeneration.current !== generation ||
+      activeAccount.current !== held.accountId ||
+      activeOperation.current !== pending
+    )
+      return;
     if (result.kind === 'signed-out' || result.kind === 'denied') {
+      enrollmentController.current.retireAuthority();
+      setEnrollment(enrollmentController.current.snapshot());
       clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure', m.auth_security_action_unverified());
       return;
     }
     if (result.kind === 'unavailable') {
-      updateOperation({ ...held, phase: 'unknown', reading: false });
+      enrollmentController.current.reviewUnavailable(held.attemptId);
+      setEnrollment(enrollmentController.current.snapshot());
+      updateOperation({ ...held, phase: 'unknown', reading: false, truncated: false });
       setPasskeyError(m.auth_security_readback_unavailable());
       return;
     }
     setPasskeys(result.passkeys);
-    setPasskeysLoad(result);
+    setPasskeysLoad({ kind: 'ready', passkeys: result.passkeys });
     setPage(null);
     setPasskeyError('');
     // Native row IDs are authoritative. Neither a name nor a WebAuthn credential ID identifies a saved row.
-    updateOperation({ ...held, phase: 'reviewed', reading: false });
+    enrollmentController.current.reviewReady(held.attemptId);
+    setEnrollment(enrollmentController.current.snapshot());
+    updateOperation({ ...held, phase: 'reviewed', reading: false, truncated: result.truncated });
   }
 
   function finishRegistrationReview() {
     const held = activeOperation.current;
     if (held?.kind !== 'registration-review' || held.reading || held.phase !== 'reviewed') return;
-    updateOperation(null);
+    if (!enrollmentController.current.finishReview(held.attemptId)) return;
+    setEnrollment(enrollmentController.current.snapshot());
     setPasskeyName('');
-    setPasskeyNotice(m.auth_security_passkey_registration_reviewed());
+    setPasskeyNotice(m.auth_security_passkey_registration_review_finished());
     void refreshRegistrationInventory(held.accountId, authorityGeneration.current);
   }
 
@@ -800,6 +908,15 @@ function SecurityPageView({
               {signedOutNotice}
             </p>
           ) : null}
+          <PasskeyEnrollmentView
+            state={enrollment}
+            reading={false}
+            truncated={false}
+            canReview={false}
+            statusRef={recoveryStatus}
+            check={() => {}}
+            finish={() => {}}
+          />
           {consentReduced ? <p role="status">{m.auth_inventory_reduced()}</p> : null}
           <a href="/login">{m.auth_security_sign_in()}</a>
         </div>
@@ -811,6 +928,15 @@ function SecurityPageView({
       <AuthPage heading={m.auth_security_heading()}>
         <div className="auth-login-form">
           <ErrorAlert>{loadMessage}</ErrorAlert>
+          <PasskeyEnrollmentView
+            state={enrollment}
+            reading={false}
+            truncated={false}
+            canReview={false}
+            statusRef={recoveryStatus}
+            check={() => {}}
+            finish={() => {}}
+          />
           <Button type="button" variant="outline" onClick={() => retryLoad.current?.()}>
             {m.auth_inventory_reload()}
           </Button>
@@ -871,29 +997,20 @@ function SecurityPageView({
                   review={() => reviewTarget(recovery.target, true)}
                 />
               ) : null}
-              {registrationRecovery ? (
-                <div className="auth-login-form" aria-busy={registrationRecovery.reading}>
-                  <div ref={recoveryStatus} tabIndex={-1} role="status">
-                    {registrationRecovery.phase === 'reviewed'
-                      ? m.auth_security_passkey_registration_reviewed()
-                      : m.auth_security_passkey_registration_unknown()}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void reviewRegistration()}
-                    disabled={registrationRecovery.reading}
-                    aria-busy={registrationRecovery.reading}
-                  >
-                    {m.auth_security_check_current()}
-                  </Button>
-                  {registrationRecovery.phase === 'reviewed' ? (
-                    <Button type="button" variant="outline" onClick={finishRegistrationReview}>
-                      {m.auth_security_passkey_registration_continue()}
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
+              <PasskeyEnrollmentView
+                state={enrollment}
+                reading={registrationRecovery?.reading ?? false}
+                truncated={registrationRecovery?.truncated ?? false}
+                canReview={
+                  loadState === 'ready' &&
+                  Boolean(activeAccount.current) &&
+                  enrollment?.accountId === activeAccount.current
+                }
+                statusRef={recoveryStatus}
+                check={() => void reviewRegistration()}
+                finish={finishRegistrationReview}
+              />
+              {passkeyError ? <ErrorAlert>{passkeyError}</ErrorAlert> : null}
               <PasswordChangeForm
                 accountId={accountId}
                 accountLabel={
@@ -940,7 +1057,6 @@ function SecurityPageView({
                           {passkeyNotice}
                         </div>
                       ) : null}
-                      {passkeyError ? <ErrorAlert>{passkeyError}</ErrorAlert> : null}
                       {passkeys.length ? (
                         <ItemGroup aria-label={m.auth_security_passkeys_heading()}>
                           {passkeys.map((passkey) => (
@@ -996,7 +1112,7 @@ function SecurityPageView({
                       {page?.passkeys.kind === 'ready' && page.passkeys.truncated ? (
                         <p>{m.auth_security_inventory_truncated()}</p>
                       ) : null}
-                      {!passkeysSupported() ? (
+                      {registrationRecovery ? null : !passkeysSupported() ? (
                         <p>{m.auth_security_passkeys_browser_unavailable()}</p>
                       ) : (
                         <form className="auth-login-form" noValidate onSubmit={submitPasskey}>
@@ -1011,6 +1127,7 @@ function SecurityPageView({
                               onChange={(event) => setPasskeyName(event.target.value)}
                               readOnly={operationBlocked}
                             />
+                            <p className="auth-security-hint">{m.auth_security_passkey_name_help()}</p>
                           </Field>
                           <Button
                             type="submit"
@@ -1022,7 +1139,7 @@ function SecurityPageView({
                           </Button>
                         </form>
                       )}
-                      <AdviceHint advice={page?.actions.register_passkey} />
+                      {registrationRecovery ? null : <AdviceHint advice={page?.actions.register_passkey} />}
                     </>
                   )}
                 </section>

@@ -55,7 +55,7 @@ export type SecurityLoadResult =
   | { kind: 'failure'; message: string };
 
 export type PasskeyRegistrationReview =
-  | { kind: 'ready'; passkeys: SecurityPasskey[] }
+  | { kind: 'ready'; passkeys: SecurityPasskey[]; truncated: boolean }
   | { kind: 'signed-out' }
   | { kind: 'denied' }
   | { kind: 'unavailable' };
@@ -125,10 +125,18 @@ const registrationReview = createServerFn({ method: 'POST' })
       if (response.status === 401) return { kind: 'signed-out' };
       if (response.status === 403) return { kind: 'denied' };
       if (response.status !== 200) return { kind: 'unavailable' };
-      const passkeys = parseSecurityPasskeys(await response.json());
+      const body: unknown = await response.json();
+      const passkeys = parseSecurityPasskeys(body);
       if (!passkeys) return { kind: 'unavailable' };
+      const bodyRecord = body && typeof body === 'object' ? (body as Record<string, unknown>) : null;
+      const hasTruncationFlag = Boolean(bodyRecord && 'truncated' in bodyRecord);
+      const explicitTruncation = bodyRecord?.truncated;
+      if (hasTruncationFlag && typeof explicitTruncation !== 'boolean') return { kind: 'unavailable' };
+      // The legacy list is bounded at 32; without an explicit completeness flag, a full page may be truncated.
+      const truncated =
+        (hasTruncationFlag && explicitTruncation === true) || (!hasTruncationFlag && passkeys.length === 32);
       const after = await authority();
-      return after === 'current' ? { kind: 'ready', passkeys } : { kind: after };
+      return after === 'current' ? { kind: 'ready', passkeys, truncated } : { kind: after };
     } catch {
       return { kind: 'unavailable' };
     }

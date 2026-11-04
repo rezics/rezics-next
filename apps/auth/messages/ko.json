@@ -560,5 +560,16 @@
   "auth_organization_delete_recovery_refused": "조직을 찾을 수 없거나 현재 검토가 거부되었습니다. 비공개 정보와 삭제 기능을 사용할 수 없습니다. 이것만으로는 이전 요청에 어떤 일이 있었는지 알 수 없습니다.",
   "auth_organization_delete_recovery_changed": "계정, 조직 또는 요청이 변경되었습니다. 비공개 정보와 삭제 기능을 더 이상 표시하지 않습니다. 이전 삭제 결과는 여전히 알 수 없습니다.",
   "auth_organization_delete_recovery_unavailable": "현재 검토 정보를 가져올 수 없습니다. 브라우저의 시간 초과는 서버 작업을 취소하지 않으며 이전 삭제 결과를 확정하지도 않습니다. 원할 때 다시 확인할 수 있습니다.",
-  "auth_organization_delete_recovery_departure": "페이지를 떠나도 이전 삭제 결과는 알 수 없는 상태로 남습니다. 페이지를 떠나거나 브라우저 저장소가 사라져도 서버에 이미 전송된 작업은 취소되지 않습니다."
+  "auth_organization_delete_recovery_departure": "페이지를 떠나도 이전 삭제 결과는 알 수 없는 상태로 남습니다. 페이지를 떠나거나 브라우저 저장소가 사라져도 서버에 이미 전송된 작업은 취소되지 않습니다.",
+  "auth_security_passkey_account_changed": "패스키 결과가 확인되지 않은 상태에서 계정이 바뀌었습니다. 이 계정의 패스키를 해당 등록과 연결할 수 없습니다.",
+  "auth_security_passkey_check_current": "현재 패스키 확인",
+  "auth_security_passkey_name_help": "비워 두면 Auth가 이 브라우저와 시스템을 바탕으로 이름을 제안합니다. 저장된 패스키 자체를 식별하지 못할 수도 있습니다.",
+  "auth_security_passkey_options_pending": "패스키 등록을 준비하고 있습니다…",
+  "auth_security_passkey_prompt_pending": "브라우저에서 패스키를 선택하거나, 아무것도 저장되기 전에 프롬프트를 닫아 취소하세요.",
+  "auth_security_passkey_registration_cancelled": "등록 요청을 보내기 전에 브라우저 프롬프트를 취소했으므로 패스키가 저장되지 않았습니다.",
+  "auth_security_passkey_registration_checking": "현재 패스키를 확인하고 있습니다. 이 확인만으로 이전 등록의 저장 여부를 알 수 없습니다.",
+  "auth_security_passkey_registration_confirmed": "Auth가 등록을 확인했습니다. 컨트롤을 다시 사용하기 전에 현재 패스키와 권한을 새로 읽습니다.",
+  "auth_security_passkey_registration_review_finished": "현재 패스키를 검토했습니다. 이 검토만으로 이전 등록의 성공 여부를 알 수 없습니다.",
+  "auth_security_passkey_registration_saving": "브라우저가 등록 요청을 보냈습니다. Auth가 패스키를 저장했을 수 있으며 응답을 기다리고 있습니다.",
+  "auth_security_passkey_authority_retired": "이전 패스키 결과는 아직 확인되지 않았지만 이 페이지에서는 이전 계정에 대해 더 이상 확인할 수 없습니다."
 }

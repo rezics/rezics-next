@@ -560,5 +560,16 @@
   "auth_organization_delete_recovery_refused": "找不到該組織，或目前的審核請求遭到拒絕。私密資訊與刪除操作均無法使用。這無法說明先前的請求發生了什麼。",
   "auth_organization_delete_recovery_changed": "帳號、組織或請求已變更。私密資訊與刪除操作已收起。先前的刪除結果仍然未知。",
   "auth_organization_delete_recovery_unavailable": "目前無法取得審核資訊。瀏覽器逾時不會取消伺服器上的工作，也無法確定先前的刪除結果。你可以主動再次檢查。",
-  "auth_organization_delete_recovery_departure": "離開後，先前的刪除結果仍然未知。離開頁面或遺失瀏覽器儲存資料都無法取消已傳送到伺服器的工作。"
+  "auth_organization_delete_recovery_departure": "離開後，先前的刪除結果仍然未知。離開頁面或遺失瀏覽器儲存資料都無法取消已傳送到伺服器的工作。",
+  "auth_security_passkey_account_changed": "通行密鑰結果尚未確定時，帳戶已切換。此帳戶的通行密鑰不能歸因於該次註冊。",
+  "auth_security_passkey_check_current": "檢查目前的通行密鑰",
+  "auth_security_passkey_name_help": "留白時，Auth 會根據此瀏覽器與系統建議名稱；該名稱不一定能識別實際儲存的通行密鑰。",
+  "auth_security_passkey_options_pending": "正在準備通行密鑰註冊提示…",
+  "auth_security_passkey_prompt_pending": "請在瀏覽器中選擇通行密鑰，或在儲存任何內容前關閉提示以取消。",
+  "auth_security_passkey_registration_cancelled": "你在送出註冊要求前取消了瀏覽器提示，因此沒有儲存通行密鑰。",
+  "auth_security_passkey_registration_checking": "正在檢查目前的通行密鑰。此檢查無法確認先前的註冊是否已儲存。",
+  "auth_security_passkey_registration_confirmed": "Auth 已確認註冊。重新啟用控制項前，正在更新目前的通行密鑰與權限。",
+  "auth_security_passkey_registration_review_finished": "你已檢視目前的通行密鑰。此操作無法確認先前的註冊是否成功。",
+  "auth_security_passkey_registration_saving": "瀏覽器已送出註冊要求。Auth 可能已儲存通行密鑰；正在等待回應。",
+  "auth_security_passkey_authority_retired": "先前的通行密鑰結果仍未確定，但此頁面已無法為先前的帳戶檢查該結果。"
 }

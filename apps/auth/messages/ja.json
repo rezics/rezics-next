@@ -560,5 +560,16 @@
   "auth_organization_delete_recovery_refused": "組織が見つからないか、現在は確認が拒否されています。非公開情報や削除操作は利用できません。これだけでは、先ほどのリクエストがどうなったかは分かりません。",
   "auth_organization_delete_recovery_changed": "アカウント、組織、またはリクエストが変わりました。非公開情報と削除操作の表示を終了しました。先ほどの削除の結果は引き続き不明です。",
   "auth_organization_delete_recovery_unavailable": "現在の確認情報を取得できません。ブラウザーのタイムアウトはサーバーでの処理を取り消さず、先ほどの削除の結果も確定しません。必要に応じて、もう一度確認できます。",
-  "auth_organization_delete_recovery_departure": "このページを離れても、先ほどの削除の結果は不明なままです。ページを離れたり、ブラウザーの保存データが失われたりしても、サーバーに送信済みの処理は取り消せません。"
+  "auth_organization_delete_recovery_departure": "このページを離れても、先ほどの削除の結果は不明なままです。ページを離れたり、ブラウザーの保存データが失われたりしても、サーバーに送信済みの処理は取り消せません。",
+  "auth_security_passkey_account_changed": "パスキーの結果が未確定の間にアカウントが切り替わりました。このアカウントのパスキーをその登録に結び付けることはできません。",
+  "auth_security_passkey_check_current": "現在のパスキーを確認",
+  "auth_security_passkey_name_help": "空欄の場合、Auth はこのブラウザーとシステムをもとにラベルを提案します。保存したパスキー自体を特定できるとは限りません。",
+  "auth_security_passkey_options_pending": "パスキー登録の準備中です…",
+  "auth_security_passkey_prompt_pending": "ブラウザーでパスキーを選ぶか、何も保存される前にプロンプトを閉じてキャンセルしてください。",
+  "auth_security_passkey_registration_cancelled": "登録の送信前にブラウザーのプロンプトをキャンセルしたため、パスキーは保存されていません。",
+  "auth_security_passkey_registration_checking": "現在のパスキーを確認しています。この確認では、先ほどの登録が保存されたかどうかは分かりません。",
+  "auth_security_passkey_registration_confirmed": "Auth が登録を確認しました。操作を再開する前に、現在のパスキーと権限を更新しています。",
+  "auth_security_passkey_registration_review_finished": "現在のパスキーを確認しました。この確認では、先ほどの登録が成功したかどうかは分かりません。",
+  "auth_security_passkey_registration_saving": "ブラウザーから登録が送信されました。Auth に保存された可能性があります。応答を待っています。",
+  "auth_security_passkey_authority_retired": "先ほどのパスキーの結果は未確定ですが、このページでは以前のアカウントについて確認できなくなりました。"
 }

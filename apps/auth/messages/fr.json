@@ -560,5 +560,16 @@
   "auth_organization_delete_recovery_refused": "L’organisation est introuvable ou la vérification est actuellement refusée. Les informations privées et les commandes de suppression ne sont pas disponibles. Cela ne permet pas de connaître le résultat de la demande précédente.",
   "auth_organization_delete_recovery_changed": "Le compte, l’organisation ou la demande a changé. Les informations privées et les commandes de suppression ont été retirées. Le résultat de la suppression précédente reste inconnu.",
   "auth_organization_delete_recovery_unavailable": "Les informations de vérification actuelles sont indisponibles. Un délai dépassé dans le navigateur n’annule pas le travail du serveur et ne détermine pas le résultat de la suppression précédente. Vous pouvez vérifier à nouveau volontairement.",
-  "auth_organization_delete_recovery_departure": "Si vous quittez cette page, le résultat de la suppression précédente restera inconnu. Quitter la page ou perdre les données du navigateur n’annule pas le travail déjà envoyé au serveur."
+  "auth_organization_delete_recovery_departure": "Si vous quittez cette page, le résultat de la suppression précédente restera inconnu. Quitter la page ou perdre les données du navigateur n’annule pas le travail déjà envoyé au serveur.",
+  "auth_security_passkey_account_changed": "Le compte a changé alors que le résultat d’une clé d’accès était incertain. Les clés de ce compte ne sont pas associées à cette création.",
+  "auth_security_passkey_check_current": "Vérifier les clés actuelles",
+  "auth_security_passkey_name_help": "Si vous laissez ce champ vide, Auth propose un nom basé sur ce navigateur et ce système ; il ne permet pas forcément d’identifier la clé créée.",
+  "auth_security_passkey_options_pending": "Préparation de la demande de création de clé d’accès…",
+  "auth_security_passkey_prompt_pending": "Choisissez une clé d’accès dans le navigateur ou fermez la demande pour annuler avant tout enregistrement.",
+  "auth_security_passkey_registration_cancelled": "Aucune clé d’accès n’a été enregistrée, car la demande du navigateur a été annulée avant l’envoi.",
+  "auth_security_passkey_registration_checking": "Vérification des clés d’accès actuelles. Cela ne confirme pas si la création précédente a abouti.",
+  "auth_security_passkey_registration_confirmed": "Auth a confirmé la création. Les clés d’accès et autorisations actuelles sont actualisées avant de réactiver les commandes.",
+  "auth_security_passkey_registration_review_finished": "Vous avez vérifié les clés d’accès actuelles. Cela ne confirme pas si la création précédente a abouti.",
+  "auth_security_passkey_registration_saving": "Le navigateur a envoyé la demande. Auth a peut-être enregistré la clé ; sa réponse est attendue.",
+  "auth_security_passkey_authority_retired": "Le résultat précédent de la clé d’accès reste incertain, mais cette page ne peut plus le vérifier pour l’ancien compte."
 }

@@ -560,5 +560,16 @@
   "auth_organization_delete_recovery_refused": "The organization is missing or review is currently refused. Private information and deletion controls are unavailable. This does not tell us what happened to the earlier request.",
   "auth_organization_delete_recovery_changed": "The account, organization or request changed. Private information and deletion controls have been retired. The earlier deletion outcome remains unknown.",
   "auth_organization_delete_recovery_unavailable": "Current review information is unavailable. A browser timeout does not cancel server work or establish the earlier deletion outcome. You may deliberately check again.",
-  "auth_organization_delete_recovery_departure": "The earlier deletion outcome will remain unknown if you leave. Leaving or losing browser storage cannot cancel work already sent to the server."
+  "auth_organization_delete_recovery_departure": "The earlier deletion outcome will remain unknown if you leave. Leaving or losing browser storage cannot cancel work already sent to the server.",
+  "auth_security_passkey_account_changed": "The account changed while a passkey result was unresolved. This account’s passkeys are not linked to that registration.",
+  "auth_security_passkey_check_current": "Check current passkeys",
+  "auth_security_passkey_name_help": "If you leave this blank, Auth suggests a label based on this browser and system; it may not identify the passkey you save.",
+  "auth_security_passkey_options_pending": "Preparing the passkey registration prompt…",
+  "auth_security_passkey_prompt_pending": "Choose a passkey in your browser, or dismiss the prompt to cancel before anything is saved.",
+  "auth_security_passkey_registration_cancelled": "No passkey was saved because the browser prompt was cancelled before registration was sent.",
+  "auth_security_passkey_registration_checking": "Checking current passkeys. This cannot confirm whether the earlier registration was saved.",
+  "auth_security_passkey_registration_confirmed": "Auth confirmed the registration. Refreshing current passkeys and permissions before controls return.",
+  "auth_security_passkey_registration_review_finished": "You reviewed the current passkeys. This does not confirm whether the earlier registration succeeded.",
+  "auth_security_passkey_registration_saving": "The browser sent the registration. Auth may have saved the passkey; waiting for its response.",
+  "auth_security_passkey_authority_retired": "The earlier passkey result remains unresolved, but this page can no longer check it for the previous account."
 }

@@ -560,5 +560,16 @@
   "auth_organization_delete_recovery_refused": "Die Organisation fehlt oder die Prüfung wird derzeit verweigert. Private Daten und Löschfunktionen sind nicht verfügbar. Daraus lässt sich das Ergebnis der früheren Anfrage nicht ableiten.",
   "auth_organization_delete_recovery_changed": "Das Konto, die Organisation oder die Anfrage hat sich geändert. Private Daten und Löschfunktionen wurden entfernt. Das Ergebnis der früheren Löschung bleibt unbekannt.",
   "auth_organization_delete_recovery_unavailable": "Aktuelle Prüfinformationen sind nicht verfügbar. Eine Zeitüberschreitung im Browser beendet keine Serverarbeit und klärt das frühere Löschergebnis nicht. Du kannst erneut bewusst prüfen.",
-  "auth_organization_delete_recovery_departure": "Wenn du gehst, bleibt das Ergebnis der früheren Löschung unbekannt. Weder das Verlassen noch der Verlust des Browserspeichers kann bereits gesendete Serverarbeit abbrechen."
+  "auth_organization_delete_recovery_departure": "Wenn du gehst, bleibt das Ergebnis der früheren Löschung unbekannt. Weder das Verlassen noch der Verlust des Browserspeichers kann bereits gesendete Serverarbeit abbrechen.",
+  "auth_security_passkey_account_changed": "Das Konto wurde geändert, während das Ergebnis eines Passkeys ungeklärt war. Die Passkeys dieses Kontos sind dieser Registrierung nicht zugeordnet.",
+  "auth_security_passkey_check_current": "Aktuelle Passkeys prüfen",
+  "auth_security_passkey_name_help": "Wenn dieses Feld leer bleibt, schlägt Auth eine Bezeichnung anhand dieses Browsers und Systems vor. Sie muss den gespeicherten Passkey nicht eindeutig bezeichnen.",
+  "auth_security_passkey_options_pending": "Die Passkey-Registrierung wird vorbereitet …",
+  "auth_security_passkey_prompt_pending": "Wähle einen Passkey im Browser aus oder schließe die Aufforderung, um abzubrechen, bevor etwas gespeichert wird.",
+  "auth_security_passkey_registration_cancelled": "Es wurde kein Passkey gespeichert, da die Browseraufforderung vor dem Senden der Registrierung abgebrochen wurde.",
+  "auth_security_passkey_registration_checking": "Aktuelle Passkeys werden geprüft. Damit lässt sich nicht bestätigen, ob die frühere Registrierung gespeichert wurde.",
+  "auth_security_passkey_registration_confirmed": "Auth hat die Registrierung bestätigt. Aktuelle Passkeys und Berechtigungen werden geladen, bevor die Steuerelemente wieder verfügbar sind.",
+  "auth_security_passkey_registration_review_finished": "Du hast die aktuellen Passkeys geprüft. Damit ist nicht bestätigt, ob die frühere Registrierung gespeichert wurde.",
+  "auth_security_passkey_registration_saving": "Der Browser hat die Registrierung gesendet. Auth könnte den Passkey gespeichert haben; die Antwort steht noch aus.",
+  "auth_security_passkey_authority_retired": "Das frühere Passkey-Ergebnis ist weiterhin ungeklärt, aber diese Seite kann es für das vorherige Konto nicht mehr prüfen."
 }

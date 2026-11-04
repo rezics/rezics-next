@@ -1,11 +1,23 @@
 import { afterAll, afterEach, expect, test } from 'bun:test';
-import { creationFixture, dom, flush, open } from './creation-page-fixture';
+import { creationFixture, dom, flush, open, fill } from './creation-page-fixture';
 import type { SecurityActionResult } from '../src/security-reconciliation';
 import type { SecuritySource } from '../src/security-reconciliation';
 import { m } from '../src/paraglide/messages.js';
 
 creationFixture();
 const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+const previousCredentials = Object.getOwnPropertyDescriptor(navigator, 'credentials');
+const previousGlobalPublicKeyCredential = Object.getOwnPropertyDescriptor(globalThis, 'PublicKeyCredential');
+const previousWindowPublicKeyCredential = Object.getOwnPropertyDescriptor(dom, 'PublicKeyCredential');
+const TestPublicKeyCredential = class {};
+Object.defineProperty(globalThis, 'PublicKeyCredential', {
+  configurable: true,
+  value: TestPublicKeyCredential,
+});
+Object.defineProperty(dom, 'PublicKeyCredential', {
+  configurable: true,
+  value: TestPublicKeyCredential,
+});
 Object.defineProperty(globalThis, 'scrollTo', { value: () => {}, configurable: true, writable: true });
 const { createBrowserHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
@@ -20,6 +32,14 @@ afterEach(() => {
 afterAll(() => {
   if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
   else Reflect.deleteProperty(globalThis, 'scrollTo');
+  if (previousCredentials) Object.defineProperty(navigator, 'credentials', previousCredentials);
+  else Reflect.deleteProperty(navigator, 'credentials');
+  if (previousGlobalPublicKeyCredential)
+    Object.defineProperty(globalThis, 'PublicKeyCredential', previousGlobalPublicKeyCredential);
+  else Reflect.deleteProperty(globalThis, 'PublicKeyCredential');
+  if (previousWindowPublicKeyCredential)
+    Object.defineProperty(dom, 'PublicKeyCredential', previousWindowPublicKeyCredential);
+  else Reflect.deleteProperty(dom, 'PublicKeyCredential');
 });
 
 const tick = () => flush(() => new Promise((resolve) => setTimeout(resolve, 0)));
@@ -204,4 +224,61 @@ test('Stay keeps an unsent target review and focus; Leave clears it with zero co
   await flush(() => navigation);
   expect(commands).toBe(0);
   expect(ui.host.textContent).not.toContain('Security key');
+});
+
+test('Stay preserves a passkey prompt phase and focus; Leave retires it without dispatch', async () => {
+  const prompt = deferred<Credential | null>();
+  let promptSignal: AbortSignal | undefined;
+  Object.defineProperty(navigator, 'credentials', {
+    configurable: true,
+    value: {
+      create: (options: CredentialCreationOptions) => {
+        promptSignal = options.signal;
+        return prompt.promise;
+      },
+    },
+  });
+  const ui = await mount({ read: async () => ({ kind: 'unavailable' }), act: async () => ({ kind: 'denied' }) });
+  const name = ui.host.querySelector<HTMLInputElement>('#security-passkey-name')!;
+  await flush(() => fill(name, 'Private passkey label'));
+  await flush(() => ui.host.querySelectorAll('form')[1]!.requestSubmit());
+  await flush(() =>
+    ui.calls[0]!.resolve(
+      Response.json({
+        challenge: 'Y2hhbGxlbmdl',
+        rp: { id: 'auth.test', name: 'REZICS' },
+        user: { id: 'YWNjb3VudA', name: 'reader', displayName: 'Reader' },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+      }),
+    ),
+  );
+  await tick();
+  const { navigation: staying } = await startNavigation(ui.router, '/next');
+  expect(ui.host.querySelector('[role="alertdialog"]')).not.toBeNull();
+  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-stay]')!.click());
+  await tick();
+  expect(ui.host.textContent).toContain(m.auth_security_passkey_prompt_pending());
+  expect(document.activeElement).toBe(ui.host.querySelector('[data-passkey-enrollment-status]'));
+  expect(name.value).toBe('Private passkey label');
+  expect(promptSignal?.aborted).toBe(false);
+
+  const { navigation: leaving } = await startNavigation(ui.router, '/next');
+  await flush(() => ui.host.querySelector<HTMLButtonElement>('[data-leave]')!.click());
+  await flush(() => leaving);
+  expect(ui.router.state.location.pathname).toBe('/next');
+  expect(ui.host.textContent).not.toContain('Private passkey label');
+  expect(promptSignal?.aborted).toBe(true);
+  expect(ui.calls.filter(({ path }) => path === '/passkeys/register')).toHaveLength(0);
+  await flush(() =>
+    prompt.resolve({
+      id: 'late-browser-credential',
+      rawId: new ArrayBuffer(1),
+      type: 'public-key',
+      getClientExtensionResults: () => ({}),
+      response: { attestationObject: new ArrayBuffer(1), clientDataJSON: new ArrayBuffer(1) },
+    } as unknown as Credential),
+  );
+  await tick();
+  expect(ui.calls.filter(({ path }) => path === '/passkeys/register')).toHaveLength(0);
+  void staying;
 });

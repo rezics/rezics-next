@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { SecurityPage } from '../../../routes/security';
+import { PasskeyEnrollmentView } from '../../../passkey-enrollment-view';
 import { m } from '../../../paraglide/messages.js';
 import type { SecurityLoadResult } from '../../../security';
 import type { AccountIdentitySource } from '../../../account-identity';
@@ -284,6 +286,34 @@ export const RemovalBusy = targetState('busy');
 export const RemovalUnknown = targetState('unknown');
 export const CurrentTargetPresent = targetState('present');
 export const TruncatedTargetMissing = targetState('truncated');
+
+function TruncatedRegistrationReviewStory() {
+  const statusRef = useRef<HTMLDivElement>(null);
+  return (
+    <AuthStory>
+      <section aria-labelledby="registration-review-heading" className="auth-login-form">
+        <h2 id="registration-review-heading">{m.auth_security_passkeys_heading()}</h2>
+        <PasskeyEnrollmentView
+          state={{
+            attemptId: 1,
+            accountId: storyAccount,
+            phase: 'reviewed',
+            possibleEffect: true,
+            reviewRequired: true,
+          }}
+          reading={false}
+          truncated
+          canReview
+          statusRef={statusRef}
+          check={() => {}}
+          finish={() => {}}
+        />
+      </section>
+    </AuthStory>
+  );
+}
+
+export const TruncatedRegistrationReview = { render: () => <TruncatedRegistrationReviewStory /> };
 export const CurrentSessionReview = {
   render: () => (
     <AuthStory>

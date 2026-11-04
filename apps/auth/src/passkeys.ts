@@ -87,13 +87,33 @@ export function passkeySignInFailure(result: Exclude<PasskeySignInResult, { ok: 
 }
 
 type UnknownRegistration = { ok: false; reason: 'unknown' };
+type PreDispatchCancellation = { ok: false; reason: 'cancelled' };
+export type PasskeyAddPhase =
+  | 'options'
+  | 'prompt'
+  | 'registration-dispatched'
+  | 'confirmed'
+  | 'unknown'
+  | 'cancelled'
+  | 'failure';
+export type PasskeyAddPhaseCallback = (phase: PasskeyAddPhase) => void;
+
+function observePasskeyAdd(callback: PasskeyAddPhaseCallback | undefined, phase: PasskeyAddPhase): void {
+  try {
+    callback?.(phase);
+  } catch {
+    // Page bookkeeping must never change the result of the native ceremony.
+  }
+}
 
 // Registration accepts 201 and cannot treat a lost acknowledgement as a refusal.
 async function postCreated<Body>(
   path: string,
   body: unknown,
   caller?: AbortSignal,
-): Promise<AuthPostResult<Body> | UnknownRegistration> {
+  dispatch?: () => void,
+): Promise<AuthPostResult<Body> | UnknownRegistration | PreDispatchCancellation> {
+  if (caller?.aborted) return { ok: false, reason: 'cancelled' };
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let cancel = () => {};
@@ -108,7 +128,7 @@ async function postCreated<Body>(
   });
   try {
     // The race also ends a transport that ignores abort, through body completion.
-    return await Promise.race([sendCreated<Body>(path, body, controller.signal), stopped]);
+    return await Promise.race([sendCreated<Body>(path, body, controller.signal, dispatch), stopped]);
   } finally {
     clearTimeout(timer);
     caller?.removeEventListener('abort', cancel);
@@ -119,9 +139,13 @@ async function sendCreated<Body>(
   path: string,
   body: unknown,
   signal: AbortSignal,
-): Promise<AuthPostResult<Body> | UnknownRegistration> {
+  dispatch?: () => void,
+): Promise<AuthPostResult<Body> | UnknownRegistration | PreDispatchCancellation> {
+  let dispatched = false;
   try {
     signal.throwIfAborted();
+    dispatch?.();
+    dispatched = true;
     const response = await fetch(path, {
       method: 'POST',
       credentials: 'same-origin',
@@ -152,7 +176,7 @@ async function sendCreated<Body>(
       retryAfter: header && /^\d+$/.test(header) ? header : null,
     };
   } catch {
-    return { ok: false, reason: 'unknown' };
+    return dispatched ? { ok: false, reason: 'unknown' } : { ok: false, reason: 'cancelled' };
   }
 }
 
@@ -180,36 +204,71 @@ function addFailure(result: Extract<AuthPostResult, { ok: false }>): PasskeyAddR
   return { ok: false, reason: 'failure', message };
 }
 
-export async function addPasskey(name: string, signal?: AbortSignal): Promise<PasskeyAddResult> {
-  if (signal?.aborted) return { ok: false, reason: 'cancelled' };
+export async function addPasskey(
+  name: string,
+  signal?: AbortSignal,
+  onPhase?: PasskeyAddPhaseCallback,
+): Promise<PasskeyAddResult> {
+  const observe = (phase: PasskeyAddPhase) => observePasskeyAdd(onPhase, phase);
+  if (signal?.aborted) {
+    observe('cancelled');
+    return { ok: false, reason: 'cancelled' };
+  }
+  observe('options');
   const options = await authPost<PublicKeyCredentialCreationOptionsJSON>('/passkeys/register/options', {});
-  if (signal?.aborted) return { ok: false, reason: 'cancelled' };
-  if (!options.ok) return addFailure(options);
+  if (signal?.aborted) {
+    observe('cancelled');
+    return { ok: false, reason: 'cancelled' };
+  }
+  if (!options.ok) {
+    observe('failure');
+    return addFailure(options);
+  }
   let response;
   const cancel = () => WebAuthnAbortService.cancelCeremony();
   signal?.addEventListener('abort', cancel, { once: true });
+  observe('prompt');
   try {
     response = await startRegistration({ optionsJSON: options.body });
   } catch (error) {
-    return isCancellation(error)
-      ? { ok: false, reason: 'cancelled' }
-      : { ok: false, reason: 'failure', message: m.auth_security_passkey_add_failed() };
+    if (isCancellation(error)) {
+      observe('cancelled');
+      return { ok: false, reason: 'cancelled' };
+    }
+    observe('failure');
+    return { ok: false, reason: 'failure', message: m.auth_security_passkey_add_failed() };
   } finally {
     signal?.removeEventListener('abort', cancel);
   }
-  if (signal?.aborted) return { ok: false, reason: 'cancelled' };
+  if (signal?.aborted) {
+    observe('cancelled');
+    return { ok: false, reason: 'cancelled' };
+  }
   const chosen = name.trim() || defaultPasskeyName();
   const created = await postCreated<{ id?: unknown; name?: unknown; created_at?: unknown }>(
     '/passkeys/register',
     chosen ? { response, name: chosen } : { response },
     signal,
+    () => observe('registration-dispatched'),
   );
-  if ('reason' in created) return created;
-  if (!created.ok) return addFailure(created);
-  if (!created.body || typeof created.body !== 'object') return { ok: false, reason: 'unknown' };
-  const { id, name: savedName, created_at: createdAt } = created.body;
-  if (typeof id !== 'string' || typeof savedName !== 'string' || typeof createdAt !== 'string')
+  if ('reason' in created) {
+    observe(created.reason === 'unknown' ? 'unknown' : 'cancelled');
+    return created;
+  }
+  if (!created.ok) {
+    observe('failure');
+    return addFailure(created);
+  }
+  if (!created.body || typeof created.body !== 'object') {
+    observe('unknown');
     return { ok: false, reason: 'unknown' };
+  }
+  const { id, name: savedName, created_at: createdAt } = created.body;
+  if (typeof id !== 'string' || typeof savedName !== 'string' || typeof createdAt !== 'string') {
+    observe('unknown');
+    return { ok: false, reason: 'unknown' };
+  }
+  observe('confirmed');
   return { ok: true, passkey: { id, name: savedName, created_at: createdAt, last_used_at: null } };
 }
 

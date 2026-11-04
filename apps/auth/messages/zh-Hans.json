@@ -560,5 +560,16 @@
   "auth_organization_delete_recovery_refused": "找不到该组织，或当前审核请求被拒绝。私密信息和删除操作均不可用。这不能说明先前的请求发生了什么。",
   "auth_organization_delete_recovery_changed": "账号、组织或请求已更改。私密信息和删除操作已收起。先前的删除结果仍然未知。",
   "auth_organization_delete_recovery_unavailable": "当前审核信息暂不可用。浏览器超时不会取消服务器上的工作，也不能确定先前的删除结果。你可以主动再次检查。",
-  "auth_organization_delete_recovery_departure": "离开后，先前的删除结果仍然未知。离开页面或丢失浏览器存储都不能取消已发送到服务器的工作。"
+  "auth_organization_delete_recovery_departure": "离开后，先前的删除结果仍然未知。离开页面或丢失浏览器存储都不能取消已发送到服务器的工作。",
+  "auth_security_passkey_account_changed": "通行密钥结果尚未确定时，账户已切换。此账户的通行密钥不能归因于那次注册。",
+  "auth_security_passkey_check_current": "检查当前通行密钥",
+  "auth_security_passkey_name_help": "留空时，Auth 会根据此浏览器和系统建议一个名称；该名称不一定能识别实际保存的通行密钥。",
+  "auth_security_passkey_options_pending": "正在准备通行密钥注册提示…",
+  "auth_security_passkey_prompt_pending": "请在浏览器中选择通行密钥，或在保存任何内容前关闭提示以取消。",
+  "auth_security_passkey_registration_cancelled": "你在发送注册请求前取消了浏览器提示，因此没有保存通行密钥。",
+  "auth_security_passkey_registration_checking": "正在检查当前通行密钥。此检查无法确认先前的注册是否已保存。",
+  "auth_security_passkey_registration_confirmed": "Auth 已确认注册。重新启用控件前，正在更新当前通行密钥和权限。",
+  "auth_security_passkey_registration_review_finished": "你已查看当前通行密钥。此操作无法确认先前的注册是否成功。",
+  "auth_security_passkey_registration_saving": "浏览器已发送注册请求。Auth 可能已保存通行密钥；正在等待响应。",
+  "auth_security_passkey_authority_retired": "先前的通行密钥结果仍未确定，但此页面已无法为先前的账户检查该结果。"
 }
