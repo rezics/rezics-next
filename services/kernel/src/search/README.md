@@ -1935,7 +1935,7 @@ Associations are only the stored forward statement, with the actual target Type;
 Decision: overflow reports only a currently disclosed fourth entry; it is not completion. No more-context destination
 is published because this native list owner supplies no admitted destination. Clients must not guess one. Each
 category emits at most three statements; at most four qualifiers are retained per statement. Oversized qualifier
-sets have an unavailable envelope. Labels select at most one requested language and retain at most 256 UTF-8 bytes;
+sets make their category unavailable without exposing a qualifier count or unexamined target identity. Labels select at most one requested language and retain at most 256 UTF-8 bytes;
 no shortened identity text is fabricated. Oversized context is unavailable at 16,384 serialized bytes per hit and
 262,144 bytes across a page, including unavailable envelopes. The wire rejects false precision, duplicate statement
 identity, mismatched source/Type, concealed entries, malformed overflow and extra fields.

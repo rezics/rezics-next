@@ -107,7 +107,9 @@ export function validWorkContext(context: WorkContext, subjectId: string): boole
   if (context.state !== 'current') return true;
   if (context.subjectId !== subjectId) return false;
   const boundedLabels = (values: Record<string, string>) =>
-    Object.values(values).every((value) => workContextBytes(value) <= WORK_CONTEXT_LIMITS.labelBytes + 2);
+    Object.values(values).every(
+      (value) => new TextEncoder().encode(value).byteLength <= WORK_CONTEXT_LIMITS.labelBytes,
+    );
   const validValue = (value: WorkContextValue) => {
     if (value.state !== 'value') return true;
     if (value.kind === 'item') return boundedLabels(value.labels) && boundedLabels(value.type.labels);

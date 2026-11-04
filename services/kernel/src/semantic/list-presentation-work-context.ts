@@ -53,7 +53,7 @@ export type WorkDraft = {
   sections: Record<
     WorkGroup,
     | { state: 'empty' | 'withheld' | 'unsupported' }
-    | { state: 'unavailable'; reason: 'limit' }
+    | { state: 'unavailable'; reason: 'limit' | 'native' }
     | { state: 'current'; items: PendingStatement[] }
   >;
 };
@@ -82,7 +82,7 @@ function valueOf(raw: unknown, property: string, release: Release): PendingValue
       return date ? { state: 'value', kind: 'time', calendar: 'gregorian', ...date } : { state: 'unsupported' };
     }
     case 'string':
-      return typeof content === 'string' && workContextBytes(content) <= limits.labelBytes + 2
+      return typeof content === 'string' && new TextEncoder().encode(content).byteLength <= limits.labelBytes
         ? { state: 'value', kind: 'text', text: content }
         : { state: 'unsupported' };
     case 'quantity':
@@ -163,8 +163,17 @@ export function prepareListWorkContext(
       const properties = plan[group];
       if (!properties.length) return [group, { state: 'unsupported' }];
       if (properties.some((property) => withheld.has(property))) return [group, { state: 'withheld' }];
-      const candidates = facts.filter((fact) => properties.includes(fact.property!)).slice(0, limits.lookahead);
+      const candidates = facts
+        .filter(
+          (fact) =>
+            properties.includes(fact.property!) &&
+            record(fact.body) &&
+            (fact.body.rank === 'normal' || fact.body.rank === 'preferred'),
+        )
+        .slice(0, limits.lookahead);
       const items = candidates.map((fact) => statementOf(id, fact, release, languages));
+      if (items.some((entry) => entry?.qualifiers.state === 'unavailable'))
+        return [group, { state: 'unavailable', reason: 'native' }];
       if (items.some((entry) => !entry)) return [group, { state: 'unavailable', reason: 'limit' }];
       return [group, items.length ? { state: 'current', items } : { state: 'empty' }];
     }),

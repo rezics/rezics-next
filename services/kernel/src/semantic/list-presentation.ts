@@ -256,7 +256,10 @@ async function observeSubjects(
                 (entry) => entry.rank !== 'deprecated',
               ).length;
               if (
-                count > view.facts.length ||
+                count >
+                  view.facts.filter((fact) =>
+                    ['normal', 'preferred'].includes((fact.body as { rank?: string }).rank ?? ''),
+                  ).length ||
                 (relation &&
                   chosenLocators
                     .filter((row) => row.slot === slot)
