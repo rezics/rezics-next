@@ -60,6 +60,7 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
             </dl>
             <div className="flex flex-wrap items-center gap-3">
               <Button
+                disabled={!reading.sourceIsCurrent()}
                 variant="outline"
                 className="min-h-11 whitespace-normal"
                 aria-describedby={`sale-title-${sale.orderId}`}
@@ -74,7 +75,7 @@ export function CreatorSalesReviewRows({ sales, locale, reading }: Props) {
                   type="checkbox"
                   className="size-5 shrink-0 accent-primary"
                   checked={selected}
-                  disabled={!selected && full}
+                  disabled={!reading.sourceIsCurrent() || (!selected && full)}
                   onChange={() => reading.toggleComparison(sale.orderId)}
                   aria-describedby={`sale-title-${sale.orderId} creator-sales-comparison-bound`}
                 />

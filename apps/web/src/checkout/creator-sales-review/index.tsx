@@ -23,6 +23,7 @@ export function CreatorSalesReview({ sales, locale, reading }: Props) {
     <div className="min-w-0 space-y-5">
       <CreatorSalesReviewControls
         review={review}
+        current={reading.sourceIsCurrent()}
         criteria={criteria}
         visible={visible.length}
         change={(next) => {

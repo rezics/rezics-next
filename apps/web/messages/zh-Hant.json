@@ -9587,5 +9587,17 @@
   "creator_review_different_titles": "{count} 個不同記錄標題",
   "creator_review_same_settlement": "提供的付款狀態相同，銷售各自獨立",
   "creator_review_different_settlements": "{count} 種不同的付款狀態",
-  "creator_review_identity_hint": "只有確切銷售參照能識別銷售。相同標題、方案、日期或付款狀態不會合併記錄，也不證明同屬一筆撥款。"
+  "creator_review_identity_hint": "只有確切銷售參照能識別銷售。相同標題、方案、日期或付款狀態不會合併記錄，也不證明同屬一筆撥款。",
+  "creator_review_refreshing_action": "正在重新整理銷售…",
+  "creator_review_refreshing_hint": "正在重新整理此銷售地址。私人選取已失效；請從收到的結果中再次選取確切銷售。",
+  "creator_review_page_context": "已收到的頁面背景",
+  "creator_review_page_context_hint": "這是提供的原生頁面資訊，不受本頁篩選影響，不是整個帳戶的計數或搜尋結果。",
+  "creator_review_page_projection": "原生投影觀察",
+  "creator_review_page_incomplete": "準備中；已收到的列仍不完整",
+  "creator_review_page_received": "頁面已收到；計數仍只涵蓋本頁",
+  "creator_review_page_continuation": "提供的後續頁",
+  "creator_review_page_more": "可明確要求較舊的頁面",
+  "creator_review_page_no_cursor": "未提供後續頁游標",
+  "creator_review_page_cursor_hint": "原生游標不透明。本頁篩選不會更改游標，也不會在重新開始時帶入隱藏條件。沒有游標不代表財務歷史完整。",
+  "creator_review_refresh_reselection": "重新整理可能替換本頁，即使標題或銷售參照看似相同。檢視與比較都必須再次明確選取。"
 }

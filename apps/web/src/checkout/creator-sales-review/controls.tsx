@@ -17,10 +17,11 @@ type Props = {
   visible: number;
   change: (criteria: ReviewCriteria) => void;
   reset: () => void;
+  current: boolean;
 };
 
 /** Native form controls keep phone and keyboard reading within the existing page. */
-export function CreatorSalesReviewControls({ review, criteria, visible, change, reset }: Props) {
+export function CreatorSalesReviewControls({ review, criteria, visible, change, reset, current }: Props) {
   const filtered = reviewIsFiltered(criteria);
   return (
     <section aria-labelledby="creator-sales-review-heading" className="min-w-0 space-y-4 rounded-xl border p-4 sm:p-5">
@@ -32,7 +33,7 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
           {m.creator_review_scope()}
         </p>
       </div>
-      <fieldset aria-describedby="creator-sales-review-scope" className="min-w-0 space-y-4">
+      <fieldset disabled={!current} aria-describedby="creator-sales-review-scope" className="min-w-0 space-y-4">
         <legend className="sr-only">{m.creator_review_filters()}</legend>
         <div className="space-y-2">
           <label htmlFor="creator-sales-review-text" className="block text-sm font-medium">
@@ -118,7 +119,12 @@ export function CreatorSalesReviewControls({ review, criteria, visible, change, 
         </div>
       </fieldset>
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" className="min-h-11 whitespace-normal" disabled={!filtered} onClick={reset}>
+        <Button
+          variant="outline"
+          className="min-h-11 whitespace-normal"
+          disabled={!filtered || !current}
+          onClick={reset}
+        >
           {m.creator_review_reset()}
         </Button>
         <p role="status" aria-live="polite" aria-atomic="true" className="text-sm">

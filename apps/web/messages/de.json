@@ -9584,5 +9584,17 @@
   "creator_review_different_titles": "{count} verschiedene gespeicherte Titel",
   "creator_review_same_settlement": "Gleicher Zahlungsstand; unabhängige Verkäufe",
   "creator_review_different_settlements": "{count} verschiedene übermittelte Zahlungsstände",
-  "creator_review_identity_hint": "Nur die genaue Verkaufsreferenz identifiziert einen Verkauf. Gleiche Titel, Angebote, Daten oder Zahlungsstände verbinden keine Datensätze und belegen keine gemeinsame Auszahlung."
+  "creator_review_identity_hint": "Nur die genaue Verkaufsreferenz identifiziert einen Verkauf. Gleiche Titel, Angebote, Daten oder Zahlungsstände verbinden keine Datensätze und belegen keine gemeinsame Auszahlung.",
+  "creator_review_refreshing_action": "Verkäufe werden aktualisiert…",
+  "creator_review_refreshing_hint": "Diese Verkaufsadresse wird aktualisiert. Private Auswahlen verfallen; genaue Verkäufe im empfangenen Ergebnis erneut auswählen.",
+  "creator_review_page_context": "Kontext der empfangenen Seite",
+  "creator_review_page_context_hint": "Beschreibt die native Seite unabhängig von lokalen Filtern. Keine kontoweite Zahl oder Suche.",
+  "creator_review_page_projection": "Beobachtung der nativen Projektion",
+  "creator_review_page_incomplete": "Vorbereitung läuft; empfangene Zeilen sind unvollständig",
+  "creator_review_page_received": "Seite empfangen; Zahlen gelten nur für diese Seite",
+  "creator_review_page_continuation": "Übermittelte Fortsetzung",
+  "creator_review_page_more": "Eine ältere Seite kann ausdrücklich angefordert werden",
+  "creator_review_page_no_cursor": "Kein Fortsetzungscursor übermittelt",
+  "creator_review_page_cursor_hint": "Der native Cursor ist undurchsichtig. Lokale Filter ändern ihn nicht und nehmen keine versteckten Bedingungen in einen Neustart mit. Ein fehlender Cursor belegt keine vollständige Finanzhistorie.",
+  "creator_review_refresh_reselection": "Aktualisieren kann die Seite ersetzen, selbst wenn Titel oder Verkaufsreferenzen gleich aussehen. Detailansicht und Vergleich erfordern eine bewusste Neuauswahl."
 }

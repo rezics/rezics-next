@@ -9584,5 +9584,17 @@
   "creator_review_different_titles": "서로 다른 기록 제목 {count}개",
   "creator_review_same_settlement": "제공된 결제 상태가 같아도 독립된 판매",
   "creator_review_different_settlements": "서로 다른 결제 상태 {count}개",
-  "creator_review_identity_hint": "정확한 판매 참조만 판매를 식별합니다. 같은 제목, 제안, 날짜 또는 결제 상태는 기록을 병합하거나 같은 지급임을 증명하지 않습니다."
+  "creator_review_identity_hint": "정확한 판매 참조만 판매를 식별합니다. 같은 제목, 제안, 날짜 또는 결제 상태는 기록을 병합하거나 같은 지급임을 증명하지 않습니다.",
+  "creator_review_refreshing_action": "판매 새로고침 중…",
+  "creator_review_refreshing_hint": "이 판매 주소를 새로고침하는 중입니다. 비공개 선택은 만료됩니다. 받은 결과에서 판매를 다시 선택하세요.",
+  "creator_review_page_context": "받은 페이지 맥락",
+  "creator_review_page_context_hint": "현재 페이지 필터와 무관한 기본 페이지 정보입니다. 계정 전체의 수나 검색 결과가 아닙니다.",
+  "creator_review_page_projection": "기본 프로젝션 관측",
+  "creator_review_page_incomplete": "준비 중이며 받은 행은 불완전함",
+  "creator_review_page_received": "페이지 수신됨. 수는 현재 페이지만 나타냄",
+  "creator_review_page_continuation": "제공된 후속 페이지",
+  "creator_review_page_more": "이전 페이지를 명시적으로 요청할 수 있음",
+  "creator_review_page_no_cursor": "후속 페이지 커서가 제공되지 않음",
+  "creator_review_page_cursor_hint": "기본 커서는 불투명합니다. 페이지 필터는 커서를 바꾸거나 재시작 시 숨겨진 조건을 전달하지 않습니다. 커서가 없다고 재무 내역이 완전한 것은 아닙니다.",
+  "creator_review_refresh_reselection": "제목이나 판매 참조가 같아도 새로고침으로 페이지가 바뀔 수 있습니다. 상세 보기와 비교에는 다시 선택해야 합니다."
 }
