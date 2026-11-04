@@ -76,6 +76,21 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
   const body = () => within(document.body);
   const click = (name: string, scope: HTMLElement = host) =>
     act(async () => user.click(within(scope).getByRole('button', { name })));
+  const createAfterReview = async (scope: HTMLElement = host) => {
+    const confirmed = () =>
+      [...scope.querySelectorAll<HTMLElement>('section p[role="status"]')].some(
+        (status) => status.textContent?.trim() === m.identity_intake_continue(),
+      );
+    if (!confirmed()) {
+      if (!within(scope).queryByRole('button', { name: m.identity_intake_continue() })) {
+        await click(m.identity_intake_search(), scope);
+        await until(() => !!within(scope).queryByRole('button', { name: m.identity_intake_continue() }));
+      }
+      await click(m.identity_intake_continue(), scope);
+    }
+    if (!scope.querySelector('[data-manga-create-review]')) await click(m.manga_create_review(), scope);
+    if (scope.querySelector('[data-manga-create-review]')) await click(m.manga_title(), scope);
+  };
   const replace = (name: string, value: string, scope: HTMLElement = host) =>
     act(async () => {
       const input = within(scope).getByRole('textbox', { name });
@@ -107,7 +122,13 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       getParentRoute: () => route,
       path: '/en/catalogue/manga',
       component: () => (
-        <Editor locale="en" session="signed-in" transport={{ ...fixture.transport, create }} search={async () => []} />
+        <Editor
+          locale="en"
+          session="signed-in"
+          transport={{ ...fixture.transport, create }}
+          search={async () => []}
+          identityIntake={fixture.identityIntake}
+        />
       ),
     });
     const search = createRoute({
@@ -158,7 +179,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     });
     await replace(m.catalogue_create_label(), 'Before recovery');
     await replace(m.catalogue_create_aliases(), 'Sibling alias');
-    await click(m.manga_title());
+    await createAfterReview();
     await until(() => host.textContent!.includes(m.correction_invalid()));
     const recoveredLabel = within(host).getByRole('textbox', { name: m.catalogue_create_label() });
     await act(async () => changeHandler(recoveredLabel)({ target: { value: 'Recovered title' } }));
@@ -169,7 +190,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       (within(host).getByRole('textbox', { name: m.catalogue_create_aliases() }) as HTMLTextAreaElement).value,
     ).toBe('Sibling alias');
     expect(host.textContent).not.toContain(m.correction_invalid());
-    await click(m.manga_title());
+    await createAfterReview();
     await until(() => host.textContent!.includes(m.manga_created()));
 
     const fixture = mangaFixture('uncertain');
@@ -254,7 +275,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
 
     const retained = [changeHandler(labels[1]!), changeHandler(aliases[1]!), changeHandler(languages[1]!)];
     expect(commands).toHaveLength(0);
-    await click(m.manga_title());
+    await createAfterReview();
     await createEntered;
     const submittedCommand = commands[0]!;
     await act(async () => {
@@ -309,7 +330,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     };
     router = await mount(mangaFixture(), pending);
     await replace(m.catalogue_create_label(), 'Unresolved');
-    await click(m.manga_title());
+    await createAfterReview();
     await leaveAttempt();
     expect(dialog()!.textContent).toContain(m.thread_authoring_leave_pending());
     await click(m.thread_authoring_leave(), dialog()!);
@@ -330,7 +351,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
       router = await mount(mangaFixture(), pending);
       await replace(m.catalogue_create_label(), 'Retiring');
       const retiredLabelChange = changeHandler(within(host).getByRole('textbox', { name: m.catalogue_create_label() }));
-      await click(m.manga_title());
+      await createAfterReview();
       await leaveAttempt();
       await act(async () => client.setQueryData(sessionQuery.queryKey, session));
       await until(() => !dialog());

@@ -74,6 +74,25 @@ test('complete Manga creation keeps series and volume drafts, independent contro
   };
   const click = (scope: HTMLElement, name: string) =>
     act(async () => user.click(within(scope).getByRole('button', { name })));
+  const createAfterReview = async (scope: HTMLElement, inspect?: (review: HTMLElement) => void) => {
+    const confirmed = () =>
+      [...scope.querySelectorAll<HTMLElement>('section p[role="status"]')].some(
+        (status) => status.textContent?.trim() === m.identity_intake_continue(),
+      );
+    if (!confirmed()) {
+      if (!within(scope).queryByRole('button', { name: m.identity_intake_continue() })) {
+        await click(scope, m.identity_intake_search());
+        await until(() => !!within(scope).queryByRole('button', { name: m.identity_intake_continue() }));
+      }
+      await click(scope, m.identity_intake_continue());
+    }
+    if (!scope.querySelector('[data-manga-create-review]')) await click(scope, m.manga_create_review());
+    const review = scope.querySelector<HTMLElement>('[data-manga-create-review]');
+    if (review) {
+      inspect?.(review);
+      await click(scope, m.manga_title());
+    }
+  };
   const select = (scope: HTMLElement, name: string, value: string) =>
     act(async () => user.selectOptions(within(scope).getByRole('combobox', { name }), value));
   const input = (scope: HTMLElement, name: string) => within(scope).getByRole('textbox', { name }) as HTMLInputElement;
@@ -100,6 +119,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     await act(async () => user.click(label));
     expect(window.document.activeElement).toBe(control);
   };
+  const identity = (fixture: ReturnType<typeof mangaFixture>, session = 'signed-in') => ({
+    ...fixture.identityIntake,
+    viewerKey: JSON.stringify([fixture.identityIntake.viewerKey, session]),
+    viewerState: session as 'unknown' | 'signed-in' | 'signed-out' | 'unavailable',
+  });
   const fresh = async (
     fixture: ReturnType<typeof mangaFixture>,
     key: string,
@@ -107,7 +131,16 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     session = 'signed-in',
     search = async () => [] as { id: string; title: string; types: string[] }[],
   ) => {
-    await show(<MangaProfileEditor key={key} locale="en" session={session} transport={transport} search={search} />);
+    await show(
+      <MangaProfileEditor
+        key={key}
+        locale="en"
+        session={session}
+        transport={transport}
+        search={search}
+        identityIntake={identity(fixture, session)}
+      />,
+    );
     await until(
       () => !!host.querySelector('select') && !(host.querySelector('fieldset') as HTMLFieldSetElement).disabled,
     );
@@ -178,10 +211,22 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     const pair = () => (
       <>
         <div data-mount="series">
-          <MangaProfileEditor locale="en" session="signed-in" transport={seriesTransport} search={search} />
+          <MangaProfileEditor
+            locale="en"
+            session="signed-in"
+            transport={seriesTransport}
+            search={search}
+            identityIntake={identity(series)}
+          />
         </div>
         <div data-mount="volume">
-          <MangaProfileEditor locale="en" session="signed-in" transport={volumeTransport} search={search} />
+          <MangaProfileEditor
+            locale="en"
+            session="signed-in"
+            transport={volumeTransport}
+            search={search}
+            identityIntake={identity(volume)}
+          />
         </div>
       </>
     );
@@ -308,14 +353,19 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       await user.type(editor, 'An original account of the observatory.');
       await user.tab();
     });
-    await click(a, m.manga_title());
+    await createAfterReview(a);
     expect(posts(series)).toHaveLength(0);
     expect(a.querySelector(`a[href="#original-${authored.id.replace('manga-row-', '')}"]`)).not.toBeNull();
     await act(async () => user.click(within(authored).getByRole('checkbox', { name: m.authored_original() })));
     await replace(input(authored, m.relation_citation()), 'https://example.org/original-summary');
     await click(authored, m.recipe_remove_field());
     const sealedRemoval = callback(within(authored).getByRole('button', { name: m.recipe_remove_field() }));
-    await click(a, m.manga_title());
+    await createAfterReview(a, (review) => {
+      expect(review.textContent).toContain('The Paper Observatory');
+      expect(review.textContent).toContain('An original account of the observatory.');
+      expect(review.textContent).toContain('CC-BY-4.0');
+      expect(review.textContent).toContain(m.authored_original());
+    });
     await until(() => a.textContent!.includes(m.correction_unavailable()));
     expect(posts(series)).toHaveLength(1);
     const sealed = structuredClone(commands[0]!);
@@ -420,7 +470,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         .getByRole('combobox', { name: m.manga_publication() })
         .querySelector('option[value="schema:numberOfPages"]'),
     ).toBeNull();
-    await click(b, m.manga_title());
+    await createAfterReview(b);
     expect(posts(volume)).toHaveLength(0);
     expect(b.querySelector('a[href="#manga-independent"]')).not.toBeNull();
     const acknowledgement = b.querySelector<HTMLAnchorElement>('a[href="#manga-independent"]')!;
@@ -433,7 +483,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(window.document.activeElement).toBe(termLanguages[1]);
     await replace(termLanguages[1]!, 'ja');
     await act(async () => user.click(within(b).getByRole('checkbox', { name: m.manga_independent() })));
-    await click(b, m.manga_title());
+    await createAfterReview(b);
     await until(() => b.textContent!.includes(m.correction_error_url()));
     const rejectionLinks = [...b.querySelectorAll<HTMLAnchorElement>('form li a')];
     for (const [link, control] of [
@@ -454,7 +504,13 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(rejectionLinks[0]!.textContent).toContain(m.relation_citation());
     expect(input(firstLanguage, m.relation_citation()).getAttribute('aria-invalid')).toBeNull();
     await replace(input(secondLanguage, m.relation_citation()), 'https://example.org/correct-citation');
-    await click(b, m.manga_title());
+    await createAfterReview(b, (review) => {
+      expect(review.textContent).toContain(m.manga_independent());
+      expect(review.textContent).toContain('✓');
+      expect(review.textContent).toContain('9781234567897');
+      expect(review.textContent).toContain(mangaSeriesId);
+      expect(review.textContent).toContain(mangaVolumeCitation);
+    });
     await until(() => b.textContent!.includes(m.manga_created()));
     expect(posts(volume)).toHaveLength(1);
     expect(volume.calls).toHaveLength(9); // Initial definitions, fresh admission, exact series check, create/read.
@@ -606,7 +662,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     expect(input(panel(staleRow.id), m.relation_citation()).value).toBe('https://example.org/creator-source');
     expect(input(panel(sibling.id), m.correction_value()).value).toBe('ja');
     await withdraw();
-    await click(host, m.manga_title());
+    await createAfterReview(host);
     expect(posts(stale)).toHaveLength(0); // Withdrawn assertions remain inadmissible.
     const staleLink = host.querySelector<HTMLAnchorElement>(`a[href="#${staleRow.id}"]`)!;
     await act(async () => user.click(staleLink));
@@ -625,7 +681,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     await refresh();
     expect(input(panel(sibling.id), m.correction_value()).value).toBe('ja');
     expect(input(host, m.catalogue_create_label()).value).toBe('Stale field draft');
-    await click(host, m.manga_title());
+    await createAfterReview(host);
     await until(() => host.textContent!.includes(m.manga_created()));
     expect(posts(stale)).toHaveLength(1);
     expect((posts(stale)[0]!.body as { statements: unknown }).statements).toEqual({
@@ -644,11 +700,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       const fixture = mangaFixture(scenario);
       await fresh(fixture, scenario);
       await replace(input(host, m.catalogue_create_label()), 'Retained draft');
-      await click(host, m.manga_title());
+      await createAfterReview(host);
       await until(() => posts(fixture).length === 1 && host.querySelector('[role="alert"]') !== null);
       const conflict = scenario === 'stale' || scenario === 'conflict';
       if (conflict) {
-        expect((within(host).getByRole('button', { name: m.manga_title() }) as HTMLButtonElement).disabled).toBe(true);
+        expect((host.querySelector('#create-subject-submit') as HTMLButtonElement).disabled).toBe(true);
         await click(host, m.catalogue_create_review_new());
       } else expect(host.textContent).toContain(scenario === 'denied' ? m.correction_denied() : m.correction_invalid());
       expect(input(host, m.catalogue_create_label()).value).toBe('Retained draft');
@@ -656,7 +712,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       await settle();
       expect(fixture.calls).toEqual(before);
       fixture.setScenario('ready');
-      await click(host, m.manga_title());
+      await createAfterReview(host);
       await until(() => host.textContent!.includes(m.manga_created()));
       expect(posts(fixture)).toHaveLength(2);
       expect(posts(fixture)[1]!.key).not.toBe(posts(fixture)[0]!.key);
@@ -665,7 +721,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       const fixture = mangaFixture(scenario);
       await fresh(fixture, scenario);
       await replace(input(host, m.catalogue_create_label()), 'Readback recovery');
-      await click(host, m.manga_title());
+      await createAfterReview(host);
       await until(() => host.textContent!.includes(m.manga_created()));
       expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
       expect(host.textContent).toContain(
@@ -714,6 +770,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
           session="signed-in"
           transport={fixture.transport}
           search={async () => []}
+          identityIntake={identity(fixture)}
         />,
       );
       const message =
@@ -723,7 +780,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
             ? m.candidate_loading()
             : m.correction_unavailable();
       await until(() => host.textContent!.includes(message));
-      expect((within(host).getByRole('button', { name: m.manga_title() }) as HTMLButtonElement).disabled).toBe(true);
+      expect((within(host).getByRole('button', { name: m.manga_create_review() }) as HTMLButtonElement).disabled).toBe(true);
       expect(posts(fixture)).toHaveLength(0);
     }
     const signedOut = mangaFixture();
@@ -734,10 +791,11 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         session="signed-out"
         transport={signedOut.transport}
         search={async () => []}
+        identityIntake={identity(signedOut, 'signed-out')}
       />,
     );
     await until(() => host.textContent!.includes(m.catalogue_create_signed_out()));
-    expect((within(host).getByRole('button', { name: m.manga_title() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(host).getByRole('button', { name: m.manga_create_review() }) as HTMLButtonElement).disabled).toBe(true);
     expect(posts(signedOut)).toHaveLength(0);
     let retries = 0;
     const sessionView = (session: string) => (
@@ -750,6 +808,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         }}
         transport={signedOut.transport}
         search={async () => []}
+        identityIntake={identity(signedOut, session)}
       />
     );
     await show(sessionView('signed-in'));
@@ -758,7 +817,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
     await show(sessionView('unavailable'));
     expect(host.textContent).toContain(m.catalogue_create_unavailable());
     expect(host.textContent).not.toContain(m.candidate_loading());
-    expect(within(host).getByRole('button', { name: m.manga_title() }).matches(':disabled')).toBe(true);
+    expect(within(host).getByRole('button', { name: m.manga_create_review() }).matches(':disabled')).toBe(true);
     await click(host, m.erasure_retry_session());
     expect(retries).toBe(1);
     await show(sessionView('signed-in'));
@@ -787,7 +846,13 @@ test('complete Manga creation keeps series and volume drafts, independent contro
           address="manga-create"
           observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
         >
-          <MangaProfileEditor locale="en" session="signed-in" transport={transport} search={async () => []} />
+          <MangaProfileEditor
+            locale="en"
+            session="signed-in"
+            transport={transport}
+            search={async () => []}
+            identityIntake={identity(fixture)}
+          />
         </CandidateReaderBoundary>
       );
       await show(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10'));
@@ -802,7 +867,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
           onSubmit: (event: { preventDefault: () => void }) => void;
         }
       ).onSubmit;
-      await click(host, m.manga_title());
+      await createAfterReview(host);
       await entered.promise;
       expect(posts(fixture)).toHaveLength(1);
       expect(form.getAttribute('aria-busy')).toBe('true');
@@ -827,7 +892,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       expect(within(host).queryByRole('button', { name: m.correction_retry() })).toBeNull();
       expect(input(host, m.catalogue_create_label()).value).toBe('');
       await replace(input(host, m.catalogue_create_label()), 'New reader draft');
-      await click(host, m.manga_title());
+      await createAfterReview(host);
       await until(() => host.textContent!.includes(m.manga_created()));
       expect(posts(fixture)).toHaveLength(2);
       expect(posts(fixture)[1]!.key).not.toBe(posts(fixture)[0]!.key);
@@ -856,7 +921,13 @@ test('complete Manga creation keeps series and volume drafts, independent contro
           address="manga-load"
           observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
         >
-          <MangaProfileEditor locale="en" session="signed-in" transport={transport} search={async () => []} />
+          <MangaProfileEditor
+            locale="en"
+            session="signed-in"
+            transport={transport}
+            search={async () => []}
+            identityIntake={identity(fixture)}
+          />
         </CandidateReaderBoundary>
       );
       await show(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10'));
@@ -901,7 +972,13 @@ test('complete Manga creation keeps series and volume drafts, independent contro
           address="manga-readback"
           observed={{ state: 'signed-in', subject: reader, csrfToken: 'AAAAAAAAAAAAAAAAAAAAAA' }}
         >
-          <MangaProfileEditor locale="en" session="signed-in" transport={transport} search={async () => []} />
+          <MangaProfileEditor
+            locale="en"
+            session="signed-in"
+            transport={transport}
+            search={async () => []}
+            identityIntake={identity(fixture)}
+          />
         </CandidateReaderBoundary>
       );
       await show(boundary('0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10'));
@@ -909,7 +986,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
         () => !!host.querySelector('select') && !(host.querySelector('fieldset') as HTMLFieldSetElement).disabled,
       );
       await replace(input(host, m.catalogue_create_label()), 'Created by the previous reader');
-      await click(host, m.manga_title());
+      await createAfterReview(host);
       await until(() => host.textContent!.includes(m.catalogue_create_reader_unavailable()));
       fixture.setScenario('ready');
       const retry = within(host).getByRole('button', { name: m.correction_retry() });
@@ -934,7 +1011,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
       expect(host.textContent).not.toContain(m.manga_created());
       expect(within(host).queryByRole('link', { name: m.candidate_view_public() })).toBeNull();
       await replace(input(host, m.catalogue_create_label()), 'Fresh creation after retirement');
-      await click(host, m.manga_title());
+      await createAfterReview(host);
       await until(() => host.textContent!.includes(m.manga_created()));
       expect(posts(fixture)).toHaveLength(2);
     }

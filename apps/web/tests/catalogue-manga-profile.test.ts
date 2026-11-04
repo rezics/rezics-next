@@ -8,6 +8,7 @@ test('Manga series and volume editor uses actual released metadata native writes
   const fixture = mangaFixture();
   const read = await fixture.transport.load();
   if (!read.ok) throw new Error('Expected current released manga definitions');
+  expect(read.releaseDigest).toBeTruthy();
   expect(mangaFields(read.release, 'schema:ComicSeries', 'en')).not.toContain('schema:numberOfPages');
   expect(mangaFields(read.release, 'schema:ComicSeries', 'en')).not.toContain('schema:isbn');
   expect(mangaFields(read.release, 'schema:PublicationVolume', 'en')).not.toContain('wdt:P2635');
@@ -45,6 +46,7 @@ test('Manga series and volume editor uses actual released metadata native writes
   expect(fixture.reads.get(mangaSeriesId)!.subject.statements['schema:numberOfPages']).toBeUndefined();
   const current = await readMangaProfile(fixture.client, mangaVolumeId);
   if (!current.ok || !current.public) throw new Error('Expected exact native current volume');
+  expect(current.releaseDigest).toBe(read.releaseDigest);
   const editor = { ...current, public: current.public, source: null };
   const pages = stageFact(
     editor,

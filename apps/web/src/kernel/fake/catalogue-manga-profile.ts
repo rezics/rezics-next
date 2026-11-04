@@ -8,6 +8,7 @@ import {
 } from '../../features/catalogue/manga-profile';
 import { readCreatedSubject } from '../../features/catalogue/create-subject-request';
 import { proposeFact } from '../../features/catalogue/subject-facts';
+import { allowedCreateAuthority, identityBinding } from '../../features/catalogue/identity-intake';
 import type { StatementInput } from '../../features/catalogue/statement-editor';
 import { candidateContext, type Candidate } from '../../subject/candidates';
 import type { FakeRoute } from '../fake-modules';
@@ -200,6 +201,7 @@ export function mangaFixture(scenario: MangaScenario = 'ready', locale = 'en') {
     for (const type of ['schema:ComicSeries', 'schema:PublicationVolume']) delete release.types[type];
   const transport: MangaTransport = {
     load: () => readMangaProfile(client),
+    eligibility: async () => allowedCreateAuthority,
     create: (command) =>
       createManga(
         client,
@@ -210,8 +212,26 @@ export function mangaFixture(scenario: MangaScenario = 'ready', locale = 'en') {
       ),
     read: (id) => readCreatedSubject(client, id, locale),
   };
+  const identityIntake = {
+    viewerKey: 'manga-fixture-viewer',
+    viewerState: 'signed-in' as const,
+    read: async (input: Parameters<typeof identityBinding>[0], generation: number) => ({
+      binding: identityBinding(input, generation),
+      status: 'empty' as const,
+      viewer: { state: 'signed-in' as const },
+      actions: {
+        openExisting: false,
+        continueWithResults: true,
+        continueUnverified: false,
+        retry: false,
+        createAuthority: allowedCreateAuthority,
+      },
+      results: [],
+    }),
+  };
   return {
     transport,
+    identityIntake,
     client,
     calls,
     receipts,

@@ -786,6 +786,12 @@ ordinary current reader. A failed read retains that ID and retries only the read
 payload and key; conflict requires explicit draft review. Invalid values refresh the active release while keeping
 the draft, and a removed or changed field is rejected rather than silently dropped.
 
+Before a new Manga create, the author searches and acknowledges the exact type and first name, then reviews the
+normalized terms and every selected initial statement, including qualifiers, evidence, authored text licence and
+the original-text acknowledgement. Editing any reviewed value retires that review. Decision: Manga keeps identity, fact review and permission observation separate; guest, refused and unavailable creation remain distinct while definitions and public target search stay useful. A new write requires a fresh `subject.create` observation from the
+Global Context parent, and native execution still reauthorizes. An uncertain write retries the exact command and key;
+a known acknowledgement keeps its returned ID and retries only the ordinary reader.
+
 Corrections reuse the common per-field draft, partial-result and candidate-review controls. Unchanged scalar
 fields are omitted, qualifiers and citations survive replacement, and each uncertain field keeps its own key.
 Membership and creator changes use the integrated relation editor's actual qualified slots and target discovery.
