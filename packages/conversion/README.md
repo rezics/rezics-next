@@ -701,7 +701,7 @@ Wikidata `wikidata-6` composes the complete cited candidate using the actual
 bundled property and calls public `checkStatementInput` before emission, retaining
 final batch validation. The same native time value keeps signed 4–16 digit nonzero
 years, Gregorian/Julian calendar, precision 9/10/11 and optional safe timezone and
-nonnegative uncertainty. Quantity amount, bounds and unit remain exact lexical
+nonnegative uncertainty, including explicit zero fields. Quantity amount, bounds and unit remain exact lexical
 strings; validation performs no Number coercion or calendar normalization.
 Unsupported or incomplete values withhold the entire statement with bounded
 source diagnostics. Somevalue/novalue remain distinct. Source projection keeps
