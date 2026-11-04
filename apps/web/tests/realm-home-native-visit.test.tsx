@@ -31,13 +31,11 @@ for (const [key, value] of Object.entries(globals))
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const realmMembershipActions = await import('../src/community/realm-membership-actions');
 const sessionModule = await import('../src/session/query');
 let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
 let joinAdvice: RealmJoinAdvice = { state: 'current', allowed: true };
 const joinAdviceReads: string[] = [];
 mock.module('../src/community/realm-membership-actions', () => ({
-  ...realmMembershipActions,
   readRealmMembership: ({ data }: { data: { realmId: string } }) =>
     realmMembershipTestReaders.readMembership(data.realmId),
   readRealmJoinAdvice: ({ data }: { data: { realmId: string } }) => {
