@@ -1946,6 +1946,169 @@ writer, asset picker or upload/lifecycle engine here.
   separate from output cardinality. This does not bound foreign Access, rules or
   media residual joins, which still need their own native prefix composition.
 
+- **Complete source-derived statement and transaction bound:** the registered
+  `GET /v1/realms/:realmId/settings` operation is `realm.settings` and runs through
+  `createKernel`'s mounted `communityRoutes` path into `readRealmSettingsPage`.
+  It adds no worker or rate-counter query; `releaseOperationalTime` has zero SQL.
+  Let `P_o` be each of the seven outer preparations, `P_m` each actual media
+  preparation, and `E_1,E_2` the complete batched rules preparations. Let `Q` and
+  `F` retain the actual formula counts already defined above. For one verified
+  token, `S_auth = 1 + d_auth + w`, with one exact identity-account lookup,
+  optional delegated assignment `d_auth<=1`, and at most one Auth signing-key
+  read per JWKS fetch `w<=2`. The actual compact bearer size is `T_auth` UTF-8
+  bytes; the authentication-work declaration charges `T_auth + 2*8192` bytes
+  for verification and bounded JWKS responses. The complete available path is
+  the additive composition of the retained component equations:
+
+  ```text
+  S_get = S_auth
+        + (28 + b_locator + b_initial + b_final + Σ_outer(P_o + Q_o))
+        + Σ_(j=1..2)(27 + m_j + 2*a_j + b_locator_j + b_final_j
+                      + Σ_media_j(P_m + Q_m))
+        + Σ_(t=1..4)(H_t + 8 + e_t + B_t + F_t)
+        + E_1 + E_2
+  ```
+
+  This is the unflattened source ceiling, not a sampled total. It preserves the
+  fixed local/eligibility coefficient of at most 273 while keeping every outer,
+  media and rules preparation, formula, auth statement and variable ban term
+  explicit. The successful two-image/two-rules path opens at most fourteen
+  read-only snapshots and runs at most twenty-eight transaction controls; each
+  opened snapshot ends in one COMMIT or one ROLLBACK. Failed/withheld paths pay
+  the dispatched prefix and replace a reached COMMIT with ROLLBACK. Cold
+  connection release adds no SQL. A caller retry adds the whole expression and
+  a fresh authentication path. Outside those snapshots, every preparation and
+  identity/JWKS SQL statement is a separate pool statement; the transaction
+  ceiling is therefore fourteen snapshot transactions plus the exact statement
+  counts `S_auth + Σ_outer P_o + Σ_media P_m + E_1 + E_2` for those autocommit
+  paths. Formula evaluations add no SQL transaction.
+
+- **Identity, Access and physical candidate ceilings:** one bearer verification
+  dispatches at most two JWKS fetches; each response is read with an 8192-byte
+  cap and at most three signing keys. The Auth/identity path reads the signing
+  generation/key rows, performs one exact account lookup and performs one extra
+  assignment lookup only for a delegated `requested_by` identity. Those executed
+  statements and response bytes are in `S_auth` and the Auth capture, not in the
+  kernel transaction count. The admitted token claims additionally cap account
+  subject at 36 characters, `client_id` at 1024 code units, scope at 66,047
+  ASCII bytes/512 scopes of at most 128 bytes each, `amr` at 100 ASCII strings
+  of at most 128 bytes, and delegated identity to its exact request pattern.
+  There is no shorter fixed HTTP bearer cap in this reader; request and JOSE
+  byte costs therefore retain the admitted `T_auth` term rather than inventing
+  a constant. Each `P_i = 2 + d_i + k_i + V_i` keeps the two base
+  reads, optional assignment (`d_i<=1`), at most two inverse-membership probes
+  (`k_i<=2`) and role-reader probes (`V_i`) visible. Each of at most two accounts
+  contributes no more than `MEMBERSHIP_LIMIT=1000` inverse memberships; role
+  proofs are made only for those returned exact group IDs. Consequently
+  `V_i<=2*MEMBERSHIP_LIMIT=2000` exact group/action probes and, at two matching
+  role-grant candidates per group, at most 4000 role-grant candidates per
+  preparation (68,000 across the maximum seventeen outer/media preparations).
+  Direct identity and
+  resource-grant reads use the routed resource/subject/action key, role grants
+  use the corresponding exact group/action key, and denials use the exact
+  resource/subject/action/time predicate. The new authority-history population
+  proves that old, non-overlapping grant intervals do not turn this exact current
+  decision into a relation scan. The Access result cap and SQL `LIMIT` are not
+  treated as examined-row bounds: physical plans must retain the indexed key
+  prefix, and native execution measures heap/index blocks separately.
+
+  Direct Community lookup has at most one selected Realm identity, one exact
+  current Realm revision, one selected host identity, one exact host revision,
+  and the exact binding/home rows projected by the two source rounds. The
+  existing source-prefix assertion proves only the routed exact Community
+  revision condition. For rules, each of four snapshots follows at most 33
+  ancestry posts, with exact route/post and route/revision lookups for the
+  selected thread, board, Realm, pin and body. The maximum ancestry population
+  is therefore `4*33=132` post candidates across the two full rules calls; each
+  successful selected call takes two snapshots and four formulas. The body
+  guard admits at most one exact body row per snapshot. Residual owner/post and
+  container checks remain charged after indexed key lookup, and absent matches
+  still incur their index probes.
+
+  For media, the two full calls make at most twelve exact `(route,media_id)`
+  acquisitions total. Each acquisition joins at most twelve unique variant
+  slots, so at most 12 media rows and 144 variant rows enter the two-call source
+  composition. This uses the exact route/media and `(route,media_id,format,width)`
+  keys; the variant JSON array is bounded at 3060 bytes per acquisition. The
+  object-body path is never dispatched. Neither this fact nor output `LIMIT`
+  substitutes for the captured plan and block bound: the native media-history,
+  authority-history, rules-history and direct Community populations are
+  independent, and their result is reported only by the controller's native
+  three-scale execution.
+
+- **Acquisition, retained-copy and response serialization ceilings:** source
+  signatures retain the complete Realm, Space, binding and home projections
+  used by `settings-page.ts`, including fields discarded from the final page,
+  and serialize both initial/final signatures. The source-copy ceiling is
+  `C_locator + 2*C_source_round + 2*C_source_signature`, where each round
+  includes every projected Realm/Space/binding/home field and its exact SQL
+  result, not merely fields exposed in JSON. Realm and Space each admit a title
+  of at most 1024 code points and summary of at most 4096. Each pair therefore
+  acquires at most 20,480 UTF-8 bytes and occupies at most 30,724 bytes in JSON,
+  including quotes and worst-case escaping. The locator plus two source rounds
+  acquire at most five such pairs (102,400 UTF-8 bytes); the two full source
+  signatures serialize four pairs (122,896 JSON bytes), in addition to all
+  fixed fields and keys in their full projections. The final Realm+host page
+  serializes two pairs (61,448 JSON bytes). For a non-null admitted Space
+  address, the two source rounds acquire at most `2*64=128` UTF-8 bytes and
+  stringify at most `2*66=132` JSON bytes including quotes; null is four JSON
+  bytes. These repeated address copies occur in discarded host signatures and
+  are included in `C_source_round` and `C_source_signature`.
+
+  Each of the twelve possible media acquisitions retains its full finite scalar
+  projection plus a variant array of at most 3060 UTF-8 bytes. The already
+  documented per-variant maximum covers every raw field: four-byte format,
+  ten-byte MIME type, 64-byte digest, four-digit width, ten-digit height,
+  nineteen-digit byte count, and a 48-byte key. Across all acquisitions, raw
+  variant JSON is at most `12*3060=36,720` bytes. Descriptor transformation
+  additionally retains at most two selected images in the page, each with at
+  most twelve variants, 44 base64 thumbhash bytes, seven color bytes, finite
+  UUID/enum/timestamp/revision/digest/focal-coordinate fields, and its own
+  serialization. Raw JSON, parsed variant values, first/final signatures,
+  transformed descriptors and final page JSON are separate copies in the peak
+  expression; the 36,720-byte acquisition total is not itself the peak.
+
+  Across four rules snapshots, raw body acquisition is at most
+  `4*65,536=262,144` UTF-8 bytes. Only the two selected final payloads are
+  validated and hashed. For each, the retained-copy accounting separately
+  includes the bounded raw body, up-to-33-row ancestry/container/revision
+  signature, parsed document, canonical JSON (at most 65,536 bytes),
+  `documentText`, split-line payload, joined text and hash input. The raw body
+  is capped in SQL before transfer; each text/canonical form is capped by the
+  document contract, and `split("\n")` has at most 65,537 entries for a
+  65,536-byte text. The symbolic peak is
+  `C_locator + 2*C_source_round + 2*C_source_signature + C_media_peak
+  + 4*C_rules_signature + 4*65,536
+  + 2*(C_parsed_document + C_canonical + C_documentText + C_split_payload
+  + C_joined_text + C_hash_input) + J_settings`. `C_rules_signature` is one
+  complete maximum signature: 33 post rows plus the selected thread, board,
+  Realm, pin/revision and their discarded signature fields. `C_media_peak`
+  includes all 12 exact acquisitions, their complete scalar projections,
+  36,720 raw variant-JSON bytes, parsed variant values, first/final media
+  signatures and the two transformed descriptors. Every term is bounded from
+  the source schema/producer maxima above, not measured samples. The sum
+  deliberately charges simultaneous initial/final copies rather than assuming
+  early reclamation; it bounds application byte copies and source rows, not
+  runtime allocator metadata.
+
+  The response contains one selected rules document, no more than two image
+  descriptors, finite operation/UUID/vote fields, and Realm plus host titles
+  and summaries. Its UTF-8 JSON ceiling is
+  `J_settings = J_fixed_schema + 65,536 + 2*J_image_descriptor`, where
+  `J_fixed_schema<=96 KiB` includes the title/summary bounds above, rules title
+  and summary limits, fixed identifiers and object keys, at most seven UUID
+  vote entries, finite operation descriptions and all delimiters. Each
+  `J_image_descriptor<=8 KiB` includes the maximum twelve serialized variants,
+  finite top-level descriptor fields and bounded thumbhash/color fields. Thus
+  the complete response JSON is at most `96 KiB + 65,536 + 16 KiB = 180,224`
+  UTF-8 bytes (under 192 KiB), including worst-case six-byte escaping and final
+  encoding. This source ceiling is independent of measured response samples.
+  The UTF-8 application request additionally includes the admitted `T_auth`
+  bearer bytes and bounded route/headers; the request/response and JWKS byte
+  counters remain independently captured by the mounted growth test.
+
+Decision: Web's `settings.get` type is delivered only by the shared complete-input publication; the mounted Content route uses the ordinary Realm-media producer, returns the current head as its quoted ETag, and requires the quoted current head in command If-Match.
+
 Decision: mounted settings growth reuses the existing dual-database capture combiner;
 caller retry retains both Auth captures and both complete Kernel requests before growth
 comparison. No separately measured media operation stands in for either selected call.
@@ -1959,11 +2122,14 @@ comparison. No separately measured media operation stands in for either selected
   then withdraws one selected image. `realm-settings-page-lifecycle.test.ts` covers protected access,
   orphan read-only state, erased selected rules and suspension during composition. Controller-owned
   `realm-settings-page-growth.test.ts` adds mounted available, empty, denied, revoked,
-  optional-unavailable, caller-retry and final-authority-withheld branches against independent
-  unrelated Realm, selected Realm revision and selected rules revision populations at
-  256/1024/4096. Each request constructs fresh native Access/JWKS state, captures Kernel
-  and Auth separately and aggregates before growth comparison. The available pinned-rules
-  branch checks seven outer preparations, two batched rules preparations and sixteen rules
-  formulas. Native execution, selected media/authority-history growth, maximal ancestry,
-  all remaining callee prefixes, cold release and complete examined-row/byte/copy/JSON
-  ceilings remain with this journey; these source additions claim no measured pass.
+  optional-unavailable, caller-retry, deadline and final-authority-withheld branches against independent
+  unrelated Realm, selected Realm revision, selected rules revision, selected-media history
+  and authority history populations at
+  256/1024/4096. Available branches compose two actual selected images with the exact rules
+  pin; the rules-unavailable branch retains both images, and the unrelated-Realm available
+  branch walks the maximum 33-row rules ancestry. Each request constructs fresh native
+  Access/JWKS state, captures Kernel and Auth separately, checks read-only effects and
+  aggregates before growth comparison. The available branch checks seven outer preparations,
+  up to ten media preparations, two batched rules preparations and sixteen rules formulas.
+  Controller-owned native execution and the complete three-scale result remain deferred;
+  these source equations and focused cases establish no measured pass.
