@@ -72,7 +72,7 @@ test('a readable-but-not-editable reload keeps an unresolved original', async ()
     save: async () => ({ ok: false as const, reason: 'unavailable' as const, failure: { status: null } }),
     read: async () => ({
       signedIn: true as const,
-      preferences: { spoilerLevel: 2 as const, suitability: 'show' as const, version: 4, advice: denied },
+      preferences: { spoilerLevel: 2 as const, suitability: 'show' as const, version: 4, advice: readingAdviceFor({ spoilerLevel: 2, suitability: 'show' }, false) },
       securityHref: null,
     }),
   };
