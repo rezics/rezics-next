@@ -109,6 +109,11 @@ import { ownSubjectRequest } from './service-request.ts';
 import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
 import { routeOf } from '../route/route.ts';
 import { executeScopedSuggestions } from './scoped-suggestion.ts';
+import {
+  completeSuggestionWorkContext,
+  type SuggestionWorkContext,
+  type SuggestionWorkContextReader,
+} from './suggestion-context.ts';
 
 export type SearchRequest = {
   text?: string;
@@ -146,7 +151,7 @@ export type PublicSearchReadContext = Readonly<{
   complete: (page: PublicSearchPage) => Promise<void>;
 }>;
 
-type Result = { id: string; type: string; labels: Record<string, string> };
+type Result = { id: string; type: string; labels: Record<string, string>; workContext?: SuggestionWorkContext };
 
 function invalid(pointer: string, code: FieldErrorCode): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code }] });
@@ -460,6 +465,7 @@ export function createSearchService({
   facetProvider,
   publicFilters,
   preparePublic,
+  suggestionWorkContext,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
   release: releaseOverride,
 }: {
@@ -481,6 +487,8 @@ export function createSearchService({
   preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
   /** Trusted native owner composition. Missing native ports fail closed. */
   facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
+  /** Optional batched handoff to the qualified work-context owner. */
+  suggestionWorkContext?: SuggestionWorkContextReader;
 }) {
   const release =
     releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
@@ -1778,6 +1786,40 @@ export function createSearchService({
         invalid('/q', 'out_of_range');
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
       const options = validateHitOptions({ languages });
+      const contextDeadline = read?.deadline ?? Date.now() + 10_000;
+      const verifySuggestionHits = async (hits: readonly NativeSearchHit[], expected: readonly Result[]) => {
+        const { passed: current } = await sourceRequest(() =>
+          checkHits(
+            source,
+            hits.map((hit) => ({ ...hit, matched: [] })),
+            new Map(),
+          ),
+        );
+        const projected = new Map(current.map(({ subject }) => [subject.id, project(subject, options.languages)]));
+        return (
+          projected.size === expected.length &&
+          expected.every((subject) => isDeepStrictEqual(projected.get(subject.id), subject))
+        );
+      };
+      const completePage = <T extends Result>(
+        page: { subjects: readonly T[]; as_of: string },
+        hits?: readonly NativeSearchHit[],
+      ) =>
+        completeSuggestionWorkContext(page, {
+          reader: suggestionWorkContext,
+          languages: options.languages,
+          deadline: contextDeadline,
+          complete: read?.complete,
+          ...(hits
+            ? {
+                verifyCurrent: () =>
+                  verifySuggestionHits(
+                    hits,
+                    page.subjects.map(({ id, type, labels }) => ({ id, type, labels })),
+                  ),
+              }
+            : {}),
+        });
       const generation = await discoveryGeneration();
       const parsed = read?.filter === undefined ? undefined : validate({ filter: read.filter }).filter;
       const current = parsed ? await activeRelease(pool) : undefined;
@@ -1826,7 +1868,8 @@ export function createSearchService({
             );
             scopeWork.native(scope.work(preparedScope));
           }
-          return await executeScopedSuggestions({
+          let completed: Awaited<ReturnType<typeof completeSuggestionWorkContext<Result>>> | undefined;
+          const response = await executeScopedSuggestions({
             operations: bound.operations,
             queried: bound.capture.queried,
             context,
@@ -1843,9 +1886,12 @@ export function createSearchService({
             asOf: () => asOf(generation),
             freshGeneration: () => indexRequest(freshAliasGeneration),
             releaseIsCurrent: async () => (await activeRelease(pool))?.digest === current.digest,
-            complete: (page) => read?.complete(page) ?? Promise.resolve(),
+            complete: async (page) => {
+              completed = await completePage(page);
+            },
             prepare,
           });
+          return completed ?? response;
         } finally {
           try {
             if (bound.capture.status === 'captured')
@@ -1887,11 +1933,12 @@ export function createSearchService({
               new Map(),
             ),
           );
-          const response = {
-            subjects: passed.slice(0, limit).map(({ subject }) => project(subject, options.languages)),
+          const visible = passed.slice(0, limit);
+          const page = {
+            subjects: visible.map(({ subject }) => project(subject, options.languages)),
             as_of: await asOf(generation),
           };
-          await read?.complete(response);
+          const response = await completePage(page, visible.map(({ hit }) => hit));
           if ((await indexRequest(freshAliasGeneration)) !== generation)
             throw new ProblemError('search_restart_required');
           const final = await bound.operations.readStatus(
@@ -1917,11 +1964,12 @@ export function createSearchService({
           new Map(),
         ),
       );
-      const response = {
-        subjects: passed.slice(0, limit).map(({ subject }) => project(subject, options.languages)),
+      const visible = passed.slice(0, limit);
+      const page = {
+        subjects: visible.map(({ subject }) => project(subject, options.languages)),
         as_of: await asOf(generation),
       };
-      await read?.complete(response);
+      const response = await completePage(page, visible.map(({ hit }) => hit));
       if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
       return response;
     },
