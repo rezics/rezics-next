@@ -1,6 +1,6 @@
 id: https://rezics.com/catalogue/rezics
 name: rezics
-version: 1.0.7
+version: 1.0.8
 description: The bundled REZICS definition catalogue.
 prefixes:
   linkml: https://w3id.org/linkml/

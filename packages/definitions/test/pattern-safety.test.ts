@@ -176,6 +176,16 @@ test('structural expansion and graph limits bound short patterns with enormous a
   expect(analyzePattern(costly)).toEqual(first);
 });
 
+test('a fixed SHA-256 suffix has a deterministic structural proof', async () => {
+  const { analyzePattern, safePattern } = await import('../src/pattern-safety.ts');
+  const prefix = '^unversioned:sha256:';
+  const suffix = '$(?![\\s\\S])';
+  const digest = `${prefix}[0-9a-f]{64}${suffix}`;
+  expect(analyzePattern(digest)).toEqual({ safe: true, steps: 0, proof: 'fixed-hex-digest' });
+  expect(safePattern(`${prefix}[0-9a-f]{63}${suffix}`)).toBe(false);
+  expect(safePattern(`^other.unversioned:sha256:[0-9a-f]{64}${suffix}`)).toBe(false);
+});
+
 for (const step of [3001, 0]) {
   for (const datatype of ['string', 'monolingualtext']) {
     test(`DFA operation budget through compiler and release (clock ${step}, ${datatype})`, async () => {

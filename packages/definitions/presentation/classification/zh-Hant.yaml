@@ -10,6 +10,10 @@ properties:
   schema:creativeWorkStatus: '作品狀態'
   schema:genre: '類型'
   skos:closeMatch: '近似概念'
+  rezics:sourceTagWeight: '來源標籤權重'
+  rezics:sourceTagWeightMetric: '來源權重指標'
+  rezics:sourceSnapshot: '來源快照'
+  rezics:sourceTagId: 'VNDB 標籤 ID'
 inverseProperties:
   wdt:P7937: '此形式的作品'
   skos:inScheme: '此概念體系的概念'
@@ -31,3 +35,7 @@ propertyDescriptions:
   schema:creativeWorkStatus: '表示此作品或發行版本開發或出版狀態的概念；某一發行版本相對作品是否完整，記錄在作品關聯的限定上。'
   schema:genre: '用來分類這部作品的題材概念，例如科幻。'
   skos:closeMatch: '意義相近的另一個獨立概念，不表示等同，也不會自動擴展篩選條件。'
+  rezics:sourceTagWeight: '此關聯的來源精確聚合值。VNDB tags.rating 的尺度為 (0,3]；它不是 REZICS 投票或信心度。'
+  rezics:sourceTagWeightMetric: '定義來源標籤權重尺度與含義的型別化指標。'
+  rezics:sourceSnapshot: '所引用的未版本化提供者回應原文的 SHA-256 摘要。'
+  rezics:sourceTagId: '所引用 VNDB 紀錄中此標籤的提供者識別碼。'

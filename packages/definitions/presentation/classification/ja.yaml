@@ -10,6 +10,10 @@ properties:
   schema:creativeWorkStatus: '作品の状態'
   schema:genre: 'ジャンル'
   skos:closeMatch: '近似する概念'
+  rezics:sourceTagWeight: '出典タグの重み'
+  rezics:sourceTagWeightMetric: '出典重みの指標'
+  rezics:sourceSnapshot: '出典スナップショット'
+  rezics:sourceTagId: 'VNDB タグ ID'
 inverseProperties:
   wdt:P7937: 'この形式の作品'
   skos:inScheme: 'この体系の概念'
@@ -31,3 +35,7 @@ propertyDescriptions:
   schema:creativeWorkStatus: 'この作品またはリリースの開発・公開状態を表す概念。あるリリースが作品に対して完全かどうかは作品関連の修飾語です。'
   schema:genre: 'SFなど、この作品を分類するジャンルの概念。'
   skos:closeMatch: '意味が近い別の概念。同一性や検索フィルターの自動展開を表すものではありません。'
+  rezics:sourceTagWeight: 'この関連に付された出典の正確な集計値。VNDB tags.rating の尺度は (0,3] です。REZICS の投票や確信度ではありません。'
+  rezics:sourceTagWeightMetric: '出典タグ重みの尺度と意味を定める型付き指標。'
+  rezics:sourceSnapshot: '引用した未版管理プロバイダー応答そのものの SHA-256 ダイジェスト。'
+  rezics:sourceTagId: '引用した VNDB レコードにあるこのタグのプロバイダー識別子。'

@@ -167,13 +167,23 @@ export async function compileCatalogue(input: {
     allowed(slot, usage ? slotKeys : `slot_uri ${slotKeys}`, location);
     if (!record(slot)) return;
     if (slot.annotations !== undefined)
-      allowed(slot.annotations, `datatype units exact qualifiers disclosure ${relationAnnotationKeys.join(' ')}`, {
-        ...location,
-        pointer: at(location.pointer, 'annotations'),
-      });
+      allowed(
+        slot.annotations,
+        `datatype units exact qualifiers disclosure minimum_exclusive ${relationAnnotationKeys.join(' ')}`,
+        {
+          ...location,
+          pointer: at(location.pointer, 'annotations'),
+        },
+      );
     const annotations = object(slot.annotations);
     if (Object.hasOwn(annotations, 'exact') && annotations.exact !== true)
       add({ ...location, pointer: at(at(location.pointer, 'annotations'), 'exact') }, 'invalid', 'Exact must be true');
+    if (Object.hasOwn(annotations, 'minimum_exclusive') && annotations.minimum_exclusive !== true)
+      add(
+        { ...location, pointer: at(at(location.pointer, 'annotations'), 'minimum_exclusive') },
+        'invalid',
+        'Exclusive minimum must be true',
+      );
     if (slot.any_of !== undefined) {
       if (!Array.isArray(slot.any_of))
         add({ ...location, pointer: at(location.pointer, 'any_of') }, 'invalid', 'Expected a list');
@@ -774,6 +784,11 @@ export async function compileCatalogue(input: {
     }
     if (property.minimum !== undefined && property.maximum !== undefined && property.minimum > property.maximum)
       add(field('maximum_value'), 'invalid', 'Maximum is below minimum');
+    if (annotations.minimum_exclusive === true) {
+      if (datatype !== 'quantity' || typeof property.minimum !== 'number')
+        add(annotation('minimum_exclusive'), 'invalid', 'Exclusive minimum requires a quantity minimum');
+      else property.minimumExclusive = true;
+    }
     if (property.targets && property.targets.length > RELEASE_LIMITS.types)
       add(field('any_of'), 'limit', `At most ${RELEASE_LIMITS.types} targets are allowed`);
     property.value = valueSchema(datatype, {
