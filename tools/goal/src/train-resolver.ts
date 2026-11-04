@@ -468,7 +468,7 @@ export class TrainResolver {
     const started = events
       .filter((event) => event.kind === 'train-resolver-started')
       .map((event) => JSON.parse(event.body) as Pass);
-    const prior = started.find((pass) => pass.phase === phase);
+    const prior = started.find((pass) => pass.phase === phase && pass.key === conflict.key);
     if (prior) {
       // A started pass spends the budget even if its controller crashed before recording an exit.
       const processEvent = events.findLast(
