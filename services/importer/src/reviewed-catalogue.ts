@@ -1,6 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import type { BatchCommand, BatchStatement, Source } from '@rezics/definitions/bulk';
+import type { BatchCommand, BatchStatement, BatchWriteRequest, Source } from '@rezics/definitions/bulk';
 import seeds from '../../../packages/definitions/src/reviewed-vocabulary.json';
 import {
   bangumiPublicTagScheme,
@@ -15,6 +15,7 @@ import {
   ImportTransportError,
   type ReviewedAcceptance,
   type ReviewedAdoption,
+  type ReviewedCandidatePage,
 } from './import-client.ts';
 import { ImportSession } from './import-session.ts';
 import type { ImportIdentifierLookup } from './importer.ts';
@@ -69,6 +70,7 @@ export type ReviewedBangumiBindingEvidence = Readonly<{
 export type ReviewedBangumiBindingStatus =
   | Readonly<{ state: 'bound'; evidence: ReviewedBangumiBindingEvidence }>
   | Readonly<{ state: 'withdrawn' | 'unavailable' }>;
+type CurrentReviewedCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
 
 function ensure(value: unknown, message = 'Reviewed catalogue input or current binding is invalid'): asserts value {
   if (!value) throw new TypeError(message);
@@ -426,12 +428,13 @@ export async function inspectReviewedBangumiBinding(
           signal,
         );
         if (page.next !== null) return { state: 'unavailable' };
-        if (page.adoption?.mode !== 'replace' || !Array.isArray(page.adoption.selection))
-          return { state: 'withdrawn' };
+        if (page.adoption?.mode !== 'replace') return { state: 'withdrawn' };
         const content = expected.value.content;
-        const selected = page.candidates.filter(
+        const currentCandidates = page.candidates.filter(
+          (candidate): candidate is CurrentReviewedCandidate => 'statement' in candidate,
+        );
+        const selected = currentCandidates.filter(
           (c) =>
-            'statement' in c &&
             c.decision === 'accepted' &&
             (c.rank === 'preferred' || c.rank === 'normal') &&
             c.retracted === null &&
@@ -443,10 +446,7 @@ export async function inspectReviewedBangumiBinding(
         if (
           selected.length !== 1 ||
           !isDeepStrictEqual(selected[0]!.statement, expected) ||
-          page.candidates.some((c) => c.id !== selected[0]!.id && c.rank !== null) ||
-          !page.adoption.selection.some(
-            (entry) => entry.candidate === selected[0]!.id && entry.rank === selected[0]!.rank,
-          ) ||
+          currentCandidates.some((c) => c.id !== selected[0]!.id && c.rank !== null) ||
           !items[seed.key]!.statements[fact.property]?.some((s) => s.id === selected[0]!.id)
         )
           return { state: 'withdrawn' };
@@ -475,7 +475,7 @@ export async function inspectReviewedBangumiBinding(
           const schemeKey = seed.type === 'skos:Concept'
             ? seeds.find((row) => row.type === 'skos:ConceptScheme' && row.schemeURI === seed.schemeURI)?.key
             : undefined;
-          entry = {
+          const created = {
             key: seed.key,
             owner: owner(seed),
             subjectId: subjects[seed.key]!,
@@ -485,7 +485,8 @@ export async function inspectReviewedBangumiBinding(
             ...(schemeKey ? { schemeKey } : {}),
             facts: [],
           };
-          vocabulary.set(seed.key, entry);
+          vocabulary.set(seed.key, created);
+          entry = created;
         }
         entry.facts.push({
           candidateId: selected[0]!.id,

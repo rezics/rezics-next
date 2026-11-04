@@ -7,6 +7,7 @@ import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 import { reviewedCatalogueSource } from './reviewed-catalogue.ts';
 import type { RecordBindings } from './record-bindings.ts';
 import type { ImportIdentifierLookup, ImportIdentifierResolution } from './importer.ts';
+import type { ReviewedCandidatePage } from './import-client.ts';
 import { createSourceRegistration } from './source-registry.ts';
 import type { ShowcaseAcknowledgement, ShowcaseAssertion, ShowcaseVocabularyRecord } from './showcase-manifest.ts';
 import { showcaseDigest } from './showcase-manifest.ts';
@@ -15,6 +16,7 @@ const HAREM_EDITOR_TAG = '后宫';
 const globalContext = '00000000-0000-8000-8000-000000000000';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const bindingKeys = new Set(['source-scheme', 'source-harem', 'canonical-scheme', 'canonical-harem']);
+type CurrentReviewedCandidate = Extract<ReviewedCandidatePage['candidates'][number], { statement: unknown }>;
 
 export type BangumiGenreDiagnostic = Readonly<{
   sourceKey: string;
@@ -203,7 +205,8 @@ export async function prepareShowcaseBangumiGenres(input: {
         continue;
       }
       const live = page.candidates.filter(
-        (candidate) =>
+        (candidate): candidate is CurrentReviewedCandidate =>
+          'statement' in candidate &&
           exact.some((entry) => entry.candidate.candidate === candidate.id) &&
           isDeepStrictEqual(candidate.source, proposal.source) &&
           isDeepStrictEqual(candidate.statement, proposal.statement) &&
