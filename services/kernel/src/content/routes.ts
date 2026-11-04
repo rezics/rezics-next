@@ -1076,7 +1076,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         detail: {
           operationId: 'thread.reading_page',
           description:
-            'Read a current thread opening and one bounded reply page with the viewer state and mounted actions.',
+            'Read a current thread opening and one bounded reply page with confirmed conversation activity, viewer state and mounted actions.',
           'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:read',

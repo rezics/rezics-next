@@ -78,6 +78,7 @@ function response(replyCount: number) {
     },
     watch: { state: 'sign_in_required' },
     slowMode: { state: 'unavailable', retryable: true },
+    conversationActivity: { state: 'unavailable', retryable: true },
     currentness: {
       source: 'current',
       place: 'current',
