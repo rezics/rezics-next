@@ -348,7 +348,9 @@ test('bfcache refresh is reader-local and two mounted readers cannot consume one
 
     await second.close();
     secondClosed = true;
-    const inspect = [...first.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Inspect');
+    const inspect = [...first.host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === m.library_my_ratings_inspect(),
+    );
     if (!inspect) throw new Error('Expected a current Inspect choice before bfcache return');
     await first.click(inspect);
 

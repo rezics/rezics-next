@@ -179,6 +179,15 @@ export function useOwnVotesCurrentOrigin(
     OWN_VOTES_SOURCE,
     visit.current.generation,
   ]);
+  const responseIdentity = () =>
+    JSON.stringify([
+      origin.boundary.id,
+      origin.lifetime(0),
+      cursor,
+      locale,
+      OWN_VOTES_SOURCE,
+      client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0,
+    ]);
   const captureReturnOwner = useCallback((previousResponseVersion = -1): OwnVotesReturnOwner => {
     const responseCount = client.getQueryState(options.queryKey)?.dataUpdateCount ?? 0;
     const requestNumber = responseReads.current.started;
@@ -263,6 +272,7 @@ export function useOwnVotesCurrentOrigin(
     cursor,
     locale,
     viewKey,
+    responseIdentity,
     isCurrent,
     captureReturnOwner,
     admitRouteResponse,
