@@ -199,7 +199,7 @@ describe('native catalogue relation contribution', () => {
     };
     // Each entry uses its own current native permission, confirmation and exact readback.
     await grant('context:accept');
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.getByRole('button', { name: 'Reload current values', exact: true }).click();
     await page.getByRole('button', { name: 'Review suggestion', exact: true }).click();
     await confirmAction('Accept suggestion');
     const secondSlot = { property: voiceCredit, target: fixture.person.id, key: fixture.secondRole.id };
@@ -207,11 +207,11 @@ describe('native catalogue relation contribution', () => {
     expect(decided[0]?.id).toBe(second[0]?.id);
     expect(decided[0]?.decision).toBe('accepted');
     expect(await readPublicStatements(fixture.stack, fixture.movie.id, voiceCredit)).toEqual([]);
-    await playExpect(page.getByRole('button', { name: 'Use this suggestion', exact: true })).toBeDisabled();
+    await playExpect(page.getByRole('button', { name: 'Select for public subject', exact: true })).toBeDisabled();
     await grant('context:adopt');
-    await page.getByRole('button', { name: 'Reload', exact: true }).click();
+    await page.getByRole('button', { name: 'Reload current values', exact: true }).click();
     await page.getByRole('button', { name: 'Review suggestion', exact: true }).click();
-    await confirmAction('Use this suggestion');
+    await confirmAction('Select for public subject');
     const selected = await readPublicStatements(fixture.stack, fixture.movie.id, voiceCredit);
     expect(selected.map((item) => item.id)).toEqual([second[0]!.id]);
 
