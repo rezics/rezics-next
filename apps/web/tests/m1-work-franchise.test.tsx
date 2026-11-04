@@ -432,7 +432,7 @@ test('evidence inspection is independent of browsing and retires on preference a
 });
 
 test('each VN, anime and book relation stream keeps its selected region through Connections and inspection', async () => {
-  const { subjectVisitReturn, connectionReturnWindow, workFranchiseReturnHref } =
+  const { subjectVisitReturn, connectionReturnWindow, connectionReturnHref, withSubjectVisitReturn } =
     await import('../src/features/pages/subject-visit-navigation');
   const { workFranchiseReturn } = await import('../src/features/catalogue/work-franchise-reading/navigation');
   for (const type of ['wd:Q689445', 'schema:TVSeries', 'schema:Book']) {
@@ -502,7 +502,7 @@ test('each VN, anime and book relation stream keeps its selected region through 
       expect(subjectVisitReturn(via, 'ja')).toBe(via);
       expect(new URL(via, destination).searchParams.get('realm')).toBe(id(960));
     }
-    const inspection = hrefs.find((url) => url.pathname.endsWith('/values') || url.pathname.includes('/values/'));
+    const inspection = hrefs.find((url) => url.pathname.endsWith('/value'));
     expect(inspection).toBeDefined();
     const via = inspection!.searchParams.get('via')!;
     expect(workFranchiseReturn(new URL(via, inspection).hash)).toMatchObject({
@@ -511,18 +511,20 @@ test('each VN, anime and book relation stream keeps its selected region through 
       holder: id(950),
       node: 'franchise',
     });
-    const finite = `${origin.replace('?realm=', '/relations?realm=')}&node=franchise&cursor=opaque%2Bcursor&property=wdt%3AP144`;
-    const restored = workFranchiseReturnHref(finite, origin, 'ja', {
+    const native = connectionReturnHref(source.subject.id, publicBook.name, 'ja', id(960), {
       stream: 'out:wdt:P144',
-      node: 'franchise',
-      spoiler: 0,
+      cursor: 'opaque+cursor',
+      reading: 'a'.repeat(64),
+      focus: id(101),
+      holder: source.subject.id,
+      control: 'evidence',
     });
-    const restoredUrl = new URL(restored, 'https://rezics.invalid');
-    expect(restoredUrl.pathname).toEndWith('/relations');
-    expect(restoredUrl.searchParams.get('cursor')).toBe('opaque+cursor');
-    expect(restoredUrl.searchParams.get('node')).toBe('franchise');
-    expect(subjectVisitReturn(restored, 'ja')).toBe(restored);
-    expect(subjectVisitReturn(restored, 'en')).toBeUndefined();
-    expect(workFranchiseReturn(`${restoredUrl.hash}&focus=evidence`)).toBeUndefined();
+    const returned = withSubjectVisitReturn(native, via, 'ja');
+    expect(subjectVisitReturn(returned, 'ja')).toBe(returned);
+    const restored = new URL(returned, 'https://rezics.invalid');
+    expect(connectionReturnWindow(restored.hash)).toMatchObject({ cursor: 'opaque+cursor', control: 'evidence' });
+    expect(restored.searchParams.get('via')).toBe(via);
+    expect(subjectVisitReturn(returned, 'en')).toBeUndefined();
+    expect(workFranchiseReturn(`${new URL(via, inspection).hash}&focus=evidence`)).toBeUndefined();
   }
 });

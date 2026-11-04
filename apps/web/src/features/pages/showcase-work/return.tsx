@@ -3,7 +3,7 @@ import { useCallback, useContext, useLayoutEffect, useRef, useState, useSyncExte
 import { addressLease, browserObservation, type BrowserObservationSnapshot } from '../../../session';
 import type { WorkFranchiseReturn } from '../../catalogue/work-franchise-reading/navigation';
 import { workFranchiseReturn } from '../../catalogue/work-franchise-reading/navigation';
-import { subjectVisitReturn, workFranchiseReturnHref } from '../subject-visit-navigation';
+import { subjectVisitReturn, workFranchiseReturnHref, workFranchiseRestartHref } from '../subject-visit-navigation';
 
 export type WorkReturnFocus = {
   control: 'browse' | 'evidence';
@@ -99,7 +99,11 @@ export function useWorkRegionReturn({
   const visit = useRef({ href: currentHref, consumed: false });
   if (visit.current.href !== currentHref) visit.current = { href: currentHref, consumed: false };
   const accepted = subjectVisitReturn(currentHref, locale);
-  const selection = accepted ? workFranchiseReturn(new URL(accepted, 'https://rezics.invalid').hash) : undefined;
+  const acceptedUrl = accepted ? new URL(accepted, 'https://rezics.invalid') : undefined;
+  const selection =
+    acceptedUrl?.pathname.split('/')[3] === new URL(origin, 'https://rezics.invalid').pathname.split('/')[3]
+      ? workFranchiseReturn(acceptedUrl!.hash)
+      : undefined;
   const expected =
     selection &&
     selection.spoiler === spoiler &&
@@ -171,6 +175,6 @@ export function useWorkRegionReturn({
     focusFor,
     streamFocusFor,
     returnToFor,
-    restartHref: workFranchiseReturnHref(undefined, address, locale),
+    restartHref: workFranchiseRestartHref(origin, locale),
   };
 }
