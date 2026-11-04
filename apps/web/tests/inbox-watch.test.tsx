@@ -214,7 +214,7 @@ test('all locales explain watch categories and mandatory outcomes, link preferen
 
 test('native optional board activity uses original intent/key recovery and retires late writes', async () => {
   const calls: NotificationChange[] = [];
-  const initial = { reply: true, mention: true, board_activity: true };
+  const initial = { reply: true, mention: true, thread_watch: true, board_activity: true };
   const current = { ...initial, board_activity: false };
   const editor = new NotificationEditor(
     settingsPreferencePage(initial, 4),

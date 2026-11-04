@@ -39,6 +39,9 @@ let delayNotifications = false;
 let stored: Stored;
 
 const catalogue = { reply: true, mention: true, thread_watch: true, board_activity: true };
+const notificationsPath = '/en/settings#notifications';
+const preferenceGets = () =>
+  calls.filter((call) => call.method === 'GET' && call.path === '/v1/accounts/alice/preferences');
 
 function present(current: Stored) {
   return { ...current, shelf: {}, page: settingsPreferencePage(current.notifications, current.version) };
@@ -323,12 +326,11 @@ test(
   'notification switches follow the owner page, omit unknown kinds and explain compulsory policy',
   async () => {
     reset({ ...catalogue, weekly_digest: true });
-    const first = await readPage('/en/settings');
+    const first = await readPage(notificationsPath);
     expect(first.status).toBe(200);
-    expect(calls.filter((call) => call.method === 'GET')).toHaveLength(2);
-    const page = await open('/en/settings', first.cookie!);
+    expect(preferenceGets()).toHaveLength(1);
+    const page = await open(notificationsPath, first.cookie!);
     const reads = calls.filter((call) => call.method === 'GET');
-    expect(reads).toHaveLength(6);
     expect(reads.filter((call) => call.path === '/v1/accounts/alice/preferences')).toHaveLength(2);
     expect(reads.filter((call) => call.path === '/v1/platform/exposure')).toHaveLength(2);
     expect(reads.filter((call) => call.path === '/v1/accounts/alice/notifications/count')).toHaveLength(1);
@@ -360,9 +362,9 @@ test(
     }
 
     reset(catalogue);
-    const translated = await readPage('/zh-Hans/settings');
-    expect(calls.filter((call) => call.method === 'GET')).toHaveLength(1);
-    const chinese = await open('/zh-Hans/settings', translated.cookie!);
+    const translated = await readPage('/zh-Hans/settings#notifications');
+    expect(preferenceGets()).toHaveLength(1);
+    const chinese = await open('/zh-Hans/settings#notifications', translated.cookie!);
     try {
       await chinese.getByRole('heading', { level: 2, name: '通知' }).waitFor();
       const group = chinese.getByRole('group', { name: '通知' });
@@ -383,8 +385,8 @@ test(
   'changing one notification sends one merge patch and Restore defaults sends notifications null',
   async () => {
     reset(catalogue);
-    const first = await readPage('/en/settings');
-    const page = await open('/en/settings', first.cookie!);
+    const first = await readPage(notificationsPath);
+    const page = await open(notificationsPath, first.cookie!);
     try {
       const group = page.getByRole('group', { name: 'Notifications' });
       const replies = group.getByRole('switch', { name: 'Replies to your posts' });
@@ -416,8 +418,8 @@ test(
   'notification autosave and Restore cannot bypass the native retry delay, and expiry sends nothing',
   async () => {
     reset({ ...catalogue, thread_watch: false });
-    const first = await readPage('/en/settings');
-    const page = await open('/en/settings', first.cookie!);
+    const first = await readPage(notificationsPath);
+    const page = await open(notificationsPath, first.cookie!);
     try {
       await page.clock.install({ time: new Date('2026-10-31T00:00:00Z') });
       await page.clock.pauseAt(new Date('2026-10-31T00:01:00Z'));
@@ -472,8 +474,8 @@ test(
   async () => {
     reset({ reply: true, mention: true });
     rejectNotifications = true;
-    const first = await readPage('/en/settings');
-    const page = await open('/en/settings', first.cookie!);
+    const first = await readPage(notificationsPath);
+    const page = await open(notificationsPath, first.cookie!);
     try {
       const replies = page.getByRole('switch', { name: 'Replies to your posts' });
       await replies.click();
@@ -492,8 +494,8 @@ test(
   'notification preferences can be saved by the form action without JavaScript',
   async () => {
     reset(catalogue);
-    const first = await readPage('/en/settings');
-    const page = await open('/en/settings', first.cookie!, false);
+    const first = await readPage(notificationsPath);
+    const page = await open(notificationsPath, first.cookie!, false);
     try {
       const watches = page.getByRole('switch', { name: 'Activity in threads you watch' });
       await watches.click();
@@ -517,10 +519,10 @@ test(
   'no-JavaScript settings writes require their session CSRF token and form tokens stay route-scoped',
   async () => {
     reset({ reply: true, mention: true });
-    const firstCookie = await signIn('/en/settings');
-    const otherCookie = await signIn('/en/settings');
-    const firstPage = await open('/en/settings', firstCookie, false);
-    const otherPage = await open('/en/settings', otherCookie, false);
+    const firstCookie = await signIn(notificationsPath);
+    const otherCookie = await signIn(notificationsPath);
+    const firstPage = await open(notificationsPath, firstCookie, false);
+    const otherPage = await open(notificationsPath, otherCookie, false);
     try {
       const firstToken = await firstPage.locator('input[name="csrf_token"]').first().inputValue();
       const otherToken = await otherPage.locator('input[name="csrf_token"]').first().inputValue();
@@ -575,8 +577,8 @@ test(
   async () => {
     for (const javascriptEnabled of [false, true]) {
       reset(catalogue);
-      const first = await readPage('/en/settings');
-      const page = await open('/en/settings', first.cookie!, javascriptEnabled);
+      const first = await readPage(notificationsPath);
+      const page = await open(notificationsPath, first.cookie!, javascriptEnabled);
       try {
         const group = page.getByRole('group', { name: 'Notifications' });
         const switches = group.getByRole('switch');

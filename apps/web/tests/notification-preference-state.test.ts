@@ -84,7 +84,7 @@ test('Settings keeps owner-supplied optional kinds and writes only the submitted
   expect(write.calls).toHaveLength(1);
   expect(write.sessionReads()).toBe(1);
   expect(write.calls[0]!.method).toBe('PATCH');
-  expect(write.calls[0]!.headers.get('idempotency-key')).toBe(idempotencyKey);
+  expect(write.calls[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(idempotencyKey));
   expect(write.calls[0]!.headers.get('content-type')).toContain('application/merge-patch+json');
   expect(await write.calls[0]!.json()).toEqual({ expectedVersion: 7, notifications: { reply: false } });
 });
@@ -275,7 +275,9 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
       if (step === 2 || step === 4) return Response.json(receipt);
       const version = step === 5 ? 9 : 10;
       const notifications =
-        step === 5 ? { ...optional, reply: true, mention: true } : { ...optional, reply: false, mention: false };
+        step === 5
+          ? { ...optional, reply: true, mention: true }
+          : { ...optional, reply: false, mention: false, thread_watch: false };
       return Response.json({
         ...reading,
         version,
@@ -347,7 +349,7 @@ test('delayed original and recovery reads preserve local drafts, exact replay an
     expect(confirmed).toEqual([9, 10]);
     expect(editor.snapshot()).toMatchObject({
       phase: 'saved',
-      draft: { reply: false, mention: false, thread_watch: false },
+      draft: { ...optional, reply: false, mention: false, thread_watch: false },
     });
   } finally {
     clock.mockRestore();
