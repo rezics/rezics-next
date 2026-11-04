@@ -28,8 +28,8 @@ estimate:
 acceptance:
   tests:
     - Home consumes the generated admitted personal-actions page once by original occurrence key and original Subject; repeated rows remain distinct while acknowledged personal state reconciles.
-    - "Current allowed=[] is successful; current exact Entry/progress and standard manual vote operations alone install existing writers, and unavailable facts retain public Home and its exact Library return."
-    - "Final source admission withholds affected occurrences without refill and preserves the original retry frontier; withdrawn occurrences and reader replacement retire command callbacks and delayed completions, preserving unresolved operands, credential and key."
+    - 'Current allowed=[] is successful; current exact Entry/progress and standard manual vote operations alone install existing writers, and unavailable facts retain public Home and its exact Library return.'
+    - 'Final source admission withholds affected occurrences without refill and preserves the original retry frontier; withdrawn occurrences and reader replacement retire command callbacks and delayed completions, preserving unresolved operands, credential and key.'
     - Focused tests cover existing-writer dispatch, unresolved-command retry and delayed retirement using generated command operands.
 ---
 
