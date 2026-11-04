@@ -2097,6 +2097,7 @@ export class Importer {
         commands,
         omissions,
         ...(deferredCover ? { deferredCover: true } : {}),
+        ...(conversion?.sourceVocabulary === undefined ? {} : { sourceVocabulary: conversion.sourceVocabulary }),
       }),
       deferredCover,
       ...(observedConversion ? { conversion: observedConversion } : {}),

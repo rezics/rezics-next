@@ -733,6 +733,18 @@ not additional check requests.
   resolved staff ID via `aid`, never the alias text. Organization or non-`s*` targets withhold the credit. Voice
   keeps VN and character endpoints. Bindings are current accepted/adopted `vndb.credit_type` Concepts. Person
   identities are imported before works so credit rows can name native holders.
+- `normal selected-family seed carries exact VNDB staff and voice qualifications through ordinary accept and current reads`:
+  `bun run --cwd services/kernel check test/imports/showcase-vndb-credits.test.ts`.
+  Focused scenarios: importer `the selected-family seed qualifies staff and voice credits without alias identities or duplicate edges`;
+  Kernel `selected-VN credits reach adopted current facts through exact current bindings and reopen`.
+  The importer scenario is local evidence. The kernel scenario is registered for native acceptance but its execution is
+  deferred to the controller; no native pass is claimed. Decision: Read staff-role bindings from current adopted
+  Concept facts; keep the existing coarse VN staff edge only when its precise role binding is unavailable, and always
+  require a bound character for a voice credit. The seed returns only finite selected-role requirements to the common
+  publisher and rereads exact current bindings supplied by its local config; it does not create taxonomy releases.
+  Source-row digest and converter provenance pass through the ordinary journal only when each proposal matches that
+  request's exact table path and VN revision.
+  The real-data public VN/person/character walkthrough remains the final M1 proof.
 - `production operator imports VNDB staff preferred and additional source names through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-names.test.ts`.
   Frozen scenario names:

@@ -54,6 +54,7 @@ export type SourceRowOrigin = Readonly<{
   revision?: string | null;
   digest?: string;
   url?: string;
+  converterRevision?: string;
 }>;
 type RowBase = Readonly<{ path: string; origin?: SourceRowOrigin }>;
 export type BangumiVocabularyRow =
@@ -607,7 +608,8 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
       ((origin.externalId !== undefined && !sourceText(origin.externalId, 255)) ||
         (origin.revision !== undefined && origin.revision !== null && !sourceText(origin.revision, 64)) ||
         (origin.digest !== undefined && (typeof origin.digest !== 'string' || !digestPattern.test(origin.digest))) ||
-        (origin.url !== undefined && !sourceText(origin.url, 2048)))
+        (origin.url !== undefined && !sourceText(origin.url, 2048)) ||
+        (origin.converterRevision !== undefined && !sourceText(origin.converterRevision, 64)))
     ) {
       pushGap({ path, ...(rowCode ? { code: rowCode } : {}), reason: 'invalid_row' });
       return;
@@ -643,7 +645,8 @@ export function createMappingEnvironment(input: SourceVocabularyInput): MappingE
         source: metadata.sourceAlias,
         external_id: externalId,
         record_revision: revision,
-        converter_revision: metadata.converterRevision,
+        converter_revision:
+          origin && typeof origin.converterRevision === 'string' ? origin.converterRevision : metadata.converterRevision,
         digest,
       },
       'facts',
