@@ -1,4 +1,27 @@
 types:
   schema:MusicAlbum: 音乐专辑
+  schema:MusicRelease: 音乐发行
+  schema:MusicRecording: 录音
+properties:
+  schema:releaseOf: 所属专辑
+  schema:catalogNumber: 目录号
+  schema:recordLabel: 唱片公司
+  schema:track: 曲目
+  schema:byArtist: 艺人
+  wdt:P642: 所属部分
+inverseProperties:
+  schema:releaseOf: 专辑发行
+  schema:recordLabel: 该厂牌发行
+  schema:track: 收录此录音的发行
+  schema:byArtist: 该艺人的录音
 typeDescriptions:
   schema:MusicAlbum: '汇集曲目的音乐专辑作品，独立于某一实体副本或发行版本。'
+  schema:MusicRelease: '带有目录号、载体、日期和有序录音的音乐专辑具体发行版。与专辑作品、个人藏本、播放文件和单条录音分开。'
+  schema:MusicRecording: '可识别的音乐作品录音，例如某一首歌的一次录制。与专辑汇总、发行版本、播放文件和个人藏本分开。'
+propertyDescriptions:
+  schema:releaseOf: '此发行版所实现的音乐专辑作品；发行版不是该专辑的另一个名称。'
+  schema:catalogNumber: '发行厂牌为这一版给出的目录号，按来源文字保存。'
+  schema:recordLabel: '作为发行此版的唱片公司被记载的组织。'
+  schema:track: '此发行版上可识别的一条录音。位置、署名、职责、日期和列表出现用来区分同一录音的重复收录。'
+  schema:byArtist: '作为此录音演奏者被记载的人物或组织，带有署名、顺序和具体职责。'
+  wdt:P642: '把指向同一录音的两条关联分开放在不同槽位的列表出现概念。它不是已发布的碟面或面次。'

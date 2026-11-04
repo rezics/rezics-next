@@ -14,12 +14,31 @@ import {
   type AlbumRead,
 } from './album-profile';
 import type { CreateResult } from './create-subject';
+import { fetchGuideRelease } from './definition-guide';
+import {
+  readAlbumEditions,
+  validAlbumEditionAddress,
+  type AlbumEditionAddress,
+  type AlbumEditionRead,
+} from './music-reader';
 
 export const loadAlbumProfile = createServerFn({ method: 'GET', strict: false })
   .validator((id?: string) => (id === undefined || (typeof id === 'string' && albumUuid.test(id)) ? id : ''))
   .handler(async ({ data }): Promise<AlbumRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     return readAlbumProfile(kernelClient(), data);
+  });
+
+export const loadAlbumEditions = createServerFn({ method: 'GET', strict: false })
+  .validator((input: AlbumEditionAddress) => {
+    if (!validAlbumEditionAddress(input)) throw new Error('Invalid album edition window');
+    return { id: input.id, context: input.context, ...(input.cursor ? { cursor: input.cursor } : {}) };
+  })
+  .handler(async ({ data }): Promise<AlbumEditionRead> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const locale = requestLocale() ?? 'en';
+    const client = kernelClient(locale);
+    return readAlbumEditions(client, fetchGuideRelease(client), data, locale);
   });
 
 export const createCatalogueAlbum = createServerFn({ method: 'POST', strict: false })

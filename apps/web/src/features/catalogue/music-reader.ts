@@ -1,9 +1,11 @@
-import type { SubjectRead } from '@rezics/client';
+import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { libraryChoices, libraryProfile } from '../../library/profiles';
 import { catalogueEntries } from './catalogue-entry';
-import { albumFields, albumType } from './album-profile';
+import { albumFields, albumType, albumUuid } from './album-profile';
+import type { GuideRelease } from './definition-guide';
+import { encodedBytes, isA } from './release-fidelity/model';
 
 export type ProfileReaderState =
   | 'ready'
@@ -59,6 +61,20 @@ export type ProfileLibrary = {
   progress: boolean;
 };
 
+type EditionLinks = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['subjects']>['links']['get']>>['data']>;
+export const albumEditionProperty = 'schema:releaseOf';
+export const albumEditionLimit = 20;
+export type AlbumEditionAddress = { id: string; context: string; cursor?: string };
+export type AlbumEditionRead =
+  | { ok: false; reason: 'unavailable' | 'withheld' | 'invalid' }
+  | {
+      ok: true;
+      admitted: boolean;
+      rows: EditionLinks['links'];
+      next: string | null;
+      caughtUp: boolean;
+    };
+
 export type MusicReaderVisit = {
   state: ProfileReaderState;
   type: typeof albumType;
@@ -68,6 +84,7 @@ export type MusicReaderVisit = {
   groups: ProfileGroup[];
   sources: ProfileSourceRecord[];
   bounds: ProfileBound[];
+  editions: AlbumEditionRead;
   correction?: { id: string; href: string };
 };
 
@@ -234,6 +251,105 @@ export function profileFields(
   });
 }
 
+/** Inverse schema:releaseOf is admitted when the album is a declared target of a released MusicRelease. */
+export function albumEditionsAdmitted(release: Pick<Release, 'types' | 'properties'>): boolean {
+  const relation = release.properties[albumEditionProperty];
+  return (
+    !!release.types[albumType] &&
+    !!relation?.relation?.inverse &&
+    relation.relation.inverse !== 'none' &&
+    !!relation.targets?.some((target) => isA(release, albumType, target)) &&
+    Object.keys(release.types).some(
+      (type) => isA(release, type, 'schema:MusicRelease') && release.types[type]?.properties.includes(albumEditionProperty),
+    )
+  );
+}
+
+export function validAlbumEditionAddress(address: AlbumEditionAddress): boolean {
+  return (
+    !!address &&
+    albumUuid.test(address.id) &&
+    albumUuid.test(address.context) &&
+    (address.cursor === undefined ||
+      (typeof address.cursor === 'string' && address.cursor.length > 0 && address.cursor.length <= 4096))
+  );
+}
+
+const editionFailure = (status: number): AlbumEditionRead => ({
+  ok: false,
+  reason: [403, 404, 308].includes(status) ? 'withheld' : 'unavailable',
+});
+
+/** One 20-row inverse edition window. No target hydration, refill or provider calls. */
+export async function readAlbumEditions(
+  client: KernelClient,
+  definitions: GuideRelease | Promise<GuideRelease>,
+  address: AlbumEditionAddress,
+  locale: string,
+): Promise<AlbumEditionRead> {
+  if (!validAlbumEditionAddress(address)) return { ok: false, reason: 'invalid' };
+  try {
+    const [current, release] = await Promise.all([
+      client.subjects({ id: address.id }).get({ query: { context: address.context, language: locale } }),
+      definitions,
+    ]);
+    if (current.status !== 200 || !current.data) return editionFailure(current.status);
+    if (
+      current.data.subject.id !== address.id ||
+      current.data.subject.context !== address.context ||
+      current.data.subject.type !== albumType
+    )
+      return { ok: false, reason: 'withheld' };
+    const admitted = albumEditionsAdmitted(release);
+    if (address.cursor && !admitted) return { ok: false, reason: 'invalid' };
+    if (!admitted) return { ok: true, admitted: false, rows: [], next: null, caughtUp: true };
+    const response = await client.subjects({ id: address.id }).links.get({
+      query: {
+        property: albumEditionProperty,
+        context: address.context,
+        language: locale,
+        limit: albumEditionLimit,
+        ...(address.cursor ? { cursor: address.cursor } : {}),
+      },
+    });
+    if (response.status !== 200 || !response.data) return editionFailure(response.status);
+    const page = response.data;
+    if (
+      page.links.length > albumEditionLimit ||
+      encodedBytes(page) > albumEditionLimit * 128 * 1024 + 64 * 1024 ||
+      (page.next !== null &&
+        (typeof page.next !== 'string' || !page.next.length || page.next.length > 4096 || page.next === address.cursor))
+    )
+      return { ok: false, reason: 'unavailable' };
+    const seen = new Set<string>();
+    for (const row of page.links) {
+      const key = `${row.subject}:${row.statement}`;
+      if (
+        encodedBytes(row) > 128 * 1024 ||
+        seen.has(key) ||
+        !albumUuid.test(row.subject) ||
+        !albumUuid.test(row.statement) ||
+        row.property !== albumEditionProperty ||
+        (row.summary && row.summary.id !== row.subject) ||
+        (row.assertion &&
+          (row.assertion.id !== row.statement ||
+            row.assertion.property.id !== albumEditionProperty ||
+            row.assertion.value.type !== 'value' ||
+            row.assertion.value.content !== address.id))
+      )
+        return { ok: false, reason: 'unavailable' };
+      seen.add(key);
+    }
+    return { ok: true, admitted: true, rows: page.links, next: page.next, caughtUp: page.freshness.caught_up };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+function emptyEditions(release?: Release): Extract<AlbumEditionRead, { ok: true }> {
+  return { ok: true, admitted: !!release && albumEditionsAdmitted(release), rows: [], next: null, caughtUp: true };
+}
+
 function musicGroups(release: Release): Record<string, string[]> {
   const fields = albumFields(release);
   const credits = fields.relations.filter((id) => release.properties[id]?.relation?.group === 'credit');
@@ -253,11 +369,25 @@ export function musicReaderVisit(input: {
   public?: SubjectRead | null;
   reason?: Exclude<ProfileReaderState, 'ready' | 'empty'>;
   bounds?: readonly ProfileBound[];
+  editions?: AlbumEditionRead;
   loading?: boolean;
 }): MusicReaderVisit {
   const library: ProfileLibrary = { admitted: false, states: [], copies: false, progress: false };
   const unpublished = { tracks: true as const, library: true as const };
-  const bounds = [...(input.bounds ?? [])];
+  const editions = input.editions ?? emptyEditions(input.release);
+  const bounds = [
+    ...(input.bounds ?? []),
+    ...(editions.ok && editions.admitted
+      ? [
+          {
+            property: albumEditionProperty,
+            loaded: editions.rows.length,
+            complete: editions.next === null,
+            ...(editions.next ? { next: editions.next } : {}),
+          },
+        ]
+      : []),
+  ];
   if (input.loading) {
     return {
       state: 'loading',
@@ -268,6 +398,7 @@ export function musicReaderVisit(input: {
       groups: [],
       sources: [],
       bounds,
+      editions,
     };
   }
   if (input.reason) {
@@ -280,6 +411,7 @@ export function musicReaderVisit(input: {
       groups: [],
       sources: [],
       bounds,
+      editions,
     };
   }
   const release = input.release;
@@ -294,6 +426,7 @@ export function musicReaderVisit(input: {
       groups: [],
       sources: publicRead ? profileSourceRecords(publicRead.subject) : [],
       bounds,
+      editions,
     };
   }
   if (publicRead && publicRead.subject.type !== albumType) {
@@ -306,6 +439,7 @@ export function musicReaderVisit(input: {
       groups: [],
       sources: profileSourceRecords(publicRead.subject),
       bounds,
+      editions,
     };
   }
   const grain = pickText(release.types[albumType]?.labels ?? {}, input.locale);
@@ -319,6 +453,7 @@ export function musicReaderVisit(input: {
       groups: [],
       sources: [],
       bounds,
+      editions,
     };
   }
   const grouped = musicGroups(release);
@@ -336,6 +471,7 @@ export function musicReaderVisit(input: {
     groups,
     sources: profileSourceRecords(publicRead.subject),
     bounds,
+    editions,
     correction: {
       id: publicRead.subject.id,
       href: catalogueEntries.album({ id: publicRead.subject.id, label: title, locale: input.locale }).href,

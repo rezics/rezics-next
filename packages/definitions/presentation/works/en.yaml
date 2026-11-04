@@ -1,4 +1,27 @@
 types:
   schema:MusicAlbum: album
+  schema:MusicRelease: music release
+  schema:MusicRecording: recording
+properties:
+  schema:releaseOf: release of
+  schema:catalogNumber: catalogue number
+  schema:recordLabel: record label
+  schema:track: track
+  schema:byArtist: artist
+  wdt:P642: of
+inverseProperties:
+  schema:releaseOf: Album releases
+  schema:recordLabel: Labelled releases
+  schema:track: Releases containing this recording
+  schema:byArtist: Recordings by this artist
 typeDescriptions:
   schema:MusicAlbum: 'A music album work grouping tracks, independent of a particular physical copy or distributed edition.'
+  schema:MusicRelease: 'A specific published edition of a music album, with its catalogue number, format, date and ordered recordings. Distinct from the album work, a personal copy, a playback file or a recording.'
+  schema:MusicRecording: 'An identified recorded performance of a musical work, such as one song take. Distinct from the album grouping, a published edition, a playback file or a personal copy.'
+propertyDescriptions:
+  schema:releaseOf: 'The music album work this published edition realizes; the edition is never a new name for that album.'
+  schema:catalogNumber: 'The catalogue number assigned to this edition by its issuing label, stored as source text.'
+  schema:recordLabel: 'The organization credited as the record label that issued this edition.'
+  schema:track: 'An identified recording on this edition. Position, credited name, role, date and listing-occurrence distinguish repeated uses of the same recording.'
+  schema:byArtist: 'A person or organization credited as the performing artist of this recording, with credited-as, order and detailed role.'
+  wdt:P642: 'The listing-occurrence Concept that keeps two associations to the same recording in separate slots. It is not a published disc or side medium.'

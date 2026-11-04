@@ -20,6 +20,14 @@ test('actual released book film and recipe lists carry portrait defaults and rea
     imageAspect: 'portrait',
     keyFacts: ['schema:datePublished', 'schema:genre'],
   });
+  expect(hint('schema:MusicRelease')).toEqual({
+    imageAspect: 'portrait',
+    keyFacts: ['schema:datePublished', 'wdt:P437'],
+  });
+  expect(hint('schema:MusicRecording')).toEqual({
+    imageAspect: 'portrait',
+    keyFacts: ['schema:duration', 'schema:datePublished'],
+  });
   expect(validateRelease(bundledRelease)).toEqual([]);
 });
 test('old releases omit hints and remain valid while list hints reject hostile or unrenderable references', () => {

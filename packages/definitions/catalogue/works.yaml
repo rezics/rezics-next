@@ -1,11 +1,13 @@
 id: https://rezics.com/catalogue/works
 name: works
 version: 1.0.0
-description: Launch profiles for music albums.
+description: Music album works, published editions and identified recordings.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
+  rezics: https://rezics.com/vocab/
 default_range: string
 imports:
   - linkml:types
@@ -33,3 +35,128 @@ classes:
       facets: contributor partOfSeries genre keywords inLanguage
       cover_ratio: 5:7
       schema_org_type: https://schema.org/MusicAlbum
+  MusicRelease:
+    is_a: CreativeWork
+    class_uri: schema:MusicRelease
+    description: >-
+      A specific published edition of a music album, with its catalogue number, format, date, label
+      and ordered recordings. Distinct from the album work, a personal copy, a playback file or a
+      recording. Languages and formats describe this edition; they do not create a Cartesian product
+      of releases. Medium-level disc or side identity is not published here.
+    exact_mappings:
+      - wd:Q108041547
+    slots:
+      - alternateName
+      - abstract
+      - datePublished
+      - inLanguage
+      - duration
+      - distributionFormat
+      - catalogNumber
+      - recordLabel
+      - releaseOf
+      - track
+      - musicBy
+      - contributor
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:datePublished, wdt:P437]
+      facets: releaseOf datePublished distributionFormat recordLabel inLanguage
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/MusicRelease
+  MusicRecording:
+    is_a: CreativeWork
+    class_uri: schema:MusicRecording
+    description: >-
+      An identified recorded performance of a musical work, such as one song take. Distinct from the
+      album grouping, a published edition, a playback file or a personal copy.
+    exact_mappings:
+      - wd:Q5057302
+    slots:
+      - alternateName
+      - datePublished
+      - duration
+      - inLanguage
+      - byArtist
+      - musicBy
+      - contributor
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:duration, schema:datePublished]
+      facets: byArtist datePublished duration inLanguage
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/MusicRecording
+slots:
+  releaseOf:
+    slot_uri: schema:releaseOf
+    description: The music album work this published edition realizes.
+    range: MusicAlbum
+    annotations:
+      datatype: wikibase-item
+      relation_group: derivation
+      inverse: schema:albumRelease
+      relation_order: date
+      acyclic: true
+  catalogNumber:
+    slot_uri: schema:catalogNumber
+    description: The catalogue number assigned to this edition by its issuing label.
+    exact_mappings:
+      - wd:P528
+    annotations:
+      datatype: string
+  recordLabel:
+    slot_uri: schema:recordLabel
+    description: The record label that issued this edition.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P264
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:labelOf
+      relation_order: name
+  track:
+    slot_uri: schema:track
+    description: An identified recording appearing on this edition, in listed order.
+    range: MusicRecording
+    multivalued: true
+    exact_mappings:
+      - wd:P658
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position creditedAs detailedRole datePublished sameAs listingPart
+      relation_group: membership
+      inverse: rezics:recordingOn
+      relation_order: position
+      relation_slot_key: wdt:P642
+      acyclic: true
+  byArtist:
+    slot_uri: schema:byArtist
+    description: A person or organization credited as the performing artist of this recording.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P175
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:artistOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
+  listingPart:
+    slot_uri: wdt:P642
+    description: >-
+      The listing-occurrence Concept that distinguishes this track association from another
+      association to the same recording. It is not a published music medium.
+    range: Concept
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: none
+      relation_order: name
