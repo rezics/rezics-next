@@ -1,5 +1,4 @@
 import type { KernelClient } from '@rezics/client';
-import { candidateContext } from '../../subject/candidates';
 
 export type ContributionAddress = { id: string; candidate: string; property: string; session?: string };
 export type ContributionCommand = ContributionAddress & { operation: 'delete' | 'restore'; key: string };
@@ -11,6 +10,7 @@ export type ContributionAvailability = {
   subject: 'available' | 'unavailable';
   candidate: 'available' | 'deleted' | 'unconfirmed';
   selected: boolean | null;
+  actions?: { state: 'available'; operations: ('delete' | 'restore')[] } | { state: 'unavailable' };
   session?: string;
 };
 export type ContributionResult =
@@ -26,7 +26,8 @@ export function confirmedContributionOperation(
   current: ContributionAvailability,
 ): ContributionCommand['operation'] | null {
   if (current.subject !== 'available' || current.candidate === 'unconfirmed') return null;
-  return current.candidate === 'deleted' ? 'restore' : 'delete';
+  const operation = current.candidate === 'deleted' ? 'restore' : 'delete';
+  return current.actions?.state === 'available' && current.actions.operations.includes(operation) ? operation : null;
 }
 
 type ContributionEndpoint = ReturnType<ReturnType<KernelClient['subjects']>['candidates']>;
@@ -75,31 +76,28 @@ export async function readContributionAvailability(
   address: ContributionAddress,
 ): Promise<ContributionAvailability> {
   const headers = { authorization, ...(address.session ? { 'rezics-session-token': address.session } : {}) };
-  const [subject, candidates] = await Promise.allSettled([
-    client.subjects({ id: address.id }).get({ headers }),
-    client.subjects({ id: address.id }).candidates.get({
+  const response = await client
+    .subjects({ id: address.id })
+    .candidates({ candidate: address.candidate })
+    .lifecycle.get({
       headers,
-      query: { context: candidateContext, property: address.property, limit: 20 },
-    }),
-  ]);
-  const current = subject.status === 'fulfilled' ? subject.value : undefined;
-  const page = candidates.status === 'fulfilled' ? candidates.value : undefined;
-  const visible =
-    current?.status === 200 &&
-    current.data?.subject.id === address.id &&
-    current.data.subject.context === candidateContext;
-  const item = page?.status === 200 ? page.data?.candidates.find((item) => item.id === address.candidate) : undefined;
-  const token = page ? new Headers(page.headers).get('rezics-session-token') : null;
+      query: { property: address.property },
+    });
+  const result = response.data;
+  if (
+    response.status !== 200 ||
+    !result ||
+    result.subject !== address.id ||
+    result.candidate !== address.candidate ||
+    result.property !== address.property
+  )
+    return { subject: 'unavailable', candidate: 'unconfirmed', selected: null, actions: { state: 'unavailable' } };
+  const token = new Headers(response.headers).get('rezics-session-token');
   return {
-    subject: visible ? 'available' : 'unavailable',
-    // `deleted: true` is the declared native tombstone. Absence on a bounded page proves nothing more.
-    candidate: item ? ('deleted' in item && item.deleted === true ? 'deleted' : 'available') : 'unconfirmed',
-    selected: visible
-      ? (current.data!.subject.statements[address.property] ?? []).some(
-          (statement) =>
-            statement.id === address.candidate && (statement.rank === 'normal' || statement.rank === 'preferred'),
-        )
-      : null,
+    subject: 'available',
+    candidate: result.state,
+    selected: result.selected,
+    actions: result.actions,
     ...(token ? { session: token } : {}),
   };
 }
@@ -134,9 +132,7 @@ export async function changeContribution(
         response.status === 401 || response.status === 403
           ? 'denied'
           : response.status === 409
-            ? command.operation === 'restore'
-              ? 'expired'
-              : 'conflict'
+            ? 'conflict'
             : response.status === 400 || response.status === 422
               ? 'invalid'
               : 'unavailable',
