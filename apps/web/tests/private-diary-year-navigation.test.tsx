@@ -11,6 +11,7 @@ import {
   type ReportedYearSummary,
 } from '../src/library/private-diary/native';
 import type { PrivateDiaryLoad } from '../src/library/private-diary/server';
+import type { DiaryOccurrence as KernelDiaryOccurrence } from '../../../services/kernel/src/library/diary-model';
 
 mock.module('../src/kernel/exposure', () => ({ useOperation: () => true }));
 mock.module('../src/library/private-diary/server', () => ({ cancelPrivateDiary: mock(async () => 'cancelled') }));
@@ -49,6 +50,7 @@ const { createRoot } = await import('react-dom/client');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { PrivateDiaryPage } = await import('../src/library/private-diary/page');
+type PrivateDiaryReadingLoadResult = import('../src/library/private-diary/page').PrivateDiaryReadingLoadResult;
 const { ReportedYearPanel } = await import('../src/library/private-diary/year-summary');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -142,7 +144,7 @@ async function mount(initialAddress = { year: 2020 } as ReturnType<typeof diaryS
     history: createMemoryHistory({ initialEntries: [diaryReturnContext(initialAddress)] }),
   });
   await router.load();
-  const show = (value: PrivateDiaryLoad = loaded, owner = 'owner') =>
+  const show = (value: PrivateDiaryReadingLoadResult = loaded, owner = 'owner') =>
     act(async () =>
       root.render(
         <RouterContextProvider router={router}>
@@ -315,7 +317,7 @@ test('received occurrences keep repeated identity, supplied labels, date precisi
       finishDate: { year: 2020, month: 2 },
     },
   };
-  const rows: DiaryPage['occurrences'] = [
+  const rows: KernelDiaryOccurrence[] = [
     {
       ...common,
       id: firstId,
@@ -348,7 +350,7 @@ test('received occurrences keep repeated identity, supplied labels, date precisi
     },
   ];
   const address = { cursor: 'native-cursor/+?=exact' };
-  const value: PrivateDiaryLoad = {
+  const value: PrivateDiaryReadingLoadResult = {
     ...loaded,
     address,
     reportedYear: null,
