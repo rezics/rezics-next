@@ -27,6 +27,7 @@ import {
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
   acquireShowcaseVndbTagRatings,
+  type VndbTagRatingFetch,
   type VndbTagRatingObservation,
 } from './showcase-vndb-tag-ratings.ts';
 import {
@@ -465,7 +466,7 @@ export async function importShowcaseTags(input: {
   port: CrossMediaPort;
   known?: VndbPublicTagKnownBindings;
   destination?: { origin: string };
-  fetch?: typeof fetch;
+  fetch?: VndbTagRatingFetch;
   manifest?: { recordVocabulary?(records: readonly ShowcaseTagVocabularyRecord[]): void };
 }): Promise<ShowcaseTagsResult> {
   const known = input.known ?? { schemes: [], concepts: [] };

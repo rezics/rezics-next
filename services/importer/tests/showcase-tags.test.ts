@@ -279,9 +279,12 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     expect(spoiler(associations, conceptIds.g311)).toEqual({ type: 'value', content: { amount: '+0', unit: '1' } });
     expect(spoiler(associations, conceptIds.g44)).toEqual({ type: 'value', content: { amount: '+2', unit: '1' } });
     expect(spoiler(weights, conceptIds.g311)).toEqual({ type: 'value', content: { amount: '+1', unit: '1' } });
-    const referenceValue = (command: Extract<BatchCommand, { op: 'propose' }>, property: string) =>
-      command.statement.references?.flatMap((reference) => reference.parts).find((part) => part.property.id === property)
-        ?.value.content;
+    const referenceValue = (command: Extract<BatchCommand, { op: 'propose' }>, property: string) => {
+      for (const reference of command.statement.references ?? [])
+        for (const part of reference.parts)
+          if (part.property.id === property && part.value.type === 'value') return part.value.content;
+      return undefined;
+    };
     const weight = weights.find((command) => referenceValue(command, 'rezics:sourceTagId') === 'g311')!;
     expect(weight.statement.qualifiers).toContainEqual({
       property: { id: 'rezics:sourceTagWeight' },

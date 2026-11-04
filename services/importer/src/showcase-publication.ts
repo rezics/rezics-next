@@ -632,7 +632,12 @@ function sourceTagWeight(statement: BatchStatement): boolean {
 function sourceTagId(statement: BatchStatement): string | undefined {
   for (const reference of statement.references ?? [])
     for (const part of reference.parts)
-      if (part.property.id === 'rezics:sourceTagId' && part.value.type === 'value') return part.value.content;
+      if (
+        part.property.id === 'rezics:sourceTagId' &&
+        part.value.type === 'value' &&
+        typeof part.value.content === 'string'
+      )
+        return part.value.content;
   return undefined;
 }
 
@@ -901,8 +906,8 @@ export async function publishShowcase(input: {
     acknowledgements: [...acknowledgementByCandidate.values()],
     aliases: input.aliases,
     mediaOutcomes,
-    tagWeightObservations: input.tagWeightObservations,
-    tagWeightRefreshes: input.tagWeightRefreshes,
+    ...(input.tagWeightObservations ? { tagWeightObservations: input.tagWeightObservations } : {}),
+    ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
     ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
     ...(genre
       ? {
@@ -1527,8 +1532,8 @@ export async function publishShowcase(input: {
     acknowledgements: [...acknowledgementByCandidate.values()],
     aliases: input.aliases,
     mediaOutcomes: finalMediaOutcomes,
-    tagWeightObservations: input.tagWeightObservations,
-    tagWeightRefreshes: input.tagWeightRefreshes,
+    ...(input.tagWeightObservations ? { tagWeightObservations: input.tagWeightObservations } : {}),
+    ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
     ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
     ...(genre
       ? {

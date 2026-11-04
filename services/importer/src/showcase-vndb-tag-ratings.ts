@@ -29,6 +29,8 @@ export type VndbTagRatingBinding = Readonly<{
   schemeUri: string;
 }>;
 
+export type VndbTagRatingFetch = (input: string | URL, init?: RequestInit) => Promise<Response>;
+
 export type VndbTagRatingObservation = Readonly<{
   workId: string;
   state: 'available' | 'unavailable' | 'partial' | 'not-requested';
@@ -139,9 +141,9 @@ export async function acquireShowcaseVndbTagRatings(input: {
   selectedVids: readonly string[];
   admitted: readonly AdmittedPublicTag[];
   bindings: SourceVocabularyBindings;
-  fetch?: typeof fetch;
+  fetch?: VndbTagRatingFetch;
 }): Promise<VndbTagRatingAcquisition> {
-  const fetcher = input.fetch ?? fetch;
+  const fetcher: VndbTagRatingFetch = input.fetch ?? ((url, init) => fetch(url, init));
   const selected = [...new Set(input.selectedVids.filter((id) => /^v[1-9][0-9]{0,9}$/u.test(id)))].sort();
   if (selected.length !== input.selectedVids.length) throw new TypeError('Invalid selected VNDB work set');
   const rowsByWork = new Map<string, AdmittedPublicTag[]>();

@@ -335,12 +335,15 @@ function currentTagWeight(
     assertion.statement.value.type !== 'value'
   )
     return false;
-  const tagId = assertion.statement.references?.flatMap((reference) => reference.parts).find(
-    (part) => part.property.id === 'rezics:sourceTagId',
-  )?.value.content;
-  const snapshot = assertion.statement.references?.flatMap((reference) => reference.parts).find(
-    (part) => part.property.id === 'rezics:sourceSnapshot',
-  )?.value.content;
+  const referenceValue = (property: string): string | undefined => {
+    for (const reference of assertion.statement.references ?? [])
+      for (const part of reference.parts)
+        if (part.property.id === property && part.value.type === 'value' && typeof part.value.content === 'string')
+          return part.value.content;
+    return undefined;
+  };
+  const tagId = referenceValue('rezics:sourceTagId');
+  const snapshot = referenceValue('rezics:sourceSnapshot');
   const binding = observation.bindings.find((item) => item.tagId === tagId);
   return !!(
     binding &&
