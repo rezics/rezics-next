@@ -2,7 +2,7 @@ import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import type { DiscoveryFilterDocument } from '@rezics/filter';
+import type { DiscoveryFilterDocument, FilterDocument } from '@rezics/filter';
 import type { Pool } from 'pg';
 import type { Access } from '../../src/request/access.ts';
 import { ProblemError } from '../../src/http/problem.ts';
@@ -126,17 +126,18 @@ test('general discovery admits a released inverse relation and carries it into n
   const qualifier = definition.qualifiers!.find(
     (candidate) => bundledRelease.properties[candidate]?.datatype === 'wikibase-item',
   )!;
+  const inverse: FilterDocument = {
+    statement: {
+      property,
+      inverse: true,
+      in: [id],
+      qualifiers: [{ property: qualifier, in: [id] }],
+    },
+  };
   const filter: DiscoveryFilterDocument = {
     and: [
       { kind: { in: ['schema:Person'] } },
-      {
-        statement: {
-          property,
-          inverse: true,
-          in: [id],
-          qualifiers: [{ property: qualifier, in: [id] }],
-        },
-      },
+      inverse,
     ],
   };
   const request: MixedDiscoveryRequest = {
@@ -149,7 +150,7 @@ test('general discovery admits a released inverse relation and carries it into n
   const admitted = admitDiscoveryRequest(request, current, bundledRelease);
   expect(admitted.filter).toEqual(filter);
   expect(currentDiscoveryFilter(admitted.filter!, current, 'schema:Person', bundledRelease)).toEqual(
-    filter.and[1]!,
+    inverse,
   );
   const capture = compileDiscoveryCapture(
     {
