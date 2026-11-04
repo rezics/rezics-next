@@ -2,6 +2,9 @@ import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, useLayoutEffect } from 'react';
 import type { DynamicCollectionPage as Page } from '../src/library/dynamic-collection';
+import type { RulePage } from '../src/library/collection-rule-read';
+import type { RuleWrite } from '../src/library/collection-rule-actions';
+import type { CollectionWriteResult } from '../src/library/collection-records';
 import type { DynamicMembersResult } from '../src/library/collection-load';
 import { m } from '../src/paraglide/messages.js';
 
@@ -37,6 +40,11 @@ const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query
 const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvider } =
   await import('@tanstack/react-router');
 const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');
+const { savedQueryResultsAddress, savedQueryRuleReturn, RuleEditLink } =
+  await import('../src/library/saved-query-results');
+const { CollectionRuleEditor } = await import('../src/library/collection-rule-editor');
+const { CollectionRuleControls } = await import('../src/library/collection-rule-controls');
+const { renderToStaticMarkup } = await import('react-dom/server');
 const { libraryNavigationQuery } = await import('../src/library/pins-read');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -343,5 +351,243 @@ test('Unmount clears future preparation timers and ignores member and clipboard 
     }
   } finally {
     await h.close();
+  }
+});
+
+test('Saved rule edit, confirmation and member return keep independent supported choices on the same identity', () => {
+  const id = '0192f3a0-6c1e-7b2a-a001-000000000001';
+  const search = {
+    type: 'schema:Book',
+    'f.schema:keywords': ['b', 'a', 'b'],
+    'r.schema:wordCount': '0,120',
+    'l.schema:keywords': 'Original label',
+  };
+  const outer = '/en/library/collections?cursor=outer%2B%2F&layout=rows';
+  const current = savedQueryResultsAddress('en', id, 'opaque /+?二', search, { layout: 'grid', returnTo: outer });
+  const collection = { id, curatorAccountId: 'owner', membershipKind: 'dynamic' };
+  const markup = renderToStaticMarkup(
+    <RuleEditLink collection={collection} viewerId="owner" allowed resultsHref={current} />,
+  );
+  const host = document.createElement('div');
+  host.innerHTML = markup;
+  const edit = new URL(host.querySelector('a')!.href);
+  expect(edit.pathname).toBe(`/en/collections/${id}/rule`);
+  const returnTo = edit.searchParams.get('returnTo')!;
+  expect(savedQueryRuleReturn(returnTo, id, 'en')).toBe(current);
+  const confirmed = savedQueryRuleReturn(returnTo, id, 'en', true);
+  expect(new URL(confirmed, window.location.origin).searchParams.has('cursor')).toBe(false);
+  const before = new URL(current, window.location.origin).searchParams;
+  const after = new URL(confirmed, window.location.origin).searchParams;
+  for (const key of ['type', 'f.schema:keywords', 'r.schema:wordCount', 'l.schema:keywords', 'layout', 'returnTo'])
+    expect(after.getAll(key)).toEqual(before.getAll(key));
+  for (const savedId of [null, id]) {
+    host.innerHTML = renderToStaticMarkup(
+      <CollectionRuleControls
+        creating={false}
+        pending={false}
+        conflict={false}
+        hasFilter
+        savedId={savedId}
+        collectionId={id}
+        resultsHref={returnTo}
+        refresh={() => {}}
+      />,
+    );
+    expect(host.querySelector('a')!.getAttribute('href')).toBe(savedId ? confirmed : current);
+  }
+  for (const value of [
+    'https://foreign.test/en/collections/' + id,
+    '//foreign.test/',
+    '/en/collections/other?cursor=old',
+    current + '&cursor=ambiguous',
+  ])
+    expect(savedQueryRuleReturn(value, id, 'en')).toBe(`/en/collections/${id}`);
+  for (const [viewerId, allowed, builtinKind] of [
+    ['reader', true, undefined],
+    ['owner', false, undefined],
+    ['owner', true, 'everything'],
+    ['owner', true, 'liked'],
+  ] as const)
+    expect(
+      renderToStaticMarkup(
+        <RuleEditLink
+          collection={{ ...collection, ...(builtinKind ? { builtinKind } : {}) }}
+          viewerId={viewerId}
+          allowed={allowed}
+          resultsHref={current}
+        />,
+      ),
+    ).toBe('');
+});
+
+test('Explicit recovery replaces current definition-bound results and retires unavailable, invalid and denied pages', async () => {
+  const h = await mount();
+  try {
+    const original = page('saved', {
+      builtinKind: undefined,
+      preparing: false,
+      unavailable: true,
+      filterStatus: 'preparing',
+      members: ready('Old member').members,
+    });
+    await h.render(original, h.reader('origin-filter'));
+    await h.click(m.library_dynamic_retry_unavailable());
+    expect(h.calls).toHaveLength(1);
+    expect(h.host.textContent).toContain(m.library_dynamic_retry_pending());
+    const replacement = page('saved', {
+      ...ready('New definition member'),
+      builtinKind: undefined,
+      title: 'Current saved title',
+      revision: 8,
+      filterReleaseKey: 'new-release',
+      filterStatus: undefined,
+    });
+    await settle(() => h.calls[0]!.resolve({ ...ready('ignored partial member'), page: replacement }));
+    expect(h.host.textContent).toContain('New definition member');
+    expect(h.host.textContent).toContain('Current saved title');
+    expect(h.host.textContent).not.toContain('Old member');
+    expect(h.host.textContent).not.toContain('ignored partial member');
+    expect(h.host.textContent).not.toContain(m.collection_filter_preparing());
+    for (const outcome of ['empty', 'unsupported', 'stale', 'denied', 'closed'] as const) {
+      await h.render({ ...original }, h.reader('origin-filter'));
+      await h.click(m.library_dynamic_retry_unavailable());
+      const result = {
+        ...ready(''),
+        members: [],
+        ...(outcome === 'unsupported'
+          ? { filterStatus: 'unsupported' as const }
+          : outcome === 'stale'
+            ? { cursorRestarted: true }
+            : outcome === 'denied' || outcome === 'closed'
+              ? { access: outcome }
+              : {}),
+      };
+      await settle(() => h.calls.at(-1)!.resolve(result));
+      expect(h.host.textContent).not.toContain('Old member');
+      expect(h.host.textContent).not.toContain('New definition member');
+      if (outcome === 'unsupported') {
+        expect(h.host.textContent).toContain(m.collection_filter_unsupported());
+        expect(h.host.textContent).toContain(m.collection_filter_clear());
+        expect(h.host.querySelector('nav[aria-label="' + m.library_collection_members() + '"]')).toBeNull();
+      } else if (outcome === 'stale') expect(h.host.textContent).toContain(m.library_collections_cursor_reset());
+      else if (outcome === 'empty') expect(h.host.textContent).toContain(m.library_dynamic_page_reader_empty());
+      else {
+        expect(h.host.textContent).not.toContain('Collection saved');
+        expect(h.host.textContent).not.toContain(m.library_dynamic_retry_unavailable());
+        if (outcome === 'closed') expect(h.host.textContent).toContain(m.platform_closed_message());
+      }
+    }
+    // Neither a late result nor an A/B/A address return can revive retired observations.
+    await h.render(page('A'), h.reader('A-filter'));
+    await h.advance();
+    const retired = h.calls.at(-1)!;
+    await h.render(page('B'), h.reader('B-filter'));
+    await h.render(page('A'), h.reader('fresh-A-filter'));
+    await settle(() => retired.resolve(ready('Retired A member')));
+    expect(h.host.textContent).not.toContain('Retired A member');
+    await h.advance();
+    expect(h.calls.at(-1)!.filter).toBe('fresh-A-filter');
+  } finally {
+    await h.close();
+  }
+});
+
+test('An uncertain saved-rule update keeps its original command and confirms the same saved results address', async () => {
+  const id = 'saved-rule';
+  const rule: Extract<RulePage, { state: 'ready' }> = {
+    state: 'ready',
+    id,
+    viewerId: 'owner',
+    title: 'Saved reading',
+    intent: '10000000-0000-4000-8000-000000000001',
+    address: { collectionId: id },
+    choices: {
+      release: { state: 'ready', metadata: { types: {}, properties: {} }, profiles: [] },
+      labels: { state: 'ready', values: [], next: null },
+    },
+    rule: {
+      filter: { owner: { presence: true } },
+      sort: 'id',
+      revision: 7,
+      collectionRevision: 9,
+      releaseDigest: 'original-release',
+      sourceGeneration: 'original-source',
+    },
+  };
+  const resultsHref = savedQueryResultsAddress(
+    'en',
+    id,
+    'original-cursor',
+    { 'f.schema:keywords': ['b', 'a'] },
+    { layout: 'grid' },
+  );
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const requests: Array<{ input: RuleWrite; csrf: string } & ReturnType<typeof deferred<CollectionWriteResult>>> = [];
+  const send = (input: RuleWrite, csrf: string) => {
+    const request = { input, csrf, ...deferred<CollectionWriteResult>() };
+    requests.push(request);
+    return request.promise;
+  };
+  const foreignSend = mock(async (): Promise<CollectionWriteResult> => ({ ok: true, id: 'wrong-identity' }));
+  const render = (csrfToken: string, save = send) =>
+    settle(() =>
+      root.render(
+        <CollectionRuleEditor
+          page={rule}
+          viewerId="owner"
+          collectionId={id}
+          csrfToken={csrfToken}
+          save={save}
+          resultsHref={resultsHref}
+          admitted={['collection_rule.get', 'collection_rule.update']}
+          reload={async () => ({ ...rule, intent: 'new-read', rule: { ...rule.rule, revision: 12 } })}
+        />,
+      ),
+    );
+  const submit = () =>
+    settle(() => {
+      host.querySelector('form')!.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    });
+  try {
+    await render('original-credential');
+    await submit();
+    await submit();
+    expect(requests).toHaveLength(1);
+    await settle(() => requests[0]!.resolve({ ok: false, reason: 'unavailable' }));
+    expect(host.textContent).toContain(m.library_rule_uncertain());
+    await render('replacement-credential', foreignSend);
+    await settle(() =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === m.library_collection_reload())!
+        .click(),
+    );
+    expect(requests).toHaveLength(1); // A read cannot replay the uncertain command.
+    await submit();
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.input).toEqual(requests[0]!.input);
+    expect(requests[1]!.input).toMatchObject({ id, revision: 7, idempotencyKey: rule.intent });
+    expect(requests[1]!.csrf).toBe('original-credential');
+    expect(foreignSend).not.toHaveBeenCalled();
+    // A successful response for another identity is still uncertain, never a new saved destination.
+    await settle(() => requests[1]!.resolve({ ok: true, id: 'wrong-identity' }));
+    expect(host.textContent).toContain(m.library_rule_uncertain());
+    expect(host.textContent).not.toContain(m.library_rule_saved());
+    await submit();
+    expect(requests).toHaveLength(3);
+    expect(requests[2]!.input).toEqual(requests[0]!.input);
+    await settle(() => requests[2]!.resolve({ ok: true, id }));
+    expect(host.textContent).toContain(m.library_rule_saved());
+    const members = [...host.querySelectorAll('a')].find((a) => a.textContent === m.library_rule_members())!;
+    expect(members.getAttribute('href')).toBe(savedQueryRuleReturn(resultsHref, id, 'en', true));
+    expect(new URL(members.href).searchParams.getAll('f.schema:keywords')).toEqual(['b', 'a']);
+    expect(new URL(members.href).searchParams.get('layout')).toBe('grid');
+    expect(new URL(members.href).searchParams.has('cursor')).toBe(false);
+    await submit();
+    expect(requests).toHaveLength(3);
+  } finally {
+    await settle(() => root.unmount());
+    host.remove();
   }
 });

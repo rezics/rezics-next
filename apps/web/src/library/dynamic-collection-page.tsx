@@ -17,11 +17,13 @@ import { useCurrentLibraryNavigation } from './pins-current';
 import { FollowTargetControl } from './follow-target-control';
 import { CollectionReadActions, CollectionReadMembers } from './collection-page';
 import { CollectionPresentationSummary } from './showcase-collection/presentation';
-import { collectionPageAddress } from './collection-presentation';
 import { AccountRef } from './account-ref';
 import { CollectionDescriptionReader } from './collection-description-reader';
 import { BulkFilteredAdd } from './bulk-filtered-add-view';
-import { isOrdinarySavedQuery, RuleEditLink } from './saved-query-results';
+import { isOrdinarySavedQuery, RuleEditLink, savedQueryResultsAddress } from './saved-query-results';
+import { admitsCollectionOperation } from './collection-records';
+import { CollectionAccessState } from './collection-access';
+import { useOperation } from '../kernel/exposure';
 import { SavedQueryManagement } from './saved-query-management';
 import { SavedFilterReviewEntry, SavedFilterReviewScopeBoundary } from './saved-filter-review';
 import type { ManagedSavedQuery } from './saved-query-management/controller';
@@ -34,11 +36,13 @@ type DynamicCollectionPageProps = {
   readCurrent?: (() => Promise<DynamicCollectionPageData>) | undefined;
   queryKey?: QueryKey | undefined;
   returnTo?: string | undefined;
+  layout?: 'grid' | 'list' | undefined;
   viewerId?: string | null;
 };
 
 export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
-  const [source, setSource] = useState({ page: props.page, lifetime: 0 });
+  const identity = JSON.stringify([props.page.id, props.page.cursor, props.search, props.viewerId, props.queryKey]);
+  const [source, setSource] = useState({ page: props.page, identity, lifetime: 0 });
   const navigation = useCurrentLibraryNavigation(
     getLocale(),
     100,
@@ -51,7 +55,8 @@ export function DynamicCollectionPage(props: DynamicCollectionPageProps) {
     origin: navigation.pinsOrigin,
   });
   // A newly observed loader object starts a page before any of its children render, even at the same URL.
-  if (source.page !== props.page) setSource({ page: props.page, lifetime: source.lifetime + 1 });
+  if (source.page !== props.page || source.identity !== identity)
+    setSource({ page: props.page, identity, lifetime: source.lifetime + 1 });
   return (
     <DynamicCollectionPageLifetime
       key={source.lifetime}
@@ -70,6 +75,7 @@ function DynamicCollectionPageLifetime({
   readCurrent,
   queryKey,
   returnTo,
+  layout,
   viewerId = null,
   pins,
   pinActions,
@@ -83,8 +89,18 @@ function DynamicCollectionPageLifetime({
   const [retries, setRetries] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [copyFailure, setCopyFailure] = useState(false);
+  const [access, setAccess] = useState<'denied' | 'closed' | null>(null);
+  const [observation, setObservation] = useState(0);
+  const observed = useRef(0);
+  const locked = useRef(false);
+  const [explicitRetry, setExplicitRetry] = useState(false);
+  const retryButton = useRef<HTMLButtonElement>(null);
+  const resultNotice = useRef<HTMLParagraphElement>(null);
+  const focusResult = useRef(false);
+  const ruleRead = useOperation('collection_rule.get');
+  const ruleUpdate = useOperation('collection_rule.update');
   // The route's reader closes over the originating filter; callback churn must not retarget a timer.
-  const reader = useRef(readMembers);
+  const origin = useRef({ read: readMembers, id: page.id, cursor: page.cursor });
   const active = useRef(false);
   useLayoutEffect(() => {
     active.current = true;
@@ -92,37 +108,93 @@ function DynamicCollectionPageLifetime({
       active.current = false;
     };
   }, []);
-  const { id, cursor, preparing, unavailable, retryAfterMs } = current;
+  const { id, preparing, unavailable, retryAfterMs } = current;
+  // Both paths use the same captured reader/address. An explicit retry is a read, never a command replay.
+  async function refreshMembers(explicit = false) {
+    const { read, id, cursor } = origin.current;
+    if (!active.current || locked.current || !read || access) return;
+    locked.current = true;
+    setRetrying(true);
+    if (explicit) {
+      setRetries(0);
+      setExplicitRetry(true);
+    }
+    try {
+      const result = await read(id, cursor);
+      if (!active.current) return;
+      if (result.access) {
+        setAccess(result.access);
+        return;
+      }
+      if (result.page && result.page.id !== id) {
+        setAccess('denied');
+        return;
+      }
+      // A production read replaces the complete admitted page, including definition-bound filters and actions.
+      // Standalone readers retain their originating shell and explicitly clear former response status.
+      const replacement = result.page ?? {
+        ...current,
+        ...result,
+        filterStatus: result.filterStatus,
+        cursorRestarted: result.cursorRestarted,
+      };
+      setCurrent({
+        ...replacement,
+        ...(replacement.preparing ||
+        replacement.unavailable ||
+        replacement.filterStatus ||
+        replacement.filterIgnored?.length
+          ? { members: [], next: null }
+          : {}),
+      });
+      focusResult.current = explicit && document.activeElement === retryButton.current;
+      observed.current += 1;
+      setObservation(observed.current);
+    } catch {
+      if (active.current) {
+        setCurrent((value) => ({
+          ...value,
+          members: [],
+          next: null,
+          preparing: false,
+          unavailable: true,
+          filterStatus: undefined,
+        }));
+        observed.current += 1;
+        setObservation(observed.current);
+      }
+    } finally {
+      if (active.current) {
+        setRetries((count) => count + 1);
+        setRetrying(false);
+        setExplicitRetry(false);
+        locked.current = false;
+      }
+    }
+  }
   useEffect(() => {
-    const read = reader.current;
-    if (!preparing || unavailable || retries >= 3 || retrying || !read) return;
+    if (!preparing || unavailable || retries >= 3 || retrying || !origin.current.read || access) return;
     const timer = setTimeout(
-      async () => {
-        if (!active.current) return;
-        setRetrying(true);
-        try {
-          const result = await read(id, cursor);
-          if (active.current) setCurrent((value) => ({ ...value, ...result }));
-        } catch {
-          if (active.current) setCurrent((value) => ({ ...value, preparing: false, unavailable: true }));
-        } finally {
-          if (active.current) {
-            setRetries((count) => count + 1);
-            setRetrying(false);
-          }
-        }
-      },
+      () => void refreshMembers(),
       Math.max(1000, Math.min(30_000, Number.isFinite(retryAfterMs) ? retryAfterMs : 1000)),
     );
     return () => clearTimeout(timer);
-  }, [id, cursor, preparing, unavailable, retryAfterMs, retries, retrying]);
+  }, [preparing, unavailable, retryAfterMs, retries, retrying, access]);
+  useLayoutEffect(() => {
+    if (!focusResult.current) return;
+    focusResult.current = false;
+    // A visitor who moved focus during the read keeps it. Only the retry action's own completion moves it.
+    if (document.activeElement === retryButton.current || document.activeElement === document.body)
+      resultNotice.current?.focus();
+  }, [observation]);
   const empty =
     current.builtinKind === 'everything'
       ? m.library_dynamic_empty_everything()
       : current.builtinKind === 'liked'
         ? m.library_dynamic_empty_liked()
         : m.library_collection_empty();
-  const membersReady = !current.preparing && !current.unavailable && current.filterStatus === undefined;
+  const incompleteFilter = (current.filterIgnored?.length ?? 0) > 0;
+  const membersReady = !current.preparing && !current.unavailable && !current.filterStatus && !incompleteFilter;
   const laterPage = current.cursor !== undefined;
   async function copyLink(href: string) {
     if (!active.current) return;
@@ -135,6 +207,10 @@ function DynamicCollectionPageLifetime({
   }
   const locale = getLocale();
   const saved = isOrdinarySavedQuery(current);
+  const resultsHref = savedQueryResultsAddress(locale, current.id, current.cursor, search, { layout, returnTo });
+  const firstPageHref = savedQueryResultsAddress(locale, current.id, undefined, search, { layout, returnTo });
+  if (access === 'denied') return <CollectionAccessState state="not-found" />;
+  if (access === 'closed') return <p role="alert">{m.platform_closed_message()}</p>;
   const reviewScope =
     saved && viewerId && current.curatorAccountId === viewerId
       ? { id: current.id, title: current.title, ownerId: current.curatorAccountId, viewerId }
@@ -171,7 +247,12 @@ function DynamicCollectionPageLifetime({
                   ...(current.builtinKind ? { builtinKind: current.builtinKind } : {}),
                 }}
                 viewerId={viewerId}
-                allowed={Boolean(viewerId)}
+                allowed={
+                  ruleRead &&
+                  ruleUpdate &&
+                  admitsCollectionOperation(current.viewerActions, 'collection:update', 'collection_rule.update')
+                }
+                resultsHref={resultsHref}
               />
               <CollectionReadActions
                 onShare={() => copyLink(`/${locale}/collections/${encodeURIComponent(current.id)}`)}
@@ -191,13 +272,14 @@ function DynamicCollectionPageLifetime({
           <FollowTargetControl targetId={current.id} following={current.following ?? null} />
         </header>
         <SavedQueryManagement
+          key={observation}
           page={current}
           viewerId={viewerId}
           {...(queryKey === undefined ? {} : { queryKey })}
           {...(readCurrent === undefined ? {} : { readCurrent })}
           {...(returnTo === undefined ? {} : { returnTo })}
           onMetadata={(metadata: ManagedSavedQuery) => {
-            if (!active.current || metadata.id !== id) return;
+            if (!active.current || observed.current !== observation || metadata.id !== id) return;
             setCurrent((value) =>
               value.id !== metadata.id
                 ? value
@@ -216,6 +298,25 @@ function DynamicCollectionPageLifetime({
         <p className="text-sm text-muted-foreground">{m.library_collection_social_unavailable()}</p>
         {copyFailure ? <p role="alert">{m.error_message()}</p> : null}
         {saved ? null : <p className="text-sm text-muted-foreground">{m.library_collection_builtin_rule()}</p>}
+        <p ref={resultNotice} tabIndex={-1} role="status" aria-live="polite" className="outline-offset-4">
+          {retrying
+            ? m.library_dynamic_retry_pending()
+            : observation > 0 && membersReady
+              ? m.library_dynamic_retry_ready()
+              : null}
+        </p>
+        <nav aria-label={m.library_layout()} className="flex min-w-0 flex-wrap gap-2">
+          {(['list', 'grid'] as const).map((choice) => (
+            <a
+              key={choice}
+              href={savedQueryResultsAddress(locale, current.id, current.cursor, search, { layout: choice, returnTo })}
+              aria-current={(layout ?? 'list') === choice ? 'true' : undefined}
+              className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 py-2 text-primary aria-[current=true]:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              {choice === 'list' ? m.library_layout_list() : m.library_layout_grid()}
+            </a>
+          ))}
+        </nav>
         {current.cursorRestarted ? <p role="status">{m.library_collections_cursor_reset()}</p> : null}
         <SavedFilterReviewScopeBoundary scope={reviewScope}>
           {current.filterProperties && current.filterParams ? (
@@ -232,6 +333,7 @@ function DynamicCollectionPageLifetime({
           )}
         </SavedFilterReviewScopeBoundary>
         <FilteredLibraryRemovalControl
+          key={`remove:${observation}`}
           source={{ id: current.id, ...(current.filter === undefined ? {} : { filter: current.filter }) }}
           boundary={JSON.stringify([current.visibility, current.cursor, search])}
           eligible={membersReady && !current.filterIgnored?.length}
@@ -242,11 +344,12 @@ function DynamicCollectionPageLifetime({
           {...(current.filterIgnored === undefined ? {} : { ignored: current.filterIgnored })}
           {...(current.filterStatus === undefined ? {} : { status: current.filterStatus })}
           {...(current.filterType === undefined ? {} : { filterType: current.filterType })}
-          empty={!current.preparing && current.members.length === 0 && !laterPage && !current.next}
+          empty={membersReady && current.members.length === 0 && !laterPage && !current.next}
           emptyLabel={empty}
           {...(current.unavailable !== undefined ? { unavailable: current.unavailable } : {})}
         />
         <BulkFilteredAdd
+          key={`add:${observation}`}
           source={{ id: current.id, ...(current.filter === undefined ? {} : { filter: current.filter }) }}
           address={JSON.stringify([current.id, current.cursor, search, queryKey])}
           disabled={!membersReady || (current.filterIgnored?.length ?? 0) > 0}
@@ -258,6 +361,7 @@ function DynamicCollectionPageLifetime({
           </p>
         ) : null}
         <CollectionFilteredStatus
+          key={`status:${observation}`}
           page={current}
           address={JSON.stringify([current.id, current.cursor, search, queryKey])}
           ready={membersReady}
@@ -272,10 +376,12 @@ function DynamicCollectionPageLifetime({
         ) : membersReady && current.members.length ? (
           <CollectionReadMembers
             members={current.members}
+            layout={layout ?? 'list'}
+            returnSource={current}
             typeRatios={current.typeRatios}
             listPresentations={current.listPresentations}
             comparisonDefinitions={current.comparisonDefinitions}
-            currentHref={collectionPageAddress(locale, current.id, current.cursor ?? '', search)}
+            currentHref={resultsHref}
             onCopy={({ subject }) => {
               if (!subject) return;
               const title = displayLibraryTitle(subject.label, locale).text;
@@ -283,18 +389,43 @@ function DynamicCollectionPageLifetime({
             }}
           />
         ) : null}
-        {current.preparing && retries >= 3 ? (
-          <div>
-            <p>{m.library_dynamic_try_later()}</p>
-            <button
-              className="inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
-              type="button"
-              onClick={() => {
-                if (!active.current || retrying) return;
-                setRetries(0);
-              }}
+        {incompleteFilter || current.filterStatus === 'unsupported' || current.filterStatus === 'failed' ? (
+          <div className="min-w-0 space-y-2">
+            {incompleteFilter ? <p role="alert">{m.collection_filter_address_rejected()}</p> : null}
+            <a
+              className="inline-flex min-h-11 items-center rounded-lg border border-border px-4 py-2 text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
+              href={savedQueryResultsAddress(
+                locale,
+                current.id,
+                undefined,
+                current.filterType && !current.filterIgnored?.includes('type') ? { type: current.filterType } : {},
+                { layout, returnTo },
+              )}
             >
-              {m.library_collection_reload()}
+              {m.collection_filter_clear()}
+            </a>
+          </div>
+        ) : null}
+        {current.unavailable || (current.preparing && retries >= 3) || explicitRetry ? (
+          <div className="min-w-0 space-y-2" aria-busy={retrying}>
+            {current.preparing ? <p role="status">{m.library_dynamic_try_later()}</p> : null}
+            <p className="text-sm text-muted-foreground">
+              {current.unavailable
+                ? m.library_dynamic_retry_unavailable_help()
+                : m.library_dynamic_retry_preparing_help()}
+            </p>
+            <button
+              className="inline-flex min-h-11 min-w-0 items-center justify-center rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+              type="button"
+              ref={retryButton}
+              disabled={retrying || !origin.current.read}
+              onClick={() => void refreshMembers(true)}
+            >
+              {retrying
+                ? m.library_dynamic_retry_pending()
+                : current.unavailable
+                  ? m.library_dynamic_retry_unavailable()
+                  : m.library_collection_reload()}
             </button>
           </div>
         ) : null}
@@ -302,7 +433,7 @@ function DynamicCollectionPageLifetime({
           <nav aria-label={m.library_collection_members()} className="flex min-w-0 flex-wrap gap-2">
             {laterPage ? (
               <a
-                href={firstMembersPageAddress(locale, current.id, search)}
+                href={firstPageHref}
                 className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 {m.library_dynamic_page_reader_first_page()}
@@ -310,7 +441,7 @@ function DynamicCollectionPageLifetime({
             ) : null}
             {current.next ? (
               <a
-                href={collectionPageAddress(locale, current.id, current.next, search)}
+                href={savedQueryResultsAddress(locale, current.id, current.next, search, { layout, returnTo })}
                 className="inline-flex min-h-11 min-w-0 max-w-full items-center justify-center break-words rounded-lg border border-border px-4 py-2 text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 {m.library_collection_more()}
@@ -321,12 +452,4 @@ function DynamicCollectionPageLifetime({
       </article>
     </div>
   );
-}
-
-function firstMembersPageAddress(locale: string, id: string, search: DynamicCollectionPageProps['search']): string {
-  // Reuse the admitted shell-filter protocol, then remove only the members cursor.
-  const [pathname, query] = collectionPageAddress(locale, id, '', search).split('?');
-  const params = new URLSearchParams(query);
-  params.delete('cursor');
-  return `${pathname}${params.size ? `?${params}` : ''}`;
 }

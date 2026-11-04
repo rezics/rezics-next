@@ -254,6 +254,7 @@ type EditorProps = {
   canLabelCurrent?: (() => boolean) | undefined;
   requireProvenance?: boolean | undefined;
   navigate?: ((id: string) => void) | undefined;
+  resultsHref?: string | undefined;
   seed?: FilterDocument | undefined;
 };
 
@@ -429,6 +430,7 @@ function RuleForm({
   labels,
   csrfToken,
   navigate,
+  resultsHref,
   viewerId,
   epoch,
   canLabel,
@@ -556,6 +558,12 @@ function RuleForm({
       if (!isCurrent() || !operation.current()) return;
       const result = await original.send(input, original.csrf);
       if (!operation.current()) return;
+      // An update acknowledges the addressed saved identity. A mismatched response cannot redirect the draft
+      // or release an uncertain command's original revision, key, credential and operands.
+      if (result.ok && base.state === 'ready' && result.id !== base.id) {
+        setFeedback(m.library_rule_unavailable());
+        return;
+      }
       if (result.ok || result.reason !== 'unavailable') {
         captured.current = null;
         request.current = null;
@@ -834,6 +842,7 @@ function RuleForm({
           hasFilter={!!filter && !!(currentCsrf ? currentCsrf() : csrfToken)}
           savedId={savedId}
           collectionId={base.state === 'ready' ? base.id : null}
+          resultsHref={resultsHref}
           refresh={() => void refresh()}
         />
         <TechnicalDetails label={m.library_rule_details()}>

@@ -26,6 +26,7 @@ import { pageHeadContext } from '../../shell/head-context';
 import { useSession } from '../../session/query';
 import { useOperation } from '../../kernel/exposure';
 import { CollectionAccessState } from '../../library/collection-access';
+import { isPlatformClosedError } from '../../kernel/platform-closed';
 
 export const Route = createFileRoute('/collections/$id')({
   staticData: { publicCache: true },
@@ -285,11 +286,22 @@ function CollectionResultLifetime({
       ...(cursor ? { cursor } : {}),
       ...(input.search ? { search: input.search } : {}),
     };
-    const result = await readDynamicCollectionMembers({ data: { ...request, credentialMode: mode } });
-    assertCurrent(mode === 'session');
-    if (!collectionResultMatches(result, request, mode, mode === 'session' ? viewerId : null, 'members'))
-      throw new Error('Collection members do not match the current viewer and request');
-    return result;
+    try {
+      const result = await readDynamicCollectionMembers({ data: { ...request, credentialMode: mode } });
+      assertCurrent(mode === 'session');
+      if (!collectionResultMatches(result, request, mode, mode === 'session' ? viewerId : null, 'members'))
+        throw new Error('Collection members do not match the current viewer and request');
+      return result;
+    } catch (error) {
+      assertCurrent(mode === 'session');
+      const access = isNotFound(error)
+        ? ('denied' as const)
+        : isPlatformClosedError(error)
+          ? ('closed' as const)
+          : null;
+      if (!access) throw error;
+      return { members: [], next: null, preparing: false, retryAfterMs: 1000, unavailable: false, access };
+    }
   }
   async function readCurrentDynamicPage() {
     assertCurrent(true);
@@ -307,6 +319,7 @@ function CollectionResultLifetime({
       readCurrent={readCurrentDynamicPage}
       queryKey={queryKey}
       returnTo={returnTo}
+      layout={layout}
       viewerId={mode === 'session' ? viewerId : null}
     />
   ) : (
