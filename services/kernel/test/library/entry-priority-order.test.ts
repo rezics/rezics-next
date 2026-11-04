@@ -29,7 +29,11 @@ test('priority pages order the full filtered shelf and read current annotation w
   ] as const)
     await f.commands.putEntry(f.owner.actor, subjectId, { state }, entryKey());
 
-  async function annotate(subjectId: string, revision: number, priority: { op: 'set'; value: number } | { op: 'clear' }) {
+  async function annotate(
+    subjectId: string,
+    revision: number,
+    priority: { op: 'set'; value: number } | { op: 'clear' },
+  ) {
     return f.send(
       'owner',
       'PUT',
