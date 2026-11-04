@@ -13,8 +13,12 @@ const input = () => contributionActionsInput(id, 'discussion', 'original-cursor'
 test('only a bounded native selection supplies the exact immutable input', () => {
   expect(contributionActionsInput(id, 'discussion', null, undefined)).toBeUndefined();
   expect(contributionActionsInput(id, 'discussion', null, { ...selection, references: [] })).toBeUndefined();
-  expect(contributionActionsInput(id, 'discussion', null, { ...selection, references: Array(21).fill(reference) })).toBeUndefined();
-  expect(contributionActionsInput(id, 'discussion', null, { ...selection, references: [reference, reference] })).toBeUndefined();
+  expect(
+    contributionActionsInput(id, 'discussion', null, { ...selection, references: Array(21).fill(reference) }),
+  ).toBeUndefined();
+  expect(
+    contributionActionsInput(id, 'discussion', null, { ...selection, references: [reference, reference] }),
+  ).toBeUndefined();
   expect(contributionActionsInput(id, 'posts', null, selection)).toBeUndefined();
   const admitted = input();
   expect(admitted.references).toEqual(selection.references);
@@ -32,13 +36,17 @@ test('production remains unavailable without the installed publisher method', as
 test('refresh coalesces; failed retries preserve the selected page and original frontier', async () => {
   const calls: unknown[] = [];
   const selected = input();
-  const receiver = new ContributionActionsReceiver(selected, {
-    async read(value) {
-      calls.push(value);
-      if (calls.length === 1) throw new Error('temporarily unavailable');
-      return { own: 'withheld' };
+  const receiver = new ContributionActionsReceiver(
+    selected,
+    {
+      async read(value) {
+        calls.push(value);
+        if (calls.length === 1) throw new Error('temporarily unavailable');
+        return { own: 'withheld' };
+      },
     },
-  }, () => true);
+    () => true,
+  );
   const first = receiver.refresh();
   expect(receiver.refresh()).toBe(first);
   await first;
@@ -52,9 +60,18 @@ test('refresh coalesces; failed retries preserve the selected page and original 
 test('a retired credential/page episode aborts and cannot revive controls with a late result', async () => {
   let finish!: (value: string) => void;
   let signal!: AbortSignal;
-  const receiver = new ContributionActionsReceiver(input(), {
-    read(_value, abort) { signal = abort; return new Promise<string>((resolve) => { finish = resolve; }); },
-  }, () => true);
+  const receiver = new ContributionActionsReceiver(
+    input(),
+    {
+      read(_value, abort) {
+        signal = abort;
+        return new Promise<string>((resolve) => {
+          finish = resolve;
+        });
+      },
+    },
+    () => true,
+  );
   const pending = receiver.refresh();
   await Promise.resolve();
   receiver.retire();
