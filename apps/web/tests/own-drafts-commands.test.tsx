@@ -54,8 +54,17 @@ test('erase review retries the same uncertain intent and readback does not claim
     await fixture.click('Erase draft');
     expect(fixture.host.querySelector('[role="alertdialog"]')?.textContent).toContain('Review draft erasure');
     expect(erasures).toHaveLength(0);
+    await fixture.click('Cancel');
+    expect(fixture.window.document.activeElement?.textContent).toBe('Erase draft');
+    expect(erasures).toHaveLength(0);
+    await fixture.click('Erase draft');
     await fixture.click('Confirm erase');
+    await fixture.click('Return to drafts');
+    expect(fixture.window.document.activeElement?.textContent).toBe('Inspect draft privately');
     expect(fixture.host.textContent).toContain('Retry the same erase');
+    await fixture.click('Inspect draft privately');
+    expect(fixture.host.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(erasures).toHaveLength(1);
     const exactIntent = structuredClone(erasures[0]);
     await fixture.click('Retry the same erase');
     expect(erasures).toHaveLength(2);

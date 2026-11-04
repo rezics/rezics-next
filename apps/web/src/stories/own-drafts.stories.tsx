@@ -311,3 +311,18 @@ export const LongTraditionalChineseDesktopDark: Story = {
   args: { locale: 'zh-Hant', scenario: 'long' },
   decorators: desktopDark,
 };
+
+const returnFromUnknownErase: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
+  const view = within(canvasElement);
+  const locale = args.locale;
+  await userEvent.click((await view.findAllByRole('button', { name: m.own_drafts_inspect({}, { locale }) }))[0]!);
+  await userEvent.click(await view.findByRole('button', { name: m.own_drafts_erase({}, { locale }) }));
+  await userEvent.click(await view.findByRole('button', { name: m.own_drafts_erase_confirm({}, { locale }) }));
+  await view.findByRole('button', { name: m.own_drafts_retry_erase({}, { locale }) });
+  await userEvent.click(await view.findByRole('button', { name: m.own_drafts_return({}, { locale }) }));
+  await expect(view.getByRole('button', { name: m.own_drafts_retry_erase({}, { locale }) })).toBeVisible();
+};
+export const EraseRecoveryPhoneLight: Story = { play: returnFromUnknownErase, decorators: phoneLight };
+export const EraseRecoveryPhoneDark: Story = { play: returnFromUnknownErase, decorators: phoneDark };
+export const EraseRecoveryDesktopLight: Story = { play: returnFromUnknownErase, decorators: desktop };
+export const EraseRecoveryDesktopDark: Story = { play: returnFromUnknownErase, decorators: desktopDark };

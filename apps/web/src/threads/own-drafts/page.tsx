@@ -44,6 +44,7 @@ type EraseIntent = Readonly<{
   opening: boolean;
   revisionId: string;
   idempotencyKey: string;
+  title: string;
 }>;
 type EraseState =
   | { state: 'review' | 'sending' | 'uncertain'; intent: EraseIntent }
@@ -77,10 +78,12 @@ function documentKindLabel(entry: OwnDraftEntry, locale: OwnDraftLocale): string
 
 function OwnDraftCommandFeedback({
   feedback,
+  id,
   locale,
   onReadback,
 }: {
   feedback: CommandFeedback;
+  id: string;
   locale: OwnDraftLocale;
   onReadback: () => void;
 }) {
@@ -91,7 +94,7 @@ function OwnDraftCommandFeedback({
         ? m.own_drafts_ack_publish({}, { locale })
         : m.own_drafts_ack_erase({}, { locale });
   return (
-    <section className="space-y-2 rounded-lg border border-border p-4" aria-live="polite">
+    <section id={id} tabIndex={-1} className="space-y-2 rounded-lg border border-border p-4" aria-live="polite">
       {feedback.state === 'acknowledged' ? <p role="status">{acknowledgement}</p> : null}
       {feedback.state === 'reading' ? <p role="status">{m.own_drafts_readback_reading({}, { locale })}</p> : null}
       {feedback.state === 'acknowledged' ? (
@@ -201,12 +204,16 @@ function BoundOwnDraftsPage({
   const selection = active && page && selectionState?.identityKey === identityKey ? selectionState : null;
   const admission = useRef({ active, reader, localWritingReader, commands, requestKey });
   admission.current = { active, reader, localWritingReader, commands, requestKey };
-  const current = () =>
+  const retired = useRef(false);
+  // Command authority follows the private reader boundary, never its inventory cursor.
+  const commandCurrent = () =>
+    !retired.current &&
+    identityRef.current === identityKey &&
     admission.current.active &&
     admission.current.reader === reader &&
     admission.current.localWritingReader === localWritingReader &&
-    admission.current.commands === commands &&
-    admission.current.requestKey === requestKey;
+    admission.current.commands === commands;
+  const current = () => commandCurrent() && admission.current.requestKey === requestKey;
   const nativeEpoch = useRef<{ identityKey: string; value: number | null }>({ identityKey, value: null });
   if (nativeEpoch.current.identityKey !== identityKey) nativeEpoch.current = { identityKey, value: null };
 
@@ -254,7 +261,7 @@ function BoundOwnDraftsPage({
     setSelectionState(null);
     setLocalWritingState(null);
     setEditingSource(null);
-    setEraseState(null);
+    clearResolvedErase();
     void reader
       .list(
         { accountId: identity.accountId, ...(currentCursor === null ? {} : { cursor: currentCursor }) },
@@ -263,6 +270,7 @@ function BoundOwnDraftsPage({
       .then((result) => {
         if (controller.signal.aborted || !current() || identityRef.current !== identityKey) return;
         if (typeof result === 'string') {
+          if (result === 'denied') retireCommands();
           setPageState({ requestKey, state: result });
           return;
         }
@@ -271,18 +279,12 @@ function BoundOwnDraftsPage({
           (identity.authnEpoch !== 0 && result.viewer.authnEpoch !== identity.authnEpoch) ||
           (nativeEpoch.current.value !== null && result.viewer.authnEpoch !== nativeEpoch.current.value)
         ) {
-          selectionController.current?.abort();
-          localWritingController.current?.abort();
-          commandController.current?.abort();
-          eraseController.current?.abort();
-          erasePending.current = false;
+          retireCommands();
           selectionGeneration.current++;
           returnFocus.current = null;
           setSelectionState(null);
           setLocalWritingState(null);
           setEditingSource(null);
-          setEraseState(null);
-          setCommandFeedback(null);
           setPageState({ requestKey, state: 'denied' });
           return;
         }
@@ -347,9 +349,33 @@ function BoundOwnDraftsPage({
       document.getElementById(recoveryFocus.current)?.focus();
       recoveryFocus.current = null;
     }
-  }, [editingSource, eraseState, controlId]);
+  }, [editingSource, eraseState, commandFeedback, controlId]);
+
+  const clearResolvedErase = () => {
+    setEraseState((previous) => (previous?.state === 'sending' || previous?.state === 'uncertain' ? previous : null));
+  };
+
+  const retireCommands = () => {
+    retired.current = true;
+    selectionController.current?.abort();
+    localWritingController.current?.abort();
+    commandController.current?.abort();
+    eraseController.current?.abort();
+    erasePending.current = false;
+    setEraseState(null);
+    setCommandFeedback(null);
+  };
+
+  const leaveCommandPresentation = () => {
+    clearResolvedErase();
+    if (commandFeedback?.action !== 'erase') {
+      commandController.current?.abort();
+      setCommandFeedback(null);
+    }
+  };
 
   const cancelErase = () => {
+    if (eraseState?.state !== 'review') return;
     recoveryFocus.current = `${controlId}-erase`;
     setEraseState(null);
   };
@@ -364,9 +390,6 @@ function BoundOwnDraftsPage({
     listController.current?.abort();
     selectionController.current?.abort();
     localWritingController.current?.abort();
-    commandController.current?.abort();
-    eraseController.current?.abort();
-    erasePending.current = false;
     const controller = new AbortController();
     selectionController.current = controller;
     const generation = ++selectionGeneration.current;
@@ -374,8 +397,7 @@ function BoundOwnDraftsPage({
     setSelectionState({ identityKey, entry, state: 'loading' });
     setLocalWritingState(null);
     setEditingSource(null);
-    setEraseState(null);
-    setCommandFeedback(null);
+    leaveCommandPresentation();
     void readSelectedOwnDraft(reader, identity, entry, controller.signal)
       .then((result) => {
         if (
@@ -386,6 +408,7 @@ function BoundOwnDraftsPage({
           return;
         if (typeof result === 'string') {
           if (result === 'denied') {
+            retireCommands();
             setSelectionState(null);
             setPageState({ requestKey, state: 'denied' });
             return;
@@ -415,15 +438,11 @@ function BoundOwnDraftsPage({
   const closeSelection = () => {
     selectionController.current?.abort();
     localWritingController.current?.abort();
-    commandController.current?.abort();
-    eraseController.current?.abort();
-    erasePending.current = false;
     selectionGeneration.current++;
     setSelectionState(null);
     setLocalWritingState(null);
     setEditingSource(null);
-    setEraseState(null);
-    setCommandFeedback(null);
+    leaveCommandPresentation();
   };
 
   const retrySelection = () => {
@@ -435,30 +454,22 @@ function BoundOwnDraftsPage({
     if (page.page.next === null) return;
     selectionController.current?.abort();
     localWritingController.current?.abort();
-    commandController.current?.abort();
-    eraseController.current?.abort();
-    erasePending.current = false;
     selectionGeneration.current++;
     setSelectionState(null);
     setLocalWritingState(null);
     setEditingSource(null);
-    setEraseState(null);
-    setCommandFeedback(null);
+    leaveCommandPresentation();
     setCursor({ key: identityKey, value: page.page.next });
   };
 
   const restart = () => {
     selectionController.current?.abort();
     localWritingController.current?.abort();
-    commandController.current?.abort();
-    eraseController.current?.abort();
-    erasePending.current = false;
     selectionGeneration.current++;
     setSelectionState(null);
     setLocalWritingState(null);
     setEditingSource(null);
-    setEraseState(null);
-    setCommandFeedback(null);
+    leaveCommandPresentation();
     setCursor({ key: identityKey, value: null });
     setRetry((value) => value + 1);
   };
@@ -473,7 +484,14 @@ function BoundOwnDraftsPage({
   };
 
   const startEditor = (source: 'server' | 'browser') => {
-    if (!readySelection || !commands || eraseState?.state === 'uncertain' || eraseState?.state === 'sending') return;
+    if (
+      !readySelection ||
+      !commands ||
+      !commandCurrent() ||
+      eraseState?.state === 'uncertain' ||
+      eraseState?.state === 'sending'
+    )
+      return;
     if (!admittedOwnDraftAction(readySelection.entry, identity.accountId, 'edit')) return;
     if (source === 'browser' && (localWritingState?.state !== 'ready' || localWritingState.writing.state !== 'unsent'))
       return;
@@ -495,7 +513,7 @@ function BoundOwnDraftsPage({
   };
 
   const checkCurrent = () => {
-    if (!commands || !commandFeedback || !current()) return;
+    if (!commands || !commandFeedback || !commandCurrent()) return;
     commandController.current?.abort();
     const controller = new AbortController();
     commandController.current = controller;
@@ -504,13 +522,13 @@ function BoundOwnDraftsPage({
     void commands
       .readback(postId, controller.signal)
       .then((readback) => {
-        if (controller.signal.aborted || !current() || identityRef.current !== identityKey) return;
+        if (controller.signal.aborted || !commandCurrent() || identityRef.current !== identityKey) return;
         setCommandFeedback((previous) =>
           previous?.postId === postId ? { ...previous, state: 'readback', readback } : previous,
         );
       })
       .catch(() => {
-        if (!controller.signal.aborted && current() && identityRef.current === identityKey)
+        if (!controller.signal.aborted && commandCurrent() && identityRef.current === identityKey)
           setCommandFeedback((previous) =>
             previous?.postId === postId ? { ...previous, state: 'readback', readback: 'unavailable' } : previous,
           );
@@ -521,11 +539,14 @@ function BoundOwnDraftsPage({
     if (
       !readySelection ||
       !commands ||
+      !commandCurrent() ||
       !admittedOwnDraftAction(readySelection.entry, identity.accountId, 'erase') ||
       eraseState?.state === 'uncertain' ||
       eraseState?.state === 'sending'
     )
       return;
+    commandController.current?.abort();
+    setCommandFeedback(null);
     setEraseState({
       state: 'review',
       intent: {
@@ -534,6 +555,7 @@ function BoundOwnDraftsPage({
         opening: readySelection.entry.documentKind === 'opening',
         revisionId: readySelection.selection.revision,
         idempotencyKey: crypto.randomUUID(),
+        title: readySelection.entry.title ?? m.own_drafts_no_title({}, { locale }),
       },
     });
   };
@@ -544,16 +566,15 @@ function BoundOwnDraftsPage({
       !eraseState ||
       (eraseState.state !== 'review' && eraseState.state !== 'uncertain') ||
       erasePending.current ||
-      !current()
+      !commandCurrent()
     )
       return;
     const intent = eraseState.intent;
-    const entry = readySelection?.entry;
-    if (!entry || entry.id !== intent.postId || entry.revisionId !== intent.revisionId) return;
     erasePending.current = true;
     eraseController.current?.abort();
     const controller = new AbortController();
     eraseController.current = controller;
+    recoveryFocus.current = `${controlId}-command-result`;
     setEraseState({ state: 'sending', intent });
     void commands
       .erase(
@@ -567,13 +588,19 @@ function BoundOwnDraftsPage({
         controller.signal,
       )
       .then((result) => {
-        if (controller.signal.aborted || !current() || identityRef.current !== identityKey) return;
+        if (controller.signal.aborted || !commandCurrent() || identityRef.current !== identityKey) return;
+        if ([`${controlId}-erase-confirm`, `${controlId}-erase-retry`].includes(document.activeElement?.id ?? ''))
+          recoveryFocus.current = `${controlId}-command-result`;
         if (result.ok) {
+          listController.current?.abort();
+          selectionController.current?.abort();
+          localWritingController.current?.abort();
+          selectionGeneration.current++;
           setSelectionState(null);
           setLocalWritingState(null);
           setEditingSource(null);
           setEraseState(null);
-          setPageState({ requestKey, state: 'unavailable' });
+          setPageState({ requestKey: admission.current.requestKey, state: 'unavailable' });
           setCommandFeedback({ action: 'erase', postId: intent.postId, state: 'acknowledged' });
         } else if (result.reason === 'unavailable') {
           setEraseState({ state: 'uncertain', intent });
@@ -582,14 +609,66 @@ function BoundOwnDraftsPage({
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted && current() && identityRef.current === identityKey)
+        if (!controller.signal.aborted && commandCurrent() && identityRef.current === identityKey)
           setEraseState({ state: 'uncertain', intent });
       })
       .finally(() => {
-        if (!controller.signal.aborted && current() && identityRef.current === identityKey)
+        if (!controller.signal.aborted && commandCurrent() && identityRef.current === identityKey)
           erasePending.current = false;
       });
   };
+
+  const eraseRecovery =
+    eraseState && eraseState.state !== 'review' ? (
+      <section
+        id={`${controlId}-command-result`}
+        tabIndex={-1}
+        aria-labelledby={`${controlId}-erase-recovery`}
+        className="space-y-2 rounded-lg border border-border p-4"
+      >
+        <h2 id={`${controlId}-erase-recovery`} className="font-semibold">
+          {m.own_drafts_erase({}, { locale })}
+          {'intent' in eraseState ? `: ${eraseState.intent.title}` : null}
+        </h2>
+        {'intent' in eraseState ? (
+          <p className="text-sm [overflow-wrap:anywhere]">
+            {m.own_drafts_revision({}, { locale })}: {eraseState.intent.revisionId}
+          </p>
+        ) : null}
+        {eraseState.state === 'sending' ? (
+          <p role="status">{m.own_drafts_erase_sending({}, { locale })}</p>
+        ) : eraseState.state === 'uncertain' ? (
+          <div role="alert" className="space-y-2">
+            <p>{m.own_drafts_command_unknown({}, { locale })}</p>
+            <Button id={`${controlId}-erase-retry`} type="button" className={control} onClick={submitErase}>
+              {m.own_drafts_retry_erase({}, { locale })}
+            </Button>
+          </div>
+        ) : eraseState.state === 'refused' ? (
+          <div role="alert" className="space-y-2">
+            <p>
+              {eraseState.reason === 'conflict'
+                ? m.own_drafts_command_conflict({}, { locale })
+                : m.thread_delete_failure({}, { locale })}
+            </p>
+            {eraseState.reason === 'conflict' ? (
+              <Button type="button" variant="outline" className={control} onClick={restart}>
+                {m.own_drafts_restart({}, { locale })}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    ) : null;
+  const feedback =
+    commandFeedback && commands ? (
+      <OwnDraftCommandFeedback
+        id={`${controlId}-command-result`}
+        feedback={commandFeedback}
+        locale={locale}
+        onReadback={checkCurrent}
+      />
+    ) : null;
 
   if (!active) {
     return (
@@ -615,6 +694,8 @@ function BoundOwnDraftsPage({
         <h1 ref={selectionHeading} tabIndex={-1} className="text-2xl font-semibold">
           {title}
         </h1>
+        {eraseRecovery}
+        {feedback}
         {selection.state === 'ready' ? (
           <>
             <p className="text-sm text-muted-foreground">
@@ -806,39 +887,22 @@ function BoundOwnDraftsPage({
                     >
                       {m.thread_delete_cancel({}, { locale })}
                     </Button>
-                    <Button type="button" className={control} onClick={submitErase}>
+                    <Button id={`${controlId}-erase-confirm`} type="button" className={control} onClick={submitErase}>
                       {m.own_drafts_erase_confirm({}, { locale })}
                     </Button>
                   </div>
                 </section>
-              ) : eraseState?.state === 'sending' ? (
-                <p role="status">{m.own_drafts_erase_sending({}, { locale })}</p>
-              ) : eraseState?.state === 'uncertain' ? (
-                <div role="alert" className="space-y-2">
-                  <p>{m.own_drafts_command_unknown({}, { locale })}</p>
-                  <Button type="button" className={control} onClick={submitErase}>
-                    {m.own_drafts_retry_erase({}, { locale })}
-                  </Button>
-                </div>
-              ) : eraseState?.state === 'refused' ? (
-                <div role="alert" className="space-y-2">
-                  <p>
-                    {eraseState.reason === 'conflict'
-                      ? m.own_drafts_command_conflict({}, { locale })
-                      : m.thread_delete_failure({}, { locale })}
-                  </p>
-                  {eraseState.reason === 'conflict' ? (
-                    <Button type="button" variant="outline" className={control} onClick={restart}>
-                      {m.own_drafts_restart({}, { locale })}
-                    </Button>
-                  ) : null}
-                </div>
               ) : (
                 <Button
                   type="button"
                   variant="outline"
                   className={control}
-                  disabled={!!editingSource}
+                  disabled={
+                    !!editingSource ||
+                    eraseState?.state === 'sending' ||
+                    eraseState?.state === 'uncertain' ||
+                    !commandCurrent()
+                  }
                   id={`${controlId}-erase`}
                   onClick={beginEraseReview}
                 >
@@ -857,9 +921,8 @@ function BoundOwnDraftsPage({
       <h1 ref={inventoryHeading} tabIndex={-1} className="text-2xl font-semibold">
         {m.own_drafts_title({}, { locale })}
       </h1>
-      {commandFeedback && commands ? (
-        <OwnDraftCommandFeedback feedback={commandFeedback} locale={locale} onReadback={checkCurrent} />
-      ) : null}
+      {eraseRecovery}
+      {feedback}
       {!page || page.state === 'loading' ? <p role="status">{m.own_drafts_loading({}, { locale })}</p> : null}
       {page?.state === 'concealed' ? <p role="status">{m.own_drafts_selection_unavailable({}, { locale })}</p> : null}
       {page?.state === 'stale' ? (

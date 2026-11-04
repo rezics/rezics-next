@@ -43,3 +43,7 @@ and deferred until executed; generated declarations and Web fixtures do not esta
 
 Decision: a concealed or changed selected head discards the retained inventory metadata and action advice; retrying
 or restarting the inventory is explicit.
+
+Decision: Retain one unresolved erase episode under the active private reader, independently of inventory and
+inspection; show its original title/revision and exact retry on either surface, block replacement writes until it
+settles, and retain erase acknowledgement for deliberate readback across navigation. Review alone remains cancellable.
