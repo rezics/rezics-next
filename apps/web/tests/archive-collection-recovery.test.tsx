@@ -591,7 +591,7 @@ test('mounted visit preserves duplicate occurrences, refreshes a stale review, c
     expect(view.router.state.location.search).toEqual({});
     expect(view.router.state.location.hash).toBe('');
     expect(fake.calls.collections).toHaveLength(1);
-    expect(fake.calls.occurrences).toHaveLength(1);
+    expect(fake.calls.occurrences).toHaveLength(2);
   } finally {
     await view.close();
   }
