@@ -735,7 +735,7 @@ export function CopyForm({
               !headers(copy ? 'copy.update' : 'copy.create')
             }
           >
-            {intent.current && intent.current.operation !== 'delete'
+            {!pending && intent.current && intent.current.operation !== 'delete'
               ? m.library_copy_editor_retry_save()
               : copy
                 ? m.library_copy_save()
@@ -758,7 +758,9 @@ export function CopyForm({
               current() && (!intent.current || intent.current.operation === 'delete') && setConfirming(true)
             }
           >
-            {intent.current?.operation === 'delete' ? m.library_copy_editor_retry_delete() : m.library_copy_delete()}
+            {!pending && intent.current?.operation === 'delete'
+              ? m.library_copy_editor_retry_delete()
+              : m.library_copy_delete()}
           </button>
         ) : null}
         <button type="button" className={quiet} onClick={requestClose}>

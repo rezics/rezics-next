@@ -14,6 +14,8 @@ const globals = {
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
   HTMLInputElement: window.HTMLInputElement,
+  HTMLTextAreaElement: window.HTMLTextAreaElement,
+  scrollTo: window.scrollTo.bind(window),
   Element: window.Element,
   Node: window.Node,
   MutationObserver: window.MutationObserver,
@@ -156,7 +158,7 @@ function mount(mode: 'create' | 'edit' | 'picker') {
 
 afterEach(async () => {
   await act(async () => root?.unmount());
-  router?.dispose();
+  router?.history.destroy();
   host.replaceChildren();
 });
 afterAll(async () => {
@@ -168,7 +170,9 @@ afterAll(async () => {
   }
 });
 beforeEach(() => {
-  for (const fn of [create, update, deletion, detail, created, saved, closed]) fn.mockClear();
+  for (const fn of [create, update, deletion, detail])
+    fn.mockReset().mockResolvedValue({ ok: false, reason: 'unavailable' });
+  for (const fn of [created, saved, closed]) fn.mockClear();
 });
 
 const form = () => host.querySelector('form')!;
@@ -368,7 +372,7 @@ test('an uncertain update cannot enter conflict review and retries its original 
   ).toBe(false);
   await click(m.library_copy_more());
   await changeInput(m.library_copy_note(), 'Changed after lost response');
-  await click(m.library_copy_save());
+  await click(m.library_copy_editor_retry_save());
   expect(update.mock.calls[1]![0]).toEqual(update.mock.calls[0]![0]);
   expect(detail).not.toHaveBeenCalled();
 });

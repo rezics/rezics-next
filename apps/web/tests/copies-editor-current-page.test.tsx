@@ -15,6 +15,8 @@ const globals = {
   navigator: window.navigator,
   HTMLElement: window.HTMLElement,
   HTMLInputElement: window.HTMLInputElement,
+  HTMLTextAreaElement: window.HTMLTextAreaElement,
+  scrollTo: window.scrollTo.bind(window),
   Element: window.Element,
   Node: window.Node,
   DocumentFragment: window.DocumentFragment,
@@ -73,6 +75,7 @@ type Shell = {
   children: ReactNode;
 };
 const shells: (Shell & { mobile: boolean })[] = [];
+const focusTargets: (() => HTMLElement | false)[] = [];
 const Dismiss = createContext<(open: boolean) => void>(() => {});
 function ShellRoot(props: Shell & { mobile: boolean }) {
   shells.push(props);
@@ -100,6 +103,7 @@ function Close({ children }: { children: ReactNode }) {
   );
 }
 function Content({ children, finalFocus }: { children: ReactNode; finalFocus?: () => HTMLElement | false }) {
+  if (finalFocus) focusTargets.push(finalFocus);
   useLayoutEffect(
     () => () => {
       const target = finalFocus?.();
@@ -164,14 +168,18 @@ const { CopiesPage, CopyForm } = await import('../src/library/copies-page');
 const host = window.document.createElement('main') as unknown as HTMLElement;
 window.document.body.append(host);
 let root: ReturnType<typeof createRoot>;
+let contextRouter: ReturnType<typeof router.createRouter>;
 beforeEach(() => {
   for (const requests of Object.values(calls)) requests.length = 0;
   shells.length = 0;
+  focusTargets.length = 0;
   window.happyDOM.setWindowSize({ width: 1440, height: 900 });
+  contextRouter = router.createRouter({ routeTree: router.createRootRoute(), history: router.createMemoryHistory() });
   root = createRoot(host);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
+  contextRouter.history.destroy();
 });
 afterAll(async () => {
   await window.happyDOM.close();
@@ -211,7 +219,14 @@ const pageOf = (...copies: CopyItem[]): CopiesPageData => ({
 });
 const receipt = (): CopyRemoved => ({ ok: true, undo: { deletionId: crypto.randomUUID(), revision: 4 } });
 const latest = (operation: Operation) => calls[operation].at(-1)!;
-const render = (page: CopiesPageData) => act(async () => root.render(<CopiesPage page={page} />));
+const render = (page: CopiesPageData) =>
+  act(async () =>
+    root.render(
+      <router.RouterContextProvider router={contextRouter}>
+        <CopiesPage page={page} />
+      </router.RouterContextProvider>,
+    ),
+  );
 const form = () => host.querySelector<HTMLFormElement>('[role="dialog"] form')!;
 const button = (name: string, region: ParentNode = host) => {
   const control = [...region.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === name);
@@ -564,7 +579,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
           await click(m.library_copy_delete(), form());
           await click(m.library_copy_delete_confirm(), form());
         } else await submit();
-        await click(m.library_copy_cancel(), form());
+        await act(async () => shells.at(-1)!.onOpenChange(false));
         expect(window.document.body.textContent).toContain(m.library_copy_draft_navigation_pending());
         expect(onClose).not.toHaveBeenCalled();
         await act(async () => root.render(null));
@@ -655,6 +670,7 @@ test('shell dismissal uses the draft decision; completed close returns only to a
   await click(m.library_copy_more(), form());
   await text(m.library_copy_location(), 'Draft');
   const oldShell = shells.at(-1)!;
+  const oldFocus = focusTargets.at(-1)!;
   await act(async () => oldShell.onOpenChange(false));
   expect(form()).not.toBeNull();
   await click(m.library_copy_draft_navigation_discard(), window.document);
@@ -670,6 +686,7 @@ test('shell dismissal uses the draft decision; completed close returns only to a
   await render(pageOf(copy));
   const replacementLauncher = button(m.library_copy_add());
   replacementLauncher.focus();
-  await act(async () => oldShell.finalFocus?.());
+  expect(launcher.isConnected).toBe(false);
+  expect(oldFocus()).toBe(false);
   expect(window.document.activeElement).toBe(replacementLauncher);
 });
