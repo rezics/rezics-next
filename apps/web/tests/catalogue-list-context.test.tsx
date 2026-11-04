@@ -20,7 +20,7 @@ function render(rows: unknown[], options: { failed?: boolean; cursor?: string; l
     unlabelled: 'Unnamed',
     spoilerShow: 'Show',
     labels: { cover: 'Cover' },
-    context: { id: PAGE_GLOBAL_CONTEXT, population: { kind: 'realm', id: catalogueIds.realm } },
+    context: { id: PAGE_GLOBAL_CONTEXT, population: { kind: 'realm', id: catalogueIds.realm, title: 'Public Realm' } },
     sections: new Map([
       [
         'works',

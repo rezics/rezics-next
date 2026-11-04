@@ -61,7 +61,10 @@ function CatalogueStory({ state = 'compare' }: { state?: 'compare' | 'unavailabl
               body: { subjects: rows, next: state === 'continued' ? null : 'source-page-two' },
             },
           }}
-          context={{ id: catalogueIds.realm, population: { kind: 'realm', id: catalogueIds.realm } }}
+          context={{
+            id: catalogueIds.realm,
+            population: { kind: 'realm', id: catalogueIds.realm, title: 'Public Realm' },
+          }}
           listTarget={{ subject: catalogueIds.book, realm: catalogueIds.realm }}
           fullList={state === 'continued' ? 'works' : undefined}
           {...(continuation ? { continuation, listCursor: continuation.cursor } : {})}
