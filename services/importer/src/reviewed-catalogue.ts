@@ -472,6 +472,12 @@ export async function inspectReviewedBangumiBinding(
           const sourceUri = seed.metadata.url;
           if (typeof sourceUri !== 'string' || !sourceUri.startsWith('https://'))
             return { state: 'withdrawn' };
+          const nativeType = seed.type === 'skos:Concept'
+            ? seed.type
+            : seed.type === 'skos:ConceptScheme'
+              ? seed.type
+              : null;
+          if (!nativeType) return { state: 'withdrawn' };
           const schemeKey = seed.type === 'skos:Concept'
             ? seeds.find((row) => row.type === 'skos:ConceptScheme' && row.schemeURI === seed.schemeURI)?.key
             : undefined;
@@ -479,19 +485,17 @@ export async function inspectReviewedBangumiBinding(
             key: seed.key,
             owner: owner(seed),
             subjectId: subjects[seed.key]!,
-            nativeType: seed.type,
+            nativeType,
             schemeURI: seed.schemeURI,
             sourceUri,
             ...(schemeKey ? { schemeKey } : {}),
             facts: [],
           };
           vocabulary.set(seed.key, created);
-          entry = created;
+          created.facts.push({ candidateId: selected[0]!.id, command });
+        } else {
+          entry.facts.push({ candidateId: selected[0]!.id, command });
         }
-        entry.facts.push({
-          candidateId: selected[0]!.id,
-          command,
-        });
       }
     return {
       state: 'bound',
