@@ -4,7 +4,8 @@ import {
   projectBoardPinAdvice,
   type BoardPinAdviceObservation,
 } from '../../src/content/board-pin-advice.ts';
-import { createKernel } from '../../src/http/kernel.ts';
+import { contentRoutes } from '../../src/content/routes.ts';
+import { createApp } from '../../src/http/app.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 
 const boardId = '0199f001-0000-7000-8000-000000000001';
@@ -22,14 +23,15 @@ const observation = (): BoardPinAdviceObservation => ({
   epochs: new Map([[1, 1]]),
 });
 
-test('createKernel mounts pin advice with its authenticated action, separate from board reads', () => {
-  const kernel = createKernel({
-    pool: { on: () => {} } as never,
-    routeKey: new Uint8Array(32).fill(7),
-    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
-    receiptKeys: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
-  });
-  const actions = actionCatalogue(kernel);
+test('mounted content routes give pin advice a separate authenticated action', () => {
+  const pool = {} as never;
+  const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
+  const app = createApp({ pool, tokens });
+  const routes = contentRoutes(
+    app as never,
+    { pool, routeKey: new Uint8Array(32).fill(7), tokens } as never,
+  );
+  const actions = actionCatalogue(routes);
   expect(actions.get('board:read')?.anonymous).toBe(true);
   expect(actions.get('board:pin_advice')?.anonymous).toBe(false);
 });
