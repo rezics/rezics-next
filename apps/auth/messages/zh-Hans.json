@@ -358,7 +358,6 @@
   "auth_security_password_return_stage": "暂存步骤可能被中断。暂存本身不能确认密码已更改。",
   "auth_security_password_return_approval": "暂存已获确认，但批准步骤可能被中断。获得批准并不等于已应用密码更改。",
   "auth_security_password_return_apply": "暂存和批准均已获确认，但密码应用步骤可能被中断；结果仍未知。",
-  "auth_security_password_return_applied": "Auth 已确认这次密码更改已应用。",
   "auth_security_password_return_applied_after_unknown": "Auth 已确认一次后续密码应用，但这不能确定较早那次结果未知的应用是否完成。",
   "auth_security_password_return_readback": "当前安全信息读取是只读的。它无法显示是否已设置密码，也不能确定先前结果未知的密码应用是否完成。",
   "auth_security_password_return_acknowledge": "我了解之前的结果仍未知。开始新的密码更改。",

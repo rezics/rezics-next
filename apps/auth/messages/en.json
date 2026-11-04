@@ -360,7 +360,6 @@
   "auth_security_password_return_stage": "Staging may have been interrupted. Staging does not confirm that a password changed.",
   "auth_security_password_return_approval": "Staging was acknowledged, but approval may have been interrupted. Approval is not a password application.",
   "auth_security_password_return_apply": "Staging and approval were acknowledged, but password application may have been interrupted. Its outcome is unknown.",
-  "auth_security_password_return_applied": "Auth confirmed that this password change was applied.",
   "auth_security_password_return_applied_after_unknown": "A password application was confirmed, but it does not settle a different earlier unknown result.",
   "auth_security_password_return_readback": "This current Security read is read-only. It cannot show whether a password exists or settle an earlier unknown application.",
   "auth_security_password_return_acknowledge": "I understand the earlier result is still unknown. Start a new password change.",

@@ -358,7 +358,6 @@
   "auth_security_password_return_stage": "Es posible que se interrumpiera la preparación. La preparación no confirma que se cambiara una contraseña.",
   "auth_security_password_return_approval": "Se confirmó la preparación, pero es posible que se interrumpiera la aprobación. Aprobar no aplica una contraseña.",
   "auth_security_password_return_apply": "Se confirmaron la preparación y la aprobación, pero es posible que se interrumpiera la aplicación de la contraseña. El resultado es desconocido.",
-  "auth_security_password_return_applied": "Auth confirmó que se aplicó este cambio de contraseña.",
   "auth_security_password_return_applied_after_unknown": "Se confirmó una aplicación de contraseña, pero eso no resuelve otro resultado anterior que sigue siendo desconocido.",
   "auth_security_password_return_readback": "Esta lectura actual de Seguridad es de solo lectura. No muestra si existe una contraseña ni resuelve una aplicación anterior con resultado desconocido.",
   "auth_security_password_return_acknowledge": "Entiendo que el resultado anterior sigue siendo desconocido. Iniciar un nuevo cambio de contraseña.",

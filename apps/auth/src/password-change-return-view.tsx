@@ -19,7 +19,7 @@ function interrupted(phase: PasswordChangeReturnHistory['unknownPhase']) {
   if (phase === 'stage') return m.auth_security_password_return_stage();
   if (phase === 'approve') return m.auth_security_password_return_approval();
   if (phase === 'apply') return m.auth_security_password_return_apply();
-  return m.auth_security_password_return_applied();
+  return m.auth_security_password_changed();
 }
 
 export function PasswordChangeReturnView({

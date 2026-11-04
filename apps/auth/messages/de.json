@@ -358,7 +358,6 @@
   "auth_security_password_return_stage": "Die Vorbereitung wurde möglicherweise unterbrochen. Daraus geht nicht hervor, ob ein Passwort geändert wurde.",
   "auth_security_password_return_approval": "Die Vorbereitung wurde bestätigt, aber die Freigabe wurde möglicherweise unterbrochen. Eine Freigabe wendet kein Passwort an.",
   "auth_security_password_return_apply": "Vorbereitung und Freigabe wurden bestätigt, aber die Passwortanwendung wurde möglicherweise unterbrochen. Das Ergebnis ist unbekannt.",
-  "auth_security_password_return_applied": "Auth hat bestätigt, dass diese Passwortänderung angewendet wurde.",
   "auth_security_password_return_applied_after_unknown": "Eine Passwortanwendung wurde bestätigt, klärt aber nicht das Ergebnis eines anderen früheren ungewissen Vorgangs.",
   "auth_security_password_return_readback": "Die aktuelle Sicherheitsabfrage ist schreibgeschützt. Sie zeigt nicht, ob ein Passwort vorhanden ist, und klärt kein früheres ungewisses Ergebnis.",
   "auth_security_password_return_acknowledge": "Ich verstehe, dass das frühere Ergebnis unbekannt bleibt. Eine neue Passwortänderung starten.",

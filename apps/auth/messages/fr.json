@@ -358,7 +358,6 @@
   "auth_security_password_return_stage": "La préparation a peut-être été interrompue. Elle ne confirme pas qu’un mot de passe a été modifié.",
   "auth_security_password_return_approval": "La préparation a été confirmée, mais l’autorisation a peut-être été interrompue. Une autorisation n’applique pas un mot de passe.",
   "auth_security_password_return_apply": "La préparation et l’autorisation ont été confirmées, mais l’application du mot de passe a peut-être été interrompue. Le résultat est inconnu.",
-  "auth_security_password_return_applied": "Auth a confirmé l’application de ce changement de mot de passe.",
   "auth_security_password_return_applied_after_unknown": "Une application de mot de passe a été confirmée, mais elle ne détermine pas le résultat inconnu d’une opération antérieure distincte.",
   "auth_security_password_return_readback": "Cette lecture actuelle de la sécurité est en lecture seule. Elle ne révèle pas si un mot de passe existe et ne détermine pas le résultat d’une application antérieure inconnue.",
   "auth_security_password_return_acknowledge": "Je comprends que le résultat précédent reste inconnu. Commencer un nouveau changement de mot de passe.",

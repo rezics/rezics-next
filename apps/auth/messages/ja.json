@@ -358,7 +358,6 @@
   "auth_security_password_return_stage": "準備の途中で中断した可能性があります。準備の確認だけでは、パスワードが変更されたとは分かりません。",
   "auth_security_password_return_approval": "準備が確認されましたが、承認の途中で中断した可能性があります。承認はパスワードの適用ではありません。",
   "auth_security_password_return_apply": "準備と承認は確認されましたが、パスワードの適用中に中断した可能性があり、結果は不明です。",
-  "auth_security_password_return_applied": "Auth はこのパスワード変更が適用されたことを確認しました。",
   "auth_security_password_return_applied_after_unknown": "後続のパスワード適用は確認されましたが、それによって別の以前の不明な結果が確定するわけではありません。",
   "auth_security_password_return_readback": "現在のセキュリティ情報の読み取りは読み取り専用です。パスワードが存在するかどうかは表示されず、以前の不明な適用結果も確定できません。",
   "auth_security_password_return_acknowledge": "以前の結果が不明なままであることを理解しました。新しいパスワード変更を開始します。",

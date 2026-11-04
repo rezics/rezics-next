@@ -358,7 +358,6 @@
   "auth_security_password_return_stage": "暫存步驟可能被中斷。暫存本身不能確認密碼已變更。",
   "auth_security_password_return_approval": "暫存已獲確認，但核准步驟可能被中斷。取得核准不代表密碼已套用。",
   "auth_security_password_return_apply": "暫存與核准均已獲確認，但密碼套用步驟可能被中斷；結果仍未知。",
-  "auth_security_password_return_applied": "Auth 已確認這次密碼變更已套用。",
   "auth_security_password_return_applied_after_unknown": "Auth 已確認一次後續密碼套用，但這無法確定較早那次結果未知的套用是否完成。",
   "auth_security_password_return_readback": "目前的安全資訊讀取是唯讀的。它無法顯示是否已設定密碼，也無法確定先前結果未知的密碼套用是否完成。",
   "auth_security_password_return_acknowledge": "我了解先前的結果仍未知。開始新的密碼變更。",
