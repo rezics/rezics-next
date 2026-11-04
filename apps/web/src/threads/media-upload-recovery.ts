@@ -109,9 +109,18 @@ export class ReplyImageUploadRecovery {
         running: false,
         attempted: false,
         // Custom legacy transports retain their conservative no-ID recovery behavior.
-        ...(this.transport === native ? { reservation: {
-          original: source.createMediaReservationIntent(context.target, file, 'post-image', context.session.subject),
-        } } : {}),
+        ...(this.transport === native
+          ? {
+              reservation: {
+                original: source.createMediaReservationIntent(
+                  context.target,
+                  file,
+                  'post-image',
+                  context.session.subject,
+                ),
+              },
+            }
+          : {}),
       };
       this.pending.set(file, entry);
     }
@@ -134,11 +143,17 @@ export class ReplyImageUploadRecovery {
         // Without a returned reservation ID, another reserve could duplicate an uncertain upload.
         if (entry.attempted && !entry.reservation) throw new source.UploadRefusal('unavailable');
         entry.attempted = true;
-        uploaded = await this.transport.uploadReplyImage(entry.context.target!, file, entry.controller.signal,
-          entry.reservation ? {
-            reservation: entry.reservation,
-            ...(this.episode ? { episode: this.episode.identity } : {}),
-          } : undefined);
+        uploaded = await this.transport.uploadReplyImage(
+          entry.context.target!,
+          file,
+          entry.controller.signal,
+          entry.reservation
+            ? {
+                reservation: entry.reservation,
+                ...(this.episode ? { episode: this.episode.identity } : {}),
+              }
+            : undefined,
+        );
       }
       this.invalidate();
       if (entry.blocked) throw new ReplyUploadRecoveryRefusal(entry.blocked);

@@ -385,9 +385,8 @@ export function uploadReplyImage(
 ): Promise<UploadedImage> {
   const command = options?.reservation.container ?? options?.reservation.original;
   const originalTarget = command?.body;
-  const reservedTarget = originalTarget && 'containerId' in originalTarget
-    ? { containerId: originalTarget.containerId! }
-    : target;
+  const reservedTarget =
+    originalTarget && 'containerId' in originalTarget ? { containerId: originalTarget.containerId! } : target;
   return uploadImage(reservedTarget, file, signal, 'post-image', command, undefined, options);
 }
 

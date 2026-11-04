@@ -279,8 +279,10 @@ test('abort remains cancellation before resume, during byte upload and while wai
 });
 
 test('one episode shares a disclosed future container and repeats the exact uncertain reservation', async () => {
-  const context = { target: { newThread: { boardId: 'board', idempotencyKey: 'draft' } },
-    session: { subject: 'writer', csrfToken: 'site-csrf' } };
+  const context = {
+    target: { newThread: { boardId: 'board', idempotencyKey: 'draft' } },
+    session: { subject: 'writer', csrfToken: 'site-csrf' },
+  };
   const recovery = new ReplyImageUploadRecovery(() => context);
   let first = true;
   let lose = true;
@@ -290,10 +292,20 @@ test('one episode shares a disclosed future container and repeats the exact unce
       if (body.newThread) {
         if (!first) return Response.json({}, { status: 409 });
         first = false;
-        return Response.json({ media: { id: mediaId, state: 'reserved', mediaType: file.type,
-          byteCount: file.size, containerId: 'private-thread' } });
+        return Response.json({
+          media: {
+            id: mediaId,
+            state: 'reserved',
+            mediaType: file.type,
+            byteCount: file.size,
+            containerId: 'private-thread',
+          },
+        });
       }
-      if (lose) { lose = false; throw new Error('reservation response lost'); }
+      if (lose) {
+        lose = false;
+        throw new Error('reservation response lost');
+      }
       return media('reserved');
     }
     return init.method === 'PUT' ? new Response(null, { status: 204 }) : media('available');
@@ -306,13 +318,17 @@ test('one episode shares a disclosed future container and repeats the exact unce
   const posts = calls.filter(({ init }) => init.method === 'POST');
   expect(JSON.parse(String(posts[2]!.init.body))).toMatchObject({ containerId: 'private-thread' });
   expect(posts[3]!.init.body).toBe(uncertain.body);
-  expect(new Headers(posts[3]!.init.headers).get('idempotency-key')).toBe(new Headers(uncertain.headers).get('idempotency-key'));
+  expect(new Headers(posts[3]!.init.headers).get('idempotency-key')).toBe(
+    new Headers(uncertain.headers).get('idempotency-key'),
+  );
   expect(posts.filter(({ init }) => JSON.parse(String(init.body)).newThread)).toHaveLength(2);
 });
 
 test('unknown 409 identity stays unknown across exact retries and independent composers', async () => {
-  const context = { target: { newThread: { boardId: 'board', idempotencyKey: 'same-key' } },
-    session: { subject: 'writer', csrfToken: 'site-csrf' } };
+  const context = {
+    target: { newThread: { boardId: 'board', idempotencyKey: 'same-key' } },
+    session: { subject: 'writer', csrfToken: 'site-csrf' },
+  };
   intercept(() => Response.json({}, { status: 409 }));
   const one = new ReplyImageUploadRecovery(() => context);
   const two = new ReplyImageUploadRecovery(() => context);
@@ -321,23 +337,36 @@ test('unknown 409 identity stays unknown across exact retries and independent co
   await refusal(two.upload(file, signal()));
   expect(calls).toHaveLength(3);
   expect(calls[0]!.init.body).toBe(calls[1]!.init.body);
-  expect(new Headers(calls[0]!.init.headers).get('idempotency-key')).toBe(new Headers(calls[1]!.init.headers).get('idempotency-key'));
+  expect(new Headers(calls[0]!.init.headers).get('idempotency-key')).toBe(
+    new Headers(calls[1]!.init.headers).get('idempotency-key'),
+  );
   for (const { init } of calls) expect(JSON.parse(String(init.body))).not.toHaveProperty('containerId');
 });
 
 test('retired and aborted late reservations cannot refill recovery identity, including ABA', async () => {
-  const initial = { target: { newThread: { boardId: 'board', idempotencyKey: 'old-key' } },
-    session: { subject: 'writer', csrfToken: 'site-csrf' } };
+  const initial = {
+    target: { newThread: { boardId: 'board', idempotencyKey: 'old-key' } },
+    session: { subject: 'writer', csrfToken: 'site-csrf' },
+  };
   let context = initial;
   const recovery = new ReplyImageUploadRecovery(() => context);
   let resolve!: (response: Response) => void;
-  intercept(() => new Promise<Response>((yes) => { resolve = yes; }));
+  intercept(
+    () =>
+      new Promise<Response>((yes) => {
+        resolve = yes;
+      }),
+  );
   const pending = recovery.upload(file, signal()).catch((error) => error);
   context = { ...initial, session: { subject: 'another', csrfToken: 'new' } };
   recovery.invalidate();
   context = initial;
-  resolve(Response.json({ containerId: 'old-private', media: { id: mediaId, state: 'reserved',
-    mediaType: file.type, byteCount: file.size } }));
+  resolve(
+    Response.json({
+      containerId: 'old-private',
+      media: { id: mediaId, state: 'reserved', mediaType: file.type, byteCount: file.size },
+    }),
+  );
   await pending;
   expect(calls).toHaveLength(1);
   recovery.clear();

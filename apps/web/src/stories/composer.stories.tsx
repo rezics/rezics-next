@@ -200,10 +200,19 @@ export const NewThreadLong: Story = {
         }
       }
       if (init?.method === 'PUT') return new Response(null, { status: 204 });
-      return Response.json({ media: { id: mediaId, containerId,
-        state: init?.method === 'POST' ? 'reserved' : 'available', mediaType: 'image/png', byteCount } });
+      return Response.json({
+        media: {
+          id: mediaId,
+          containerId,
+          state: init?.method === 'POST' ? 'reserved' : 'available',
+          mediaType: 'image/png',
+          byteCount,
+        },
+      });
     }) as typeof fetch;
-    return () => { globalThis.fetch = original; };
+    return () => {
+      globalThis.fetch = original;
+    };
   },
   play: async (context) => {
     await longThreadPlay(context);
@@ -211,13 +220,20 @@ export const NewThreadLong: Story = {
     const attach = async (name: string) => {
       await userEvent.click(view.getByRole('button', { name: m.editor_image(), exact: true }));
       const dialog = await screen.findByRole('dialog', { name: m.editor_image() });
-      const bytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/F5sAAAAASUVORK5CYII='), (char) => char.charCodeAt(0));
-      await userEvent.upload(within(dialog).getByLabelText(m.editor_upload_file()), new File([bytes], name, { type: 'image/png' }));
-      return within(dialog);
+      const bytes = Uint8Array.from(
+        atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/F5sAAAAASUVORK5CYII='),
+        (char) => char.charCodeAt(0),
+      );
+      await userEvent.upload(
+        within(dialog).getByLabelText(m.editor_upload_file()),
+        new File([bytes], name, { type: 'image/png' }),
+      );
+      await userEvent.click(within(dialog).getByRole('button', { name: m.editor_insert_image() }));
+      return view;
     };
-    const first = await attach('first.png');
-    await waitFor(() => expect(first.getByRole('button', { name: m.editor_insert_image() })).toBeEnabled());
-    await userEvent.click(first.getByRole('button', { name: m.editor_insert_image() }));
+    await attach('first.png');
+    await waitFor(() => expect(view.queryByRole('dialog', { name: m.editor_image() })).toBeNull());
+    await waitFor(() => expect(view.getByRole('button', { name: m.thread_write_send() })).toBeEnabled());
     const second = await attach('second.png');
     await expect(await second.findByRole('button', { name: m.editor_retry_upload() })).toBeEnabled();
     // Leave the real recovery control visible; deliberate retry uses the retained command.

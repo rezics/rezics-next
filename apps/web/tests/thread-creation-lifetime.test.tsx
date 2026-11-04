@@ -627,8 +627,14 @@ test('caller revisions reject retained callbacks after same-value cache replacem
 });
 
 test('mounted future-thread attachments retain recovery only until the admitted composer leaves', async () => {
-  const page = await mountPage({ boardId: id(81), purpose: 'discussion', presetSubject: id(82),
-    presetSubjectTitle: 'Subject', key: id(83), visible: true });
+  const page = await mountPage({
+    boardId: id(81),
+    purpose: 'discussion',
+    presetSubject: id(82),
+    presetSubjectTitle: 'Subject',
+    key: id(83),
+    visible: true,
+  });
   const reservations: { body: Record<string, unknown>; key: string | null }[] = [];
   let first = true;
   let lose = true;
@@ -639,26 +645,35 @@ test('mounted future-thread attachments retain recovery only until the admitted 
       if (body.newThread) {
         if (!first) return Response.json({}, { status: 409 });
         first = false;
-      } else if (lose) { lose = false; throw new Error('lost reservation'); }
-      return Response.json({ media: { id: id(84), containerId: id(85), state: 'reserved',
-        mediaType: 'image/png', byteCount: 3 } });
+      } else if (lose) {
+        lose = false;
+        throw new Error('lost reservation');
+      }
+      return Response.json({
+        media: { id: id(84), containerId: id(85), state: 'reserved', mediaType: 'image/png', byteCount: 3 },
+      });
     }
     if (init?.method === 'PUT') return new Response(null, { status: 204 });
     return Response.json({ media: { id: id(84), state: 'available', mediaType: 'image/png', byteCount: 3 } });
   });
-  const button = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
+  const button = (name: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
   const attach = async (name: string) => {
     await act(async () => page.user.click(button(page.m.editor_image())));
     await page.settle(() => !!document.querySelector('input[type="file"]'));
-    await act(async () => page.user.upload(document.querySelector<HTMLInputElement>('input[type="file"]')!,
-      new File(['png'], name, { type: 'image/png' })));
+    await act(async () =>
+      page.user.upload(
+        document.querySelector<HTMLInputElement>('input[type="file"]')!,
+        new File(['png'], name, { type: 'image/png' }),
+      ),
+    );
+    await act(async () => page.user.click(button(page.m.editor_insert_image())));
   };
   try {
     await page.render();
     await page.fill('Draft title', 'Keep this writing through recovery.');
     await attach('first.png');
-    await page.settle(() => !!button(page.m.editor_insert_image()) && !button(page.m.editor_insert_image()).disabled);
-    await act(async () => page.user.click(button(page.m.editor_insert_image())));
+    await page.settle(() => reservations.length === 1 && page.host.querySelector('[role="img"]') !== null);
     await attach('second.png');
     await page.settle(() => !!button(page.m.editor_retry_upload()));
     expect(page.title()?.value).toBe('Draft title');
