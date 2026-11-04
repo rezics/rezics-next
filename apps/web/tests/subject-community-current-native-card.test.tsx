@@ -166,6 +166,7 @@ test('installed native cards render through the generated reader and original ac
   let actionCalls = 0;
   let refreshCompletion: Promise<void> = Promise.resolve();
   let refreshCurrentAdvice = async () => {};
+  const refreshAction = () => refreshCurrentAdvice();
   const show = () =>
     act(async () =>
       root.render(
@@ -174,7 +175,7 @@ test('installed native cards render through the generated reader and original ac
             value={{ sitekey: '', scriptUrl: 'https://verification.invalid' }}
           >
             <SubjectCommunityContext.Provider value={data}>
-            <SubjectCommunityRefreshContext.Provider value={refreshCurrentAdvice}>
+            <SubjectCommunityRefreshContext.Provider value={refreshAction}>
               <SubjectCommunityRegion
                 id="native"
                 kind="review"
