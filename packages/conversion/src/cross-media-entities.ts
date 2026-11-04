@@ -287,15 +287,6 @@ function text(value: unknown, pointer: string, max: number, empty = false): stri
   return value as string;
 }
 
-const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
-
-function latinLanguageTag(tag: string): string | null {
-  const parts = tag.split('-');
-  if (/^[A-Z][a-z]{3}$/u.test(parts[1] ?? '')) parts[1] = 'Latn';
-  else parts.splice(1, 0, 'Latn');
-  return canonicalLanguageTag(parts.join('-'));
-}
-
 function nameText(value: unknown, pointer: string): string {
   const result = text(value, pointer, vndbCharacterNameLimits.maxCodepoints);
   if ([...result].length > vndbCharacterNameLimits.maxCodepoints)
