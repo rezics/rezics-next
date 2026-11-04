@@ -5,9 +5,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   buildCollectionSaveReviewPlan,
   initialCollectionSaveOutcomes,
+  rebaseRemainingCollectionDraft,
+  remainingCollectionMemberOperations,
   runCollectionSaveSteps,
 } from '../src/library/collection-member-edit-plan';
-import { CollectionSaveReview } from '../src/library/collection-save-review/review';
+import {
+  CollectionSaveReview,
+  type CollectionSaveCurrentBasis,
+} from '../src/library/collection-save-review/review';
 import { CollectionMemberList } from '../src/library/collection-editor';
 import { loadEditableCollectionPage } from '../src/library/collection-load';
 import type { SessionEnv } from '../src/session/client';
@@ -148,6 +153,77 @@ test('partial save reports settled outcomes and retries the original uncertain s
     { targetId: 'note:partial-0', revision: 23 },
     { targetId: 'note:partial-1', revision: 24 },
   ]);
+});
+
+test('conflict recovery separates the current basis and preserves only unresolved draft operations', () => {
+  const initial: CollectionMember[] = [
+    { ...memberRecording.members[0]!, id: 'recover-a', note: 'before' },
+    { ...memberRecording.members[1]!, id: 'recover-b', note: null },
+    { ...memberRecording.members[2]!, id: 'recover-c', note: null },
+  ];
+  const desired = [
+    initial[1]!,
+    { ...initial[0]!, note: 'confirmed note' },
+    initial[2]!,
+  ];
+  const metadata = {
+    title: 'Shelf',
+    description: null,
+    visibility: 'private' as const,
+    presentationKind: null,
+    coverMediaId: null,
+  };
+  const plan = buildCollectionSaveReviewPlan({
+    collectionId,
+    revision: 7,
+    firstPage: true,
+    initial,
+    desired,
+    before: metadata,
+    after: metadata,
+  });
+  const outcomes = [
+    { stepId: 'metadata', status: 'confirmed' as const, revision: 8 },
+    { stepId: 'note:recover-a', status: 'confirmed' as const },
+    { stepId: 'move:recover-b', status: 'conflict' as const, reason: 'conflict' },
+  ];
+  const remaining = remainingCollectionMemberOperations(plan, outcomes);
+  expect(remaining.map((entry) => entry.id)).toEqual(['move:recover-b']);
+  const currentMembers = [
+    initial[2]!,
+    { ...initial[0]!, note: 'confirmed note' },
+    initial[1]!,
+  ];
+  const currentBasis: CollectionSaveCurrentBasis = {
+    id: collectionId,
+    revision: 10,
+    title: 'Current title',
+    description: null,
+    visibility: 'private',
+    members: currentMembers,
+    presentationKind: null,
+    presentationTypes: [],
+    coverMediaId: null,
+  };
+  const rebased = rebaseRemainingCollectionDraft(currentBasis.members, remaining, true);
+  expect(rebased).toEqual({ ok: true, members: [initial[1], currentMembers[0], currentMembers[1]] });
+
+  const html = renderToStaticMarkup(
+    createElement(CollectionSaveReview, {
+      plan,
+      initial,
+      desired,
+      outcomes,
+      currentBasis,
+      basisState: 'ready',
+      onReviewCurrent: () => {},
+      onDiscard: () => {},
+    }),
+  );
+  expect(html).toContain('data-collection-basis="10"');
+  expect(html).toContain('data-remaining-draft');
+  expect(html).toContain('data-draft-operation="move:recover-b"');
+  expect(html).not.toContain('data-draft-operation="note:recover-a"');
 });
 
 test('Named Collection editor review states remain visibly editable with compact generic rows and native bulk commands while only actual curator known totals render member counts', async () => {
