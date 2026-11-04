@@ -281,6 +281,21 @@ test('selected anime staff and cast use the default acknowledged role adapter an
     expect(publication.status).toBe('incomplete');
     expect(accepted.size).toBeGreaterThan(0);
     expect(result.creditRoles).toHaveLength(1);
+    const selectedWorkRecord = publication.manifest.records.find((record) => record.sourceKey === '101');
+    console.log(
+      'work source identity diagnostic',
+      JSON.stringify({
+        sourceUri: selectedWorkRecord?.sourceUri,
+        semanticDigest: selectedWorkRecord?.semanticDigest,
+        identityAssertions: selectedWorkRecord?.assertions
+          .filter((assertion) => assertion.property === 'wdt:P5732')
+          .map((assertion) => ({
+            digest: assertion.source.digest,
+            citations: assertion.citations,
+            value: assertion.statement.value,
+          })),
+      }),
+    );
     expect(publication.omissions).not.toContainEqual(
       expect.objectContaining({ sourceKey: '101', code: 'source-uri-not-current' }),
     );
