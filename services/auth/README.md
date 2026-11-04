@@ -62,6 +62,10 @@ not certify reintroduced data. Old writers must be retired before issuer, workfl
 open. This is an adopted requirement, not exercised hosting/runbook proof.
 
 Retained `restore-admission.ts` machinery can stage original obligations and advance bounded native replay.
+Replay advances at most one existing native unit per call: 48 raw keys, 1 KiB per locator and 64 KiB total.
+Obligation staging admits at most 48 obligations on one native partition/page per five-second absolute deadline;
+traversal/verification retains the fixed 4096-partition universe. Original receipt, continuation, source floor and
+310-second consent due time survive replay without renewing source authorization or evidence deadlines.
 Its existing `restoredGeneration`/database-owner declarations and receiving controls are implementation seams,
 not a required runtime physical-owner ABI or restore-generation witness protocol. Missing trusted source,
 consumer or custody facts remain unverified; declaration, local emptiness and elapsed TTL never supply them.

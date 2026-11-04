@@ -40,8 +40,8 @@ operation discovery supports them.
 ## Dependencies
 
 Requires kernel commands, routed storage, ordinary grant routes and resource declarations. Supplies authentication,
-authorization, creation grants, membership and lifecycle ports to all product modules. Agree shared runtime changes
-before consumers adopt them; use the shared production-default test factories.
+authorization, creation grants, membership and lifecycle ports to all product modules. Kernel owns shared runtime
+contracts and production-default test composition.
 
 ## Acceptance
 
@@ -52,10 +52,9 @@ Use the [permission outcomes](../../specs/permission-outcomes.test.ts),
 [account workflow outcomes](../../specs/native-account-workflow-outcomes.test.ts),
 [platform gate outcomes](../../specs/platform-gates-outcomes.test.ts), and native tests under
 `services/kernel/test/access/` and `services/auth/`. Include denial, replay, revocation, lifecycle and unavailable
-dependencies through real boundaries. Carry adopted suspended-credential expectations into Auth/Access and frozen acceptance before dependent briefs;
-the exact response mapping belongs to those contracts. Run the applicable workspace commands from their manifests;
-a shared kernel runtime contract change requires `bun run --cwd services/kernel check`.
-Use [verification](../development/verification.md) for root typecheck, growth and promotion evidence.
+dependencies through real boundaries, including the adopted suspended-credential response mapping in Auth/Access.
+Acceptance evidence follows [verification](../development/verification.md), with scoped workspace, growth and
+promotion evidence bound to the promoted revision.
 
 ## External conditions
 

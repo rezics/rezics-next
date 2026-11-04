@@ -848,11 +848,11 @@ guards gives the exact recovery role-transition reservation 1470/1460/164/573440
 SDK gap and unrecognized old receiving obligations stay independently pending. This SQL does not search history,
 personal JSON, role prefixes or populations.
 
-The Semantic final-frame owner still cannot fund whole Source completion: five existing current-verifier entries
-alone need 696320 bytes against the unchanged 630784-byte native allowance. The Source recovery branch therefore
-refuses before its foreign probes or writer with `identity-history-native-funding-unavailable`; it does not borrow
-the earlier 11588/9856/2731/6843136/0 consumer-body expansion, change limits/prices, or report aggregate success.
-Source/History native acceptance, Search currentness and final Semantic funding remain deferred to their owning
+The whole Source completion bound remains unresolved: five current-verifier entries alone need 696320 bytes
+against the existing 630784-byte local ceiling. The retained Source recovery implementation refuses before foreign
+probes/writes with `identity-history-native-funding-unavailable`. This is an unavailable implementation seam, not
+a runtime-price authorization operand or aggregate success. Source/History native acceptance, Search currentness
+and whole-call Source composition remain deferred to their owning
 integration. The local regression at `test/access/agent-identity-recovery-retention.test.ts` is authored and
 UNRUN; workspace typing proves neither receiving completion nor final retention.
 
@@ -2950,7 +2950,11 @@ constant number of TOAST blocks, since the stored shelf is capped at 16,384 byte
 bytes. The in-memory projection adds no statements at the 256, 1024 and 4096 preference scales. Decision: shelf
 observation reuses the shared viewer/actions and empty stored defaults; reset remains the existing `shelf: null`
 merge-patch.
-Set cost: one preference row and the command envelope's receipt, with constant rows and statements; the merge is in
+Whole-call read costs include both read/update preparations and final checks, as well as the preference seek
+and envelope projection. Whole-call PATCH costs include update preparation/checks, command/receipt and returned
+read/update advice; none of those operands is replaced by the one-row storage subtotal. Failures and bounded
+retries repeat their reached work under the original deadline.
+Set storage cost: one preference row and the command envelope's receipt, with constant rows and statements; the merge is in
 memory over at most 32 + 6 + 2 shelf entries and 32 notification kinds. Authentication and native authorization
 retain their existing bounds. A bounded retry reuses the original idempotency key after current authorization;
 historical receipt values are not current readback. `test/access/growth-preferences.test.ts` grows accounts with stored
@@ -3475,10 +3479,9 @@ an exact obligation key; it cannot submit a consumer proof blob.
 
 Access owns `auth_receiving_control`, `auth_receiving_obligation` and immutable
 `auth_receiving_closure` outside the Auth image. A control revision is a fencing
-sequence, never a receiving incarnation. Every current receipt fixes Source
-continuity, exact account/version/T, database identity, receiving incarnation,
-restore generation, installation, writer fence, physical/receiving custody and
-the original accepted source continuation/receipt. Historical copy publication,
+sequence. Retained receipt schemas bind Source continuity, exact account/version/T and original accepted
+source continuation/receipt, with implementation database/installation/writer/custody fields. Those fields do
+not define a runtime restore-generation witness requirement; operational restore is owned by Deletion. Historical copy publication,
 early source transfer, successful child, registration and page EOF cannot issue it.
 Registration creates only a pending obligation. No identity is backfilled.
 Barrier validation rejects account IDs without a native route before checking
@@ -4031,7 +4034,7 @@ callable and the one forward History migration; Source and SDK function bodies r
 
 | Symbol / actual dispatch                           | Bound                                   | Native home and lock lifetime                                                                                                                                                                      |
 | -------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C: `identityHistoryCommand` controls               | 3/1/8/256/0                             | BEGIN, two SET LOCAL, time, final SET, original no-effect partition fence, COMMIT and prepaid failure ROLLBACK; one attempt                                                                        |
+| C: `identityHistoryCommand` controls               | 3/1/8/256/0                             | BEGIN, two SET LOCAL, time, final SET, original no-effect partition fence, COMMIT and bounded failure ROLLBACK; one attempt                                                                        |
 | Initial mapping: `resolveAgentIdentitySDKWork`     | 4/4/3/16384/0                           | Original m/work, receiver partition, History domain; released before staging                                                                                                                       |
 | Initial `readAgentIdentitySDKReceivingBinding`     | 72/72/6/32768/0 + C                     | Mapping, m/work, roles LIMIT65, barrier; released                                                                                                                                                  |
 | Initial `readAccountIdentitySource`                | 70/68/25/73984/0                        | Includes C and original normal plus bounded technical fallback; released                                                                                                                           |
@@ -4320,11 +4323,10 @@ reader now supplies released preparation and same-transaction verification of da
 restore generation, Source ownership and writer/custody fences. An early `native-consumed` phase or a historical
 `copies-erased` row alone never permits these deletions, including after receiving quarantine or replacement.
 
-Independent physical-owner installation and per-obligation physical/receiving custody remain parked under
-[Current Auth receiving controls](#current-auth-receiving-controls). Registration cannot activate them. Without
-those original operands preparation returns null and every present witness keeps its precise existing consumer
-reason. The default native retirement path is implemented against the original owner seam; genuine positive
-native acceptance still requires those independent operands and is not established by source typing.
+Physical custody and operational restore proof remain unverified under
+[Current Auth receiving controls](#current-auth-receiving-controls). Retained guards return null for unavailable
+inputs and preserve each witness's existing consumer reason; registration cannot establish custody. These local
+implementation seams do not require a new physical-owner ABI. Source typing establishes no positive native pass.
 
 Each selected key adds only fixed primary-key probes: selected source; native progress, root and saved discovery
 page; original current locator (nine keyed visits); and the historical copy phase. Preparation adds one root read

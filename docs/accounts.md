@@ -3,8 +3,8 @@
 REZICS has one account identity and five concepts: account, operator, credential, client and grant.
 [Access][access] owns identity and authorization inside the kernel; [Auth][auth] supplies authentication in a
 separate service and database. This document owns product identity, delegation, consent and preferences; the
-module READMEs own native protocols, mechanisms, operational requirements and cost bounds. An implementation gap called out here
-does not change the contract.
+module READMEs own native protocols, mechanisms, operational requirements and cost bounds. An implementation
+gap called out here does not change the contract.
 
 The [five-system design status](research/design-status-accounts.md) links the delivered primary research and
 current journey gaps. Its findings adopted below belong to this contract; research reports remain evidence,
@@ -76,7 +76,8 @@ operation and does not change PATCH validation, public lookup or discovery. Advi
 
 The public account page is `/@handle`, outside Realms and Zones. `GET /v1/accounts` accepts exactly one selector:
 up to 100 deduplicated IDs, one handle, or one verified catalogue agent ID. Unknown and pending accounts are
-omitted; handle and agent lookups also hide deleted accounts. The HTTP ID form preserves attribution tombstones. The native observation entry accepts 1–100 routable IDs,
+omitted; handle and agent lookups also hide deleted accounts. The HTTP ID form preserves attribution tombstones.
+The native observation entry accepts 1–100 routable IDs,
 preserves input order and repeated results while deduplicating seeks; its before/after Media composition uses
 bounded public references, never raw URLs or duplicate profile reads. Unadmitted sources remain unavailable.
 Accounts are public, enumerable identities; the public projection protects private fields rather than concealing that a live account exists.
@@ -785,4 +786,3 @@ external or backup erasure. No provider, retention schedule or deleted-account r
 [auth-host]: ../services/auth/README.md#ordinary-native-host-assembly
 [auth-workflows]: ../services/auth/README.md#durable-account-workflow-host
 
-[access-preferences]: ../services/kernel/src/access/README.md#viewer-preferences

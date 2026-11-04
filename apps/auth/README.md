@@ -364,7 +364,7 @@ One random operation key and its exact stage, approval and apply bindings stay i
 failure, timeout or malformed response is phase-specific uncertainty. No phase is retried automatically. An explicit
 retry reuses that exact phase payload only while current Security advice allows it; native authorization remains final.
 Only a validated apply receipt confirms completion. A refusal or expired approval after an unknown apply does not
-resolve that earlier result. A confirmed apply retires the session and the page offers sign-in with the new password;
+resolve that earlier result. A confirmed replacement retires the session and the page offers sign-in with the new password;
 if that does not work, the existing account-recovery path remains available. When current advice requires step-up, the
 page goes to `/step-up?return_to=%2Fsecurity` before sending any credential-effect request. No password is put in a URL.
 
