@@ -1387,6 +1387,33 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   `services/kernel/test/imports/bangumi-character-names.test.ts`; broader native
   acceptance remains controller-owned.
 
+## Bangumi TVAnime official websites
+
+Decision: accept one literal HTTP(S) `官方网站` value per field occurrence. Exact URL duplicates coalesce; distinct addresses remain separate candidates under the single-valued released property. Do not normalize hostnames or split lists.
+
+The ordinary converter advances from `bangumi@8` to `bangumi@9`, preserving the
+existing TVAnime names and original-run fields. Ordinary Bangumi registration
+and selected-family seeding share the bounded TVAnime profile extractor. Only
+the exact type-2 `{{Infobox animanga/TVAnime` profile is eligible. Each
+supported URL becomes a cited `schema:url` proposal whose provenance remains
+the exact Bangumi subject record. Path, query and fragment spelling are
+preserved; the Bangumi record URL never substitutes for the work's website.
+The existing importer journal and common publisher retain proposal-only
+imports, separate candidate acceptance/adoption and current public-read
+verification. Unsupported values produce bounded field pointers, and missing
+or changed input does not retract adopted assertions.
+
+- Touches: one selected TVAnime record, at most 64 website facts and 16 bounded
+  omission diagnostics, each fact cited to its exact source record.
+- Bound: the existing 65,536-character projection, 64 infobox fields, 1,500
+  characters per URL and at most 92 converted assertions; no destination
+  requests are made.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  covers ordinary and selected-family proposals, source changes and omissions.
+  `services/kernel/test/imports/bangumi-official-websites.test.ts` covers
+  independent adoption, a public viewer read and current fencing; the M1
+  walkthrough remains separate evidence.
+
 ## Default Bangumi anime Episodes
 
 The explicit local `seed:dev` step runs the existing reviewed-catalogue publisher first and passes its acknowledged

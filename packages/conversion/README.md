@@ -876,30 +876,39 @@ The caller owns current native trust; dictionary syntax is no proof of authority
 The production Importer/CLI obtains the dictionary through its existing
 `identifierLookup`, after explicit reviewed seeding. Normalization and digesting
 remain pure; the source-only digest includes the ordered metadata tags and excludes
-bindings. Supported records visit twelve top-level fields and produce at most nine
+bindings. Supported records visit twelve top-level fields and produce at most 92
 commands and one cover intent; byte caps remain unchanged. The new keyword adds one bounded citation and one qualifier.
 
-## Bangumi TVAnime subject names
+## Bangumi TVAnime subject profiles
 
-`bangumi@7` consumes only `中文名` and `别名` from the exact pinned
-`{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
-Bangumi converter and selected-family registrations share this pure extraction.
-The existing top-level `name` and `name_cn` bootstrap labels keep their current
-meanings; infobox names become cited native name facts after subject binding and
-do not set `inLanguage`. The complete infobox remains in the existing bounded
-projection and digest for raw change detection.
+Decision: accept one literal HTTP(S) `官方网站` value per field occurrence. Exact URL duplicates coalesce; distinct addresses remain separate candidates under the single-valued released property. Do not normalize hostnames or split lists.
 
-The scalar `中文名` is `zh`. Scalar and bullet-list `别名` values are `und`,
-because the pinned template defines no alias-language syntax. Equal property,
-language and exact-text tuples deduplicate; other spellings remain separate.
-Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
-omissions, with no source prose copied into diagnostics. Parsing scans at most 64
-field occurrences, retains at most 24 distinct name values, and emits at most 16
-omission diagnostics. Each field occurrence is staged until its complete scalar
-or bullet-list form is known; malformed or mixed occurrences contribute no names.
-omission diagnostics.
+`bangumi@9` projects `中文名`, `别名` and `官方网站` only from the exact
+pinned `{{Infobox animanga/TVAnime` profile on type-2 records. Top-level `name`
+and `name_cn` keep their existing bootstrap meaning. Scalar `中文名` is `zh`;
+scalar or bullet-list `别名` is `und`. Website facts preserve their literal URL,
+including path, query and fragment. Their `schema:url` citation points to the
+Bangumi subject record, which remains distinct from the destination URL. The
+original-run adapter continues to own only `放送开始`, `播放结束` and `话数`.
+All supported facts contribute to the semantic digest while the source infobox
+remains available for raw-change detection.
 
-### Bangumi character physical profile
+The existing bounded TVAnime parser stages each field before emitting names or
+websites. Unsupported templates, malformed URLs, mixed URL lists, wiki markup,
+continuations and unknown keys stay bounded omissions without source prose in
+diagnostics. Exact duplicate names and website URLs coalesce; different URL
+spellings remain separate facts. No destination is fetched or normalized.
+
+- Touches: one type-2 record, at most 24 distinct name facts, 64 website facts,
+  and 16 omission diagnostics, each website cited to its exact source record.
+- Bound: the existing 65,536-character projection, 64 infobox fields, 1,500
+  characters per URL and at most 92 proposals for a converted record.
+- Growth check: `services/importer/tests/bangumi-official-websites.test.ts`
+  covers ordinary and selected-family proposals, refresh and omission; the
+  separate native acceptance journey is authored in
+  `services/kernel/test/imports/bangumi-official-websites.test.ts`.
+
+## Bangumi character physical profile
 
 `cross-media-entities@9` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
