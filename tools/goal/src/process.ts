@@ -93,7 +93,7 @@ function matches(current: ProcessIdentity | null, identity: ProcessIdentity): bo
 export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): boolean {
   return matches(processIdentity(identity.pid, procRoot), identity);
 }
-/** Whether a live process is inside a directory; null means /proc did not prove absence. */
+/** Whether a visible live process is inside a directory; null means /proc scanning failed. */
 export function hasLiveProcessUnder(directory: string, procRoot = '/proc'): boolean | null {
   const root = resolve(directory);
   let entries: string[];
@@ -108,7 +108,9 @@ export function hasLiveProcessUnder(directory: string, procRoot = '/proc'): bool
     try {
       cwd = readlinkSync(`${procRoot}/${name}/cwd`).replace(/ \(deleted\)$/, '');
     } catch (error) {
-      if (['ENOENT', 'ESRCH'].includes((error as NodeJS.ErrnoException).code ?? '')) continue;
+      const code = (error as NodeJS.ErrnoException).code;
+      // Match stopProcessesUnder: the kernel hides cwd for some other-user and non-dumpable processes.
+      if (['ENOENT', 'ESRCH', 'EACCES', 'EPERM'].includes(code ?? '')) continue;
       return null;
     }
     if (cwd !== root && !cwd.startsWith(`${root}/`)) continue;
