@@ -720,8 +720,38 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
                     context,
                   );
             for (const anchor of result.anchors) session.record(sessionComponent(anchor));
-            if (result.page.context) session.record(result.page.context.subject.source);
-            return result.page;
+            if (result.page.context) {
+              const source = result.page.context.subject.source;
+              session.record({ partition: source.partition, epoch: source.epoch, position: BigInt(source.position) });
+            }
+            return {
+              state: result.page.state,
+              viewer: { state: result.page.viewer.state },
+              context: result.page.context
+                ? {
+                    subject: {
+                      ...result.page.context.subject,
+                      source: { ...result.page.context.subject.source },
+                    },
+                    realm: { ...result.page.context.realm },
+                  }
+                : null,
+              items: result.page.items.map((item) => ({
+                id: item.id,
+                title: item.title,
+                purpose: item.purpose,
+                actions: { createReview: item.actions.createReview },
+                native: {
+                  kind: item.native.kind,
+                  boardId: item.native.boardId,
+                  subjectIds: [item.native.subjectIds[0]],
+                  subjectSource: { ...item.native.subjectSource },
+                  realmHeadRevisionId: item.native.realmHeadRevisionId,
+                  boardSecurityRevision: item.native.boardSecurityRevision,
+                },
+              })),
+              next: result.page.next,
+            };
           }),
         );
       },
