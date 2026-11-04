@@ -6,9 +6,9 @@ The [coverage audit](../../../../../../docs/research/api-first-platform-coverage
 boundaries. Album contents and Recording destination readers remain separate owners. Destinations use the current
 ordinary Subject composition, without adding a View or changing the existing release-fidelity release types.
 
-Decision: this reader requires the exact released `schema:MusicRelease` identity (or a released descendant);
-`rezics:MusicMedium` and `schema:MusicRecording` are explicit optional association seams, never generated declarations.
-Semantic owns their publication. Labels, generic release ancestry, mappings and provider codes never admit music.
+Decision: this reader requires the exact released `schema:MusicRelease` identity (or a released descendant).
+`schema:MusicRecording` is a published Type; `rezics:MusicMedium` remains an explicit unpublished association seam.
+Labels, generic release ancestry, mappings and provider codes never admit music.
 The ordinary frame uses its native summary ancestry to discover descendants; the reader independently checks the
 current immutable Release before exposing edition facts. A missing admission offers generic facts and correction.
 
@@ -22,10 +22,12 @@ retain their existing authority and draft recovery; this reader performs no writ
 
 One selected stream follows native direction and order. Forward item relations must admit this release and target a
 released music identity; inverse relations must target this release and be admitted on a released music identity.
-Canonical containment uses `bf:hasPart`/`schema:hasPart` forward and `schema:isPartOf`/`wdt:P361`/`wdt:P1433` inverse.
-No album, file or generic CreativeWork target is relabelled as a recording or medium. Rows retain holder, statement,
-slot qualifiers and summary identity, including repeated recordings in distinct slots. A withheld summary has no
-invented destination. Corrections open the exact holder's existing membership editor.
+The default window is admitted `schema:track`. Canonical containment still uses `bf:hasPart`/`schema:hasPart` forward
+and `schema:isPartOf`/`wdt:P361`/`wdt:P1433` inverse when those streams are selected. Listing-occurrence Concepts on
+`wdt:P642` keep repeated recording slots distinct; `rezics:MusicMedium` stays unpublished. No album, file or generic
+CreativeWork target is relabelled as a recording or medium. Rows retain holder, statement, slot qualifiers and summary
+identity, including repeated recordings in distinct slots. A withheld summary has no invented destination. Corrections
+open the exact holder's existing membership editor.
 
 Each next, stream or restart replaces one bounded window; unavailable continuation retains the previous window and
 retries the exact pending address. Invalid/withheld results retire it. There is no refill, automatic retry, per-target

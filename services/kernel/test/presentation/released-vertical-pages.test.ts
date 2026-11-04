@@ -32,6 +32,7 @@ const launch = {
   series: ['wd:Q7725310', 'schema:BookSeries'],
   character: ['wd:Q95074'],
   agents: ['schema:Person', 'schema:Organization', 'schema:SoftwareApplication'],
+  works: ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'],
 };
 const sources = bundledSources();
 const key = () => ({ 'Idempotency-Key': `"${randomUUID()}"` });
@@ -54,7 +55,13 @@ type Page = {
   document: CompositionDocument;
   views: View[];
   reads: Record<string, ReadValue>;
+  viewer?: { type: string; id: string };
+  actions?: { status: string; viewerActions?: { action: string; operations: string[] }[] };
 };
+function publicPage(page: Page) {
+  const { viewer: _viewer, actions: _actions, ...rest } = page;
+  return rest;
+}
 function status(response: HttpResponse, wanted: number, phase: string) {
   expect(response.status, `${phase}: ${JSON.stringify(response.body)}`).toBe(wanted);
 }
@@ -232,7 +239,13 @@ for (const [vertical, types] of Object.entries(launch)) {
         for (const view of ['overview', 'details'] as const) {
           const anonymous = await factualPage(driver, 'anonymous', type, id, factual, view);
           const editor = await factualPage(driver, 'editor', type, id, factual, view);
-          expect(editor).toEqual(anonymous);
+          expect(publicPage(editor)).toEqual(publicPage(anonymous));
+          expect(anonymous.viewer).toEqual({ type, id });
+          expect(editor.viewer).toEqual({ type, id });
+          const anonymousStatus = (anonymous as { actions?: { status: string } }).actions?.status ?? 'missing';
+          const editorStatus = (editor as { actions?: { status: string } }).actions?.status ?? 'missing';
+          expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(anonymousStatus);
+          expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(editorStatus);
         }
         const missing = await driver.request('anonymous', 'POST', '/v1/pages:read', {
           target: { subject: id, view: 'collections' },

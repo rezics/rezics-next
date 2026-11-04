@@ -41,7 +41,7 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { cataloguePageMetadata, semanticPageView } from '../semantic-page.ts';
+import { cataloguePageMetadata, pageViewerActions, semanticPageView } from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -676,8 +676,9 @@ async function pageAnswer(input: {
     )
       result = { ...result, body: { ...result.body, documents: page.documents } };
     if (!result) throw new Error('Page read did not return a result');
-    if (descriptor.kind === 'subject' && descriptor.id === input.subject && result.status !== 200)
+    if (descriptor.kind === 'subject' && descriptor.id === input.subject && result.status !== 200) {
       return respond(result.status, result.body, readSession, true);
+    }
     // A subject page without an active verified account must not name an account through its subject read.
     reads[key] =
       input.account === null &&
@@ -686,6 +687,52 @@ async function pageAnswer(input: {
       isRecord(result.body)
         ? { ...result, body: { ...result.body, account: null } }
         : result;
+  }
+
+  let viewerEnvelope: ReturnType<typeof pageViewerActions> | undefined;
+  if (input.subject) {
+    const composed = Object.entries(plan.reads).find(
+      ([, descriptor]) => descriptor.kind === 'subject' && descriptor.id === input.subject,
+    );
+    const composedBody = composed ? reads[composed[0]] : undefined;
+    const type =
+      composedBody?.status === 200 &&
+      isRecord(composedBody.body) &&
+      isRecord(composedBody.body.subject) &&
+      typeof composedBody.body.subject.type === 'string'
+        ? composedBody.body.subject.type
+        : undefined;
+    if (type) {
+      try {
+        input.budget.charge(1);
+        const headers = new Headers(incoming.headers);
+        headers.set('content-type', 'application/json');
+        if (readSession !== null) headers.set(SESSION_HEADER, readSession);
+        const viewerResponse = await input.dispatch(
+          new Request(new URL('/v1/viewerActions', input.request.url), {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ resources: [{ type, id: input.subject }] }),
+            signal: input.request.signal,
+          }),
+        );
+        const text = await viewerResponse.text();
+        viewerEnvelope = pageViewerActions(type, input.subject, {
+          status: viewerResponse.status,
+          body: text === '' ? null : (JSON.parse(text) as unknown),
+        });
+        readSession = mergedSession(
+          input.session.ring,
+          input.session.scope,
+          readSession,
+          viewerResponse.headers.get(SESSION_HEADER),
+        );
+      } catch (error) {
+        if (error instanceof PageReadError || error instanceof SyntaxError)
+          viewerEnvelope = pageViewerActions(type, input.subject, { status: 503, body: null });
+        else throw error;
+      }
+    }
   }
 
   return respond(
@@ -702,6 +749,7 @@ async function pageAnswer(input: {
       ...(input.catalogue ? { catalogue: input.catalogue } : {}),
       ...(input.viewer ? { viewer: await input.viewer() } : {}),
       reads,
+      ...(viewerEnvelope ?? {}),
     },
     readSession,
     true,

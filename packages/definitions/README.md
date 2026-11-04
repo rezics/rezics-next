@@ -39,9 +39,10 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.1 is current, while release 1.0.0 bytes and its digest remain loadable for existing pins. Book
+is immutable: 1.0.2 is current, while release 1.0.0 and 1.0.1 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
-cookTime/suitableForDiet; MusicAlbum selects datePublished/genre. These ordered factual hints, media dimensions,
+cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
+MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
 source authority, membership, LibraryProfileSource and accepted profile pins retain their meaning. Hints convey
 no authority or fact values.
 
@@ -151,15 +152,15 @@ and pattern checks.
 A property may name at most 1,024 targets. Compilation allows at most 256 schema files.
 
 The launch grain is three types and twelve properties in one schema file. The bundled
-catalogue has 17 types, 68 properties and 12 schema files. One hundred such verticals
-add 300 types, 1,200 properties and 100 schema files: 317 types, 1,268 properties and
-112 schema files, 874,688 canonical bytes. `foaf:focus` ranges over `Thing`, so its
+catalogue has 27 types, 112 properties and 12 schema files. One hundred such verticals
+add 300 types, 1,200 properties and 100 schema files: 327 types, 1,312 properties and
+112 schema files, still under the 4 MiB release cap. `foaf:focus` ranges over `Thing`, so its
 target is `schema:Thing`; a later type matches through its `bases`.
 `schema:exampleOfWork` ranges over `CreativeWork`, so its target stays
 `schema:CreativeWork` when a vertical adds a creative-work subtype. Adding a
 vertical never changes another vertical's properties. The previous caps of 256
 types, 1,024 properties and 64 schema files do not fit that grain. The measured
-body is 874,688 bytes, so the previous 1 MiB cap still holds it. The new caps multiply those limits by four: 1,024
+body remains well under 1 MiB, so the previous 1 MiB cap still holds it. The new caps multiply those limits by four: 1,024
 types, 4,096 properties, 256 schema files and 4 MiB. Targets are the exception: every
 target is a type, so the target cap equals the type cap. That is about three times the
 measured type and property counts. Per-type caps stay 64 properties and 16 facets,
@@ -393,6 +394,8 @@ identify classification resources rather than works.
 | `wd:Q7725310`              | 系列     | 系列     | シリーズ           |
 | `wd:Q689445`               | 视觉小说 | 視覺小說 | ビジュアルノベル   |
 | `schema:MusicAlbum`        | 音乐专辑 | 音樂專輯 | アルバム           |
+| `schema:MusicRelease`      | 音乐发行 | 音樂發行 | リリース           |
+| `schema:MusicRecording`    | 录音     | 錄音     | 録音               |
 
 Each changed label below was written by hand. References establish the usage of
 the word in its language; choosing it for a catalogue type is an editorial decision
@@ -499,7 +502,7 @@ Run `bun run --cwd packages/definitions check` from the repository root.
 ### Schema.org subject types
 
 For each concrete catalogue profile, select the narrowest Schema.org class
-that is true of its entire admitted scope. The following 24 mappings are the
+that is true of its entire admitted scope. The following 26 mappings are the
 reviewed choices for subject JSON-LD; the source research and supporting
 rationales are in [the Schema.org mapping report](../../docs/research/catalogue-schema-org-mapping.md).
 The corresponding `annotations.schema_org_type` values are a separate profile
@@ -534,6 +537,8 @@ mappings or property semantics.
 | `wd:Q2095` / Food                                  | `https://schema.org/Thing`               |
 | `schema:Recipe` / Recipe                           | `https://schema.org/Recipe`              |
 | `schema:MusicAlbum` / MusicAlbum                   | `https://schema.org/MusicAlbum`          |
+| `schema:MusicRelease` / MusicRelease               | `https://schema.org/MusicRelease`        |
+| `schema:MusicRecording` / MusicRecording           | `https://schema.org/MusicRecording`      |
 
 Book work and its book-specific edition both use `Book` while keeping distinct
 native identities. Broad fictional characters and Food use `Thing`; broad game

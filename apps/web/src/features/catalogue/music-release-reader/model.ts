@@ -189,7 +189,8 @@ export async function readMusicRelease(
       : [];
     const streams = musicReleaseStreams(release, current.data.subject.type, locale);
     if (streams.length > 64) return { ok: false, reason: 'unavailable' };
-    const stream = address.stream ? streams.find((item) => item.key === address.stream) : streams[0];
+    const preferred = streams.find((item) => item.key === 'forward:schema:track');
+    const stream = address.stream ? streams.find((item) => item.key === address.stream) : (preferred ?? streams[0]);
     if (address.stream && !stream) return { ok: false, reason: 'invalid' };
     const identity = { id: address.id, label: pickText(current.data.subject.labels, locale) };
     const labels = partLabels(
