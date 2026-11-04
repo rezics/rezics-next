@@ -297,7 +297,7 @@ export function ManagedAccountsView({
             className="min-w-0 max-w-full"
             role="region"
             aria-labelledby={organizationsHeadingId}
-            aria-busy={organizations.busy ? true : undefined}
+            aria-busy={organizations.busy}
           >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
@@ -346,7 +346,7 @@ export function ManagedAccountsView({
             className="min-w-0 max-w-full"
             role="region"
             aria-labelledby={responsibilitiesHeadingId}
-            aria-busy={responsibilities.busy ? true : undefined}
+            aria-busy={responsibilities.busy}
           >
             <CardHeader className="min-w-0">
               <CardTitle className="min-w-0 wrap-anywhere">
