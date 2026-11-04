@@ -1,4 +1,5 @@
 import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
 import { Exposure } from '../kernel/exposure';
 import { shelfHref, type ShelfDisplay, type ShelfSearch } from './shelf-params';
 import { libraryNavigation } from './navigation';
@@ -13,7 +14,8 @@ const firstUseImports = libraryNavigation.filter(
     destination.kind === 'navigation' &&
     destination.id.startsWith('library.import-') &&
     destination.signedIn === true &&
-    destination.operation === 'library_entry.put',
+    destination.operation === 'library_entry.put' &&
+    typeof destination.href === 'string',
 );
 
 export function shelfSummaryFirstUse(
@@ -151,13 +153,15 @@ export function ShelfSummaryFirstUseLinks({ locale }: { locale: string }) {
           <nav aria-label={m.library_summary_first_use_imports()}>
             <ul className="flex flex-wrap justify-center gap-2">
               {firstUseImports.map((destination) => (
-                <li key={destination.id}>
-                  <a className={target} href={`/${locale}${destination.href}`}>
-                    {typeof destination.label === 'string'
-                      ? destination.label
-                      : destination.label({ locale, pathname: destination.href })}
-                  </a>
-                </li>
+                typeof destination.href === 'string' ? (
+                  <li key={destination.id}>
+                    <a className={target} href={`/${locale}${destination.href}`}>
+                      {typeof destination.label === 'string'
+                        ? destination.label
+                        : destination.label({ locale: getLocale(), pathname: destination.href })}
+                    </a>
+                  </li>
+                ) : null
               ))}
             </ul>
           </nav>

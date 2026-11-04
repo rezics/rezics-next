@@ -154,11 +154,12 @@ test('eight locales render first-use and count navigation with registered destin
       const imports = libraryNavigation.filter((destination) => destination.id.startsWith('library.import-'));
       expect(imports).toHaveLength(4);
       for (const destination of imports) {
+        if (typeof destination.href !== 'string') continue;
         expect(html).toContain(`href="/${locale}${destination.href}"`);
         const label =
           typeof destination.label === 'string'
             ? destination.label
-            : destination.label({ locale, pathname: destination.href });
+            : destination.label({ locale: getLocale(), pathname: destination.href });
         expect(html).toContain(label);
       }
     }
