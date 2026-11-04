@@ -1612,6 +1612,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, one optional `schema:gtin` fact per release inside the existing 163-command, 64 KiB, per-record candidate (≤300) and journal budgets. Unknown `0`, null, malformed, unsupported-length and unsafe numeric cells withhold only that fact. Unrelated releases are not scanned.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB release minimum ages
+
+- Touches: the selected `releases.minage` COPY cell or supported Kana integer on the existing release payload, the shared entity converter and ordinary public batch/fence/candidate paths. The value is proposed only on that Release with the VNDB citation.
+- Bound: at most 64 selected releases and 32 characters for a retained malformed scalar, within the existing 64 KiB source projection, 300-candidate and journal budgets. Missing, null, malformed, nonintegral and out-of-range values withhold only this fact; no extra reads, authorization calls, release scans or work proposals are added.
+- Growth check: the focused importer case checks canonical COPY integers, all-ages zero, unknown/invalid values, same-byte refresh, changed age and stable release identity. The focused kernel case checks public acceptance/adoption, citation, facts fencing and idempotent reopen. No PostgreSQL growth series is added.
+
 ### Import authored VNDB public tag associations
 
 - Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.

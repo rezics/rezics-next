@@ -677,6 +677,13 @@ not additional check requests.
   executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: dump COPY `gtin` is a
   bigint decimal cell with unknown sentinel `0`; admitted values keep that spelling under the released 8 or 12–14
   digit contract; barcode equality does not merge releases.
+- `production operator imports an authored VNDB release minimum age through ordinary accept and current reads`:
+  the focused importer case exercises bounded COPY values, zero/all-ages, unknown and invalid representations,
+  unchanged-input refresh, a changed source value and stable Release identity. The focused kernel case inspects
+  the candidate and citation, independently accepts/adopts, reads the exact years quantity, then checks facts
+  fencing and idempotent reopen. Source semantics decision: 0 means all ages; null and absent mean unknown;
+  only canonical COPY integers and Kana API integers from 0 through 18 are admitted. Both files contain authored
+  fixtures. This attempt leaves native acceptance deferred under the verification policy; no native pass is claimed.
 - `production operator publishes authored VNDB public tags through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-public-tags.test.ts`.
   Frozen scenario names:

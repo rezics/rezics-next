@@ -245,7 +245,7 @@ refreshes under this revision. Unknown or invalid types still fail with
 and retry keys. Platform and community tools use this same pure module;
 importer skipped-count accounting is separate.
 
-Cross-media entity revision `cross-media-entities@4` retains an admitted
+Cross-media entity revision `cross-media-entities@6` retains an admitted
 Bangumi `person.summary` for the source-selected `schema:Person` or
 `schema:Organization` identity. Its exact bytes enter the normalized digest;
 nonempty text becomes an `und` `schema:abstract` document proposal with the
@@ -254,6 +254,7 @@ absent summaries produce no document. Summary commands remain in `summary`,
 separate from identity facts, metadata licences and image rights.
 Decision: biography admission advances the existing `@3` converter to `@4`, preserving the prior VNDB release-title projection revision.
 Decision: release original language advances the existing `@4` converter to `@5`, preserving biography, websites, staff names and release-title projection.
+Decision: release minimum age advances the existing `@5` converter to `@6`, preserving biography, websites, staff names, release titles and original language.
 
 Decision: type 3 uses admitted `schema:MusicAlbum` because Semantic has no music work/release/track split; type 6 uses `schema:Movie` for pinned movie platforms and `schema:TVSeries` for pinned TV-template platforms, sharing `liveActionWorkType`; archive integer platform ids stringify; unknown live-action platform codes stay ignored at `/platform`. MusicAlbum has no library profile. Bangumi episode records stay the graph continuation.
 
@@ -373,7 +374,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@5` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@6` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -413,6 +414,19 @@ bootstrap label and order remaining distinct names by codepoint.
 
 Focused pure controls live in `tests/vndb-staff-names.test.ts`. Exact credited roles and
 credited-as spelling remain the staff-credit coordinator.
+
+### VNDB release minimum age
+
+`cross-media-entities@6` preserves bounded `releases.minage` values in the
+sanitized release projection and digest. It accepts canonical COPY integer text
+and Kana API integer values from 0 through 18. Zero is the explicit all-ages
+value; null and absent values stay unknown. Malformed, nonintegral and
+out-of-range representations keep their bounded source scalar and diagnostic
+but produce no age fact. An admitted value becomes the exact `wdt:P2899`
+quantity in years (`wd:Q577`) with the VNDB release citation. It remains on the
+Release and is never copied to a work. Decision: `minage` accepts only canonical
+COPY integers or API integers; zero means all ages, while null and absent stay
+unknown.
 
 ### VNDB native alternate-name contract
 
@@ -597,6 +611,12 @@ cannot retract an earlier candidate from source data alone.
   conversion under unrelated catalogue/history growth. `vndb-native-metadata.test.ts`
   verifies all 98 facts at the combined title/link limit and native timestamp
   semantics; `vndb-native-citations.test.ts` covers citation parts and digest replay.
+
+### Project a VNDB release minimum age
+
+- Touches: the existing selected release rows and ordinary entity conversion; one bounded `minage` scalar, one native quantity proposal, and the release's existing source citation. Work links and all other release facts retain their current owners.
+- Bound: at most 64 selected release rows, at most 32 characters for a retained malformed source string, and the existing 64 KiB projection, 300-candidate and journal limits. No additional SQL, native reads, authorization calls or unrelated-release scans.
+- Growth check: `services/importer/tests/vndb-release-age-rating.test.ts` exercises the bounded COPY caller, unchanged-input refresh and source change; `services/kernel/test/imports/vndb-release-age-rating.test.ts` exercises native candidate, adoption, current read, fence and reopen behavior. No new PostgreSQL growth series is added.
 
 ### Dispatch a Bangumi record
 
