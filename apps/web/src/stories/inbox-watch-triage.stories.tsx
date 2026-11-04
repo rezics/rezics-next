@@ -92,18 +92,26 @@ async function readyPage(notices: InboxNotice[], next: string | null): Promise<I
   return { signedIn: true, state: 'ready', ...resolved };
 }
 
-function Preview({ view, attempts, cursors }: { view: View; attempts: InboxNoticeSeenAttempt[]; cursors: (string | null)[] }) {
+function Preview({
+  view,
+  attempts,
+  cursors,
+}: {
+  view: View;
+  attempts: InboxNoticeSeenAttempt[];
+  cursors: (string | null)[];
+}) {
   const loadPage = useMemo(
-    () => async (cursor?: string): Promise<InboxPage> => {
-      cursors.push(cursor ?? null);
-      if (view === 'unavailable')
-        return { signedIn: true, state: 'unavailable', failure: { status: 503, code: 'dependency_unavailable' } };
-      if (view === 'sparse')
-        return readyPage([], cursor === undefined ? 'opaque/+continuation==' : null);
-      if (view === 'report') return readyPage([nativeNotice('report-outcome', 'moderation_decision')], null);
-      if (view === 'uncertain') return readyPage([nativeNotice('reply-1', 'reply')], null);
-      return readyPage(mixedNotices, null);
-    },
+    () =>
+      async (cursor?: string): Promise<InboxPage> => {
+        cursors.push(cursor ?? null);
+        if (view === 'unavailable')
+          return { signedIn: true, state: 'unavailable', failure: { status: 503, code: 'dependency_unavailable' } };
+        if (view === 'sparse') return readyPage([], cursor === undefined ? 'opaque/+continuation==' : null);
+        if (view === 'report') return readyPage([nativeNotice('report-outcome', 'moderation_decision')], null);
+        if (view === 'uncertain') return readyPage([nativeNotice('reply-1', 'reply')], null);
+        return readyPage(mixedNotices, null);
+      },
     [cursors, view],
   );
   const acknowledgeNotice = async (attempt: InboxNoticeSeenAttempt) => {

@@ -172,8 +172,7 @@ function validOpenAction(value: unknown): value is NativeActions['open'] {
     return exactKeys(value, ['kind', 'threadId', 'postId']) && noticeId(value.threadId) && noticeId(value.postId);
   if (value.kind === 'moderation_decision')
     return exactKeys(value, ['kind', 'decisionId']) && noticeId(value.decisionId);
-  if (value.kind === 'report_outcome')
-    return exactKeys(value, ['kind', 'reportId']) && noticeId(value.reportId);
+  if (value.kind === 'report_outcome') return exactKeys(value, ['kind', 'reportId']) && noticeId(value.reportId);
   return false;
 }
 
@@ -273,9 +272,10 @@ function validNotice(value: unknown, accountId?: string): value is NativeNotice 
 }
 
 function projectNativeNotice(item: NativeNotice): InboxNotice {
-  const target: NativeTarget = item.target.state === 'withheld'
-    ? { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null }
-    : item.target;
+  const target: NativeTarget =
+    item.target.state === 'withheld'
+      ? { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null }
+      : item.target;
   return {
     id: item.id,
     kind: item.kind,
@@ -313,7 +313,11 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
 /** Convert only native action identities to existing localized routes; never consume a supplied URL. */
 export function inboxOpenHref(item: InboxNotice): string | undefined {
   const open = item.actions?.open;
-  if (!open || !item.target || item.target.state !== 'available' && open.kind !== 'report_outcome' && open.kind !== 'moderation_decision')
+  if (
+    !open ||
+    !item.target ||
+    (item.target.state !== 'available' && open.kind !== 'report_outcome' && open.kind !== 'moderation_decision')
+  )
     return undefined;
   if (open.kind === 'board' && item.target.boardId === open.boardId)
     return localizeHref(`/boards/${encodeURIComponent(open.boardId)}`);
@@ -447,12 +451,10 @@ export async function loadUnreadCount(
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
     if (!authorization || !accountId) return { signedIn: false };
-    const result = await client
-      .accounts({ accountId })
-      .notifications.count.get({
-        headers: authHeaders(authorization),
-        ...(signal ? { fetch: { signal } } : {}),
-      });
+    const result = await client.accounts({ accountId }).notifications.count.get({
+      headers: authHeaders(authorization),
+      ...(signal ? { fetch: { signal } } : {}),
+    });
     if (result.error || !result.data)
       throw new InboxReadError(nativeFailure(result.error, result.status, result.headers));
     const count = result.data;

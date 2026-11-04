@@ -25,13 +25,15 @@ export type StopWatch = Readonly<{
 export type StopWatchResult = { kind: 'removed' } | { kind: 'rejected' } | { kind: 'uncertain' };
 
 export interface WatchManagementIO {
-  read(input: Readonly<{
-    accountId: string;
-    kind: WatchKind;
-    limit: number;
-    cursor: string | null;
-    signal: AbortSignal;
-  }>): Promise<WatchRead>;
+  read(
+    input: Readonly<{
+      accountId: string;
+      kind: WatchKind;
+      limit: number;
+      cursor: string | null;
+      signal: AbortSignal;
+    }>,
+  ): Promise<WatchRead>;
   /** Dispatch the original removal episode through the current Settings session. */
   stop(input: StopWatch, csrfToken: string): Promise<StopWatchResult>;
 }
@@ -93,11 +95,7 @@ function validId(value: unknown): value is string {
 }
 
 function validInstant(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    Number.isFinite(Date.parse(value)) &&
-    new Date(value).toISOString() === value
-  );
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 }
 
 /** Reject malformed management pages and strip target identity from unavailable rows. */
@@ -111,11 +109,18 @@ export function decodeWatchPage(value: unknown, kind: WatchKind): WatchPage {
   )
     throw new Error('Invalid native watch page');
   const watches = value.items.map((item): ManagedWatch => {
-    if (!isRecord(item) || item.kind !== kind || !validId(item.id) || !Number.isSafeInteger(item.revision) ||
-      (item.revision as number) < 1 || !validInstant(item.createdAt))
+    if (
+      !isRecord(item) ||
+      item.kind !== kind ||
+      !validId(item.id) ||
+      !Number.isSafeInteger(item.revision) ||
+      (item.revision as number) < 1 ||
+      !validInstant(item.createdAt)
+    )
       throw new Error('Invalid native watch row');
     if (item.state === 'unavailable') {
-      if (!exactKeys(item, ['id', 'kind', 'revision', 'createdAt', 'state'])) throw new Error('Invalid native watch row');
+      if (!exactKeys(item, ['id', 'kind', 'revision', 'createdAt', 'state']))
+        throw new Error('Invalid native watch row');
       return {
         subscriptionId: item.id,
         kind,
@@ -132,9 +137,10 @@ export function decodeWatchPage(value: unknown, kind: WatchKind): WatchPage {
     )
       throw new Error('Invalid native watch row');
     const title = item.title ?? m.threads_untitled();
-    const href = kind === 'thread'
-      ? threadLocation(getLocale(), { id: item.resourceId, title: item.title as string | null })
-      : localizeHref(`/boards/${encodeURIComponent(item.resourceId)}`);
+    const href =
+      kind === 'thread'
+        ? threadLocation(getLocale(), { id: item.resourceId, title: item.title as string | null })
+        : localizeHref(`/boards/${encodeURIComponent(item.resourceId)}`);
     return {
       subscriptionId: item.id,
       kind,

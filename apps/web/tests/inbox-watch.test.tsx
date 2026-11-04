@@ -16,42 +16,46 @@ type ResolvedNotice = import('../src/inbox/inbox-read').ResolvedInboxPage['items
 
 function wireNotice(overrides: Partial<InboxNotice> = {}, accountId = 'viewer'): InboxNotice {
   const base = {
-  id: 'notice',
-  kind: 'reply',
-  createdAt: '2026-11-03T10:00:00.000Z',
-  unread: true,
-  actorId: 'actor',
-  threadId: 'thread',
-  postId: 'post',
-  decisionId: null,
-  reportId: null,
-  ...overrides,
+    id: 'notice',
+    kind: 'reply',
+    createdAt: '2026-11-03T10:00:00.000Z',
+    unread: true,
+    actorId: 'actor',
+    threadId: 'thread',
+    postId: 'post',
+    decisionId: null,
+    reportId: null,
+    ...overrides,
   };
   const target = overrides.target ?? {
-    state: base.kind === 'moderation_decision' ? 'withheld' as const : 'available' as const,
+    state: base.kind === 'moderation_decision' ? ('withheld' as const) : ('available' as const),
     threadId: base.kind === 'moderation_decision' ? null : base.threadId,
     postId: base.kind === 'moderation_decision' ? null : base.postId,
     boardId: base.kind === 'board_activity' ? 'board' : null,
     threadTitle: base.kind === 'moderation_decision' ? null : 'A current thread',
     boardTitle: base.kind === 'board_activity' ? 'Books' : null,
   };
-  const actor = overrides.actor ?? (base.kind === 'moderation_decision'
-    ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
-    : {
-        state: 'available' as const,
-        accountId: base.actorId ?? 'actor',
-        displayName: 'Momo',
-        handle: 'momo',
-        avatarUrl: null,
-        automated: false,
-      });
-  const open = overrides.actions?.open ?? (base.kind === 'moderation_decision'
-    ? base.reportId
-      ? { kind: 'report_outcome' as const, reportId: base.reportId }
-      : base.decisionId
-        ? { kind: 'moderation_decision' as const, decisionId: base.decisionId }
-        : null
-    : { kind: 'thread_post' as const, threadId: base.threadId!, postId: base.postId! });
+  const actor =
+    overrides.actor ??
+    (base.kind === 'moderation_decision'
+      ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
+      : {
+          state: 'available' as const,
+          accountId: base.actorId ?? 'actor',
+          displayName: 'Momo',
+          handle: 'momo',
+          avatarUrl: null,
+          automated: false,
+        });
+  const open =
+    overrides.actions?.open ??
+    (base.kind === 'moderation_decision'
+      ? base.reportId
+        ? { kind: 'report_outcome' as const, reportId: base.reportId }
+        : base.decisionId
+          ? { kind: 'moderation_decision' as const, decisionId: base.decisionId }
+          : null
+      : { kind: 'thread_post' as const, threadId: base.threadId!, postId: base.postId! });
   return {
     ...base,
     threadId: target.state === 'withheld' ? null : target.threadId,
@@ -89,7 +93,14 @@ test('the composed Inbox page includes installed watch kinds and does not hydrat
       wireNotice({ id: 'mention', kind: 'mention' }),
       wireNotice({ id: 'thread-watch', kind: 'thread_watch' }),
       wireNotice({ id: 'board-activity', kind: 'board_activity' }),
-      wireNotice({ id: 'decision', kind: 'moderation_decision', actorId: null, threadId: null, postId: null, decisionId: 'decision' }),
+      wireNotice({
+        id: 'decision',
+        kind: 'moderation_decision',
+        actorId: null,
+        threadId: null,
+        postId: null,
+        decisionId: 'decision',
+      }),
     ],
     next: 'opaque/+cursor==',
   };
@@ -110,7 +121,13 @@ test('the composed Inbox page includes installed watch kinds and does not hydrat
   const page = await loadInboxPage(client, 'viewer', 'Bearer current', 'opaque-input/+==');
   expect(page.next).toBe(raw.next);
   expect(page.items).toHaveLength(5);
-  expect(page.items.map((item) => item.kind)).toEqual(['reply', 'mention', 'thread_watch', 'board_activity', 'moderation_decision']);
+  expect(page.items.map((item) => item.kind)).toEqual([
+    'reply',
+    'mention',
+    'thread_watch',
+    'board_activity',
+    'moderation_decision',
+  ]);
   expect(page.items[1]).toMatchObject({ actorName: 'Momo', text: 'A current owner summary' });
   const currentPost = threadLocation(getLocale(), { id: 'thread', title: 'A current thread' }, undefined, 'post');
   expect(page.items[2]?.href).toBe(currentPost);
@@ -133,15 +150,28 @@ test('malformed and unknown native kinds fail the whole page', () => {
 
 test('withheld actors and report targets conceal private context while the admitted report link remains usable', async () => {
   const hiddenNotice = wireNotice({
-    id: 'hidden-report', kind: 'moderation_decision', actorId: null, threadId: null, postId: null, reportId: 'report', decisionId: null,
+    id: 'hidden-report',
+    kind: 'moderation_decision',
+    actorId: null,
+    threadId: null,
+    postId: null,
+    reportId: 'report',
+    decisionId: null,
     target: { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null },
     actions: {
       open: { kind: 'report_outcome', reportId: 'report' },
       markSeen: { method: 'POST', path: '/v1/accounts/viewer/notifications/hidden-report:markSeen' },
     },
   });
-  const page = await resolveInboxItems({ items: decodeInboxPage({ items: [hiddenNotice], next: null }, 'viewer').items, next: null });
-  expect(page.items[0]).toMatchObject({ unavailable: true, actorId: null, href: `/${getLocale()}/moderation/reports/report` });
+  const page = await resolveInboxItems({
+    items: decodeInboxPage({ items: [hiddenNotice], next: null }, 'viewer').items,
+    next: null,
+  });
+  expect(page.items[0]).toMatchObject({
+    unavailable: true,
+    actorId: null,
+    href: `/${getLocale()}/moderation/reports/report`,
+  });
   const html = renderToStaticMarkup(createElement(InboxRows, { page }));
   expect(html).toContain(`href="/${getLocale()}/moderation/reports/report"`);
   expect(html).not.toContain('data-actor-id=');

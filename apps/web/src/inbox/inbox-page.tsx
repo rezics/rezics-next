@@ -89,24 +89,28 @@ export function InboxRows({
           const hasComposedDisclosure = !!item.actor && !!item.target && !!item.actions;
           const hiddenLegacyItem = item.unavailable && !hasComposedDisclosure;
           const href = hiddenLegacyItem ? undefined : item.href || undefined;
-          const actorId = item.actor?.state === 'available'
-            ? item.actor.accountId
-            : item.actor || hiddenLegacyItem
-              ? null
-              : item.actorId;
-          const actor = item.actor?.state === 'available'
-            ? item.actor.displayName
-            : item.actor?.state === 'system'
-              ? m.inbox_actor_moderation()
-              : item.actor?.state === 'withheld'
-                ? m.inbox_actor_unknown()
-                : hiddenLegacyItem
+          const actorId =
+            item.actor?.state === 'available'
+              ? item.actor.accountId
+              : item.actor || hiddenLegacyItem
+                ? null
+                : item.actorId;
+          const actor =
+            item.actor?.state === 'available'
+              ? item.actor.displayName
+              : item.actor?.state === 'system'
+                ? m.inbox_actor_moderation()
+                : item.actor?.state === 'withheld'
                   ? m.inbox_actor_unknown()
-                  : item.actorName || (item.reportId || item.kind === 'moderation_decision'
-                    ? m.inbox_actor_moderation()
-                    : m.inbox_actor_unknown());
+                  : hiddenLegacyItem
+                    ? m.inbox_actor_unknown()
+                    : item.actorName ||
+                      (item.reportId || item.kind === 'moderation_decision'
+                        ? m.inbox_actor_moderation()
+                        : m.inbox_actor_unknown());
           const kind = kindLabel(item);
-          const text = item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();
+          const text =
+            item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();
           const explanation =
             item.kind === 'thread_watch' || item.watch === 'thread'
               ? m.inbox_thread_activity_text()
@@ -116,34 +120,35 @@ export function InboxRows({
           const readState = item.unread ? m.inbox_notice_unread() : m.inbox_notice_read();
           const date = exactDate.format(new Date(item.createdAt));
           const context = item.context ?? inboxTargetContext(item.target);
-          const chosenAction = onMarkSeen && (item.unread || uncertainNoticeId === item.id)
-            ? uncertainNoticeId === item.id
-              ? (
-                  <div className="space-y-1">
-                    <p role="status">{m.inbox_notice_seen_unknown()}</p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
-                      disabled={pendingNoticeId === item.id || loading}
-                      onClick={onRetrySeen}
-                    >
-                      {m.inbox_notice_seen_retry()}
-                    </Button>
-                  </div>
-                )
-              : (
+          const chosenAction =
+            onMarkSeen && (item.unread || uncertainNoticeId === item.id) ? (
+              uncertainNoticeId === item.id ? (
+                <div className="space-y-1">
+                  <p role="status">{m.inbox_notice_seen_unknown()}</p>
                   <Button
                     type="button"
                     variant="outline"
                     className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
-                    disabled={acknowledgementBlocked || loading || pendingNoticeId !== null && pendingNoticeId !== undefined}
-                    onClick={() => onMarkSeen(item.id)}
+                    disabled={pendingNoticeId === item.id || loading}
+                    onClick={onRetrySeen}
                   >
-                    {pendingNoticeId === item.id ? m.inbox_notice_marking_seen() : m.inbox_notice_mark_seen()}
+                    {m.inbox_notice_seen_retry()}
                   </Button>
-                )
-            : null;
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
+                  disabled={
+                    acknowledgementBlocked || loading || (pendingNoticeId !== null && pendingNoticeId !== undefined)
+                  }
+                  onClick={() => onMarkSeen(item.id)}
+                >
+                  {pendingNoticeId === item.id ? m.inbox_notice_marking_seen() : m.inbox_notice_mark_seen()}
+                </Button>
+              )
+            ) : null;
           const destinationProps = href ? { href } : {};
           const primaryLinkLabelProps = href
             ? ({
@@ -199,7 +204,11 @@ export function InboxRows({
                   ) : null}
                 </div>
               }
-              state={<span aria-hidden={href ? true : undefined}>{confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}</span>}
+              state={
+                <span aria-hidden={href ? true : undefined}>
+                  {confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}
+                </span>
+              }
               actions={chosenAction}
               data-notice-id={item.id}
               data-unread={item.unread}
@@ -836,7 +845,7 @@ export function ViewerInboxPage({
                 onMarkSeen={markNoticeSeen}
                 onRetrySeen={retryNoticeSeen}
                 pendingNoticeId={noticePendingId}
-                uncertainNoticeId={noticeFailure ? noticeAttemptView?.noticeId ?? null : null}
+                uncertainNoticeId={noticeFailure ? (noticeAttemptView?.noticeId ?? null) : null}
                 acknowledgementBlocked={
                   noticeAttemptView !== null ||
                   seenAttempt.current !== null ||

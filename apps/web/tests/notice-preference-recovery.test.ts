@@ -557,4 +557,3 @@ test('unknown and pending unread counts use the same honest dot while ready coun
     expect(markup).toContain(`>${label}</span>`);
   }
 });
-

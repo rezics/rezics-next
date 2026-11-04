@@ -181,10 +181,18 @@ export const readWatchInventory = createServerFn({ method: 'GET' })
       !watchKind(value.kind) ||
       !Number.isSafeInteger(value.limit) ||
       value.limit !== 20 ||
-      !(value.cursor === null || (typeof value.cursor === 'string' && value.cursor.length > 0 && value.cursor.length <= 4096))
+      !(
+        value.cursor === null ||
+        (typeof value.cursor === 'string' && value.cursor.length > 0 && value.cursor.length <= 4096)
+      )
     )
       throw new Error('Invalid watch page');
-    return { accountId: value.accountId, kind: value.kind, limit: value.limit as 20, cursor: value.cursor as string | null };
+    return {
+      accountId: value.accountId,
+      kind: value.kind,
+      limit: value.limit as 20,
+      cursor: value.cursor as string | null,
+    };
   })
   .handler(async ({ data }): Promise<WatchRead> => {
     setResponseHeader('cache-control', 'private, no-store');
@@ -234,12 +242,7 @@ export const removeWatchSubscription = createServerFn({ method: 'POST' })
     await prepareSession(request, env as Partial<SessionEnv>);
     const authorization = viewerCredential(request);
     const accountId = sessionSubject(request);
-    if (
-      !authorization ||
-      !accountId ||
-      accountId !== data.accountId ||
-      requestCsrfToken(request) !== data.csrfToken
-    )
+    if (!authorization || !accountId || accountId !== data.accountId || requestCsrfToken(request) !== data.csrfToken)
       return { kind: 'rejected' };
     return removeWatchNative(kernelClient(undefined, authorization), authorization, data);
   });

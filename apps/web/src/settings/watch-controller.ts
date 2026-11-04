@@ -96,7 +96,9 @@ export class WatchController {
           row.revision > 0 &&
           typeof row.createdAt === 'string' &&
           (row.target === null ||
-            (typeof row.target.title === 'string' && typeof row.target.href === 'string' && row.target.href.startsWith('/'))),
+            (typeof row.target.title === 'string' &&
+              typeof row.target.href === 'string' &&
+              row.target.href.startsWith('/'))),
       ) &&
       (page.next === null || (typeof page.next === 'string' && page.next.length > 0))
     );
@@ -127,13 +129,7 @@ export class WatchController {
 
   stop = async (subscriptionId: string) => {
     const row = this.state.rows.find((candidate) => candidate.subscriptionId === subscriptionId);
-    if (
-      !this.canWrite() ||
-      this.state.read !== 'ready' ||
-      this.state.command ||
-      !row
-    )
-      return;
+    if (!this.canWrite() || this.state.read !== 'ready' || this.state.command || !row) return;
     const command = Object.freeze({
       accountId: this.owner.subject,
       watchId: row.subscriptionId,
@@ -159,9 +155,7 @@ export class WatchController {
       if (!this.current() || this.state.command !== command) return;
       if (result.kind === 'removed') {
         this.update({
-          rows: this.state.rows.filter(
-            (row) => row.subscriptionId !== command.watchId || row.kind !== command.kind,
-          ),
+          rows: this.state.rows.filter((row) => row.subscriptionId !== command.watchId || row.kind !== command.kind),
           command: null,
           write: 'removed',
         });

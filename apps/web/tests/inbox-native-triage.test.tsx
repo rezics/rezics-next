@@ -2,7 +2,13 @@ import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { getLocale } from '../src/paraglide/runtime.js';
 import { threadLocation } from '../src/threads/thread-href';
-import { emptyInboxPagination, nextInboxPage, receiveInboxPage, readableInboxPage, confirmInboxNoticeSeen } from '../src/inbox/inbox-pagination';
+import {
+  emptyInboxPagination,
+  nextInboxPage,
+  receiveInboxPage,
+  readableInboxPage,
+  confirmInboxNoticeSeen,
+} from '../src/inbox/inbox-pagination';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { decodeInboxPage, inboxReadFailure, loadInboxPage, markInboxNoticeSeen, resolveInboxItems } =
   await import('../src/inbox/inbox-read');
@@ -28,15 +34,35 @@ function notice(id: string, kind: Notice['kind']): Notice {
   const actor = report
     ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
     : id === 'mention-1'
-      ? { state: 'withheld' as const, displayName: 'Former or unavailable account' as const, handle: null, avatarUrl: null }
-      : { state: 'available' as const, accountId: 'actor-1', displayName: 'Momo', handle: 'momo', avatarUrl: null, automated: false };
+      ? {
+          state: 'withheld' as const,
+          displayName: 'Former or unavailable account' as const,
+          handle: null,
+          avatarUrl: null,
+        }
+      : {
+          state: 'available' as const,
+          accountId: 'actor-1',
+          displayName: 'Momo',
+          handle: 'momo',
+          avatarUrl: null,
+          automated: false,
+        };
   const open = report
     ? { kind: 'report_outcome' as const, reportId: reportId! }
     : { kind: 'thread_post' as const, threadId: threadId!, postId: postId! };
   return {
-    id, kind, createdAt: '2026-11-03T10:00:00.000Z', unread: true,
+    id,
+    kind,
+    createdAt: '2026-11-03T10:00:00.000Z',
+    unread: true,
     actorId: actor.state === 'available' ? actor.accountId : null,
-    threadId, postId, decisionId, reportId, actor, target,
+    threadId,
+    postId,
+    decisionId,
+    reportId,
+    actor,
+    target,
     summary: report ? 'Your report was actioned' : `Update ${id}`,
     actions: {
       open,
@@ -63,10 +89,18 @@ test('Inbox uses one composed page for current disclosure, installed kinds and a
     }) as typeof fetch,
   });
   const page = await loadInboxPage(client, 'alice', 'Bearer alice', 'opaque/+input==');
-  expect(page.items.map(({ kind }) => kind)).toEqual(['reply', 'mention', 'thread_watch', 'board_activity', 'moderation_decision']);
+  expect(page.items.map(({ kind }) => kind)).toEqual([
+    'reply',
+    'mention',
+    'thread_watch',
+    'board_activity',
+    'moderation_decision',
+  ]);
   expect(page.items[0]).toMatchObject({ actorName: 'Momo', context: 'Current discussion', text: 'Update reply-1' });
   expect(page.items[1]).toMatchObject({ actorId: null, actor: { state: 'withheld' }, href: expect.any(String) });
-  expect(page.items[0]?.href).toBe(threadLocation(getLocale(), { id: 'thread-1', title: 'Current discussion' }, undefined, 'post-1'));
+  expect(page.items[0]?.href).toBe(
+    threadLocation(getLocale(), { id: 'thread-1', title: 'Current discussion' }, undefined, 'post-1'),
+  );
   expect(page.items[2]?.href).toBe(
     threadLocation(getLocale(), { id: 'watched-thread', title: 'Current discussion' }, undefined, 'post-1'),
   );
@@ -153,11 +187,15 @@ test('one-item acknowledgement uses only its notice identity and changes no neig
   expect(request.headers.get('idempotency-key')).toBe(JSON.stringify(attempt.idempotencyKey));
   expect(await request.text()).toBe('');
 
-  const resolved = await resolveInboxItems({ items: [notice('chosen', 'reply'), notice('neighbor', 'mention')], next: null });
+  const resolved = await resolveInboxItems({
+    items: [notice('chosen', 'reply'), notice('neighbor', 'mention')],
+    next: null,
+  });
   const initial = receiveInboxPage(emptyInboxPagination, { signedIn: true, state: 'ready', ...resolved });
   const confirmed = confirmInboxNoticeSeen(initial, 'chosen');
   expect(confirmed.current?.items.map(({ id, unread }) => [id, unread])).toEqual([
-    ['chosen', false], ['neighbor', true],
+    ['chosen', false],
+    ['neighbor', true],
   ]);
   expect(confirmInboxNoticeSeen(confirmed, 'chosen')).toBe(confirmed);
 });

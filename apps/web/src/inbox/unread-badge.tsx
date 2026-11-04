@@ -4,9 +4,11 @@ import type { UnreadCount } from './inbox-read';
 import { useInboxViewer } from './inbox-viewer';
 import { m } from '../paraglide/messages.js';
 
-export function unreadBadgeLabel(
-  count: { count: number; capped: boolean; basis?: 'current-visible-unread' | 'current-visible-lower-bound' },
-): string | null {
+export function unreadBadgeLabel(count: {
+  count: number;
+  capped: boolean;
+  basis?: 'current-visible-unread' | 'current-visible-lower-bound';
+}): string | null {
   const lowerBound = count.basis === 'current-visible-lower-bound' || count.capped;
   if (count.count <= 0 && !count.capped && !lowerBound) return null;
   if (count.count >= 100) return '99+';

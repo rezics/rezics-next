@@ -55,9 +55,20 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
       if (request.method === 'GET') {
         const kind = url.searchParams.get('kind');
         return Response.json({
-          items: kind === 'thread' ? [threadRow, unavailableRow] : [{
-            id: 'board-watch-episode', kind: 'board', revision: 3, createdAt, state: 'available', resourceId: 'board-1', title: 'Books',
-          }],
+          items:
+            kind === 'thread'
+              ? [threadRow, unavailableRow]
+              : [
+                  {
+                    id: 'board-watch-episode',
+                    kind: 'board',
+                    revision: 3,
+                    createdAt,
+                    state: 'available',
+                    resourceId: 'board-1',
+                    title: 'Books',
+                  },
+                ],
           next: null,
         });
       }
@@ -65,17 +76,22 @@ test('generated inventory and exact removal operations preserve kind, cursor, re
     }) as typeof fetch,
   });
   const first = await readWatchInventoryNative(client, 'alice', 'Bearer alice', {
-    kind: 'thread', limit: 20, cursor: null,
+    kind: 'thread',
+    limit: 20,
+    cursor: null,
   });
   const board = await readWatchInventoryNative(client, 'alice', 'Bearer alice', {
-    kind: 'board', limit: 20, cursor: 'opaque/+cursor==',
+    kind: 'board',
+    limit: 20,
+    cursor: 'opaque/+cursor==',
   });
   expect(first.watches).toHaveLength(2);
   expect(board.watches[0]?.target?.href).toBe(`/${getLocale()}/boards/board-1`);
   expect(new URL(requests[0]!.request.url).searchParams.toString()).toBe('kind=thread&limit=20');
   expect(new URL(requests[1]!.request.url).searchParams.get('cursor')).toBe('opaque/+cursor==');
   expect(requests.slice(0, 2).map(({ request }) => request.headers.get('authorization'))).toEqual([
-    'Bearer alice', 'Bearer alice',
+    'Bearer alice',
+    'Bearer alice',
   ]);
 
   const command = Object.freeze({
@@ -123,12 +139,17 @@ test('fixed 20-row watch visits release controllers and ignore unrelated invento
       });
       for (let visit = 0; visit < visits; visit++) {
         const page = await readWatchInventoryNative(client, 'alice', 'Bearer alice', {
-          kind: 'thread', limit: 20, cursor: null,
+          kind: 'thread',
+          limit: 20,
+          cursor: null,
         });
         const controller = new WatchController(
           {
             read: async () => ({ kind: 'page', page }),
-            stop: async () => { commandAttempts++; return { kind: 'removed' }; },
+            stop: async () => {
+              commandAttempts++;
+              return { kind: 'removed' };
+            },
           },
           { subject: 'alice', readCurrent: () => true, credential: () => 'csrf', subscribe: () => () => {} },
         );
@@ -199,13 +220,19 @@ test('uncertain removal retries the original command and a retired owner callbac
   const lateController = new WatchController(
     {
       read: async () => ({ kind: 'page', page: { watches: [row], next: null } }),
-      stop: async (command) => { commands.push(command); return { kind: 'removed' }; },
+      stop: async (command) => {
+        commands.push(command);
+        return { kind: 'removed' };
+      },
     },
     {
       subject: 'alice',
       readCurrent: () => current,
       credential: () => (current ? 'csrf' : null),
-      subscribe: (listener) => { notify = listener; return () => {}; },
+      subscribe: (listener) => {
+        notify = listener;
+        return () => {};
+      },
     },
   );
   current = true;

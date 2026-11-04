@@ -39,32 +39,41 @@ function notice(overrides: Partial<InboxNotice> = {}, accountId = 'reporter-1'):
     ...overrides,
   };
   const target = overrides.target ?? {
-    state: base.kind === 'moderation_decision' ? 'withheld' as const : 'available' as const,
+    state: base.kind === 'moderation_decision' ? ('withheld' as const) : ('available' as const),
     threadId: base.kind === 'moderation_decision' ? null : base.threadId,
     postId: base.kind === 'moderation_decision' ? null : base.postId,
     boardId: base.kind === 'board_activity' ? 'board-1' : null,
     threadTitle: base.kind === 'moderation_decision' ? null : 'A current thread',
     boardTitle: base.kind === 'board_activity' ? 'A current board' : null,
   };
-  const actor = overrides.actor ?? (base.kind === 'moderation_decision'
-    ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
-    : base.actorId
-      ? {
-          state: 'available' as const,
-          accountId: base.actorId,
-          displayName: 'Momo',
-          handle: 'momo',
-          avatarUrl: null,
-          automated: false,
-        }
-      : { state: 'withheld' as const, displayName: 'Former or unavailable account' as const, handle: null, avatarUrl: null });
-  const open = overrides.actions?.open ?? (base.kind === 'moderation_decision'
-    ? base.reportId
-      ? { kind: 'report_outcome' as const, reportId: base.reportId }
-      : base.decisionId
-        ? { kind: 'moderation_decision' as const, decisionId: base.decisionId }
-        : null
-    : { kind: 'thread_post' as const, threadId: base.threadId!, postId: base.postId! });
+  const actor =
+    overrides.actor ??
+    (base.kind === 'moderation_decision'
+      ? { state: 'system' as const, displayName: 'Moderation team' as const, handle: null, avatarUrl: null }
+      : base.actorId
+        ? {
+            state: 'available' as const,
+            accountId: base.actorId,
+            displayName: 'Momo',
+            handle: 'momo',
+            avatarUrl: null,
+            automated: false,
+          }
+        : {
+            state: 'withheld' as const,
+            displayName: 'Former or unavailable account' as const,
+            handle: null,
+            avatarUrl: null,
+          });
+  const open =
+    overrides.actions?.open ??
+    (base.kind === 'moderation_decision'
+      ? base.reportId
+        ? { kind: 'report_outcome' as const, reportId: base.reportId }
+        : base.decisionId
+          ? { kind: 'moderation_decision' as const, decisionId: base.decisionId }
+          : null
+      : { kind: 'thread_post' as const, threadId: base.threadId!, postId: base.postId! });
   return {
     ...base,
     threadId: target.state === 'withheld' ? null : target.threadId,
@@ -106,7 +115,10 @@ test('the composed notice supplies current summaries and exact localized destina
 
 test('unreadable ordinary notices fail the page while reporter outcomes remain openable', async () => {
   const withheld = notice({
-    id: 'withheld', actorId: null, threadId: null, postId: null,
+    id: 'withheld',
+    actorId: null,
+    threadId: null,
+    postId: null,
     target: { state: 'withheld', threadId: null, postId: null, boardId: null, threadTitle: null, boardTitle: null },
     actions: {
       open: null,
@@ -189,7 +201,10 @@ test('a reporter notice keeps its admitted status destination with withheld targ
   for (const targetAvailability of ['available', 'unavailable'] as const) {
     for (const outcome of ['actioned', 'dismissed'] as const) {
       const submission = { ...submittedReport, targetAvailability, outcome };
-      const currentReporterNotice = notice({ ...reporterNotice, summary: outcome === 'actioned' ? 'Actioned' : 'Dismissed' });
+      const currentReporterNotice = notice({
+        ...reporterNotice,
+        summary: outcome === 'actioned' ? 'Actioned' : 'Dismissed',
+      });
       const calls: string[] = [];
       const client = createKernelClient('http://kernel.local', {
         fetch: (async (input, init) => {
@@ -248,7 +263,14 @@ test('report destination reads remain reporter-scoped after the Inbox admits the
         expect(path).toBe(`/v1/reports/${report}`);
         return Response.json(
           status === 200
-            ? { report: { ...moderator, targetAvailability: 'unavailable', partition: 1, transactionId: 'private-transaction' } }
+            ? {
+                report: {
+                  ...moderator,
+                  targetAvailability: 'unavailable',
+                  partition: 1,
+                  transactionId: 'private-transaction',
+                },
+              }
             : { code: status === 503 ? 'dependency_unavailable' : 'not_found' },
           { status },
         );
@@ -256,7 +278,8 @@ test('report destination reads remain reporter-scoped after the Inbox admits the
     });
     const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
     expect(page.items[0]?.href).toBe(`/${getLocale()}/moderation/reports/${report}`);
-    if (status === 200) expect(await loadReporterStatus(client, report, 'Bearer reporter')).toMatchObject(submittedReport);
+    if (status === 200)
+      expect(await loadReporterStatus(client, report, 'Bearer reporter')).toMatchObject(submittedReport);
     else if (status === 404) expect(await loadReporterStatus(client, report, 'Bearer reporter')).toBeNull();
     else await expect(loadReporterStatus(client, report, 'Bearer reporter')).rejects.toThrow();
   }
@@ -490,41 +513,41 @@ test('actual Retry-After survives the composed list failure; only a valid header
   const { preferenceRetryDeadline } = await import('../src/settings/preference-failure-retry');
   const now = Date.parse('2026-10-31T00:00:00.000Z');
   for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', 'invalid', undefined]) {
-      const paths: string[] = [];
-      const client = createKernelClient('http://kernel.local', {
-        fetch: (async (input, init) => {
-          const request = new Request(input, init);
-          const path = new URL(request.url).pathname;
-          paths.push(path);
-          expect(request.method).toBe('GET');
-          return Response.json(
-            {
-              status: 503,
-              code: 'deadline_exceeded',
-              retryable: true,
-              request_id: 'native-deadline',
-              retryAfter: '99',
-            },
-            { status: 503, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
-          );
-        }) as typeof fetch,
-      });
-      const result = await loadInboxPage(client, 'reporter-1', 'Bearer reporter').catch(inboxReadFailure);
-      expect(result).toEqual({
-        signedIn: true,
-        state: 'unavailable',
-        failure: {
-          status: 503,
-          code: 'deadline_exceeded',
-          retryable: true,
-          requestId: 'native-deadline',
-          ...(retryAfter === undefined ? {} : { retryAfter }),
-        },
-      });
-      expect(paths).toEqual(['/v1/accounts/reporter-1/notifications']);
-      expect(preferenceRetryDeadline(retryAfter, now)).toBe(
-        retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0,
-      );
+    const paths: string[] = [];
+    const client = createKernelClient('http://kernel.local', {
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        const path = new URL(request.url).pathname;
+        paths.push(path);
+        expect(request.method).toBe('GET');
+        return Response.json(
+          {
+            status: 503,
+            code: 'deadline_exceeded',
+            retryable: true,
+            request_id: 'native-deadline',
+            retryAfter: '99',
+          },
+          { status: 503, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
+        );
+      }) as typeof fetch,
+    });
+    const result = await loadInboxPage(client, 'reporter-1', 'Bearer reporter').catch(inboxReadFailure);
+    expect(result).toEqual({
+      signedIn: true,
+      state: 'unavailable',
+      failure: {
+        status: 503,
+        code: 'deadline_exceeded',
+        retryable: true,
+        requestId: 'native-deadline',
+        ...(retryAfter === undefined ? {} : { retryAfter }),
+      },
+    });
+    expect(paths).toEqual(['/v1/accounts/reporter-1/notifications']);
+    expect(preferenceRetryDeadline(retryAfter, now)).toBe(
+      retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0,
+    );
   }
   const native = new MediaProblem(
     {

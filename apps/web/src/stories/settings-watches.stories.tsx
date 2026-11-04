@@ -27,25 +27,38 @@ function Preview({ view, attempts }: { view: View; attempts: StopWatch[] }) {
         kind: 'page',
         page: {
           next: null,
-          watches: view === 'inaccessible' || view === 'uncertain'
-            ? kind === 'thread'
-              ? [{ subscriptionId: 'private-unavailable', kind, revision: 7, createdAt: '2026-11-03T10:00:00.000Z', target: null }]
-              : []
-            : kind === 'thread'
-              ? [{
-                  subscriptionId: 'private-thread',
-                  kind,
-                  revision: 4,
-                  createdAt: '2026-11-03T10:00:00.000Z',
-                  target: { title: 'Reading together: autumn discoveries', href: '/en/threads/preview' },
-                }]
-              : [{
-                  subscriptionId: 'private-board',
-                  kind,
-                  revision: 5,
-                  createdAt: '2026-11-03T10:00:00.000Z',
-                  target: { title: 'Books and reading', href: '/en/boards/preview' },
-                }],
+          watches:
+            view === 'inaccessible' || view === 'uncertain'
+              ? kind === 'thread'
+                ? [
+                    {
+                      subscriptionId: 'private-unavailable',
+                      kind,
+                      revision: 7,
+                      createdAt: '2026-11-03T10:00:00.000Z',
+                      target: null,
+                    },
+                  ]
+                : []
+              : kind === 'thread'
+                ? [
+                    {
+                      subscriptionId: 'private-thread',
+                      kind,
+                      revision: 4,
+                      createdAt: '2026-11-03T10:00:00.000Z',
+                      target: { title: 'Reading together: autumn discoveries', href: '/en/threads/preview' },
+                    },
+                  ]
+                : [
+                    {
+                      subscriptionId: 'private-board',
+                      kind,
+                      revision: 5,
+                      createdAt: '2026-11-03T10:00:00.000Z',
+                      target: { title: 'Books and reading', href: '/en/boards/preview' },
+                    },
+                  ],
         },
       };
     },
