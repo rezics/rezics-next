@@ -1,3 +1,4 @@
+import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
 import { useId, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useLocation, useRouter } from '@tanstack/react-router';
 import { ContentItem } from '@rezics/ui/content-item';
@@ -359,7 +360,9 @@ function BoardFeedVisit({
     boardId,
     sort,
     locale,
-    ...(typeof location.search.returnTo === 'string' ? { returnTo: location.search.returnTo } : {}),
+    ...(subjectCommunityVisitReturn(location.search.returnTo, locale)
+      ? { returnTo: subjectCommunityVisitReturn(location.search.returnTo, locale)! }
+      : {}),
     ...(cursor === undefined || pins.needsRestart ? {} : { cursor }),
   });
   useLayoutEffect(() => {

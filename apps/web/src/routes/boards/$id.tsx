@@ -124,15 +124,22 @@ function BoardPage() {
           overflow={<BoardCommunityMenu boardId={id} signedIn={session === 'signed-in'} />}
           postingInterval={
             <>
-            {search.returnTo ? <a href={search.returnTo} className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring">{realmReadingReturn(search.returnTo) ? m.realm_reading_return() : m.subject_connections_return()}</a> : null}
-            {session === 'signed-in' ? (
-              <SlowModeSetting
-                boardId={id}
-                scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
-                credentialMode={router.options.context.credentialMode}
-                onApplied={() => void router.invalidate()}
-              />
-            ) : null}
+              {search.returnTo ? (
+                <a
+                  href={search.returnTo}
+                  className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {realmReadingReturn(search.returnTo) ? m.realm_reading_return() : m.subject_connections_return()}
+                </a>
+              ) : null}
+              {session === 'signed-in' ? (
+                <SlowModeSetting
+                  boardId={id}
+                  scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
+                  credentialMode={router.options.context.credentialMode}
+                  onApplied={() => void router.invalidate()}
+                />
+              ) : null}
             </>
           }
         />

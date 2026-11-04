@@ -1,4 +1,3 @@
-import { subjectCommunityVisitReturn } from '../features/pages/subject-visit-navigation';
 import { BOARD_PINNED_SECTION_LIMIT, pinnedIdentitySet, validBoardPinId } from './board-pins/contract';
 import type { BoardSort } from './board-sort';
 
@@ -68,6 +67,17 @@ export function isMalformedBoardQuery(status: number, body: unknown): boolean {
   return code !== 'invalid_cursor' && code !== 'stale_cursor';
 }
 
+/** Opaque navigation input; the receiving Board route still applies its existing return validator. */
+function boardReturnCandidate(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= 32768 &&
+    value.startsWith('/') &&
+    !value.startsWith('//') &&
+    !/[\\\u0000-\u001f\u007f]/u.test(value)
+  );
+}
+
 export function captureBoardReadingReturn(input: {
   boardId: string;
   sort: BoardSort;
@@ -88,7 +98,7 @@ export function captureBoardReadingReturn(input: {
     sort: input.sort,
     locale: input.locale,
     ...(cursor === undefined ? {} : { cursor }),
-    ...(subjectCommunityVisitReturn(input.returnTo, input.locale) ? { returnTo: subjectCommunityVisitReturn(input.returnTo, input.locale)! } : {}),
+    ...(boardReturnCandidate(input.returnTo) ? { returnTo: input.returnTo! } : {}),
     ...(validBoardPinId(input.focusThreadId) ? { focusThreadId: input.focusThreadId } : {}),
   };
 }
@@ -118,7 +128,7 @@ export function boardReadingHref(reading: BoardReadingReturn): string {
   const params = new URLSearchParams();
   if (reading.sort !== 'active') params.set('sort', reading.sort);
   if (reading.cursor !== undefined) params.set('cursor', reading.cursor);
-  const returnTo = subjectCommunityVisitReturn(reading.returnTo, reading.locale);
+  const returnTo = boardReturnCandidate(reading.returnTo) ? reading.returnTo : undefined;
   if (returnTo) params.set('returnTo', returnTo);
   const search = params.toString();
   const href = search ? `${path}?${search}` : path;

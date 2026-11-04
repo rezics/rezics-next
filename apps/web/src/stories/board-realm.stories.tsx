@@ -52,5 +52,7 @@ export const BoardSignedOut: Story = {
     const link = within(context.canvasElement).getByRole('link', { name: m.realm_reading_return() });
     expect(link).toHaveAttribute('href', selectedRealmReturn);
   },
-  render: () => <PageStory visitor="Signed Out" path={`${boardPath}?${new URLSearchParams({ returnTo: selectedRealmReturn })}`} />,
+  render: () => (
+    <PageStory visitor="Signed Out" path={`${boardPath}?${new URLSearchParams({ returnTo: selectedRealmReturn })}`} />
+  ),
 };

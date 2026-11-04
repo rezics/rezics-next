@@ -50,7 +50,11 @@ export function useShelfList<T extends { id: string }>(
   requireReaderOrigin = false,
 ) {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState({ ...initial, cursors: new Map(initial.items.map(item => [item.id, null as string | null])), continuation: null as ShelfContinuationResult | null });
+  const [page, setPage] = useState({
+    ...initial,
+    cursors: new Map(initial.items.map((item) => [item.id, null as string | null])),
+    continuation: null as ShelfContinuationResult | null,
+  });
   const [failedRead, setFailedRead] = useState<FailedShelfRead | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
@@ -71,7 +75,11 @@ export function useShelfList<T extends { id: string }>(
     visit.current = lifetime;
     generation.current++;
     active.current = null;
-    setPage({ ...initial, cursors: new Map(initial.items.map(item => [item.id, null as string | null])), continuation: null });
+    setPage({
+      ...initial,
+      cursors: new Map(initial.items.map((item) => [item.id, null as string | null])),
+      continuation: null,
+    });
     setFailedRead(null);
     setBusy(false);
   }, [lifetime]);
