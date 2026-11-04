@@ -1,8 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "jsx": "react-jsx",
     "resolveJsonModule": true,
+    "paths": {
+      "@rezics/money": ["../../packages/money/src/index.ts"]
+    },
     "types": ["vite/client", "@cloudflare/workers-types"]
   },
   "include": [

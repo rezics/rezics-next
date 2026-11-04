@@ -423,14 +423,12 @@ function CreatorOfferForm({
       ) : editor.kind !== 'ready' ? (
         <div className="space-y-3 rounded-xl border bg-card p-5 text-card-foreground" role="status">
           <p>{editor.kind === 'choose-edition' ? m.creator_choose_edition() : creatorNotice(editor.kind)}</p>
-          {editor.kind !== 'price-unavailable' && (
-            <a
-              href={`/${locale}/editions/new`}
-              className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
-            >
-              {m.creator_publish_edition()}
-            </a>
-          )}
+          <a
+            href={`/${locale}/editions/new`}
+            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          >
+            {m.creator_publish_edition()}
+          </a>
         </div>
       ) : (
         <>
