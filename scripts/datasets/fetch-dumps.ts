@@ -34,6 +34,9 @@ export const VNDB_DUMP_HEADERS: Readonly<Record<string, readonly string[]>> = {
   releases_extlinks: ['id', 'link'],
   staff_extlinks: ['id', 'link'],
   vn_extlinks: ['id', 'link'],
+  tags: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'],
+  tags_parents: ['id', 'parent', 'main'],
+  tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
 };
 export const VNDB_DUMP_TABLES = [
   'anime',
@@ -53,8 +56,12 @@ export const VNDB_DUMP_TABLES = [
   'staff',
   'staff_alias',
   'staff_extlinks',
+  'tags',
+  'tags_parents',
+  'tags_vn',
   'vn',
   'vn_anime',
+  'vn_extlinks',
   'vn_relations',
   'vn_seiyuu',
   'vn_staff',

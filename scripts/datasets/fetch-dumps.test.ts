@@ -55,7 +55,16 @@ async function tempCache(): Promise<{ cacheRoot: string; dispose: () => Promise<
 
 test('VNDB dump cache requires the exact external-link tables and COPY headers', () => {
   expect(VNDB_DUMP_TABLES).toEqual(
-    expect.arrayContaining(['extlinks', 'staff_extlinks', 'producers_extlinks', 'releases_extlinks', 'vn_extlinks']),
+    expect.arrayContaining([
+      'extlinks',
+      'staff_extlinks',
+      'producers_extlinks',
+      'releases_extlinks',
+      'vn_extlinks',
+      'tags',
+      'tags_parents',
+      'tags_vn',
+    ]),
   );
   expect(VNDB_DUMP_HEADERS).toMatchObject({
     extlinks: ['id', 'site', 'value'],
@@ -63,6 +72,9 @@ test('VNDB dump cache requires the exact external-link tables and COPY headers',
     producers_extlinks: ['id', 'link'],
     releases_extlinks: ['id', 'link'],
     vn_extlinks: ['id', 'link'],
+    tags: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'],
+    tags_parents: ['id', 'parent', 'main'],
+    tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
   });
   expect(VNDB_DUMP_TABLES).toContain('releases_titles');
 });

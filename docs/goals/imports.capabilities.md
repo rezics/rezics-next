@@ -704,6 +704,15 @@ not additional check requests.
   website validator as `sourceWebsiteUrl`; inventory `extlinks.value` as proposed `schema:url` (`wdt:P856`) because
   `schema:Thing` is not a bundled class and one column serves Person, Organization and Release; Bangumi-looking
   staff/producer/release websites remain `schema:url` and the Bangumi identity bridge stays VN-only.
+- Default local real-dump seed projects selected-family `tags`/`tags_vn` through
+  `services/importer/src/showcase-tags.ts` and the existing public-tag coordinator.
+  Local evidence: `services/importer/tests/showcase-tags.test.ts`. Connected native
+  file `services/kernel/test/imports/showcase-tags.test.ts` is registered and not
+  executed in this attempt; no native pass is claimed. Decision: `tags_vn.vote` is
+  an admission filter, not public `tags.rating` or native weight;
+  `rezics:sourceTagWeight` remains a Semantic obligation. Parent relationships and
+  unsupported associations stay explicit gaps. Refresh keeps the same native work
+  identity.
 - `production operator imports two VNDB staff aliases through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-credits.test.ts`.
   Frozen scenario names:
