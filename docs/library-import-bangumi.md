@@ -93,7 +93,15 @@ Retired accounts are left to Library's terminal owner graph, whose appended `ban
 100 keys per page. Explicit deletion and either cleanup path preserve acknowledged native state and labels. Review
 command receipts retain only the opaque review token, not the private review response. Shared command-history erasure
 retains the existing Library pending-custody limitation; this source makes no complete erasure attestation.
+The expiry fence covers fresh state and label admission. An already-started private note, privacy or source-date native
+command crossing expiry still needs receipt-only recovery after source evidence is scrubbed.
 Examples above are constructed API guidance; focused native test execution is reported separately.
+
+Local verification attempted `bun run --cwd services/kernel typecheck`; it reported missing generated
+`packages/client/src/kernel/rating/own-votes-counted` and other Kernel diagnostics. The focused command
+`bun run --cwd services/kernel check test/library/list-import-bangumi-http.test.ts test/library/library-export-http.test.ts test/library/erasure-owned-graph.test.ts`
+stopped before executing tests at `Schema dump differs from db/library/schema.sql.` The Content-owned schema
+derivation handoff is pending. Frozen acceptance, native64/512/4096 growth, browser and root checks were not run.
 
 ## Web journey
 

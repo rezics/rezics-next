@@ -715,6 +715,11 @@ vote or aggregate write is claimed. The focused HTTP test covers source distinct
 selection and preservation of an existing vote. Score declaration generation and Web rendering remain continuation
 work with their existing owners; no completed score UI is claimed. The existing Web324 interface consumes the
 generated state/tag delivery.
+The private note/privacy/source-date path still needs receipt-only recovery when an already-started native command
+crosses source expiry; expiry must not admit a new effect once the evidence is scrubbed. Local Kernel typecheck
+reported a missing generated client declaration and unrelated Kernel diagnostics. Focused HTTP/export/erasure tests
+did not execute because the check stopped at `Schema dump differs from db/library/schema.sql.` The Content-owned schema
+derivation is pending; no frozen, native growth, browser or root check was run.
 Focused scenarios: `services/kernel/test/library/list-import-bangumi-http.test.ts`; broader frozen acceptance
 remains an integration responsibility, and source delivery does not assert its result.
 
