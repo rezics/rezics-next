@@ -38,7 +38,7 @@ const VNDB_DUMP_TABLES = [
   'vn_staff',
   'vn_titles',
 ];
-const VNDB_DUMP_HEADERS = {
+const VNDB_DUMP_HEADERS: Record<string, readonly string[]> = {
   extlinks: ['id', 'site', 'value'],
   producers_relations: ['id', 'pid', 'relation'],
   tags: VNDB_PUBLIC_TAG_COLUMNS.tags,
