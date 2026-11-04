@@ -6,10 +6,14 @@ import { ProblemError } from '../http/problem.ts';
 import type { Access, Actor } from '../request/access.ts';
 import type { Fact } from '../search/hits.ts';
 import { routeOf } from '../route/route.ts';
-import { readIdentityMappings, type IdentityMapping } from '../semantic/identity-epoch-read.ts';
+import { readIdentityMappings } from '../semantic/identity-epoch-read.ts';
 import { readListPresentationFacts } from '../semantic/list-presentation.ts';
 import { readSubjectSummaries, type SubjectSummary } from '../semantic/summaries.ts';
 import { activeRelease } from '../semantic/definitions.ts';
+
+type IdentityMapping = Awaited<ReturnType<typeof readIdentityMappings>> extends ReadonlyMap<string, infer Mapping>
+  ? Mapping
+  : never;
 
 export const COPY_LIST_CONTEXT_MAX_ROWS = 100;
 export const COPY_LIST_CONTEXT_MAX_BYTES = 65_536;
@@ -70,6 +74,7 @@ function sameMapping(left: IdentityMapping | undefined, right: IdentityMapping |
     case 'unavailable':
       return right.state === 'unavailable' && left.reason === right.reason;
   }
+  return false;
 }
 
 function disclosedFacts(facts: Record<string, Fact[]>): Record<string, Fact[]> {
