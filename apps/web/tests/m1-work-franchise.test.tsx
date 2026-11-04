@@ -335,16 +335,20 @@ test('tag assertions preserve exact provider meaning, duplicate rows, original i
 
 test('the 24-row preview exposes native continuation without hidden totals and distinguishes unavailable from no admitted tags', () => {
   const source = tagReading(27);
+  source.subject.relationCounts = { 'schema:genre': 999999 };
   const html = tagMarkup(source);
   expect(html.match(/data-tag-index=/g)).toHaveLength(24);
   expect(html).toContain('first 24 admitted assertions');
   expect(html).toContain('/details?via=');
   expect(html).toContain('property=schema%3Agenre');
-  expect(html).not.toContain('27');
+  expect(html).not.toContain('property=schema%3Acontributor');
+  expect(html).not.toContain('property=wdt%3AP179');
+  expect(html.replace(/<[^>]*>/g, '')).not.toMatch(/\b27\b/);
+  expect(html).not.toContain('999999');
   const empty = tagMarkup(source, 0);
   expect(empty).toContain('No admitted tag assertions');
   expect(empty).not.toContain('first 24 admitted assertions');
-  expect(empty).not.toContain('27');
+  expect(empty).not.toContain('999999');
   const unavailable = renderToStaticMarkup(
     createElement(SubjectConceptTags, {
       subject: source.subject,
@@ -383,6 +387,7 @@ test('evidence inspection is independent of browsing and retires on preference a
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const source = tagReading();
+  const returnHref = `/en/subjects/${id(700)}/book#work-tags?statement=${id(800)}&property=schema%3Agenre&spoiler=1&focus=browse`;
   const draw = (read: SubjectRead, threshold: number) =>
     act(async () => {
       root.render(
@@ -392,12 +397,15 @@ test('evidence inspection is independent of browsing and retires on preference a
           definitions: releasedTags,
           locale: 'en',
           spoilerThreshold: threshold,
+          currentHref: returnHref,
         }),
       );
     });
   const inspect = () => host.querySelector<HTMLButtonElement>('[data-tag-action="evidence"]')!;
   try {
     await draw(source, 1);
+    const browse = host.querySelector('[data-tag-action="browse"]')!;
+    expect(window.document.activeElement).toBe(browse);
     expect(inspect().tagName).toBe('BUTTON');
     expect(host.querySelector('[data-tag-action="browse"]')?.tagName).toBe('A');
     await act(async () => inspect().click());
@@ -411,6 +419,7 @@ test('evidence inspection is independent of browsing and retires on preference a
     expect(host.textContent).not.toContain('2.59999990463257');
     await draw(source, 1);
     expect(host.querySelector('[data-slot="work-tag-evidence"]')).toBeNull();
+    expect(window.document.activeElement).not.toBe(host.querySelector('[data-tag-action="browse"]'));
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {
