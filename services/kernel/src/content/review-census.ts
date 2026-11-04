@@ -156,8 +156,7 @@ export function createReviewCensus(pool: Pool, reader: Reader) {
             const examined = Number(state.examined);
             if (!Number.isSafeInteger(examined) || examined < 0)
               return { ...common, state: 'preparing', installed: false, missing: 'examined-count-range' };
-            if (examined === 0)
-              return { ...common, state: 'preparing', installed: true, missing: 'empty-population' };
+            if (examined === 0) return { ...common, state: 'preparing', installed: true, missing: 'empty-population' };
             const total = Number(state.observed_public);
             if (Number.isSafeInteger(total) && total >= 0)
               return {
