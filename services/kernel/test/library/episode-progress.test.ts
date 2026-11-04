@@ -197,9 +197,7 @@ test('mounted native journey retains holes, specials, independent sessions, retr
         value.episodes.map((row: { episodeSubjectId: string }) => row.episodeSubjectId),
       ),
     ),
-  ).toEqual(
-    new Set([one.id, two.id, special.id]),
-  );
+  ).toEqual(new Set([one.id, two.id, special.id]));
   await send(
     'GET',
     `/v1/progressSessions/${reread.id}/episodes?cursor=${encodeURIComponent(page.next)}`,
