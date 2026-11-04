@@ -128,11 +128,13 @@ function present(year: number, snapshot: Snapshot | undefined): ReadingInsightsP
 
 /** Bounded native reader; final delivery runs under current owner authority. */
 export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
-  return {
-    async profiles<T = ReadingInsightsProfiles>(
-      actor: Actor, year: number, deadline: number, signal?: AbortSignal,
-      deliver?: (value: ReadingInsightsProfiles, encoded: string) => T,
-    ): Promise<ReadingInsightsProfiles | T> {
+  function profiles(actor: Actor, year: number, deadline: number, signal?: AbortSignal): Promise<ReadingInsightsProfiles>;
+  function profiles<T>(actor: Actor, year: number, deadline: number, signal: AbortSignal | undefined,
+    deliver: (value: ReadingInsightsProfiles, encoded: string) => T): Promise<T>;
+  async function profiles<T>(
+    actor: Actor, year: number, deadline: number, signal?: AbortSignal,
+    deliver?: (value: ReadingInsightsProfiles, encoded: string) => T,
+  ): Promise<ReadingInsightsProfiles | T> {
       if (!Number.isInteger(year) || year < 1 || year > 9999) throw new ProblemError('invalid_request');
       if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
       const route = routeOf(actor.accountId);
@@ -186,6 +188,6 @@ export function createReadingInsightsProfileReads(deps: { pool: Pool }) {
           throw error;
         }
       }));
-    },
-  };
+  }
+  return { profiles };
 }
