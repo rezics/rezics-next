@@ -94,6 +94,37 @@ Submitted reports, pending appeals and resolved cases remain exclusive queues. R
 `status=pending|resolved` with `targetKind` and `order`; appeals use the board's pending list. Case rows keep stable
 native report/appeal IDs and exact selected queue snapshots. Case-detail triage and uncertain native commands remain
 on existing review pages with their original sender, credentials, operands and idempotency key.
+An authorized signed-in moderator enters `/moderation/workbench`. One navigation entry replaces the previous
+catalogue-only shell link. The workbench selects **one** currently permitted scope at a time:
+
+- a Realm from `GET /v1/me/realms`, then one board from that Realm's paged `GET /v1/realms/{id}/boards`
+- or the Global catalogue (`GET /v1/catalogue/reports`), which still requires current Global `moderation:read_reports`
+
+Membership or a listed board is not moderation permission. Each selected queue repeats exact parent/target
+authorization. A board moderator is never widened to catalogue authority. There is no platform-wide appeal
+adjudication and no aggregate case search across boards.
+
+Submitted reports, pending appeals and resolved cases are exclusive queues. Reports use native
+`status=pending|resolved` with `targetKind` and `order`. Appeals use the board appeal list (pending by nature).
+Catalogue has no appeal list; that control stays visible and explains the missing native seam. Continuation uses
+the sealed native cursor, not report target IDs. Each row carries a stable report or appeal ID into the existing
+detail surface (`/moderation/cases/{reportId}`, the selected workbench appeal, or `/moderation/catalogue`).
+
+The queue reads installed native list declarations only. It does not hydrate target documents or reported revisions. Private evidence
+and appeal statements appear only when that list returned them. Unavailable, denied and retired reads render no
+cases. Viewer or session replacement retires the mounted private owner.
+
+## Remaining producer binding
+
+Connected: `me.realms`, Realm boards, `boards/{id}.reports`, `boards/{id}.appeals`, catalogue reports (status and
+order forwarded through the existing catalogue client seam), and exact moderator report inspection at
+`GET /v1/reports/{id}`. The exact case read uses the report ID independently of queue pagination; captured queue
+state restores only the return destination. Still absent: a producer that lists only currently permitted moderation
+queues and catalogue appeals. Native uncertain commands stay on the existing review pages and retain original
+sender, credentials, key and operands. Workbench rows open
+`/moderation/cases/{reportId}` or the selected workbench appeal (`case`) and return to `/moderation/workbench` with
+the captured snapshot. Loaded pending board reports can be dismissed through the existing per-report command, at most
+twenty on the current page.
 
 ## Exact appeal inspection
 

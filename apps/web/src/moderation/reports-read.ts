@@ -35,10 +35,11 @@ export function reportSelection(input: Record<string, unknown>): ReportSelection
   };
 }
 export type ReportReadInput = Partial<ReportSelection> & {
-  boardId: string;
+  boardId?: string;
   threadId?: string;
   postId?: string;
   cursor?: string;
+  reportId?: string;
 };
 export function moderationReportInput(boardId: string, search: Record<string, unknown>): ReportReadInput {
   return {
@@ -57,9 +58,10 @@ export function reportPageIsCurrent(page: { readKey: string }, input: ReportRead
 }
 /** The route uses the same normalized identity as the read, including empty/sparse pages. */
 export function reportReadKey(input: ReportReadInput): string {
+  if (input.reportId) return JSON.stringify(['report-inspection', input.reportId]);
   const selection = reportSelection(input);
   return JSON.stringify([
-    input.boardId,
+    input.boardId ?? '',
     input.threadId ?? '',
     input.postId ?? '',
     input.cursor ?? '',
@@ -127,6 +129,14 @@ export type ReportTargetValue =
   | { readonly [key: string]: ReportTargetValue | undefined };
 export type ResolvedReportTarget = { key: string; kind: Report['target']['kind']; value: ReportTargetValue | null };
 
+export type ReportInspectionRead = Readonly<{
+  currentState: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable';
+  reportedRevisionState: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable' | null;
+  destination: Readonly<{ boardId: string; threadId?: string; realmId?: string }> | null;
+  canDismiss: boolean;
+  canTakeDown: boolean;
+}>;
+
 /** Board/thread/post queues keep those kinds; subject reports stay on the catalogue reports surface. */
 function publishedReports(reports: readonly ReportRecord[]): Report[] {
   return reports.flatMap(({ id, target, revisionId, reason, evidence, createdAt, outcome, resolvedAt }) => {
@@ -138,6 +148,7 @@ function publishedReports(reports: readonly ReportRecord[]): Report[] {
 
 /** Keeps report records private and resolves repeated target identities with one existing read each. */
 export async function readModerationReports(source: ReportReadSource, input: ReportReadInput): Promise<ReportPage> {
+  if (!input.boardId) throw new ReportReadFailure('error');
   const selection = reportSelection(input);
   const page = input.postId
     ? await source.postReports(input.postId, input.cursor, selection)
@@ -190,7 +201,10 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
   .validator((input: unknown) => {
     if (!input || typeof input !== 'object') throw notFound();
     const value = input as Record<string, unknown>;
-    if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
+    const reportId = typeof value.reportId === 'string' && value.reportId.length > 0 && value.reportId.length <= 128
+      ? value.reportId
+      : undefined;
+    if (!reportId && (typeof value.boardId !== 'string' || value.boardId.length > 128)) throw notFound();
     if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
       throw notFound();
     if (value.postId !== undefined && (typeof value.postId !== 'string' || value.postId.length > 128)) throw notFound();
@@ -201,7 +215,8 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
       if (value[key] !== undefined && value[key] !== selection[key]) throw notFound();
     return {
       ...selection,
-      boardId: value.boardId,
+      ...(typeof value.boardId === 'string' ? { boardId: value.boardId } : {}),
+      ...(reportId ? { reportId } : {}),
       ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
       ...(typeof value.postId === 'string' ? { postId: value.postId } : {}),
       ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
@@ -244,6 +259,44 @@ export async function readModerationReportPage(
   };
   try {
     const headers = auth(authorization);
+    if (data.reportId) {
+      const result = await client.reports({ id: data.reportId }).get(headers);
+      if (result.error) {
+        return {
+          reports: [],
+          next: null,
+          targets: [],
+          revisions: [],
+          ...identity,
+          inspection: undefined,
+          state: result.status === 404 ? ('unavailable' as const) : result.status === 401 || result.status === 403
+            ? ('denied' as const)
+            : ('error' as const),
+        };
+      }
+      const inspected = reportInspectionEnvelope(result.data, data.reportId);
+      if (!inspected) {
+        return {
+          reports: [],
+          next: null,
+          targets: [],
+          revisions: [],
+          ...identity,
+          inspection: undefined,
+          state: 'unavailable' as const,
+        };
+      }
+      return {
+        reports: [inspected.report],
+        next: null,
+        targets: [inspected.target],
+        revisions: [{ reportId: inspected.report.id, value: inspected.revision }],
+        ...identity,
+        inspection: inspected.inspection,
+        state: 'ready' as const,
+      };
+    }
+    if (!data.boardId) throw new ReportReadFailure('error');
     const page = await readModerationReports(
       {
         boardReports: async (id, cursor, selection) => {
@@ -310,9 +363,81 @@ export async function readModerationReportPage(
   }
 }
 
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+/** Public response seam until the shared client declaration includes inspection. */
+function reportInspectionEnvelope(value: unknown, requestedId: string): {
+  report: Report;
+  target: ResolvedReportTarget;
+  revision: ReportTargetValue | null;
+  inspection: ReportInspectionRead;
+} | null {
+  const envelope = record(value);
+  const rawReport = record(envelope?.report);
+  const rawTarget = record(rawReport?.target);
+  const rawInspection = record(envelope?.inspection);
+  const current = record(rawInspection?.currentTarget);
+  const revision = record(rawInspection?.reportedRevision);
+  const viewer = record(rawInspection?.viewer);
+  if (
+    !rawReport ||
+    !rawTarget ||
+    !rawInspection ||
+    !current ||
+    !revision ||
+    !viewer ||
+    rawReport.id !== requestedId ||
+    typeof rawTarget.id !== 'string' ||
+    (rawTarget.kind !== 'board' && rawTarget.kind !== 'thread' && rawTarget.kind !== 'post') ||
+    typeof rawReport.reason !== 'string' ||
+    !['actioned', 'dismissed', null].includes(rawReport.outcome as string | null) ||
+    typeof rawReport.createdAt !== 'string' ||
+    typeof viewer.canDismiss !== 'boolean' ||
+    typeof viewer.canTakeDown !== 'boolean' ||
+    typeof current.state !== 'string' ||
+    typeof revision.state !== 'string'
+  )
+    return null;
+  const report: Report = {
+    id: requestedId,
+    target: { kind: rawTarget.kind, id: rawTarget.id },
+    revisionId: typeof rawReport.revisionId === 'string' ? rawReport.revisionId : null,
+    reason: rawReport.reason,
+    evidence: typeof rawReport.evidence === 'string' ? rawReport.evidence : null,
+    createdAt: rawReport.createdAt,
+    outcome: rawReport.outcome as Report['outcome'],
+    resolvedAt: typeof rawReport.resolvedAt === 'string' ? rawReport.resolvedAt : null,
+  };
+  const currentState = current.state as ReportInspectionRead['currentState'];
+  if (!['available', 'taken-down', 'erased', 'withheld', 'unavailable'].includes(currentState)) return null;
+  const reportedState = revision.state as ReportInspectionRead['currentState'];
+  if (!['available', 'taken-down', 'erased', 'withheld', 'unavailable'].includes(reportedState)) return null;
+  const currentValue = currentState === 'available' ? current.value : null;
+  const targetValue = record(currentValue);
+  if (targetValue && targetValue.id !== report.target.id) return null;
+  const revisionValue = reportedState === 'available' ? (revision.value as ReportTargetValue | null) : null;
+  const postRevision = record(revisionValue);
+  if (report.revisionId && postRevision?.revisionId && postRevision.revisionId !== report.revisionId) return null;
+  return {
+    report,
+    target: { key: `${report.target.kind}:${report.target.id}`, kind: report.target.kind, value: currentValue as ReportTargetValue | null },
+    revision: revisionValue,
+    inspection: {
+      currentState,
+      reportedRevisionState: report.revisionId ? reportedState : null,
+      destination: record(current.destination) as ReportInspectionRead['destination'],
+      canDismiss: viewer.canDismiss,
+      canTakeDown: viewer.canTakeDown,
+    },
+  };
+}
+
 export type PrivateReportPage = Awaited<ReturnType<typeof readModerationReportPage>> &
   PrivateReaderRead & {
     browserRevision?: number;
+    inspection?: ReportInspectionRead;
   };
 type ReportSession = { state: string; subject?: string | null; csrfToken?: string | null };
 

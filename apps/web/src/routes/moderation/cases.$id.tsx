@@ -26,10 +26,10 @@ export const Route = createFileRoute('/moderation/cases/$id')({
   pendingMinMs: 0,
   staleTime: 0,
   gcTime: 0,
-  loaderDeps: ({ search }) => search,
+  loaderDeps: () => null,
   loader: async ({ params, deps, context, abortController, location }) => {
     if (!params.id || params.id.length > 128) throw notFound();
-    const input = workbenchCaseInput(deps);
+    const input = workbenchCaseInput(deps, params.id);
     const page = await prepareModerationReportRead(
       context.queryClient,
       input,
@@ -67,7 +67,7 @@ function WorkbenchCaseRoute() {
     }),
     [router, page.navigationKey, page.generation],
   );
-  const input = workbenchCaseInput(search);
+  const input = workbenchCaseInput(search, id);
   return (
     <WorkbenchCasePage
       key={page.generation}

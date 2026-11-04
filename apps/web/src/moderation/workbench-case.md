@@ -6,13 +6,16 @@ Decision: selected board reports open `/moderation/cases/{reportId}`; selected b
 appeals queue with `case`. Both return to `/moderation/workbench` with the captured board, queue, filter, order and
 cursor. Subject reports stay on the catalogue surface.
 
+Decision: moderator case reads use an additive inspection envelope on `GET /v1/reports/{reportId}`. The route
+selects by `reportId` alone; the captured queue scope and cursor are used only for the return link.
+
 A board, thread or post case reference is `/moderation/cases/{reportId}` with the source queue's `boardId`, `queue`
 (`reports` or `resolved`), `status`, `targetKind`, `order`, and optional `realm`, `thread`, `post` and `cursor`.
 `reportId` is the stable native reference; the scoped queue fields preserve where the case was opened.
 `workbenchCaseHref` on the workbench row builds this reference from the current snapshot. Returning reconstructs
 `/moderation/workbench` with that board, queue, Realm, target-kind filter, order and cursor. The case route never
-advances through pages to search for an ID. If the report is absent from that exact bounded page, the case is
-unavailable.
+advances through pages to search for an ID. It loads the exact report independently, so pagination or resolution of
+the captured queue does not invalidate the link. Unknown and concealed IDs share the unavailable response.
 
 Subject reports stay on `/moderation/catalogue`, where the catalogue report reader independently loads the subject and
 its reports. A Subject is never converted to a board, thread or post target. An appeal keeps its native ID on
@@ -21,10 +24,13 @@ resolved appeals. Missing inspection is unavailable and never triggers scanning 
 
 ## Read and disclosure boundary
 
-The route consumes the current typed Web report reader. It uses the existing scoped report-list operation, then the
-existing independent current-target and exact reported-post-revision reads. It adds no endpoint and does not infer a
-target read grant from the case reference or report visibility. The existing target presenter withholds unavailable,
-erased and withheld bodies honestly. Only fields already disclosed by the report reader are rendered.
+The route makes one exact report-resource read. The moderator response composes the retained report, its exact
+reported post revision, current target state and destination, and current dismiss/takedown advice. Parent moderation
+authorization precedes report detail, reporter disclosure and evidence. The reported revision remains separate from
+current target availability; a concealed or unavailable current target never supplies a body or actions. Existing
+native target readers bound disclosure, and existing report and moderation commands remain the only writers. Unknown
+and concealed IDs share the unavailable response. The reader does not scan queue pages, substitute a target ID or
+hydrate documents per row.
 
 The browser visit is bound to the prepared private reader, QueryClient, current session and route navigation. Scope or
 session retirement hides the case and retires its decision controller. The mounted form clears on retirement; pending
@@ -89,6 +95,22 @@ admission seam to generated board/thread requests and mounted native producer ca
 No new native DTO or endpoint is authored by Web.
 
 ## Cost
+
+### Cost: selected report inspection
+
+- **Touches:** one exact report reference read, one parent moderation authorization before and after retaining the
+  report, one exact private report read, and a final exact reference check. The composed read adds at most one exact
+  reported-revision selection, the existing native reported-revision reader, one current target selection with its
+  bounded containing Thread/Board observations, and one current action-advice authorization. It never calls a report
+  queue reader.
+- **Bound:** selection is one `reportId`; report evidence retains its existing 4096-character limit. Revision and
+  target content use the existing point readers and their body, label, actor and nested-disclosure limits. The result
+  has one report, at most one revision and one current target; withheld branches omit target values and destinations.
+  Queue, unrelated report, revision and authority history do not expand selection cardinality.
+- **Growth check:** the route transport regression proves an exact GET and no queue/target list calls; the native
+  focused journey covers a pending report outside the first queue page and denied/unknown concealment. Independent
+  256/1024/4096 source, authority and serialization growth measurements remain deferred; no physical-work ceiling is
+  claimed here.
 
 - **Touches:** one board or thread Appeals GET per explicit pending read; no Account, Media or current-target
   reads. Unsupported production inspection performs zero native calls. When the generated operation is installed,

@@ -15,6 +15,7 @@ import { dismissReport, ReportResolvedError } from './report-outcomes.ts';
 import { createReporterHistory, ReporterHistoryChangedError, ReporterHistoryCursorError } from './reporter-history.ts';
 import { ReporterHistoryPageSchema, ReporterHistoryQuerySchema } from './reporter-history-schemas.ts';
 import { parseReportBody, reportRequestContext, requireReportInspection } from './report-admission.ts';
+import { readReportInspection } from './report-inspection.ts';
 import {
   createReport,
   listSelectedTargetReports,
@@ -232,7 +233,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
           'x-exposure': 'public',
           'x-action': 'account:read',
           description:
-            'A reporter reads their submitted target/revision, reason/evidence, identity, times and outcome through account:read, with output-only current targetAvailability and no target content. Moderators retain report inspection through moderation:read_reports.',
+            'A reporter reads their submitted record through account:read. A moderator receives the exact report, separately observed reported revision and current target, and current command advice through moderation:read_reports; advice is not command authority.',
           security: [{ bearerAuth: [] }],
         },
       },
@@ -242,6 +243,14 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         return reportOperation(
           () =>
             admission.run('normal', job, async () => {
+              const inspection = await readReportInspection(dependencies, id, { actor, deadline: job.deadline });
+              if (inspection.value) {
+                session.record(component(inspection.anchor));
+                return {
+                  report: reportReadView(inspection.value.report),
+                  inspection: inspection.value.inspection,
+                };
+              }
               const result = await readReport(dependencies, id, { actor, deadline: job.deadline });
               if (!result.value) throw new ProblemError('not_found');
               session.record(component(result.anchor));

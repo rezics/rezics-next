@@ -45,9 +45,10 @@ export function parseWorkbenchCaseSearch(input: Record<string, unknown>): Workbe
   };
 }
 
-export function workbenchCaseInput(search: WorkbenchCaseSearch): ReportReadInput {
+export function workbenchCaseInput(search: WorkbenchCaseSearch, reportId?: string): ReportReadInput {
   return {
     boardId: search.boardId,
+    ...(reportId ? { reportId } : {}),
     ...reportSelection(search),
     ...(search.thread ? { threadId: search.thread } : {}),
     ...(search.post ? { postId: search.post } : {}),

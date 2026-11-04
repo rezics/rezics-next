@@ -859,6 +859,24 @@ that experience gap.
   `test/content/report-community-http.test.ts`; cross-home notice and history-scale budgets await
   the continuation's Performance-reviewed three-scale suite.
 
+### Cost: exact moderator report inspection
+
+- Touches: one exact report reference lookup, parent `moderation:read_reports` authorization, one private report
+  lookup, a final reference lookup and parent authorization recheck. The composed inspection adds one selected
+  revision point lookup and its existing native disclosure reader when a post revision is recorded, one current
+  target-facts point lookup, then either one Board read or the selected Thread, containing Board and optional Post
+  point reads, and one current `moderation:takedown` advice check. Report and target writers are not invoked by this
+  read.
+- Bound: the route selects one indexed report ID and at most one indexed revision ID. It reads no queue page,
+  report history, revision range or target-ID substitute. Existing native readers bound body, label, actor and nested
+  disclosure work; withheld/unavailable results retain no current target value or destination. Evidence remains
+  capped at 4096 characters. Parent, advice and source checks remain subject to their existing finite Access,
+  Accounts, Realm and pool bounds.
+- Growth check: `test/content/report-inspection-journey.test.ts` exercises a report beyond the first queue page,
+  current viewer advice, reporter compatibility, denial and unknown-ID concealment. Independent 256/1024/4096
+  report, revision, authority, nested-disclosure and serialized-byte growth measurements remain deferred; no new
+  physical ceiling is claimed.
+
 ## Board moderation decision history
 
 `GET /v1/boards/{id}/moderation-history` returns `{ entries, nextCursor }`, newest first, with `limit` 1–100

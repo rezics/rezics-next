@@ -44,6 +44,7 @@ import readReportBoard from './read-report-board.sql';
 import readReportPost from './read-report-post.sql';
 import readReportPostThread from './read-report-post-thread.sql';
 import readReportRevision from './read-report-revision.sql';
+import readInspectionRevision from './report-inspection-revision.sql';
 import readReportThread from './read-report-thread.sql';
 import { readBoard, readPost, readThread } from './reads.ts';
 import type { TurnstileVerifier } from './turnstile.ts';
@@ -106,7 +107,8 @@ const operation = 'content.report.create';
 const createAction = 'report:create';
 const inspectAction = 'moderation:read_reports';
 const reasons = new Set(['off_topic', 'inappropriate', 'spam', 'illegal', 'other']);
-type ReadContext = Readonly<{ actor: Actor; deadline: number }>;
+export type ReportReadContext = Readonly<{ actor: Actor; deadline: number }>;
+type ReadContext = ReportReadContext;
 type ReportRow = {
   route: number;
   report_id: string;
@@ -784,6 +786,199 @@ export async function readReport(
   }
 
   return inspectReport(dependencies, reportId, target, context);
+}
+
+/** Exact moderator selection. Authorization is checked on the report's parent
+ * before the private row is retained; a missing current target does not turn a
+ * retained, independently authorized report into a concealed report. */
+export async function readModerationReportReference(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  context: ReadContext,
+): Promise<Anchored<ReportView | null>> {
+  const reference = await loadReport(dependencies, reportId, context, false);
+  if (!reference.value) return { ...reference, value: null };
+  const target: ReportTarget = { kind: reference.value.target_kind, id: reference.value.target_id };
+  if (!(await moderationReportParentAllowed(dependencies, target, context)))
+    return { ...reference, value: null };
+
+  const record = await loadReport(dependencies, reportId, context, true);
+  const finalReference = await loadReport(dependencies, reportId, context, false);
+  if (
+    !record.value ||
+    !finalReference.value ||
+    !sameReportReference(reference.value, record.value) ||
+    !sameReportReference(reference.value, finalReference.value) ||
+    !(await moderationReportParentAllowed(dependencies, target, context))
+  )
+    return { ...finalReference, value: null };
+  return { ...finalReference, value: view(record.value) };
+}
+
+async function moderationReportParentAllowed(
+  dependencies: ReportDependencies,
+  target: ReportTarget,
+  context: ReadContext,
+): Promise<boolean> {
+  if (context.actor.kind !== 'account') return false;
+  if (target.kind === 'subject') return (await inspectCatalogue(dependencies, context)).value;
+  if (target.kind === 'space' || target.kind === 'realm') {
+    const check = await communityReportReadCheck(dependencies, target, context);
+    return snapshot(dependencies, target.id, context.deadline, async (client) => {
+      const facts = await communityReportTargetFacts(client, target);
+      return !!facts && (await check(client));
+    }).then(({ value }) => value);
+  }
+  const check = await accessCheck(
+    dependencies.access,
+    context.actor,
+    inspectAction,
+    { route: route(target.id), id: target.id },
+    { pool: dependencies.pool, deadline: context.deadline },
+  );
+  return snapshot(dependencies, target.id, context.deadline, async (client) => !!check && (await check(client))).then(
+    ({ value }) => value,
+  );
+}
+
+export type ReportTargetInspection = Readonly<{
+  state: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable';
+  value: unknown | null;
+  destination: Readonly<{ boardId: string; threadId?: string; realmId?: string }> | null;
+}>;
+
+/** One exact current-target read and, when recorded, one exact historical post
+ * revision read. Current destination disclosure is a separate native read. */
+export async function readReportTargetInspection(
+  dependencies: ReportDependencies,
+  report: ReportView,
+  context: ReadContext,
+): Promise<Readonly<{ current: ReportTargetInspection; reportedRevision: ReportTargetInspection }>> {
+  const target = report.target;
+  const facts = await snapshot(dependencies, target.id, context.deadline, (client) => targetFacts(client, target));
+  const notAvailable: ReportTargetInspection = { state: 'unavailable', value: null, destination: null };
+  const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
+  let reportedRevision: ReportTargetInspection = notAvailable;
+  if (report.revisionId && (target.kind === 'thread' || target.kind === 'post')) {
+    const metadata = await snapshot(dependencies, report.revisionId, context.deadline, (client) =>
+      readInspectionRevision.run(client, {
+        route: route(report.revisionId!),
+        id: report.revisionId!,
+        target_kind: target.kind,
+        target_id: target.id,
+      }),
+    );
+    if (metadata.value) {
+      const result = await readPost(
+        readers,
+        metadata.value.thread_id as ThreadId,
+        metadata.value.post_id as PostId,
+        context,
+        report.revisionId,
+      );
+      const post = result.value;
+      reportedRevision = {
+        state:
+          post?.availability === 'available'
+            ? 'available'
+            : post?.availability === 'erased'
+              ? 'erased'
+              : post?.availability === 'withheld'
+                ? 'withheld'
+                : 'unavailable',
+        value: post?.availability === 'available' ? post : null,
+        destination: null,
+      };
+    }
+  }
+  if (!facts.value) return { current: notAvailable, reportedRevision };
+
+  let current: ReportTargetInspection = notAvailable;
+  if (target.kind === 'board') {
+    const result = await readBoard(readers, target.id, context);
+    const board = result.value;
+    if (board?.availability === 'available' && board.visibility !== 'taken_down') {
+      current = {
+        state: 'available',
+        value: board,
+        destination: { boardId: board.id, ...(board.realmId ? { realmId: board.realmId } : {}) },
+      };
+    } else if (board?.availability === 'erased') current = { ...notAvailable, state: 'erased' };
+    else if (board?.availability === 'withheld') current = { ...notAvailable, state: 'withheld' };
+    else if (board?.visibility === 'taken_down') current = { ...notAvailable, state: 'taken-down' };
+  } else if (target.kind === 'thread' || target.kind === 'post') {
+    const threadId = facts.value.threadId;
+    if (threadId) {
+      const thread = await readThread(readers, threadId, context);
+      const board = thread.value ? await readBoard(readers, thread.value.boardId, context) : null;
+      const post =
+        thread.value && board?.value && target.kind === 'post'
+          ? await readPost(readers, threadId, target.id, context)
+          : null;
+      const selected = target.kind === 'post' ? post?.value : thread.value;
+      const status =
+        selected?.availability === 'erased'
+          ? 'erased'
+          : selected?.availability === 'withheld'
+            ? 'withheld'
+            : board?.value?.availability === 'withheld'
+              ? 'withheld'
+              : thread.value?.visibility === 'taken_down' || board?.value?.visibility === 'taken_down'
+              ? 'taken-down'
+              : selected?.availability === 'available' && board?.value?.availability === 'available'
+                ? 'available'
+                : 'unavailable';
+      if (status === 'available' && thread.value && board?.value) {
+        current = {
+          state: 'available',
+          value: target.kind === 'post' ? post?.value : thread.value,
+          destination: {
+            boardId: board.value.id,
+            threadId: thread.value.id,
+            ...(board.value.realmId ? { realmId: board.value.realmId } : {}),
+          },
+        };
+      } else current = { ...notAvailable, state: status };
+    }
+  } else {
+    const availability = await targetAvailability(dependencies, target, context);
+    current = { ...notAvailable, state: availability === 'available' ? 'available' : 'unavailable' };
+  }
+
+  return { current, reportedRevision };
+}
+
+/** Advice is a current read only; dismiss and takedown writers reauthorize the
+ * original report and target when their existing command is submitted. */
+export async function readReportActionAdvice(
+  dependencies: ReportDependencies,
+  report: ReportView,
+  current: ReportTargetInspection,
+  context: ReadContext,
+): Promise<Readonly<{ dismiss: boolean; takeDown: boolean }>> {
+  if (report.outcome !== null || current.state !== 'available' || context.actor.kind !== 'account')
+    return { dismiss: false, takeDown: false };
+  const target = report.target;
+  const targetResource =
+    target.kind === 'subject' ? globalContextAnchor.resource : { route: route(target.id), id: target.id };
+  const check = await accessCheck(
+    dependencies.access,
+    context.actor,
+    'moderation:takedown',
+    targetResource,
+    { pool: dependencies.pool, deadline: context.deadline },
+  );
+  const pointId = target.kind === 'subject' ? GLOBAL_CONTEXT : target.id;
+  const allowed = await snapshot(
+    dependencies,
+    pointId,
+    context.deadline,
+    async (client) => !!check && (await check(client)),
+  );
+  return {
+    dismiss: allowed.value,
+    takeDown: allowed.value && ['board', 'thread', 'post'].includes(target.kind),
+  };
 }
 
 /** Minimal current projection for an outcome notice owned by its reporter.

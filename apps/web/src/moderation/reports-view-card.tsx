@@ -51,9 +51,13 @@ export function ReportReviewCard({
   onRefresh,
   intentOwner,
   bulkBlocked = false,
+  actionAdvice,
+  reportedRevisionState,
 }: {
   intentOwner?: ReportsBulkAction;
   bulkBlocked?: boolean;
+  actionAdvice?: Readonly<{ dismiss: boolean; takeDown: boolean }>;
+  reportedRevisionState?: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable' | null;
   report: Report;
   target: ResolvedReportTarget | undefined;
   revision: ReportTargetValue | null;
@@ -137,7 +141,15 @@ export function ReportReviewCard({
           : m.moderation_queue_open();
 
   async function act(action: 'dismiss' | 'take-down', source: HTMLButtonElement | null) {
-    if (bulkBlocked || pending || confirmed || report.outcome || failure || (takenDown && action === 'take-down'))
+    if (
+      bulkBlocked ||
+      pending ||
+      confirmed ||
+      report.outcome ||
+      failure ||
+      (takenDown && action === 'take-down') ||
+      (actionAdvice !== undefined && !actionAdvice[action === 'dismiss' ? 'dismiss' : 'takeDown'])
+    )
       return;
     setMessage('');
     let confirmation: Confirmation;
@@ -280,6 +292,17 @@ export function ReportReviewCard({
           <ContentItemHeading id={`${id}-revision`} level={3} className="text-sm font-semibold">
             {m.moderation_reported_revision_label()}
           </ContentItemHeading>
+          {reportedRevisionState && reportedRevisionState !== 'available' ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {reportedRevisionState === 'taken-down'
+                ? m.moderation_target_taken_down()
+                : reportedRevisionState === 'erased'
+                  ? m.moderation_target_deleted()
+                  : reportedRevisionState === 'withheld'
+                    ? m.moderation_target_withheld()
+                    : m.moderation_target_unavailable()}
+            </p>
+          ) : null}
           <div className="min-w-0 border-l-2 pl-3 text-sm leading-relaxed">
             {moderationTargetContent({ key: `post:${report.target.id}`, kind: 'post', value: revision })}
           </div>
@@ -373,7 +396,7 @@ export function ReportReviewCard({
                     type="submit"
                     variant="destructive"
                     className="min-h-11"
-                    disabled={blocked || takenDown}
+                    disabled={blocked || takenDown || (actionAdvice !== undefined && !actionAdvice.takeDown)}
                     onClick={(event) => {
                       submitSource.current = keyboardSource(event);
                     }}
@@ -384,7 +407,7 @@ export function ReportReviewCard({
                     type="button"
                     variant="outline"
                     className="min-h-11"
-                    disabled={blocked}
+                    disabled={blocked || (actionAdvice !== undefined && !actionAdvice.dismiss)}
                     onClick={(event) => void act('dismiss', keyboardSource(event))}
                   >
                     {m.moderation_dismiss()}

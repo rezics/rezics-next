@@ -20,6 +20,7 @@ import type { FeedReviewContext } from './model.ts';
 import { FeedReviewContextSchema } from './feed-context-schema.ts';
 import type { ItemView, PostEntry, ThreadView } from './reads.ts';
 import type { ReporterReportView, ReportReadView, ReportView } from './reports.ts';
+import type { ReportInspection } from './report-inspection.ts';
 import type { Operation } from './operation-contract.ts';
 import type { DocumentMediaPage } from './media-presentation.ts';
 import type { OwnDraftEntry } from './own-drafts.ts';
@@ -189,6 +190,62 @@ const reporterReport = t.Unsafe<ReporterReportView>(
 export const ReportResponseSchema = t.Object(
   {
     report: t.Unsafe<ReportReadView>(t.Union([reporterReport, ModeratorReportResponseSchema.properties.report])),
+    inspection: t.Optional(t.Unsafe<ReportInspection>(
+      t.Object(
+        {
+          reportedRevision: t.Object(
+            {
+              state: t.Union([
+                t.Literal('available'),
+                t.Literal('taken-down'),
+                t.Literal('erased'),
+                t.Literal('withheld'),
+                t.Literal('unavailable'),
+              ]),
+              value: t.Unknown(),
+              destination: t.Union([
+                t.Object(
+                  {
+                    boardId: t.String(),
+                    threadId: t.Optional(t.String()),
+                    realmId: t.Optional(t.String()),
+                  },
+                  closed,
+                ),
+                t.Null(),
+              ]),
+            },
+            closed,
+          ),
+          currentTarget: t.Object(
+            {
+              state: t.Union([
+                t.Literal('available'),
+                t.Literal('taken-down'),
+                t.Literal('erased'),
+                t.Literal('withheld'),
+                t.Literal('unavailable'),
+              ]),
+              value: t.Unknown(),
+              destination: t.Union([
+                t.Object(
+                  {
+                    boardId: t.String(),
+                    threadId: t.Optional(t.String()),
+                    realmId: t.Optional(t.String()),
+                  },
+                  closed,
+                ),
+                t.Null(),
+              ]),
+            },
+            closed,
+          ),
+          viewer: t.Object({ canDismiss: t.Boolean(), canTakeDown: t.Boolean() }, closed),
+        },
+        closed,
+      ),
+    )),
   },
   closed,
 );

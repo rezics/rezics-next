@@ -144,6 +144,13 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
       report={result.report}
       target={result.target}
       revision={result.revision}
+      reportedRevisionState={current.page.inspection?.reportedRevisionState}
+      actionAdvice={current.page.inspection ? {
+        dismiss: current.page.inspection.canDismiss,
+        takeDown: current.page.inspection.canTakeDown,
+      } : undefined}
+      currentState={current.page.inspection?.currentState}
+      destination={current.page.inspection?.destination ?? null}
       queueHref={queueHref}
       isCurrent={currentPage.isCurrent}
       register={currentPage.register}
@@ -161,6 +168,10 @@ export function WorkbenchCaseDetail({
   report,
   target,
   revision,
+  reportedRevisionState,
+  actionAdvice,
+  currentState,
+  destination = null,
   queueHref,
   isCurrent,
   register,
@@ -170,6 +181,10 @@ export function WorkbenchCaseDetail({
   report: Report;
   target: Parameters<typeof ReportReviewCard>[0]['target'];
   revision: ReportTargetValue | null;
+  reportedRevisionState?: Parameters<typeof ReportReviewCard>[0]['reportedRevisionState'];
+  actionAdvice?: Readonly<{ dismiss: boolean; takeDown: boolean }>;
+  currentState?: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable';
+  destination?: Readonly<{ boardId: string; threadId?: string; realmId?: string }> | null;
   queueHref: string;
   isCurrent: () => boolean;
   register: (controller: ReportsBulkAction) => () => void;
@@ -194,15 +209,40 @@ export function WorkbenchCaseDetail({
           {m.moderation_workbench_history_return()}
         </a>
         <h1 className="text-2xl font-semibold">{m.moderation_queue_submission()}</h1>
+        {currentState && currentState !== 'available' ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {currentState === 'taken-down'
+              ? m.moderation_target_taken_down()
+              : currentState === 'erased'
+                ? m.moderation_target_deleted()
+                : currentState === 'withheld'
+                  ? m.moderation_target_withheld()
+                  : m.moderation_target_unavailable()}
+          </p>
+        ) : null}
+        {destination ? (
+          <nav aria-label={m.moderation_current_destination()} className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
+            <a className="min-h-11 break-all underline underline-offset-4" href={localizeHref(`/boards/${encodeURIComponent(destination.boardId)}`)}>
+              {m.moderation_current_board({ id: destination.boardId })}
+            </a>
+            {destination.threadId ? (
+              <a className="min-h-11 break-all underline underline-offset-4" href={localizeHref(`/threads/${encodeURIComponent(destination.threadId)}`)}>
+                {m.moderation_current_thread({ id: destination.threadId })}
+              </a>
+            ) : null}
+          </nav>
+        ) : null}
         <ReportReviewCard
           report={report}
           target={target}
           revision={revision}
+          reportedRevisionState={reportedRevisionState}
           takenDown={takenDown}
           onTakenDown={() => setTakenDown(true)}
           onAction={onAction}
           intentOwner={controller}
           bulkBlocked={controller.individualBlocked(report.id)}
+          {...(actionAdvice ? { actionAdvice } : {})}
           {...(onRefresh ? { onRefresh } : {})}
         />
       </main>
