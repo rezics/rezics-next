@@ -8385,5 +8385,18 @@
   "own_media_recovery_return": "Volver al archivo original",
   "library_priority_unavailable": "El orden por prioridad aún no está disponible.",
   "library_priority_ascending": "Rango 1 primero",
-  "library_priority_descending": "Rango 100 primero"
+  "library_priority_descending": "Rango 100 primero",
+  "draft_preview_title": "Vista previa del borrador capturado",
+  "draft_preview_help": "Captura todo el perfil actual y el destino exacto. Esta vista previa privada y anónima no publica ni activa el perfil.",
+  "draft_preview_capture": "Capturar borrador y previsualizar",
+  "draft_preview_retry": "Reintentar el borrador capturado",
+  "draft_preview_interrupt": "Interrumpir vista previa",
+  "draft_preview_interrupted": "Vista previa interrumpida. Reintenta el borrador capturado cuando quieras.",
+  "draft_preview_digest": "Revisión capturada: {digest}",
+  "draft_preview_changed": "El borrador tiene cambios posteriores. Captúralo de nuevo para verlos.",
+  "draft_preview_success": "Borrador capturado mostrado de forma anónima.",
+  "draft_preview_account": "Nombre de cuenta",
+  "draft_preview_view": "Vista",
+  "draft_preview_correct": "Usar la cuenta actual @{handle}",
+  "draft_preview_address": "ID de entidad, nombre de cuenta o ruta"
 }

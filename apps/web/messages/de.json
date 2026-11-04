@@ -8385,5 +8385,18 @@
   "own_media_recovery_return": "Zu den ursprünglichen Medien",
   "library_priority_unavailable": "Die Prioritätssortierung ist noch nicht verfügbar.",
   "library_priority_ascending": "Rang 1 zuerst",
-  "library_priority_descending": "Rang 100 zuerst"
+  "library_priority_descending": "Rang 100 zuerst",
+  "draft_preview_title": "Vorschau des erfassten Entwurfs",
+  "draft_preview_help": "Erfasse das gesamte aktuelle Profil und das genaue Ziel. Diese private anonyme Vorschau veröffentlicht oder aktiviert nichts.",
+  "draft_preview_capture": "Entwurf erfassen und ansehen",
+  "draft_preview_retry": "Erfassten Entwurf erneut versuchen",
+  "draft_preview_interrupt": "Vorschau unterbrechen",
+  "draft_preview_interrupted": "Vorschau unterbrochen. Versuche den erfassten Entwurf erneut, wenn du bereit bist.",
+  "draft_preview_digest": "Erfasste Version: {digest}",
+  "draft_preview_changed": "Der Entwurf wurde weiter bearbeitet. Erfasse ihn erneut für eine aktuelle Vorschau.",
+  "draft_preview_success": "Erfasster Entwurf anonym dargestellt.",
+  "draft_preview_account": "Kontoname",
+  "draft_preview_view": "Ansicht",
+  "draft_preview_correct": "Aktuelles Konto @{handle} verwenden",
+  "draft_preview_address": "Objekt-ID, Kontoname oder Route"
 }

@@ -12,6 +12,7 @@ import {
   publishCurationOnly,
   readCuration,
   readCurationActive,
+  readDraftPreview,
   type CurationRead,
 } from './curate-actions';
 import { confirmSubjectCandidate, readSubjectCandidates } from './curate-actions';
@@ -25,6 +26,7 @@ import { readPresentationPreview } from './curate-actions';
 import { CurationReaderAdmission } from './curation-reader-admission';
 
 const publicationTransport: CurationEditorTransport = {
+  previewDraft: (input) => readDraftPreview({ data: input, headers: csrfHeaders() }),
   read: (expectedReader) => readCurationActive({ data: { expectedReader }, headers: csrfHeaders() }),
   publish: (intent, expectedReader) => publishCuration({ data: { intent, expectedReader }, headers: csrfHeaders() }),
   publishOnly: (intent, expectedReader) =>

@@ -8497,5 +8497,18 @@
   "own_media_recovery_return": "Return to original media",
   "library_priority_unavailable": "Priority order is not available yet.",
   "library_priority_ascending": "Rank 1 first",
-  "library_priority_descending": "Rank 100 first"
+  "library_priority_descending": "Rank 100 first",
+  "draft_preview_title": "Captured draft preview",
+  "draft_preview_help": "Capture the whole current profile and exact target. This private anonymous preview does not publish or activate it.",
+  "draft_preview_capture": "Capture draft and preview",
+  "draft_preview_retry": "Retry captured draft",
+  "draft_preview_interrupt": "Interrupt preview",
+  "draft_preview_interrupted": "Preview interrupted. Retry the captured draft when ready.",
+  "draft_preview_digest": "Captured revision: {digest}",
+  "draft_preview_changed": "The draft has later edits. Capture again to preview them.",
+  "draft_preview_success": "Captured draft rendered anonymously.",
+  "draft_preview_account": "Account handle",
+  "draft_preview_view": "View",
+  "draft_preview_correct": "Use current account @{handle}",
+  "draft_preview_address": "Subject ID, account handle or route"
 }

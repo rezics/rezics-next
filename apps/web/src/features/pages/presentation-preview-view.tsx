@@ -36,7 +36,11 @@ function samePreviewRequestContext(left: PreviewRequestContext, right: PreviewRe
 export const PresentationPreviewContext = createContext<Partial<Omit<PresentationPreviewProps, 'locale'>>>({});
 
 /** The same document, data adapters, title and cover as the public renderer, without admin host slots or SEO. */
-export function PublishedPresentationPage({ result }: { result: Extract<PresentationPreview, { ok: true }> }) {
+export function PublishedPresentationPage({
+  result,
+}: {
+  result: Pick<Extract<PresentationPreview, { ok: true }>, 'page' | 'locale'>;
+}) {
   const [client] = useState(() => {
     const isolated = new QueryClient({
       defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false, refetchOnReconnect: false } },

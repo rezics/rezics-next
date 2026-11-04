@@ -90,6 +90,8 @@ import {
   type KeyedTemplateRemoval,
 } from './curation-template-removal';
 import { CurationCompanionViews } from './curation-companion-views';
+import { DraftPreviewPanel } from './draft-preview-view';
+import type { DraftPreviewRead } from './draft-preview';
 
 const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
 
@@ -104,6 +106,7 @@ const editorRecoveryClass =
 
 /** The existing whole-profile publication helper owns transport; no retry protocol lives in the editor. */
 export type CurationEditorTransport = PublicationTransport & {
+  previewDraft?: DraftPreviewRead;
   readOpening?: (expectedReader: string) => Promise<CurationRead>;
 };
 export type ObservedCurationSession = {
@@ -1179,6 +1182,9 @@ function AdmittedPresentationViewEditor({
         <div className={editorRecoveryClass}>
           <CurationFailureNotice failure={failure} correction={validationCorrection(failureProfile)} locale={locale} />
         </div>
+      )}
+      {lease && transport.previewDraft && (
+        <DraftPreviewPanel profile={profile} locale={locale} lease={lease} read={transport.previewDraft} />
       )}
       {preview}
       <div className={editorRecoveryClass}>
