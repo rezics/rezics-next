@@ -27,6 +27,11 @@ properties:
   schema:dateModified: '最后更新'
   schema:inLanguage: '语言'
   schema:abstract: '摘要'
+  wdt:P106: 职业
+  schema:knowsLanguage: 通晓语言
+  wdt:P749: 上级组织
+  wdt:P1365: 前身
+  wdt:P1366: 继任者
   schema:image: '图像'
   wdt:P648: '开放图书馆标识符'
   wdt:P5732: 'Bangumi主题标识符'
@@ -87,6 +92,9 @@ inverseProperties:
   rezics:summaryOf: '总集篇'
   rezics:sideStoryOf: '番外篇'
   rezics:bangumiRelatedTo: '关联来源（Bangumi）'
+  wdt:P749: 下属组织
+  wdt:P1365: 继任者
+  wdt:P1366: 前身
   rezics:releaseGroup: '此发布组的文件'
 typeDescriptions:
   wd:Q2095: '可食用的食物或物质，如面粉；食谱则描述如何制作食物。'
@@ -117,6 +125,11 @@ propertyDescriptions:
   schema:dateModified: '来源记录最后更新的日期，与作品出版日期分开。'
   schema:inLanguage: '资源所用的语言代码，如 en、ja，与界面语言分开。'
   schema:abstract: '作者撰写的摘要文档，惯例上每种语言一个；接受文档值，而非普通字符串。'
+  wdt:P106: '表示此人职业的概念，如导演或作家；作品署名不能代替这一事实。'
+  schema:knowsLanguage: '此人通晓的语言，记为已采纳的概念；既非口语能力，也非署名作品所用语言。'
+  wdt:P749: '此制作方的上级组织。陈述记在下级一侧，可附起止日期与出处。'
+  wdt:P1365: '此制作方所取代的组织。值为前身；这是有方向的更替，不是单纯按时间相邻的邻居。'
+  wdt:P1366: '取代此制作方的组织。值为继任者，作为与前身陈述相互独立的方向保存。'
   schema:image: '描绘此对象的已上传媒体对象；使用媒体值，而非外部图片 URL。'
   wdt:P648: 'Open Library 标识，如 OL45804W、OL7353617M 或 OL23919A；填写标识，不填页面 URL。'
   wdt:P5732: 'Bangumi 条目的数字标识，如 123；与人物、角色标识分开。'

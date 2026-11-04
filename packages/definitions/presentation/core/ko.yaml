@@ -27,6 +27,11 @@ properties:
   schema:dateModified: '마지막 갱신일'
   schema:inLanguage: '언어'
   schema:abstract: '요약'
+  wdt:P106: 직업
+  schema:knowsLanguage: 구사 언어
+  wdt:P749: 상위 조직
+  wdt:P1365: 전신
+  wdt:P1366: 후신
   schema:image: '이미지'
   wdt:P648: '오픈 라이브러리 ID'
   wdt:P5732: 'Bangumi 주제 ID'
@@ -87,6 +92,9 @@ inverseProperties:
   rezics:summaryOf: '요약판'
   rezics:sideStoryOf: '외전'
   rezics:bangumiRelatedTo: '관련 출발 작품 (Bangumi)'
+  wdt:P749: 하위 조직
+  wdt:P1365: 후신
+  wdt:P1366: 전신
 
   rezics:releaseGroup: '이 릴리스 그룹의 파일'
 propertyDescriptions:
@@ -111,6 +119,11 @@ propertyDescriptions:
   schema:dateModified: '출처 레코드가 마지막으로 수정된 날짜입니다. 작품의 발행일과 구별합니다.'
   schema:inLanguage: 'en이나 ja 같은 자료의 언어 코드입니다. 화면 표시 언어와는 별개입니다.'
   schema:abstract: '작성된 요약 문서입니다. 보통 언어마다 하나를 두며, 일반 문자열이 아닌 문서 값을 사용합니다.'
+  wdt:P106: '이 인물의 직업을 가리키는 개념입니다. 감독이나 작가처럼요. 작품 크레딧이 이 사실을 대신하지 않습니다.'
+  schema:knowsLanguage: '이 인물이 아는 언어를 채택된 개념으로 기록합니다. 구사 능력이나 크레딧된 작품의 언어가 아닙니다.'
+  wdt:P749: '이 제작 단체의 상위 조직입니다. 진술은 하위 쪽에 저장하며 시작일과 종료일, 출처를 붙일 수 있습니다.'
+  wdt:P1365: '이 제작 단체가 대체하는 조직입니다. 값은 전신입니다. 단순한 연대 이웃이 아니라 방향이 있는 교체입니다.'
+  wdt:P1366: '이 제작 단체를 대체하는 조직입니다. 값은 후신이며, 전신 진술과 독립된 방향으로 유지합니다.'
   schema:image: '대상을 나타내는 업로드된 미디어 객체입니다. 외부 이미지 URL 대신 미디어 값을 사용합니다.'
   wdt:P648: 'OL45804W, OL7353617M, OL23919A 같은 Open Library 식별자입니다. 페이지 URL이 아닙니다.'
   wdt:P5732: '123 같은 Bangumi 작품의 숫자 식별자입니다. 인물이나 캐릭터 ID와 구별합니다.'

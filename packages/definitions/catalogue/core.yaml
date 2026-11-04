@@ -91,6 +91,9 @@ classes:
       - penNameOf
       - birthDate
       - deathDate
+      - abstract
+      - occupation
+      - knowsLanguage
       - openLibraryId
       - bangumiPersonId
       - vndbId
@@ -104,6 +107,10 @@ classes:
     is_a: Thing
     slots:
       - penNameOf
+      - abstract
+      - parentOrganization
+      - replaces
+      - replacedBy
       - vndbId
     class_uri: schema:Organization
     description: An organization.
@@ -746,6 +753,71 @@ slots:
       inverse: none
       relation_order: name
 
+  occupation:
+    slot_uri: wdt:P106
+    description: A Concept naming this person's occupation; credits on works do not supply it.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P106
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: classification
+      inverse: none
+      relation_order: name
+  knowsLanguage:
+    slot_uri: schema:knowsLanguage
+    description: A language this person knows, as an admitted Concept, not spoken proficiency or a work's language.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: none
+      relation_order: name
+  parentOrganization:
+    slot_uri: wdt:P749
+    description: The parent organization of this producer; stored on the child with optional start and end dates.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P749
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: association
+      inverse: rezics:hasSubsidiary
+      relation_order: name
+      acyclic: true
+  replaces:
+    slot_uri: wdt:P1365
+    description: The organization this producer replaces; the value is the predecessor, not a generic neighbor.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P1365
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: order
+      inverse: rezics:replacedBy
+      relation_order: name
+      acyclic: true
+  replacedBy:
+    slot_uri: wdt:P1366
+    description: The organization that replaces this producer; the value is the successor, kept independent of replaces.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P1366
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: order
+      inverse: rezics:replaces
+      relation_order: name
+      acyclic: true
   penNameOf:
     slot_uri: rezics:penNameOf
     description: The person or organization behind this pen name or collective name; credits remain on the named agent.

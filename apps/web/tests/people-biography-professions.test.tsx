@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act, createElement as h, type ReactNode } from 'react';
-import type { PropertyDefinition, Release } from '@rezics/definitions';
+import type { Release } from '@rezics/definitions';
 import type { SubjectRead } from '@rezics/client';
 import { peopleCandidateId, peoplePersonId, peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
 import {
@@ -13,29 +13,6 @@ import {
 import { sealFacts, sendFacts, type FactDraft } from '../src/features/catalogue/subject-facts';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-
-function itemProperty(id: string, label: string): PropertyDefinition {
-  return {
-    iri: `http://schema.org/${id.split(':')[1]}`,
-    value: { type: 'string', pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
-    labels: { en: label, ja: label },
-    descriptions: { en: label },
-    datatype: 'wikibase-item',
-    targets: ['skos:Concept'],
-    mappings: [],
-    qualifiers: [],
-    multivalued: true,
-    relation: { group: 'classification', order: 'name', inverse: 'none' },
-  };
-}
-
-function admitPeopleBiography(release: Release) {
-  release.properties['wdt:P106'] = itemProperty('wdt:P106', 'occupation');
-  release.properties['schema:knowsLanguage'] = itemProperty('schema:knowsLanguage', 'knows language');
-  const person = release.types['schema:Person']!;
-  for (const id of ['schema:abstract', 'wdt:P106', 'schema:knowsLanguage'])
-    if (!person.properties.includes(id)) person.properties.push(id);
-}
 
 function statement(
   id: string,
@@ -64,9 +41,21 @@ function statement(
   };
 }
 
+function withoutPeopleAdmission(release: Release): Release {
+  const closed = structuredClone(release);
+  delete closed.properties['wdt:P106'];
+  delete closed.properties['schema:knowsLanguage'];
+  const person = closed.types['schema:Person'];
+  if (person)
+    person.properties = person.properties.filter(
+      (id) => id !== 'schema:abstract' && id !== 'wdt:P106' && id !== 'schema:knowsLanguage',
+    );
+  return closed;
+}
+
 test('Person biography groups bind admitted multilingual documents, occupations and languages and keep unreleased fields named unsupported', async () => {
   const fixture = peopleProfileFixture('ready', 'en', 'person');
-  const closed = peopleBiographyGroups(fixture.release, 'schema:Person', 'en', fixture.person);
+  const closed = peopleBiographyGroups(withoutPeopleAdmission(fixture.release), 'schema:Person', 'en', fixture.person);
   expect(closed.map((group) => group.kind)).toEqual(['biography', 'occupations', 'languages', 'affiliations']);
   expect(
     closed
@@ -74,12 +63,32 @@ test('Person biography groups bind admitted multilingual documents, occupations 
       .flatMap((group) => group.fields)
       .every((field) => field.status === 'unsupported'),
   ).toBe(true);
+  const recorded = peopleBiographyGroups(fixture.release, 'schema:Person', 'en');
+  expect(recorded.find((group) => group.kind === 'biography')?.fields[0]).toMatchObject({
+    id: 'schema:abstract',
+    status: 'absent',
+    editor: 'authored',
+  });
+  expect(recorded.find((group) => group.kind === 'occupations')?.fields.find((field) => field.id === 'wdt:P106')).toMatchObject({
+    status: 'absent',
+    editor: 'item',
+    label: { text: 'occupation' },
+  });
+  expect(recorded.find((group) => group.kind === 'languages')?.fields[0]).toMatchObject({
+    id: 'schema:knowsLanguage',
+    status: 'absent',
+    editor: 'item',
+  });
+  expect(
+    peopleBiographyGroups(fixture.release, 'schema:Person', 'en', fixture.person, false)
+      .find((group) => group.kind === 'occupations')
+      ?.fields.find((field) => field.id === 'wdt:P106')?.status,
+  ).toBe('unreadable');
   expect(peopleScalarFields(fixture.release, 'schema:Person', 'en')).toContain('schema:url');
   expect(peopleBiographyHref(peoplePersonId, 'Mira Sato', 'en', 'schema:abstract')).toContain(
     '/authored?property=schema%3Aabstract',
   );
 
-  admitPeopleBiography(fixture.release);
   const occupation = '00000000-0000-4000-8000-00000000d201';
   const writer = '00000000-0000-4000-8000-00000000d202';
   const japanese = '00000000-0000-4000-8000-00000000d203';
@@ -204,7 +213,6 @@ test('labelled People groups show admitted occupations, unreleased fields and re
   window.document.body.append(host);
   const root = createRoot(host);
   const fixture = peopleProfileFixture('ready', 'en', 'person');
-  admitPeopleBiography(fixture.release);
   const occupation = '00000000-0000-4000-8000-00000000d201';
   fixture.person.subject.statements['wdt:P106'] = [
     statement('00000000-0000-4000-8000-00000000d221', 'wdt:P106', occupation, 'wikibase-item'),
@@ -245,6 +253,34 @@ test('labelled People groups show admitted occupations, unreleased fields and re
     expect(authored?.getAttribute('href')).toContain('property=schema%3Aabstract');
     expect(authored?.getAttribute('href')).toContain('return=');
     expect([...host.querySelectorAll('a')].some((link) => link.textContent === m.people_biography_return())).toBe(true);
+    const withheld = structuredClone(fixture.person);
+    delete withheld.related[occupation];
+    await act(async () =>
+      root.render(
+        h(
+          CandidateReaderBoundary,
+          {
+            observed: { state: 'signed-in', subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10', csrfToken: 'token' },
+            address: 'people-biography',
+          },
+          h(
+            CatalogueCurrentReading,
+            { visible: true, ready: true, revision: '2' },
+            h(PeopleBiographyGroups, {
+              read: { ok: true, public: withheld, release: fixture.release, source: null },
+              locale: 'en',
+              search: async () => [],
+              transport: {
+                propose: fixture.propose,
+                read: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+              },
+              review: fixture.review,
+            }) as ReactNode,
+          ) as ReactNode,
+        ),
+      ),
+    );
+    expect(host.textContent).toContain(m.people_biography_unreadable());
   } finally {
     await act(async () => root.unmount());
     await window.happyDOM.abort();

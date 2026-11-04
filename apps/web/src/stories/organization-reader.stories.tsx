@@ -14,16 +14,17 @@ function ReaderStory({ state }: { state: 'unconfigured' | 'history' | 'withheld'
     const { release, organization: current } = fixture;
     current.subject.descriptions = { en: 'An independent animation studio.', ja: '独立系アニメーション制作会社。' };
     // Illustrative admitted-release variation, not a claim of native configuration or a rendered pass.
-    if (state !== 'unconfigured') {
-      release.types['schema:Organization']!.properties.push('wdt:P1365');
-      release.properties['wdt:P1365'] = {
-        ...release.properties['rezics:penNameOf']!,
-        labels: { en: 'Predecessor', ja: '前身' },
-        iri: 'http://www.wikidata.org/prop/direct/P1365',
-        targets: ['schema:Organization'],
-        qualifiers: ['schema:startDate', 'schema:endDate'],
-        relation: { group: 'credit', order: 'name', inverse: 'none' },
-      };
+    if (state === 'unconfigured') {
+      delete release.properties['wdt:P749'];
+      delete release.properties['wdt:P1365'];
+      delete release.properties['wdt:P1366'];
+      const type = release.types['schema:Organization'];
+      if (type)
+        type.properties = type.properties.filter(
+          (id) =>
+            id !== 'schema:abstract' && id !== 'wdt:P749' && id !== 'wdt:P1365' && id !== 'wdt:P1366',
+        );
+    } else {
       const target = '00000000-0000-4000-8000-00000000d311';
       if (state === 'history')
         current.related[target] = {

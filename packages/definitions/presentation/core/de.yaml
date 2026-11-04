@@ -27,6 +27,11 @@ properties:
   schema:dateModified: 'letzte Aktualisierung'
   schema:inLanguage: 'Sprache'
   schema:abstract: 'Zusammenfassung'
+  wdt:P106: Beruf
+  schema:knowsLanguage: bekannte Sprache
+  wdt:P749: übergeordnete Organisation
+  wdt:P1365: ersetzt
+  wdt:P1366: ersetzt durch
   schema:image: 'Bild'
   wdt:P648: 'Open-Library-Kennung'
   wdt:P5732: 'Bangumi-Werkkennung'
@@ -87,6 +92,9 @@ inverseProperties:
   rezics:summaryOf: 'Zusammenfassungen'
   rezics:sideStoryOf: 'Nebengeschichten'
   rezics:bangumiRelatedTo: 'Verknüpft von (Bangumi)'
+  wdt:P749: Tochterorganisationen
+  wdt:P1365: ersetzt durch
+  wdt:P1366: ersetzt
   rezics:releaseGroup: 'Dateien dieser Release-Gruppe'
 typeDescriptions:
   wd:Q2095: 'Ein Lebensmittel oder essbarer Stoff, etwa Mehl; ein Rezept beschreibt dessen Zubereitung.'
@@ -117,6 +125,11 @@ propertyDescriptions:
   schema:dateModified: 'Zeitpunkt der letzten Änderung am Quelldatensatz, nicht das Veröffentlichungsdatum des Werks.'
   schema:inLanguage: 'Der Sprachcode der Ressource, etwa en oder ja, unabhängig von der Sprache der Oberfläche.'
   schema:abstract: 'Ein verfasstes Zusammenfassungsdokument, üblicherweise eines je Sprache; erwartet wird ein Dokumentwert statt einfachem Text.'
+  wdt:P106: 'Ein Konzept für den Beruf dieser Person, etwa Regie oder Autorenschaft; Werkcredits ersetzen diese Angabe nicht.'
+  schema:knowsLanguage: 'Eine Sprache, die diese Person kennt, als zugelassenes Konzept; weder Sprechfertigkeit noch die Sprache eines zugeschriebenen Werks.'
+  wdt:P749: 'Die übergeordnete Organisation dieses Produzenten. Die Aussage steht beim Kind und kann mit Anfangs- und Enddatum sowie Belegen versehen werden.'
+  wdt:P1365: 'Die Organisation, die dieser Produzent ersetzt. Der Wert ist der Vorgänger; eine gerichtete Nachfolge, kein bloß zeitlicher Nachbar.'
+  wdt:P1366: 'Die Organisation, die diesen Produzenten ersetzt. Der Wert ist der Nachfolger, unabhängig von der Vorgänger-Aussage gespeichert.'
   schema:image: 'Ein hochgeladenes Medienobjekt, das das Subjekt zeigt; erwartet wird ein Medienwert statt einer externen Bild-URL.'
   wdt:P648: 'Eine Open-Library-Kennung wie OL45804W, OL7353617M oder OL23919A; keine Seiten-URL.'
   wdt:P5732: 'Die numerische Bangumi-Werkkennung, etwa 123; keine Personen- oder Figurenkennung.'
