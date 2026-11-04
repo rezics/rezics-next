@@ -82,6 +82,7 @@ export function useMusicLocationReading(input: {
         requested: undefined,
         failure: undefined,
         busy: false,
+        restoredUnavailable: request.intent === 'open' && pending.restoredUnavailable,
       });
     } else {
       update({
