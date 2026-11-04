@@ -73,7 +73,12 @@ function key(): string {
 
 function tracedPool(
   source: Pool,
-  observe: (connection: number, text: string, args: string, run: (query?: unknown, values?: unknown[]) => Promise<unknown>) => unknown,
+  observe: (
+    connection: number,
+    text: string,
+    args: string,
+    run: (query?: unknown, values?: unknown[]) => Promise<unknown>,
+  ) => unknown,
 ): Pool {
   let nextConnection = 0;
   return new Proxy(source, {
