@@ -56,10 +56,17 @@ function tokenOf(result: { headers?: HeadersInit | undefined }) {
 }
 
 export function musicContextKind(release: Definitions, type: string): MusicContextKind {
+  // Preserve an exact native Type's identity before classifying its admitted ancestors.
   for (const [kind, ids] of Object.entries(musicContextRequested) as [
     Exclude<MusicContextKind, 'unsupported'>,
     readonly string[],
   ][]) {
+    if (ids.includes(type) && !!release.types[type]) return kind;
+  }
+  // AdministrativeArea is also a Place in some releases; show its more specific identity.
+  const priority: Exclude<MusicContextKind, 'unsupported'>[] = ['area', 'event', 'instrument', 'place'];
+  for (const kind of priority) {
+    const ids = musicContextRequested[kind];
     if (ids.some((id) => !!release.types[id] && typeExtends(release, type, id))) return kind;
   }
   return 'unsupported';

@@ -18,6 +18,8 @@ import { composedSubjectRead } from '../catalogue/music-reader';
 import { MusicAlbumOverview } from '../catalogue/music-reader-view';
 import { MusicReleaseOverview } from '../catalogue/music-release-reader/entry';
 import { musicReleaseEntry } from '../catalogue/music-release-reader/model';
+import { MusicLocationOverview } from '../catalogue/music-location-reader/entry';
+import { musicLocationEntry } from '../catalogue/music-location-reader/model';
 import { AlbumTrackOverview } from '../catalogue/album-track-reader/entry';
 import { StoryArcOverview } from '../catalogue/story-arc-reader/entry';
 import { RecordingOverview } from '../catalogue/recording-reader/overview';
@@ -837,6 +839,16 @@ export function SubjectPage({
                 {...(page.context ? { context: page.context } : {})}
                 {...(visitReturn ? { returnTo: visitReturn } : {})}
                 link={ContextLink}
+              />
+            ) : null}
+            {overview && read && !page.account && musicLocationEntry(read.subject.type, read.summary?.types) ? (
+              <MusicLocationOverview
+                source={page}
+                reader={page.requestedReader ?? null}
+                subject={composedSubjectRead(read)}
+                context={page.context?.id ?? read.subject.context}
+                locale={locale}
+                realm={realm}
               />
             ) : null}
             {overview && read && !page.account && isScreenType(read.subject.type) ? (
