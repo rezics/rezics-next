@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import type { Release } from '@rezics/definitions';
 import type { Subject } from '../../../subject/types';
 import type { TermsPageAuthority } from '../subject-terms';
@@ -21,6 +21,12 @@ export function WorkNamesEntry({ subject, source, locale, context, sourcesHref, 
   expectedReader?: string | null | undefined; adviceLoader?: NamesAdviceLoader; link?: PageLink;
 }) {
   const lifetime = useNamesLifetime(source, JSON.stringify([subject.id, subject.type, Reflect.get(subject, 'revision'), subject.context, context, locale, releaseDigest]), expectedReader);
+  const host = useRef<HTMLDivElement>(null);
+  const focused = useRef<EventTarget | null>(null);
+  useLayoutEffect(() => {
+    if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
+      host.current?.querySelector<HTMLElement>('summary')?.focus();
+  }, [lifetime.generation, lifetime.retired]);
   const names = useMemo(() => workNames(subject, locale), [subject, source, locale]);
   if (!supportsReleasedWorkNames(subject.type, release)) return null;
   const address = subjectHref({ id: subject.id, label: names.state === 'ready' ? names.selected.text : '' }, locale).href;
@@ -31,8 +37,8 @@ export function WorkNamesEntry({ subject, source, locale, context, sourcesHref, 
   const binding = lifetime.caller ? JSON.stringify([subject.id, subject.context, context, locale, releaseDigest,
     Reflect.get(subject, 'revision'), lifetime.caller, returnHref]) : undefined;
   const termsHref = withSubjectVisitReturn(`${address}/terms${url.search}`, returnHref ?? '', locale);
-  return <WorkNamesVisit key={lifetime.generation} {...{ names, locale, sourcesHref, termsHref, returnHref, binding,
-    termsAuthority, adviceLoader, lifetime, Link }} />;
+  return <div ref={host} className="min-w-0" onFocusCapture={event => { focused.current = event.target; }}><WorkNamesVisit key={lifetime.generation} {...{ names, locale, sourcesHref, termsHref, returnHref, binding,
+    termsAuthority, adviceLoader, lifetime, Link }} /></div>;
 }
 
 function WorkNamesVisit({ names, locale, sourcesHref, termsHref, returnHref, binding, termsAuthority, adviceLoader, lifetime, Link }: {
