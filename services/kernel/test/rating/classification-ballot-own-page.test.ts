@@ -501,9 +501,7 @@ test('concealed sparse windows keep the examined raw frontier and allow an exact
   await realAccess.renew('owner');
   try {
     const selection = `selectedSubjectId=${subject.id}&selectedAssociationId=${selectedAssociationId}`;
-    const first = await responseJson(
-      await request('owner', 'GET', `/v1/me/classification-assessments?${selection}`),
-    );
+    const first = await responseJson(await request('owner', 'GET', `/v1/me/classification-assessments?${selection}`));
     expect(first.items).toEqual([]);
     expect(first.traversal).toBe('more');
     expect(first.next).toEqual(expect.any(String));
