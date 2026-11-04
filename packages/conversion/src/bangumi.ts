@@ -9,6 +9,7 @@ import {
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
+import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -21,7 +22,7 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@5';
+export const converter_revision = 'bangumi@6';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
@@ -154,11 +155,15 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
   return record;
 }
 
-function retainedFieldDiagnostics(record: NormalizedRecord): { pointer: string; code: string }[] {
+function retainedFieldDiagnostics(
+  record: NormalizedRecord,
+  nameDiagnostics: readonly { pointer: string; code: string }[],
+): { pointer: string; code: string }[] {
   const citedDate =
     (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
-  return (['tags', 'platform', 'infobox', 'nsfw', 'date'] as const)
+  const retained = (['tags', 'platform', 'infobox', 'nsfw', 'date'] as const)
     .filter((field) => record[field] !== undefined)
+    .filter((field) => field !== 'infobox' || record.type !== 2)
     .filter((field) => field !== 'date' || !citedDate)
     .map((field) => ({
       pointer: `/${field}`,
@@ -171,6 +176,7 @@ function retainedFieldDiagnostics(record: NormalizedRecord): { pointer: string; 
               ? 'unsupported_infobox_mapping'
               : `catalogue_has_no_${field}_property`,
     }));
+  return [...retained, ...nameDiagnostics];
 }
 
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
@@ -262,11 +268,11 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     value: { type: 'value', content },
     references: references(),
   });
-  // Bangumi does not declare the original title/summary language. Preserve that
-  // uncertainty rather than mislabelling all works Japanese. name_cn is Chinese.
-  const titles = [fact('schema:name', { language: 'und', text: record.name })];
-  if (record.name_cn?.trim()) titles.push(fact('schema:name', { language: 'zh', text: record.name_cn }));
-  const facts = [fact('wdt:P5732', input.external_id), ...titles];
+  const extractedNames = extractBangumiSubjectNames(record);
+  const facts = [
+    fact('wdt:P5732', input.external_id),
+    ...extractedNames.names.map((name) => fact(name.property, { language: name.language, text: name.text })),
+  ];
   if (record.meta_tags?.includes('后宫')) {
     const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
     const dictionary = context.resolvedReferences;
@@ -319,7 +325,19 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       subject: { type: profile.type, labels },
     });
   } else {
-    for (const [index, statement] of facts.entries()) proposals.push(propose(statement, 'facts', `fact:${index}`));
+    for (const [index, statement] of facts.entries()) {
+      const property = statement.property.id;
+      const content = statement.value.type === 'value' ? statement.value.content : undefined;
+      const field =
+        (property === 'schema:name' || property === 'schema:alternateName') &&
+        content &&
+        typeof content === 'object' &&
+        'language' in content &&
+        'text' in content
+          ? `name:${property}:${String(content.language)}:${String(content.text)}`
+          : `fact:${index}`;
+      proposals.push(propose(statement, 'facts', field));
+    }
     if (record.type === 3 || record.type === 6) {
       const published = record.date?.trim() ? bangumiPublicationTime(record.date.trim()) : undefined;
       if (published) proposals.push(propose(fact('schema:datePublished', published), 'facts', 'date'));
@@ -380,7 +398,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     normalizedRecord: record,
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
-    diagnostics: retainedFieldDiagnostics(record),
+    diagnostics: retainedFieldDiagnostics(record, extractedNames.diagnostics),
     coverAssets,
     mediaImportIntents,
     sourceMetadata,

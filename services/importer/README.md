@@ -2225,3 +2225,25 @@ The result carries provider and native type bindings, source keys, source and co
 - Touches: at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, and 256 result omissions.
 - Bound: work is limited to the selected source family, source acknowledgements and required current subject/property reads. There is no catalogue-wide candidate scan or generic accept-all mode.
 - Growth check: `services/importer/tests/showcase-publication.test.ts` covers a compact dump plan, exact candidate selection and journal restart after a refusal. `services/kernel/test/imports/showcase-publication.test.ts` covers the native API publication path and anonymous read; its execution remains controller-owned and is not recorded as a local pass.
+
+### Bangumi TVAnime subject names
+
+Ordinary Bangumi registration and selected-family type 2 rows already reach
+`convertBangumi`; the selected-family registration supplies its combined
+`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
+Both use one pure TVAnime name extractor and the existing journal, source
+metadata admission, citations, candidate acceptance and adoption flow. No
+additional seed publisher or identity lookup is involved. The importer keeps the
+exact Bangumi subject alias and key, unversioned record state where no provider
+revision exists, the normalized digest and the acknowledged native UUID.
+
+- Touches: one selected source record, at most 24 name statements and 16 bounded
+  omission diagnostics; each name carries its exact Bangumi subject citation.
+- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
+  and the current source journal and batch limits; raw source values never enter
+  diagnostics.
+- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
+  selected-family JSONL planning, stable identity, unchanged and changed input,
+  exact citations and omissions. The connected ordinary caller is
+  `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
+  remains controller-owned.

@@ -1217,3 +1217,33 @@ The local task reuses Accounts' development persona and private seed wiring, the
 - Touches: at most 768 source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 review candidates per page, and 256 bounded omissions.
 - Bound: publication reads only the selected family, its current bindings and exact subject/property pages. It does not scan all pending candidates or alter ordinary importer behavior.
 - Growth check: the focused importer journal scenario is `services/importer/tests/showcase-publication.test.ts`. The native API scenario is `services/kernel/test/imports/showcase-publication.test.ts`; it remains deferred to integration, with no native pass claimed here.
+
+## Bangumi TVAnime subject names
+
+Decision: the pinned TVAnime grammar gives `中文名` Chinese language but no
+language syntax for aliases, so scalar and bullet-list `别名` values remain
+`und` and are never relabelled from provider, glyphs or work country.
+
+Ordinary Bangumi conversion and the selected-family type 2 route share one pure
+extractor. Exact `中文名` and scalar or bullet-list `别名` values become
+`schema:name` or `schema:alternateName` facts with the exact Bangumi subject
+citation after the source identity is bound. Existing top-level `name` and
+`name_cn` labels remain unchanged; name facts do not assert work language.
+Repeated keys are considered independently, exact property/language/text tuples
+deduplicate, and other names remain distinct. Only the pinned template and these
+two fields are consumed. Unsupported keys and forms produce bounded diagnostics
+without source prose. The original infobox stays in the existing bounded source
+projection and digest.
+
+- Touches: one source record, at most 24 total distinct name values and at most
+  16 omission diagnostics, with one source citation per proposed fact.
+- Bound: no more than 65,536 infobox characters or 64 field occurrences are
+  scanned; the parser does not recurse through arbitrary wiki markup or retain
+  arbitrary keys. The existing journal, source rights admission and facts fence
+  govern proposals and refresh.
+- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` exercises
+  the selected-family JSONL operator, exact proposals/citations, neighbor
+  exclusion, unchanged and changed input, identity reuse and bounded omissions.
+  `services/kernel/test/imports/bangumi-subject-names.test.ts` authors the
+  ordinary production-caller review, adoption, reopen and facts-fence journey;
+  its native execution remains controller-owned.

@@ -810,3 +810,21 @@ The production Importer/CLI obtains the dictionary through its existing
 remain pure; the source-only digest includes the ordered metadata tags and excludes
 bindings. Supported records visit twelve top-level fields and produce at most eight
 commands and one cover intent; byte caps remain unchanged. The new keyword adds one bounded citation and one qualifier.
+
+## Bangumi TVAnime subject names
+
+`bangumi@6` consumes only `中文名` and `别名` from the exact pinned
+`{{Infobox animanga/TVAnime` template on Bangumi type 2 records. The ordinary
+Bangumi converter and selected-family registrations share this pure extraction.
+The existing top-level `name` and `name_cn` bootstrap labels keep their current
+meanings; infobox names become cited native name facts after subject binding and
+do not set `inLanguage`. The complete infobox remains in the existing bounded
+projection and digest for raw change detection.
+
+The scalar `中文名` is `zh`. Scalar and bullet-list `别名` values are `und`,
+because the pinned template defines no alias-language syntax. Equal property,
+language and exact-text tuples deduplicate; other spellings remain separate.
+Nested templates, links, unknown keys and unconsumed TVAnime fields are bounded
+omissions, with no source prose copied into diagnostics. Parsing scans at most 64
+field occurrences, retains at most 24 distinct name values, and emits at most 16
+omission diagnostics.
