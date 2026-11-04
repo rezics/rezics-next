@@ -15,18 +15,35 @@ test('author replies carry only their immediate public parent and retire changed
     const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 120_000 };
     const created = await f.call('POST', '/v1/threads', {
       bearer: f.author.bearer,
-      body: { kind: 'review', title: 'Parent context', body: fromPlainText('Opening'), licence: 'CC0-1.0',
-        boardId: f.boardId, subjectIds: [f.subjectId], visibility: 'published' },
+      body: {
+        kind: 'review',
+        title: 'Parent context',
+        body: fromPlainText('Opening'),
+        licence: 'CC0-1.0',
+        boardId: f.boardId,
+        subjectIds: [f.subjectId],
+        visibility: 'published',
+      },
     });
     expect(created.response.status, created.text).toBe(201);
     const threadId = created.value.thread.id as string;
     async function reply(text: string, parentId?: string) {
-      const body = normalizeDocument({ ...fromPlainText(text), doc: { type: 'doc', content: [
-        { type: 'paragraph', attrs: { id: 'parent-text', lang: 'ja' }, content: [
-          { type: 'text', text, marks: [{ type: 'spoiler' }] },
-          { type: 'ruby', attrs: { rt: 'Invisible annotation' }, content: [{ type: 'text', text: 'visible' }] },
-        ] },
-      ] } });
+      const body = normalizeDocument({
+        ...fromPlainText(text),
+        doc: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              attrs: { id: 'parent-text', lang: 'ja' },
+              content: [
+                { type: 'text', text, marks: [{ type: 'spoiler' }] },
+                { type: 'ruby', attrs: { rt: 'Invisible annotation' }, content: [{ type: 'text', text: 'visible' }] },
+              ],
+            },
+          ],
+        },
+      });
       const result = await f.call('POST', `/v1/threads/${threadId}/posts`, {
         bearer: f.author.bearer,
         body: { body, licence: 'CC0-1.0', subjectIds: [], ...(parentId ? { parentId } : {}) },
@@ -41,9 +58,16 @@ test('author replies carry only their immediate public parent and retire changed
     const reference = { thread, post };
     const prepared = await prepareAuthorItemContext(dependencies, [reference], context);
     const result = (await prepared.finish()).get(childId)!;
-    expect(result.parentContext).toMatchObject({ kind: 'reply', parent: {
-      state: 'available', id: parentId, author: null, spoiler: true, language: 'ja',
-    } });
+    expect(result.parentContext).toMatchObject({
+      kind: 'reply',
+      parent: {
+        state: 'available',
+        id: parentId,
+        author: null,
+        spoiler: true,
+        language: 'ja',
+      },
+    });
     if (result.parentContext?.kind !== 'reply' || result.parentContext.parent.state !== 'available')
       throw new Error('Expected disclosed parent');
     expect(result.parentContext.parent.excerpt!.length).toBeLessThanOrEqual(160);
@@ -52,12 +76,20 @@ test('author replies carry only their immediate public parent and retire changed
     expect(result.parentContext.parent.revisionId).toBe(parent.revisionId);
     expect(JSON.stringify(result)).not.toContain('Opening');
     expect(JSON.stringify(result)).not.toContain('Invisible annotation');
+    const mounted = await f.call('GET', `/v1/accounts/${f.author.accountId}/posts`);
+    expect(mounted.response.status, mounted.text).toBe(200);
+    expect(mounted.value.posts.find((item: { id: string }) => item.id === childId)?.parentContext).toEqual(
+      result.parentContext,
+    );
+    expect(JSON.stringify(mounted.value)).not.toContain('viewerReaction');
+    expect(JSON.stringify(mounted.value)).not.toContain('watching');
     const changing = await prepareAuthorItemContext(dependencies, [reference], context);
     const removed = await f.call('DELETE', `/v1/posts/${parentId}`, { bearer: f.author.bearer });
     expect(removed.response.status, removed.text).toBe(204);
-    expect((await changing.finish()).get(childId)?.parentContext).toEqual({
-      kind: 'reply', parent: { state: 'withheld' },
-    });
+    await changing.finish().then(
+      (values) => expect(values.get(childId)?.parentContext).toEqual({ kind: 'reply', parent: { state: 'withheld' } }),
+      (error: unknown) => expect(error).toMatchObject({ code: 'dependency_unavailable' }),
+    );
     await expect(changing.finish()).rejects.toThrow('finish only once');
   } finally {
     await f.close();
@@ -70,8 +102,15 @@ test('author page refuses publication revoked after selection without returning 
   try {
     const created = await f.call('POST', '/v1/threads', {
       bearer: f.author.bearer,
-      body: { kind: 'review', title: 'Publication fence', body: fromPlainText('Opening'), licence: 'CC0-1.0',
-        boardId: f.boardId, subjectIds: [f.subjectId], visibility: 'published' },
+      body: {
+        kind: 'review',
+        title: 'Publication fence',
+        body: fromPlainText('Opening'),
+        licence: 'CC0-1.0',
+        boardId: f.boardId,
+        subjectIds: [f.subjectId],
+        visibility: 'published',
+      },
     });
     expect(created.response.status, created.text).toBe(201);
     const reply = await f.call('POST', `/v1/threads/${created.value.thread.id}/posts`, {
@@ -89,8 +128,11 @@ test('author page refuses publication revoked after selection without returning 
     const outcome = expect(pending).rejects.toMatchObject({ code: 'dependency_unavailable' });
     try {
       await gate.entered;
-      await f.admin.query('UPDATE access.account SET public_views=$3::jsonb WHERE route=$1 AND account_id=$2',
-        [routeOf(f.author.accountId), f.author.accountId, JSON.stringify({ posts: false, reviews: true })]);
+      await f.admin.query('UPDATE access.account SET public_views=$3::jsonb WHERE route=$1 AND account_id=$2', [
+        routeOf(f.author.accountId),
+        f.author.accountId,
+        JSON.stringify({ posts: false, reviews: true }),
+      ]);
     } finally {
       gate.release();
     }

@@ -20,7 +20,11 @@ import {
 } from './reads.ts';
 import threadPage from './author-item-threads.sql';
 import postPage from './author-item-posts.sql';
-import { prepareAuthorItemContext, type AuthorContextReference, type AuthorItemContext } from './author-item-context.ts';
+import {
+  prepareAuthorItemContext,
+  type AuthorContextReference,
+  type AuthorItemContext,
+} from './author-item-context.ts';
 
 export type AuthorThreadKind = 'discussion' | 'review';
 export type AuthorPageInput = { cursor?: string; limit?: number };
@@ -295,26 +299,31 @@ async function listAuthorItems(
   }
   // Last asynchronous owner call: account deletion/fencing, publication choice
   // and current editor authority use the same native snapshot as initial choice.
-  const final = await within(context.deadline, () => withConnection(dependencies.pool, async (connection) => {
-    const client = deadlineClient(connection, context.deadline);
-    try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      await client.query("SET LOCAL statement_timeout = '3000ms'");
-      const partition = await readPartition(client, partitionOf(accountRoute!));
-      if (!partition || partition.writeState === 'moved' || partition.epoch !== page.anchor.epoch)
-        throw new ProblemError('dependency_unavailable');
-      const views = (await readPublicViews(client, [accountId])).get(accountId);
-      const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
-      if (!enabled && !self && !(presentationCheck && await presentationCheck(client)) && entries.length > 0)
-        throw new ProblemError('dependency_unavailable');
-      await client.query('COMMIT');
-      return { partition, epoch: partition.epoch, position: partition.position };
-    } catch (error) {
-      try { await connection.query('ROLLBACK'); }
-      catch (rollbackError) { discardConnection(connection, rollbackError as Error); }
-      throw error;
-    }
-  }));
+  const final = await within(context.deadline, () =>
+    withConnection(dependencies.pool, async (connection) => {
+      const client = deadlineClient(connection, context.deadline);
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        await client.query("SET LOCAL statement_timeout = '3000ms'");
+        const partition = await readPartition(client, partitionOf(accountRoute!));
+        if (!partition || partition.writeState === 'moved' || partition.epoch !== page.anchor.epoch)
+          throw new ProblemError('dependency_unavailable');
+        const views = (await readPublicViews(client, [accountId])).get(accountId);
+        const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
+        if (!enabled && !self && !(presentationCheck && (await presentationCheck(client))) && entries.length > 0)
+          throw new ProblemError('dependency_unavailable');
+        await client.query('COMMIT');
+        return { partition, epoch: partition.epoch, position: partition.position };
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        throw error;
+      }
+    }),
+  );
   anchors.push(final);
   return {
     entries: entries.map((entry) => ({ ...entry, ...contexts.get(entry.id) })),
@@ -331,7 +340,14 @@ export async function listAuthorThreads(
 ): Promise<AuthorPage<AuthorThreadEntry>> {
   const kind = input.kind ?? 'discussion';
   if (kind !== 'discussion' && kind !== 'review') throw new TypeError('Invalid author thread kind');
-  return (await listAuthorItems(dependencies, accountId, context, input, 'threads', kind)) as AuthorPage<AuthorThreadEntry>;
+  return (await listAuthorItems(
+    dependencies,
+    accountId,
+    context,
+    input,
+    'threads',
+    kind,
+  )) as AuthorPage<AuthorThreadEntry>;
 }
 
 export async function listAuthorPosts(

@@ -1197,19 +1197,27 @@ export const AuthorThreadsQuerySchema = t.Object(
 );
 export const AuthorThreadsResponseSchema = t.Object(
   {
-    threads: t.Array(t.Unsafe<AuthorThreadEntry>(t.Object({
-      ...metadata,
-      ...references,
-      authorId: ContentIdSchema,
-      kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
-      title: t.Union([t.String(), t.Null()]),
-      availability,
-      firstPost: PostEntrySchema,
-      reviewContext: t.Optional(FeedReviewContextSchema),
-      conversationActivity: t.Optional(AuthorConversationActivitySchema),
-      ...viewerReaction,
-      ...reactions,
-    }, closed)), { maxItems: 20 }),
+    threads: t.Array(
+      t.Unsafe<AuthorThreadEntry>(
+        t.Object(
+          {
+            ...metadata,
+            ...references,
+            authorId: ContentIdSchema,
+            kind: t.Union([t.Literal('discussion'), t.Literal('review')]),
+            title: t.Union([t.String(), t.Null()]),
+            availability,
+            firstPost: PostEntrySchema,
+            reviewContext: t.Optional(FeedReviewContextSchema),
+            conversationActivity: t.Optional(AuthorConversationActivitySchema),
+            ...viewerReaction,
+            ...reactions,
+          },
+          closed,
+        ),
+      ),
+      { maxItems: 20 },
+    ),
     next: t.Union([t.String(), t.Null()]),
   },
   closed,

@@ -29,8 +29,21 @@ function presentation(post: Extract<PostEntry, { availability: 'available' }>) {
   let excerpt = '';
   let language: string | null = null;
   let spoiler = false;
-  const containers = new Set(['doc', 'paragraph', 'heading', 'blockquote', 'bulletList', 'orderedList',
-    'listItem', 'codeBlock', 'table', 'tableRow', 'tableCell', 'tableHeader', 'ruby']);
+  const containers = new Set([
+    'doc',
+    'paragraph',
+    'heading',
+    'blockquote',
+    'bulletList',
+    'orderedList',
+    'listItem',
+    'codeBlock',
+    'table',
+    'tableRow',
+    'tableCell',
+    'tableHeader',
+    'ruby',
+  ]);
   const append = (text: string) => {
     for (const character of text) {
       const width = Buffer.byteLength(character, 'utf8');
@@ -69,16 +82,21 @@ export async function prepareAuthorItemContext(
   dependencies: ContentReadDependencies,
   references: readonly AuthorContextReference[],
   context: ReadContext,
-): Promise<Readonly<{
-  anchors: AnchoredPosition[];
-  finish(): Promise<ReadonlyMap<string, AuthorItemContext>>;
-}>> {
+): Promise<
+  Readonly<{
+    anchors: AnchoredPosition[];
+    finish(): Promise<ReadonlyMap<string, AuthorItemContext>>;
+  }>
+> {
   if (references.length > MAX_SELECTED) throw new RangeError('At most 20 author contexts');
   const publicContext = { ...context, actor: { kind: 'anonymous' as const } };
   const activity = createConversationActivityBatch(dependencies.pool);
-  const selectedActivity = await activity.select([...new Set(references.map(({ thread }) => thread.id))], context.deadline);
+  const selectedActivity = await activity.select(
+    [...new Set(references.map(({ thread }) => thread.id))],
+    context.deadline,
+  );
   const parents = new Map<string, { threadId: string; postId: string; initial: PostEntry | null }>();
-  const anchors = selectedActivity.flatMap((item) => item.status === 'current' ? [item.witness.source] : []);
+  const anchors = selectedActivity.flatMap((item) => (item.status === 'current' ? [item.witness.source] : []));
   for (const { thread, post } of references) {
     if (!post || post.threadId !== thread.id) {
       if (post) throw new TypeError('Author context thread mismatch');
@@ -108,26 +126,47 @@ export async function prepareAuthorItemContext(
         anchors.push(current.anchor);
         const initial = parent.initial;
         const value = current.value;
-        const excerpt = value?.availability === 'available' && initial?.availability === 'available'
-          && value.id === parent.postId && value.threadId === parent.threadId
-          && JSON.stringify(initial) === JSON.stringify(value) ? presentation(value) : null;
-        parentViews.set(key, excerpt && value?.availability === 'available' ? {
-          kind: 'reply', parent: {
-            state: 'available', id: value.id, revisionId: value.revisionId, createdAt: value.createdAt,
-            author: null, ...excerpt,
-          },
-        } : { kind: 'reply', parent: { state: 'withheld' } });
+        const excerpt =
+          value?.availability === 'available' &&
+          initial?.availability === 'available' &&
+          value.id === parent.postId &&
+          value.threadId === parent.threadId &&
+          JSON.stringify(initial) === JSON.stringify(value)
+            ? presentation(value)
+            : null;
+        parentViews.set(
+          key,
+          excerpt && value?.availability === 'available'
+            ? {
+                kind: 'reply',
+                parent: {
+                  state: 'available',
+                  id: value.id,
+                  revisionId: value.revisionId,
+                  createdAt: value.createdAt,
+                  author: null,
+                  ...excerpt,
+                },
+              }
+            : { kind: 'reply', parent: { state: 'withheld' } },
+        );
       }
       const result = new Map<string, AuthorItemContext>();
       for (const { thread, post } of references) {
         const selection = byThread.get(thread.id);
-        const conversationActivity: FeedConversationActivity = selection?.status === 'current' ? {
-          state: 'current', cohort: 'public', count: selection.replyCount,
-          lastActivityAt: selection.lastContributionAt,
-        } : { state: 'withheld' };
+        const conversationActivity: FeedConversationActivity =
+          selection?.status === 'current'
+            ? {
+                state: 'current',
+                cohort: 'public',
+                count: selection.replyCount,
+                lastActivityAt: selection.lastContributionAt,
+              }
+            : { state: 'withheld' };
         const parentContext: FeedParentContext | undefined = post
-          ? post.parentId === null ? { kind: 'opening' }
-            : parentViews.get(parentKey(thread.id, post.parentId)) ?? { kind: 'reply', parent: { state: 'withheld' } }
+          ? post.parentId === null
+            ? { kind: 'opening' }
+            : (parentViews.get(parentKey(thread.id, post.parentId)) ?? { kind: 'reply', parent: { state: 'withheld' } })
           : undefined;
         result.set(post?.id ?? thread.id, { conversationActivity, ...(parentContext ? { parentContext } : {}) });
       }
