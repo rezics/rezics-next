@@ -164,7 +164,12 @@ export async function readAuthorContributionActions(
     value: {
       viewer: result.viewer,
       selected: result.selected.map(({ reference, state, reply }) => ({ reference, state, reply })),
-      reactions: result.reactions, actions: result.actions, watch: result.watch, currentness: result.currentness,
+      reactions: { ...result.reactions, items: [...result.reactions.items] },
+      actions: { ...result.actions, references: result.actions.references.map((reference) => ({
+        ...reference, operations: [...reference.operations],
+      })) },
+      watch: { ...result.watch, items: [...result.watch.items] },
+      currentness: result.currentness,
     },
     anchors: [firstPublication, ...initial.anchors, ...result.anchors, ...final.anchors, lastPublication],
   };
