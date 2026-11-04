@@ -636,10 +636,10 @@ test('seven continuations that share owner docs dispatch; a proposal does not bl
   f.runtime.policy = readControlPolicy({ backlog: { continuationReview: { web: false } } });
   const shared = 'README.md, docs/journeys.md, packages/definitions/release/catalog.json';
   const text = (title: string, paths: string) =>
-    markdown.replace('goal: fixture', 'goal: web').replace('paths: [result.txt]', `paths: [${paths}]`).replace(
-      'Write the requested result and commit it.',
-      title,
-    );
+    markdown
+      .replace('goal: fixture', 'goal: web')
+      .replace('paths: [result.txt]', `paths: [${paths}]`)
+      .replace('Write the requested result and commit it.', title);
   for (let index = 1; index <= 7; index++)
     brief(
       f.state,

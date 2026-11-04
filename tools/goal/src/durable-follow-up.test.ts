@@ -1,14 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  utimesSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { GateOutcome } from './contracts.ts';
 import { completeContinuation, harvestContinuations } from './continuation.ts';
@@ -358,12 +349,17 @@ test('title match and remaining-path coverage are still duplicates; proposed bri
       join(source, 'covered.md'),
       continuationMarkdown('# Covered remainder', `result.txt, ${SHARED_PATHS}`),
     );
-    expect(harvestContinuations(h.store, h.settings, task, ref).proposed[0]?.reason).toContain(`overlaps task ${other.id}`);
+    expect(harvestContinuations(h.store, h.settings, task, ref).proposed[0]?.reason).toContain(
+      `overlaps task ${other.id}`,
+    );
     writeFileSync(
       join(source, 'titled.md'),
       continuationMarkdown('# Finish shelf', `apps/web/src/journeys/titled.ts, ${SHARED_PATHS}`),
     );
-    writeFileSync(join(backlog, 'manager.md'), continuationMarkdown('# Finish shelf', 'apps/web/src/journeys/other.ts'));
+    writeFileSync(
+      join(backlog, 'manager.md'),
+      continuationMarkdown('# Finish shelf', 'apps/web/src/journeys/other.ts'),
+    );
     expect(harvestContinuations(h.store, h.settings, task, ref).proposed[0]?.reason).toContain('manager.md');
     writeFileSync(
       join(backlog, 'proposed', 'parked.md'),
