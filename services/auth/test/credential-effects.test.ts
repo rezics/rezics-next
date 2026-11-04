@@ -44,6 +44,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
   const openings = new Map<string, { stage: CredentialEffectBinding; spent: boolean; expiresAt: string }>();
   let allowed = true;
   let afterConsume = async () => {};
+  let revalidateProof = false;
   let service: AuthService;
   const options = {
     database: pool,
@@ -90,6 +91,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
         },
       ) {
         if (!allowed) throw new Error('Fixture authority revoked');
+        if (revalidateProof) await service.internal.accessTokenForProof(input.human);
         if (input.replay) {
           expect(input.committedOpeningReceiptId).toBeString();
           if (!openings.get(input.authorization)?.spent || input.committedOpeningReceiptId !== input.authorization)
@@ -167,6 +169,9 @@ export async function credentialFixture(suppliedPool?: Pool) {
     afterConsume(callback: () => Promise<void>) {
       afterConsume = callback;
     },
+    revalidateWithNativeProof() {
+      revalidateProof = true;
+    },
     async stage(
       credential: Parameters<AuthService['internal']['stageCredentialEffect']>[0]['credential'],
       subjectAccountId = 'robot',
@@ -212,6 +217,31 @@ test('Auth stage commits an immutable keyed commitment and rejects changed input
     ).rejects.toThrow();
     const rows = await f.pool.query('SELECT * FROM auth_effect_receipt WHERE operation_key=$1', [op.key]);
     expect(JSON.stringify(rows.rows)).not.toContain('candidate password');
+  } finally {
+    await f.close();
+  }
+}, 60000);
+
+test('credential revalidation signs a live proof under the credential transaction without rewriting current consent', async () => {
+  const f = await credentialFixture();
+  try {
+    // Bound a regression's self-deadlock, including reused and newly opened clients.
+    f.pool.options.max = 4;
+    const clients = await Promise.all(Array.from({ length: 4 }, () => f.pool.connect()));
+    for (const client of clients) {
+      await client.query("SET lock_timeout='1s'");
+      client.release();
+    }
+    const before = (
+      await f.pool.query('SELECT revision FROM auth_consent WHERE account_id=$1 AND client_id=$2', ['human', 'web'])
+    ).rows;
+    f.revalidateWithNativeProof();
+    const op = await f.stage({ kind: 'key', kid: 'new-key', publicJwk: f.publicJwk }, 'human');
+    expect((await f.apply(op)).replayed).toBe(false);
+    expect(
+      (await f.pool.query('SELECT revision FROM auth_consent WHERE account_id=$1 AND client_id=$2', ['human', 'web']))
+        .rows,
+    ).toEqual(before);
   } finally {
     await f.close();
   }
