@@ -9,7 +9,14 @@ const db = await openGrowthDatabase();
 afterAll(() => db.close());
 
 test('selected Board advice preserves sign-in, current denial and unavailable', () => {
-  const account = { kind: 'account', accountId: newId(0x789a) } as const;
+  const account = {
+    kind: 'account',
+    accountId: newId(0x789a),
+    clientId: 'subject-entry-test',
+    scopes: [],
+    requestedBy: null,
+    authnEpoch: 1,
+  } as const;
   const anonymous = { kind: 'anonymous' } as const;
   expect(projectSubjectThreadCreateAdvice(anonymous, 'allowed', true)).toBe('sign-in');
   expect(projectSubjectThreadCreateAdvice(account, 'allowed', false)).toBe('denied');
