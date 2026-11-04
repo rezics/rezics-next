@@ -13,7 +13,9 @@ test('first-run secrets remain private and stable across setup retries', async (
     expect(new Set([keys.signing.kid, keys.website.kid, keys.importer.kid]).size).toBe(3);
     expect(publicKey(keys.importer).d).toBeUndefined();
     expect(keys.secret).not.toBe(keys.staging);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('local setup refuses remote databases', () => {

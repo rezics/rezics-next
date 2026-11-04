@@ -13,15 +13,15 @@ creates development keys and configures the Web worker. It can be repeated. An i
 `dev` also runs setup, then starts these processes together; Ctrl-C ends the processes it launched and leaves
 infrastructure running. A child startup failure ends the other children.
 
-| Service | Loopback address |
-| --- | --- |
-| Web | http://127.0.0.1:3000 |
-| Auth pages and public issuer | http://127.0.0.1:4200 |
-| Native Auth behind the pages | http://127.0.0.1:3100 |
-| Kernel API | http://127.0.0.1:4100 |
-| Kernel background worker | No HTTP listener |
-| PostgreSQL | 127.0.0.1:54329 |
-| OpenSearch | http://127.0.0.1:59200 |
+| Service                      | Loopback address       |
+| ---------------------------- | ---------------------- |
+| Web                          | http://127.0.0.1:3000  |
+| Auth pages and public issuer | http://127.0.0.1:4200  |
+| Native Auth behind the pages | http://127.0.0.1:3100  |
+| Kernel API                   | http://127.0.0.1:4100  |
+| Kernel background worker     | No HTTP listener       |
+| PostgreSQL                   | 127.0.0.1:54329        |
+| OpenSearch                   | http://127.0.0.1:59200 |
 
 Open Web and choose Sign in. Auth offers password sign-in, passkeys and sign-up. Sign-up works without an email
 provider or Cloudflare account. The development widget completes locally; it and its verifier exist only in the

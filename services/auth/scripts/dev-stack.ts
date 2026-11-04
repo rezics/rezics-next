@@ -16,14 +16,36 @@ export const origins = {
   audience: 'https://api.rezics.test',
 };
 export const websiteScopes = [
-  'openid', 'offline_access', 'media:create', 'media:read_reservation', 'media:read', 'media:complete',
-  'media:erase', 'thread:create', 'post:create', 'reaction:set', 'presentation:publish', 'presentation:activate',
-  'order:create', 'order:read', 'order:reconcile', 'account:read', 'account:update', 'organization:create',
-  'account:manage', 'account:delete',
+  'openid',
+  'offline_access',
+  'media:create',
+  'media:read_reservation',
+  'media:read',
+  'media:complete',
+  'media:erase',
+  'thread:create',
+  'post:create',
+  'reaction:set',
+  'presentation:publish',
+  'presentation:activate',
+  'order:create',
+  'order:read',
+  'order:reconcile',
+  'account:read',
+  'account:update',
+  'organization:create',
+  'account:manage',
+  'account:delete',
 ];
 export const importerScopes = [
-  'subject:create', 'subject:batch_write', 'statement:propose', 'source_fence:read', 'media:import_from_url',
-  'media:read_reservation', 'source_statistic:write', 'subject:read',
+  'subject:create',
+  'subject:batch_write',
+  'statement:propose',
+  'source_fence:read',
+  'media:import_from_url',
+  'media:read_reservation',
+  'source_statistic:write',
+  'subject:read',
 ];
 const personaClient = 'rezics-dev-importer';
 export type DevelopmentKeys = {
@@ -37,7 +59,7 @@ export type DevelopmentKeys = {
 
 async function privateKey(): Promise<JWK> {
   const pair = await generateKeyPair('ES256', { extractable: true });
-  return { ...await exportJWK(pair.privateKey), kid: randomUUID(), alg: 'ES256', use: 'sig' };
+  return { ...(await exportJWK(pair.privateKey)), kid: randomUUID(), alg: 'ES256', use: 'sig' };
 }
 export function publicKey(key: JWK): JWK {
   const { d: _private, key_ops: _operations, ...publicPart } = key;
@@ -56,9 +78,12 @@ export async function developmentKeys(directory = state): Promise<DevelopmentKey
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   const keys: DevelopmentKeys = {
-    secret: randomBytes(48).toString('base64url'), staging: randomBytes(32).toString('base64url'),
-    signing: await privateKey(), website: await privateKey(),
-    importer: await privateKey(), password: randomBytes(24).toString('base64url'),
+    secret: randomBytes(48).toString('base64url'),
+    staging: randomBytes(32).toString('base64url'),
+    signing: await privateKey(),
+    website: await privateKey(),
+    importer: await privateKey(),
+    password: randomBytes(24).toString('base64url'),
   };
   // Exclusive creation makes concurrent first-run commands converge on one key set.
   try {
@@ -72,8 +97,10 @@ export async function developmentKeys(directory = state): Promise<DevelopmentKey
 
 export async function kernelEnvironment(): Promise<Record<string, string>> {
   return Object.fromEntries(
-    (await readFile(resolve(root, 'services/kernel/.env'), 'utf8')).split('\n')
-      .filter((line) => /^[A-Z_]+=/.test(line)).map((line) => {
+    (await readFile(resolve(root, 'services/kernel/.env'), 'utf8'))
+      .split('\n')
+      .filter((line) => /^[A-Z_]+=/.test(line))
+      .map((line) => {
         const equals = line.indexOf('=');
         return [line.slice(0, equals), line.slice(equals + 1)];
       }),
@@ -100,28 +127,53 @@ async function setup() {
   try {
     // The service has its own database even though development shares one PostgreSQL server.
     if (!(await pool.query("SELECT 1 FROM pg_database WHERE datname='rezics_auth'")).rowCount) {
-      try { await pool.query('CREATE DATABASE rezics_auth'); }
-      catch (error) { if ((error as { code?: string }).code !== '42P04') throw error; }
+      try {
+        await pool.query('CREATE DATABASE rezics_auth');
+      } catch (error) {
+        if ((error as { code?: string }).code !== '42P04') throw error;
+      }
     }
-  } finally { await pool.end(); }
+  } finally {
+    await pool.end();
+  }
   migrate(await authDatabaseUrl());
   const keys = await developmentKeys();
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
-  await privateFile(resolve(root, 'apps/web/.dev.vars'), Object.entries({
-    AUTH_ISSUER: origins.issuer, API_RESOURCE: origins.audience, WEBSITE_CLIENT_ID: 'rezics-website',
-    WEBSITE_CLIENT_KEY: JSON.stringify(keys.website), WEBSITE_SCOPES: websiteScopes.join(' '),
-    SITE_ORIGINS: origins.web, KERNEL_ORIGIN: origins.kernel,
-  }).map(([name, value]) => `${name}=${JSON.stringify(value)}`).join('\n') + '\n');
+  await privateFile(
+    resolve(root, 'apps/web/.dev.vars'),
+    Object.entries({
+      AUTH_ISSUER: origins.issuer,
+      API_RESOURCE: origins.audience,
+      WEBSITE_CLIENT_ID: 'rezics-website',
+      WEBSITE_CLIENT_KEY: JSON.stringify(keys.website),
+      WEBSITE_SCOPES: websiteScopes.join(' '),
+      SITE_ORIGINS: origins.web,
+      KERNEL_ORIGIN: origins.kernel,
+    })
+      .map(([name, value]) => `${name}=${JSON.stringify(value)}`)
+      .join('\n') + '\n',
+  );
 }
 
 async function assemble() {
   if (process.env.NODE_ENV === 'production') throw new Error('Local stack is development only');
   await import('reylo/register');
-  const [auth, { createKernel }, { actionCatalogue }, { createAccess }, { createNativeAccountBindings },
-    { readConfig }, { createAccountManagementReadAccess }] = await Promise.all([
-    import('../src/index.ts'), import('../../kernel/src/http/kernel.ts'), import('../../kernel/src/http/request.ts'),
-    import('../../kernel/src/access/index.ts'), import('../../kernel/src/access/native-account-bindings.ts'),
-    import('../../kernel/src/server.ts'), import('../../kernel/src/access/management-source.ts'),
+  const [
+    auth,
+    { createKernel },
+    { actionCatalogue },
+    { createAccess },
+    { createNativeAccountBindings },
+    { readConfig },
+    { createAccountManagementReadAccess },
+  ] = await Promise.all([
+    import('../src/index.ts'),
+    import('../../kernel/src/http/kernel.ts'),
+    import('../../kernel/src/http/request.ts'),
+    import('../../kernel/src/access/index.ts'),
+    import('../../kernel/src/access/native-account-bindings.ts'),
+    import('../../kernel/src/server.ts'),
+    import('../../kernel/src/access/management-source.ts'),
   ]);
   const env = await kernelEnvironment();
   const config = readConfig(env);
@@ -129,42 +181,79 @@ async function assemble() {
   const kernelPool = new Pool({ connectionString: config.databaseUrl });
   const database = new Pool({ connectionString: await authDatabaseUrl() });
   const keys = await developmentKeys();
-  const kernel = createKernel({ pool: kernelPool, tokens: config.tokens, routeKey: config.routeKey, ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}) });
+  const kernel = createKernel({
+    pool: kernelPool,
+    tokens: config.tokens,
+    routeKey: config.routeKey,
+    ...(config.receiptKeys ? { receiptKeys: config.receiptKeys } : {}),
+  });
   const actions = actionCatalogue(kernel);
   let service: import('../src/index.ts').AuthService;
-  const access = createAccess({ actions, auth: {
-    issuer: origins.issuer, audience: origins.audience, jwksUrl: `${origins.issuer}/.well-known/jwks.json`,
-    fetch: async () => service.handler(new Request(`${origins.issuer}/.well-known/jwks.json`)),
-  } });
+  const access = createAccess({
+    actions,
+    auth: {
+      issuer: origins.issuer,
+      audience: origins.audience,
+      jwksUrl: `${origins.issuer}/.well-known/jwks.json`,
+      fetch: async () => service.handler(new Request(`${origins.issuer}/.well-known/jwks.json`)),
+    },
+  });
   const proofs = auth.createNativeWorkflowProofPorts({ database });
   const bindings = createNativeAccountBindings({
-    pool: kernelPool, access, actions, routeKey: config.routeKey,
+    pool: kernelPool,
+    access,
+    actions,
+    routeKey: config.routeKey,
     referenceKeys: config.tokens,
     auth: () => service,
-    proofs: { workflow: proofs, provisioning: auth.createProvisioningEvidenceVerifier({ database }),
-      barriers: auth.createBarrierProofVerifier({ database }) },
+    proofs: {
+      workflow: proofs,
+      provisioning: auth.createProvisioningEvidenceVerifier({ database }),
+      barriers: auth.createBarrierProofVerifier({ database }),
+    },
   });
   const host = await auth.createAuthHost({
-    database, issuer: origins.issuer, audience: origins.audience, secret: keys.secret,
+    database,
+    issuer: origins.issuer,
+    audience: origins.audience,
+    secret: keys.secret,
     signing: { activeKid: keys.signing.kid!, privateKeys: [keys.signing] },
-    stagingKey: Buffer.from(keys.staging, 'base64url'), trustedAccess: bindings.trustedAccess,
-    access: bindings.workflowPorts, siteActions: actions,
+    stagingKey: Buffer.from(keys.staging, 'base64url'),
+    trustedAccess: bindings.trustedAccess,
+    access: bindings.workflowPorts,
+    siteActions: actions,
     accountManagementReads: createAccountManagementReadAccess({ pool: kernelPool, access }),
     // The local widget and verifier never call Cloudflare. Production composition is unchanged.
-    turnstile: { secret: 'loopback-only', fetch: (async (_url, init) => Response.json({
-      success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
-      action: 'signup', hostname: '127.0.0.1',
-    })) as typeof fetch },
+    turnstile: {
+      secret: 'loopback-only',
+      fetch: (async (_url, init) =>
+        Response.json({
+          success: new URLSearchParams(String(init?.body)).get('response') === 'rezics-local-signup',
+          action: 'signup',
+          hostname: '127.0.0.1',
+        })) as typeof fetch,
+    },
   });
   service = host.service;
   await service.internal.registerWebsiteClient({
     publicJwks: { keys: [publicKey(keys.website)] } as import('../src/index.ts').PublicJwks,
-    redirectUris: [`${origins.web}/auth/callback`], postLogoutRedirectUris: [`${origins.web}/`], scopes: websiteScopes,
+    redirectUris: [`${origins.web}/auth/callback`],
+    postLogoutRedirectUris: [`${origins.web}/`],
+    scopes: websiteScopes,
   });
-  await service.internal.registerClient({ clientId: personaClient, firstParty: true,
-    scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])] });
+  await service.internal.registerClient({
+    clientId: personaClient,
+    firstParty: true,
+    scopes: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+  });
   await host.start();
-  const stop = async () => { try { await host.stop(); } finally { await kernelPool.end(); } };
+  const stop = async () => {
+    try {
+      await host.stop();
+    } finally {
+      await kernelPool.end();
+    }
+  };
   return { host, kernel, access, kernelPool, database, keys, stop };
 }
 
@@ -175,32 +264,80 @@ async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>
   const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../kernel/src/access/bootstrap-governance.ts');
   const { accessCommandAuthorization } = await import('../../kernel/src/request/access.ts');
   const { createExposureCommands } = await import('../../kernel/src/access/gates/catalogue.ts');
-  const person = await host.workflows.register({ key: 'local-developer', handle: 'developer', email: 'developer@rezics.test', password: keys.password });
+  const person = await host.workflows.register({
+    key: 'local-developer',
+    handle: 'developer',
+    email: 'developer@rezics.test',
+    password: keys.password,
+  });
   await bootstrapGovernance(kernelPool, person.accountId);
-  const signIn = () => host.handler(new Request(`${origins.issuer}/signin`, {
-    method: 'POST', headers: { origin: origins.issuer, 'content-type': 'application/json' },
-    body: JSON.stringify({ email: 'developer@rezics.test', password: keys.password, client_id: personaClient,
-      scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])] }),
-  }));
+  const signIn = () =>
+    host.handler(
+      new Request(`${origins.issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: origins.issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'developer@rezics.test',
+          password: keys.password,
+          client_id: personaClient,
+          scope: [...new Set([...importerScopes, 'account:manage', 'exposure:open'])],
+        }),
+      }),
+    );
   let signin = await signIn();
   if (!signin.ok) throw new Error(`Local persona sign-in failed: ${signin.status} ${await signin.text()}`);
-  let headers = new Headers({ origin: origins.issuer, 'content-type': 'application/json', cookie: signin.headers.getSetCookie().map((cookie) => cookie.split(';')[0]).join('; ') });
+  let headers = new Headers({
+    origin: origins.issuer,
+    'content-type': 'application/json',
+    cookie: signin.headers
+      .getSetCookie()
+      .map((cookie) => cookie.split(';')[0])
+      .join('; '),
+  });
   // Install the importer's public key through the ordinary fresh-human credential protocol.
   const key = `local-importer:${keys.importer.kid}`;
-  if (!(await composition.database.query('SELECT 1 FROM auth_public_key WHERE account_id=$1 AND kid=$2', [person.accountId, keys.importer.kid])).rowCount) {
-  const stage = await host.service.internal.stageCredentialEffect({ key, subjectAccountId: person.accountId, headers,
-    credential: { kind: 'key', kid: keys.importer.kid!, publicJwk: publicKey(keys.importer) } });
-  const approved = await host.service.internal.approveCredentialEffect({ key, subjectAccountId: person.accountId, headers, effectRef: stage.effectRef });
-  await host.service.internal.applyCredentialEffect({ key, subjectAccountId: person.accountId, headers,
-    effectRef: stage.effectRef, authorization: approved.reference });
-  // Credential installation raises the epoch; acquire a current session before issuing API credentials.
-  signin = await signIn();
-  if (!signin.ok) throw new Error(`Local persona sign-in failed: ${signin.status}`);
-  headers = new Headers({ origin: origins.issuer, 'content-type': 'application/json', cookie: signin.headers.getSetCookie().map((cookie) => cookie.split(';')[0]).join('; ') });
+  if (
+    !(
+      await composition.database.query('SELECT 1 FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
+        person.accountId,
+        keys.importer.kid,
+      ])
+    ).rowCount
+  ) {
+    const stage = await host.service.internal.stageCredentialEffect({
+      key,
+      subjectAccountId: person.accountId,
+      headers,
+      credential: { kind: 'key', kid: keys.importer.kid!, publicJwk: publicKey(keys.importer) },
+    });
+    const approved = await host.service.internal.approveCredentialEffect({
+      key,
+      subjectAccountId: person.accountId,
+      headers,
+      effectRef: stage.effectRef,
+    });
+    await host.service.internal.applyCredentialEffect({
+      key,
+      subjectAccountId: person.accountId,
+      headers,
+      effectRef: stage.effectRef,
+      authorization: approved.reference,
+    });
+    // Credential installation raises the epoch; acquire a current session before issuing API credentials.
+    signin = await signIn();
+    if (!signin.ok) throw new Error(`Local persona sign-in failed: ${signin.status}`);
+    headers = new Headers({
+      origin: origins.issuer,
+      'content-type': 'application/json',
+      cookie: signin.headers
+        .getSetCookie()
+        .map((cookie) => cookie.split(';')[0])
+        .join('; '),
+    });
   }
   const token = await host.handler(new Request(`${origins.issuer}/token`, { method: 'POST', headers, body: '{}' }));
   if (!token.ok) throw new Error(`Local persona token failed: ${token.status}`);
-  const bearer = (await token.json() as { access_token: string }).access_token;
+  const bearer = ((await token.json()) as { access_token: string }).access_token;
   const context = { pool: kernelPool, deadline: Date.now() + 30_000 };
   const actor = await access.authenticate(bearer, context);
   if (actor.kind !== 'account') throw new Error('Local persona is not an account');
@@ -208,57 +345,122 @@ async function provisionPersona(composition: Awaited<ReturnType<typeof assemble>
   const groups = new Set<string>();
   for (const route of kernel.routes) {
     const detail = route.hooks?.detail as { 'x-exposure'?: string; security?: Record<string, unknown>[] } | undefined;
-    if (route.method === 'GET' && detail?.security?.some((item) => Object.keys(item).length === 0) && detail['x-exposure']?.startsWith('gate:'))
+    if (
+      route.method === 'GET' &&
+      detail?.security?.some((item) => Object.keys(item).length === 0) &&
+      detail['x-exposure']?.startsWith('gate:')
+    )
       groups.add(detail['x-exposure'].slice(5));
   }
   const exposure = createExposureCommands({ pool: kernelPool, clock: () => new Date() });
   for (const group of groups) {
-    const authorization = await accessCommandAuthorization(access, actor, 'exposure:open', PLATFORM_RESOURCE,
-      context, () => new Error('Local public-read grant denied'));
+    const authorization = await accessCommandAuthorization(
+      access,
+      actor,
+      'exposure:open',
+      PLATFORM_RESOURCE,
+      context,
+      () => new Error('Local public-read grant denied'),
+    );
     await exposure.open({ ...context, actor }, { group, key: `local-public-read:${group}`, authorization });
   }
-  await privateFile(resolve(state, 'seed.env'), Object.entries({
-    REZICS_DEV_PERSONA_ACCOUNT_KEY: resolve(state, 'importer.jwk'), REZICS_DEV_PERSONA_ACCOUNT: person.accountId,
-    REZICS_DEV_PERSONA_CLIENT: personaClient, AUTH_ORIGIN: origins.issuer, KERNEL_ORIGIN: origins.kernel,
-  }).map(([name, value]) => `${name}=${value}`).join('\n') + '\n');
+  await privateFile(
+    resolve(state, 'seed.env'),
+    Object.entries({
+      REZICS_DEV_PERSONA_ACCOUNT_KEY: resolve(state, 'importer.jwk'),
+      REZICS_DEV_PERSONA_ACCOUNT: person.accountId,
+      REZICS_DEV_PERSONA_CLIENT: personaClient,
+      AUTH_ORIGIN: origins.issuer,
+      KERNEL_ORIGIN: origins.kernel,
+    })
+      .map(([name, value]) => `${name}=${value}`)
+      .join('\n') + '\n',
+  );
   console.log(`Local persona: developer@rezics.test\nPassword: ${keys.password}\nAccount: ${person.accountId}`);
 }
 
 async function serveHost() {
   const composition = await assemble();
-  try { await provisionPersona(composition); }
-  catch (error) { await composition.stop(); throw error; }
-  const server = Bun.serve({ hostname: '127.0.0.1', port: 3100, fetch: async (request) => {
-    if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
-    if (new URL(request.url).pathname === '/local-turnstile.js')
-      return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
-    return composition.host.handler(request);
-  } });
-  const stop = async () => { await server.stop(true); await composition.stop(); process.exit(0); };
-  process.once('SIGINT', () => { void stop(); });
-  process.once('SIGTERM', () => { void stop(); });
+  try {
+    await provisionPersona(composition);
+  } catch (error) {
+    await composition.stop();
+    throw error;
+  }
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 3100,
+    fetch: async (request) => {
+      if (new URL(request.url).hostname !== '127.0.0.1') return new Response('Loopback only', { status: 403 });
+      if (new URL(request.url).pathname === '/local-turnstile.js')
+        return new Response(widgetScript, { headers: { 'content-type': 'text/javascript' } });
+      return composition.host.handler(request);
+    },
+  });
+  const stop = async () => {
+    await server.stop(true);
+    await composition.stop();
+    process.exit(0);
+  };
+  process.once('SIGINT', () => {
+    void stop();
+  });
+  process.once('SIGTERM', () => {
+    void stop();
+  });
   console.log(`Native Auth: ${origins.native} (issuer ${origins.issuer})`);
 }
 
 async function launch(action: 'pages' | 'web', args: string[]) {
   const pages = action === 'pages';
-  const child = Bun.spawn(['bun', 'run', '--cwd', pages ? 'apps/auth' : 'apps/web', 'dev', '--host', '127.0.0.1',
-    '--port', pages ? '4200' : '3000', '--strictPort', ...args], {
-    cwd: root, env: { ...process.env, AUTH_ORIGIN: origins.native, KERNEL_ORIGIN: origins.kernel,
-      AUTH_ISSUER: origins.issuer, API_RESOURCE: origins.audience, PUBLIC_ORIGIN: origins.web,
-      SITE_ORIGINS: origins.web, WEBSITE_CLIENT_ID: 'rezics-website', WEBSITE_SCOPES: websiteScopes.join(' '),
-      WEBSITE_CLIENT_KEY: JSON.stringify((await developmentKeys()).website),
-      TURNSTILE_SITE_KEY: 'local', TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js` },
-    stdin: 'inherit', stdout: 'inherit', stderr: 'inherit',
-  });
+  const child = Bun.spawn(
+    [
+      'bun',
+      'run',
+      '--cwd',
+      pages ? 'apps/auth' : 'apps/web',
+      'dev',
+      '--host',
+      '127.0.0.1',
+      '--port',
+      pages ? '4200' : '3000',
+      '--strictPort',
+      ...args,
+    ],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        AUTH_ORIGIN: origins.native,
+        KERNEL_ORIGIN: origins.kernel,
+        AUTH_ISSUER: origins.issuer,
+        API_RESOURCE: origins.audience,
+        PUBLIC_ORIGIN: origins.web,
+        SITE_ORIGINS: origins.web,
+        WEBSITE_CLIENT_ID: 'rezics-website',
+        WEBSITE_SCOPES: websiteScopes.join(' '),
+        WEBSITE_CLIENT_KEY: JSON.stringify((await developmentKeys()).website),
+        TURNSTILE_SITE_KEY: 'local',
+        TURNSTILE_SCRIPT_URL: `${origins.issuer}/local-turnstile.js`,
+      },
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    },
+  );
   const stop = () => child.kill('SIGTERM');
-  process.once('SIGINT', stop); process.once('SIGTERM', stop);
-  try { process.exitCode = await child.exited; }
-  finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
+  try {
+    process.exitCode = await child.exited;
+  } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
 }
 
 async function start() {
-  const env = { ...process.env, ...await kernelEnvironment(), KERNEL_HOSTNAME: '127.0.0.1', KERNEL_PORT: '4100' };
+  const env = { ...process.env, ...(await kernelEnvironment()), KERNEL_HOSTNAME: '127.0.0.1', KERNEL_PORT: '4100' };
   const children = [
     ['bun', 'services/auth/scripts/dev-stack.ts', 'host'],
     ['bun', 'services/auth/scripts/dev-stack.ts', 'pages'],
@@ -267,15 +469,22 @@ async function start() {
     ['bun', 'run', '--cwd', 'services/kernel', 'worker'],
   ].map((command) => Bun.spawn(command, { cwd: root, env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }));
   let stopping = false;
-  const stop = () => { stopping = true; for (const child of children) child.kill('SIGTERM'); };
-  process.once('SIGINT', stop); process.once('SIGTERM', stop);
+  const stop = () => {
+    stopping = true;
+    for (const child of children) child.kill('SIGTERM');
+  };
+  process.once('SIGINT', stop);
+  process.once('SIGTERM', stop);
   try {
     const first = await Promise.race(children.map(async (child) => await child.exited));
     const interrupted = stopping;
     stop();
     await Promise.all(children.map((child) => child.exited));
     process.exitCode = interrupted ? 0 : first || 1;
-  } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
+  } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
 }
 if (import.meta.main) {
   try {
@@ -284,9 +493,16 @@ if (import.meta.main) {
     else if (action === 'host') await serveHost();
     else if (action === 'persona') {
       const composition = await assemble();
-      try { await provisionPersona(composition); } finally { await composition.stop(); }
+      try {
+        await provisionPersona(composition);
+      } finally {
+        await composition.stop();
+      }
     } else if (action === 'pages' || action === 'web') await launch(action, process.argv.slice(3));
     else if (action === 'start') await start();
     else throw new Error('Use setup, start, host, pages, web or persona');
-  } catch (error) { console.error(error); process.exit(1); }
+  } catch (error) {
+    console.error(error);
+    process.exit(1);
+  }
 }
