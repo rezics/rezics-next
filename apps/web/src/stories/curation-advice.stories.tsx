@@ -96,7 +96,7 @@ export const ReadOnly: Story = {
   args: { scenario: 'read-only' },
   play: async ({ canvasElement }) => {
     const canvas = await draftRoute(canvasElement);
-    await expect(canvas.getByText(m.curation_advice_denied())).toBeVisible();
+    await expect(canvas.getAllByText(m.curation_advice_denied())).toHaveLength(2);
     await expect(canvas.getByRole('button', { name: m.curation_publish() })).toBeDisabled();
     await expect(canvas.getByRole('button', { name: m.curation_view_discard() })).toBeEnabled();
   },

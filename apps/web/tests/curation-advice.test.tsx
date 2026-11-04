@@ -105,6 +105,7 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
   let loseNextPublish = false;
   const publishKeys: string[] = [];
   let activationCalls = 0;
+  let lastReceiptDigest = '';
   const transport: CurationEditorTransport = {
     read: async () => ({ ok: true, reader, digest, head: 7, profile }),
     readOpening: (expectedReader) => refresh(expectedReader),
@@ -115,7 +116,8 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
         loseNextPublish = false;
         return { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
       }
-      return { ok: true, digest: profileDigest(input.profile) };
+      lastReceiptDigest = profileDigest(input.profile);
+      return { ok: true, digest: lastReceiptDigest };
     },
     activate: async (input) => {
       activationCalls++;
@@ -176,6 +178,30 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
     expect(host.textContent).toContain('/books');
     expect(host.textContent).toContain(m.curation_unsaved());
 
+    const recoveryReader = `${reader}-activation-recovery`;
+    refresh = async (expectedReader) => ({
+      ...opening(advice('allowed', 'denied')),
+      reader: expectedReader,
+    });
+    await act(async () => root.render(null));
+    await show(advice('allowed', 'denied'), recoveryReader);
+    await draftRoute();
+    const beforeActivationRecovery = publishKeys.length;
+    await act(async () => button(m.curation_publish()).click());
+    await settle(() => host.textContent?.includes(m.curation_published_waiting({ digest: lastReceiptDigest })) === true);
+    expect(activationCalls).toBe(0);
+    refresh = async (expectedReader) => ({
+      ...opening(advice('denied', 'allowed')),
+      reader: expectedReader,
+    });
+    await act(async () => button(m.curation_advice_refresh()).click());
+    await settle(() => host.textContent?.includes(m.curation_retry_activation_help()) === true);
+    expect(button(m.curation_publish()).disabled).toBe(true);
+    await act(async () => button(m.curation_retry_activation()).click());
+    await settle(() => host.textContent?.includes(m.presentation_editor_published()) === true);
+    expect(publishKeys.length).toBe(beforeActivationRecovery + 1);
+    expect(activationCalls).toBe(1);
+
     refresh = async (expectedReader) => ({
       ...opening(advice('allowed', 'allowed')),
       reader: expectedReader,
@@ -195,7 +221,7 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
     await act(async () => button(m.curation_retry_original()).click());
     await settle(() => host.textContent?.includes(m.presentation_editor_published()) === true);
     expect(publishKeys.at(-1)).toBe(originalKey);
-    expect(activationCalls).toBe(1);
+    expect(activationCalls).toBe(2);
   } finally {
     await act(async () => root.unmount());
     runtime.setLocale(previousLocale, { reload: false });
