@@ -49,7 +49,7 @@ function ExactRevisionPending() {
     <ExactRevisionView
       identity={{ postId: params.id, revisionId: params.revisionId }}
       page={{ state: 'loading' }}
-      historyReturn={returnTarget}
+      {...(returnTarget ? { historyReturn: returnTarget } : {})}
     />
   );
 }
@@ -70,7 +70,7 @@ function ExactRevisionPage() {
       credentialMode={credentialMode}
       loading={loading}
       onRetry={() => void router.invalidate()}
-      historyReturnToken={historyReturn}
+      {...(historyReturn ? { historyReturnToken: historyReturn } : {})}
     />
   );
 }
