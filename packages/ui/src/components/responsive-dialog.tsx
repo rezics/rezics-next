@@ -124,7 +124,7 @@ export function ResponsiveDialog({
 
   useLayoutEffect(() => {
     if (!portalHost || !mount) return;
-    if (portalHost.parentElement !== mount) mount.append(portalHost);
+    if (portalHost.parentElement !== mount) mount.appendChild(portalHost);
 
     const transfer = switching.current;
     if (!transfer)
@@ -192,7 +192,7 @@ export function ResponsiveDialog({
 
   const shell = mobile ? (
     <BottomSheet
-      id={id}
+      {...(id === undefined ? {} : { id })}
       open={open}
       onOpenChange={(next) => changeOpen(next, true, renderedEpisode)}
       onOpenChangeComplete={(next) => completeOpenChange(next, true, renderedEpisode)}
