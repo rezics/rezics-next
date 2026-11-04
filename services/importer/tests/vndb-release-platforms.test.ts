@@ -54,7 +54,7 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
       { taxonomy: vndbReleasePlatformTaxonomy, uri: vndbReleasePlatformSchemeUri, schemeId: randomUUID(), concepts: [] },
       { taxonomy: vndbReleaseMediumTaxonomy, uri: vndbReleaseMediumSchemeUri, schemeId: randomUUID(), concepts: [] },
     ];
-    const codes = [['win', 'mac'], ['cd', 'dvd']] as const;
+    const codes = [['win', 'mac', 'ios'], ['cd', 'dvd']] as const;
     for (const [index, group] of groups.entries()) {
       for (const code of codes[index]!) {
         const id = randomUUID();
@@ -127,7 +127,7 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
     const firstFacts = commands.filter((command) => ['schema:gamePlatform', 'wdt:P437'].includes(propertyOf(command)));
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
     expect(first.readings.some((row) => row.externalId === 'r1')).toBe(true);
-    expect(firstFacts.map(targetOf).sort()).toEqual([...ids.values()].sort());
+    expect(firstFacts.map(targetOf).sort()).toEqual(['win', 'mac', 'cd', 'dvd'].map((code) => ids.get(code)!).sort());
     expect(JSON.stringify(first.gaps)).toContain('xyz');
     expect(firstFacts).toHaveLength(4);
     const citations = firstFacts.flatMap((command) => command.op === 'propose' ? command.statement.references ?? [] : []);
@@ -146,19 +146,20 @@ test('selected authored VNDB COPY release classifications preserve values, dedup
 
     const beforeRefresh = commands.length;
     const changed = await importVndbReleaseFidelity({
-      tables: await authoredTables(directory, ['win', 'lin', 'mac', 'xyz'], [['cd', '1'], ['dvd', '1']]),
+      tables: await authoredTables(directory, ['win', 'lin', 'mac', 'ios', 'xyz'], [['cd', '1'], ['dvd', '1']]),
       path: join(directory, 'state.sqlite'),
       port,
       bindings: { releaseDigest: bundledDigest, schemes: [], concepts: [] },
       bindingGroups: groups,
     });
     const refreshed = commands.slice(beforeRefresh).filter((command) => ['schema:gamePlatform', 'wdt:P437'].includes(propertyOf(command)));
-    console.log(JSON.stringify({ changed: changed.runs.vndb?.counts, gaps: changed.gaps, refreshed: commands.slice(beforeRefresh) }));
     expect(changed.runs.vndb?.counts.changed).toBeGreaterThan(0);
     expect(refreshed.filter((command) => propertyOf(command) === 'schema:gamePlatform').map(targetOf).sort()).toEqual(
-      [ids.get('mac'), ids.get('win')].sort(),
+      [ids.get('ios'), ids.get('mac'), ids.get('win')].sort(),
     );
-    expect(JSON.stringify(changed.gaps)).toContain('lin');
+    expect(refreshed.filter((command) => propertyOf(command) === 'wdt:P437').map(targetOf).sort()).toEqual(
+      [ids.get('cd'), ids.get('dvd')].sort(),
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
