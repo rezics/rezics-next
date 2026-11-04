@@ -1,3 +1,5 @@
+import { threadPageOperation } from './thread-page-advice';
+import type { ThreadPageObservation } from './thread-page';
 import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
 import { useContext, useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { normalizeSessionObservation } from '../session/browser-state';
@@ -19,6 +21,7 @@ export type ThreadWatchProps = {
   returnTo: string;
   /** A current native card can seed this visit without a per-thread status request. */
   initialWatching?: boolean;
+  observation?: ThreadPageObservation;
   /** The admitted page/source identity, separate from a repeated thread ID. */
   readAuthority?: object;
   isCurrent?: () => boolean;
@@ -75,6 +78,7 @@ function sameBinding(left: Binding, right: Binding): boolean {
     left.props.sessionStamp === right.props.sessionStamp &&
     left.props.admitted === right.props.admitted &&
     left.props.initialWatching === right.props.initialWatching &&
+    left.props.observation === right.props.observation &&
     left.props.readAuthority === right.props.readAuthority
   );
 }
@@ -248,6 +252,12 @@ export class ThreadWatchVisit {
     }
   };
 
+  canBegin = () => {
+    const page = this.binding.props.observation;
+    return !page || threadPageOperation(page, { kind: 'thread', id: this.owner.threadId },
+      this.view.watching ? 'thread.unwatch' : 'thread.watch') === 'available';
+  };
+
   begin = () => {
     if (!this.current() || this.active || this.view.phase !== 'confirmed' || typeof this.view.watching !== 'boolean')
       return;
@@ -256,6 +266,7 @@ export class ThreadWatchVisit {
       this.view.watching !== this.binding.props.initialWatching
     )
       return;
+    if (!this.canBegin()) return;
     const command = Object.freeze({ ...this.owner, watching: !this.view.watching });
     void this.send(command);
   };

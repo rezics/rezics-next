@@ -532,6 +532,7 @@ type PostComposerProps<T, Context> = {
   boardId?: string;
   replyTargetId?: string | null;
   replyContext?: ReactNode;
+  slowModeAdvice?: import('./thread-page').ThreadPageObservation['slowMode'] | undefined;
   focusRequest?: number;
   onPendingChange?: (pending: boolean) => void;
   submissionContext?: Context;
@@ -560,6 +561,7 @@ function PostComposerContent<T, Context = undefined>({
   boardId,
   replyTargetId,
   replyContext,
+  slowModeAdvice,
   focusRequest = 0,
   onPendingChange,
   submissionContext,
@@ -1123,7 +1125,7 @@ function PostComposerContent<T, Context = undefined>({
   return (
     <div className="min-w-0 rounded-xl border border-border/70 bg-card p-5 [container-type:inline-size] [overflow-wrap:anywhere]">
       {replyContext}
-      {boardId ? <SlowModeEligibility boardId={boardId} refusal={failure} /> : null}
+      {boardId ? <SlowModeEligibility boardId={boardId} refusal={failure} advice={slowModeAdvice} /> : null}
       <form id={formId} className="min-w-0 [overflow-wrap:anywhere]" onSubmit={submit}>
         {titleRequired ? (
           <div className="mb-5 min-w-0 space-y-2 [overflow-wrap:anywhere]">

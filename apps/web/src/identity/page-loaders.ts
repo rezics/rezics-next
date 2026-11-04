@@ -101,12 +101,6 @@ export async function loadThreadPageWithAuthors(
           credentialMode,
         );
   if ('redirect' in page) return page;
-  const [authors, subjects] = await Promise.all([
-    readPageAuthors(client, [
-      page.thread.authorId,
-      ...page.posts.posts.flatMap((post) => ('authorId' in post ? [post.authorId] : [])),
-    ]),
-    readThreadSubjects(client, page.thread.subjectIds),
-  ]);
-  return { ...page, authors, subjects, now };
+  const subjects = await readThreadSubjects(client, page.thread.subjectIds);
+  return { ...page, subjects, now };
 }

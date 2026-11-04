@@ -74,7 +74,36 @@ function EligibilityCopy({
   return null;
 }
 
-export function SlowModeEligibility({ boardId, refusal }: { boardId: string; refusal: WriteFailure | null }) {
+type EligibilityProps = {
+  boardId: string;
+  refusal: WriteFailure | null;
+  advice?: import('../thread-page').ThreadPageObservation['slowMode'] | undefined;
+};
+
+export function SlowModeEligibility(props: EligibilityProps) {
+  return props.advice ? <ComposedEligibility advice={props.advice} refusal={props.refusal} /> : <PointEligibility {...props} />;
+}
+
+function ComposedEligibility({ advice, refusal }: Pick<EligibilityProps, 'refusal'> & { advice: NonNullable<EligibilityProps['advice']> }) {
+  const received = useRef({ refusal, at: Date.now() });
+  if (received.current.refusal !== refusal) received.current = { refusal, at: Date.now() };
+  const deadline = advice.state === 'current' && advice.retryAt ? Date.parse(advice.retryAt) : null;
+  const waitUntil = refusal?.reason === 'rate-limited' && refusal.retryAfter !== undefined
+    ? deadlineFromRetryAfter(refusal.retryAfter, received.current.at) : deadline;
+  const now = useDisplayNow(waitUntil);
+  if (advice.state === 'current' && advice.intervalSeconds === 0 && !waitUntil) return null;
+  return <div className="mb-4 min-w-0 space-y-2 text-sm [overflow-wrap:anywhere]" data-slot="board-slow-mode" role="status">
+    {advice.state === 'unavailable' ? <p>{m.slow_mode_next_unavailable()}</p> : <>
+      <p>{m.slow_mode_interval_label({ label: advice.intervalSeconds === 0 ? m.slow_mode_interval_off() : m.slow_mode_interval_seconds({ seconds: advice.intervalSeconds }) })}</p>
+      {advice.admissionState === 'pending' ? <p>{m.slow_mode_preparing()}</p> : null}
+      {advice.nextEligibleAt ? <p>{m.slow_mode_next_at({ time: fullDateTime(advice.nextEligibleAt, getLocale()) })}</p> : null}
+    </>}
+    {waitUntil !== null && waitUntil > now ? <p>{m.thread_write_rate_limited({ seconds: remainingSeconds(waitUntil, now) })}</p> : null}
+    <p>{m.slow_mode_guidance()}</p>
+  </div>;
+}
+
+function PointEligibility({ boardId, refusal }: EligibilityProps) {
   const { visit, read, preparing, reload } = useSlowModeRead(boardId);
   const receivedAt = useRef({ refusal, at: Date.now() });
   if (receivedAt.current.refusal !== refusal) receivedAt.current = { refusal, at: Date.now() };

@@ -30,6 +30,7 @@ import type { readThreadPersonal } from './reads';
 import { ReplyParentReader } from './reply-context';
 import { ConversationBranches, conversationPostElement } from './conversation-branches';
 import { conversationPageModel } from './conversation-page-model';
+import { threadPageViewerMatches } from './thread-page-advice';
 import { replyToThread } from './actions';
 import { csrfHeaders, draftFetch } from './composer';
 import { ThreadReplyComposer } from './reply-context-composer';
@@ -134,8 +135,8 @@ function redactThreadReadingPage(page: ThreadReadingPage): ThreadReadingPage {
     void [_postAuthor, _revisedAt, _revisionId, _body, _mediaIds];
     return { ...safePost, body: empty, mediaIds: [], sha256: null } as unknown as typeof post;
   });
-  const { board: _board, realm: _realm, documentMedia: _documentMedia, ...safePage } = page;
-  void [_board, _realm, _documentMedia];
+  const { board: _board, realm: _realm, documentMedia: _documentMedia, composed: _composed, ...safePage } = page;
+  void [_board, _realm, _documentMedia, _composed];
   return {
     ...safePage,
     thread: safeThread,
@@ -237,6 +238,9 @@ export function ThreadReading({
     [branches, posts.posts],
   );
   // Private data is consumed only while the session still says signed in.
+  const observationMatches = !page.composed || threadPageViewerMatches(page.composed, session === 'signed-in' ? personal?.viewerId : null);
+  const replyAvailable = !page.composed || (observationMatches && page.composed.currentness.actions === 'current' &&
+    page.composed.actions.state === 'current' && page.composed.actions.reply.state === 'available');
   const currentPersonal = pageCurrent && session === 'signed-in' ? personal : undefined;
   const retainedCommandAuthority = useRef<{
     session: SessionState | 'unknown';
@@ -401,6 +405,7 @@ export function ThreadReading({
                       post={post}
                       readAuthority={readAuthority}
                       authors={authors}
+                      composed={page.composed}
                       mentions={currentMentions}
                       documentMedia={documentMedia}
                       now={now}
@@ -431,7 +436,7 @@ export function ThreadReading({
                       }}
                       replyParents={replyParents}
                       replyParentReader={parentReader}
-                      replyPending={replyPending}
+                      replyPending={replyPending || !replyAvailable}
                       onReply={() => selectReplyParent(post.id)}
                       subjects={provenanceSubjects}
                       currentVote={currentPersonal?.reviewVotes[post.id]}
@@ -466,6 +471,8 @@ export function ThreadReading({
               <ThreadReplyComposer
                 key={`${thread.id}:${composer.current.viewerId}`}
                 initialKey={composer.current.initialKey}
+                canSubmit={pageCurrent && replyAvailable}
+                slowModeAdvice={page.composed?.slowMode}
                 canSubmit={currentPersonal !== undefined}
                 containerId={thread.id}
                 boardId={thread.boardId}

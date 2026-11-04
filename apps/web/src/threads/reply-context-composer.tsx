@@ -19,6 +19,7 @@ export function ThreadReplyComposer({
   onCancel: () => void;
   initialKey: string;
   canSubmit?: boolean;
+  slowModeAdvice?: import('./thread-page').ThreadPageObservation['slowMode'] | undefined;
   containerId: string;
   boardId?: string;
   focusRequest: number;

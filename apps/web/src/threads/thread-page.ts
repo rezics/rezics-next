@@ -14,21 +14,12 @@ type ThreadResource = ReturnType<KernelClient['threads']>;
 type BoardResource = ReturnType<KernelClient['boards']>;
 type Board = NonNullable<Awaited<ReturnType<BoardResource['get']>>['data']>['board'];
 type Thread = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['data']>;
-type PostPage = NonNullable<Awaited<ReturnType<ThreadResource['posts']['get']>>['data']>;
-/** Temporary narrow seam until the complete Kernel client declarations publish this mounted route. */
-type ReadingPage = {
-  thread: Thread['thread'];
-  replies: { items: PostPage['posts']; next: PostPage['next'] };
-};
-type ReadingPageClient = ThreadResource & {
-  'reading-page': {
-    get(options: {
-      query?: { cursor?: string };
-      headers?: { authorization: string };
-    }): Promise<{ error?: unknown; status?: number; data?: ReadingPage | null }>;
-  };
-};
-export type ThreadPost = PostPage['posts'][number];
+export type ReadingPage = NonNullable<Awaited<ReturnType<ThreadResource['reading-page']['get']>>['data']>;
+export type ThreadPost = ReadingPage['thread']['firstPost'] | ReadingPage['replies']['items'][number];
+export type ThreadPageAuthor = ReadingPage['authors']['items'][number];
+export type ThreadPageObservation = Pick<ReadingPage,
+  'target' | 'viewer' | 'query' | 'actions' | 'watch' | 'slowMode' | 'currentness' | 'reactionsAsOf'
+>;
 
 type PageInput = { id: string; cursor?: string; post?: string };
 type CanonicalPageInput = PageInput & { expectedSlug: string };
@@ -39,23 +30,15 @@ export type LoadedThreadPage = {
   thread: Thread['thread'];
   board?: Board;
   realm?: BoardRealm;
-  posts: PostPage;
+  posts: { posts: ThreadPost[]; next: string | null };
+  /** Present only on the installed composed current-page read. */
+  composed?: ThreadPageObservation;
+  authors: import('../identity/read').PageAuthors;
   mentions: DocumentMentions;
   documentMedia?: ThreadDocumentMedia;
   viewerId?: string;
   verification: VerificationConfig;
   linkedPostUnavailable?: boolean;
-};
-
-/** Consumer seam for the native locator until the controller regenerates the client. */
-type PostLocator = (params: { postId: string }) => {
-  location: {
-    get(options: { headers?: { authorization: string }; fetch: { cache: 'no-store' } }): Promise<{
-      error?: unknown;
-      status?: number;
-      data?: { cursor: string | null } | null;
-    }>;
-  };
 };
 
 function checkRead<T>(result: { error?: unknown; status?: number; data?: T | null }, resource: string): NonNullable<T> {
@@ -107,8 +90,7 @@ export async function loadThreadPage(
   const readReadingPage = async () => {
     let cursor = data.cursor;
     if (data.post !== undefined) {
-      const posts = client.threads({ id: data.id }).posts as unknown as PostLocator;
-      const result = await posts({ postId: data.post }).location.get({
+      const result = await client.threads({ id: data.id }).posts({ postId: data.post }).location.get({
         ...(authorization ? { headers: { authorization } } : {}),
         fetch: { cache: 'no-store' },
       });
@@ -126,8 +108,7 @@ export async function loadThreadPage(
       ...(cursor === undefined ? {} : { query: { cursor } }),
       ...(authorization ? { headers: { authorization } } : {}),
     };
-    const threadClient = client.threads({ id: data.id }) as ReadingPageClient;
-    return threadClient['reading-page'].get(options);
+    return client.threads({ id: data.id })['reading-page'].get(options);
   };
   let readingPageRead = data.expectedSlug === undefined ? readReadingPage() : undefined;
   if (data.expectedSlug !== undefined) {
@@ -146,7 +127,7 @@ export async function loadThreadPage(
   if (thread.id !== data.id) throw notFound();
   if (data.expectedSlug !== undefined && !sameThreadSlug(data.expectedSlug, thread.title))
     return { redirect: { id: thread.id, title: threadTitle(thread) } };
-  const posts: PostPage = {
+  const posts: LoadedThreadPage['posts'] = {
     posts: [thread.firstPost, ...readingPage.replies.items],
     next: readingPage.replies.next,
   };
@@ -177,13 +158,22 @@ export async function loadThreadPage(
     ),
     readThreadDocumentMedia(client, posts.posts, authorization),
   ]);
+  // Only identities named by readable posts can enter this page's byline map.
+  const disclosed = new Set(posts.posts.flatMap((post) =>
+    post.availability === 'available' ? [post.authorId] : []));
+  const authors = readingPage.authors.state === 'current' && readingPage.currentness.authors === 'current'
+    ? Object.fromEntries(readingPage.authors.items.filter((author) => disclosed.has(author.id)).map((author) => [author.id, author]))
+    : null;
+  const { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf } = readingPage;
   return {
+    authors,
+    composed: { target, viewer, query, actions, watch, slowMode, currentness, reactionsAsOf },
     mentions,
     documentMedia,
     thread,
     ...context,
     posts,
-    ...(viewerId ? { viewerId } : {}),
+    ...(readingPage.viewer.kind === 'account' && readingPage.viewer.id === viewerId ? { viewerId } : {}),
     verification,
     ...(data.post === undefined ? {} : { linkedPostUnavailable }),
   };
