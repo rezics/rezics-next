@@ -1,6 +1,6 @@
 // Authored UNRUN. Mounted DOM assertions do not establish browser geometry or native authority.
 // Original lifecycle, reader/session/credential, ABA and retirement campaigns remain unchanged.
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, useState, type ReactNode } from 'react';
 import { editorialContextFixture } from '../src/kernel/fake/editorial-context';
@@ -9,6 +9,8 @@ import type { EditorialTransport } from '../src/features/catalogue/editorial-con
 
 const editorialNativeCalls = (calls: ReturnType<typeof editorialContextFixture>['calls']) =>
   calls.filter((call) => call.path !== '/v1/viewerActions' && !call.path.endsWith('/lifecycle'));
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 // One actual-component regression, deliberately separate from the native campaign.
 test('Editorial Context family retains supplied comparison, independent controls and exact deliberate lifecycle recovery', async () => {
