@@ -1,6 +1,7 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, useContext, useRef, useState } from 'react';
+import * as start from '../.storybook/react-start';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -14,7 +15,6 @@ import type { OwnVoteEntry, OwnVotesPage } from '../../../services/kernel/src/ra
 import type { OwnVoteIntent } from '../src/ratings/own-votes/intent';
 import type { OwnVoteCommandResult, OwnVotesRead } from '../src/ratings/own-votes/actions';
 import type { OwnVoteReadback } from '../src/ratings/own-votes/readback';
-import { OwnVotesWorkspace } from '../src/ratings/own-votes/page';
 import {
   OwnVotesReturnProvider,
   useOwnVotesReturn,
@@ -24,6 +24,16 @@ import {
 } from '../src/ratings/own-votes/return';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, setLocale } from '../src/paraglide/runtime.js';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('../src/kernel/client', () => ({ configured: () => false }));
+mock.module('../src/ratings/own-votes/actions', () => ({
+  executeOwnVoteIntent: async () => ({ kind: 'rejected' }),
+  voteReadbackForIntent: async () => ({ kind: 'unavailable' }),
+}));
+const { OwnVotesWorkspace } = await import('../src/ratings/own-votes/page');
 
 const viewer = 'f6f6f6f6-f6f6-46f6-86f6-f6f6f6f6f6f6';
 const terminal = 'a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1';
