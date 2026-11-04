@@ -48,7 +48,7 @@ type Evidence = {
   property: string;
   label: { text: string; lang: string | null };
   statement: Statement;
-  association?: CatalogueFileAssociation;
+  association?: CatalogueFileAssociation | undefined;
 };
 
 function options(locale: string) {
