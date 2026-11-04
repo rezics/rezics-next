@@ -658,7 +658,7 @@ export function RealmAppearanceSettings({
           state={state}
           adapter={adapter}
           control={control}
-          lifetime={lifetime}
+          {...(lifetime ? { lifetime } : {})}
           onModeChange={(active) => setRulesAuthoringActive(active)}
         />
         {snapshot.canManage ? (
