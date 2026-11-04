@@ -116,7 +116,10 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
   const [owner] = useState(() => new SettingsSessionOwner(queryClient, token, accountId));
   const [saved, setSaved] = useState({
     shelf: scoreDirection
-      ? { ...initialShelf, sorts: { ...initialShelf.sorts, all: { field: 'rating' as const, direction: scoreDirection } } }
+      ? {
+          ...initialShelf,
+          sorts: { ...initialShelf.sorts, all: { field: 'rating' as const, direction: scoreDirection } },
+        }
       : initialShelf,
     version: 4,
   });
@@ -174,13 +177,17 @@ function SavedShelfJourney({ scoreDirection }: { scoreDirection?: 'asc' | 'desc'
             </h2>
             <div data-testid="library-preview" data-layout={resolved.display.layout}>
               <PersonalLibraryPage
-                page={libraryPage.signedIn ? {
-                  ...libraryPage,
-                  sort: resolved.sort,
-                  ...(resolved.sort.orderBy === 'personalScore'
-                    ? { readState: 'score-unavailable', entries: [], next: null }
-                    : {}),
-                } : libraryPage}
+                page={
+                  libraryPage.signedIn
+                    ? {
+                        ...libraryPage,
+                        sort: resolved.sort,
+                        ...(resolved.sort.orderBy === 'personalScore'
+                          ? { readState: 'score-unavailable', entries: [], next: null }
+                          : {}),
+                      }
+                    : libraryPage
+                }
                 continueState={{ state: 'loaded', entries: [], next: null }}
                 locale={getLocale()}
                 display={resolved.display}
