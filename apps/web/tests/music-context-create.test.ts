@@ -11,10 +11,7 @@ import {
 import { musicContextKind } from '../src/features/catalogue/music-context-profile';
 import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
 import type { CreateResult, CreatedReader, InitialSubject } from '../src/features/catalogue/create-subject';
-import * as start from '../.storybook/react-start';
 
-mock.module('@tanstack/react-start', () => start);
-mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
 const release = bundledRelease;
@@ -38,20 +35,7 @@ let submitImpl: (command: { item: InitialSubject; key: string }) => Promise<Crea
   reason: 'unavailable',
 });
 let readImpl: (id: string) => Promise<CreatedReader> = async () => ({ state: 'unavailable' });
-
-mock.module('../src/session/query', () => ({ useSession: () => viewer }));
-mock.module('../src/features/catalogue/create-subject-actions', () => ({
-  readCatalogueCreateEligibility: () => observe(),
-  readCreatedCatalogueSubject: async ({ data }: { data: string }) => readImpl(data),
-}));
-mock.module('../src/features/catalogue/music-context-create-actions', () => ({
-  loadMusicContextCreate: async () => ({ ok: true as const, digest, release }),
-  createCatalogueMusicContext: async ({ data }: { data: { item: InitialSubject; key: string } }) => {
-    commands.push({ item: data.item, key: data.key });
-    return submitImpl(data);
-  },
-}));
-mock.module('../src/features/catalogue/relation-editor-search', () => ({ relationTargetSearch: async () => [] }));
+let sessionMocks = false;
 
 test('music-context creation exposes only real released grains and emitted fields', () => {
   expect(offered.map(({ id }) => id).sort()).toEqual(
@@ -91,6 +75,30 @@ test('generic creation links to the localized music-context visit', () => {
 });
 
 async function musicContextSession(locale = 'en') {
+  if (!sessionMocks) {
+    const start = await import('../.storybook/react-start');
+    mock.module('cloudflare:workers', () => ({ env: {} }));
+    mock.module('@tanstack/react-start', () => start);
+    mock.module('@tanstack/react-start/server', () => start);
+    mock.module('../src/kernel/client', () => ({
+      kernelClient: () => ({}),
+      requestLocale: () => 'en',
+    }));
+    mock.module('../src/session/query', () => ({ useSession: () => viewer }));
+    mock.module('../src/features/catalogue/create-subject-actions', () => ({
+      readCatalogueCreateEligibility: () => observe(),
+      readCreatedCatalogueSubject: async ({ data }: { data: string }) => readImpl(data),
+    }));
+    mock.module('../src/features/catalogue/music-context-create-actions', () => ({
+      loadMusicContextCreate: async () => ({ ok: true as const, digest, release }),
+      createCatalogueMusicContext: async ({ data }: { data: { item: InitialSubject; key: string } }) => {
+        commands.push({ item: data.item, key: data.key });
+        return submitImpl(data);
+      },
+    }));
+    mock.module('../src/features/catalogue/relation-editor-search', () => ({ relationTargetSearch: async () => [] }));
+    sessionMocks = true;
+  }
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
