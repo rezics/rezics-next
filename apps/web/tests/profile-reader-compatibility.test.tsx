@@ -760,10 +760,10 @@ test('the connected Profile and Public activity journey shares safe reads and pe
         createElement(PublicViewsCard, { editor: standalone, writable: false, readable: true }),
       ),
     );
-    expect(readableMarkup).toContain('Current organization biography');
+    expect(readableMarkup).toContain(nativeProfile.biography);
     const readableDocument = new window.DOMParser().parseFromString(readableMarkup, 'text/html');
     expect(readableDocument.querySelector('input')?.disabled).toBe(true);
-    expect(readableDocument.querySelector('[role="switch"]')?.hasAttribute('disabled')).toBe(true);
+    expect(readableDocument.querySelector('[role="switch"]')?.getAttribute('aria-disabled')).toBe('true');
     standalone.edit({ displayName: 'Standalone Accounts edit' });
     await standalone.submit('profile');
     expect(standalone.confirmationSnapshot()).toBe('profile');
