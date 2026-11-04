@@ -25,7 +25,13 @@ export function selectBangumiProfile(input: {
   readonly series?: boolean;
   readonly infobox?: string;
 }): ProfileSelection {
-  if (input.type === 1) return selectBangumiBookProfile(input);
+  if (input.type === 1)
+    return selectBangumiBookProfile({
+      type: 1,
+      ...(input.platform === undefined ? {} : { platform: input.platform }),
+      ...(input.series === undefined ? {} : { series: input.series }),
+      ...(input.infobox === undefined ? {} : { infobox: input.infobox }),
+    });
   if (input.type === 2 || input.type === 4) return { outcome: 'selected', type: bangumiLaunchTypes[input.type] };
   if (input.type === 3) return { outcome: 'selected', type: 'schema:MusicAlbum' };
   const live = liveActionWorkType(input.platform);

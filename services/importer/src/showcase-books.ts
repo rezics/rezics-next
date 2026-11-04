@@ -107,12 +107,17 @@ function isNovelSeries(row: Row): boolean {
 }
 function grainOf(row: Row): BangumiBookGrain {
   if (row.type !== 1) return 'schema:Book';
+  const platform = platformOf(row);
   return selectBangumiBookProfile({
     type: 1,
-    ...(platformOf(row) === undefined ? {} : { platform: platformOf(row) }),
+    ...(platform === undefined ? {} : { platform }),
     ...(typeof row.series === 'boolean' ? { series: row.series } : {}),
     ...(typeof row.infobox === 'string' ? { infobox: row.infobox } : {}),
   }).type;
+}
+function withPlatform(row: Row): { readonly platform: string } | Record<string, never> {
+  const platform = platformOf(row);
+  return platform === undefined ? {} : { platform };
 }
 
 function gap(table: string, record: Row, reason: string, extra: Partial<CrossMediaGap> = {}): CrossMediaGap {
@@ -162,7 +167,7 @@ export async function planShowcaseBooks(input: {
       key: String(SERIES_ID),
       grain: grainOf(seriesRow),
       role: 'series',
-      ...(platformOf(seriesRow) === undefined ? {} : { platform: platformOf(seriesRow) }),
+      ...withPlatform(seriesRow),
       series: true,
     });
 
@@ -191,7 +196,7 @@ export async function planShowcaseBooks(input: {
         key: String(volumeId),
         grain: grainOf(volume),
         role: 'excluded',
-        ...(platformOf(volume) === undefined ? {} : { platform: platformOf(volume) }),
+        ...withPlatform(volume),
         ...(typeof volume.series === 'boolean' ? { series: volume.series } : {}),
         reason: 'not_a_novel_volume',
       });
@@ -207,7 +212,7 @@ export async function planShowcaseBooks(input: {
       key: String(volumeId),
       grain: grainOf(volume),
       role: 'volume',
-      ...(platformOf(volume) === undefined ? {} : { platform: platformOf(volume) }),
+      ...withPlatform(volume),
       series: false,
     });
   }
