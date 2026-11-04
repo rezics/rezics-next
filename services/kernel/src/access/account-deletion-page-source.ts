@@ -96,23 +96,31 @@ export function createAccountDeletionPageAccess(deps: {
             },
           });
           const descriptor = managedAuthWorkflowDescriptor('delete', human.account_id);
+          const reviewAfterFailure = async (error: unknown): Promise<AccountDeletionAdvice> => {
+            const after = await withReadTransaction(deps.pool, snapshot, deadline);
+            if (after.admitted && before.stamp !== after.stamp) return { kind: 'changed' };
+            throw error;
+          };
           // No source connection is held across foreign preparation. This is
           // ordinary read authorization, never a command guard or an approval.
-          const check = await accessCheck(
-            access,
-            actor,
-            descriptor.action,
-            { route, id: descriptor.target },
-            { ...context, time },
-          );
+          let check: Awaited<ReturnType<typeof accessCheck>>;
+          try {
+            check = await accessCheck(
+              access,
+              actor,
+              descriptor.action,
+              { route, id: descriptor.target },
+              { ...context, time },
+            );
+          } catch (error) {
+            return await reviewAfterFailure(error);
+          }
           try {
             await deps.accessTokenForProof(human);
           } catch (error) {
             // A moved home can also invalidate Auth's currentness read. Preserve
             // the safe changed-review outcome without disclosing the target.
-            const after = await withReadTransaction(deps.pool, snapshot, deadline);
-            if (after.admitted && before.stamp !== after.stamp) return { kind: 'changed' };
-            throw error;
+            return await reviewAfterFailure(error);
           }
           return await withReadTransaction(
             deps.pool,

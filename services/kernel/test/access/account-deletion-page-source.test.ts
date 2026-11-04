@@ -45,8 +45,18 @@ function source(access = f.access) {
     accessTokenForProof: (proof) => f.host.service.internal.accessTokenForProof(proof),
   });
 }
-function read(headers: Headers, access: Access) {
-  return accountDeletionPageTransport(f.host.service, f.host.handler, f.authPool, source(access))(request(headers));
+function read(headers: Headers, access: Access, failed?: (error: unknown) => void) {
+  const native = source(access);
+  return accountDeletionPageTransport(f.host.service, f.host.handler, f.authPool, {
+    async readAccountDeletionAdvice(input) {
+      try {
+        return await native.readAccountDeletionAdvice(input);
+      } catch (error) {
+        failed?.(error);
+        throw error;
+      }
+    },
+  })(request(headers));
 }
 function nativeRead(headers: Headers, access = f.access) {
   return f.host.service.internal.withFreshHuman({ headers, fresh: false }, async (human) =>
@@ -140,9 +150,12 @@ test.each(['floor', 'home', 'session', 'dependency'] as const)(
         return evidence;
       },
     };
-    const response = await read(human.exact, access);
+    let nativeFailure: unknown;
+    const response = await read(human.exact, access, (error) => { nativeFailure = error; });
     const body = await response.json();
-    expect(body.kind).toBe(change === 'home' ? 'changed' : change === 'dependency' ? 'unavailable' : 'signed-out');
+    expect(body.kind, nativeFailure instanceof Error ? nativeFailure.stack : String(nativeFailure)).toBe(
+      change === 'home' ? 'changed' : change === 'dependency' ? 'unavailable' : 'signed-out',
+    );
     expect(body).not.toHaveProperty('email');
     expect(body).not.toHaveProperty('accountId');
   },
