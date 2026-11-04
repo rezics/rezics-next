@@ -166,7 +166,7 @@ export class ThreadWatchVisit {
     for (const listener of this.listeners) listener();
   }
 
-  retire = (replace = false) => {
+  retire = (replace = false, notify = true) => {
     if (this.dead) return;
     this.dead = true;
     this.replacement = replace;
@@ -175,7 +175,8 @@ export class ThreadWatchVisit {
     this.unsubscribe?.();
     this.unsubscribe = undefined;
     // Drop confirmation, requested state and command ownership immediately, before a replacement render.
-    this.publish({ phase: 'retired' });
+    if (notify) this.publish({ phase: 'retired' });
+    else this.view = Object.freeze({ phase: 'retired' });
   };
 
   current = (): boolean => {
@@ -367,7 +368,7 @@ export function useThreadWatchCurrent(props: ThreadWatchProps) {
   latest.current = next;
   const stored = useRef<ThreadWatchVisit | undefined>(undefined);
   if (!stored.current || stored.current.replaceable || !stored.current.matches(next)) {
-    stored.current?.retire();
+    stored.current?.retire(false, false);
     stored.current = new ThreadWatchVisit(next, () => latest.current);
   }
   const visit = stored.current;
