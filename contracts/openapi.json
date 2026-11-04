@@ -412851,6 +412851,99 @@
                   "descriptions": {
                     "type": "boolean"
                   },
+                  "emptyRecoveryActions": {
+                    "items": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "edit-query",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "remove-type",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "remove-kind",
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "remove-facet",
+                              "type": "string"
+                            },
+                            "property": {
+                              "maxLength": 128,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "property",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "remove-range",
+                              "type": "string"
+                            },
+                            "property": {
+                              "maxLength": 128,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "property"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "maxItems": 8,
+                    "type": "array"
+                  },
                   "filter": {},
                   "kindCountLeaf": {
                     "minimum": 0,
@@ -412965,23 +413058,157 @@
                           "format": "date-time",
                           "type": "string"
                         },
-                        "freshness": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "state": {
-                              "enum": [
-                                "current",
-                                "catching-up",
-                                "unavailable"
-                              ],
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "state"
-                          ],
-                          "type": "object"
-                        },
+"freshness": {
+  "additionalProperties": false,
+  "properties": {
+    "state": {
+      "enum": [
+        "current",
+        "catching-up",
+        "unavailable"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "type": "object"
+},
+"emptyRecovery": {
+  "additionalProperties": false,
+  "properties": {
+    "actions": {
+      "items": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "edit-query",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-kind",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 128,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-facet",
+                "type": "string"
+              },
+              "property": {
+                "maxLength": 128,
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 128,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "property",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-range",
+                "type": "string"
+              },
+              "property": {
+                "maxLength": 128,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "property"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "maxItems": 8,
+      "type": "array"
+    },
+    "alternatives": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "label"
+        ],
+        "type": "object"
+      },
+      "maxItems": 3,
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "preparing",
+        "unavailable"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "alternatives",
+    "actions"
+  ],
+  "type": "object"
+},
                         "kinds": {
                           "additionalProperties": false,
                           "properties": {
@@ -413645,23 +413872,157 @@
                           "format": "date-time",
                           "type": "string"
                         },
-                        "freshness": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "state": {
-                              "enum": [
-                                "current",
-                                "catching-up",
-                                "unavailable"
-                              ],
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "state"
-                          ],
-                          "type": "object"
-                        },
+"freshness": {
+  "additionalProperties": false,
+  "properties": {
+    "state": {
+      "enum": [
+        "current",
+        "catching-up",
+        "unavailable"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "state"
+  ],
+  "type": "object"
+},
+"emptyRecovery": {
+  "additionalProperties": false,
+  "properties": {
+    "actions": {
+      "items": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "edit-query",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-kind",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 128,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-facet",
+                "type": "string"
+              },
+              "property": {
+                "maxLength": 128,
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 128,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "property",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "remove-range",
+                "type": "string"
+              },
+              "property": {
+                "maxLength": 128,
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "property"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "maxItems": 8,
+      "type": "array"
+    },
+    "alternatives": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 128,
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query",
+          "label"
+        ],
+        "type": "object"
+      },
+      "maxItems": 3,
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "ready",
+        "preparing",
+        "unavailable"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "alternatives",
+    "actions"
+  ],
+  "type": "object"
+},
                         "hits": {
                           "items": {
                             "anyOf": [

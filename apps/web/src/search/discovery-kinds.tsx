@@ -39,7 +39,7 @@ export function DiscoveryKinds({
   const [continuations] = useState(() => new KindContinuationLedger(initial.values.map((kind) => kind.id)));
   const [status, setStatus] = useState<DiscoveryKindsState['status']>();
   const [recovery, setRecovery] = useState<SearchRecoveryState>();
-  const waiting = useSearchRetryWait(recovery && recovery.status !== 'ready' ? recovery.retryAt : undefined);
+  const waiting = useSearchRetryWait(recovery && 'retryAt' in recovery ? recovery.retryAt : undefined);
   const pending = useRef<AbortController | undefined>(undefined);
   const moreButton = useRef<HTMLButtonElement>(null);
   const restartButton = useRef<HTMLButtonElement>(null);

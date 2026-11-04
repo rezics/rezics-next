@@ -11,6 +11,7 @@ import { SpaceEntryPageSchema, SpaceEntryPresentationSchema } from '../community
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
+import { EmptyRecoverySchema } from './http/empty-recovery-schemas.ts';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import { routeOf } from '../route/route.ts';
@@ -287,6 +288,7 @@ export const DiscoveryPageSchema = t.Object(
     freshness: t.Optional(SearchFreshnessSchema),
     viewerFacts: t.Optional(viewerFacts),
     collectionFollows: t.Optional(FollowDiscoverySchema),
+    emptyRecovery: t.Optional(EmptyRecoverySchema),
   },
   closed,
 );

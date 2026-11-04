@@ -35,6 +35,18 @@ export function discoveryRequest(params: SearchLoaderDeps, languages: string[]):
   for (const [property, range] of Object.entries(params.ranges ?? {})) clauses.push({ statement: { property, range } });
   const kindCountLeaf = params.kinds?.length ? clauses.length : undefined;
   if (params.kinds?.length) clauses.push({ kind: { in: params.kinds } });
+  const emptyRecoveryActions: NonNullable<DiscoveryRequest['emptyRecoveryActions']> = [];
+  const addAction = (action: NonNullable<DiscoveryRequest['emptyRecoveryActions']>[number]) => {
+    const strings = Object.values(action).filter((value): value is string => typeof value === 'string');
+    if (emptyRecoveryActions.length < 8 && strings.every((value) => [...value].length <= 128))
+      emptyRecoveryActions.push(action);
+  };
+  if (params.query.trim()) addAction({ kind: 'edit-query' });
+  if (params.type) addAction({ kind: 'remove-type' });
+  for (const value of params.kinds ?? []) addAction({ kind: 'remove-kind', value });
+  for (const [property, values] of Object.entries(params.facets))
+    for (const value of values) addAction({ kind: 'remove-facet', property, value });
+  for (const property of Object.keys(params.ranges ?? {})) addAction({ kind: 'remove-range', property });
   return {
     representation: 'discovery-v1',
     limit: 100,
@@ -45,6 +57,7 @@ export function discoveryRequest(params: SearchLoaderDeps, languages: string[]):
     ...(params.sort ? { sort: params.sort } : {}),
     ...(clauses.length ? { filter: { and: clauses } } : {}),
     ...(kindCountLeaf !== undefined && !params.cursor ? { kindCountLeaf } : {}),
+    ...(emptyRecoveryActions.length ? { emptyRecoveryActions } : {}),
     kindPage: { limit: 8 },
   };
 }
