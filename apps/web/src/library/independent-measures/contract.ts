@@ -162,6 +162,7 @@ export function draftDirty(measure: IndependentMeasure, draft: MeasureDraft): bo
 export function collectEdits(measures: IndependentMeasure[], drafts: MeasureDraft[]): MeasureEdit[] {
   const edits: MeasureEdit[] = [];
   for (const measure of measures) {
+    if (measure.recording !== 'supported') continue;
     const draft = drafts.find((item) => item.unit === measure.unit);
     if (!draft || !draftDirty(measure, draft)) continue;
     if (draft.clear) edits.push({ unit: measure.unit, kind: 'clear' });

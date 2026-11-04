@@ -4909,6 +4909,7 @@
   "library_progress_measure_clear": "清除此单位",
   "library_progress_measure_save": "保存独立进度",
   "library_progress_measures_review": "核对独立进度",
+  "library_progress_measures_correction": "此单位当前的记录规则已更改。请先修正标出的数值，再进行核对。",
   "library_progress_measures_review_amount": "{unit}：{amount}",
   "library_progress_measures_review_clear": "{unit}：清除已记录数值",
   "library_progress_measures_review_unchanged": "{unit}：未更改",

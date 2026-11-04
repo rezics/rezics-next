@@ -4909,6 +4909,7 @@
   "library_progress_measure_clear": "この単位をクリア",
   "library_progress_measure_save": "独立した進捗を保存",
   "library_progress_measures_review": "独立した進捗を確認",
+  "library_progress_measures_correction": "現在の単位の記録ルールが変更されました。確認する前に、強調表示された値を修正してください。",
   "library_progress_measures_review_amount": "{unit}: {amount}",
   "library_progress_measures_review_clear": "{unit}: 記録した値をクリア",
   "library_progress_measures_review_unchanged": "{unit}: 変更なし",

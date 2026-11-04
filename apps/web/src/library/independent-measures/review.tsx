@@ -7,6 +7,7 @@ export function IndependentMeasuresReview({
   measures,
   edits,
   busy,
+  correction = false,
   onConfirm,
   onCancel,
 }: {
@@ -14,13 +15,15 @@ export function IndependentMeasuresReview({
   measures: IndependentMeasure[];
   edits: MeasureEdit[];
   busy: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
+  correction?: boolean;
+  onConfirm?: () => void;
+  onCancel?: () => void;
 }) {
   return (
     <section className="space-y-4" aria-label={m.library_progress_measures_review()}>
       <h3 className="text-lg font-semibold">{m.library_progress_measures_review()}</h3>
       <p className="text-sm">{m.library_progress_measures_shared_revision({ revision })}</p>
+      {correction ? <p role="alert">{m.library_progress_measures_correction()}</p> : null}
       <dl className="space-y-3">
         {measures.map((measure) => {
           const edit = edits.find((item) => item.unit === measure.unit);
@@ -43,12 +46,16 @@ export function IndependentMeasuresReview({
         })}
       </dl>
       <div className="flex flex-wrap gap-3">
-        <button type="button" className={independentPrimaryActionClass} disabled={busy} onClick={onConfirm}>
-          {m.library_progress_confirm_correction()}
-        </button>
-        <button type="button" className={independentActionClass} disabled={busy} onClick={onCancel}>
-          {m.library_progress_cancel()}
-        </button>
+        {onConfirm ? (
+          <button type="button" className={independentPrimaryActionClass} disabled={busy} onClick={onConfirm}>
+            {m.library_progress_confirm_correction()}
+          </button>
+        ) : null}
+        {onCancel ? (
+          <button type="button" className={independentActionClass} disabled={busy} onClick={onCancel}>
+            {m.library_progress_cancel()}
+          </button>
+        ) : null}
       </div>
     </section>
   );

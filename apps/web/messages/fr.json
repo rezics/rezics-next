@@ -4909,6 +4909,7 @@
   "library_progress_measure_clear": "Effacer cette unité",
   "library_progress_measure_save": "Enregistrer la progression indépendante",
   "library_progress_measures_review": "Vérifier la progression indépendante",
+  "library_progress_measures_correction": "Les règles actuelles de cette mesure ont changé. Corrigez la valeur signalée avant de vérifier.",
   "library_progress_measures_review_amount": "{unit}: {amount}",
   "library_progress_measures_review_clear": "{unit} : effacer la valeur enregistrée",
   "library_progress_measures_review_unchanged": "{unit} : inchangé",

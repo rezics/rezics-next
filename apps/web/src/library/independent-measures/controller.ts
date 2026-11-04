@@ -2,6 +2,7 @@ import type { ProgressSnapshot } from '../progress-reads';
 import {
   applySnapshot,
   collectEdits,
+  draftFor,
   draftsFrom,
   draftDirty,
   replaceDraft,
@@ -124,12 +125,17 @@ export function refreshIndependentVisit(
   measures: IndependentMeasure[],
   snapshot?: ProgressSnapshot,
 ): IndependentVisit {
+  if (visit.kind === 'submitting' || revision < visit.revision) return visit;
   const nextMeasures = snapshot ? applySnapshot(measures, snapshot) : measures;
-  const drafts = visit.drafts.map((draft) => {
-    const measure = nextMeasures.find((item) => item.unit === draft.unit);
-    if (!measure) return draft;
-    if (draftDirty(measure, draft) || draft.clear) return draft;
-    return { unit: measure.unit, text: measure.amount ?? '', clear: false };
+  const drafts = nextMeasures.map((measure) => {
+    const previous = visit.measures.find((item) => item.unit === measure.unit);
+    const draft = visit.drafts.find((item) => item.unit === measure.unit);
+    const hasLocalChoice =
+      previous?.recording === 'supported' &&
+      measure.recording === 'supported' &&
+      draft !== undefined &&
+      (draft.clear || draftDirty(previous, draft));
+    return hasLocalChoice ? { ...draft, unit: measure.unit } : draftFor(measure);
   });
   const retry = visit.retry;
   return {
@@ -144,6 +150,24 @@ export function refreshIndependentVisit(
   };
 }
 
+export function acknowledgeIndependentRetry(
+  visit: IndependentVisit,
+  unit: string,
+  snapshot: ProgressSnapshot,
+): IndependentVisit {
+  const drafts = visit.drafts.map((draft) => {
+    if (draft.unit !== unit) return draft;
+    const measure = visit.measures.find((item) => item.unit === unit);
+    return measure ? draftFor(measure) : draft;
+  });
+  return refreshIndependentVisit(
+    { ...visit, drafts, retry: null, outcome: null },
+    snapshot.revision,
+    visit.measures,
+    snapshot,
+  );
+}
+
 export async function submitIndependentVisit(
   visit: IndependentVisit,
   credential: HeadersInit,
@@ -151,6 +175,7 @@ export async function submitIndependentVisit(
   sender: MeasureSender,
   captured?: BoundMeasureCommand[],
 ): Promise<{ visit: IndependentVisit; commands: BoundMeasureCommand[] }> {
+  if (visit.retry) return { visit, commands: captured ?? [] };
   const edits = visit.edits.length ? visit.edits : collectEdits(visit.measures, visit.drafts);
   if (!edits.length) return { visit: { ...visit, kind: 'ready' }, commands: captured ?? [] };
   const submitting: IndependentVisit = { ...visit, kind: 'submitting', edits };
