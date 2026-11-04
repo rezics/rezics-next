@@ -24,10 +24,7 @@ const value = (candidate: Candidate) =>
 type PublicView = {
   subject: {
     type: string;
-    statements: Record<
-      string,
-      { value: { content: unknown }; references?: Candidate['statement']['references'] }[]
-    >;
+    statements: Record<string, { value: { content: unknown }; references?: Candidate['statement']['references'] }[]>;
   };
 };
 
@@ -68,7 +65,9 @@ test('ordinary Bangumi imports review and adopt an exact TVAnime website on its 
 
     const publicRead = (await cli.anonymous(id)) as unknown as PublicView;
     expect(publicRead.subject.type).toBe('schema:TVSeries');
-    expect(publicRead.subject.statements['schema:url']?.map((statement) => statement.value.content)).toEqual([firstUrl]);
+    expect(publicRead.subject.statements['schema:url']?.map((statement) => statement.value.content)).toEqual([
+      firstUrl,
+    ]);
     expect(publicRead.subject.statements['schema:url']?.[0]?.references).toEqual(selected.statement.references);
     const beforeDigest = cli.inspect([externalId]).records[0]!.baseline!.digest;
 
@@ -76,9 +75,9 @@ test('ordinary Bangumi imports review and adopt an exact TVAnime website on its 
     expect(reopened.code).toBe(0);
     expect(reopened.writes).toEqual([]);
     expect(cli.inspect([externalId]).records[0]!.claim).toEqual({ state: 'bound', subject: id });
-    expect(((await cli.anonymous(id)) as unknown as PublicView).subject.statements['schema:url']?.[0]?.value.content).toBe(
-      firstUrl,
-    );
+    expect(
+      ((await cli.anonymous(id)) as unknown as PublicView).subject.statements['schema:url']?.[0]?.value.content,
+    ).toBe(firstUrl);
 
     const changed = await cli.invoke(feed(subject(changedUrl)));
     expect(changed.code, JSON.stringify(changed)).toBe(0);
@@ -87,9 +86,9 @@ test('ordinary Bangumi imports review and adopt an exact TVAnime website on its 
     const changedCommands = changed.writes.flatMap(
       (exchange) => (JSON.parse(exchange.bytes!) as { commands: BatchCommand[] }).commands,
     );
-    expect(changedCommands.some((command) => command.op === 'create' && command.source.external_id === externalId)).toBe(
-      false,
-    );
+    expect(
+      changedCommands.some((command) => command.op === 'create' && command.source.external_id === externalId),
+    ).toBe(false);
     expect((await cli.candidates(id, 'schema:url')).map(value)).toContain(changedUrl);
     const beforeFence = (await cli.anonymous(id)) as unknown as PublicView;
     expect(beforeFence.subject.statements['schema:url']?.map((item) => item.value.content)).toEqual([firstUrl]);

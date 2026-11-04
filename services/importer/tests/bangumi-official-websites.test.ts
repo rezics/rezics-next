@@ -170,7 +170,9 @@ test('ordinary and selected-family Bangumi TVAnime imports propose cited literal
     expect(created.filter((key) => key === externalId)).toHaveLength(1);
 
     const changedStart = sent.length;
-    const changed = await run(await selectedPlan(sourceDir, target('https://anime.example.jp/official/v2?lang=ja#staff')));
+    const changed = await run(
+      await selectedPlan(sourceDir, target('https://anime.example.jp/official/v2?lang=ja#staff')),
+    );
     expect(changed.runs.bangumi?.counts.changed).toBe(1);
     expect(identities.get(externalId)).toBe(subjectId);
     expect(created.filter((key) => key === externalId)).toHaveLength(1);
