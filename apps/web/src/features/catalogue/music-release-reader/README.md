@@ -6,7 +6,9 @@ The [coverage audit](../../../../../../docs/research/api-first-platform-coverage
 boundaries. Album contents and Recording destination readers remain separate owners. Destinations use the current
 ordinary Subject composition, without adding a View or changing the existing release-fidelity release types.
 
-Decision: this reader requires the exact released `schema:MusicRelease` identity (or a released descendant).
+Decision: until the current Definition publishes `rezics:MusicMedium` with its release-membership relation, keep
+medium/disc membership explicitly unavailable and read only released ordered `schema:track` recordings.
+This reader requires the exact released `schema:MusicRelease` identity (or a released descendant).
 `schema:MusicRecording` is a published Type; `rezics:MusicMedium` remains an explicit unpublished association seam.
 Labels, generic release ancestry, mappings and provider codes never admit music.
 The ordinary frame uses its native summary ancestry to discover descendants; the reader independently checks the
@@ -29,12 +31,18 @@ CreativeWork target is relabelled as a recording or medium. Rows retain holder, 
 identity, including repeated recordings in distinct slots. A withheld summary has no invented destination. Corrections
 open the exact holder's existing membership editor.
 
-Each next, stream or restart replaces one bounded window; unavailable continuation retains the previous window and
-retries the exact pending address. Invalid/withheld results retire it. There is no refill, automatic retry, per-target
-hydration or accumulated history. Subject, Context, Realm, locale, source observation, Query provider, session and
-exposure changes retire the old reading, even across away/back. Delayed responses cannot restore old controls or
-focus. Native destinations and correction open new tabs; keyboard return restores the origin or stable heading.
-Wrapping components, inherited themes and 44px controls serve phone390/desktop1280 and all eight locales.
+Each next, stream, previous or restart performs a fresh current read for its address. Unavailable stream reads retain
+the other disclosed window; changed, invalid and withheld reads retire it. The reader keeps at most 20 prior addresses
+and one pending address, never prior authorized payloads. Each address is bounded to a 36-character Subject and
+Context, 256-character stream, 4,096-character cursor, revision and 128-character Definition digest; even with JSON
+escaping, the 21 retained addresses use under 588 KiB. A deliberate read uses at most four native reads: Subject,
+active pointer, immutable Definition and one relation page. The Subject response is capped at 2 MiB; one page is capped
+at 20 rows, 128 KiB per row and 2,686,976 bytes total. Qualifiers, references and their related labels are inside
+those row/page bytes; no target Subject or document read is added. Subject, Context, Realm, locale, source observation,
+Query provider, session and exposure changes retire the old reading, even across away/back. Delayed responses cannot
+restore old controls or focus. Native destinations and correction open new tabs; keyboard return restores the exact
+row or stable heading. Wrapping components, inherited themes and 44px controls serve phone390/desktop1280 and all
+eight locales.
 
 ## Cost
 

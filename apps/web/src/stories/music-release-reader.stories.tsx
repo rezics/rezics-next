@@ -50,8 +50,9 @@ type Story = StoryObj<typeof meta>;
 export const AdmittedEdition: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click((await canvas.findAllByText(m.album_tracks_inspect()))[0]!);
     const links = await canvas.findAllByRole('link', { name: m.album_tracks_open() });
-    await expect(links.length).toBe(3);
+    await expect(links.length).toBe(2);
     await expect(links[0]).not.toHaveAttribute('href', links[1]!.getAttribute('href'));
     await userEvent.click(canvas.getByRole('button', { name: m.work_parts_more() }));
     await canvas.findByText(m.album_tracks_complete());
@@ -65,7 +66,8 @@ export const UnavailableContinuation: Story = {
     const next = await canvas.findByRole('button', { name: m.work_parts_more() });
     await userEvent.click(next);
     await canvas.findByText(m.music_release_next_unavailable());
-    await expect(canvas.getAllByRole('link', { name: m.album_tracks_open() }).length).toBe(3);
+    await userEvent.click((await canvas.findAllByText(m.album_tracks_inspect()))[0]!);
+    await expect(canvas.getAllByRole('link', { name: m.album_tracks_open() }).length).toBe(2);
   },
 };
 export const ExplicitTba: Story = { args: { scenario: 'tba' } };

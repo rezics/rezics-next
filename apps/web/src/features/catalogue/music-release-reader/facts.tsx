@@ -2,38 +2,53 @@ import type { ComponentProps, MouseEvent } from 'react';
 import { m } from '../../../paraglide/messages.js';
 import { CandidateValue } from '../../pages/data';
 import { subjectHref } from '../../../subject/subject-href';
-import { contextHref } from '../../pages/context-navigation';
+import { ValueExplanationEntry } from '../value-explanation-entry';
 import { historicalStatement } from '../release-fidelity/model';
 import { profileSourceRecords } from '../music-reader';
+import type { NativeOperationAvailability } from '../../../subject/candidates';
 import { musicReleaseDate, type MusicReleaseRead } from './model';
+import { musicReleaseLinkHref, musicReleaseReturnHref, type MusicReleaseReturn } from './navigation';
 
 type Ready = Extract<MusicReleaseRead, { ok: true }>;
+type Statement = Ready['public']['subject']['statements'][string][number];
 const action =
   'inline-flex min-h-11 min-w-11 max-w-full items-center break-words underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 export function MusicReleaseFacts({
   page,
   locale,
-  realm,
+  current,
+  correction,
   onNavigate,
 }: {
   page: Ready;
   locale: string;
   realm?: string | undefined;
+  current: MusicReleaseReturn;
+  correction: NativeOperationAvailability;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const o = { locale: locale as never };
-  const base = contextHref(subjectHref({ id: page.identity.id, label: page.identity.label.text }, locale).href, realm);
+  const base = subjectHref({ id: page.identity.id, label: page.identity.label.text }, locale).href;
+  const returnTo = musicReleaseReturnHref(current);
   const sources = profileSourceRecords(page.public.subject);
   const Link = (props: ComponentProps<'a'>) => (
     <a
       {...props}
       className={action}
-      href={contextHref(props.href ?? '', realm)}
+      href={musicReleaseLinkHref(props.href ?? '', current)}
       target="_blank"
       rel="noopener"
       onClick={onNavigate}
     />
   );
+  const evidenceValue = (snak: Statement['qualifiers'][number]) => {
+    if (snak.property.data_type === 'wikibase-item' && snak.value.type === 'value') {
+      const target = typeof snak.value.content === 'string' ? snak.value.content : '';
+      const labels = page.public.related[target]?.labels ?? {};
+      if (!Object.values(labels).some(Boolean)) return <span>{m.work_parts_unresolved({}, o)}</span>;
+    }
+    return <CandidateValue snak={snak} related={page.public.related} locale={locale} link={Link} />;
+  };
   return (
     <div className="min-w-0 space-y-4 [overflow-wrap:anywhere]" data-slot="music-release-facts">
       {!page.admitted ? (
@@ -49,13 +64,14 @@ export function MusicReleaseFacts({
               {m.music_release_field_unavailable({ property }, o)}
             </p>
           ))}
+          {page.unreleasedGrains.length ? <p role="status">{m.music_release_unconfigured({}, o)}</p> : null}
           {!page.facts.some((fact) => fact.kind === 'album') ? <p>{m.music_release_album_unavailable({}, o)}</p> : null}
           <dl className="space-y-4">
             {page.facts.map((fact) => (
               <div key={fact.property}>
                 <dt className="font-semibold" lang={fact.label.lang ?? undefined}>
                   {fact.kind === 'album' ? `${m.music_release_album({}, o)} · ` : ''}
-                  {fact.label.text || fact.property}
+                  {fact.label.text || m.work_parts_unresolved({}, o)}
                 </dt>
                 <dd className="space-y-3">
                   {!fact.statements.length ? (
@@ -66,7 +82,9 @@ export function MusicReleaseFacts({
                   {fact.statements.map((statement) => {
                     const date = fact.kind === 'date' ? musicReleaseDate(statement, page.digest, locale) : undefined;
                     return (
-                      <div key={statement.id} className="space-y-2">
+                      <details key={statement.id} className="rounded-lg border border-border p-3">
+                        <summary className={`${action} cursor-pointer`}>{m.music_release_inspect_statement({}, o)}</summary>
+                        <div className="space-y-2 pt-3">
                         {date ? (
                           <p data-date-kind={date.kind}>
                             {date.kind === 'tba'
@@ -96,16 +114,9 @@ export function MusicReleaseFacts({
                                 {parts.map((snak, index) => (
                                   <div key={index}>
                                     <dt lang={page.labels[snak.property.id]?.lang ?? undefined}>
-                                      {page.labels[snak.property.id]?.text || snak.property.id}
+                                      {page.labels[snak.property.id]?.text || m.work_parts_unresolved({}, o)}
                                     </dt>
-                                    <dd>
-                                      <CandidateValue
-                                        snak={snak}
-                                        related={page.public.related}
-                                        locale={locale}
-                                        link={Link}
-                                      />
-                                    </dd>
+                                    <dd>{evidenceValue(snak)}</dd>
                                   </div>
                                 ))}
                               </dl>
@@ -114,8 +125,18 @@ export function MusicReleaseFacts({
                           <p className="text-sm">
                             {statement.id} · {statement.rank} · {statement.rezics.release}
                           </p>
+                          <ValueExplanationEntry
+                            id={page.identity.id}
+                            title={page.identity.label.text}
+                            statement={statement.id}
+                            property={statement.property.id}
+                            context={current.address.context}
+                            locale={locale}
+                            returnTo={returnTo}
+                          />
                         </details>
-                      </div>
+                        </div>
+                      </details>
                     );
                   })}
                 </dd>
@@ -153,8 +174,14 @@ export function MusicReleaseFacts({
           </section>
         </>
       )}
-      <Link href={`${base.split('?')[0]}/details`}>{m.music_release_generic({}, o)}</Link>
-      <Link href={`${base.split('?')[0]}/edit`}>{m.music_release_correct({}, o)}</Link>
+      <Link href={`${base}/details`}>{m.music_release_generic({}, o)}</Link>
+      {correction === 'allowed' ? (
+        <Link href={`${base}/edit`}>{m.music_release_correct({}, o)}</Link>
+      ) : (
+        <p role="status">
+          {correction === 'denied' ? m.correction_denied({}, o) : m.correction_actions_unavailable({}, o)}
+        </p>
+      )}
     </div>
   );
 }

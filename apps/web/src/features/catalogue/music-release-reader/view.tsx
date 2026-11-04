@@ -1,14 +1,36 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from 'react';
 import { ContentItemFrame } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
-import { subjectHref } from '../../../subject/subject-href';
 import { CandidateValue } from '../../pages/data';
-import { contextHref } from '../../pages/context-navigation';
+import { subjectHref } from '../../../subject/subject-href';
+import { correctionProposalAvailability } from '../statement-editor';
+import { ValueExplanationEntry } from '../value-explanation-entry';
+import type { CandidateViewerActions, NativeOperationAvailability, ViewerActionComponent } from '../../../subject/candidates';
 import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
-import { linkClass, linkColor } from '../../pages/shared';
+import { linkClass, linkColor, type LinkProps } from '../../pages/shared';
 import { MusicReleaseFacts } from './facts';
-import type { MusicReleaseAddress, MusicReleaseRead, MusicReleaseTransport } from './model';
+import {
+  musicReleaseHistoryLimit,
+  type MusicReleaseAddress,
+  type MusicReleaseRead,
+  type MusicReleaseTransport,
+} from './model';
+import {
+  musicReleaseLinkHref,
+  musicReleaseReturnHref,
+  musicReleaseRoute,
+  musicReleaseTargetHref,
+  type MusicReleaseFocus,
+  type MusicReleaseReturn,
+} from './navigation';
 
 const action =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -24,17 +46,53 @@ type Props = {
   source: object | string;
   reader: string | null;
   initial?: MusicReleaseRead;
+  /** An explicit local address for mounted examples; production uses the current Subject return query. */
+  address?: MusicReleaseAddress;
 };
+
+function correctionAdvice(source: object | string, contextId: string): NativeOperationAvailability {
+  if (!source || typeof source !== 'object') return 'unavailable';
+  const page = source as {
+    actions?: { status?: string; viewerActions?: { action: string; operations: string[] }[] };
+    viewer?: { context?: string; actions?: { statementPropose?: string } };
+  };
+  if (page.actions?.status === 'denied') return 'denied';
+  if (
+    page.actions?.status !== 'ready' ||
+    !Array.isArray(page.actions.viewerActions) ||
+    page.viewer?.context !== contextId
+  )
+    return 'unavailable';
+  const advice = page.viewer?.actions?.statementPropose;
+  const context: ViewerActionComponent =
+    advice === 'allowed'
+      ? { state: 'available', actions: [{ action: 'statement:propose', operations: ['subject.propose'] }] }
+      : advice === 'denied'
+        ? { state: 'available', actions: [] }
+        : advice === 'unavailable'
+          ? { state: 'unavailable', reason: 'unavailable' }
+          : { state: 'not-requested' };
+  const subject: ViewerActionComponent = { state: 'available', actions: page.actions.viewerActions };
+  const actions: CandidateViewerActions = { subject, context };
+  return correctionProposalAvailability(actions);
+}
 
 /** Observe existing viewer/disclosure caches; a retired source never revives after an away/back transition. */
 export function MusicReleaseReader(props: Props) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef<EventTarget | null>(null);
+  const base: MusicReleaseAddress = { id: props.id, context: props.context };
+  const route =
+    props.address !== undefined
+      ? { address: props.address }
+      : typeof window === 'undefined'
+        ? { address: base }
+        : musicReleaseRoute(window.location.search, base);
   const reading = useSubjectCommunityReading({
     source: props.source,
     reader: props.reader,
-    descriptor: JSON.stringify([props.id, props.context, props.locale, props.realm]),
+    descriptor: JSON.stringify([props.id, props.context, props.locale, props.realm, route.address, route.focus]),
   });
   useLayoutEffect(() => {
     if (focused.current instanceof Element && !focused.current.isConnected && document.activeElement === document.body)
@@ -57,6 +115,10 @@ export function MusicReleaseReader(props: Props) {
         <MusicReleaseWindow
           key={reading.key}
           {...props}
+          startingAddress={route.address}
+          initial={route.address.expectedRevision === undefined ? props.initial : undefined}
+          returnFocus={route.focus}
+          correction={correctionAdvice(props.source, props.context)}
           current={reading.isCurrent}
           focusHeading={() => heading.current?.focus()}
         />
@@ -75,19 +137,32 @@ export function MusicReleaseWindow({
   realm,
   transport,
   initial,
+  startingAddress,
+  returnFocus: returnLocator,
+  correction,
   current,
   focusHeading,
-}: Omit<Props, 'source' | 'reader'> & { current: () => boolean; focusHeading: () => void }) {
+}: Omit<Props, 'source' | 'reader'> & {
+  startingAddress: MusicReleaseAddress;
+  returnFocus?: MusicReleaseFocus | undefined;
+  correction: NativeOperationAvailability;
+  current: () => boolean;
+  focusHeading: () => void;
+}) {
   const o = { locale: locale as never };
   const [page, setPage] = useState<Ready | undefined>(initial?.ok ? initial : undefined);
   const [failure, setFailure] = useState<Failure | undefined>(initial && !initial.ok ? initial : undefined);
   const [busy, setBusy] = useState(!initial);
+  const [history, setHistory] = useState<MusicReleaseAddress[]>([]);
   const mounted = useRef(false);
+  const restoredFocus = useRef(false);
+  const root = useRef<HTMLDivElement>(null);
   const sequence = useRef(0);
   const inFlight = useRef(false);
-  const pending = useRef<MusicReleaseAddress>({ id, context });
+  const pending = useRef<MusicReleaseAddress>(startingAddress);
+  const pendingIntent = useRef<'next' | 'previous' | 'restart' | 'stream'>('restart');
   const origin = useRef<HTMLAnchorElement | null>(null);
-  const returnFocus = (event: MouseEvent<HTMLAnchorElement>) => {
+  const trackReturnFocus = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.detail === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey) origin.current = event.currentTarget;
   };
   useEffect(() => {
@@ -102,11 +177,18 @@ export function MusicReleaseWindow({
     window.addEventListener('focus', restore);
     return () => window.removeEventListener('focus', restore);
   }, [current, focusHeading]);
-  const read = async (address: MusicReleaseAddress, trigger?: HTMLButtonElement, keyboard = false) => {
+  const read = async (
+    address: MusicReleaseAddress,
+    intent: 'next' | 'previous' | 'restart' | 'stream',
+    trigger?: HTMLButtonElement,
+    keyboard = false,
+  ) => {
     if (!mounted.current || !current() || inFlight.current) return;
+    const previousAddress = page?.address;
     inFlight.current = true;
     const turn = ++sequence.current;
     pending.current = address;
+    pendingIntent.current = intent;
     setBusy(true);
     setFailure(undefined);
     let result: MusicReleaseRead;
@@ -120,6 +202,16 @@ export function MusicReleaseWindow({
     setBusy(false);
     if (result.ok) {
       setPage(result);
+      if (intent === 'next' || intent === 'stream') {
+        if (previousAddress && JSON.stringify(previousAddress) !== JSON.stringify(result.address))
+          setHistory((items) => [...items.slice(-(musicReleaseHistoryLimit - 1)), previousAddress]);
+      } else if (intent === 'previous') {
+        setHistory((items) =>
+          JSON.stringify(items.at(-1)) === JSON.stringify(address) ? items.slice(0, -1) : items,
+        );
+      } else {
+        setHistory([]);
+      }
       if (
         keyboard &&
         trigger &&
@@ -128,12 +220,15 @@ export function MusicReleaseWindow({
         focusHeading();
     } else {
       setFailure(result);
-      if (result.reason !== 'unavailable') setPage(undefined);
+      if (result.reason !== 'unavailable') {
+        setPage(undefined);
+        setHistory([]);
+      }
     }
   };
   useEffect(() => {
     mounted.current = true;
-    if (!initial) void read({ id, context });
+    if (!initial) void read(startingAddress, 'restart');
     return () => {
       mounted.current = false;
       inFlight.current = false;
@@ -142,12 +237,34 @@ export function MusicReleaseWindow({
     };
     // The parent remounts this window for every source, address, viewer or locale observation.
   }, []);
-  const request = (address: MusicReleaseAddress) => (event: MouseEvent<HTMLButtonElement>) => {
-    if (!busy) void read(address, event.currentTarget, event.detail === 0);
+  const request = (address: MusicReleaseAddress, intent: 'next' | 'previous' | 'restart' | 'stream') =>
+    (event: MouseEvent<HTMLButtonElement>) => {
+      if (!busy) void read(address, intent, event.currentTarget, event.detail === 0);
   };
   const base = { id, context };
+  const currentReturn: MusicReleaseReturn | undefined = page
+    ? {
+        address: page.address,
+        locale,
+        ...(realm ? { realm } : {}),
+        label: page.identity.label.text,
+        revision: page.address.expectedRevision ?? page.public.subject.revision,
+        digest: page.address.expectedDigest ?? page.digest,
+      }
+    : undefined;
+  useEffect(() => {
+    if (restoredFocus.current || !page || !returnLocator) return;
+    restoredFocus.current = true;
+    const row = Array.from(root.current?.querySelectorAll<HTMLElement>('[data-slot="music-release-row"]') ?? []).find(
+      (candidate) =>
+        candidate.dataset.holder === returnLocator.holder &&
+        candidate.dataset.statementId === returnLocator.statementId,
+    );
+    if (row) row.focus();
+    else focusHeading();
+  }, [page, returnLocator, focusHeading]);
   return (
-    <div className="min-w-0 space-y-4" aria-busy={busy}>
+    <div ref={root} className="min-w-0 space-y-4" aria-busy={busy}>
       <p className="text-sm text-muted-foreground">{m.music_release_scope({}, o)}</p>
       <p className="text-sm text-muted-foreground">{m.music_release_return({}, o)}</p>
       {busy ? <p role="status">{m.candidate_loading({}, o)}</p> : null}
@@ -156,7 +273,9 @@ export function MusicReleaseWindow({
           <p>
             {failure.reason === 'withheld'
               ? m.music_release_withheld({}, o)
-              : page
+              : failure.reason === 'changed'
+                ? m.music_release_changed({}, o)
+                : page
                 ? m.music_release_next_unavailable({}, o)
                 : m.music_release_unavailable({}, o)}
           </p>
@@ -164,13 +283,28 @@ export function MusicReleaseWindow({
             type="button"
             className={`${buttonVariants({ variant: 'outline' })} ${action}`}
             disabled={busy}
-            onClick={request(pending.current)}
+            onClick={request(
+              failure.reason === 'changed' || failure.reason === 'invalid'
+                ? base
+                : pending.current,
+              failure.reason === 'changed' || failure.reason === 'invalid' ? 'restart' : pendingIntent.current,
+            )}
           >
-            {m.album_tracks_retry({}, o)}
+            {failure.reason === 'changed' || failure.reason === 'invalid'
+              ? m.work_parts_restart({}, o)
+              : m.album_tracks_retry({}, o)}
           </button>
         </div>
       ) : null}
-      {page ? <MusicReleaseFacts page={page} locale={locale} realm={realm} onNavigate={returnFocus} /> : null}
+      {page && currentReturn ? (
+        <MusicReleaseFacts
+          page={page}
+          locale={locale}
+          current={currentReturn}
+          correction={correction}
+          onNavigate={trackReturnFocus}
+        />
+      ) : null}
       {page && page.admitted && !page.stream ? <p role="status">{m.music_release_unconfigured({}, o)}</p> : null}
       {page && page.stream ? (
         <>
@@ -179,12 +313,23 @@ export function MusicReleaseWindow({
               <button
                 key={stream.key}
                 type="button"
+                data-stream-key={stream.key}
                 aria-pressed={stream.key === page.stream?.key}
                 disabled={busy}
                 className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-                onClick={request({ ...base, stream: stream.key })}
+                onClick={request(
+                  {
+                    ...base,
+                    stream: stream.key,
+                    expectedRevision: page.public.subject.revision,
+                    expectedDigest: page.digest,
+                  },
+                  'stream',
+                )}
               >
-                <span lang={stream.label.lang ?? undefined}>{stream.label.text || stream.property}</span>
+                <span lang={stream.label.lang ?? undefined}>
+                  {stream.label.text || m.work_parts_unresolved({}, o)}
+                </span>
               </button>
             ))}
           </nav>
@@ -203,117 +348,161 @@ export function MusicReleaseWindow({
           ) : null}
           {!page.rows.length ? <p role="status">{m.work_parts_empty({}, o)}</p> : null}
           <ul className="min-w-0 divide-y divide-border">
-            {page.rows.map((row) => {
+            {page.rows.map((row, rowIndex) => {
               const summary = row.summary;
               const type = summary ? page.types[summary.type] : undefined;
-              const href = summary
-                ? contextHref(subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href, realm)
-                : undefined;
-              const holder = contextHref(
-                subjectHref(
-                  {
-                    id: row.holder,
-                    label: row.holder === id ? page.identity.label.text : (summary?.label?.value ?? ''),
-                  },
-                  locale,
-                ).href,
-                realm,
+              const disclosed = !!summary;
+              const focusKey = returnLocator?.holder === row.holder && returnLocator.statementId === row.statementId;
+              const label = summary?.label?.value;
+              const rowReturn =
+                currentReturn && disclosed
+                  ? { ...currentReturn, focus: { holder: row.holder, statementId: row.statementId } }
+                  : currentReturn;
+              const linkTo = (href: string, props: LinkProps) => (
+                <a
+                  href={rowReturn ? musicReleaseLinkHref(href, rowReturn) : href}
+                  lang={props.lang}
+                  className={props.className ?? `${linkClass} ${linkColor}`}
+                  target="_blank"
+                  rel="noopener"
+                  onClick={trackReturnFocus}
+                >
+                  {props.children}
+                </a>
               );
+              const href =
+                summary && rowReturn
+                  ? musicReleaseTargetHref({ id: summary.id, label: label ?? '' }, rowReturn)
+                  : undefined;
+              const evidenceValue = (snak: NonNullable<typeof row.statement>['qualifiers'][number]) => {
+                if (snak.property.data_type === 'wikibase-item' && snak.value.type === 'value') {
+                  const target = typeof snak.value.content === 'string' ? snak.value.content : '';
+                  const labels = row.related[target]?.labels ?? {};
+                  if (!Object.values(labels).some(Boolean)) return <span>{m.work_parts_unresolved({}, o)}</span>;
+                }
+                return <CandidateValue snak={snak} related={row.related} locale={locale} link={linkTo} />;
+              };
+              const valueLabel = (property: string) =>
+                page.labels[property]?.text || m.work_parts_unresolved({}, o);
               return (
-                <li key={`${row.holder}:${row.statementId}`} data-slot="music-release-row" className="min-w-0">
-                  <ContentItemFrame as="div" className="min-w-0 space-y-3 py-4 [overflow-wrap:anywhere]">
-                    <h3 className="font-semibold" lang={summary?.label?.language}>
-                      {summary?.label?.value || m.work_parts_unresolved({}, o)}
-                    </h3>
-                    {summary && href ? (
-                      <>
-                        <p className="text-sm">
-                          <span>{m.album_tracks_kind({}, o)}: </span>
-                          <span lang={type?.lang ?? undefined}>{type?.text || summary.type}</span>
-                        </p>
-                        <a className={link} href={href} target="_blank" rel="noopener" onClick={returnFocus}>
-                          {m.album_tracks_open({}, o)}
-                        </a>
-                      </>
-                    ) : null}
-                    {row.statement ? (
-                      <>
-                        {row.statement.value.type !== 'value' ? (
-                          <CandidateValue snak={row.statement} related={row.related} locale={locale} />
-                        ) : null}
-                        <dl className="space-y-2">
-                          {row.statement.qualifiers.map((snak, index) => (
-                            <div key={index}>
-                              <dt
-                                className="text-sm text-muted-foreground"
-                                lang={page.labels[snak.property.id]?.lang ?? undefined}
-                              >
-                                {page.labels[snak.property.id]?.text || snak.property.id}
-                              </dt>
-                              <dd>
-                                <CandidateValue snak={snak} related={row.related} locale={locale} />
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-                        <details className="min-w-0 rounded-lg border border-border p-3">
-                          <summary className={`${action} cursor-pointer`}>{m.sources_citations({}, o)}</summary>
-                          {row.statement.references.length ? (
-                            row.statement.references.map((reference, index) => (
-                              <dl key={index} className="mt-3 space-y-2">
-                                {reference.parts.map((snak, part) => (
-                                  <div key={part}>
-                                    <dt lang={page.labels[snak.property.id]?.lang ?? undefined}>
-                                      {page.labels[snak.property.id]?.text || snak.property.id}
+                <li
+                  key={disclosed ? `${row.holder}:${row.statementId}` : `withheld:${rowIndex}`}
+                  data-slot="music-release-row"
+                  {...(disclosed
+                    ? { 'data-holder': row.holder, 'data-statement-id': row.statementId }
+                    : {})}
+                  tabIndex={focusKey ? -1 : undefined}
+                  className="min-w-0"
+                >
+                  {!summary ? (
+                    <p role="status" className="py-4">
+                      {m.music_release_withheld({}, o)}
+                    </p>
+                  ) : (
+                    <ContentItemFrame as="div" className="min-w-0 py-4 [overflow-wrap:anywhere]">
+                      <details className="min-w-0 rounded-lg border border-border p-3">
+                        <summary className={`${action} cursor-pointer`}>{m.album_tracks_inspect({}, o)}</summary>
+                        <div className="min-w-0 space-y-3 pt-3">
+                          <h3 className="font-semibold" lang={summary.label?.language}>
+                            {label || m.work_parts_unresolved({}, o)}
+                          </h3>
+                          <p className="text-sm">
+                            <span>{m.album_tracks_kind({}, o)}: </span>
+                            <span lang={type?.lang ?? undefined}>
+                              {type?.text || m.work_parts_unresolved({}, o)}
+                            </span>
+                          </p>
+                          {href ? (
+                            <a className={link} href={href} target="_blank" rel="noopener" onClick={trackReturnFocus}>
+                              {m.album_tracks_open({}, o)}
+                            </a>
+                          ) : null}
+                          {row.statement ? (
+                            <>
+                              <dl className="space-y-2">
+                                {row.statement.qualifiers.map((snak, index) => (
+                                  <div key={index}>
+                                    <dt
+                                      className="text-sm text-muted-foreground"
+                                      lang={page.labels[snak.property.id]?.lang ?? undefined}
+                                    >
+                                      {valueLabel(snak.property.id)}
                                     </dt>
-                                    <dd>
-                                      <CandidateValue snak={snak} related={row.related} locale={locale} />
-                                    </dd>
+                                    <dd>{evidenceValue(snak)}</dd>
                                   </div>
                                 ))}
                               </dl>
-                            ))
+                              <details className="min-w-0 rounded-lg border border-border p-3">
+                                <summary className={`${action} cursor-pointer`}>{m.sources_citations({}, o)}</summary>
+                                {row.statement.references.length ? (
+                                  row.statement.references.map((reference, index) => (
+                                    <dl key={index} className="mt-3 space-y-2">
+                                      {reference.parts.map((snak, part) => (
+                                        <div key={part}>
+                                          <dt lang={page.labels[snak.property.id]?.lang ?? undefined}>
+                                            {valueLabel(snak.property.id)}
+                                          </dt>
+                                          <dd>{evidenceValue(snak)}</dd>
+                                        </div>
+                                      ))}
+                                    </dl>
+                                  ))
+                                ) : (
+                                  <p>{m.music_reader_source_unavailable({}, o)}</p>
+                                )}
+                              </details>
+                              <ValueExplanationEntry
+                                id={row.holder}
+                                title={row.holder === id ? page.identity.label.text : label || ''}
+                                statement={row.statementId}
+                                property={row.statement.property.id}
+                                context={context}
+                                locale={locale}
+                                returnTo={musicReleaseReturnHref(rowReturn!)}
+                              />
+                            </>
                           ) : (
-                            <p>{m.music_reader_source_unavailable({}, o)}</p>
+                            <p>{m.work_parts_assertion_unavailable({}, o)}</p>
                           )}
-                        </details>
-                      </>
-                    ) : (
-                      <p>{m.work_parts_assertion_unavailable({}, o)}</p>
-                    )}
-                    <details className="min-w-0 rounded-lg border border-border p-3">
-                      <summary className={`${action} cursor-pointer`}>{m.catalogue_technical_details({}, o)}</summary>
-                      <dl className="mt-3 space-y-2 text-sm [overflow-wrap:anywhere]">
-                        <div>
-                          <dt>{m.work_parts_holder({}, o)}</dt>
-                          <dd>{row.holder}</dd>
+                          <details className="min-w-0 rounded-lg border border-border p-3">
+                            <summary className={`${action} cursor-pointer`}>{m.catalogue_technical_details({}, o)}</summary>
+                            <dl className="mt-3 space-y-2 text-sm [overflow-wrap:anywhere]">
+                              <div>
+                                <dt>{m.work_parts_holder({}, o)}</dt>
+                                <dd>{row.holder}</dd>
+                              </div>
+                              <div>
+                                <dt>{m.album_tracks_membership({}, o)}</dt>
+                                <dd>{row.statementId}</dd>
+                              </div>
+                              <div>
+                                <dt>{m.album_tracks_target({}, o)}</dt>
+                                <dd>{summary.id}</dd>
+                              </div>
+                              <div>
+                                <dt>{m.work_parts_relation({}, o)}</dt>
+                                <dd>{valueLabel(page.stream.property)}</dd>
+                              </div>
+                            </dl>
+                          </details>
+                          {correction === 'allowed' && row.holder === id ? (
+                            <a
+                              className={link}
+                              href={musicReleaseLinkHref(
+                                `${subjectHref({ id: row.holder, label: page.identity.label.text }, locale).href}/relation-edit`,
+                                rowReturn!,
+                              )}
+                              target="_blank"
+                              rel="noopener"
+                              onClick={trackReturnFocus}
+                            >
+                              {m.album_tracks_correction({}, o)}
+                            </a>
+                          ) : null}
                         </div>
-                        <div>
-                          <dt>{m.album_tracks_membership({}, o)}</dt>
-                          <dd>{row.statementId}</dd>
-                        </div>
-                        {summary ? (
-                          <div>
-                            <dt>{m.album_tracks_target({}, o)}</dt>
-                            <dd>{summary.id}</dd>
-                          </div>
-                        ) : null}
-                        <div>
-                          <dt>{m.work_parts_relation({}, o)}</dt>
-                          <dd>{page.stream?.property}</dd>
-                        </div>
-                      </dl>
-                    </details>
-                    <a
-                      className={link}
-                      href={contextHref(`${holder.split('?')[0]}/relation-edit`, realm)}
-                      target="_blank"
-                      rel="noopener"
-                      onClick={returnFocus}
-                    >
-                      {m.album_tracks_correction({}, o)}
-                    </a>
-                  </ContentItemFrame>
+                      </details>
+                    </ContentItemFrame>
+                  )}
                 </li>
               );
             })}
@@ -324,7 +513,16 @@ export function MusicReleaseWindow({
                 type="button"
                 disabled={busy}
                 className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-                onClick={request({ ...base, stream: page.stream.key, cursor: page.next })}
+                onClick={request(
+                  {
+                    ...base,
+                    stream: page.stream.key,
+                    cursor: page.next,
+                    expectedRevision: page.public.subject.revision,
+                    expectedDigest: page.digest,
+                  },
+                  'next',
+                )}
               >
                 {m.work_parts_more({}, o)}
               </button>
@@ -335,10 +533,20 @@ export function MusicReleaseWindow({
               type="button"
               disabled={busy}
               className={`${buttonVariants({ variant: 'outline' })} ${action}`}
-              onClick={request({ ...base, stream: page.stream.key })}
+              onClick={request({ ...base, stream: page.stream.key }, 'restart')}
             >
               {m.work_parts_restart({}, o)}
             </button>
+            {history.length ? (
+              <button
+                type="button"
+                disabled={busy}
+                className={`${buttonVariants({ variant: 'outline' })} ${action}`}
+                onClick={request(history[history.length - 1]!, 'previous')}
+              >
+                {m.album_tracks_previous({}, o)}
+              </button>
+            ) : null}
           </div>
         </>
       ) : null}

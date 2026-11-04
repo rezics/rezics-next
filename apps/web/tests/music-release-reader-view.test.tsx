@@ -8,7 +8,6 @@ import {
   musicAddress,
   releaseId,
   albumId,
-  mediumId,
   recordingId,
 } from '../src/features/catalogue/music-release-reader/examples';
 import type { MusicReleaseRead, MusicReleaseTransport } from '../src/features/catalogue/music-release-reader/model';
@@ -81,16 +80,31 @@ test('keyboard continuation retries the exact window and keeps target/correction
       addresses.push(address);
       return fixture.read(address);
     };
-    await mounted.render({ ...musicAddress, locale: 'en', source: {}, reader: null, transport, initial });
+    await mounted.render({
+      ...musicAddress,
+      locale: 'en',
+      source: {
+        actions: { status: 'ready', viewerActions: [{ action: 'subject:read', operations: ['subject.read'] }] },
+        viewer: { context: musicAddress.context, actions: { statementPropose: 'allowed' } },
+      },
+      reader: null,
+      transport,
+      initial,
+    });
     const targets = Array.from(mounted.host.querySelectorAll<HTMLAnchorElement>('a')).filter(
       (node) => node.textContent === m.album_tracks_open(),
     );
-    expect(targets.length).toBe(3);
-    expect(targets.map((node) => node.href)).toEqual(
-      [mediumId, recordingId, recordingId].map(
-        (id) => `https://site.example/en/subjects/${id}/${id === mediumId ? 'disc-two' : 'harbour'}`,
-      ),
-    );
+    expect(targets.length).toBe(2);
+    for (const target of targets) {
+      const url = new URL(target.href);
+      expect(url.pathname).toBe(`/en/subjects/${recordingId}/harbour`);
+      expect(url.searchParams.get('context')).toBe(musicAddress.context);
+      const returned = new URL(url.searchParams.get('via')!, 'https://site.example');
+      expect(returned.searchParams.get('context')).toBe(musicAddress.context);
+      expect(returned.searchParams.get('musicReturnStream')).toBe('forward:schema:track');
+      expect(returned.searchParams.get('musicReturnHolder')).toBe(releaseId);
+      expect(returned.searchParams.get('musicReturnStatement')).toMatch(/[0-9a-f-]{36}/);
+    }
     expect(targets.every((node) => node.target === '_blank' && node.rel === 'noopener')).toBe(true);
     expect(mounted.host.textContent).toContain('Harbour sessions');
     expect(mounted.host.textContent).toContain('Japan');
@@ -99,14 +113,20 @@ test('keyboard continuation retries the exact window and keeps target/correction
     expect(mounted.host.querySelector(`a[href*="${albumId}"]`)).not.toBeNull();
     expect(mounted.host.textContent).toContain('source:unknown');
     expect(mounted.host.textContent).toContain('provider-side-02?');
-    expect(mounted.host.querySelector(`a[href*="${releaseId}"][href$="relation-edit"]`)).not.toBeNull();
+    expect(
+      Array.from(mounted.host.querySelectorAll<HTMLAnchorElement>('a')).some(
+        (node) => new URL(node.href).pathname.endsWith('/relation-edit'),
+      ),
+    ).toBe(true);
+    const firstDisclosure = mounted.host.querySelector('li[data-slot="music-release-row"] details')!;
+    firstDisclosure.open = true;
     targets[0]!.focus();
     targets[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
     window.dispatchEvent(new Event('focus'));
     expect(document.activeElement).toBe(targets[0]);
     await mounted.click(m.work_parts_more());
     expect(mounted.host.textContent).toContain(m.music_release_next_unavailable());
-    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(3);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
     fixture.recover();
     await mounted.click(m.album_tracks_retry());
     expect(addresses[1]).toEqual(addresses[0]);
@@ -139,7 +159,7 @@ test('replacement observations retire delayed continuations and removed keyboard
     await mounted.render(props);
     await mounted.click(m.work_parts_more());
     await act(async () => {
-      mounted.client.setQueryData(['session'], { state: 'signed-in', subject: mediumId, csrfToken: 'changed' });
+      mounted.client.setQueryData(['session'], { state: 'signed-in', subject: recordingId, csrfToken: 'changed' });
       mounted.client.setQueryData(['session'], { state: 'signed-out' });
     });
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
@@ -151,11 +171,30 @@ test('replacement observations retire delayed continuations and removed keyboard
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
     const fresh = { ...props, source: {} };
     await mounted.render(fresh);
-    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(3);
+    expect(mounted.host.querySelectorAll('[data-slot="music-release-row"]').length).toBe(2);
     await mounted.render({ ...fresh, locale: 'ja' });
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
     await mounted.render(fresh);
     expect(mounted.host.querySelectorAll('a').length).toBe(0);
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('a withheld association exposes no target address and disclosed row evidence stays behind one gate', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = musicReleaseExample('concealed');
+    const initial = await fixture.read();
+    await mounted.render({ ...musicAddress, locale: 'en', source: {}, reader: null, transport: fixture.read, initial });
+    const rows = mounted.host.querySelectorAll<HTMLElement>('[data-slot="music-release-row"]');
+    expect(rows[0]?.textContent).toContain(m.music_release_withheld());
+    expect(rows[0]?.hasAttribute('data-holder')).toBe(false);
+    expect(rows[0]?.querySelector('a')).toBeNull();
+    const gate = rows[1]?.querySelector('details');
+    expect(gate?.open).toBe(false);
+    expect(gate?.querySelector('summary')?.textContent).toBe(m.album_tracks_inspect());
+    expect(gate?.querySelector('h3')?.textContent).toBe('Harbour');
   } finally {
     await mounted.close();
   }

@@ -454,7 +454,21 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
         return;
       return `${url.pathname}${url.search}`;
     }
-    const allowed = new Set(['realm', 'node', 'cursor', 'property', 'screenCursor', 'screenSelection']);
+    const allowed = new Set([
+      'context',
+      'realm',
+      'node',
+      'cursor',
+      'property',
+      'screenCursor',
+      'screenSelection',
+      'musicReturnStream',
+      'musicReturnCursor',
+      'musicReturnRevision',
+      'musicReturnDigest',
+      'musicReturnHolder',
+      'musicReturnStatement',
+    ]);
     const keys = [...url.searchParams.keys()];
     const nestedVia = url.searchParams.getAll('via');
     if (nestedVia.length) {
@@ -463,16 +477,41 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     }
     if (keys.some((key) => !allowed.has(key)) || new Set(keys).size !== keys.length) return;
     const selectedRealm = url.searchParams.get('realm');
+    const selectedContext = url.searchParams.get('context');
     const node = url.searchParams.get('node');
     const cursor = url.searchParams.get('cursor');
     const property = url.searchParams.get('property');
     const screenCursor = url.searchParams.get('screenCursor');
     const screenSelection = url.searchParams.get('screenSelection');
+    const musicStream = url.searchParams.get('musicReturnStream');
+    const musicCursor = url.searchParams.get('musicReturnCursor');
+    const musicRevision = url.searchParams.get('musicReturnRevision');
+    const musicDigest = url.searchParams.get('musicReturnDigest');
+    const musicHolder = url.searchParams.get('musicReturnHolder');
+    const musicStatement = url.searchParams.get('musicReturnStatement');
+    const musicReturn = [musicStream, musicCursor, musicRevision, musicDigest, musicHolder, musicStatement].some(
+      (part) => part !== null,
+    );
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
     const recordingStatement = new RegExp(`^#recording-statement-${uuid}$`, 'i').test(url.hash);
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
+      (selectedContext !== null && !new RegExp(`^${uuid}$`).test(selectedContext)) ||
+      (musicReturn &&
+        (!subject ||
+          (musicStream !== null && (!musicStream || musicStream.length > 256)) ||
+          (musicStream !== null && /[\u0000-\u001f\u007f]/u.test(musicStream)) ||
+          (musicCursor !== null &&
+            (!musicStream || !musicCursor || musicCursor.length > 4096 || /[\u0000-\u001f\u007f]/u.test(musicCursor))) ||
+          !musicRevision ||
+          !/^\d{1,16}$/u.test(musicRevision) ||
+          !Number.isSafeInteger(Number(musicRevision)) ||
+          !musicDigest ||
+          !boundedToken(musicDigest, 128) ||
+          ((musicHolder === null) !== (musicStatement === null)) ||
+          (musicHolder !== null && !new RegExp(`^${uuid}$`, 'i').test(musicHolder)) ||
+          (musicStatement !== null && !new RegExp(`^${uuid}$`, 'i').test(musicStatement)))) ||
       (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null &&
         (!subject?.[2] || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
@@ -532,7 +571,9 @@ export function subjectRouteSearchLimit(search: string, cursor?: string): number
   const acceptedVia = via && via.length <= returnAddressCap ? subjectVisitReturn(via) : undefined;
   try {
     const currentCursor = cursor && cursor.length <= 8192 ? encodeURIComponent(cursor).length : 0;
-    return 2048 + (acceptedVia ? encodeURIComponent(acceptedVia).length : 0) + currentCursor;
+    const musicCursor = parameters.get('musicReturnCursor');
+    const returnCursor = musicCursor && musicCursor.length <= 4096 ? encodeURIComponent(musicCursor).length : 0;
+    return 2048 + (acceptedVia ? encodeURIComponent(acceptedVia).length : 0) + currentCursor + returnCursor;
   } catch {
     return 2048;
   }
