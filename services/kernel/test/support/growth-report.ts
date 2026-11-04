@@ -324,19 +324,27 @@ type StatementOccurrenceDetails = {
 };
 
 export type StatementOccurrence = StatementOccurrenceDetails & {
-  /** Native documents linked to this occurrence, retained after the capture is released. */
-  readonly planDocuments: readonly unknown[];
+  /** Native documents are present only for raw captures. */
+  readonly planDocuments?: readonly unknown[];
+  /** Folded captures identify plan notice custody without retaining raw documents. */
+  readonly planDocumentAvailability?: 'cost-folded';
 };
 
-export type CostFoldedStatementOccurrence = StatementOccurrenceDetails & {
+export type RawStatementOccurrence = StatementOccurrence & {
+  /** Native documents linked to this occurrence, retained after the capture is released. */
+  readonly planDocuments: readonly unknown[];
+  readonly planDocumentAvailability?: never;
+};
+
+export type CostFoldedStatementOccurrence = StatementOccurrence & {
   /** Folded captures identify plan notice custody but do not retain raw documents. */
   readonly planDocumentAvailability: 'cost-folded';
   readonly planDocuments?: never;
 };
 
 export type RawStatementOccurrences = {
-  readonly statements: readonly StatementOccurrence[];
-  readonly backgroundStatements: readonly StatementOccurrence[];
+  readonly statements: readonly RawStatementOccurrence[];
+  readonly backgroundStatements: readonly RawStatementOccurrence[];
 };
 
 export type FoldedStatementOccurrences = {
@@ -344,7 +352,10 @@ export type FoldedStatementOccurrences = {
   readonly backgroundStatements: readonly CostFoldedStatementOccurrence[];
 };
 
-export type StatementOccurrences = RawStatementOccurrences | FoldedStatementOccurrences;
+export type StatementOccurrences = {
+  readonly statements: readonly StatementOccurrence[];
+  readonly backgroundStatements: readonly StatementOccurrence[];
+};
 
 export function statementOccurrences(capture: Capture): RawStatementOccurrences;
 export function statementOccurrences(capture: CostFoldedCapture): FoldedStatementOccurrences;
@@ -405,7 +416,7 @@ export function statementOccurrences(capture: Capture | CostFoldedCapture): Stat
     planStatements: readonly (number | undefined)[] | undefined,
     planDatabases: readonly (string | undefined)[] | undefined,
     planCollection: string,
-  ): StatementOccurrence[] => {
+  ): RawStatementOccurrence[] => {
     const plansByStatement = Array.from({ length: statements.length }, () => [] as number[]);
     for (let planIndex = 0; planIndex < plans.length; planIndex++) {
       const statementIndex = planStatements?.[planIndex];
