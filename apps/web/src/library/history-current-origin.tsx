@@ -5,4 +5,4 @@ export {
   assertReaderCurrent as assertHistoryCurrent,
   useReaderAddress as useHistoryAddress,
   useReaderResponseOrigin as useHistoryReadOrigin,
-} from '../session';
+} from '../session/reader';

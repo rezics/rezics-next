@@ -7,7 +7,7 @@ import {
   useReaderAddress,
   useReaderCurrentOrigin,
   useReaderResponseOrigin,
-} from '../../session';
+} from '../../session/reader';
 import { personalRead } from '../../kernel/query';
 import { readOwnVotesForViewer, type OwnVotesRead } from './actions';
 import type { OwnVotesPage } from './types';
