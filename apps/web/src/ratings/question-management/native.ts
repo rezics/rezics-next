@@ -26,7 +26,7 @@ async function boundedBody(response: Response): Promise<ArrayBuffer> {
     await response.body?.cancel();
     throw new Error('Question management response exceeds 1 MiB');
   }
-  if (!response.body) return new Uint8Array();
+  if (!response.body) return new ArrayBuffer(0);
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
