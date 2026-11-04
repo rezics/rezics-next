@@ -1709,7 +1709,9 @@ Decision: retain requested Subject/place keys, conceal redirected Subject identi
 a required current context observation changes; context conveys no creation or command authority.
 
 `prepareSubjectThreadContext(dependencies: ContentReadDependencies, subjectId: string, placeId: string,
-kind: 'discussion' | 'review', context: ReadContext)` returns `{finish(): Promise<SubjectThreadContext>}`.
+kind: 'discussion' | 'review', context: ReadContext)` returns `{initial, finish()}`. `initial` is the exact
+Subject/place observation captured before foreign-home work; `finish()` repeats and compares that observation once
+all page or action work is complete.
 Preparation releases the Subject home before opening the Realm home. After bounded native candidate disclosure,
 `finish` repeats ordinary Realm/Subject reads and compares the actual observations, including the Semantic source
 component and Realm head. A current denial returns 404; a changed observation returns the ordinary 503
@@ -3779,3 +3781,40 @@ activity retries the same page frontier, while incomplete activity stays withhel
   its original owner; this journey measures how page consumers call it.
 
 Decision: Review destination pages always require an explicit Board selection, including for one eligible Board, and re-inspect that exact Realm/Board/Subject under current native read and thread-create policy before opening the existing composer.
+
+`GET /v1/realms/{realmId}/review-destinations?subjectId=...` composes one page for the deliberately selected Realm
+and exact reviewed Subject. It selects at most twenty raw Realm Board keys plus one lookahead through the native
+Realm keyset, then uses current Board/Realm disclosure and `readBoardPageActionEvidence` for each disclosed
+reviews Board. Only current `thread:create` advice and current Realm participation produce an item. The endpoint
+does not infer admission from membership, purpose, public readability or a visible create control. Empty pages
+with `next` are `sparse`; terminal empty pages distinguish `no-destinations` from a later `exhausted` page, while
+current denial and expired cursors have their own states. The raw frontier advances even when all selected keys
+are withheld. Exact `boardId` inspection repeats the Subject, Realm, Board and current action observations before
+returning the original native review operands; `createThread` remains the final authority check.
+
+The opaque outer cursor binds the account, client, delegator, sorted scopes, authentication epoch, exact Realm and
+head, Subject and Semantic source component, filter, order, page bound and destination policy version. Its inner
+Realm keyset cursor retains the Realm source epoch and raw Board frontier. Both cursors expire after fifteen minutes;
+an expired inner Realm generation is returned as a closed expired page for explicit restart. No Board advice is cached across pages.
+The web consumer currently uses the explicitly named local public DTO seam
+`apps/web/src/threads/review-board-choices.ts`; it validates the mounted response and calls the native route without
+importing private producer types. The shared complete-input publisher has not installed successor declarations for
+this route in this attempt, so no installed declaration head or typing evidence is claimed.
+
+### Cost: Review destination page and exact inspection
+
+- **Touches:** prepare and finally reread the exact Subject/Realm context, check Realm participation before and
+  after the destination work, select one Realm Board keyset page, disclose its Boards and evaluate current
+  `board:read`/`thread:create` evidence. Charge authentication, nested Access and Accounts, Realm/Subject source,
+  membership and permission histories, both disclosure observations, pools, controls and actual runners. Charge
+  indexed prefixes/rows/blocks, complete retained bodies, copies and serialized output; the output cap is not an
+  upstream work bound.
+- **Bound:** one Subject plus one Realm per observation; twenty raw Board keys and one lookahead; at most twenty
+  disclosed Board checks; two participation checks; at most twenty allowed item projections; 96 KiB serialized
+  output. Exact inspection performs one selected Board disclosure and one current action evaluation. No refill,
+  whole-membership traversal, cross-Realm union or per-choice Subject hydration occurs.
+- **Growth check:** independently grow Realm memberships, Realm Boards, review history, Subject history and
+  Access/Accounts authority history at 256/1024/4096 while page, selection, nested call and byte budgets stay fixed.
+  Measure the complete operation including every native producer/consumer phase, indexed prefix, row/block,
+  materialized byte, retained raw body, copy and serialization. A final LIMIT or response-byte rejection does not
+  establish a bound on work already materialized upstream.

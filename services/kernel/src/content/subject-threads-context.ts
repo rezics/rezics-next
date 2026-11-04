@@ -31,7 +31,7 @@ export async function prepareSubjectThreadContext(
   placeId: string,
   kind: SubjectThreadContext['kind'],
   context: ReadContext,
-): Promise<Readonly<{ finish(): Promise<SubjectThreadContext> }>> {
+): Promise<Readonly<{ initial: SubjectThreadContext; finish(): Promise<SubjectThreadContext> }>> {
   const route = routeOf(subjectId);
   if (route === null || routeOf(placeId) === null) throw new ContentNotFoundError();
   requireAccessDeadline(context.deadline);
@@ -83,7 +83,21 @@ export async function prepareSubjectThreadContext(
   const originalSubject = await subject();
   // No Subject connection survives this foreign-home call.
   const originalPlace = await place();
+  const initial: SubjectThreadContext = {
+    subject: originalSubject,
+    place: originalPlace
+      ? {
+          kind: 'realm',
+          id: originalPlace.realmId,
+          title: originalPlace.title,
+          spaceId: originalPlace.spaceId,
+          headRevisionId: originalPlace.headRevisionId,
+        }
+      : { kind: 'global', id: GLOBAL_CONTEXT },
+    kind,
+  };
   return {
+    initial,
     async finish() {
       const currentPlace = await place();
       const currentSubject = await subject();

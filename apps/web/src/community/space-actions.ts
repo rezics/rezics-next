@@ -111,9 +111,18 @@ function validateCursor(input: unknown): { cursor?: string } {
   return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
 }
 
-function validateReviewMyRealmsRead(input: unknown): { expected: ReviewReaderExpectation } {
-  if (!input || typeof input !== 'object' || !('expected' in input)) throw new Error('Invalid review reader');
-  return { expected: validateReviewReaderExpectation(input.expected) };
+function validateReviewMyRealmsRead(input: unknown): { expected: ReviewReaderExpectation; cursor?: string } {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    !('expected' in input) ||
+    ('cursor' in input && input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 4096))
+  )
+    throw new Error('Invalid review reader');
+  return {
+    expected: validateReviewReaderExpectation(input.expected),
+    ...('cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {}),
+  };
 }
 
 function validateChange(input: unknown): { realmId: string; action: 'join' | 'leave'; idempotencyKey: string } {
@@ -209,7 +218,10 @@ export const readMyRealmsPageForReview = createServerFn({ method: 'GET' })
   .handler(async ({ data }): Promise<ReviewMyRealmsRead> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await loadMyRealms(kernelClient(), request, env as Partial<SessionEnv>, {});
+    const page = await loadMyRealms(kernelClient(), request, env as Partial<SessionEnv>, {
+      ...(data.cursor === undefined ? {} : { cursor: data.cursor }),
+      preserveCursorFailure: true,
+    });
     const provenance = await preparedReviewReader(sessionSubject(request), requestCsrfToken(request));
     if (!page.signedIn || !provenance || !sameReviewReader(data.expected, provenance)) return { kind: 'mismatch' };
     return { kind: 'ready', page, provenance };
