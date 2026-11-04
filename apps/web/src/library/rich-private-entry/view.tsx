@@ -399,7 +399,7 @@ function PrivateEntryReview({
     review &&
     reviewVersion(review.entry, review.guard) !== reviewVersion(entry, entryGuard)
   );
-  const conflictWaiting = annotationNotice === 'conflict' || staleReview;
+  const conflictWaiting = !annotationCommand && (annotationNotice === 'conflict' || staleReview);
   const issues = annotationIssues(workingDraft);
   const unsentDraft = !!draft && !!entry && annotationDraftChanged(review?.entry ?? entry, draft);
   const diaryHref = '/library/history?returnTo=' + encodeURIComponent(returnTo);
@@ -614,7 +614,17 @@ function PrivateEntryReview({
   }
 
   function reviewLatest() {
-    if (!currentResult() || !entry || !entryGuard || !reviewAvailable) return;
+    if (
+      !currentResult() ||
+      !entry ||
+      !entryGuard ||
+      !reviewAvailable ||
+      annotationCommand ||
+      annotationBusy.current ||
+      sourceCommand ||
+      sourceBusy.current
+    )
+      return;
     // An unchanged operand stays unchanged even if the latest private note or rank has changed.
     setDraft(renewAnnotationDraft(review?.entry ?? entry, entry, workingDraft, review?.guard ?? entryGuard));
     setReview({ entry, guard: entryGuard });
