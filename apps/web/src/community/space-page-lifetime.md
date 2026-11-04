@@ -126,3 +126,8 @@ A fresh page object remounts the outer visit even when values compare equal. Cha
 credential, route or frozen state retires its pending return effects before replacement render. A late read may
 not navigate or move focus after retirement. Missing, denied and stale windows keep the native shelf's explicit
 retry/restart controls; focus restoration never takes focus from an intervening user action.
+
+The remaining acknowledged in-page participation return needs an outer source-bound completion seam from the
+existing command owners. Their current invalidation replaces the page and restarts its ephemeral selection.
+This implementation does not retain that selection across an unqualified replacement or intercept a command.
+The continuation also adopts Content's approved community mount once its public render slot is available.

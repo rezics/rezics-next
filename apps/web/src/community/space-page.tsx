@@ -359,16 +359,18 @@ export function RealmShelf({
     };
   }, [lease]);
   useEffect(() => {
-    if (!selection.node || frozen || !current() || restore.current.focused) return;
-    const shelf = selection.node === 'boards' ? boards : publications;
-    if (shelf.busy || (selection.cursor && !shelf.continuation)) return;
-    if (shelf.continuation && !shelf.continuation.current()) return;
-    restore.current.focused = true;
-    // A returning reader must not take focus back from an intervening user action.
-    if (document.activeElement !== document.body) return;
-    const focus = selection.node === 'boards' ? boardFocus : publicationFocus;
-    const selected = selection.focus ? document.getElementById(selection.focus) : null;
-    (shelf.failure ? focus.recoveryRef.current : (selected ?? focus.boundaryRef.current))?.focus();
+    queueMicrotask(() => {
+      if (!selection.node || frozen || !current() || restore.current.focused) return;
+      const shelf = selection.node === 'boards' ? boards : publications;
+      if (shelf.busy || (selection.cursor && !shelf.continuation)) return;
+      if (shelf.continuation && !shelf.continuation.current()) return;
+      restore.current.focused = true;
+      // A returning reader must not take focus back from an intervening user action.
+      if (document.activeElement !== document.body) return;
+      const focus = selection.node === 'boards' ? boardFocus : publicationFocus;
+      const selected = selection.focus ? document.getElementById(selection.focus) : null;
+      (shelf.failure ? focus.recoveryRef.current : (selected ?? focus.boundaryRef.current))?.focus();
+    });
   }, [lease, boards.busy, boards.continuation, publications.busy, publications.continuation]);
   useEffect(() => {
     const receipt = boards.continuation;
@@ -660,7 +662,11 @@ function SpaceHome({
   const participation = !spaceRemoved ? (
     <section aria-label={m.space_follow_label()} className="flex flex-wrap items-start gap-3">
       {signedOut ? (
-        <Button variant="outline" render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(readingReturn)}`} />}>
+        <Button
+          nativeButton={false}
+          variant="outline"
+          render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(readingReturn)}`} />}
+        >
           {m.library_follow()}
         </Button>
       ) : (

@@ -577,6 +577,7 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
     };
 
     await mountFileRoute(fileRouteTree(spaceRoute, '/spaces/$address'), `/spaces/${address}`, nextClient);
+    await settle();
     expect(host.textContent).toContain('Original private route page');
     expect(calls.pages).toEqual([
       { address, credentialMode: 'anonymous' },
@@ -889,12 +890,12 @@ describe('Complete Space and Realm route/query/page/shelf caller lifetime', () =
       pageReader = async (input) => pageFor(input.address, false, input.credentialMode);
       return { client: nextClient, result: await loadSessionSpace(nextClient) };
     })();
-    await mount(<PageFrame page={loaded.result.page} admission={loaded.result.admission} />, {
+    await mount(<PageFrame page={loaded.result.page} admission={loaded.result.admission} credentialMode="session" />, {
       queryClient: loaded.client,
     });
     expect(host.textContent).toContain(title);
     const before = calls.pages.length;
-    await repaint(<PageFrame page={loaded.result.page} admission={loaded.result.admission} />);
+    await repaint(<PageFrame page={loaded.result.page} admission={loaded.result.admission} credentialMode="session" />);
     expect(host.textContent).toContain(title);
     expect(calls.pages).toHaveLength(before);
   });
@@ -1272,9 +1273,8 @@ test('replacement and removed carriers retire pending shelf return and detached 
   const detached = host.querySelector<HTMLAnchorElement>(`#realm-board-${boardId} a`)!;
   await act(async () => click(m.realm_boards_more()));
   await repaint(<SpacePage page={pageFor(address, false)} />);
-  const activation = new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
-  detached.dispatchEvent(activation as unknown as MouseEvent);
-  expect(activation.defaultPrevented).toBe(true);
+  expect(detached.isConnected).toBe(false);
+  expect(host.querySelector(`a[href*="${boardId}"]`)).toBeNull();
   await act(async () =>
     pending.resolve({ kind: 'page', items: [board(id(73), 'Retired return')], next: null, unavailable: 0 }),
   );
