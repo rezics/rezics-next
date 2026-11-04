@@ -3030,6 +3030,45 @@ Retained history is never searched. `collection-batch-growth.test.ts` adds API r
 and native 64/512/4096 live/retained/unrelated growth at fixed batches 1 and 100, including fixed full destinations; captures use the existing inclusive
 Access, receipt, custody, outbox and listing accounting with unchanged bounds and raw plans/bytes.
 
+### Private Collection occurrence structure history
+
+Curators of ordinary curated Collections can page the private structure stream at
+`GET /v1/collections/{collectionId}/structure-history` and compare one or two addressed recorded changes at
+`GET /v1/collections/{collectionId}/structure-history/compare`. The stream records successful occurrence add, note,
+move, deletion, restore and same-home transfer effects inside the existing member writer transaction. A transfer
+records a source removal and destination addition atomically with the same occurrence identity. Batch changes remain
+separate addressed deltas. Replay, rejected writes, rollback, present-member skips and no-op notes do not add rows.
+
+Decision: Keep at most 1,000 deltas per Collection and 16 operation groups per occurrence (at most 32 rows); cap each before/after operand at 32,768 serialized bytes.
+
+Each delta returns its signed address, native operation and recorded time, exact occurrence ID, member revision, and
+bounded before/after states. It does not return a Subject ID or a write operand. Subject enrichment is explicitly
+`withheld`; curators can still distinguish repeated occurrences by their separate member IDs. The current
+Collection read establishes current curator/account authority before and after each bounded journal read. The route
+uses the existing `collection:update` action and account lifetime in both cursors and addresses. Responses are
+`private, no-store`.
+
+Pages return at most 50 deltas plus one lookahead, and comparisons read at most two selected rows. Each Collection's
+head serializes its native change number; opaque cursors and addresses bind the Collection, curator account lifetime,
+structure stream and retained coverage basis. Coverage distinguishes known recorded changes, pruned gaps, and
+pre-installation history that remains unknown. New Collections have coverage from creation. The journal never
+reconstructs an old snapshot from current ordinal keys or scans all members. Placement context stores addressed
+neighbor member IDs when observed; a restored deleted occurrence reports its earlier placement as unavailable.
+Physical respacing and order repair are not logical movement.
+
+History endpoints are private, current-curator only and `no-store`. They recheck the current curator and active
+account authority after reading the bounded journal page. Historical Subject context is explicitly withheld and raw
+Subject IDs are not returned; an authorized occurrence change remains inspectable without current Subject
+enrichment. Existing public Collection readers and `collection_listing_history` remain unchanged. Collection purge
+cascades its history head and changes; curator erasure removes the private head when Collection ownership is retired;
+terminal member purge erases that occurrence's retained changes through its existing bounded member-delete lifecycle
+path.
+
+Cost: one current Collection authority read before and after a fixed repeatable-read journal page, at most 51 raw
+rows for a page, or two indexed address reads for comparison. Append and retention use the per-Collection change
+index and per-occurrence operation index. A member purge removes at most 32 retained rows; a Collection retains at
+most 1,000. No foreign Subject calls or Library connection are held during external observations.
+
 ### FULL member facts cost
 
 See the [FULL Collection member facts runtime contract](#full-collection-member-facts) for API, authority and

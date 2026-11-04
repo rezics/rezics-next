@@ -22,6 +22,7 @@ import { collectionReadView, createCollectionReads } from './collection-reads.ts
 import { viewerFactsResponseSchema } from './viewer-facts.ts';
 import { createCollectionPublicationEpisodes } from './collection-publication-episodes.ts';
 import { createCollectionCommands } from './collections.ts';
+import { createCollectionStructureHistory } from './collection-structure-history.ts';
 import { createCollectionPublications } from './collection-publication.ts';
 import { createCollectionPublicationService } from './collection-publication-service.ts';
 import {
@@ -244,6 +245,89 @@ const createMetadata = {
 };
 const ruleBody = { filter: t.Unknown(), sort: t.Optional(t.String()) };
 const memberResponse = t.Object({ member: memberSchema }, closed);
+const structurePlacementSchema = t.Union([
+  t.Object(
+    {
+      state: t.Literal('known'),
+      beforeMemberId: nullableString,
+      afterMemberId: nullableString,
+    },
+    closed,
+  ),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+]);
+const structureStateSchema = t.Object(
+  {
+    presence: t.Union([t.Literal('live'), t.Literal('deleted'), t.Literal('not_in_collection')]),
+    memberRevision: t.String(),
+    note: nullableString,
+    addedAt: nullableString,
+    deletedAt: nullableString,
+    placement: structurePlacementSchema,
+  },
+  closed,
+);
+const structureChangeSchema = t.Object(
+  {
+    address: t.String({ maxLength: 4096 }),
+    operation: t.Union([
+      t.Literal('added'),
+      t.Literal('note_changed'),
+      t.Literal('moved'),
+      t.Literal('deleted'),
+      t.Literal('restored'),
+      t.Literal('transferred_in'),
+      t.Literal('transferred_out'),
+    ]),
+    recordedAt: t.String(),
+    occurrenceId: id,
+    memberRevision: t.String(),
+    before: t.Union([structureStateSchema, t.Null()]),
+    after: t.Union([structureStateSchema, t.Null()]),
+    subjectContext: t.Object({ state: t.Literal('withheld') }, closed),
+  },
+  closed,
+);
+const structureCoverageSchema = t.Object(
+  {
+    retainedChanges: t.Integer({ minimum: 0, maximum: 1000 }),
+    firstRetainedChangeNo: nullableString,
+    latestRecordedChangeNo: nullableString,
+    hasPrunedGaps: t.Boolean(),
+    historyBeforeTracking: t.Union([
+      t.Literal('unknown_before_installation'),
+      t.Literal('collection_created_after_installation'),
+    ]),
+  },
+  closed,
+);
+const structureBasisSchema = t.Object(
+  {
+    throughChangeNo: t.String(),
+    hadUnknownPrehistory: t.Boolean(),
+    hadPrunedGaps: t.Boolean(),
+  },
+  closed,
+);
+const structureHistoryPageSchema = t.Object(
+  {
+    collectionId: id,
+    changes: t.Array(structureChangeSchema, { maxItems: 50 }),
+    next: nullableString,
+    coverage: structureCoverageSchema,
+    basis: structureBasisSchema,
+  },
+  closed,
+);
+const structureHistoryComparisonSchema = t.Object(
+  {
+    status: t.Union([t.Literal('ready'), t.Literal('retired')]),
+    changes: t.Array(structureChangeSchema, { maxItems: 2 }),
+    coverage: structureCoverageSchema,
+    basis: t.Union([structureBasisSchema, t.Null()]),
+  },
+  closed,
+);
 const subjectPage = t.Object(
   {
     collections: t.Array(
@@ -415,6 +499,7 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
   const { pool, tokens, clock } = dependencies;
   let commands: ReturnType<typeof createCollectionCommands> | undefined;
   let reads: ReturnType<typeof createCollectionReads> | undefined;
+  let structureHistory: ReturnType<typeof createCollectionStructureHistory> | undefined;
   let publications: ReturnType<typeof createCollectionPublications> | undefined;
   let wholeQueryPublications: ReturnType<typeof createCollectionPublicationService> | undefined;
   const wholeQuery = () =>
@@ -451,6 +536,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       routeKey: dependencies.routeKey,
       ...(dependencies.workClient ? { workClient: dependencies.workClient } : {}),
       ...(dependencies.search ? { search: dependencies.search } : {}),
+    }));
+  const history = () =>
+    (structureHistory ??= createCollectionStructureHistory({
+      pool,
+      tokens,
+      current: (actor, collectionId, deadline) => read().readCollection(actor, collectionId, deadline),
     }));
   async function written(value: Collection, actor: Actor) {
     // Receipt values retain their native revision. Only the current viewer's readable descriptor is added.
@@ -759,9 +850,50 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       async ({ params, actor, admission, job }) => {
         requireAccount(actor);
         return admission.run('normal', job, () =>
-          mapped(() =>
-            read().readCollectionMetadataHistoryChange(actor, params.collectionId, params.revision, job.deadline),
-          ),
+          mapped(() => read().readCollectionMetadataHistoryChange(actor, params.collectionId, params.revision, job.deadline)),
+        );
+      },
+    )
+    .get(
+      '/v1/collections/:collectionId/structure-history',
+      {
+        params: collectionParams,
+        query: t.Object(
+          {
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+          },
+          closed,
+        ),
+        response: { 200: strict(structureHistoryPageSchema), ...failures },
+        detail: detail('collection.structure_history.list', 'collection:update'),
+        transform: ({ set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+        },
+      },
+      async ({ params, query, actor, admission, job }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () => history().page(actor, params.collectionId, query, job.deadline));
+      },
+    )
+    .get(
+      '/v1/collections/:collectionId/structure-history/compare',
+      {
+        params: collectionParams,
+        query: t.Object(
+          { addresses: t.Array(t.String({ maxLength: 4096 }), { minItems: 1, maxItems: 2, uniqueItems: true }) },
+          closed,
+        ),
+        response: { 200: strict(structureHistoryComparisonSchema), ...failures },
+        detail: detail('collection.structure_history.compare', 'collection:update'),
+        transform: ({ set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+        },
+      },
+      async ({ params, query, actor, admission, job }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () =>
+          history().compare(actor, params.collectionId, query.addresses, job.deadline),
         );
       },
     )

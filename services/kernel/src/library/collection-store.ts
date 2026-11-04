@@ -299,6 +299,9 @@ export async function moveMember(
   ordinalKey: string,
   context: WriteContext,
 ): Promise<CollectionMember | null> {
+  // Only the addressed occurrence is a logical move. Later physical respacing updates in the same
+  // transaction remain silent in the structure journal.
+  await client.query("SELECT set_config('library.collection_structure_move_member', $1, true)", [memberId]);
   const row = await memberMove.run(queryClient(client), {
     route,
     collection_id: collectionId,
@@ -306,6 +309,7 @@ export async function moveMember(
     ordinal_key: ordinalKey,
     transaction_id: context.transactionId,
   });
+  await client.query("SELECT set_config('library.collection_structure_move_member', '', true)");
   return row ? asMember(row as MemberResult) : null;
 }
 
