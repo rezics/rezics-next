@@ -41,7 +41,7 @@ for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
 const { createRoot } = await import('react-dom/client');
-const { QueryClient, QueryClientProvider, useQueryClient } = await import('@tanstack/react-query');
+const { QueryClient, QueryClientProvider, useQueryClient, notifyManager } = await import('@tanstack/react-query');
 const { useSession } = await import('../src/session/query');
 const { personalRead } = await import('../src/kernel/query');
 const { useSubjectPersonalReader } = await import('../src/features/pages/subject-personal-reader');
@@ -366,6 +366,7 @@ test('subject preferences and own rating retire across the complete mounted read
   // Other server-rendered files may have imported query defaults before this browser harness mounted.
   const previousEnabled = personalRead.enabled;
   Object.assign(personalRead, { enabled: true });
+  notifyManager.setScheduler(queueMicrotask);
   const readerA = { state: 'signed-in', subject: 'reader-a', csrfToken: null } as const;
   const readerB = { state: 'signed-in', subject: 'reader-b', csrfToken: 'csrf-b' } as const;
   const signedOut = { state: 'signed-out', subject: null, csrfToken: null } as const;
@@ -809,6 +810,7 @@ test('subject preferences and own rating retire across the complete mounted read
     await main.unmount();
     main.client.clear();
     Object.assign(personalRead, { enabled: previousEnabled });
+    notifyManager.setScheduler((notify) => setTimeout(notify, 0));
     await window.happyDOM.close();
     for (const [key, descriptor] of previousGlobals) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
