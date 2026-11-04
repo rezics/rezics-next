@@ -8,8 +8,20 @@ import collection from '../src/kernel/recorded/library-collection.json';
 const app = join(import.meta.dir, '..');
 const root = join(app, '../..');
 const id = collection.collection.id;
-type Call = { path: string; method: string; body: Record<string, unknown> | null; authorization: string | null };
-type JourneyWindow = Window & { calls: Call[]; changeElsewhere(): void };
+type Call = {
+  path: string;
+  method: string;
+  body: Record<string, unknown> | null;
+  authorization: string | null;
+  idempotencyKey: string | null;
+};
+type JourneyWindow = Window & {
+  calls: Call[];
+  failNextNote: boolean;
+  changeElsewhere(): void;
+  collectionRevision(): number;
+  retire(): void;
+};
 
 // Deferred browser outcome: only requests and native responses are controlled. This mounts the delivered page,
 // Query composition, subject picker/search and default server/API adapters. No server or database is started.
@@ -78,13 +90,17 @@ test('Curator can add and edit Collection members without an always-open form wa
     const members = [];
     const subject = membersRecording.members[0].subject;
     window.calls = [];
+    window.failNextNote = false;
+    const noteReceipts = new Map();
     window.changeElsewhere = () => parent.revision++;
+    window.collectionRevision = () => parent.revision;
     globalThis.fetch = async (input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input), location.href);
       const request = input instanceof Request ? new Request(input, init) : new Request(url, init);
       const path = url.pathname;
       const body = request.body ? await request.clone().json() : null;
-      window.calls.push({ path, method: request.method, body, authorization: request.headers.get('authorization') });
+      window.calls.push({ path, method: request.method, body, authorization: request.headers.get('authorization'),
+        idempotencyKey: request.headers.get('idempotency-key') });
       if (path === '/api/search/suggestions') return Response.json({ subjects: [{ id: subject.id,
         type: subject.type, labels: { en: subject.label.value }, summary: null }], types: {} });
       if (path === '/v1/definitions/active') return Response.json({ digest: 'journey-release' });
@@ -110,9 +126,17 @@ test('Curator can add and edit Collection members without an always-open form wa
         return Response.json({ members, next: null });
       }
       if (request.method === 'PATCH' && path.startsWith('/v1/collections/' + parent.id + '/members/')) {
+        const key = request.headers.get('idempotency-key');
+        if (key && noteReceipts.has(key)) return Response.json(noteReceipts.get(key));
         const member = members.find(item => path.endsWith('/' + item.id));
         member.note = body.note; parent.revision++;
-        return Response.json({ member });
+        const receipt = { member };
+        if (key) noteReceipts.set(key, receipt);
+        if (window.failNextNote) {
+          window.failNextNote = false;
+          return Response.json({ code: 'temporarily_unavailable' }, { status: 503 });
+        }
+        return Response.json(receipt);
       }
       return Response.json({ code: 'not_found' }, { status: 404 });
     };
@@ -124,9 +148,11 @@ test('Curator can add and edit Collection members without an always-open form wa
       return page;
     }
     function Screen() {
+      const [current, setCurrent] = React.useState(true);
+      window.retire = () => setCurrent(false);
       const { data } = useSuspenseQuery(query);
       return <CollectionPage page={data} queryKey={query.queryKey} cursor={undefined}
-        refreshPage={() => read()} readEditorPage={() => read(true)} />;
+        refreshPage={() => read()} readEditorPage={() => read(true)} isCurrent={() => current} />;
     }
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await client.fetchQuery(sessionQuery);
@@ -202,12 +228,38 @@ test('Curator can add and edit Collection members without an always-open form wa
     expect((await calls()).filter((call) => call.method === 'PATCH' && call.path.includes('/members/'))).toHaveLength(
       0,
     );
-    await page.getByRole('button', { name: m.library_collection_reload(), exact: true }).click();
-    await page.locator('[data-collection-save]').waitFor({ state: 'detached' });
+    await page.locator('[data-conflict-basis]').waitFor();
+    await page.locator('[data-collection-basis="3"]').waitFor();
+    await page.getByRole('button', { name: m.collection_save_review_current(), exact: true }).click();
+    expect(
+      await page.getByRole('textbox', { name: `${m.library_member_note()}: Snow Country`, exact: true }).inputValue(),
+    ).toBe('Keep my unsaved note');
+    expect(await page.locator('[data-conflict-basis]').count()).toBe(0);
     await editNote('Saved note');
     await page.getByRole('button', { name: m.library_collection_save(), exact: true }).click();
     await page.locator('[data-collection-save]').waitFor({ state: 'detached' });
     await page.getByText('Saved note', { exact: true }).waitFor();
+    await editNote('Retry note');
+    await page.evaluate(() => ((window as unknown as JourneyWindow).failNextNote = true));
+    await page.getByRole('button', { name: m.library_collection_save(), exact: true }).click();
+    await page.locator('[data-save-outcome="confirmed"][data-save-step="metadata"]').waitFor();
+    await page.locator('[data-save-outcome="unknown"]').waitFor();
+    const revisionAtUnknown = await page.evaluate(() => (window as unknown as JourneyWindow).collectionRevision());
+    const writesAtUnknown = (await calls()).filter((call) => call.method === 'PATCH');
+    expect(writesAtUnknown.map((call) => call.path)).toEqual([
+      `/v1/collections/${id}`,
+      `/v1/collections/${id}`,
+      expect.stringContaining('/members/'),
+      `/v1/collections/${id}`,
+      expect.stringContaining('/members/'),
+    ]);
+    await page.getByRole('button', { name: m.collection_save_retry_original(), exact: true }).click();
+    await page.locator('[data-collection-save]').waitFor({ state: 'detached' });
+    expect(await page.evaluate(() => (window as unknown as JourneyWindow).collectionRevision())).toBe(revisionAtUnknown);
+    await page.locator('[data-collection-edit-review]').waitFor();
+    expect(await page.locator('[data-collection-save-outcomes] [data-save-outcome="confirmed"]').count()).toBe(2);
+    await page.evaluate(() => (window as unknown as JourneyWindow).retire());
+    await page.locator('[data-collection-edit-review]').waitFor({ state: 'detached' });
     const writes = (await calls()).filter((call) => call.method === 'PATCH');
     expect(writes.map((call) => call.path)).toEqual([
       `/v1/collections/${id}`,
@@ -217,6 +269,9 @@ test('Curator can add and edit Collection members without an always-open form wa
     expect(writes[0]!.body!.revision).toBe(2);
     expect(writes[1]!.body!.revision).toBe(3);
     expect(writes[2]!.body).toEqual({ note: 'Saved note' });
+    expect(writes[4]!.body).toEqual({ note: 'Retry note' });
+    expect(writes[5]!.body).toEqual({ note: 'Retry note' });
+    expect(writes[4]!.idempotencyKey).toBe(writes[5]!.idempotencyKey);
   } finally {
     await page.close();
     await browser.close();

@@ -6,7 +6,12 @@ import { useCollectionComparisonReturn } from './collection-comparison/return';
 import { FilteredLibraryRemovalControl } from './bulk-filtered-library-removal-view';
 import { CollectionFilteredStatus } from './bulk-filtered-status-view';
 import { collectionTextIssue } from './collection-text-input';
-import { batchRemoveCollectionMembers, transferCollectionMembers } from './collection-commands';
+import {
+  batchRemoveCollectionMembers,
+  transferCollectionMembers,
+  type CollectionBatchResult,
+  type CollectionTransferResult,
+} from './collection-commands';
 import { CollectionBatchRemoveConfirmation } from './collection-batch-remove';
 import { useCollectionDraftNavigation } from './collection-draft-navigation';
 import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-move-chooser';
@@ -118,9 +123,20 @@ import {
   CollectionMetadataEditor,
   fieldClass,
   CollectionPresentationFields,
-  applyCollectionMemberEditPlan,
-  buildCollectionMemberEditPlan,
 } from './collection-editor';
+import {
+  buildCollectionSaveReviewPlan,
+  collectionSaveHasUnknown,
+  collectionSaveOutcomeStatus,
+  initialCollectionSaveOutcomes,
+  rebaseRemainingCollectionDraft,
+  remainingCollectionMemberOperations,
+  runCollectionSaveSteps,
+  type CollectionSavePlanStep,
+  type CollectionSaveReviewPlan,
+  type CollectionSaveStepOutcome,
+  type ReviewedCollectionMemberOperation,
+} from './collection-member-edit-plan';
 import { CollectionMetadataHistory } from './collection-metadata-history-view';
 
 const publicOrigin = createIsomorphicFn()
@@ -352,6 +368,28 @@ type CollectionPageProps = {
 
 type CollectionRestoreOffer = CollectionMemberUndo & { key: string; purgeAfter?: string; uncertain?: boolean };
 
+type CollectionSaveCommandResult =
+  | CollectionWriteResult
+  | CollectionBatchResult
+  | CollectionTransferResult;
+
+type CapturedCollectionSaveAttempt = {
+  operation: CollectionOperation;
+  key: string;
+  data: Readonly<Record<string, unknown>>;
+  credential: string;
+  send: () => Promise<CollectionSaveCommandResult>;
+};
+
+type CollectionSaveRunView = {
+  plan: CollectionSaveReviewPlan;
+  initial: readonly CollectionMember[];
+  desired: readonly CollectionMember[];
+  outcomes: readonly CollectionSaveStepOutcome[];
+  complete: boolean;
+  recoverCurrent: boolean;
+};
+
 export function CollectionPage(props: CollectionPageProps) {
   useSession();
   const { page } = props;
@@ -419,6 +457,7 @@ function CollectionPageLifetime({
   const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
   // The editor also needs the loaded private metadata, independently of native action admission.
   const owner = updateAdmitted && page.visibility !== null && (page.memberState ?? 'ready') === 'ready';
+  const ownerCurrent = owner && isCurrent();
   const boundaryAdmitted =
     owner && admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection_member.move');
   const addAdmitted =
@@ -479,7 +518,47 @@ function CollectionPageLifetime({
   const [conflict, setConflict] = useState(false);
   const [failure, setFailure] = useState('');
   const [writing, setPending] = useState(false);
+  const [saveRunView, setSaveRunView] = useState<CollectionSaveRunView | null>(null);
+  const [conflictBasis, setConflictBasis] = useState<EditableCollectionPage | null>(null);
+  const [conflictBasisState, setConflictBasisState] = useState<'idle' | 'reading' | 'ready' | 'unavailable'>('idle');
+  const [rebaseIssue, setRebaseIssue] = useState<{
+    operation: ReviewedCollectionMemberOperation;
+    reason: 'member-missing' | 'anchor-missing';
+  } | null>(null);
   const [boundary, setBoundary] = useState<BoundaryMove | null>(null);
+  const transferIds = new Set(transfer?.memberIds ?? []);
+  const saveInitialMembers = (editorMembers ?? draftPage.members).filter((member) => !transferIds.has(member.id));
+  const saveDesiredMembers = members.filter((member) => !transferIds.has(member.id));
+  const savePlan = buildCollectionSaveReviewPlan({
+    collectionId: page.id,
+    revision: draftPage.revision,
+    firstPage: draftPage.firstPage,
+    initial: saveInitialMembers,
+    desired: saveDesiredMembers,
+    before: {
+      title: draftPage.title,
+      description: draftPage.description,
+      visibility: draftPage.visibility,
+      presentationKind: draftPage.presentationKindSource === 'owner' ? (draftPage.presentationKind ?? null) : null,
+      coverMediaId: draftPage.coverMediaId ?? null,
+    },
+    after: {
+      title,
+      description,
+      visibility,
+      presentationKind: kind,
+      coverMediaId,
+    },
+    batchRemovalIds,
+    transfer: transfer
+      ? {
+          sourceTitle: transfer.sourceTitle,
+          destinationTitle: transfer.destination.title,
+          memberIds: transfer.memberIds,
+          after: transfer.after,
+        }
+      : null,
+  });
   const captureSave = () => ({
     credential: admission.csrf('collection.update'),
     send: {
@@ -501,6 +580,11 @@ function CollectionPageLifetime({
     kind,
     storedKind,
     coverMediaId,
+    plan: savePlan,
+    outcomes: initialCollectionSaveOutcomes(savePlan),
+    attempts: new Map<string, CapturedCollectionSaveAttempt>(),
+    currentRevision: transfer?.sourceRevision ?? draftPage.revision,
+    transferRevisions: null as { source: number; destination: number } | null,
   });
   const saveIntent = useRef<ReturnType<typeof captureSave> | null>(null);
   const draftFrozen = saveIntent.current !== null;
@@ -874,6 +958,10 @@ function CollectionPageLifetime({
       setMoveChoice(null);
       setBulkUnavailable(false);
       setSaveConfirmed(false);
+      setSaveRunView(null);
+      setConflictBasis(null);
+      setConflictBasisState('idle');
+      setRebaseIssue(null);
       setEditing(true);
     } catch {
       if (isCurrent()) setFailure(m.error_message());
@@ -882,7 +970,7 @@ function CollectionPageLifetime({
     }
   }
 
-  function resetEditor(source: EditableCollectionPage) {
+  function resetEditor(source: EditableCollectionPage, preserveSaveResult = false) {
     editorPage.current = null;
     saveIntent.current = null;
     writeKeys.current.clear();
@@ -903,6 +991,12 @@ function CollectionPageLifetime({
     setConflict(false);
     setFailure('');
     setEditing(false);
+    if (!preserveSaveResult) {
+      setSaveRunView(null);
+      setConflictBasis(null);
+      setConflictBasisState('idle');
+      setRebaseIssue(null);
+    }
   }
 
   function cancelEditing() {
@@ -915,12 +1009,319 @@ function CollectionPageLifetime({
     collectionTextIssue('description', description) ||
     members.some((member) => collectionTextIssue('note', member.note));
 
+  function publishSaveRun(run: NonNullable<typeof saveIntent.current>, complete = false) {
+    setSaveRunView({
+      plan: run.plan,
+      initial: run.editorMembers ?? run.page.members,
+      desired: run.members,
+      outcomes: run.outcomes.map((outcome) => ({ ...outcome, ...(outcome.undo ? { undo: [...outcome.undo] } : {}) })),
+      complete,
+      recoverCurrent: run.transfer === null,
+    });
+  }
+
+  async function readCurrentConflictBasis() {
+    if (!isCurrent() || !owner) return;
+    setConflictBasisState('reading');
+    setConflictBasis(null);
+    setRebaseIssue(null);
+    try {
+      const basis = await (readEditorPage ? readEditorPage() : refreshPage());
+      if (!isCurrent()) return;
+      if (
+        basis.id !== page.id ||
+        basis.visibility === null ||
+        !admitsCollectionOperation(basis.viewerActions, 'collection:update', 'collection.update') ||
+        (basis.memberState ?? 'ready') !== 'ready' ||
+        basis.filterStatus
+      ) {
+        setConflictBasisState('unavailable');
+        return;
+      }
+      setConflictBasis(basis);
+      setConflictBasisState('ready');
+    } catch {
+      if (isCurrent()) setConflictBasisState('unavailable');
+    }
+  }
+
+  function discardDraftForCurrentBasis() {
+    if (!conflictBasis || !saveIntent.current || collectionSaveHasUnknown(saveIntent.current.outcomes) || !isCurrent()) return;
+    resetEditor(conflictBasis);
+  }
+
+  function reviewRemainingAgainstCurrent(discardOperationId?: string) {
+    const run = saveIntent.current;
+    const basis = conflictBasis;
+    if (!run || !basis || run.transfer || collectionSaveHasUnknown(run.outcomes) || !isCurrent()) return;
+    const remaining = remainingCollectionMemberOperations(run.plan, run.outcomes).filter(
+      (entry) => entry.id !== discardOperationId,
+    );
+    const rebased = rebaseRemainingCollectionDraft(basis.members, remaining, basis.firstPage);
+    if (!rebased.ok) {
+      setRebaseIssue({ operation: rebased.operation, reason: rebased.reason });
+      return;
+    }
+    const metadataConfirmed = run.outcomes.some(
+      (outcome) => outcome.stepId === 'metadata' && outcome.status === 'confirmed',
+    );
+    editorPage.current = basis;
+    setEditorMembers(basis.members);
+    setMembers(rebased.members);
+    setTitle(metadataConfirmed ? basis.title : run.title);
+    setDescription(metadataConfirmed ? (basis.description ?? '') : run.description);
+    setVisibility(metadataConfirmed ? (basis.visibility ?? 'private') : run.visibility);
+    setKind(
+      metadataConfirmed
+        ? basis.presentationKindSource === 'owner'
+          ? (basis.presentationKind ?? null)
+          : null
+        : run.kind,
+    );
+    setCoverMediaId(metadataConfirmed ? (basis.coverMediaId ?? null) : run.coverMediaId);
+    saveIntent.current = null;
+    writeKeys.current.clear();
+    setSaveRunView(null);
+    setConflictBasis(null);
+    setConflictBasisState('idle');
+    setRebaseIssue(null);
+    setConflict(false);
+    setSaveConfirmed(false);
+    setFailure('');
+  }
+
+  function discardUnavailableDraftOperation() {
+    if (!rebaseIssue) return;
+    reviewRemainingAgainstCurrent(rebaseIssue.operation.id);
+  }
+
+  function restoreOffer(episode: CollectionMemberUndo) {
+    const existing = nativeUndoKeys.current.get(episode.deletionId);
+    const key = existing ?? crypto.randomUUID();
+    if (!existing) nativeUndoKeys.current.set(episode.deletionId, key);
+    return { ...episode, key };
+  }
+
+  function saveOperation(step: CollectionSavePlanStep): CollectionOperation {
+    if (step.kind === 'metadata') return 'collection.update';
+    if (step.kind === 'remove-batch') return 'collection_member.batch_remove';
+    if (step.kind === 'transfer') return 'collection_member.transfer';
+    switch (step.operation.operation.kind) {
+      case 'remove':
+        return 'collection_member.delete';
+      case 'move':
+        return 'collection_member.move';
+      case 'note':
+        return 'collection_member.update';
+    }
+  }
+
+  function createSaveAttempt(
+    run: NonNullable<typeof saveIntent.current>,
+    step: CollectionSavePlanStep,
+  ): CapturedCollectionSaveAttempt {
+    const operation = saveOperation(step);
+    const requestHeaders = headers(operation, run.credential ?? '');
+    const fingerprintKey = (operands: unknown) => {
+      const fingerprint = JSON.stringify(operands);
+      let key = writeKeys.current.get(fingerprint);
+      if (!key) {
+        key = crypto.randomUUID();
+        writeKeys.current.set(fingerprint, key);
+      }
+      return key;
+    };
+    const credential = requestHeaders['X-CSRF-Token'];
+    if (step.kind === 'metadata') {
+      if (run.currentRevision === undefined) throw new Error('Missing Collection revision');
+      const body = {
+        collectionId: run.page.id,
+        revision: run.currentRevision,
+        title: run.title,
+        description: run.description,
+        visibility: run.visibility,
+        ...(run.kind !== run.storedKind ? { presentationKind: run.kind } : {}),
+        ...(run.coverMediaId !== (run.page.coverMediaId ?? null) ? { coverMediaId: run.coverMediaId } : {}),
+      };
+      const key = fingerprintKey(body);
+      const data = { ...body, idempotencyKey: key };
+      return {
+        operation,
+        key,
+        credential,
+        data,
+        send: () => run.send.updateCollection({ data, headers: requestHeaders }),
+      };
+    }
+    if (step.kind === 'remove-batch') {
+      if (run.currentRevision === undefined) throw new Error('Missing Collection revision');
+      const body = {
+        collectionId: run.page.id,
+        revision: run.currentRevision,
+        memberIds: step.operations.map((entry) => entry.operation.memberId),
+      };
+      const key = fingerprintKey(body);
+      const data = { ...body, idempotencyKey: key };
+      return {
+        operation,
+        key,
+        credential,
+        data,
+        send: () => run.send.batchRemoveCollectionMembers({ data, headers: requestHeaders }),
+      };
+    }
+    if (step.kind === 'transfer') {
+      if (!run.transfer) throw new Error('Missing Collection transfer capture');
+      const body = {
+        collectionId: run.transfer.sourceId,
+        revision: run.transfer.sourceRevision,
+        memberIds: run.transfer.memberIds,
+        destinationCollectionId: run.transfer.destination.id,
+        destinationRevision: run.transfer.destination.revision,
+        after: run.transfer.after,
+      };
+      const key = run.transfer.idempotencyKey;
+      const data = { ...body, idempotencyKey: key };
+      return {
+        operation,
+        key,
+        credential,
+        data,
+        send: () => run.send.transferCollectionMembers({ data, headers: requestHeaders }),
+      };
+    }
+
+    const memberOperation = step.operation.operation;
+    const base = { collectionId: run.page.id };
+    if (memberOperation.kind === 'remove') {
+      if (run.currentRevision === undefined) throw new Error('Missing Collection revision');
+      const body = { ...base, memberId: memberOperation.memberId, revision: run.currentRevision };
+      const key = fingerprintKey([run.page.id, memberOperation, run.currentRevision]);
+      const data = { ...body, idempotencyKey: key };
+      return {
+        operation,
+        key,
+        credential,
+        data,
+        send: () => run.send.removeCollectionMember({ data, headers: requestHeaders }),
+      };
+    }
+    if (memberOperation.kind === 'move') {
+      const body = { ...base, memberId: memberOperation.memberId, after: memberOperation.after };
+      const key = fingerprintKey([run.page.id, memberOperation, run.currentRevision]);
+      const data = { ...body, idempotencyKey: key };
+      return {
+        operation,
+        key,
+        credential,
+        data,
+        send: () => run.send.moveCollectionMember({ data, headers: requestHeaders }),
+      };
+    }
+    const body = { ...base, memberId: memberOperation.memberId, note: memberOperation.note };
+    const key = fingerprintKey([run.page.id, memberOperation, run.currentRevision]);
+    const data = { ...body, idempotencyKey: key };
+    return {
+      operation,
+      key,
+      credential,
+      data,
+      send: () => run.send.updateMemberNote({ data, headers: requestHeaders }),
+    };
+  }
+
+  async function executeSaveStep(
+    run: NonNullable<typeof saveIntent.current>,
+    step: CollectionSavePlanStep,
+  ): Promise<CollectionSaveStepOutcome | null> {
+    let attempt = run.attempts.get(step.id);
+    if (!attempt) {
+      try {
+        attempt = createSaveAttempt(run, step);
+        run.attempts.set(step.id, attempt);
+      } catch {
+        if (!isCurrent()) return null;
+        setConflict(true);
+        setFailure(m.collection_save_not_sent_help());
+        setConflictBasisState('reading');
+        void readCurrentConflictBasis();
+        return { stepId: step.id, status: 'not-sent', reason: 'credential-unavailable' };
+      }
+    }
+
+    let result: CollectionSaveCommandResult;
+    try {
+      result = await attempt.send();
+    } catch {
+      result = { ok: false, reason: 'unavailable' };
+    }
+    if (!isCurrent(attempt.operation)) return null;
+    if (!result.ok) {
+      const status = collectionSaveOutcomeStatus(result.reason);
+      setConflict(status !== 'unknown');
+      setFailure(
+        status === 'unknown'
+          ? m.collection_save_unknown_help()
+          : status === 'conflict'
+            ? m.library_collection_conflict()
+            : writeMessage(result),
+      );
+      if (result.reason === 'closed' || result.reason === 'unavailable') setBulkUnavailable(true);
+      if (step.kind === 'transfer') setTransferState(status === 'unknown' ? 'unknown' : 'refused');
+      if (status !== 'unknown' && !run.transfer) {
+        setConflictBasisState('reading');
+        void readCurrentConflictBasis();
+      }
+      return { stepId: step.id, status, reason: result.reason };
+    }
+
+    const targetId = 'id' in result ? result.id : undefined;
+    const revision = 'revision' in result ? result.revision : undefined;
+    const undoEpisodes = 'undo' in result
+      ? Array.isArray(result.undo)
+        ? result.undo
+        : result.undo
+          ? [result.undo]
+          : []
+      : [];
+    const outcome: CollectionSaveStepOutcome = {
+      stepId: step.id,
+      status: 'confirmed',
+      ...(targetId ? { targetId } : {}),
+      ...(revision !== undefined ? { revision } : {}),
+      ...(undoEpisodes.length ? { undo: undoEpisodes } : {}),
+    };
+    if (
+      step.kind === 'metadata' ||
+      step.kind === 'remove-batch' ||
+      (step.kind === 'member' && step.operation.operation.kind === 'remove')
+    )
+      run.currentRevision = revision;
+    if (step.kind === 'transfer' && 'destinationRevision' in result) {
+      run.currentRevision = result.revision;
+      run.transferRevisions = { source: result.revision, destination: result.destinationRevision };
+      outcome.destinationRevision = result.destinationRevision;
+      setTransferState('confirmed');
+    }
+    if (step.kind === 'member' && step.operation.operation.kind === 'note') {
+      const memberId = step.operation.operation.memberId;
+      setSavedNoteIds((current) => new Set([...current, memberId]));
+    }
+    if (undoEpisodes.length) {
+      const offers = undoEpisodes.map((episode) => restoreOffer(episode));
+      setUndo((current) => {
+        const known = new Set(current.map((item) => item.deletionId));
+        const added = offers.filter((item) => !known.has(item.deletionId));
+        return added.length ? [...current, ...added] : current;
+      });
+    }
+    return outcome;
+  }
+
   async function save(event?: FormEvent<HTMLFormElement>, confirmed = false, confirmedTransfer = false) {
     event?.preventDefault();
     if (!isCurrent('collection.update') || !hydrated || pending || conflict || !editing || !owner) return;
-    if (transfer && !confirmedTransfer) return;
-    // Validate the entire new Save before capture or any independently receipted write.
-    // An uncertain plan already owns its exact operands, sender and credential.
+    if (transfer && !confirmedTransfer && saveIntent.current === null) return;
     if (saveIntent.current === null) {
       setTextSubmitted(true);
       if (draftTextInvalid()) return;
@@ -934,205 +1335,25 @@ function CollectionPageLifetime({
     if (!request) return;
     setFailure('');
     setConflict(false);
-    const {
-      credential,
-      send,
-      page,
-      members,
-      editorMembers,
-      transfer: capturedTransfer,
-      batchRemovalIds,
-      title,
-      description,
-      visibility,
-      kind,
-      storedKind,
-      coverMediaId,
-    } = (saveIntent.current ??= captureSave());
-    let committed = 0;
-    let currentRevision: number | undefined = capturedTransfer?.sourceRevision ?? page.revision;
-    let transferRevisions: { source: number; destination: number } | null = null;
-
-    const keyFor = (operation: unknown) => {
-      const fingerprint = JSON.stringify(operation);
-      let key = writeKeys.current.get(fingerprint);
-      if (!key) {
-        key = crypto.randomUUID();
-        writeKeys.current.set(fingerprint, key);
-      }
-      return key;
-    };
+    const run = (saveIntent.current ??= captureSave());
+    publishSaveRun(run);
     try {
-      const transferIds = new Set(capturedTransfer?.memberIds ?? []);
-      const initial = (editorMembers ?? page.members).filter((member) => !transferIds.has(member.id));
-      const remainingMembers = members.filter((member) => !transferIds.has(member.id));
-      const plan = buildCollectionMemberEditPlan(initial, remainingMembers, page.firstPage);
-      const fail = async (result: Extract<CollectionWriteResult, { ok: false }>) => {
-        if (!isCurrent()) return;
-        if (committed > 0) {
-          setConflict(result.reason !== 'unavailable');
-          setFailure(m.library_collection_save_partial({ count: committed }));
-        } else if (result.reason === 'conflict') setConflict(true);
-        else {
-          setFailure(writeMessage(result));
-          if (result.reason === 'unavailable' || result.reason === 'closed') setBulkUnavailable(true);
-        }
-      };
-      const removals = plan.filter((operation) => operation.kind === 'remove');
-      const batchRemoval = removals.length > 1 || removals.some((operation) => batchRemovalIds.has(operation.memberId));
-      if (batchRemoval) {
-        if (!isCurrent()) return;
-        if (currentRevision === undefined) throw new Error('Missing source revision');
-        const data = {
-          collectionId: page.id,
-          revision: currentRevision,
-          memberIds: removals.map((operation) => operation.memberId),
-        };
-        const result = await send.batchRemoveCollectionMembers({
-          data: { ...data, idempotencyKey: keyFor(data) },
-          headers: headers('collection_member.batch_remove', credential),
-        });
-        if (!isCurrent('collection_member.batch_remove')) return;
-        if (!result.ok) {
-          await fail(result);
-          return;
-        }
-        currentRevision = result.revision;
-        committed += 1;
-        setUndo((current) => [
-          ...current,
-          ...result.undo
-            .filter((episode) => !current.some((item) => item.deletionId === episode.deletionId))
-            .map((episode) => ({ ...episode, key: crypto.randomUUID() })),
-        ]);
-      }
-      // Batch removal owns the loaded CAS first: a rejected selection must not save even a metadata no-op.
-      // Other draft edits remain independently receipted commands after the atomic removal.
-      if (
-        plan.some((operation) => operation.kind !== 'remove') ||
-        (!batchRemoval && removals.length > 0) ||
-        title !== page.title ||
-        description !== (page.description ?? '') ||
-        visibility !== page.visibility ||
-        kind !== storedKind ||
-        coverMediaId !== (page.coverMediaId ?? null)
-      ) {
-        if (!isCurrent()) return;
-        const result = await send.updateCollection({
-          data: {
-            collectionId: page.id,
-            revision: currentRevision!,
-            title,
-            description,
-            visibility,
-            ...(kind !== storedKind ? { presentationKind: kind } : {}),
-            ...(coverMediaId !== (page.coverMediaId ?? null) ? { coverMediaId } : {}),
-            idempotencyKey: keyFor([page.id, currentRevision, title, description, visibility, kind, coverMediaId]),
-          },
-          headers: headers('collection.update', credential),
-        });
-        if (!isCurrent()) return;
-        if (!result.ok) {
-          if (result.reason !== 'unavailable' && result.reason !== 'conflict') saveIntent.current = null;
-          if (result.reason === 'conflict') setConflict(true);
-          else {
-            setFailure(writeMessage(result));
-            if (result.reason === 'unavailable' || result.reason === 'closed') setBulkUnavailable(true);
-          }
-          return;
-        }
-        currentRevision = result.revision;
-        committed += 1;
-      }
-
-      if (capturedTransfer) {
-        if (!isCurrent()) return;
-        const data = {
-          collectionId: capturedTransfer.sourceId,
-          revision: capturedTransfer.sourceRevision,
-          memberIds: capturedTransfer.memberIds,
-          destinationCollectionId: capturedTransfer.destination.id,
-          destinationRevision: capturedTransfer.destination.revision,
-          after: capturedTransfer.after,
-        };
-        setTransferState('pending');
-        const result = await send.transferCollectionMembers({
-          data: { ...data, idempotencyKey: capturedTransfer.idempotencyKey },
-          headers: headers('collection_member.transfer', credential),
-        });
-        if (!isCurrent('collection_member.transfer')) return;
-        if (!result.ok) {
-          if (result.reason === 'unavailable') {
-            setTransferState('unknown');
-            setFailure(m.library_collection_move_unknown());
-          } else {
-            saveIntent.current = null;
-            setTransferState('refused');
-            setConflict(false);
-            setFailure(result.reason === 'conflict' ? m.library_collection_conflict() : writeMessage(result));
-          }
-          return;
-        }
-        currentRevision = result.revision;
-        transferRevisions = { source: result.revision, destination: result.destinationRevision };
-        committed += 1;
-        saveIntent.current = null;
-      }
-      const applied = await applyCollectionMemberEditPlan(
-        batchRemoval ? plan.filter((operation) => operation.kind !== 'remove') : plan,
-        async (operation) => {
-          if (!isCurrent()) return { ok: false, reason: 'unavailable' };
-          const common = { collectionId: page.id, idempotencyKey: keyFor([page.id, operation, currentRevision]) };
-          if (operation.kind === 'remove') {
-            if (currentRevision === undefined) return { ok: false, reason: 'unavailable' };
-            const result = await send.removeCollectionMember({
-              data: { ...common, memberId: operation.memberId, revision: currentRevision },
-              headers: headers('collection_member.delete', credential),
-            });
-            if (!isCurrent('collection_member.delete')) return { ok: false, reason: 'unavailable' };
-            if (result.ok) {
-              currentRevision = result.revision;
-              const episode = result.undo;
-              if (episode)
-                setUndo((current) =>
-                  current.some((item) => item.deletionId === episode.deletionId)
-                    ? current
-                    : [...current, { ...episode, key: crypto.randomUUID() }],
-                );
-            }
-            return result;
-          }
-          const result =
-            operation.kind === 'move'
-              ? await send.moveCollectionMember({
-                  data: { ...common, memberId: operation.memberId, after: operation.after },
-                  headers: headers('collection_member.move', credential),
-                })
-              : await send.updateMemberNote({
-                  data: { ...common, memberId: operation.memberId, note: operation.note },
-                  headers: headers('collection_member.update', credential),
-                });
-          if (!isCurrent(operation.kind === 'move' ? 'collection_member.move' : 'collection_member.update'))
-            return { ok: false, reason: 'unavailable' };
-          if (operation.kind === 'note' && result.ok)
-            setSavedNoteIds((current) => new Set([...current, operation.memberId]));
-          return result;
-        },
+      const progression = await runCollectionSaveSteps(
+        run.plan.steps,
+        run.outcomes,
+        (step) => executeSaveStep(run, step),
+        () => publishSaveRun(run),
       );
-      if (!isCurrent()) return;
-      committed += applied.completed;
-      if (applied.failed) {
-        if (committed > 0) {
-          const retryable = applied.failed.reason === 'unavailable';
-          setConflict(!retryable);
-          setFailure(m.library_collection_save_partial({ count: committed }));
-        } else {
-          setConflict(applied.failed.reason !== 'unavailable');
-          setFailure(m.error_message());
-        }
-        return;
-      }
-      if (capturedTransfer && transferRevisions) {
+      if (!progression.complete || !isCurrent()) return;
+      publishSaveRun(run, true);
+      saveIntent.current = null;
+      setSaveConfirmed(true);
+      setConflict(false);
+      setFailure('');
+      setConflictBasis(null);
+      setConflictBasisState('idle');
+      if (run.transfer && run.transferRevisions) {
+        const capturedTransfer = run.transfer;
         const receipt: CollectionTransferReceipt = {
           sourceId: capturedTransfer.sourceId,
           destinationId: capturedTransfer.destination.id,
@@ -1140,42 +1361,31 @@ function CollectionPageLifetime({
           destinationTitle: capturedTransfer.destination.title,
           sourceHref: capturedTransfer.sourceHref,
           destinationHref: capturedTransfer.destinationHref,
-          sourceRevision: transferRevisions.source,
-          destinationRevision: transferRevisions.destination,
+          sourceRevision: run.transferRevisions.source,
+          destinationRevision: run.transferRevisions.destination,
           state: 'reading',
         };
         setTransferReceipt(receipt);
-        setTransferState('confirmed');
-        setSaveConfirmed(true);
         const [sourceRead, destinationRead] = await Promise.allSettled([
           reloadCollection(true),
           readCollectionMovePlacements({
-            data: { collectionId: capturedTransfer.destination.id, revision: transferRevisions.destination },
+            data: { collectionId: capturedTransfer.destination.id, revision: run.transferRevisions.destination },
           }),
         ]);
         if (!isCurrent()) return;
         const sourcePage = sourceRead.status === 'fulfilled' ? sourceRead.value : undefined;
         const sourceReady = !!sourcePage && sourcePage.id === capturedTransfer.sourceId;
         const destinationReady = destinationRead.status === 'fulfilled';
-        if (sourceReady) resetEditor(sourcePage);
+        resetEditor(sourceReady ? sourcePage : run.page, true);
         setTransferReceipt({ ...receipt, state: sourceReady && destinationReady ? 'ready' : 'unavailable' });
         return;
       }
-      setSaveConfirmed(true);
       const refreshed = await reloadCollection(true);
-      if (refreshed) resetEditor(refreshed);
+      if (!isCurrent()) return;
+      resetEditor(refreshed ?? run.page, true);
     } catch {
       if (!isCurrent()) return;
-      if (capturedTransfer && transferRevisions) {
-        // The native receipt is definitive. Reconciliation cannot repeat a confirmed transfer.
-        setTransferReceipt((receipt) => (receipt ? { ...receipt, state: 'unavailable' } : receipt));
-      } else if (capturedTransfer) {
-        setTransferState('unknown');
-        setFailure(m.library_collection_move_unknown());
-      } else if (committed > 0) {
-        setConflict(true);
-        setFailure(m.library_collection_save_partial({ count: committed }));
-      } else setFailure(m.error_message());
+      setFailure(m.error_message());
     } finally {
       finishRequest(request);
     }
@@ -1443,18 +1653,8 @@ function CollectionPageLifetime({
   const visibleUndo = undo.filter((episode) =>
     bulkOccurrenceRemoveRestoreAvailable(episode.purgeAfter, currentRestore, Date.now(), episode.uncertain),
   );
-  const memberDraftChanged =
-    editing &&
-    buildCollectionMemberEditPlan(
-      (editorMembers ?? draftPage.members).filter((member) => !transfer?.memberIds.includes(member.id)),
-      transfer ? members.filter((member) => !transfer.memberIds.includes(member.id)) : members,
-      draftPage.firstPage,
-    ).length > 0;
-  const removalCount = buildCollectionMemberEditPlan(
-    (editorMembers ?? draftPage.members).filter((member) => !transfer?.memberIds.includes(member.id)),
-    transfer ? members.filter((member) => !transfer.memberIds.includes(member.id)) : members,
-    draftPage.firstPage,
-  ).filter((operation) => operation.kind === 'remove').length;
+  const memberDraftChanged = editing && savePlan.operations.length > 0;
+  const removalCount = savePlan.operations.filter((entry) => entry.operation.kind === 'remove').length;
   const transferHasIndependentDraft =
     memberDraftChanged ||
     title !== draftPage.title ||
@@ -1471,6 +1671,11 @@ function CollectionPageLifetime({
       visibility !== draftPage.visibility ||
       kind !== storedKind ||
       coverMediaId !== (draftPage.coverMediaId ?? null));
+  const activeSave = saveIntent.current;
+  const activePlan = activeSave?.plan ?? savePlan;
+  const activeInitial = activeSave?.editorMembers ?? activeSave?.page.members ?? saveInitialMembers;
+  const activeDesired = activeSave?.members ?? saveDesiredMembers;
+  const activeOutcomes = activeSave?.outcomes ?? [];
   const draftNavigation = useCollectionDraftNavigation({
     dirty: draftChanged && !saveConfirmed,
     locked:
@@ -1551,7 +1756,7 @@ function CollectionPageLifetime({
               onShare={() => copyLink(collectionHref(page.id))}
               primaryShare={!addAdmitted}
               entries={[
-                ...(owner
+                ...(ownerCurrent
                   ? [
                       {
                         type: 'item' as const,
@@ -1594,7 +1799,7 @@ function CollectionPageLifetime({
         {page.viewerActions?.state === 'unavailable' ? (
           <p role="status">{m.library_collection_actions_unavailable()}</p>
         ) : null}
-        {owner && isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview') ? (
+        {ownerCurrent && isCurrent('collection_member.batch_remove') && admission.current('library_operation.preview') ? (
           <Button
             type="button"
             variant="outline"
@@ -1624,7 +1829,7 @@ function CollectionPageLifetime({
           />
         ) : null}
         <AlertDialog
-          open={deletion !== null}
+          open={deletion !== null && isCurrent()}
           onOpenChange={(open, details) => {
             if (!isCurrent()) return;
             if (!open && deleting) {
@@ -1655,13 +1860,13 @@ function CollectionPageLifetime({
         </AlertDialog>
 
         <CollectionBatchRemoveConfirmation
-          open={removalConfirmation && owner}
+          open={removalConfirmation && ownerCurrent}
           count={removalCount}
           onOpenChange={setRemovalConfirmation}
           onConfirm={() => void save(undefined, true)}
         />
 
-        {owner && visibleUndo.length ? (
+        {ownerCurrent && visibleUndo.length ? (
           <div
             role="status"
             className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/40 p-3"
@@ -1682,7 +1887,7 @@ function CollectionPageLifetime({
             ))}
           </div>
         ) : null}
-        {failure ? <p role="alert">{failure}</p> : null}
+        {failure && isCurrent() ? <p role="alert">{failure}</p> : null}
         {transferReceipt && isCurrent() ? (
           <section
             className="space-y-3 rounded-xl border p-3"
@@ -1781,7 +1986,7 @@ function CollectionPageLifetime({
             ) : null}
           </div>
         ) : null}
-        {conflict ? (
+        {conflict && ownerCurrent ? (
           <p role="alert">
             {m.library_collection_conflict()}{' '}
             <button
@@ -1795,7 +2000,7 @@ function CollectionPageLifetime({
           </p>
         ) : null}
 
-        {adding ? (
+        {adding && isCurrent('collection_member.create') ? (
           <CollectionAddMembers
             key={page.id}
             collectionId={page.id}
@@ -1808,7 +2013,7 @@ function CollectionPageLifetime({
             }}
           />
         ) : null}
-        {editing && owner ? (
+        {editing && ownerCurrent ? (
           <CollectionMetadataEditor
             textSubmitted={textSubmitted}
             title={title}
@@ -1952,14 +2157,14 @@ function CollectionPageLifetime({
         ) : null}
         <section aria-label={m.library_collection_members()}>
           <h2 className="sr-only">{m.library_collection_members()}</h2>
-          {editing && boundaryAdmitted ? (
+          {editing && ownerCurrent && boundaryAdmitted ? (
             <div className="mb-3 space-y-1 text-sm text-muted-foreground" data-collection-boundary-guidance>
               <p>{m.library_collection_boundary_help()}</p>
               {draftChanged ? <p role="status">{m.library_collection_move_save_first()}</p> : null}
             </div>
           ) : null}
           {editing &&
-          owner &&
+          ownerCurrent &&
           (selectedIds.size > 0 || batchRemovalIds.size > 0 || transfer !== null || !!bulkOccurrenceCapture) ? (
             <div className="mb-3 flex flex-wrap items-end gap-2 rounded-xl bg-muted/40 p-3" data-collection-selection>
               <p className="me-auto self-center text-sm text-muted-foreground">
@@ -2262,7 +2467,7 @@ function CollectionPageLifetime({
               typeRatios={page.typeRatios}
               listPresentations={page.listPresentations}
               comparisonDefinitions={page.comparisonDefinitions}
-              editing={editing && owner}
+              editing={editing && ownerCurrent}
               firstPage={page.firstPage}
               busy={pending || draftFrozen || transfer !== null}
               selectedIds={selectedIds}
@@ -2324,19 +2529,40 @@ function CollectionPageLifetime({
             />
           )}
         </section>
-        {editing && owner && draftChanged && !transfer ? (
+        {editing && ownerCurrent && (draftChanged || transfer || activeSave) ? (
           <CollectionEditReview
-            initial={editorMembers ?? draftPage.members}
-            desired={members}
-            firstPage={draftPage.firstPage}
-            title={title}
-            description={description}
-            kind={kind}
+            plan={activePlan}
+            initial={activeInitial}
+            desired={activeDesired}
             types={page.presentationTypes}
-            visibility={visibility}
+            outcomes={activeOutcomes}
+            basisState={conflictBasisState}
+            currentBasis={conflictBasis}
+            rebaseIssue={rebaseIssue}
+            recoverCurrent={!activeSave?.transfer}
+            onRetry={activeSave ? () => void save(undefined, true, Boolean(activeSave.transfer)) : undefined}
+            onReadCurrent={activeSave && !activeSave.transfer ? () => void readCurrentConflictBasis() : undefined}
+            onDiscard={activeSave && !activeSave.transfer ? discardDraftForCurrentBasis : undefined}
+            onDiscardUnavailable={
+              activeSave && !activeSave.transfer && rebaseIssue ? discardUnavailableDraftOperation : undefined
+            }
+            onReviewCurrent={
+              activeSave && !activeSave.transfer ? () => reviewRemainingAgainstCurrent() : undefined
+            }
           />
         ) : null}
-        {editing && owner ? (
+        {!editing && ownerCurrent && saveRunView?.complete ? (
+          <CollectionEditReview
+            plan={saveRunView.plan}
+            initial={saveRunView.initial}
+            desired={saveRunView.desired}
+            types={page.presentationTypes}
+            outcomes={saveRunView.outcomes}
+            complete
+            recoverCurrent={false}
+          />
+        ) : null}
+        {editing && ownerCurrent ? (
           <div
             className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm"
             data-collection-save

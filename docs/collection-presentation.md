@@ -166,6 +166,8 @@ Decision: Collection title/description/occurrence-note inputs explain native lim
 
 Decision: ordinary curated drafts guard page departure against the loaded edit baseline; unresolved commands offer only Stay, confirmed saves clear loss guidance even if refresh fails, and explicit editor Cancel/reload keep their existing behavior.
 
+Decision: a definitive CAS conflict keeps the remaining draft and reads a current owner basis separately; an explicit re-review applies only unconfirmed intent to that accepted basis, shows a fresh plan before Save, and never reissues confirmed effects. Unknown commands settle only through replay of their original captured request.
+
 ### Selected-publication recovery
 
 After an uncertain selected-publication response, retain the exact request, source revision and review selection

@@ -21,6 +21,8 @@ import { SubjectCover } from './subject-row';
 import { collectionMemberRatio } from './collection-presentation';
 import type { CollectionListPresentations, CollectionTypeOption } from './collection-presentation';
 import type { CollectionMember, LibrarySubject } from './reads';
+export { applyCollectionMemberEditPlan, buildCollectionMemberEditPlan } from './collection-member-edit-plan';
+export type { CollectionMemberEditOperation } from './collection-member-edit-plan';
 
 export const fieldClass =
   'mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary';
@@ -190,68 +192,6 @@ export function CollectionSubjectList({
       })}
     </ul>
   );
-}
-
-export type CollectionMemberEditOperation =
-  | { kind: 'move'; memberId: string; after: string | null }
-  | { kind: 'note'; memberId: string; note: string | null }
-  | { kind: 'remove'; memberId: string };
-
-/** Bounded per-member writes derived from the loaded page only; the native API still owns each CAS and receipt. */
-export function buildCollectionMemberEditPlan(
-  initial: readonly CollectionMember[],
-  desired: readonly CollectionMember[],
-  firstPage: boolean,
-): CollectionMemberEditOperation[] {
-  if (initial.length > 100 || desired.length > 100) throw new RangeError('Collection edit selection exceeds one page');
-  const initialIds = new Set(initial.map((member) => member.id));
-  const desiredIds = new Set(desired.map((member) => member.id));
-  if (
-    initialIds.size !== initial.length ||
-    desiredIds.size !== desired.length ||
-    desired.some((member) => !initialIds.has(member.id))
-  )
-    throw new RangeError('Collection edits must name distinct loaded occurrences');
-  if (!firstPage && desired.length && desired[0]?.id !== initial.find((member) => desiredIds.has(member.id))?.id)
-    throw new RangeError('A later page cannot move a member before its loaded boundary');
-  const operations: CollectionMemberEditOperation[] = [];
-  for (const member of initial)
-    if (!desiredIds.has(member.id)) operations.push({ kind: 'remove', memberId: member.id });
-  const initialById = new Map(initial.map((member) => [member.id, member]));
-  for (const member of desired) {
-    const original = initialById.get(member.id);
-    if (original && original.note !== member.note)
-      operations.push({ kind: 'note', memberId: member.id, note: member.note });
-  }
-  const working = initial.filter((member) => desiredIds.has(member.id));
-  const target = desired.filter((member) => initialById.has(member.id));
-  for (let index = 0; index < target.length; index++) {
-    if (working[index]?.id === target[index]!.id) continue;
-    if (index === 0 && !firstPage) continue;
-    const member = target[index]!;
-    const after = index === 0 ? null : target[index - 1]!.id;
-    operations.push({ kind: 'move', memberId: member.id, after });
-    const from = working.findIndex((item) => item.id === member.id);
-    if (from < 0) continue;
-    working.splice(from, 1);
-    working.splice(index, 0, member);
-  }
-  return operations;
-}
-
-/** Applies independently receipted native writes in order and stops at the first refusal. */
-export async function applyCollectionMemberEditPlan(
-  operations: readonly CollectionMemberEditOperation[],
-  write: (operation: CollectionMemberEditOperation) => Promise<{ ok: true } | { ok: false; reason: string }>,
-): Promise<{ completed: number; failed?: { operation: CollectionMemberEditOperation; reason: string } }> {
-  if (operations.length > 299) throw new RangeError('Collection edit plan exceeds its per-page bound');
-  let completed = 0;
-  for (const operation of operations) {
-    const result = await write(operation).catch(() => ({ ok: false as const, reason: 'unavailable' }));
-    if (!result.ok) return { completed, failed: { operation, reason: result.reason } };
-    completed += 1;
-  }
-  return { completed };
 }
 
 export function CollectionMemberList({
