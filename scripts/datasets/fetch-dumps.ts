@@ -12,8 +12,9 @@ export const BANGUMI_ARCHIVE_URL =
   'https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip';
 export const BANGUMI_ARCHIVE_SHA256 = '9fe8de272398ff4bd12994b73e25aac37cca631372383f6aadc503528623aa93';
 export const VNDB_ARCHIVE_URL = 'https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst';
-export const VNDB_README_SHA256 = '49dc1574d7a656fa43fe0809f1981e09c401a0fa0c3c365d9fc0509c3c71e454';
-export const VNDB_SCHEMA_SHA256 = 'd608ec4022029bdb65a5c780bbf8ca46e3348f16eaa7b88290efde35e2dd4758';
+export const VNDB_DUMP_INDEX_URL = 'https://dl.vndb.org/dump/';
+export const VNDB_DUMP_MANIFEST = 'manifest.json';
+const VNDB_DATED_DUMP = /^vndb-db-\d{4}-\d{2}-\d{2}\.tar\.zst$/;
 
 const BANGUMI_TABLES = [
   'subject.jsonlines',
@@ -26,7 +27,7 @@ const BANGUMI_TABLES = [
   'person-relations.jsonlines',
   'episode.jsonlines',
 ];
-const VNDB_TABLES = [
+export const VNDB_DUMP_TABLES = [
   'anime',
   'chars',
   'chars_vns',
@@ -59,6 +60,12 @@ export type CrossMediaDumpPaths = Readonly<{
   vndbArchive: string;
 }>;
 
+export type VndbDumpManifest = Readonly<{
+  file: string;
+  url: string;
+  sha256: string;
+}>;
+
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
 }
@@ -67,6 +74,45 @@ function errorCode(error: unknown): string | undefined {
   return typeof error === 'object' && error !== null && 'code' in error
     ? String(Reflect.get(error, 'code'))
     : undefined;
+}
+
+function dumpFileName(url: string): string {
+  const name = new URL(url).pathname.split('/').pop();
+  ensure(name, 'Dump URL is missing a file name');
+  return name;
+}
+
+function gone(status: number): boolean {
+  return status === 404 || status === 410;
+}
+
+/** Pick the current dated VNDB database dump from the published dump index HTML. */
+export function parseVndbDumpIndex(
+  html: string,
+  indexUrl: string = VNDB_DUMP_INDEX_URL,
+): { file: string; url: string } {
+  ensure(html.trim().length > 0, 'VNDB dump index is empty');
+  const base = new URL(indexUrl);
+  ensure(base.protocol === 'https:', 'VNDB dump index must be HTTPS');
+  const directory = base.href.endsWith('/') ? base.href : `${base.href}/`;
+  const files = new Set<string>();
+  for (const match of html.matchAll(/href=["']([^"']+)["']/gi)) {
+    let resolved: URL;
+    try {
+      resolved = new URL(match[1], directory);
+    } catch {
+      continue;
+    }
+    if (resolved.protocol !== 'https:' || resolved.host !== base.host) continue;
+    const name = resolved.pathname.split('/').pop();
+    if (name && VNDB_DATED_DUMP.test(name)) files.add(name);
+  }
+  for (const match of html.matchAll(/vndb-db-\d{4}-\d{2}-\d{2}\.tar\.zst/g)) files.add(match[0]);
+  const newest = [...files].sort().at(-1);
+  ensure(newest, 'VNDB dump index does not list a current database dump');
+  const url = new URL(newest, directory);
+  ensure(url.protocol === 'https:' && url.host === base.host, 'VNDB dump resolved away from the dump host');
+  return { file: newest, url: url.href };
 }
 
 async function regularFile(path: string): Promise<boolean> {
@@ -236,17 +282,12 @@ async function bangumiDirectory(root: string): Promise<string | undefined> {
   });
 }
 
-async function hashMatches(path: string, expected: string): Promise<boolean> {
-  if (!(await regularFile(path))) return false;
-  return (await sha256(path)) === expected;
-}
-
 async function vndbDirectory(root: string): Promise<string | undefined> {
   return locateDirectory(root, async (candidate) => {
-    if (!(await hashMatches(join(candidate, 'README.txt'), VNDB_README_SHA256))) return false;
-    if (!(await hashMatches(join(candidate, 'schema_vndbid.sql'), VNDB_SCHEMA_SHA256))) return false;
+    if (!(await regularFile(join(candidate, 'README.txt')))) return false;
+    if (!(await regularFile(join(candidate, 'schema_vndbid.sql')))) return false;
     const db = join(candidate, 'db');
-    for (const table of VNDB_TABLES) {
+    for (const table of VNDB_DUMP_TABLES) {
       const file = join(db, table);
       const header = join(db, `${table}.header`);
       if (!(await regularFile(file)) || !(await regularFile(header))) return false;
@@ -311,19 +352,148 @@ export function crossMediaDumpCacheRoot(env: NodeJS.ProcessEnv = process.env): s
   return resolve(env[CROSS_MEDIA_DUMP_CACHE_ENV] || DEFAULT_CROSS_MEDIA_DUMP_CACHE);
 }
 
-/** Fetch and validate both pinned source dumps, reusing verified archive and extraction caches. */
+export function vndbDumpManifestPath(cacheRoot: string): string {
+  return join(cacheRoot, 'vndb', VNDB_DUMP_MANIFEST);
+}
+
+async function readVndbManifest(path: string): Promise<VndbDumpManifest | undefined> {
+  let text: string;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') return undefined;
+    throw error;
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const file = Reflect.get(raw, 'file');
+  const url = Reflect.get(raw, 'url');
+  const digest = Reflect.get(raw, 'sha256');
+  if (typeof file !== 'string' || typeof url !== 'string' || typeof digest !== 'string') return undefined;
+  if (!VNDB_DATED_DUMP.test(file) || !/^[0-9a-f]{64}$/.test(digest)) return undefined;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return undefined;
+  } catch {
+    return undefined;
+  }
+  return { file, url, sha256: digest };
+}
+
+async function writeVndbManifest(path: string, manifest: VndbDumpManifest): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const partial = `${path}.${process.pid}.${randomUUID()}.part`;
+  try {
+    await writeFile(partial, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });
+    await rename(partial, path);
+  } catch (error) {
+    await rm(partial, { force: true });
+    throw error;
+  }
+}
+
+async function writeDumpBody(url: string, path: string, response: Response): Promise<string> {
+  ensure(response.ok && response.body, `Dump download failed with HTTP ${response.status}: ${url}`);
+  const finalUrl = new URL(response.url || url);
+  ensure(finalUrl.protocol === 'https:', 'Dump download redirected away from HTTPS');
+  await mkdir(dirname(path), { recursive: true });
+  const partial = `${path}.${process.pid}.${randomUUID()}.part`;
+  try {
+    await pipeline(
+      Readable.fromWeb(response.body as ReadableStream<Uint8Array>),
+      createWriteStream(partial, { flags: 'wx' }),
+    );
+    const downloadedHash = await sha256(partial);
+    await rename(partial, path);
+    return downloadedHash;
+  } catch (error) {
+    await rm(partial, { force: true });
+    throw error;
+  }
+}
+
+async function cachedArchiveDigest(path: string): Promise<string | undefined> {
+  if (!(await regularFile(path))) return undefined;
+  return sha256(path);
+}
+
+async function fetchVndbArchive(
+  cacheRoot: string,
+  options: FetchOptions,
+): Promise<{ archive: string; digest: string; file: string; url: string }> {
+  const downloads = join(cacheRoot, 'downloads');
+  const cached = await readVndbManifest(vndbDumpManifestPath(cacheRoot));
+  if (cached) {
+    const archive = join(downloads, cached.file);
+    if ((await cachedArchiveDigest(archive)) === cached.sha256)
+      return { archive, digest: cached.sha256, file: cached.file, url: cached.url };
+  }
+
+  const pinnedFile = dumpFileName(VNDB_ARCHIVE_URL);
+  const pinnedPath = join(downloads, pinnedFile);
+  const pinnedDigest = await cachedArchiveDigest(pinnedPath);
+  if (pinnedDigest) return { archive: pinnedPath, digest: pinnedDigest, file: pinnedFile, url: VNDB_ARCHIVE_URL };
+
+  const fetcher = options.fetchImpl ?? globalThis.fetch;
+  const pinnedResponse = await fetcher(VNDB_ARCHIVE_URL, { redirect: 'follow' });
+  if (pinnedResponse.ok) {
+    const digest = await writeDumpBody(VNDB_ARCHIVE_URL, pinnedPath, pinnedResponse);
+    return { archive: pinnedPath, digest, file: pinnedFile, url: VNDB_ARCHIVE_URL };
+  }
+  const pinnedStatus = pinnedResponse.status;
+  try {
+    await pinnedResponse.body?.cancel();
+  } catch {
+    /* 404/410 body is discarded before the index fetch */
+  }
+  ensure(gone(pinnedStatus), `Dump download failed with HTTP ${pinnedStatus}: ${VNDB_ARCHIVE_URL}`);
+
+  const indexResponse = await fetcher(VNDB_DUMP_INDEX_URL, { redirect: 'follow' });
+  ensure(Boolean(indexResponse.ok), `VNDB dump index failed with HTTP ${indexResponse.status}: ${VNDB_DUMP_INDEX_URL}`);
+  const indexUrl = new URL(indexResponse.url || VNDB_DUMP_INDEX_URL);
+  ensure(indexUrl.protocol === 'https:', 'VNDB dump index redirected away from HTTPS');
+  const resolved = parseVndbDumpIndex(await indexResponse.text(), VNDB_DUMP_INDEX_URL);
+  const archive = join(downloads, resolved.file);
+  const existing = await cachedArchiveDigest(archive);
+  const digest = existing ?? (await cacheUnpinnedAsset(resolved.url, archive, options));
+  return { archive, digest, file: resolved.file, url: resolved.url };
+}
+
+/** Fetch one VNDB dump, verifying it and recording the resolved file and checksum. */
+export async function fetchVndbDump(
+  options: FetchOptions & { cacheRoot?: string } = {},
+): Promise<{ cacheRoot: string; vndb: string; vndbArchive: string; manifest: VndbDumpManifest }> {
+  const cacheRoot = resolve(options.cacheRoot ?? crossMediaDumpCacheRoot());
+  await mkdir(cacheRoot, { recursive: true });
+  const fetched = await fetchVndbArchive(cacheRoot, options);
+  const vndb = await extractCached(
+    fetched.archive,
+    fetched.digest,
+    join(cacheRoot, 'vndb', fetched.file.replace(/\.tar\.zst$/, '')),
+    vndbDirectory,
+    validateVndbArchive,
+    (path, destination) => runCommand('tar', ['--zstd', '-xf', path, '-C', destination]),
+  );
+  const manifest: VndbDumpManifest = { file: fetched.file, url: fetched.url, sha256: fetched.digest };
+  await writeVndbManifest(vndbDumpManifestPath(cacheRoot), manifest);
+  return { cacheRoot, vndb, vndbArchive: fetched.archive, manifest };
+}
+
+/** Fetch and validate both source dumps, reusing verified archive and extraction caches. */
 export async function fetchCrossMediaDumps(
   options: FetchOptions & { cacheRoot?: string } = {},
 ): Promise<CrossMediaDumpPaths> {
   const cacheRoot = resolve(options.cacheRoot ?? crossMediaDumpCacheRoot());
   const bangumiArchive = join(cacheRoot, 'downloads', 'dump-2026-10-20.210332Z.zip');
-  const vndbArchive = join(cacheRoot, 'downloads', 'vndb-db-2026-10-25.tar.zst');
   const bangumiTarget = join(cacheRoot, 'bangumi', 'dump-2026-10-20.210332Z');
-  const vndbTarget = join(cacheRoot, 'vndb', 'vndb-db-2026-10-25');
   await mkdir(cacheRoot, { recursive: true });
 
   const bangumiDigest = await cacheDumpAsset(BANGUMI_ARCHIVE_URL, bangumiArchive, BANGUMI_ARCHIVE_SHA256, options);
-  const vndbDigest = await cacheUnpinnedAsset(VNDB_ARCHIVE_URL, vndbArchive, options);
   const bangumi = await extractCached(
     bangumiArchive,
     bangumiDigest,
@@ -332,15 +502,14 @@ export async function fetchCrossMediaDumps(
     (path) => runCommand('unzip', ['-tqq', path]),
     (path, destination) => runCommand('unzip', ['-qq', path, '-d', destination]),
   );
-  const vndb = await extractCached(
-    vndbArchive,
-    vndbDigest,
-    vndbTarget,
-    vndbDirectory,
-    validateVndbArchive,
-    (path, destination) => runCommand('tar', ['--zstd', '-xf', path, '-C', destination]),
-  );
-  return { cacheRoot, bangumi, vndb, bangumiArchive, vndbArchive };
+  const vndbDump = await fetchVndbDump({ ...options, cacheRoot });
+  return {
+    cacheRoot,
+    bangumi,
+    vndb: vndbDump.vndb,
+    bangumiArchive,
+    vndbArchive: vndbDump.vndbArchive,
+  };
 }
 
 if (import.meta.main) {

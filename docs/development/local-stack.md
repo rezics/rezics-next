@@ -78,11 +78,21 @@ container and volume names can be isolated with `KERNEL_DATABASE_CONTAINER`, `KE
 
 ## Cross-media dump cache
 
-`seed:dev` fetches the pinned Bangumi Archive release and VNDB dump, checks archive or schema fingerprints,
-extracts source tables and seeds Kernel over loopback HTTP. Later runs reuse the dump cache; state and the import
-report stay under `.temp/cross-media-seed/`. The cache defaults to `/home/edge/projects/rezics/rezics-datasets/dumps/`;
-set `REZICS_DATASETS_DUMP_CACHE` to choose another location. Bangumi is pinned by SHA-256. VNDB is checked by tar
-integrity, pinned `README.txt` and `schema_vndbid.sql` hashes, and required tables and `.header` files.
+`seed:dev` fetches the pinned Bangumi Archive release and a VNDB dump, verifies them, extracts source tables and seeds
+Kernel over loopback HTTP. Later runs reuse the dump cache; state and the import report stay under
+`.temp/cross-media-seed/`. The cache defaults to `/home/edge/projects/rezics/rezics-datasets/dumps/`;
+set `REZICS_DATASETS_DUMP_CACHE` to choose another location. Bangumi is pinned by URL and SHA-256.
+
+VNDB rotates dated files under https://dl.vndb.org/dump/. `seed:dev` first tries the inventoried dump URL. When that
+file is gone (HTTP 404 or 410), it reads that dump index, selects the current `vndb-db-YYYY-MM-DD.tar.zst` (the Latest
+versions destination, or the newest dated file listed), downloads it over HTTPS, and verifies tar integrity plus the
+required tables and `.header` files. It records the resolved file name and SHA-256 in `vndb/manifest.json` in the dump
+cache so later runs on the same machine reuse that verified archive. If the index, download or verification fails, the
+seed stops; it does not continue with Bangumi alone. README.txt and schema_vndbid.sql hashes remain inventory
+provenance for the inventoried dump; they are not a fetch gate for a rotated file.
+
+Decision: local VNDB seed resolves a rotated dump from dl.vndb.org/dump, verifies structure, and pins the resolved file
+plus SHA-256 in the machine cache manifest.
 
 The seed's `REZICS_DEV_PERSONA_*`, `AUTH_ORIGIN` and `KERNEL_ORIGIN` environment seam also works with a manually
 configured local account. Seed origins accept HTTPS or loopback HTTP (`localhost`, `127.0.0.1`, `[::1]`).
