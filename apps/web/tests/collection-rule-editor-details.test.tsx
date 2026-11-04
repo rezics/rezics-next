@@ -315,6 +315,7 @@ test('a mismatched state set retains distinct unknown states and exact identifie
     await ui.submit();
     expect(calls[0]).toEqual({ id: 'private-rule', revision: 7, filter, sort: 'id', idempotencyKey: key });
     await ui.render();
+    expect(ui.host.querySelector('form fieldset')!.disabled).toBe(false);
     await ui.choose(ui.select(m.library_rule_state()), ['state.retired']);
     expect([...ui.select(m.library_rule_state()).selectedOptions].map((option) => option.value)).toEqual([
       'state.retired',
@@ -356,6 +357,7 @@ test('retired profile, label, session and holding operands survive save; unavail
     await ui.submit();
     expect(calls[0]!.filter).toEqual(filter);
     await ui.render();
+    expect(ui.host.querySelector('form fieldset')!.disabled).toBe(false);
     await ui.choose(ui.select(m.library_rule_label()), ['00000000-0000-4000-8000-000000000001']);
     expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toBe('Weekend reading');
     await ui.choose(ui.select(m.library_rule_label()), ['']);
