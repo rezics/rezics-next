@@ -15,9 +15,10 @@ export function createConsentRequestReturn(publish: (notices: ConsentNotices) =>
     },
     dismiss(notice: ConsentNotice) {
       // Object identity guards a removed notice's callback without storing an ID.
-      if (notices.first === notice)
-        notices = unresolved(notices.latest) ? { first: notices.latest } : { latest: notices.latest };
-      else if (notices.latest === notice) notices = { ...notices, latest: undefined };
+      if (notices.first === notice) {
+        const latest = notices.latest;
+        notices = latest ? (unresolved(latest) ? { first: latest } : { latest }) : {};
+      } else if (notices.latest === notice) notices = notices.first ? { first: notices.first } : {};
       else return;
       publish(notices);
     },
