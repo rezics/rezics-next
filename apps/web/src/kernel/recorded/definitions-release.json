@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:1ded81205f3588d10a0cb5dab75bfaec1fcb22cac3e2e54809cf0086f54806f7",
+  "digest": "sha256:5e87b321b6f6ada0fd0a775eca9e09b8929167816be5a54a8c7c68bcadf3f725",
   "release": {
     "types": {
       "wd:Q2095": {
@@ -734,6 +734,7 @@
         "mappings": [],
         "coverRatio": "5:7",
         "properties": [
+          "rezics:releaseSupersedes",
           "schema:alternateName",
           "schema:author",
           "schema:contributor",
@@ -2509,7 +2510,7 @@
       "schema": "http://schema.org/",
       "marcrel": "http://id.loc.gov/vocabulary/relators/"
     },
-    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.4" },
+    "catalogue": { "id": "https://rezics.com/catalogue/rezics", "version": "1.0.5" },
     "generator": { "name": "@neverblink/linkml", "version": "0.17.2" },
     "properties": {
       "wdt:P31": {
@@ -7621,6 +7622,51 @@
           "ko": "이 등장에만 해당하는 나이를 0 이상 연수(wd:Q577)로 적습니다. 출처 전체의 나이는 이 한정자가 아닙니다.",
           "zh-Hans": "该登场陈述上的年龄，以非负年数（wd:Q577）记录；来源整体年龄不是此限定。",
           "zh-Hant": "該登場陳述上的年齡，以非負年數（wd:Q577）記錄；來源整體年齡不是此限定。"
+        }
+      },
+      "rezics:releaseSupersedes": {
+        "iri": "https://rezics.com/vocab/releaseSupersedes",
+        "labels": {
+          "de": "ersetzt",
+          "en": "supersedes",
+          "es": "reemplaza",
+          "fr": "remplace",
+          "ja": "置き換える",
+          "ko": "대체하는 릴리스",
+          "zh-Hans": "取代",
+          "zh-Hant": "取代"
+        },
+        "mappings": [],
+        "datatype": "wikibase-item",
+        "multivalued": true,
+        "qualifiers": ["schema:sameAs"],
+        "value": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+        "relation": {
+          "group": "order",
+          "order": "date",
+          "inverse": "rezics:releaseSupersededBy",
+          "acyclic": true,
+          "inverseLabels": {
+            "de": "Ersetzt durch",
+            "en": "Superseded by",
+            "es": "Reemplazado por",
+            "fr": "Remplacé par",
+            "ja": "置き換えられたリリース",
+            "ko": "대체된 릴리스",
+            "zh-Hans": "被取代",
+            "zh-Hant": "被取代"
+          }
+        },
+        "targets": ["wd:Q20631656"],
+        "descriptions": {
+          "de": "Die genaue Softwareveröffentlichung, die diese Veröffentlichung ersetzt; unabhängig von der zeitlichen Reihenfolge.",
+          "en": "The exact software release that this release replaces; independent of chronological order.",
+          "es": "El lanzamiento de software exacto que este lanzamiento reemplaza; independiente del orden cronológico.",
+          "fr": "L’édition logicielle exacte que cette édition remplace, indépendamment de l’ordre chronologique.",
+          "ja": "時系列上の前後関係とは別に、このリリースが置き換える特定のソフトウェアリリース。",
+          "ko": "연대순 관계와 별개로 이 출시판이 대체하는 특정 소프트웨어 출시판입니다.",
+          "zh-Hans": "此发行版所取代的确切软件发行版，与时间顺序无关。",
+          "zh-Hant": "此發行版所取代的確切軟體發行版，與時間順序無關。"
         }
       }
     },
