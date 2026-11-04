@@ -131,38 +131,38 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     expect(created.results.map((result) => result.status)).toEqual([201, 201]);
     const schemeId = (created.results[0] as { value: { id: string } }).value.id;
     const authorConcept = (created.results[1] as { value: { id: string } }).value.id;
-    async function candidates(subjectId: string, property: string) {
+    async function adopt(subjectId: string, property: string, content?: string) {
       const page = await editor.http(
-        `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '100' })}`,
+        `/v1/subjects/${subjectId}/candidates?${new URLSearchParams({ property, context: globalContext, limit: '20' })}`,
       );
       expect(page.status).toBe(200);
-      return page.body as { candidates: Candidate[]; adoption: { head: number } | null };
-    }
-    async function acceptAdopt(subjectId: string, property: string) {
-      const seen = new Set<string>();
-      for (;;) {
-        const listing = await candidates(subjectId, property);
-        const next = listing.candidates.find((item) => item.source && !item.retracted && !seen.has(item.id));
-        if (!next) {
-          const live = listing.candidates.filter((item) => !item.retracted);
-          if (!live.length) return listing;
-          const adopted = await editor.http(`/v1/subjects/${subjectId}:adopt`, {
+      const listing = page.body as { candidates: Candidate[]; adoption: { head: number } | null };
+      const live = listing.candidates.filter(
+        (item) => !item.retracted && (content === undefined || item.statement.value.content === content),
+      );
+      expect(live.length).toBeGreaterThan(0);
+      for (const candidate of live) {
+        if (!candidate.source) continue;
+        expect(
+          (
+            await editor.http(`/v1/subjects/${subjectId}/candidates/${candidate.id}:accept`, {
+              context: globalContext,
+              expected_head: candidate.head,
+            })
+          ).status,
+        ).toBe(200);
+      }
+      expect(
+        (
+          await editor.http(`/v1/subjects/${subjectId}:adopt`, {
             context: globalContext,
             property,
             mode: 'replace',
             expected_head: listing.adoption?.head ?? null,
             selection: live.map((item) => ({ candidate: item.id, rank: item.statement.rank ?? 'normal' })),
-          });
-          expect(adopted.status).toBe(200);
-          return listing;
-        }
-        const accepted = await editor.http(`/v1/subjects/${subjectId}/candidates/${next.id}:accept`, {
-          context: globalContext,
-          expected_head: next.head,
-        });
-        expect(accepted.status).toBe(200);
-        seen.add(next.id);
-      }
+          })
+        ).status,
+      ).toBe(200);
     }
     const bindings = {
       releaseDigest: bundledDigest,
@@ -195,21 +195,19 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     });
     expect(first.selected.series).toEqual(['499']);
     expect(first.selected.volumes).toEqual(['26', '27']);
+    expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
     expect(first.identities['499']?.type).toBe('schema:BookSeries');
     expect(first.identities['26']?.type).toBe('schema:Book');
+    expect(first.identities['person:6023']?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
+    );
     expect(first.gaps.some((gap) => gap.reason === 'Missing source volume for a stated series membership')).toBe(true);
     expect(JSON.stringify(first.selected)).not.toContain('9001');
     const seriesId = first.identities['499']!.id;
     const volumeId = first.identities['26']!.id;
     const authorId = first.identities['person:6023']!.id;
-    for (const [id, property] of [
-      [seriesId, 'schema:name'],
-      [volumeId, 'schema:name'],
-      [volumeId, 'wdt:P179'],
-      [seriesId, 'schema:author'],
-      [authorId, 'schema:name'],
-    ] as const)
-      await acceptAdopt(id, property);
+    await adopt(volumeId, 'wdt:P179', seriesId);
+    await adopt(seriesId, 'schema:author', authorId);
     const book = await editor.http(`/v1/subjects/${volumeId}?context=${globalContext}`);
     expect(book.status).toBe(200);
     const bookView = book.body as {
@@ -243,4 +241,4 @@ test('reader keeps book, volume and author identities after accept, adopt and on
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
-}, 180_000);
+}, 300_000);

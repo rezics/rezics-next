@@ -430,6 +430,8 @@ export async function importShowcaseBooks(input: {
     input.destination,
     {
       providers: ['bangumi'],
+      entitiesFirst: true,
+      mediaDeadlineMs: 120_000,
       sourceVocabulary: input.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     },
   );
