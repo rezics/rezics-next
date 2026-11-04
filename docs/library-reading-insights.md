@@ -71,9 +71,13 @@ all-time source and ready/open shelf maintenance, plus equality between this rec
 the retained-session counter. The reader addresses at most sixteen revision rows and twenty-one exact value buckets
 per revision, rechecks authority and generation, and caps JSON at 16,384 UTF-8 bytes. GET remains pure.
 
-The mounted route and schema are exported by `reading-insights-routes.ts`; Content still needs to publish its matching
-generated client output before Web can call this endpoint. The panel is composed with the all-time/year summary,
-retained-profile distribution, current-progress and assessment panels by `GET /v1/libraryReadingInsights`.
+The mounted route and schema are exported by `reading-insights-routes.ts`. Content owns publication of the matching
+official `@rezics/client` declarations, callable client and root exports for `readingInsightsOverviewSchema`, including
+`readingInsightsCurrentProgressSchema`, and `library_reading_insights.overview` at `GET /v1/libraryReadingInsights`.
+That installed publication is a prerequisite for the Web page and overflow destination; transport remains unavailable
+until it exists. A local response type, declaration patch or substitute request cannot satisfy this boundary. The panel
+is composed with the all-time/year summary, retained-profile distribution, current-progress and assessment panels by
+that overview operation. The native receiver is delivered independently of the Web continuation.
 
 ## Coverage, installation and cleanup
 
