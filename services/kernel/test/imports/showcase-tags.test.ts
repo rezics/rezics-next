@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import {
   commandKey,
   sourceDigest,
@@ -15,7 +14,6 @@ import {
 } from '../../../../packages/conversion/src/support.ts';
 import { parseAuthoredVndbCopy } from '../../../importer/src/vndb-public-tags.ts';
 import { VNDB_PUBLIC_TAG_COLUMNS } from '../../../importer/src/vndb-tables.ts';
-import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { captureShowcaseCommands, ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
 import { showcaseVocabularyExternalId } from '../../../importer/src/showcase-manifest.ts';
 import {
@@ -526,13 +524,6 @@ test('default selected VN tag publication keeps language-less names as und throu
     const hanId = created.get('vocabulary:vndb.tag.cont:g311')!;
     const kanaId = created.get('vocabulary:vndb.tag.cont:g12')!;
     const latinId = created.get('vocabulary:vndb.tag.ero:g44')!;
-    const publicClient = createPublicBulkClient({
-      origin: runtime.origin,
-      fetch: async (input) => {
-        const url = new URL(String(input));
-        return runtime.request(`${url.pathname}${url.search}`);
-      },
-    });
     const labelsOf = async (id: string) => {
       const read = await editor.http(`/v1/subjects/${id}?context=${globalContext}`);
       expect(read.status).toBe(200);
@@ -560,28 +551,28 @@ test('default selected VN tag publication keeps language-less names as und throu
       path: join(directory, 'state.sqlite'),
       port,
       known: knownShowcaseTagBindings(current),
-      destination: { origin: runtime.origin },
+      destination: { origin: 'https://kernel.import.test' },
     });
     const workId =
       (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
       (imported.readings[0]?.subject as { id?: string }).id;
     expect(workId).toBeTruthy();
     await acceptAdopted(editor, workId!, 'schema:genre');
-    const publicHan = await publicClient.readSubject(hanId);
-    expect((publicHan.subject as { labels?: Record<string, string> }).labels).toEqual({ und: '学園' });
-    const publicLatin = await publicClient.readSubject(latinId);
-    expect((publicLatin.subject as { labels?: Record<string, string> }).labels).toEqual({ und: 'Authored erotic tag' });
-    const publicKana = await publicClient.readSubject(kanaId);
-    expect((publicKana.subject as { labels?: Record<string, string> }).labels).toEqual({ und: '親タグ' });
-    const publicWork = await publicClient.readSubject(workId!);
+    expect(await labelsOf(hanId)).toEqual({ und: '学園' });
+    expect(await labelsOf(kanaId)).toEqual({ und: '親タグ' });
+    expect(await labelsOf(latinId)).toEqual({ und: 'Authored erotic tag' });
+    const publicWork = await editor.http(`/v1/subjects/${workId}?context=${globalContext}`);
+    expect(publicWork.status).toBe(200);
     const genres = (
-      publicWork.subject as {
-        statements: Record<
-          string,
-          { value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[] }[]
-        >;
+      publicWork.body as {
+        subject: {
+          statements: Record<
+            string,
+            { value: { content: unknown }; qualifiers?: { property: { id: string }; value: { content: unknown } }[] }[]
+          >;
+        };
       }
-    ).statements['schema:genre'];
+    ).subject.statements['schema:genre'];
     expect(genres?.map((item) => item.value.content).sort()).toEqual([hanId, latinId].sort());
     const spoilerOf = (id: string) =>
       genres
@@ -628,13 +619,13 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
     const kana = guessedTagCreate({
       sourceKey: 'vndb.tag.cont:g12',
       uri: vndbPublicTagConceptUri('cont', 'g12'),
-      citation: vndbRecordUrl('g12'),
+      citation: 'https://vndb.org/g12',
       labels: { ja: '親タグ' },
     });
     const han = guessedTagCreate({
       sourceKey: 'vndb.tag.cont:g311',
       uri: vndbPublicTagConceptUri('cont', 'g311'),
-      citation: vndbRecordUrl('g311'),
+      citation: 'https://vndb.org/g311',
       labels: { 'zh-Hant': '学園' },
     });
     journal.prepareCommand(kana);
@@ -707,7 +698,7 @@ test('reopening a pre-repair journal recovers sealed tag creates and original Co
       path: join(directory, 'state.sqlite'),
       port,
       known: knownShowcaseTagBindings(current),
-      destination: { origin: runtime.origin },
+      destination: { origin: 'https://kernel.import.test' },
     });
     const workId =
       (imported.readings[0]?.subject as { subject?: { id: string } }).subject?.id ??
