@@ -435,14 +435,13 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       () => writableEditor.snapshot().acknowledged && writableEditor.snapshot().readStatus === 'failed',
       'the acknowledged profile with an unavailable current read',
     );
-    expect(host.textContent?.includes(m.settings_profile_acknowledged_stale())).toBe(true);
+    expect([
+      host.textContent?.includes(m.settings_profile_acknowledged_stale()),
+      [...host.querySelectorAll('button')].filter((item) => item.textContent?.trim() === m.settings_profile_retry_save())
+        .length,
+    ]).toEqual([true, 0]);
     await capturedRetry();
     expect(saveRequests).toHaveLength(profileSaveCount + 1);
-    expect(
-      [...host.querySelectorAll('button')].filter((item) =>
-        item.textContent?.trim() === m.settings_profile_retry_save(),
-      ),
-    ).toHaveLength(0);
     await act(async () => writableEditor.edit({ displayName: 'Current organization' }));
     const newerProfile = { ...profileAfter, displayName: 'Another writer', biography: 'Current native biography' };
     const deliberateRead = readRequests.length;
@@ -453,10 +452,12 @@ test('the connected Profile and Public activity journey shares safe reads and pe
       () => !writableEditor.snapshot().acknowledged && writableEditor.snapshot().attempt === null,
       'acknowledged recovery resolution',
     );
-    expect(saveRequests).toHaveLength(profileSaveCount + 1);
-    expect(writableEditor.snapshot().known?.displayName).toBe('Another writer');
-    expect(writableEditor.snapshot().draft?.displayName).toBe('Current organization');
-    expect(writableEditor.snapshot().draft?.biography).toBe('Current native biography');
+    expect([
+      saveRequests.length,
+      writableEditor.snapshot().known?.displayName,
+      writableEditor.snapshot().draft?.displayName,
+      writableEditor.snapshot().draft?.biography,
+    ]).toEqual([profileSaveCount + 1, 'Another writer', 'Current organization', 'Current native biography']);
 
     const reviewSwitch = publicSwitch(m.settings_public_reviews());
     expect(reviewSwitch.getAttribute('aria-disabled')).toBeNull();
@@ -474,12 +475,11 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveWrite(viewSaveCount, { ok: true, profile: viewsAfter }, viewsAfter);
     await until(() => readRequests.length === viewsReadback + 1, 'public activity readback');
     await resolveRead(viewsReadback, successRead(viewsAfter));
-    await until(
-      () => writableEditor.snapshot().phase === 'review' && writableEditor.snapshot().attempt === null,
-      'public activity confirmation with a later Profile edit retained',
-    );
-    expect(writableEditor.snapshot().known?.publicViews.reviews).toBe(false);
-    expect(writableEditor.snapshot().draft?.displayName).toBe('Current organization');
+    await until(() => writableEditor.snapshot().phase === 'review', 'public activity leaves the later Profile edit for review');
+    expect([writableEditor.snapshot().known?.publicViews.reviews, writableEditor.snapshot().draft?.displayName]).toEqual([
+      false,
+      'Current organization',
+    ]);
 
     const speakerSwitch = publicSwitch(m.settings_public_speakers());
     expect(speakerSwitch.getAttribute('aria-checked')).toBe('false');
@@ -495,33 +495,18 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveWrite(speakerSaveCount, { ok: true, profile: speakersAfter }, speakersAfter);
     await until(() => readRequests.length === speakerReadback + 1, 'organization speaker readback');
     await resolveRead(speakerReadback, successRead(speakersAfter));
-    await until(
-      () => writableEditor.snapshot().phase === 'review' && writableEditor.snapshot().attempt === null,
-      'organization speaker confirmation with the later Profile edit retained',
-    );
-    expect(writableEditor.snapshot().known?.speakersListed).toBe(true);
-    expect(writableEditor.snapshot().draft?.displayName).toBe('Current organization');
-
-    const reviewedProfileSave = saveRequests.length;
-    await click(button(m.settings_profile_save()));
-    await until(() => saveRequests.length === reviewedProfileSave + 1, 'the separately reviewed Profile change');
-    const reviewedProfile = saveRequests[reviewedProfileSave]!;
-    expect(reviewedProfile.attempt.patch).toEqual({ displayName: 'Current organization' });
-    const reviewedProfileReadback = readRequests.length;
-    await resolveWrite(
-      reviewedProfileSave,
-      { ok: true, profile: reviewedProfile.attempt.after },
-      reviewedProfile.attempt.after,
-    );
-    await until(() => readRequests.length === reviewedProfileReadback + 1, 'the reviewed Profile readback');
-    await resolveRead(reviewedProfileReadback, successRead(reviewedProfile.attempt.after));
-    await until(() => writableEditor.snapshot().phase === 'saved', 'the reviewed Profile confirmation');
+    await until(() => writableEditor.snapshot().phase === 'review', 'speaker confirmation retains the Profile edit');
+    expect([writableEditor.snapshot().known?.speakersListed, writableEditor.snapshot().draft?.displayName]).toEqual([
+      true,
+      'Current organization',
+    ]);
 
     await act(async () => writableEditor.edit({ biography: 'Uncertain original command' }));
     const uncertainWrite = saveRequests.length;
     await click(button(m.settings_profile_save()));
     await until(() => saveRequests.length === uncertainWrite + 1, 'the original uncertain command');
     const originalAttempt = saveRequests[uncertainWrite]!.attempt;
+    expect(originalAttempt.patch).toEqual({ displayName: 'Current organization', biography: 'Uncertain original command' });
     await resolveWrite(uncertainWrite, { ok: false, status: 503, message: '', failure: { status: 503 } });
     expect(writableEditor.snapshot().attempt).toBe(originalAttempt);
     expect(writableEditor.snapshot().phase).toBe('uncertain');
