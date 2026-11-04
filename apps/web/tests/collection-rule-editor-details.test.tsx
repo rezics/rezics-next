@@ -91,7 +91,7 @@ async function mount(initial: Partial<Props> = {}) {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
-  const window = new Window({ url: 'https://site.test/en/collections/private-rule/rule' });
+  const window = new Window({ url: `https://site.test/${getLocale()}/collections/private-rule/rule` });
   const globals = {
     window,
     document: window.document,
@@ -305,7 +305,8 @@ test('a mismatched state set retains distinct unknown states and exact identifie
     );
     await ui.submit();
     expect(calls[0]).toEqual({ id: 'private-rule', revision: 7, filter, sort: 'id', idempotencyKey: key });
-    await ui.choose(select, ['state.retired']);
+    await ui.render();
+    await ui.choose(ui.select(m.library_rule_state()), ['state.retired']);
     expect([...ui.select(m.library_rule_state()).selectedOptions].map((option) => option.value)).toEqual([
       'state.retired',
     ]);
@@ -345,6 +346,7 @@ test('retired profile, label, session and holding operands survive save; unavail
     expect(ui.select(m.library_rule_holding_status()).value).toBe('copy.missing');
     await ui.submit();
     expect(calls[0]!.filter).toEqual(filter);
+    await ui.render();
     await ui.choose(ui.select(m.library_rule_label()), ['00000000-0000-4000-8000-000000000001']);
     expect(ui.select(m.library_rule_label()).selectedOptions[0]!.textContent).toBe('Weekend reading');
     await ui.choose(ui.select(m.library_rule_label()), ['']);
@@ -388,7 +390,7 @@ test('an uncertain save keeps its original binding, key and all operands through
       sort: 'id',
       idempotencyKey: key,
     });
-    expect(writes[1]!.csrf).toBe('csrf-rotated');
+    expect(writes[1]!.csrf).toBe('csrf-alice');
     expect(ui.host.textContent).toContain(m.library_rule_saved());
     expect(ui.host.querySelectorAll('a')).toHaveLength(1);
   } finally {
