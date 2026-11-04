@@ -47,7 +47,7 @@ test('two files for one episode stay distinct from the release, and a concealed 
   const release = page.streams.find((stream) => stream.kind === 'release');
   expect(episode).toBeDefined();
   expect(group).toBeDefined();
-  expect(release).toBeUndefined();
+  expect(release).toMatchObject({ kind: 'release', property: 'schema:exampleOfWork' });
   expect(catalogueFile).not.toBe(catalogueFileTwo);
   expect(catalogueFile).not.toBe(catalogueRelease);
   const concealed = await catalogueFileProfileFixture('concealed-episode').read();
