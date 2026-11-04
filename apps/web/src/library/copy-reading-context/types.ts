@@ -1,4 +1,7 @@
+import type { KernelClient } from '@rezics/client';
 import type { Fact } from '../../search/results';
+
+export type NativeCopyListRow = NonNullable<Awaited<ReturnType<KernelClient['copies']['get']>>['data']>['copies'][number];
 
 export type NativeCopyContextIdentity = { id: string; labels: Record<string, string> };
 export type NativeCopyListContext =
