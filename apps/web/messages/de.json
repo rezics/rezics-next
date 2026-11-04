@@ -7852,5 +7852,10 @@
   "discovery_personal_unknown": "Verfügbare Bibliotheksaktionen werden geprüft…",
   "discovery_personal_unsupported": "Dieses Subjekt unterstützt keine Bibliothekseinträge.",
   "discovery_personal_concealed": "Aktionen für Bibliothekseinträge sind für dieses Konto nicht freigegeben.",
-  "discovery_personal_unavailable": "Aktionen für Bibliothekseinträge sind nicht verfügbar."
+  "discovery_personal_unavailable": "Aktionen für Bibliothekseinträge sind nicht verfügbar.",
+  "discovery_score_unknown": "Verfügbare Bewertungsaktionen werden geprüft…",
+  "discovery_score_signed_out": "Melde dich an, um dieses Subjekt zu bewerten.",
+  "discovery_score_unsupported": "Dieses Subjekt unterstützt diese Bewertungsfrage nicht.",
+  "discovery_score_concealed": "Bewertungsaktionen sind für diesen Nutzer nicht freigegeben.",
+  "discovery_score_unavailable": "Bewertungsaktionen sind nicht verfügbar."
 }

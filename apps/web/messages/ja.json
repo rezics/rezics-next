@@ -7852,5 +7852,10 @@
   "discovery_personal_unknown": "利用可能なライブラリ操作を確認しています…",
   "discovery_personal_unsupported": "この対象はライブラリの登録操作に対応していません。",
   "discovery_personal_concealed": "この閲覧者にはライブラリの登録操作が公開されていません。",
-  "discovery_personal_unavailable": "ライブラリの登録操作を利用できません。"
+  "discovery_personal_unavailable": "ライブラリの登録操作を利用できません。",
+  "discovery_score_unknown": "利用可能な評価操作を確認しています…",
+  "discovery_score_signed_out": "この対象を評価するにはログインしてください。",
+  "discovery_score_unsupported": "この対象はこの評価項目に対応していません。",
+  "discovery_score_concealed": "この閲覧者には評価操作が公開されていません。",
+  "discovery_score_unavailable": "評価操作を利用できません。"
 }

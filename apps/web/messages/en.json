@@ -7927,5 +7927,10 @@
   "discovery_personal_unknown": "Checking available Library actions…",
   "discovery_personal_unsupported": "This Subject does not support Library entry actions.",
   "discovery_personal_concealed": "Library entry actions are not exposed to this reader.",
-  "discovery_personal_unavailable": "Library entry actions are unavailable."
+  "discovery_personal_unavailable": "Library entry actions are unavailable.",
+  "discovery_score_unknown": "Checking available score actions…",
+  "discovery_score_signed_out": "Sign in to rate this Subject.",
+  "discovery_score_unsupported": "This Subject does not support this rating question.",
+  "discovery_score_concealed": "Score actions are not exposed to this reader.",
+  "discovery_score_unavailable": "Score actions are unavailable."
 }

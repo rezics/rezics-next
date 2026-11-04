@@ -196,7 +196,22 @@ async function enrichDiscoveryPage(
           ...(figure && hit.summary.value.creativeWork ? { figure: { ...figure, scale: { ...figure.scale } } } : {}),
         };
       }),
-      viewerFacts,
+      viewerFacts:
+        viewerFacts?.state === 'current' && prepared
+          ? (() => {
+              const mappings = new Map(prepared.mappings.map(({ subjectId, mapping }) => [subjectId, mapping]));
+              const current = {
+                ...viewerFacts,
+                rows: viewerFacts.rows.map((row) => {
+                  const mapping = mappings.get(row.subjectId);
+                  return { ...row, resolvedSubjectId: mapping?.state === 'mapped' ? mapping.terminal : row.subjectId };
+                }),
+              };
+              return new TextEncoder().encode(JSON.stringify(current)).byteLength <= 65536
+                ? current
+                : { state: 'unavailable' as const, reason: 'response_limit' as const, retryable: false };
+            })()
+          : viewerFacts,
     },
     semanticOriginals: originals,
     semanticPresentation: presentation,

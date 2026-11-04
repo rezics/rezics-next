@@ -31,11 +31,26 @@ export type DiscoveryCommandState = 'idle' | 'pending' | DiscoveryCommandResult 
 /** Share across page incarnations. There is no queue and an uncertain command is never resent. */
 export function createDiscoveryCommandRegistry() {
   const active = new Set<string>();
+  const listeners = new Set<() => void>();
+  const changed = () => {
+    for (const listener of listeners) listener();
+  };
   return {
+    isActive: (identity: string) => active.has(identity),
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
     acquire(identity: string): (() => void) | undefined {
       if (active.has(identity)) return;
       active.add(identity);
-      return () => active.delete(identity);
+      changed();
+      return () => {
+        active.delete(identity);
+        changed();
+      };
     },
   };
 }
@@ -120,6 +135,7 @@ export function createDiscoveryPersonalPage(input: {
   let refreshStarted = false;
   let pending = 0;
   let revision = 0;
+  const stopRegistry = input.registry.subscribe(changed);
 
   function owns(): boolean {
     if (disposed) return false;
@@ -133,6 +149,7 @@ export function createDiscoveryPersonalPage(input: {
     if (!matches) {
       // Once observed retired, an A → B → A transition cannot reopen an old form.
       disposed = true;
+      stopRegistry();
       controller.abort();
     }
     return matches;
@@ -191,6 +208,8 @@ export function createDiscoveryPersonalPage(input: {
     accepts: (target: DiscoveryPersonalTarget) => signatures.get(target.rowKey) === targetKey(target),
     state(rowKey: string, family: DiscoveryCommandFamily): DiscoveryCommandState {
       if (!owns()) return 'retired';
+      const target = targets.get(rowKey);
+      if (target && input.registry.isActive(identity(target, family))) return 'pending';
       const state = states.get(stateKey(rowKey, family));
       return state ?? (retired ? 'retired' : 'idle');
     },
@@ -230,6 +249,7 @@ export function createDiscoveryPersonalPage(input: {
       return owns() ? result : 'retired';
     },
     dispose() {
+      stopRegistry();
       disposed = true;
       controller.abort();
       changed();

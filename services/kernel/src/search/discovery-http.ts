@@ -191,7 +191,23 @@ const viewerFactsUnavailable = t.Object(
   },
   closed,
 );
-const viewerFacts = t.Union([t.Null(), viewerFactsResponseSchema, viewerFactsUnavailable]);
+const searchViewerFacts = t.Object(
+  {
+    ...viewerFactsResponseSchema.properties,
+    rows: t.Array(
+      t.Object(
+        {
+          ...viewerFactsResponseSchema.properties.rows.items.properties,
+          resolvedSubjectId: t.Optional(t.String({ format: 'uuid' })),
+        },
+        closed,
+      ),
+      { maxItems: 100 },
+    ),
+  },
+  closed,
+);
+const viewerFacts = t.Union([t.Null(), searchViewerFacts, viewerFactsUnavailable]);
 /** The owner-tagged key and non-null native summary close together; no Account Subject shell. */
 export const DiscoveryPageSchema = t.Object(
   {
@@ -351,6 +367,7 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
             rows: originalViewerFacts.rows.map((row) => ({
               rowKey: row.rowKey,
               subjectId: row.subjectId,
+              ...(row.resolvedSubjectId ? { resolvedSubjectId: row.resolvedSubjectId } : {}),
               entry: structuredClone(row.entry),
               vote: structuredClone(row.vote),
             })),

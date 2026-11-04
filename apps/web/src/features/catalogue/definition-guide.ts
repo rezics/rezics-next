@@ -9,7 +9,7 @@ import {
   type GuideComparisonSide,
 } from './definition-guide-comparison';
 
-export type GuideRelease = Pick<Release, 'types' | 'properties'> & { digest: string };
+export type GuideRelease = Pick<Release, 'types' | 'properties' | 'libraryProfiles'> & { digest: string };
 export type GuideLocale = 'de' | 'en' | 'es' | 'fr' | 'ja' | 'ko' | 'zh-Hans' | 'zh-Hant';
 export type GuideAddress = {
   type?: string | undefined;

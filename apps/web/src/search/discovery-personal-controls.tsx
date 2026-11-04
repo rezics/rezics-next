@@ -2,7 +2,16 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { m } from '../paraglide/messages.js';
 import { locales } from '../paraglide/runtime.js';
 import type { SubjectLibraryMutation, SubjectLibraryMutationResponse } from '../library/subject-slot';
-import { changeDiscoveryEntry, type DiscoveryEntryCapability } from './discovery-personal-actions';
+import { RatingControlView } from '../features/pages/rating-control';
+import type { RatingQuestion } from '../features/pages/subject-ratings';
+import type { DiscoveryCommandResult } from './discovery-personal-state';
+import {
+  changeDiscoveryVote,
+  type DiscoveryVoteCapability,
+  type DiscoveryVoteInput,
+  changeDiscoveryEntry,
+  type DiscoveryEntryCapability,
+} from './discovery-personal-actions';
 import type { DiscoveryPersonalPage, DiscoveryPersonalTarget } from './discovery-personal-state';
 
 const subscribeBrowser = () => () => {};
@@ -24,7 +33,9 @@ export function DiscoveryPersonalControls({
   title,
   returnTo,
   write,
+  suppressed = false,
 }: {
+  suppressed?: boolean;
   page: DiscoveryPersonalPage;
   target: DiscoveryPersonalTarget;
   capability: DiscoveryEntryCapability;
@@ -109,10 +120,17 @@ export function DiscoveryPersonalControls({
             <select
               id={id}
               className={controlClass}
-              disabled={!active}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              disabled={!hydrated}
+              aria-disabled={!active}
+              onKeyDown={(event) => {
+                if (!active) event.preventDefault();
+              }}
+              value={suppressed ? '' : draft}
+              onChange={(event) => {
+                if (active) setDraft(event.target.value);
+              }}
             >
+              {suppressed ? <option value="" /> : null}
               {choices.map((choice) => (
                 <option key={choice.id} value={choice.id} lang={choice.label.lang}>
                   {choice.label.text}
@@ -129,14 +147,14 @@ export function DiscoveryPersonalControls({
           {m.discovery_personal_state({ title }, options)}
         </span>
       )}
-      {capability.remove && target.entry.state === 'present' ? (
+      {capability.remove ? (
         <button
           type="button"
           className={controlClass}
           disabled={!hydrated}
-          aria-disabled={!active}
+          aria-disabled={!active || target.entry.state !== 'present'}
           onClick={() => {
-            if (active)
+            if (active && target.entry.state === 'present')
               void changeDiscoveryEntry({ page, rowKey: target.rowKey, capability, action: { remove: true }, write });
           }}
         >
@@ -149,5 +167,79 @@ export function DiscoveryPersonalControls({
         </p>
       ) : null}
     </form>
+  );
+}
+
+/** The native score view is controlled by the same lifetime, with its Subject-only fallback disabled. */
+export function DiscoveryScoreControls({
+  page,
+  target,
+  capability,
+  locale,
+  returnTo,
+  write,
+  suppressed = false,
+}: {
+  page: DiscoveryPersonalPage;
+  target: DiscoveryPersonalTarget;
+  capability: DiscoveryVoteCapability;
+  locale: string;
+  returnTo: string;
+  suppressed?: boolean;
+  write: (command: DiscoveryVoteInput) => Promise<DiscoveryCommandResult>;
+}) {
+  useSyncExternalStore(page.subscribe, page.snapshot, serverRevision);
+  const hydrated = useSyncExternalStore(subscribeBrowser, browserSnapshot, serverSnapshot);
+  const options = { locale: locales.find((value) => value === locale) ?? 'en' };
+  const state = page.accepts(target) && locale === page.locale ? page.state(target.rowKey, 'vote') : 'retired';
+  const current = hydrated && page.current() && page.accepts(target) && locale === page.locale;
+  const notice =
+    state === 'pending'
+      ? m.discovery_personal_pending({}, options)
+      : state === 'successful'
+        ? m.discovery_personal_successful({}, options)
+        : state === 'rejected'
+          ? m.discovery_personal_rejected({}, options)
+          : state === 'uncertain'
+            ? m.discovery_personal_uncertain({}, options)
+            : state === 'retired'
+              ? m.discovery_personal_retired({}, options)
+              : null;
+  const q = target.question;
+  if (capability.state !== 'ready' || !q || target.vote.state === 'unavailable') {
+    const message =
+      capability.state === 'unknown'
+        ? m.discovery_score_unknown({}, options)
+        : capability.state === 'signed-out'
+          ? m.discovery_score_signed_out({}, options)
+          : capability.state === 'unsupported'
+            ? m.discovery_score_unsupported({}, options)
+            : capability.state === 'concealed'
+              ? m.discovery_score_concealed({}, options)
+              : m.discovery_score_unavailable({}, options);
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        {message}
+      </p>
+    );
+  }
+  const change = (units: number | null) => {
+    if (!current || state === 'pending') return;
+    void changeDiscoveryVote({ page, rowKey: target.rowKey, capability, units, write });
+  };
+  return (
+    <RatingControlView
+      question={{ ...q, grain: q.grain as RatingQuestion['grain'], label: m.subject_rating_control_label({}, options) }}
+      subjectId={target.subjectId}
+      locale={locale}
+      returnTo={returnTo}
+      nativeFallback={false}
+      hideValue={suppressed}
+      state={{ kind: 'ready', units: target.vote.state === 'present' ? target.vote.units : null }}
+      pending={!current || state === 'pending'}
+      failure={notice}
+      onSet={change}
+      onClear={() => change(null)}
+    />
   );
 }

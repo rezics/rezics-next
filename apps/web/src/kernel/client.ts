@@ -56,7 +56,11 @@ export function requestLocale(given?: Request): string | undefined {
 }
 
 /** One reader's kernel client. Every call asks for the reader's language chain, so embedded labels follow it. */
-export function kernelClient(locale?: string, authorization?: string) {
+export function kernelClient(
+  locale?: string,
+  authorization?: string,
+  decorateFetch: (fetcher: typeof fetch) => typeof fetch = (fetcher) => fetcher,
+) {
   const language = uiLocale(locale) ?? requestLocale();
   const headers = {
     ...(language === undefined ? {} : { 'accept-language': acceptLanguage(language) }),
@@ -64,18 +68,25 @@ export function kernelClient(locale?: string, authorization?: string) {
   };
   const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
   if (origin)
-    return withPlatformClosedRecognition(createKernelClient(origin, { headers, fetch: pageFetch(globalThis.fetch) }));
+    return withPlatformClosedRecognition(
+      createKernelClient(origin, { headers, fetch: pageFetch(decorateFetch(globalThis.fetch)) }),
+    );
   if (import.meta.env.DEV) {
     return withPlatformClosedRecognition(
       createKernelClient('http://kernel.local', {
         headers,
-        fetch: pageFetch((async (input, init) => {
-          const [{ createFakeKernelFetch }, { default: fixtures }] = await Promise.all([
-            import('./fake.ts'),
-            import('./fixtures.json'),
-          ]);
-          return createFakeKernelFetch(fixtures as unknown as Parameters<typeof createFakeKernelFetch>[0])(input, init);
-        }) as typeof fetch),
+        fetch: pageFetch(
+          decorateFetch((async (input, init) => {
+            const [{ createFakeKernelFetch }, { default: fixtures }] = await Promise.all([
+              import('./fake.ts'),
+              import('./fixtures.json'),
+            ]);
+            return createFakeKernelFetch(fixtures as unknown as Parameters<typeof createFakeKernelFetch>[0])(
+              input,
+              init,
+            );
+          }) as typeof fetch),
+        ),
       }),
     );
   }

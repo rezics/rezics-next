@@ -274,7 +274,13 @@ const viewerVote = v.variant('state', [
   }),
   v.strictObject({ state: v.literal('unavailable'), reason: v.picklist(['scope', 'question']) }),
 ]);
-const viewerFact = v.strictObject({ rowKey: v.string(), subjectId: resourceId, entry: viewerEntry, vote: viewerVote });
+const viewerFact = v.strictObject({
+  rowKey: v.string(),
+  subjectId: resourceId,
+  resolvedSubjectId: v.exactOptional(resourceId),
+  entry: viewerEntry,
+  vote: viewerVote,
+});
 const viewerFacts = v.union([
   v.null(),
   v.strictObject({

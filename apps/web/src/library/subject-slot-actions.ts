@@ -16,6 +16,8 @@ import { restorePersonalLibraryEntry, validateLibraryRestoreInput } from './entr
 import { applySubjectLabelMutation, searchSubjectLabels, type SubjectLabelMutationInput } from './subject-labels.ts';
 import { subjectLabelInputLimit } from './subject-label-input.ts';
 
+import { validExpectedReader } from '../session/expected-reader';
+
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const incarnationIdPattern = idempotencyKeyPattern;
 function validateMutation(input: unknown): SubjectLibraryMutation {
@@ -61,6 +63,8 @@ function validateMutation(input: unknown): SubjectLibraryMutation {
     (typeof input.collectionId !== 'string' || !input.collectionId || input.collectionId.length > 128)
   )
     throw new Error('Invalid subject library action');
+  if (('expectedReader' in input || 'expectedCredential' in input) && !validExpectedReader(input))
+    throw new Error('Invalid subject library reader');
   return input as SubjectLibraryMutation;
 }
 

@@ -3,7 +3,8 @@ import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import type { SessionEnv } from '../../session/client';
 import { prepareSession, viewerCredential } from '../../session/request';
-import { preparedRatingReader, writeOwnRating } from './subject-ratings';
+import { prepareExpectedReader, type ExpectedReader } from '../../session/expected-reader';
+import { QUESTION, validRatingUnits, writeRatingVote, preparedRatingReader, writeOwnRating } from './subject-ratings';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -138,3 +139,75 @@ export async function postSubjectRatingForm(
   if (!authorization) return 'signed-out';
   return (await writeOwnRating(client, path[1]!, authorization, units, crypto.randomUUID())) ? 'success' : 'failure';
 }
+
+export type QuestionBoundRatingInput = ExpectedReader & {
+  subjectId: string;
+  units: number | null;
+  idempotencyKey: string;
+  question: {
+    id: string;
+    revision: number;
+    grain: string;
+    meaning: string;
+    scale: { min: number; max: number; displayStep: number };
+  };
+};
+function validateBoundRating(input: QuestionBoundRatingInput): QuestionBoundRatingInput {
+  validateChange(input);
+  const q = input.question;
+  if (
+    !q ||
+    typeof q.id !== 'string' ||
+    !uuid.test(q.id) ||
+    !Number.isSafeInteger(q.revision) ||
+    q.revision < 1 ||
+    typeof q.grain !== 'string' ||
+    typeof q.meaning !== 'string' ||
+    !q.scale ||
+    ![q.scale.min, q.scale.max, q.scale.displayStep].every(Number.isSafeInteger) ||
+    q.scale.min >= q.scale.max ||
+    q.scale.displayStep < 1 ||
+    (input.units !== null && !validRatingUnits(input.units, q.scale)) ||
+    typeof input.expectedCredential !== 'string' ||
+    !input.expectedCredential ||
+    input.expectedCredential.length > 256 ||
+    new TextEncoder().encode(JSON.stringify({ subjectId: input.subjectId, question: q })).byteLength > 2048
+  )
+    throw new Error('Invalid bound rating change');
+  return structuredClone(input);
+}
+export async function writeQuestionBoundRatingForCurrentReader(
+  client: KernelClient,
+  request: Request,
+  env: Partial<SessionEnv>,
+  input: QuestionBoundRatingInput,
+) {
+  input = validateBoundRating(input);
+  // Conditional native providers remain unavailable without their atomic participant guard.
+  if (input.question.id !== QUESTION) return 'rejected' as const;
+  const authorization = await prepareExpectedReader(request, env, input);
+  if (!authorization) return 'rejected' as const;
+  return writeRatingVote(client, {
+    ...input,
+    questionId: input.question.id,
+    authorization,
+    observation: { subjectId: input.subjectId, question: input.question },
+  });
+}
+export const changeQuestionBoundRating = createServerFn({ method: 'POST' })
+  .validator(validateBoundRating)
+  .handler(async ({ data }) => {
+    setResponseHeader('cache-control', 'private, no-store');
+    try {
+      const { env } = await import('cloudflare:workers');
+      const { kernelClient } = await import('../../kernel/client');
+      return await writeQuestionBoundRatingForCurrentReader(
+        kernelClient(),
+        getRequest(),
+        env as Partial<SessionEnv>,
+        data,
+      );
+    } catch {
+      return 'uncertain' as const;
+    }
+  });

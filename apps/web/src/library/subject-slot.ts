@@ -86,6 +86,8 @@ export type SubjectLibrarySlotData = {
 export type SubjectLibraryMutation = {
   subjectId: string;
   intent: 'entry' | 'member';
+  expectedReader?: string;
+  expectedCredential?: string;
   action?: 'save' | 'clear';
   state?: LibraryEntryStateWrite;
   revision?: number;

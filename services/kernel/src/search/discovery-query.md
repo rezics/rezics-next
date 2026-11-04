@@ -134,3 +134,11 @@ entry and score commands are independent.
 
 Native all-pool accounting and connected browser inspection remain controller acceptance; no per-seek cap, second
 cursor or runtime funding protocol is introduced here.
+
+The Search-only current private rows may include `resolvedSubjectId`, copied from the already prepared identity
+mapping. This field is private envelope evidence, never a public summary or cache field; adding it must still fit the
+65,536-byte private output limit. The native vote PUT/DELETE accepts an optional bounded `x-rating-observation`
+(2,048 UTF-8 bytes) containing the resolved Subject and explicit question ID/revision/grain/meaning/scale. The existing
+writer verifies it against each native prepared attempt before receipt disclosure/execution. Only the immutable Global
+standard provider is supported through this seam; conditional providers retain `atomic_guard_unavailable` without an
+unlocked preflight. Entry and vote still use their existing authorization and native command writers.

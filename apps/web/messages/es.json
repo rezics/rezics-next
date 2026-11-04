@@ -7852,5 +7852,10 @@
   "discovery_personal_unknown": "Comprobando las acciones disponibles de la biblioteca…",
   "discovery_personal_unsupported": "Este elemento no admite acciones de entrada en la biblioteca.",
   "discovery_personal_concealed": "Este lector no tiene acceso a las acciones de entrada en la biblioteca.",
-  "discovery_personal_unavailable": "Las acciones de entrada en la biblioteca no están disponibles."
+  "discovery_personal_unavailable": "Las acciones de entrada en la biblioteca no están disponibles.",
+  "discovery_score_unknown": "Comprobando las acciones de puntuación disponibles…",
+  "discovery_score_signed_out": "Inicia sesión para puntuar este sujeto.",
+  "discovery_score_unsupported": "Este sujeto no admite esta pregunta de puntuación.",
+  "discovery_score_concealed": "Las acciones de puntuación no están habilitadas para este lector.",
+  "discovery_score_unavailable": "Las acciones de puntuación no están disponibles."
 }

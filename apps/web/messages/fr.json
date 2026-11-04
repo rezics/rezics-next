@@ -7852,5 +7852,10 @@
   "discovery_personal_unknown": "Vérification des actions disponibles dans la bibliothèque…",
   "discovery_personal_unsupported": "Ce sujet ne prend pas en charge les actions de bibliothèque.",
   "discovery_personal_concealed": "Les actions de bibliothèque ne sont pas accessibles à ce lecteur.",
-  "discovery_personal_unavailable": "Les actions de bibliothèque sont indisponibles."
+  "discovery_personal_unavailable": "Les actions de bibliothèque sont indisponibles.",
+  "discovery_score_unknown": "Vérification des actions de notation disponibles…",
+  "discovery_score_signed_out": "Connectez-vous pour noter ce sujet.",
+  "discovery_score_unsupported": "Ce sujet ne prend pas en charge cette question de notation.",
+  "discovery_score_concealed": "Les actions de notation ne sont pas accessibles à ce lecteur.",
+  "discovery_score_unavailable": "Les actions de notation sont indisponibles."
 }

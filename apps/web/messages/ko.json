@@ -7852,5 +7852,10 @@
   "discovery_personal_unknown": "사용 가능한 라이브러리 작업을 확인하는 중…",
   "discovery_personal_unsupported": "이 대상은 라이브러리 항목 작업을 지원하지 않습니다.",
   "discovery_personal_concealed": "이 사용자에게는 라이브러리 항목 작업이 공개되지 않았습니다.",
-  "discovery_personal_unavailable": "라이브러리 항목 작업을 사용할 수 없습니다."
+  "discovery_personal_unavailable": "라이브러리 항목 작업을 사용할 수 없습니다.",
+  "discovery_score_unknown": "사용 가능한 평가 작업을 확인하는 중…",
+  "discovery_score_signed_out": "이 대상을 평가하려면 로그인하세요.",
+  "discovery_score_unsupported": "이 대상은 이 평가 질문을 지원하지 않습니다.",
+  "discovery_score_concealed": "이 사용자에게 평가 작업이 공개되지 않았습니다.",
+  "discovery_score_unavailable": "평가 작업을 사용할 수 없습니다."
 }

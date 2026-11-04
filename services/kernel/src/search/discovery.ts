@@ -167,7 +167,14 @@ export type DiscoveryPage = {
   next: string | null;
   as_of: string;
   /** One current private envelope, present on the installed HTTP response and never cached publicly. */
-  viewerFacts?: ViewerFactsPage | null;
+  viewerFacts?:
+    | Exclude<ViewerFactsPage, { state: 'current' }>
+    | (Omit<Extract<ViewerFactsPage, { state: 'current' }>, 'rows'> & {
+        rows: readonly (Extract<ViewerFactsPage, { state: 'current' }>['rows'][number] & {
+          resolvedSubjectId?: string;
+        })[];
+      })
+    | null;
 };
 /** Opt-in wire; omitted representation retains the Subject response. */
 export type DiscoveryRequest = SearchRequest & {

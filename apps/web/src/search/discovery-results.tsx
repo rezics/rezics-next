@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { Cover } from '@rezics/ui/cover';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
@@ -17,6 +17,7 @@ import {
   type DiscoveryViewerFact,
   type DiscoveryViewerQuestion,
   type DiscoveryState,
+  type DiscoveryHit,
 } from './discovery';
 import { DiscoveryPublicRow } from './discovery-public-rows';
 
@@ -179,7 +180,9 @@ export function DiscoveryResults({
   yearProperties = [],
   restartHref,
   subjectHrefFor,
+  renderPersonal,
 }: {
+  renderPersonal?: ((hit: DiscoveryHit, title: string) => ReactNode) | undefined;
   state: DiscoveryState;
   locale: string;
   yearProperties?: string[];
@@ -208,7 +211,7 @@ export function DiscoveryResults({
           </p>
         ) : null}
         {restartHref && state.status !== 'ready' && state.status !== 'loading' && (
-          <a href={restartHref} className={buttonVariants({ variant: 'outline' })}>
+          <a data-discovery-restart href={restartHref} className={buttonVariants({ variant: 'outline' })}>
             {state.status === 'restart' ? m.discovery_restart_action({}, options) : m.search_facet_retry({}, options)}
           </a>
         )}
@@ -283,6 +286,14 @@ export function DiscoveryResults({
                   question={viewerQuestion}
                   locale={locale}
                 />
+              ) : null}
+              {renderPersonal ? (
+                <li
+                  data-discovery-personal-row={discoveryKey(hit)}
+                  className="ml-6 list-none rounded-md border px-3 py-2"
+                >
+                  {renderPersonal(hit, label?.value ?? hit.key.id)}
+                </li>
               ) : null}
               {contextLists.map(({ key, label: heading, value }) => (
                 <li key={`${discoveryKey(hit)}:${key}`} className="ml-6 list-none rounded-md border px-3 py-2 text-sm">

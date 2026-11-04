@@ -14,7 +14,200 @@ import {
   discoveryEntryInput,
   type DiscoveryEntryCapability,
 } from '../src/search/discovery-personal-actions';
-import { DiscoveryPersonalControls } from '../src/search/discovery-personal-controls';
+import { DiscoveryPersonalControls, DiscoveryScoreControls } from '../src/search/discovery-personal-controls';
+import { changeDiscoveryVote } from '../src/search/discovery-personal-actions';
+import { readBoundDiscoveryPage } from '../src/search/discovery-personal-server';
+import { discoveryExposureKey } from '../src/search/discovery-personal-capabilities';
+import { writeQuestionBoundRatingForCurrentReader } from '../src/features/pages/rating-actions';
+import { changePersonalLibraryEntry } from '../src/library/entries-read';
+import { QUESTION } from '../src/features/pages/subject-ratings';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { sessionQuery } from '../src/session/query';
+import { viewerExposureQuery } from '../src/kernel/viewer-exposure';
+import { discoveryExample } from '../src/kernel/fake/search-discovery';
+import { discoveryKey } from '../src/search/discovery';
+import { DiscoveryResults } from '../src/search/discovery-results';
+import { useDiscoveryPersonalResults } from '../src/search/discovery-personal-host';
+import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
+
+test('score zero and clear are independent native commands; another page incarnation sees contention', async () => {
+  const registry = createDiscoveryCommandRegistry();
+  const a = fixture(registry),
+    b = fixture(registry);
+  const waiting = deferred<'rejected'>();
+  const commands: unknown[] = [];
+  const run = changeDiscoveryVote({
+    page: a.page,
+    rowKey: 'row',
+    capability: { state: 'ready', set: true, clear: true },
+    units: 0,
+    write: async (command) => {
+      commands.push(command);
+      return waiting.promise;
+    },
+  });
+  expect(b.page.state('row', 'vote')).toBe('pending');
+  expect(
+    await b.page.execute('row', 'vote', async () => {
+      throw new Error('duplicate dispatch');
+    }),
+  ).toBe('pending');
+  expect(b.page.state('row', 'entry')).toBe('idle');
+  a.page.dispose();
+  waiting.resolve('rejected');
+  expect(await run).toBe('retired');
+  expect(b.page.state('row', 'vote')).toBe('idle');
+  expect(
+    await changeDiscoveryVote({
+      page: b.page,
+      rowKey: 'row',
+      capability: { state: 'ready', set: true, clear: true },
+      units: null,
+      write: async (command) => {
+        commands.push(command);
+        return 'rejected';
+      },
+    }),
+  ).toBe('rejected');
+  expect(commands).toMatchObject([{ units: 0, question: { revision: 2 } }, { units: null }]);
+  b.page.dispose();
+});
+
+test('private page final admission is terminal, bounded and retains ordinary public producer failures', async () => {
+  const input = {
+    expectedReader: 'reader',
+    expectedCredential: 'credential',
+    locale: 'en',
+    request: { representation: 'discovery-v1' as const, text: 'title', limit: 100 },
+  };
+  let authorization = 'Bearer reader';
+  let reads = 0;
+  const ports = {
+    authorize: async () => authorization,
+    prepareCapabilities: async () => () => null,
+    read: async () => {
+      reads++;
+      return empty;
+    },
+  };
+  expect(await readBoundDiscoveryPage(input, ports)).toEqual({ state: empty, capabilities: null });
+  const unavailable = {
+    status: 'ready' as const,
+    page: {
+      ...empty.page,
+      viewerFacts: { state: 'unavailable' as const, reason: 'identity' as const, retryable: true },
+    },
+  };
+  expect((await readBoundDiscoveryPage(input, { ...ports, read: async () => unavailable })).state).toEqual(unavailable);
+  const pending = deferred<DiscoveryState>();
+  const reading = readBoundDiscoveryPage(input, {
+    ...ports,
+    read: () => {
+      reads++;
+      return pending.promise;
+    },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  authorization = 'Bearer other';
+  pending.resolve(empty);
+  expect((await reading).state).toEqual({ status: 'restart' });
+  expect(reads).toBe(2);
+  const caps = { release: 'x'.repeat(65536), exposure: '[]', entries: {}, vote: false };
+  const bounded = await readBoundDiscoveryPage(input, { ...ports, prepareCapabilities: async () => () => caps });
+  expect(bounded).toMatchObject({
+    state: { page: { viewerFacts: { reason: 'response_limit' }, next: null, hits: [] } },
+    capabilities: null,
+  });
+});
+
+test('guarded native BFF ports refuse credentials changed during session await and bind score question/zero/clear', async () => {
+  const reader = '018f0000-0000-7000-8000-00a000000001';
+  const token = 'A'.repeat(22);
+  let session = { status: 'active' as const, subject: reader, csrfToken: token, accessToken: 'reader' };
+  let pause: ReturnType<typeof deferred<typeof session>> | undefined;
+  const env = {
+    AUTH_ISSUER: 'https://auth.invalid',
+    API_RESOURCE: 'api',
+    WEBSITE_SCOPES: 'scopes',
+    WEBSITE_CLIENT_ID: 'web',
+    WEBSITE_CLIENT_KEY: 'key',
+    SESSIONS: {
+      idFromName: (id: string) => id,
+      get: () => ({ credentialIfFresh: () => pause?.promise ?? Promise.resolve(session) }),
+    },
+  } as never;
+  const request = () =>
+    new Request('https://site.invalid/en/search', {
+      method: 'POST',
+      headers: {
+        cookie: `__Host-rezics_session=${'A'.repeat(43)}`,
+        origin: 'https://site.invalid',
+        'x-csrf-token': token,
+      },
+    });
+  const sent: unknown[] = [];
+  const client = {
+    subjects: ({ id }: { id: string }) => ({
+      ratings: ({ questionId }: { questionId: string }) => ({
+        vote: {
+          put: async (body: unknown, options: unknown) => {
+            sent.push({ id, questionId, body, options });
+            return { status: 200 };
+          },
+          delete: async (options: unknown) => {
+            sent.push({ id, questionId, options });
+            return { status: 204 };
+          },
+        },
+      }),
+    }),
+  } as never;
+  const input = {
+    subjectId: reader,
+    units: 0,
+    idempotencyKey: crypto.randomUUID(),
+    expectedReader: reader,
+    expectedCredential: token,
+    question: {
+      id: QUESTION,
+      revision: 1,
+      grain: 'work',
+      meaning: 'score',
+      scale: { min: 0, max: 20, displayStep: 1 },
+    },
+  };
+  expect(await writeQuestionBoundRatingForCurrentReader(client, request(), env, input)).toBe('successful');
+  expect(await writeQuestionBoundRatingForCurrentReader(client, request(), env, { ...input, units: null })).toBe(
+    'successful',
+  );
+  expect(sent).toMatchObject([
+    { questionId: QUESTION, body: { units: 0 }, options: { headers: { authorization: 'Bearer reader' } } },
+    { questionId: QUESTION },
+  ]);
+  const wire = sent[0] as { options: { headers: Record<string, string> } };
+  expect(JSON.parse(wire.options.headers['x-rating-observation']!)).toEqual({
+    subjectId: reader,
+    question: input.question,
+  });
+  pause = deferred<typeof session>();
+  const stale = writeQuestionBoundRatingForCurrentReader(client, request(), env, input);
+  session = { ...session, subject: 'another-reader' };
+  pause.resolve(session);
+  expect(await stale).toBe('rejected');
+  expect(sent).toHaveLength(2);
+  pause = undefined;
+  const entry = await changePersonalLibraryEntry(client, request(), env, {
+    subjectId: reader,
+    state: 'planned',
+    expectedReader: reader,
+    expectedCredential: token,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  expect(entry).toEqual({ ok: false, reason: 'signed-out' });
+  expect(sent).toHaveLength(2);
+});
 
 const empty: DiscoveryState = {
   status: 'ready',
@@ -353,9 +546,194 @@ test('controlled native form preserves focus, draft and URL through rejection, w
       const html = renderToStaticMarkup(<DiscoveryPersonalControls {...props} locale={locale} />);
       expect(html).not.toContain('discovery_personal_');
       expect(html).toContain('role="status"');
+      const outcomes = ['unknown', 'signed-out', 'unsupported', 'concealed', 'unavailable'] as const;
+      const messages = outcomes.map((state) =>
+        renderToStaticMarkup(
+          <DiscoveryScoreControls
+            page={f.page}
+            target={props.target}
+            capability={{ state }}
+            locale={locale}
+            returnTo="/search"
+            write={async () => 'rejected'}
+          />,
+        ),
+      );
+      expect(new Set(messages).size).toBe(5);
+      expect(messages.join('')).not.toContain('discovery_score_');
     }
   } finally {
     await act(async () => root.unmount());
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
+
+test('live mixed host binds native adapters, reconciles duplicate rows once, and retains focus/scroll on restart and cancellation', async () => {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en/search?q=title&sort=name&kind=book#context' });
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLSelectElement',
+    'HTMLInputElement',
+    'HTMLButtonElement',
+    'Element',
+    'Node',
+    'Document',
+    'DocumentFragment',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
+  const saved = new Map(keys.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of keys)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      value:
+        key === 'window'
+          ? window
+          : key === 'IS_REACT_ACT_ENVIRONMENT'
+            ? true
+            : typeof window[key] === 'function' &&
+                ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'].includes(key)
+              ? window[key].bind(window)
+              : window[key],
+    });
+  const { createRoot } = await import('react-dom/client');
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const reader = 'reader',
+    credential = 'credential';
+  client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: reader, csrfToken: credential });
+  const admitted = ['personal_library', 'library_entry.delete'];
+  client.setQueryData(viewerExposureQuery({ subject: reader, id: 1 }).queryKey, { subject: reader, admitted });
+  const page = structuredClone(discoveryExample);
+  const book = page.hits[3]!;
+  page.hits = [book, { ...book, key: { ...book.key, kind: 'schema:CreativeWork' } }];
+  page.viewerFacts = {
+    state: 'current',
+    question: {
+      id: QUESTION,
+      revision: 1,
+      grain: 'work',
+      meaning: 'score',
+      scale: { min: 0, max: 20, displayStep: 1 },
+    },
+    rows: page.hits.map((hit) => ({
+      rowKey: discoveryKey(hit),
+      subjectId: hit.key.id,
+      resolvedSubjectId: hit.key.id,
+      entry: { state: 'present', entryState: 'planned', revision: 7, incarnationId: crypto.randomUUID() },
+      vote: { state: 'present', questionId: QUESTION, questionRevision: 1, units: 0, revision: 4 },
+    })),
+  };
+  const source: DiscoveryState = { status: 'ready', page };
+  const bound: DiscoveryBoundPage = {
+    state: source,
+    capabilities: {
+      release: 'release',
+      exposure: discoveryExposureKey(admitted),
+      entries: { 'schema:Book': capability, 'schema:CreativeWork': capability },
+      vote: true,
+    },
+  };
+  const refresh = deferred<DiscoveryBoundPage>(),
+    entry = deferred<{ result: 'saved' }>(),
+    vote = deferred<'rejected'>();
+  let reads = 0;
+  const writes: unknown[] = [];
+  function Live({ locale = 'en' }: { locale?: string }) {
+    const personal = useDiscoveryPersonalResults({
+      enabled: true,
+      source,
+      request: { representation: 'discovery-v1', text: 'title', limit: 100 },
+      locale,
+      returnTo: window.location.href,
+      read: async ({ data }) => {
+        expect(data.expectedCredential).toBe(credential);
+        reads++;
+        return reads === 1 ? bound : refresh.promise;
+      },
+      writeEntry: async (command) => {
+        writes.push(command);
+        return entry.promise as never;
+      },
+      writeVote: async (command) => {
+        writes.push(command);
+        return vote.promise;
+      },
+    });
+    return (
+      <section ref={personal.regionRef} tabIndex={-1}>
+        <DiscoveryResults
+          state={personal.state!}
+          locale={locale}
+          restartHref="/en/search?q=title&sort=name&kind=book"
+          renderPersonal={personal.renderPersonal}
+        />
+      </section>
+    );
+  }
+  try {
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <Live />
+        </QueryClientProvider>,
+      ),
+    );
+    expect(host.querySelectorAll('select')).toHaveLength(2);
+    expect(host.querySelector('[data-slot=rating-control-value]')?.textContent).toContain('0');
+    const select = host.querySelector('select')!;
+    await act(async () => {
+      select.value = 'completed';
+      select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    });
+    const submit = host.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    submit.focus();
+    window.scrollTo(0, 210);
+    await act(async () => host.querySelector('form')!.requestSubmit());
+    expect(host.querySelectorAll('select')[1]!.getAttribute('aria-disabled')).toBe('true');
+    const clear = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('Clear'),
+    )!;
+    await act(async () => clear.click());
+    expect(writes).toMatchObject([
+      { expectedReader: reader, expectedCredential: credential, state: 'completed', revision: 7 },
+      { expectedReader: reader, expectedCredential: credential, units: null, question: { id: QUESTION, revision: 1 } },
+    ]);
+    await act(async () => entry.resolve({ result: 'saved' }));
+    expect(reads).toBe(1);
+    expect(window.document.activeElement).toBe(submit);
+    expect(host.querySelector('[data-slot=rating-control-value]')?.textContent).not.toBe('0');
+    await act(async () => vote.resolve('rejected'));
+    expect(reads).toBe(2);
+    await act(async () => refresh.resolve({ state: { status: 'restart' }, capabilities: null }));
+    expect(window.document.activeElement).toBe(host.querySelector('[data-discovery-restart]'));
+    expect(window.scrollY).toBe(210);
+    expect(window.location.search).toBe('?q=title&sort=name&kind=book');
+    expect(window.location.hash).toBe('#context');
+    expect(host.querySelectorAll('select')).toHaveLength(0);
+    await act(async () =>
+      client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null }),
+    );
+    expect(host.textContent).not.toContain('Planned');
+    expect(reads).toBe(2);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
     await window.happyDOM.abort();
     for (const [key, descriptor] of saved) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);

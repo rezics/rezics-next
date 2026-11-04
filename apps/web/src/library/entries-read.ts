@@ -18,6 +18,7 @@ import type { SessionEnv } from '../session/client';
 import type { ProgressLabelInput } from './progress-label';
 import { libraryAnyStateLabel, libraryStateLabel, libraryStateOptions, type LibraryStateChoice } from './profiles';
 import type { Release } from '../subject/definitions.ts';
+import { prepareExpectedReader, type ExpectedReader } from '../session/expected-reader';
 import { prepareSession, viewerCredential } from '../session/request';
 import {
   libraryFullQuery,
@@ -92,7 +93,7 @@ export type LibraryMutationResult =
       reason: 'closed' | 'denied' | 'missing' | 'unavailable' | 'signed-out' | 'unsupported_library_profile';
     };
 
-export type LibraryChangeInput = {
+export type LibraryChangeInput = Partial<ExpectedReader> & {
   subjectId: string;
   state: LibraryEntryStateWrite;
   revision?: number;
@@ -100,7 +101,7 @@ export type LibraryChangeInput = {
   idempotencyKey: string;
 };
 
-export type LibraryRemoveInput = {
+export type LibraryRemoveInput = Partial<ExpectedReader> & {
   subjectId: string;
   revision: number;
   incarnationId?: string | null;
@@ -407,7 +408,10 @@ export async function changePersonalLibraryEntry(
   input: LibraryChangeInput,
 ): Promise<LibraryMutationResult> {
   try {
-    const authorization = await bearer(request, sessionEnv);
+    const guarded = input.expectedReader !== undefined || input.expectedCredential !== undefined;
+    const authorization = guarded
+      ? await prepareExpectedReader(request, sessionEnv, input as ExpectedReader)
+      : await bearer(request, sessionEnv);
     if (!authorization) return { ok: false, reason: 'signed-out' };
     const result = await client.libraryEntries({ subjectId: input.subjectId }).put(
       {
@@ -466,7 +470,10 @@ export async function removePersonalLibraryEntry(
   input: LibraryRemoveInput,
 ): Promise<LibraryMutationResult> {
   try {
-    const authorization = await bearer(request, sessionEnv);
+    const guarded = input.expectedReader !== undefined || input.expectedCredential !== undefined;
+    const authorization = guarded
+      ? await prepareExpectedReader(request, sessionEnv, input as ExpectedReader)
+      : await bearer(request, sessionEnv);
     if (!authorization) return { ok: false, reason: 'signed-out' };
     const result = await client.libraryEntries({ subjectId: input.subjectId }).delete(undefined, {
       query: {
