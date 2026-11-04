@@ -25,7 +25,9 @@ export function collectionComparisonDefinitions(
   );
   return Object.fromEntries(
     [...properties].flatMap((property) =>
-      Object.hasOwn(definitions, property) ? [[property, { labels: definitions[property]?.labels }]] : [],
+      Object.hasOwn(definitions, property)
+        ? [[property, definitions[property]?.labels ? { labels: definitions[property]!.labels! } : {}]]
+        : [],
     ),
   );
 }
