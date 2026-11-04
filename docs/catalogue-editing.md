@@ -156,6 +156,9 @@ Decision: explicit Context decision and adoption controls use separate native op
 - Bound: retain the exact property/slot/candidate and existing session; do not enumerate Contexts or candidate/grant history, or hydrate actions per row.
 - Growth check: with the chosen Subject, slot and page fixed, unrelated Contexts, candidates and grants leave the two action references and bounded native reads fixed; existing Context, candidate and viewer-action growth suites own the indexed work bounds.
 
+Decision: both creation surfaces read the mounted create operation on its fixed Global Context parent; lifecycle
+controls use current action availability and exact Context retention state.
+
 ## Browser flow: subject contributions
 
 The existing subject header and compact view frame expose one **Contribute** menu. The shared UI Menu supplies

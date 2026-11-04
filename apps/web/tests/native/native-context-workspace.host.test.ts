@@ -59,6 +59,52 @@ async function kernelJson<T>(
   return { status: response.status, body };
 }
 
+async function contextOperations(id: string): Promise<string[]> {
+  const result = await kernelJson<{
+    resources: { type: string; id: string; viewerActions?: { operations: string[] }[] }[];
+  }>('/v1/viewerActions', {
+    method: 'POST',
+    body: JSON.stringify({ resources: [{ type: 'semantic.context', id }] }),
+  });
+  expect(result.status).toBe(200);
+  return (
+    result.body.resources
+      .find((resource) => resource.type === 'semantic.context' && resource.id === id)
+      ?.viewerActions?.flatMap((entry) => entry.operations) ?? []
+  );
+}
+
+async function revokeContextOwner(id: string): Promise<void> {
+  const aliceIdentity = await stack.authPersona('alice');
+  const grants = await kernelJson<{
+    grants: {
+      kind: string;
+      subject: { kind: string; id: string };
+      role: string | null;
+      valid: string;
+    }[];
+  }>(`/v1/grants?resourceId=${encodeURIComponent(id)}`);
+  expect(grants.status).toBe(200);
+  const owner = grants.body.grants.find(
+    (grant) =>
+      grant.kind === 'role' &&
+      grant.subject.kind === 'account' &&
+      grant.subject.id === aliceIdentity.accountId &&
+      grant.role === 'semantic.context.owner',
+  );
+  expect(owner).toBeTruthy();
+  const revoked = await kernelJson('/v1/roleGrants:revoke', {
+    method: 'POST',
+    body: JSON.stringify({
+      resource: { route: 0, id },
+      subject: { kind: 'account', id: aliceIdentity.accountId },
+      role: 'semantic.context.owner',
+      valid: owner!.valid,
+    }),
+  });
+  expect(revoked.status).toBe(200);
+}
+
 async function waitForDirectory(label: string, deleted = false): Promise<DirectoryPage['contexts'][number]> {
   const deadline = Date.now() + 60_000;
   let last: unknown;
@@ -158,6 +204,7 @@ test('signed-in Alice discovers a named Context, creates one, then deletes and r
   const workspaceHref = await open.getAttribute('href');
   expect(workspaceHref).toMatch(/\/en\/my\/contexts\/[0-9a-f-]{36}$/i);
   const createdId = workspaceHref!.split('/').at(-1)!;
+  expect(await contextOperations(createdId)).toContain('context.delete');
 
   await open.click();
   await directory.locator('html[data-hydrated]').waitFor({ state: 'attached' });
@@ -196,12 +243,34 @@ test('signed-in Alice discovers a named Context, creates one, then deletes and r
   const deletedEntry = await waitForDirectory(createdLabel, true);
   expect(deletedEntry.state).toBe('deleted');
   expect(deletedEntry.purgeAfter).toBeTruthy();
+  expect(await contextOperations(createdId)).toContain('context.restore');
+  expect(await contextOperations(createdId)).not.toContain('context.delete');
   const deletedPage = await visit(`/en/my/contexts?query=${encodeURIComponent(createdLabel)}&deleted=true`);
   await expect(deletedPage.getByRole('link', { name: createdLabel })).toBeVisible();
   await deletedPage.close();
   const activePage = await visit(`/en/my/contexts?query=${encodeURIComponent(createdLabel)}`);
   await expect(activePage.getByText('No matching Contexts')).toBeVisible();
   await activePage.close();
+
+  await stack.injectKernelFailureOnce({
+    method: 'POST',
+    path: '/v1/viewerActions',
+    status: 503,
+    body: JSON.stringify({
+      type: 'https://rezics.com/problems/overloaded',
+      title: 'Overloaded',
+      status: 503,
+      code: 'overloaded',
+      request_id: crypto.randomUUID(),
+      retryable: true,
+      effect_status: 'not_applicable',
+    }),
+  });
+  await directory.getByRole('button', { name: 'Read current state' }).click();
+  await expect(directory.getByText('Current action permissions are unavailable. Changes are disabled.')).toBeVisible();
+  await expect(directory.getByRole('button', { name: 'Restore Context' })).toBeDisabled();
+  await directory.getByRole('button', { name: 'Read current state' }).click();
+  await expect(directory.getByRole('button', { name: 'Restore Context' })).toBeEnabled();
 
   const restoreStart = stack.kernelRequests().length;
   const restoreBff = directory.waitForResponse(
@@ -219,6 +288,7 @@ test('signed-in Alice discovers a named Context, creates one, then deletes and r
         new URL(request.url, stack.kernelOrigin).pathname === `/v1/contexts/${createdId}:restore`,
     ),
   ).toBe(true);
+  expect(await contextOperations(createdId)).toContain('context.delete');
 
   const global = await visit(`/en/my/contexts/${PAGE_GLOBAL_CONTEXT}`);
   await expect(global.getByText('Global is shared editorial authority')).toBeVisible();
@@ -252,5 +322,34 @@ test('signed-in Alice discovers a named Context, creates one, then deletes and r
   const discoveredPage = await visit(`/en/my/contexts/${discoveredId}`);
   await expect(discoveredPage.getByRole('heading', { name: discovered })).toBeVisible();
   await discoveredPage.close();
+
+  const revokedDelete = await kernelJson<{ context: { id: string } }>('/v1/contexts', {
+    method: 'POST',
+    body: JSON.stringify({ labels: { en: `Revoked delete ${crypto.randomUUID()}` } }),
+  });
+  const revokedDeletePage = await visit(`/en/my/contexts/${revokedDelete.body.context.id}`);
+  await expect(revokedDeletePage.getByRole('button', { name: 'Delete Context' })).toBeEnabled();
+  await revokeContextOwner(revokedDelete.body.context.id);
+  expect(await contextOperations(revokedDelete.body.context.id)).not.toContain('context.delete');
+  await revokedDeletePage.getByRole('button', { name: 'Delete Context' }).click();
+  await revokedDeletePage.getByRole('dialog').getByRole('button', { name: 'Delete Context' }).click();
+  await expect(revokedDeletePage.getByText('Your current permissions do not allow this request.')).toBeVisible();
+  await revokedDeletePage.close();
+
+  const revokedRestore = await kernelJson<{ context: { id: string; labels: Record<string, string> } }>('/v1/contexts', {
+    method: 'POST',
+    body: JSON.stringify({ labels: { en: `Revoked restore ${crypto.randomUUID()}` } }),
+  });
+  const revokedRestorePage = await visit(`/en/my/contexts/${revokedRestore.body.context.id}`);
+  await expect(revokedRestorePage.getByRole('button', { name: 'Delete Context' })).toBeEnabled();
+  await revokedRestorePage.getByRole('button', { name: 'Delete Context' }).click();
+  await revokedRestorePage.getByRole('dialog').getByRole('button', { name: 'Delete Context' }).click();
+  await expect(revokedRestorePage.getByRole('button', { name: 'Restore Context' })).toBeEnabled();
+  await revokeContextOwner(revokedRestore.body.context.id);
+  expect(await contextOperations(revokedRestore.body.context.id)).not.toContain('context.restore');
+  await revokedRestorePage.getByRole('button', { name: 'Restore Context' }).click();
+  await revokedRestorePage.getByRole('dialog').getByRole('button', { name: 'Restore Context' }).click();
+  await expect(revokedRestorePage.getByText('Your current permissions do not allow this request.')).toBeVisible();
+  await revokedRestorePage.close();
   await directory.close();
 });
