@@ -29,7 +29,7 @@ const page = {
   subjects: [],
   provenanceSubjects: [],
   authors: {},
-  mentions: {},
+  mentions: null,
   verification: { sitekey: '', scriptUrl: '' },
   now: '2026-10-24T00:00:00Z',
 } as ThreadReadingPage;

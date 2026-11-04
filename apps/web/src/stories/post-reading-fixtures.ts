@@ -83,7 +83,7 @@ export function preparedPostReading(blocks = 24) {
     thread: { ...(recordedThread.thread as ThreadReadingPage['thread']), firstPost: post },
     posts: { posts: [post], next: null, reactionsAsOf: null },
     authors,
-    mentions: {},
+    mentions: null,
     subjects: [],
     provenanceSubjects: [],
     documentMedia,
