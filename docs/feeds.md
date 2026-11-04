@@ -428,7 +428,7 @@ Dependency failure propagates to the page owner rather than returning a guessed 
 - **Bound:** S <= 20 selected unique Subjects, H <= S represented partitions, five admitted Subject kinds, and the
   existing 20 displayed / 160 raw / one-round selection ceilings. Each identity observation adds H SQL statements,
   one batched partition statement and three transaction/control statements; across both that is 2H + 8 statements,
-  plus H native count statements and at most one viewer statement. Exact identity prefixes read at most S Subject
+  plus at most two first-use compiled-schema freshness probes from the native partition reader, H native count statements and at most one viewer statement. Exact identity prefixes read at most S Subject
   and S latest-redirect rows per observation; the redirect primary key ends in sequence, so selected merge history
   is sought backwards with LIMIT 1. Counts seek at most seven native total rows per ID (the shared native reader's
   physical bound), admit only the five Subject kinds and preserve zero-row coverage. The authenticated viewer
