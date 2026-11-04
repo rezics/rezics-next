@@ -683,10 +683,10 @@ export function CollectionSaveReview({
               remainingOperations={remainingOperations}
               metadataChanges={metadataWasConfirmed ? [] : plan.metadataChanges}
               types={types}
-              onReadCurrent={onReadCurrent}
-              onDiscard={onDiscard}
-              onDiscardUnavailable={onDiscardUnavailable}
-              onReviewCurrent={onReviewCurrent}
+              {...(onReadCurrent ? { onReadCurrent } : {})}
+              {...(onDiscard ? { onDiscard } : {})}
+              {...(onDiscardUnavailable ? { onDiscardUnavailable } : {})}
+              {...(onReviewCurrent ? { onReviewCurrent } : {})}
               rebaseIssue={rebaseIssue}
               canReviewCurrent={!unknown}
             />
