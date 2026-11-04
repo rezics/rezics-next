@@ -87,6 +87,117 @@ test('A lost Collection visibility save retains the exact attempted revision/inp
   expect(editor.snapshot().phase).not.toBe('saved'); // The old receipt cannot confirm this new command.
 });
 
+test('an original command wait survives a shorter current-read refusal and retained retry callback', async () => {
+  let now = 1_000;
+  let reads = 0;
+  const commands: VisibilityAttempt[] = [];
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async (input) => {
+        commands.push(input);
+        return {
+          ok: false,
+          reason: 'unavailable',
+          failure: { status: 503, ...(commands.length === 1 ? { retryAfter: '60' } : {}) },
+        };
+      },
+      read: async () =>
+        ++reads === 1
+          ? { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '5' } }
+          : { ok: true, value: row('unlisted', 9) },
+    },
+    undefined,
+    undefined,
+    () => now,
+  );
+  await editor.edit('public');
+  const original = editor.snapshot().attempt!;
+  const retainedRetry = editor.retry.bind(editor);
+  await editor.edit('unlisted');
+  await editor.reload();
+  expect(editor.commandRetryDeadline()).toBe(61_000);
+  expect(editor.currentReadRetryDeadline()).toBe(6_000);
+  await editor.reload();
+  await retainedRetry();
+  expect(reads).toBe(1);
+  expect(commands).toEqual([original]);
+  now = 6_000;
+  await editor.reload();
+  expect(editor.snapshot()).toMatchObject({ current: { revision: 9 }, desired: 'unlisted', attempt: original });
+  expect(editor.commandRetryDeadline()).toBe(61_000);
+  now = 61_000;
+  await retainedRetry();
+  expect(commands).toEqual([original, original]);
+  expect(editor.snapshot()).toMatchObject({ phase: 'uncertain', attempt: original, outcomeUnknown: true });
+});
+
+test('a failed inventory cursor keeps its retry wait while a deliberate cursor-free restart remains independent', async () => {
+  let now = 1_000;
+  const reads: (string | null)[] = [];
+  const pager = new CollectionPrivacyPager(
+    async (cursor) => {
+      reads.push(cursor);
+      if (reads.length === 1) return { ok: true, value: { collections: [initial], next: 'exact-next-page' } };
+      if (reads.length === 2)
+        return { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '30' } };
+      return { ok: true, value: { collections: [receipt], next: null } };
+    },
+    undefined,
+    () => now,
+  );
+  await pager.load();
+  await pager.load();
+  const retry = pager.load.bind(pager);
+  await retry();
+  expect(reads).toEqual([null, 'exact-next-page']);
+  expect(pager.retryDeadline()).toBe(31_000);
+  expect(pager.snapshot()).toMatchObject({ next: 'exact-next-page', failure: 'unavailable' });
+  await pager.restart();
+  expect(reads).toEqual([null, 'exact-next-page', null]);
+  expect(pager.snapshot()).toMatchObject({ collections: [receipt], next: null, failure: null, loaded: true });
+});
+
+test('retirement clears private waits and fences a late current-read refusal and retained callback', async () => {
+  let now = 1_000;
+  let saves = 0;
+  const lateRead = deferred<CollectionPrivacyRead<OwnedCollection>>();
+  const editor = new CollectionPrivacyEditor(
+    initial,
+    {
+      save: async () => {
+        saves++;
+        return { ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '60' } };
+      },
+      read: async () => lateRead.promise,
+    },
+    undefined,
+    undefined,
+    () => now,
+  );
+  await editor.edit('public');
+  const retainedRetry = editor.retry.bind(editor);
+  const reload = editor.reload();
+  editor.dispose();
+  expect(editor.commandRetryDeadline()).toBe(0);
+  lateRead.resolve({ ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '120' } });
+  await reload;
+  await retainedRetry();
+  expect(editor.currentReadRetryDeadline()).toBe(0);
+  expect(editor.commandRetryDeadline()).toBe(0);
+  expect(saves).toBe(1);
+
+  const pager = new CollectionPrivacyPager(
+    async () => ({ ok: false, reason: 'unavailable', failure: { status: 503, retryAfter: '60' } }),
+    undefined,
+    () => now,
+  );
+  await pager.load();
+  expect(pager.retryDeadline()).toBe(61_000);
+  pager.dispose();
+  expect(pager.retryDeadline()).toBe(0);
+});
+
 test('explicit local abandonment releases the row without claiming the original save was cancelled or absent', async () => {
   let saves = 0;
   const editor = new CollectionPrivacyEditor(initial, {
