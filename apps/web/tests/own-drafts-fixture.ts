@@ -1,3 +1,4 @@
+import { mock } from 'bun:test';
 import type { OwnDraftEntry, OwnDraftIdentity } from '../src/threads/own-drafts/model';
 import { act, createElement } from 'react';
 import { dirname } from 'node:path';
@@ -52,6 +53,9 @@ export function selected(entry: OwnDraftEntry = row(), text = 'Selected server b
     },
   };
 }
+
+// The mounted browser shell supplies commands; no Cloudflare runtime is involved.
+mock.module('cloudflare:workers', () => ({ env: {} }));
 
 /** A small mounted shell for the three private drafts outcome suites. */
 export async function mountOwnDrafts() {
