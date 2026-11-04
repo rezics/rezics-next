@@ -92,6 +92,25 @@ test('explicit derived preparation builds a real native page; GET does no bootst
   await f.real.grant(global, 'ordinary', 'context:accept');
   const ordinary = status(await f.call('GET', endpoint, undefined, 'ordinary'), 200);
   expect(ordinary.candidates).toHaveLength(3);
+  const installed = status(
+    await f.call(
+      'POST',
+      '/v1/viewerActions',
+      {
+        resources: [{ type: 'semantic.context', id: GLOBAL_CONTEXT }],
+      },
+      'ordinary',
+    ),
+    200,
+  );
+  expect(ordinary.actions.operations).toEqual(
+    installed.resources[0].viewerActions
+      .flatMap((entry: { operations: string[] }) => entry.operations)
+      .filter((operation: string) =>
+        ['subject.accept_candidate', 'subject.reject_candidate', 'subject.adopt'].includes(operation),
+      ),
+  );
+
   expect(ordinary.actions).toMatchObject({
     state: 'available',
     context: GLOBAL_CONTEXT,
