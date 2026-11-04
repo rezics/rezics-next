@@ -370,7 +370,7 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
       expect(templateLabels(retainedTemplates)).toContain('Type: schema:Novel');
       const templateSelect = retainedTemplates.getByRole('combobox', { name: m.curation_template({}, { locale }) });
       await select(templateSelect, JSON.stringify({ scope: 'type', key: 'schema:Book' }));
-      const viewSelect = retainedTemplates.getByRole('combobox', { name: m.curation_view({}, { locale }) });
+      const viewSelect = retainedTemplates.getAllByRole('combobox', { name: m.curation_view({}, { locale }) })[0]!;
       expect(Array.from((viewSelect as HTMLSelectElement).options).map((option) => option.value)).toContain('relations');
       expect(publications).toBe(2);
       await act(async () => root.render(null));
