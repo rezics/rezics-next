@@ -199,6 +199,12 @@ const { renderToString } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
   await import('@tanstack/react-router');
+// Another focused file may have imported these static browser defaults during server rendering.
+const queryDefaults = await import('../src/kernel/query');
+mock.module('../src/kernel/query', () => ({
+  ...queryDefaults,
+  personalRead: { ...queryDefaults.personalRead, enabled: typeof window !== 'undefined' },
+}));
 const { sessionQuery } = await import('../src/session/query');
 const { spaceQuery, useShelfList } = await import('../src/community/space-queries');
 const { ShelfContinuation } = await import('../src/community/publication-controls-view');
