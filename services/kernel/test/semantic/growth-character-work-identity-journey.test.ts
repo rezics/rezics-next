@@ -4,8 +4,7 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { listSubjectLinks, listSubjectRelations } from '../../src/semantic/links.ts';
 import { newId } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
-import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
+import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
 
 const appearanceProperty = 'schema:character';
 const identityProperty = 'rezics:relatedCharacterIdentity';
@@ -40,7 +39,6 @@ afterAll(async () => {
 });
 
 test('a 20-row character appearance window stays fixed at 64/512/4096 unrelated population', async () => {
-  const unrelated = unrelatedSemanticPopulation('character-work-identity-unrelated', route >>> 4);
   const window = async () => {
     const appearances = await listSubjectLinks(db.pool, ring, {
       routeKey: new Uint8Array(32).fill(1),
@@ -70,7 +68,23 @@ test('a 20-row character appearance window stays fixed at 64/512/4096 unrelated 
     scales: [64, 512, 4096],
     bounds: { rows: 'constant' as const, blocks: 'constant' as const, statements: 'constant' as const },
     grow: async (_database: GrowthDatabase, scale: number, previous: number) => {
-      await seedSemanticPopulation(db, unrelated.population, { from: previous * 500, to: scale * 500 });
+      await seed(
+        db,
+        {
+          name: 'character-work-identity-unrelated',
+          hotPartition: (route + 16) >>> 4,
+          hotShare: 1,
+          write: async (target, placement) => {
+            await target.admin.query(
+              `INSERT INTO semantic.subject
+                (route,subject_id,type,recorded_transaction_id,visibility,security_revision,current_facts,current_release,projection_pending)
+               VALUES ($1,$2,'schema:Book',$3,'visible',0,0,$4,false)`,
+              [placement.route, newId(placement.route), randomUUID(), bundledDigest],
+            );
+          },
+        },
+        { from: previous, to: scale },
+      );
       if (previous === 0) {
         await db.admin.query(
           `INSERT INTO semantic.inbound_link(route,subject_id,property,source_subject_id,statement_id,source_revision,present,recorded_transaction_id,source_type,order_key,filter_value)
