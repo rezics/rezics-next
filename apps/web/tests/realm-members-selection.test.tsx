@@ -275,7 +275,8 @@ test('selected episode changes retire stale inspection while explicit add readba
       pageReads++;
       return { kind: 'ready', page: page([]) };
     },
-    readSelected: async () => (pageReads === 1 ? selected('none', 'absence-episode') : selected('current', 'new-member-episode')),
+    readSelected: async () =>
+      pageReads === 1 ? selected('none', 'absence-episode') : selected('current', 'new-member-episode'),
   });
   const stopReadback = readback.connect();
   await settle();
@@ -296,7 +297,11 @@ test('selected episode changes retire stale inspection while explicit add readba
     readPage: async () => ({ kind: 'ready', page: page([]) }),
     readSelected: async () => {
       attempts++;
-      return attempts === 1 ? selected('current', 'original-member-episode') : attempts === 2 ? { kind: 'failed' } : selected('current', 'rejoined-member-episode');
+      return attempts === 1
+        ? selected('current', 'original-member-episode')
+        : attempts === 2
+          ? { kind: 'failed' }
+          : selected('current', 'rejoined-member-episode');
     },
   });
   const stopRetry = retry.connect();

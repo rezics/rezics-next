@@ -34,10 +34,7 @@ function member(overrides: Partial<NativeRealmMember> = {}): NativeRealmMember {
   };
 }
 
-function response(
-  selected: NativeRealmMember | null,
-  items: NativeRealmMember[] = [member()],
-): NativeRealmMembersRead {
+function response(selected: NativeRealmMember | null, items: NativeRealmMember[] = [member()]): NativeRealmMembersRead {
   return {
     kind: 'ready',
     page: {
@@ -57,9 +54,7 @@ test('production source binds native viewer and page bound, preserves cursor and
   const operands: RealmMembersReadInput[] = [];
   const reader = async (input: RealmMembersReadInput) => {
     operands.push(input);
-    return input.accountId
-      ? response(member())
-      : response(null, [member()]);
+    return input.accountId ? response(member()) : response(null, [member()]);
   };
   const source = nativeRealmMembersSource(viewerId, reader);
   const page = await source.readPage({ realmId, cursor: ' opaque/+==? &字 ' });
@@ -125,9 +120,7 @@ test('none stays absence, carries the exact episode, and never falls back to a c
   );
   const source = nativeRealmMembersSource(viewerId, async () => current);
   await source.readPage({ realmId, cursor: null });
-  expect(
-    await source.readSelected({ realmId, accountId, authority: 'mra1.0.authority-proof' }),
-  ).toMatchObject({
+  expect(await source.readSelected({ realmId, accountId, authority: 'mra1.0.authority-proof' })).toMatchObject({
     kind: 'ready',
     membership: 'none',
     membershipInterval: null,
@@ -136,8 +129,7 @@ test('none stays absence, carries the exact episode, and never falls back to a c
   });
 
   current = response(member({ identity: null }));
-  expect(
-    await source.readSelected({ realmId, accountId, authority: 'mra1.0.authority-proof' }),
-  ).toEqual({ kind: 'concealed' });
+  expect(await source.readSelected({ realmId, accountId, authority: 'mra1.0.authority-proof' })).toEqual({
+    kind: 'concealed',
+  });
 });
-

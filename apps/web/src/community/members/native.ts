@@ -181,8 +181,7 @@ function page(value: unknown, input: RealmMembersReadInput): value is NativeReal
     !nullableText(value.next, 4096)
   )
     return false;
-  if (value.state === 'preparing')
-    return value.items.length === 0 && value.selected === null && value.viewer === null;
+  if (value.state === 'preparing') return value.items.length === 0 && value.selected === null && value.viewer === null;
   if (
     !record(value.viewer) ||
     !keys(value.viewer, ['accountId', 'authority']) ||

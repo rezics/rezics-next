@@ -83,8 +83,7 @@ export function nativeRealmMembersSource(
       if (read.kind !== 'ready') return pageFailure(read);
       pageBound = read.page.pageBound;
       if (read.page.state === 'preparing') return { kind: 'preparing' };
-      if (read.page.realmId !== address.realmId || read.page.viewer.accountId !== viewerId)
-        return { kind: 'failed' };
+      if (read.page.realmId !== address.realmId || read.page.viewer.accountId !== viewerId) return { kind: 'failed' };
       return {
         kind: 'ready',
         page: {
@@ -111,8 +110,7 @@ export function nativeRealmMembersSource(
       if (read.kind !== 'ready') return selectionFailure(read);
       if (expectedBound < 1 || read.page.pageBound !== expectedBound) return { kind: 'changed' };
       if (read.page.state === 'preparing') return { kind: 'unavailable' };
-      if (read.page.realmId !== address.realmId || read.page.viewer.accountId !== viewerId)
-        return { kind: 'failed' };
+      if (read.page.realmId !== address.realmId || read.page.viewer.accountId !== viewerId) return { kind: 'failed' };
       const selected = read.page.selected;
       if (!selected || selected.accountId !== address.accountId) return { kind: 'changed' };
       const identity = selectedIdentity(selected);
