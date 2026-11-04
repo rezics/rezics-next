@@ -541,25 +541,11 @@ async function chooseCurrentTarget(host: HTMLElement) {
   await click(option!);
 }
 
-test('mounted visit retries uncertain upload and apply commands while preserving duplicate occurrences', async () => {
-  const fake = fakePort({ uncertainApply: true, uncertainUpload: true, staleReview: true });
+test('mounted visit preserves duplicate occurrences, refreshes a stale review, confirms a private result and retries the exact uncertain command', async () => {
+  const fake = fakePort({ uncertainApply: true, staleReview: true });
   const view = await mount(fake.port);
-  const archive = new window.File(['{}'], 'library.json');
-  let reads = 0;
-  Object.defineProperty(archive, 'arrayBuffer', {
-    value: async () => {
-      reads++;
-      return new Uint8Array([123, 125]).buffer as ArrayBuffer;
-    },
-  });
   try {
-    await uploadSmallFile(view.host, archive);
-    const originalUpload = fake.calls.upload[0];
-    expect(view.host.textContent).toContain(m.library_archive_recovery_uncertain());
-    await click(button(view.host, m.library_archive_recovery_retry_original()));
-    expect(fake.calls.upload).toHaveLength(2);
-    expect(fake.calls.upload[1]).toEqual(originalUpload);
-    expect(reads).toBe(1);
+    await uploadSmallFile(view.host);
     await click(button(view.host, m.library_archive_recovery_choose_collection()));
     const rows = [...view.host.querySelectorAll('input[type=checkbox][aria-label]')];
     expect(rows).toHaveLength(2);
@@ -601,6 +587,30 @@ test('mounted visit retries uncertain upload and apply commands while preserving
     expect(view.router.state.location.hash).toBe('');
     expect(fake.calls.collections).toHaveLength(1);
     expect(fake.calls.occurrences).toHaveLength(1);
+  } finally {
+    await view.close();
+  }
+});
+
+test('mounted uncertain archive upload retries its exact command without reading the file again', async () => {
+  const fake = fakePort({ uncertainUpload: true });
+  const view = await mount(fake.port);
+  const archive = new window.File(['{}'], 'library.json');
+  let reads = 0;
+  Object.defineProperty(archive, 'arrayBuffer', {
+    value: async () => {
+      reads++;
+      return new Uint8Array([123, 125]).buffer as ArrayBuffer;
+    },
+  });
+  try {
+    await uploadSmallFile(view.host, archive);
+    const originalUpload = fake.calls.upload[0];
+    expect(view.host.textContent).toContain(m.library_archive_recovery_uncertain());
+    await click(button(view.host, m.library_archive_recovery_retry_original()));
+    expect(fake.calls.upload).toHaveLength(2);
+    expect(fake.calls.upload[1]).toEqual(originalUpload);
+    expect(reads).toBe(1);
   } finally {
     await view.close();
   }
