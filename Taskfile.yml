@@ -23,7 +23,7 @@ tasks:
       - bun services/auth/scripts/dev-stack.ts setup
 
   dev:persona:
-    desc: Provision the local developer and cross-media importer credentials
+    desc: Provision the local developer, importer credentials and showcase exposure openings
     deps: [dev:infra]
     cmds: ['bun services/auth/scripts/dev-stack.ts persona']
 
@@ -102,7 +102,10 @@ tasks:
 
   seed:dev:
     desc: Fetch pinned cross-media dumps and seed the running local stack with its development persona
-    cmds: ['bun scripts/datasets/cross-media-seed.ts --dev']
+    cmds:
+      - task: dev:persona
+      # Reload the private seed.env written by persona before invoking the existing seed producer.
+      - go-task seed:cross-media -- --dev
 
   goal:service:install:
     desc: Install and start the Goal user systemd services

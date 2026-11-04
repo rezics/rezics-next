@@ -2,6 +2,10 @@
 
 For the complete loopback stack, generated keys, persona and reset command, see
 [Local development stack](../../docs/development/local-stack.md). Run `task dev:infra` then `task dev` from the repository root.
+`task dev:persona` repeats the local developer, importer credential and showcase exposure setup; `task seed:dev`
+runs that same step before seeding. It opens mounted anonymous GET groups plus M1 mixed Search (`search`) and
+facets/filters (`search_advanced`) through authorized native platform commands. Failures stop setup with the group,
+native error and retry task. Production defaults and native action/resource checks are unchanged.
 
 `@rezics/auth` is a separate workspace and PostgreSQL store. It owns password
 credentials, Better Auth sessions, registered clients, consent and signing keys.

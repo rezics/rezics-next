@@ -41,14 +41,22 @@ task seed:dev
 The one persona task provisions `developer@rezics.test`, prints its generated password and account ID, installs its
 importer key through native credential authorization and writes `.temp/local-stack/seed.env` for `seed:dev`.
 Native Auth startup also provisions this persona, so first-run public reads work without a separate manual bootstrap.
+`seed:dev` repeats `dev:persona` before invoking the existing dump/seed producer, reloading the private `seed.env`
+even on its first invocation. Keep `task dev` running and wait for normal readiness before seeding. Repeating either
+task reuses the developer, importer key and ordinary exposure command keys; no manual platform grant is needed.
 The persona owns the development platform governance role, including `gate:any`, Access grant authority and the
 cross-media importer's subject, statement, source-statistic, source-fence and media-import permissions. The importer
 client requests only its import scopes. The same person can sign into Web using the printed password.
 
-Decision: local setup uses the existing native governance bootstrap for the developer and opens only mounted anonymous
-GET exposure groups in the local database; production configuration and private/write gates retain their defaults.
+Decision: local persona setup opens mounted anonymous GET exposure groups plus the explicit M1 `search` (path 9,
+mixed Search) and `search_advanced` (path 10, filters and POST `/v1/subjects:facets`) groups through ordinary platform
+commands; `seed:dev` composes that same setup. Future additions must name a concrete M1 path here and in the bounded
+list in `services/auth/scripts/dev-stack.ts`; anonymous POST routes are not scanned for openings.
+Production configuration and private/write gates retain their defaults.
 A public exposure opening admits that group, while ordinary route and resource permissions still apply. Kernel and
 both app servers bind loopback. Do not expose this development database or host to a network.
+If an opening fails, setup reports the group and native error, exits unsuccessfully and tells you which task to rerun
+after resolving it. Seed does not continue after a failed persona step.
 
 ## Keys and reset
 
