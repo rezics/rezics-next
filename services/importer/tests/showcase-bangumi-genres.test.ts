@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
 import { emptyCrossMediaPlan, seedCrossMedia } from '../src/cross-media-seed.ts';
 import { ImportSession } from '../src/import-session.ts';
+import { sameStatementProvenance } from '../src/statement-provenance.ts';
 import {
   readReviewedBangumiBinding,
   seedReviewedCatalogue,
@@ -13,6 +14,19 @@ import {
 } from '../src/reviewed-catalogue.ts';
 
 const context = '00000000-0000-8000-8000-000000000000';
+test('statement provenance admits data descriptors before projecting semantic fields', () => {
+  let reads = 0;
+  const statement = { property: { id: 'schema:url' }, value: { type: 'value', content: 'https://vndb.org/v2002' } };
+  const accessor = Object.defineProperty({ ...statement }, 'value', {
+    enumerable: true,
+    get() {
+      reads++;
+      return statement.value;
+    },
+  });
+  expect(sameStatementProvenance(accessor, statement)).toBe(false);
+  expect(reads).toBe(0);
+});
 type Candidate = {
   id: string;
   subject: string;
@@ -185,8 +199,8 @@ test('current reviewed binding accepts transport JSON records and still refuses 
     const session = new ImportSession(path);
     try {
       expect(await readReviewedBangumiBinding(session.bindings, port)).toEqual({
-        sourceConcept: result.subjects['source-harem'],
-        canonicalConcept: result.subjects['canonical-harem'],
+        sourceConcept: result.subjects['source-harem']!,
+        canonicalConcept: result.subjects['canonical-harem']!,
       });
       changed = true;
       expect(await readReviewedBangumiBinding(session.bindings, port)).toBeNull();
