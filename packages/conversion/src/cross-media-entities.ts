@@ -390,14 +390,14 @@ function copyFlag(value: unknown, pointer: string): boolean {
 }
 
 function releaseTitleText(value: unknown, pointer: string): string {
-  if (typeof value !== 'string') fail(pointer);
+  if (typeof value !== 'string') return fail(pointer);
   if (
     !value.isWellFormed() ||
     !value.trim() ||
     [...value].length > vndbReleaseNameLimits.titleChars ||
     Buffer.byteLength(value, 'utf8') > vndbReleaseNameLimits.stringBytes
   )
-    fail(pointer);
+    return fail(pointer);
   return value;
 }
 
@@ -442,12 +442,12 @@ function projectReleaseTitles(
   for (let i = 0; i < length; i++) {
     const pointer = `/releases_titles/${i}`;
     const entry = own(rows, String(i), pointer);
-    if (entry === undefined) fail(pointer);
+    if (entry === undefined) return fail(pointer);
     const row = object(entry, pointer);
     const id = own(row, 'id', `${pointer}/id`);
-    if (typeof id !== 'string' || id !== releaseId) fail(`${pointer}/id`, 'invalid_identifier');
+    if (typeof id !== 'string' || id !== releaseId) return fail(`${pointer}/id`, 'invalid_identifier');
     const rawLanguage = own(row, 'lang', `${pointer}/lang`);
-    if (typeof rawLanguage !== 'string') fail(`${pointer}/lang`);
+    if (typeof rawLanguage !== 'string') return fail(`${pointer}/lang`);
     const lang = canonicalLanguageTag(rawLanguage);
     const title = releaseTitleText(own(row, 'title', `${pointer}/title`), `${pointer}/title`);
     const mtl = copyFlag(own(row, 'mtl', `${pointer}/mtl`), `${pointer}/mtl`);
