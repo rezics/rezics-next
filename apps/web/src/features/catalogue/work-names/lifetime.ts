@@ -17,7 +17,7 @@ export function useNamesLifetime(source: object, identity: string, expectedReade
     captured.current = { source, identity, observation, retired: seen.current.has(source), generation: (captured.current?.generation ?? 0) + 1 };
     seen.current.add(source);
   } else {
-    if (captured.current.observation.state === 'unknown' && observation.state !== 'unknown' && !captured.current.retired)
+    if ((captured.current.observation.state === 'unknown' || captured.current.observation.state === 'inactive') && observation.state !== 'unknown' && observation.state !== 'inactive' && !captured.current.retired)
       captured.current.observation = observation;
     if (captured.current.observation !== observation || captured.current.identity !== identity) captured.current.retired = true;
   }

@@ -4,6 +4,7 @@ import { createKernelClient } from '@rezics/client';
 import { checkSubjectStructure } from '@rezics/definitions/validate';
 import { createFakeKernelFetch } from '../src/kernel/fake';
 import fixtures from '../src/kernel/fixtures.json';
+import definitions from '../src/kernel/recorded/definitions-release.json';
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { loadSubjectPage, subjectBody } = await import('../src/features/pages/subject');
 import { WORK_NAMES_BYTES, workNames } from '../src/features/catalogue/work-names/model';
@@ -15,7 +16,7 @@ import { work } from './work-title-variants.test';
 test('native-valid complete term sets can exceed the Web presentation budget', () => {
   const s = work(); s.labels = { ja: '名' }; s.aliases = {};
   for (let i = 0; i < 16; i++) s.aliases[`ja-x-${i}`] = Array.from({ length: i === 15 ? 31 : 32 }, (_, j) => `${i}-${j}${'旅'.repeat(240)}`);
-  expect(checkSubjectStructure(s).violations).toEqual([]);
+  expect(checkSubjectStructure({ type: s.type, labels: s.labels, aliases: s.aliases }).violations).toEqual([]);
   const names = workNames(s, 'ja');
   expect(names.state).toBe('unavailable'); expect(names.bytes).toBeGreaterThan(WORK_NAMES_BYTES);
 });
@@ -31,9 +32,13 @@ test('composition charges page/action/refresh/Terms response bytes at all three 
     let actionCount = 0;
     const client = createKernelClient('https://kernel.invalid', { fetch: (async (input, init) => {
       const request = new Request(input, init); const path = new URL(request.url).pathname; requests.push(path);
-      const response = path.includes('viewer-actions')
+      let response = path.includes('viewer-actions')
         ? new Response(JSON.stringify(++actionCount === 1 ? { code: 'unavailable' } : { resources: [{ type: 'semantic.context', id: PAGE_GLOBAL_CONTEXT, viewerActions: [] }] }), { status: actionCount === 1 ? 503 : 200, headers: { 'content-type': 'application/json' } })
         : await local(request);
+      if (path === '/v1/pages:read') {
+        const page = await response.json();
+        response = new Response(JSON.stringify({ ...page, catalogue: { state: 'released', type: 'schema:Book', digest: definitions.digest, definitions: definitions.release } }), { headers: { 'content-type': 'application/json' } });
+      }
       responses.push(new TextEncoder().encode(await response.clone().text()).length);
       return response;
     }) as typeof fetch });
@@ -46,7 +51,7 @@ test('composition charges page/action/refresh/Terms response bytes at all three 
     await readSubjectTerms(client, id, 'en', 'Bearer fixture'); // original Terms candidate, never the names projection
     await readTermsPageAuthority(client, 'signed-in', 'Bearer fixture');
     // Definitions are a separate Terms-owned projection. Charge its bytes as well.
-    await client.definitions({ digest: admitted.subject.release }).get();
+    await client.definitions({ digest: definitions.digest }).get();
     const saved = { binding: JSON.stringify([id, 'global', 'en', admitted.subject.release, admitted.subject.revision, 'cache-incarnation']),
       href: `/en/subjects/${id}/title#supplied-names`, window: { query: '心', page: 0, expanded: true, groups: [{ index: 0, page: 0, open: true }] } };
     const obsoleteHistory = Array.from({ length: size }, () => ({ namesReturn: { binding: 'obsolete' } }));

@@ -214,7 +214,9 @@ test('mounted signed-out search, overflow, exact copying, advice retry and A-B-A
     host.querySelector<HTMLDetailsElement>('[data-name-language]')!.open = true;
     expect(host.querySelectorAll('[data-name-language]')).toHaveLength(8);
     expect(host.querySelectorAll('[data-supplied-name]').length).toBeLessThanOrEqual(8 * 24);
-    expect(host.querySelector('a')?.getAttribute('href')).toContain('/terms?realm=');
+    const termsAddress = new URL(host.querySelector('a')!.getAttribute('href')!, 'https://rezics.invalid');
+    expect(termsAddress.pathname).toEndWith('/terms');
+    expect(termsAddress.searchParams.get('realm')).toBe('00000000-0000-4000-8000-000000000777');
     expect(host.querySelectorAll('a')[1]?.getAttribute('href')).toContain('/sources?realm=');
     await click(button('More names'));
     expect(host.textContent).toContain('alias-39');
