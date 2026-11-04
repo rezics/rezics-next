@@ -255,7 +255,8 @@ function frozenShelfPatch(shelf: ShelfPreferencePatch | null): ShelfPreferencePa
           ),
         )
       : shelf.sorts;
-  const tableColumns = Array.isArray(shelf.tableColumns) ? Object.freeze([...shelf.tableColumns]) : shelf.tableColumns;
+  const tableColumns = Array.isArray(shelf.tableColumns) ? [...shelf.tableColumns] : shelf.tableColumns;
+  if (Array.isArray(tableColumns)) Object.freeze(tableColumns);
   return Object.freeze({
     ...shelf,
     ...(layouts !== undefined ? { layouts } : {}),
@@ -619,7 +620,7 @@ export class ShelfPreferenceDraftRecovery {
         Object.keys(shelf.layouts).length > maxLayouts ||
         Object.values(merged).filter((value) => value !== null).length > maxLayouts
       ) {
-        this.update({ phase: 'failed', reason: 'invalid' });
+        this.update({ phase: 'failed', reason: 'write:invalid' });
         return;
       }
     }
