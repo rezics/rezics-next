@@ -160,6 +160,7 @@ function emptyPlan(): VndbCharacterTraitPlan {
     records: { bangumi: [], vndb: [] },
     entities: { bangumi: [], vndb: [] },
     edges: [],
+    credits: [],
     franchises: {
       'steins-gate': { bangumi: [], vndb: [] },
       clannad: { bangumi: [], vndb: [] },
