@@ -1593,3 +1593,14 @@ and cover rights keep their existing owners.
   occurrences, neighbor exclusion and changed-name refresh.
   `services/kernel/test/imports/bangumi-game-names.test.ts` covers independent
   review/adoption, reopen and facts-fence behavior; native execution is deferred.
+
+## Bangumi Game platforms and software engine
+
+Decision: Game-template `平台` and `游戏引擎` bind through current reviewed Concept reads keyed by the released property plus the exact source item; no infobox-field scheme URI is minted. Engine items with version, platform or edition text are withheld whole because `wdt:P408` admits no qualifiers. Platform language is preserved only as `schema:inLanguage` when the labelled source tag is an admitted BCP 47 tag.
+Decision: Game environment admission stays on the combined `bangumi@11` revision so unchanged dumps offer the new facts; Game names, player-count mapping, TVAnime work evidence and book grain stay on that revision.
+
+A selected type-4 Game keeps top-level `subject.platform` as the profile selector. Infobox platform and engine items become `schema:gamePlatform` and `wdt:P408` on that VideoGame after an independent current read of each configured Concept. Missing, concealed and wrong-source bindings remain distinct and withhold only the affected occurrence. Identity and sealed retry custody stay on the existing source fence. Names, dates, player count, staff, genre and websites retain their owners.
+
+- Touches: one selected or ordinary Game record, at most 16 platform and 8 engine Concept relations, exact infobox field citations, and independent accept/adopt/read.
+- Bound: 65,536 infobox bytes, 64 fields, depth 2, 16 diagnostics, 24 cached current Concept reads, 64 KiB command envelope. No catalogue label scan or second publisher.
+- Growth check: `services/importer/tests/bangumi-game-environment.test.ts` covers selected-family and ordinary registration. `services/kernel/test/imports/bangumi-game-environment.test.ts` covers native review, adoption, current read and per-occurrence concealment; native execution is deferred to integration.

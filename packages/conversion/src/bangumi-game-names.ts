@@ -11,6 +11,6 @@ export function extractBangumiGameNames(record: BangumiNameRecord): BangumiNameE
     type: 4,
     isTemplateHead: isBangumiGameTemplateHead,
     listFields: new Set(['别名']),
-    retainedOtherFields: new Set(['游玩人数']),
+    retainedOtherFields: new Set(['游玩人数', '平台', '游戏引擎']),
   });
 }
