@@ -12,6 +12,12 @@ import { preparePrivateReaderRead, type PrivateReaderRead } from '../private-rea
 import { readModerationAppeals, type Appeal, type AppealPage, type AppealProvenance } from '../appeals-read';
 import { readModerationReports, type Report, type ResolvedReportTarget } from '../reports-read';
 import {
+  moderationDirectoryPage,
+  nativeModerationDirectoryUnavailable,
+  type ModerationDirectoryPage,
+  type ModerationDirectorySource,
+} from './directory';
+import {
   WORKBENCH_PAGE_SIZE,
   workbenchReadKey,
   workbenchScope,
@@ -44,6 +50,7 @@ export type WorkbenchRead = PrivateReaderRead & {
   realmsNext: string | null;
   boards: WorkbenchDirectoryItem[];
   boardsNext: string | null;
+  directory?: ModerationDirectoryPage;
   cases: WorkbenchCase[];
   next: string | null;
   /** Original board reports from this read generation. Catalogue and appeals leave this empty. */
@@ -58,8 +65,10 @@ export type WorkbenchRead = PrivateReaderRead & {
   unavailableReason?: 'native-appeal-inspect';
 };
 export type WorkbenchNativeSource = {
-  realms: (cursor?: string) => Promise<{ items: WorkbenchDirectoryItem[]; next: string | null }>;
-  boards: (realmId: string, cursor?: string) => Promise<{ items: WorkbenchDirectoryItem[]; next: string | null }>;
+  directory?: ModerationDirectorySource;
+  /** Compatibility for older callers; discovery never calls either membership-derived source. */
+  realms?: (cursor?: string) => Promise<{ items: WorkbenchDirectoryItem[]; next: string | null }>;
+  boards?: (realmId: string, cursor?: string) => Promise<{ items: WorkbenchDirectoryItem[]; next: string | null }>;
   boardReports: (
     boardId: string,
     cursor: string | undefined,
@@ -172,13 +181,13 @@ export async function readWorkbench(
     appeals: [] as Appeal[],
     selectedTarget: null as ResolvedReportTarget | null,
   };
-  if (scope.kind === 'none') {
-    const page = await source.realms(search.realmsCursor);
-    return { ...identity, state: 'ready', ...idle, realms: bounded(page.items, 50), realmsNext: page.next };
-  }
-  if (scope.kind === 'realm') {
-    const page = await source.boards(scope.realmId, search.boardsCursor);
-    return { ...identity, state: 'ready', ...idle, boards: bounded(page.items), boardsNext: page.next };
+  if (scope.kind === 'none' || scope.kind === 'realm') {
+    const page = await (source.directory ?? nativeModerationDirectoryUnavailable)({
+      limit: WORKBENCH_PAGE_SIZE,
+      ...(search.directoryCursor ? { cursor: search.directoryCursor } : {}),
+      ...(scope.kind === 'realm' ? { realmId: scope.realmId } : {}),
+    });
+    return { ...identity, state: 'ready', ...idle, directory: moderationDirectoryPage(page) };
   }
   if (scope.kind === 'catalogue' && search.queue === 'appeals') {
     return { ...identity, state: 'ready', ...idle };
@@ -234,25 +243,7 @@ const auth = (authorization: string) => ({ headers: { authorization }, fetch: { 
 function nativeSource(client: KernelClient, authorization: string): WorkbenchNativeSource {
   const headers = auth(authorization);
   return {
-    async realms(cursor) {
-      const result = await client.me.realms.get({ query: cursor ? { cursor } : {}, ...headers });
-      if (result.error) throw new WorkbenchReadFailure(listFailure(result.status, result.error.value));
-      return {
-        items: (result.data?.items ?? []).map((item) => ({ id: item.realmId, title: item.name })),
-        next: result.data?.next ?? null,
-      };
-    },
-    async boards(realmId, cursor) {
-      const result = await client.realms({ realmId }).boards.get({
-        ...headers,
-        query: { limit: WORKBENCH_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-      });
-      if (result.error) throw new WorkbenchReadFailure(listFailure(result.status, result.error.value));
-      return {
-        items: (result.data?.items ?? []).map((item) => ({ id: item.id, title: item.title })),
-        next: result.data?.next ?? null,
-      };
-    },
+    directory: nativeModerationDirectoryUnavailable,
     async boardReports(boardId, cursor, selection) {
       const result = await client.boards({ id: boardId }).reports.get({
         ...headers,

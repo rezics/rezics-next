@@ -1930,7 +1930,7 @@
   "moderation_workbench_intro": "一次选择当前获准的版面，或全域目录。每个队列都独立授权。",
   "moderation_workbench_catalogue": "全域目录",
   "moderation_workbench_select_scope": "请选择版面或全域目录以打开队列。",
-  "moderation_workbench_membership_hint": "列出的领域或版面不代表审核权限。所选队列会再检查当前访问。",
+  "moderation_workbench_membership_hint": "仅有成员身份不代表拥有审核权限。每个选取的队列都会检查当前的访问权限。",
   "moderation_workbench_queue_reports": "已提交的举报",
   "moderation_workbench_queue_appeals": "待处理的申诉",
   "moderation_workbench_queue_resolved": "已结案",
@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "此用户无法使用评分操作。",
   "discovery_score_unavailable": "评分操作暂时不可用。",
   "thread_page_invalid_cursor": "此页面链接无效或已过期。请从第一页继续。",
-  "thread_page_restart": "打开第一页"
+  "thread_page_restart": "打开第一页",
+  "moderation_directory_heading": "可用的审核队列",
+  "moderation_directory_empty": "目前没有您可以使用的审核队列。",
+  "moderation_directory_empty_next": "下一页可能还有其他范围。",
+  "moderation_directory_preparing": "正在准备审核队列发现…",
+  "moderation_directory_unavailable": "目前无法发现审核队列。",
+  "moderation_directory_open_scope": "打开 {label}"
 }

@@ -1964,7 +1964,7 @@
   "moderation_workbench_intro": "Choose one currently permitted board or the Global catalogue. Each queue is authorized on its own.",
   "moderation_workbench_catalogue": "Global catalogue",
   "moderation_workbench_select_scope": "Select a board or the Global catalogue to open a queue.",
-  "moderation_workbench_membership_hint": "A listed Realm or board is not moderation permission. The selected queue checks current access.",
+  "moderation_workbench_membership_hint": "Membership alone does not grant moderation permission. Every selected queue checks current access.",
   "moderation_workbench_queue_reports": "Submitted reports",
   "moderation_workbench_queue_appeals": "Pending appeals",
   "moderation_workbench_queue_resolved": "Resolved cases",
@@ -8030,5 +8030,11 @@
   "discovery_score_concealed": "Score actions are not exposed to this reader.",
   "discovery_score_unavailable": "Score actions are unavailable.",
   "thread_page_invalid_cursor": "This page link is invalid or out of date. Open the first page to continue.",
-  "thread_page_restart": "Open the first page"
+  "thread_page_restart": "Open the first page",
+  "moderation_directory_heading": "Available moderation queues",
+  "moderation_directory_empty": "There are no moderation queues you can currently use.",
+  "moderation_directory_empty_next": "More scopes may be available on the next page.",
+  "moderation_directory_preparing": "Preparing moderation queue discovery…",
+  "moderation_directory_unavailable": "Moderation queue discovery is unavailable right now.",
+  "moderation_directory_open_scope": "Open {label}"
 }

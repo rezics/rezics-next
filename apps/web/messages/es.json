@@ -1930,7 +1930,7 @@
   "moderation_workbench_intro": "Elige un tablón actualmente permitido o el catálogo global. Cada cola se autoriza por separado.",
   "moderation_workbench_catalogue": "Catálogo global",
   "moderation_workbench_select_scope": "Elige un tablón o el catálogo global para abrir una cola.",
-  "moderation_workbench_membership_hint": "Un Reino o tablón listado no es permiso de moderación. La cola elegida comprueba el acceso actual.",
+  "moderation_workbench_membership_hint": "La pertenencia por sí sola no concede permisos de moderación. Cada cola seleccionada comprueba el acceso actual.",
   "moderation_workbench_queue_reports": "Denuncias enviadas",
   "moderation_workbench_queue_appeals": "Apelaciones pendientes",
   "moderation_workbench_queue_resolved": "Casos resueltos",
@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "Las acciones de puntuación no están habilitadas para este lector.",
   "discovery_score_unavailable": "Las acciones de puntuación no están disponibles.",
   "thread_page_invalid_cursor": "Este enlace de página no es válido o ha caducado. Abre la primera página para continuar.",
-  "thread_page_restart": "Abrir la primera página"
+  "thread_page_restart": "Abrir la primera página",
+  "moderation_directory_heading": "Colas de moderación disponibles",
+  "moderation_directory_empty": "Actualmente no hay colas de moderación que puedas usar.",
+  "moderation_directory_empty_next": "Puede haber más ámbitos disponibles en la página siguiente.",
+  "moderation_directory_preparing": "Preparando la lista de colas de moderación…",
+  "moderation_directory_unavailable": "La lista de colas de moderación no está disponible en este momento.",
+  "moderation_directory_open_scope": "Abrir {label}"
 }

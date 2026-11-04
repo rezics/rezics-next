@@ -71,6 +71,7 @@ export function WorkbenchPage({
         next: null,
         realmsNext: null,
         boardsNext: null,
+        directory: undefined,
       }
     : { ...data, search };
   const isCurrent = () => !retired && (!owner || owner.isCurrent());
@@ -139,6 +140,7 @@ export function WorkbenchPage({
           page: {
             ...data,
             state: 'unavailable',
+            directory: undefined,
             cases: [],
             reports: [],
             appeals: [],
@@ -187,7 +189,7 @@ export function WorkbenchPage({
         <WorkbenchView
           key={identity}
           page={view}
-          onSearch={onSearch}
+          onSearch={(next) => { if (isCurrent()) onSearch(next); }}
           selection={controller}
           onAction={submit}
           isCurrent={isCurrent}

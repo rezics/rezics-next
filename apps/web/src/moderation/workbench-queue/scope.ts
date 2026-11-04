@@ -14,6 +14,7 @@ export type WorkbenchSearch = ReportSelection & {
   cursor?: string;
   realmsCursor?: string;
   boardsCursor?: string;
+  directoryCursor?: string;
   /** Exact appeal inspection beside the captured bounded page; never a later-page scan. */
   case?: string;
 };
@@ -47,6 +48,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const board = token(search.board, 128);
   const realmsCursor = token(search.realmsCursor, 4096);
   const boardsCursor = token(search.boardsCursor, 4096);
+  const directoryCursor = token(search.directoryCursor, 4096);
   const history = search.history === true && board ? true : undefined;
   const historyCursor = history ? token(search.historyCursor, 4096) : undefined;
   const historyReturn = !history && board && search.historyReturn === true ? true : undefined;
@@ -65,6 +67,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
     ...(cursor ? { cursor } : {}),
     ...(realmsCursor ? { realmsCursor } : {}),
     ...(boardsCursor ? { boardsCursor } : {}),
+    ...(directoryCursor ? { directoryCursor } : {}),
   };
 }
 
@@ -97,6 +100,7 @@ export function workbenchQueueHref(search: WorkbenchSearch): string {
   if (search.historyReturn) params.set('historyReturn', 'true');
   if (search.realmsCursor) params.set('realmsCursor', search.realmsCursor);
   if (search.boardsCursor) params.set('boardsCursor', search.boardsCursor);
+  if (search.directoryCursor) params.set('directoryCursor', search.directoryCursor);
   return `/moderation/workbench?${params}`;
 }
 
@@ -124,6 +128,7 @@ export function workbenchReadKey(search: WorkbenchSearch): string {
     search.cursor ?? '',
     search.realmsCursor ?? '',
     search.boardsCursor ?? '',
+    search.directoryCursor ?? '',
   ]);
 }
 

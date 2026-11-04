@@ -42,35 +42,58 @@ independent. Original intent, drafts and late callbacks retire with the visit.
 
 ## Workbench queue
 
-An authorized signed-in moderator enters `/moderation/workbench`. One navigation entry replaces the previous
-catalogue-only shell link. The workbench selects **one** currently permitted scope at a time:
+An authorized signed-in moderator enters `/moderation/workbench`. Discovery consumes a paged native moderator-scope
+response, independently of Realm membership. A supplied board scope can be selected without a Realm or parent.
+One selected board or Global catalogue still reads its existing exact native queue, with its original cursor,
+filters and independent authorization. Manual board and catalogue deep links remain supported.
 
-- a Realm from `GET /v1/me/realms`, then one board from that Realm's paged `GET /v1/realms/{id}/boards`
-- or the Global catalogue (`GET /v1/catalogue/reports`), which still requires current Global `moderation:read_reports`
+Decision: until the native directory and its published declarations arrive, use the named
+`nativeModerationDirectoryUnavailable` local consumer seam; never substitute membership or board inventories.
 
-Membership or a listed board is not moderation permission. Each selected queue repeats exact parent/target
-authorization. A board moderator is never widened to catalogue authority. There is no platform-wide appeal
-adjudication and no aggregate case search across boards.
+The native producer and installed typing are **not delivered**. The production discovery seam returns unavailable,
+with no scope labels or controls. This is separate from a complete native empty page and from preparing projection
+coverage. The former `me.realms` then Realm-board discovery and unconditional catalogue selection are retired.
+Catalogue never offers an appeals control. An old exact catalogue-appeals link explains the absent producer.
 
-Submitted reports, pending appeals and resolved cases are exclusive queues. Reports use native
-`status=pending|resolved` with `targetKind` and `order`. Appeals use the board appeal list (pending by nature).
-Catalogue has no appeal list; that control stays visible and explains the missing native seam. Continuation uses
-the sealed native cursor, not report target IDs. Each row carries a stable report or appeal ID into the existing
-detail surface (`/moderation/cases/{reportId}`, the selected workbench appeal, or `/moderation/catalogue`).
+### Public directory consumer contract
 
-The queue reads installed native list declarations only. It does not hydrate target documents or reported revisions. Private evidence
-and appeal statements appear only when that list returned them. Unavailable, denied and retired reads render no
-cases. Viewer or session replacement retires the mounted private owner.
+`workbench-queue/directory.ts` defines only a local public response shape, without private Content imports or a
+cast of the installed client. It is the integration seam for a future native directory; it does not mount an HTTP
+route or claim the source exists. The producer owner must adopt/mount the final public contract and supply its
+OpenAPI input to the shared complete-input publisher before replacing this seam with installed declarations.
 
-## Remaining producer binding
+A page has closed `state` advice. `preparing`, `unavailable`, `denied` and `stale` retain no items or continuation.
+`ready` has at most 20 items, nullable opaque `next`, opaque final native `source` (up to 256 characters) and exclusive
+`validUntil`. The horizon must cover both candidate coverage and current actor/authority lifetime, at most 180 seconds.
+Each item has a native `scope` (`board` with `id`, or independently authorized `catalogue`), current `label`, nullable
+safe Realm `parent` (`id`, `label`), supported `queues` and closed `viewer.open` advice (`permitted`, `denied`,
+`unavailable`). Board IDs and parent IDs are at most 128 characters and labels at most 1024 characters. Catalogue has
+no parent or appeals. No counts, reporters, evidence, grants or membership facts cross this seam. Discovery advice
+is never command authority. Only native permitted advice creates enabled queue controls or a native destination.
 
-Connected: `me.realms`, Realm boards, `boards/{id}.reports`, `boards/{id}.appeals`, and catalogue reports (status
-and order forwarded through the existing catalogue client seam). Absent: a producer that lists only currently
-permitted moderation queues; a moderator case-detail GET; catalogue appeals. Native uncertain commands stay on the
-existing review pages and retain original sender, credentials, key and operands. Workbench rows open
-`/moderation/cases/{reportId}` or the selected workbench appeal (`case`) and return to `/moderation/workbench` with
-the captured snapshot. Loaded pending board reports can be dismissed through the existing per-report command, at most
-twenty on the current page.
+`directoryCursor` is independent of the selected queue's `cursor`; it belongs to the private read key and captured
+URL. A failed continuation retries the same search/frontier. A ready sparse page with `next` explains that more
+scopes may exist; it never declares a complete empty result. Unknown or malformed source data becomes unavailable.
+Expired observations discard all directory labels, cursors and controls. Selection handlers also check the original
+observation and private visit at activation, so retained or late callbacks cannot navigate with retired advice.
+The existing private reader owns account, credential/session, locale and route retirement and async generation guards.
+
+### Cost: directory consumer
+
+- Touches: one supplied directory response for an unselected or Realm-filtered discovery page; one exact native queue
+  read for a selected board/catalogue, without a directory read. Membership and Realm board inventories are not called.
+- Bound: one page, at most 20 copied item records, three queue choices each, 128-character identifiers, two
+  1024-character labels per item, a 256-character source observation and one 4096-character continuation. The consumer
+  discards unknown fields, rejects duplicate scopes, malformed advice and unsupported catalogue queues, and keeps no
+  page accumulator. These retained browser bounds do not establish upstream materialization or native work bounds.
+- Growth check: `tests/moderation-directory-consumer.test.tsx` covers source admission and retained consumer limits.
+  Native candidate, grant, membership and repair populations, 256/1024/4096 growth, final disclosure observations and
+  actual worker operations remain the producer continuation's work. No native Cost claim follows from these fixtures.
+
+Submitted reports, pending appeals and resolved cases remain exclusive queues. Reports use native
+`status=pending|resolved` with `targetKind` and `order`; appeals use the board's pending list. Case rows keep stable
+native report/appeal IDs and exact selected queue snapshots. Case-detail triage and uncertain native commands remain
+on existing review pages with their original sender, credentials, operands and idempotency key.
 
 ## Exact appeal inspection
 

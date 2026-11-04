@@ -18,7 +18,8 @@ import {
   workbenchWithoutContinuation,
   type WorkbenchSearch,
 } from './scope';
-import { workbenchQueueScope, type WorkbenchCase, type WorkbenchDirectoryItem, type WorkbenchRead } from './read';
+import { ModerationDirectory } from './directory-view';
+import { workbenchQueueScope, type WorkbenchCase, type WorkbenchRead } from './read';
 
 const control =
   'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words px-3 py-2 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -28,7 +29,7 @@ export type WorkbenchViewProps = {
     Partial<
       Pick<
         WorkbenchRead,
-        'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal' | 'nativeSession'
+        'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal' | 'nativeSession' | 'directory'
       >
     >;
   onSearch: (search: WorkbenchSearch) => void;
@@ -41,10 +42,6 @@ export type WorkbenchViewProps = {
   onUnresolvedAppealChange?: (unresolved: boolean) => void;
   refreshBlocked?: boolean;
 };
-
-function labelOf(item: WorkbenchDirectoryItem): string {
-  return item.title?.trim() || m.moderation_target_unavailable();
-}
 
 function CaseRow({
   item,
@@ -75,50 +72,6 @@ function CaseRow({
   );
 }
 
-function Directory({
-  label,
-  items,
-  next,
-  onSelect,
-  onNext,
-  empty,
-}: {
-  label: string;
-  items: WorkbenchDirectoryItem[];
-  next: string | null;
-  onSelect: (id: string) => void;
-  onNext?: () => void;
-  empty: string;
-}) {
-  return (
-    <section className="space-y-3" aria-label={label}>
-      <h2 className="text-xl font-semibold">{label}</h2>
-      {items.length === 0 ? <p className="text-muted-foreground">{empty}</p> : null}
-      {items.length > 0 ? (
-        <ul className="min-w-0 divide-y">
-          {items.map((item) => (
-            <li key={item.id}>
-              <Button
-                type="button"
-                variant="ghost"
-                className={`${control} w-full justify-start text-left`}
-                onClick={() => onSelect(item.id)}
-              >
-                {labelOf(item)}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {next && onNext ? (
-        <Button type="button" variant="outline" className={control} onClick={onNext}>
-          {m.threads_next_page()}
-        </Button>
-      ) : null}
-    </section>
-  );
-}
-
 export function WorkbenchView({
   page,
   onSearch,
@@ -137,8 +90,6 @@ export function WorkbenchView({
   const queueScope = workbenchQueueScope(search);
   const boardId = scope.kind === 'board' ? scope.boardId : undefined;
   const next = page.next;
-  const realmsNext = page.realmsNext;
-  const boardsNext = page.boardsNext;
   useEffect(() => {
     if (search.historyReturn) document.getElementById(`workbench-queue-${search.queue}`)?.focus();
   }, [search.historyReturn, search.queue]);
@@ -180,83 +131,19 @@ export function WorkbenchView({
           {m.moderation_queue_restart()}
         </Button>
       ) : null}
-      {page.state === 'ready' || page.state === 'denied' || search.history || search.historyReturn ? (
-        <div className="flex min-w-0 flex-wrap gap-2">
-          <Button
-            type="button"
-            variant={scope.kind === 'catalogue' ? 'default' : 'outline'}
-            className={control}
-            aria-pressed={scope.kind === 'catalogue'}
-            onClick={() =>
-              onSearch(
-                workbenchSearch({
-                  queue: search.queue === 'appeals' ? 'reports' : search.queue,
-                  status: search.queue === 'resolved' ? 'resolved' : 'pending',
-                  targetKind: 'all',
-                  order: search.order,
-                  scope: 'catalogue',
-                }),
-              )
-            }
-          >
-            {m.moderation_workbench_catalogue()}
-          </Button>
-          {scope.kind !== 'none' ? (
-            <Button
-              type="button"
-              variant="outline"
-              className={control}
-              onClick={() =>
-                onSearch(workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest' }))
-              }
-            >
-              {m.public_account_realms()}
-            </Button>
-          ) : null}
-        </div>
+      {scope.kind !== 'none' ? (
+        <Button type="button" variant="outline" className={control} onClick={() => {
+          if (!isCurrent || isCurrent()) onSearch(workbenchSearch({}));
+        }}>{m.moderation_directory_heading()}</Button>
       ) : null}
-      {page.state === 'ready' && scope.kind === 'none' ? (
-        <Directory
-          label={m.public_account_realms()}
-          items={page.realms}
-          next={page.realmsNext}
-          empty={m.moderation_workbench_realms_empty()}
-          onSelect={(realm) =>
-            onSearch(
-              workbenchSearch({ queue: 'reports', status: 'pending', targetKind: 'all', order: 'newest', realm }),
-            )
-          }
-          {...(realmsNext ? { onNext: () => onSearch(workbenchSearch({ ...search, realmsCursor: realmsNext })) } : {})}
-        />
-      ) : null}
-      {page.state === 'ready' && scope.kind === 'realm' ? (
-        <Directory
-          label={m.realm_boards_heading()}
-          items={page.boards}
-          next={page.boardsNext}
-          empty={m.moderation_workbench_boards_empty()}
-          onSelect={(board) =>
-            onSearch(
-              workbenchSearch({
-                queue: 'reports',
-                status: 'pending',
-                targetKind: 'all',
-                order: search.order,
-                ...(search.realm ? { realm: search.realm } : {}),
-                board,
-              }),
-            )
-          }
-          {...(boardsNext ? { onNext: () => onSearch(workbenchSearch({ ...search, boardsCursor: boardsNext })) } : {})}
-        />
-      ) : null}
-      {page.state === 'ready' && scope.kind === 'none' ? (
-        <p className="text-sm text-muted-foreground">{m.moderation_workbench_select_scope()}</p>
+      {page.state === 'ready' && (scope.kind === 'none' || scope.kind === 'realm') ? (
+        <ModerationDirectory page={page.directory} search={search} onSearch={onSearch}
+          {...(onRetry ? { onRetry } : {})} {...(isCurrent ? { isCurrent } : {})} />
       ) : null}
       {page.state === 'ready' && queueScope ? (
         <section className="space-y-4" aria-label={m.moderation_workbench_heading()}>
           <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
-            {(['reports', 'appeals', 'resolved'] as const).map((queue) => (
+            {(['reports', 'appeals', 'resolved'] as const).filter((queue) => scope.kind !== 'catalogue' || queue !== 'appeals').map((queue) => (
               <Button
                 key={queue}
                 type="button"

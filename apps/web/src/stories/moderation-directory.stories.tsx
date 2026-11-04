@@ -1,0 +1,85 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+import { WorkbenchPage } from '../moderation/workbench-queue/page';
+import { WorkbenchPreparing } from '../moderation/workbench-queue/view';
+import { prepareWorkbenchRead, readWorkbench, type WorkbenchRead } from '../moderation/workbench-queue/read';
+import { workbenchSearch, type WorkbenchSearch } from '../moderation/workbench-queue/scope';
+import type { ModerationDirectoryPage } from '../moderation/workbench-queue/directory';
+import { privateReaderFingerprint } from '../moderation/private-reader-origin';
+import { sessionQuery } from '../session/query';
+import { m } from '../paraglide/messages.js';
+import { AppShell } from '../shell/shell';
+import { PatternStory } from './page';
+import { queueViewports } from './patterns/board-report-queue/fixture';
+
+type Mode = 'ready' | 'empty' | 'preparing' | 'unavailable';
+const longLabel = 'A board with a very long title that wraps without hiding its queue choices — '.repeat(5);
+
+/** The route's prepare/read/page composition with illustrative public source inputs. */
+function DirectoryStory({ mode = 'ready', continuation = false }: { mode?: Mode; continuation?: boolean }) {
+  const cache = useMemo(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'directory-story-reader', csrfToken: null });
+    return client;
+  }, []);
+  const [search, setSearch] = useState(() => workbenchSearch(continuation ? { directoryCursor: 'original-frontier' } : {}));
+  const [page, setPage] = useState<WorkbenchRead>();
+  const [revision, retry] = useState(0);
+  const read = useCallback(async (input: WorkbenchSearch): Promise<WorkbenchRead> => {
+    const directory: ModerationDirectoryPage = mode === 'preparing' || mode === 'unavailable'
+      ? { state: mode, items: [], next: null }
+      : { state: 'ready', source: 'illustrative-native-source', validUntil: new Date(Date.now() + 180000).toISOString(),
+        next: null, items: mode === 'empty' ? [] : [
+          { scope: { kind: 'board', id: 'direct-board' }, label: longLabel,
+            parent: { id: 'parent-realm', label: 'A currently disclosed parent Realm with a long name' },
+            queues: ['reports', 'appeals', 'resolved'], viewer: { open: 'permitted' } },
+          { scope: { kind: 'catalogue' }, label: 'Global catalogue', parent: null,
+            queues: ['reports', 'resolved'], viewer: { open: 'permitted' } },
+        ] };
+    const result = await readWorkbench({ directory: async () => directory,
+      boardReports: async () => ({ reports: [], next: null }), boardAppeals: async () => ({ appeals: [], next: null }),
+      catalogueReports: async () => ({ reports: [], next: null }) }, input);
+    return { ...result, generation: crypto.randomUUID(),
+      readerOrigin: { subject: 'directory-story-reader', csrfFingerprint: await privateReaderFingerprint(null) } };
+  }, [mode]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setPage(undefined);
+    void prepareWorkbenchRead(cache, search, read, controller.signal).then((result) => {
+      if (!controller.signal.aborted) setPage(result);
+    }, () => undefined);
+    return () => controller.abort();
+  }, [cache, search, read, revision]);
+  return <QueryClientProvider client={cache}>{page ? <WorkbenchPage key={page.generation} page={page} search={search}
+    onSearch={setSearch} onRetry={() => retry((value) => value + 1)} read={read} /> : <WorkbenchPreparing />}</QueryClientProvider>;
+}
+
+const meta = {
+  title: 'Pages/Moderation/Queue directory',
+  component: DirectoryStory,
+  parameters: { layout: 'fullscreen', viewport: { options: queueViewports }, docs: { description: {
+    component: 'The workbench route consumer with supplied directory advice. Native projection, mounted producer and installed typing are pending; these stories make no native authority or execution claim.',
+  } } },
+  decorators: [(Story) => <PatternStory visitor="Signed In" path="/moderation/workbench"><AppShell><Story /></AppShell></PatternStory>],
+} satisfies Meta<typeof DirectoryStory>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const KeyboardAndLongLabels: Story = {
+  play: async ({ canvasElement }) => {
+    const view = within(canvasElement);
+    const button = await view.findByRole('button', { name: `${longLabel}: ${m.moderation_workbench_queue_reports()}` });
+    button.focus();
+    await expect(button).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await view.findByRole('status');
+    await expect(view.getByText(m.moderation_workbench_empty())).toBeVisible();
+  },
+};
+export const Empty: Story = { args: { mode: 'empty' } };
+export const Preparing: Story = { args: { mode: 'preparing' } };
+export const FailedContinuation: Story = { args: { mode: 'unavailable', continuation: true } };
+export const Phone390: Story = { globals: { viewport: { value: 'phone390' } } };
+export const Desktop1280: Story = { globals: { viewport: { value: 'desktop1280' } } };

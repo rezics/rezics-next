@@ -1930,7 +1930,7 @@
   "moderation_workbench_intro": "現在許可されている掲示板、またはグローバルカタログを一つ選びます。各キューは個別に認可されます。",
   "moderation_workbench_catalogue": "グローバルカタログ",
   "moderation_workbench_select_scope": "掲示板またはグローバルカタログを選んでキューを開きます。",
-  "moderation_workbench_membership_hint": "表示されたレルムや掲示板はモデレーション権限ではありません。選んだキューが現在のアクセスを確認します。",
+  "moderation_workbench_membership_hint": "メンバーであることだけではモデレーション権限は付与されません。選択したキューごとに現在のアクセス権が確認されます。",
   "moderation_workbench_queue_reports": "提出済みの報告",
   "moderation_workbench_queue_appeals": "未処理の不服申立て",
   "moderation_workbench_queue_resolved": "解決済みの案件",
@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "この閲覧者には評価操作が公開されていません。",
   "discovery_score_unavailable": "評価操作を利用できません。",
   "thread_page_invalid_cursor": "このページのリンクは無効か、有効期限が切れています。最初のページから続けてください。",
-  "thread_page_restart": "最初のページを開く"
+  "thread_page_restart": "最初のページを開く",
+  "moderation_directory_heading": "利用可能なモデレーションキュー",
+  "moderation_directory_empty": "現在利用できるモデレーションキューはありません。",
+  "moderation_directory_empty_next": "次のページに他の範囲がある可能性があります。",
+  "moderation_directory_preparing": "モデレーションキューの一覧を準備しています…",
+  "moderation_directory_unavailable": "現在、モデレーションキューの一覧を取得できません。",
+  "moderation_directory_open_scope": "{label} を開く"
 }

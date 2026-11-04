@@ -1930,7 +1930,7 @@
   "moderation_workbench_intro": "Choisissez un tableau actuellement autorisé ou le catalogue global. Chaque file est autorisée séparément.",
   "moderation_workbench_catalogue": "Catalogue global",
   "moderation_workbench_select_scope": "Choisissez un tableau ou le catalogue global pour ouvrir une file.",
-  "moderation_workbench_membership_hint": "Un Royaume ou un tableau listé n’est pas une permission de modération. La file choisie vérifie l’accès actuel.",
+  "moderation_workbench_membership_hint": "La seule adhésion ne confère pas de droits de modération. Chaque file sélectionnée vérifie les droits d’accès actuels.",
   "moderation_workbench_queue_reports": "Signalements soumis",
   "moderation_workbench_queue_appeals": "Appels en attente",
   "moderation_workbench_queue_resolved": "Affaires résolues",
@@ -7955,5 +7955,11 @@
   "discovery_score_concealed": "Les actions de notation ne sont pas accessibles à ce lecteur.",
   "discovery_score_unavailable": "Les actions de notation sont indisponibles.",
   "thread_page_invalid_cursor": "Ce lien de page est invalide ou a expiré. Ouvrez la première page pour continuer.",
-  "thread_page_restart": "Ouvrir la première page"
+  "thread_page_restart": "Ouvrir la première page",
+  "moderation_directory_heading": "Files de modération disponibles",
+  "moderation_directory_empty": "Vous ne pouvez utiliser aucune file de modération actuellement.",
+  "moderation_directory_empty_next": "D’autres périmètres peuvent être disponibles à la page suivante.",
+  "moderation_directory_preparing": "Préparation de la liste des files de modération…",
+  "moderation_directory_unavailable": "La liste des files de modération est actuellement indisponible.",
+  "moderation_directory_open_scope": "Ouvrir {label}"
 }
