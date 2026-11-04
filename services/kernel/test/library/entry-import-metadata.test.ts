@@ -538,6 +538,20 @@ for (const provider of ['mal', 'anilist'] as const) {
     expect(pending.annotationKey).toBe(history[0]!.confirmation!.annotationKey);
     expect(pending.annotationInput?.note).toEqual({ op: 'set', value: 'Retained note' });
     expect(pending.outcome).toBeUndefined();
+    const changeSourceNote = async (note: string) => {
+      if (provider === 'mal')
+        await f.pool.query(
+          `UPDATE library.list_import_mal SET document=jsonb_set(document,'{rows,0,notes,value}',$3::jsonb) WHERE account_id=$1 AND id=$2`,
+          [f.owner.actor.accountId, id, JSON.stringify(note)],
+        );
+      else
+        await f.pool.query(
+          `UPDATE library.list_import_anilist SET payload=jsonb_set(payload,'{source,evidence,notes}',$3::jsonb) WHERE account_id=$1 AND import_id=$2 AND ordinal=0`,
+          [f.owner.actor.accountId, id, JSON.stringify(note)],
+        );
+    };
+    await changeSourceNote('Changed after dispatch');
+    expect((await body(await send('GET', `${root}/${id}/metadata/0?reviewToken=${token}`))).status).toBe('stale');
     const applyPath = provider === 'mal' ? `${root}/${id}/metadata/apply` : `${root}/${id}:applyMetadata`;
     const applyInput = { ...(provider === 'mal' ? { row: 0 } : { ordinal: 0 }), reviewToken: token, fields };
     expect(
@@ -569,6 +583,7 @@ for (const provider of ['mal', 'anilist'] as const) {
     expect(await nativeFacts()).toEqual(saved);
     const viewPath = `${root}/${id}/metadata/0?reviewToken=${token}`;
     expect((await send('GET', viewPath, undefined, 'other')).status).toBe(404);
+    await changeSourceNote('Retained note');
     const second = await body(await send('POST', reviewPath, reviewInput));
     expect(second.reviewToken).not.toBe(token);
     expect((await send('POST', reviewPath, reviewInput)).status).toBe(409);
