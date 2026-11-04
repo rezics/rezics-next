@@ -1,3 +1,4 @@
+-- migrate:up
 -- An upload has one absolute lifetime; reading or reviewing it never moves this deadline.
 ALTER TABLE library.bangumi_upload
   ADD COLUMN expires_at timestamptz NOT NULL DEFAULT (clock_timestamp() + interval '7 days');
