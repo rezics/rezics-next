@@ -505,60 +505,60 @@ function ShellContent({
       <PhoneNavigationClearance>
         <PhoneCreationProvider>
           <HeaderSearchFilterProvider>
-          <SidebarProvider
-            className="flex-col"
-            open={!railCollapsed}
-            onOpenChange={(open) => {
-              setCollapsed(!open);
-              // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
-              setTimeout(() => {
-                document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
-              });
-            }}
-          >
-            <a href="#main-content" className={skipLink}>
-              {m.shell_skip_to_content()}
-            </a>
-            <link rel="preload" href={manropeFontUrl} as="font" type="font/woff2" crossOrigin="anonymous" />
-            <TopBar
-              navigation={
-                <NavigationToggle
-                  collapsed={railCollapsed}
-                  onToggle={() => setCollapsed(!railCollapsed)}
-                  pathname={location.pathname}
-                  session={session}
-                />
-              }
-              logo={<Logo />}
-              search={search ?? <ShellSearch />}
-              actions={
-                <ShellTopActions
-                  notifications={notifications}
-                  session={session}
-                  pathname={location.pathname}
-                  returnTo={location.publicHref.split('#')[0]!}
-                  account={<AccountMenu session={session} csrfToken={csrfToken} />}
-                />
-              }
-            />
-            <ScriptFreeNavigation pathname={location.pathname} session={session} />
-            <div className="flex flex-1">
-              <NavigationColumn pathname={location.pathname} session={session} />
-              <SidebarInset
-                id="main-content"
-                tabIndex={-1}
-                className="min-w-0 px-3 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none md:p-6"
-              >
-                <div className="mx-auto w-full max-w-5xl">{children}</div>
-              </SidebarInset>
-            </div>
-            <PhoneNavigation
-              session={session}
-              csrfToken={csrfToken}
-              pathname={location.pathname}
-              account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
-            />
-          </SidebarProvider>
+            <SidebarProvider
+              className="flex-col"
+              open={!railCollapsed}
+              onOpenChange={(open) => {
+                setCollapsed(!open);
+                // The sidebar writes its own cookie after this call; the shell keeps one preference in rezics_nav.
+                setTimeout(() => {
+                  document.cookie = 'sidebar_state=; Max-Age=0; Path=/';
+                });
+              }}
+            >
+              <a href="#main-content" className={skipLink}>
+                {m.shell_skip_to_content()}
+              </a>
+              <link rel="preload" href={manropeFontUrl} as="font" type="font/woff2" crossOrigin="anonymous" />
+              <TopBar
+                navigation={
+                  <NavigationToggle
+                    collapsed={railCollapsed}
+                    onToggle={() => setCollapsed(!railCollapsed)}
+                    pathname={location.pathname}
+                    session={session}
+                  />
+                }
+                logo={<Logo />}
+                search={search ?? <ShellSearch />}
+                actions={
+                  <ShellTopActions
+                    notifications={notifications}
+                    session={session}
+                    pathname={location.pathname}
+                    returnTo={location.publicHref.split('#')[0]!}
+                    account={<AccountMenu session={session} csrfToken={csrfToken} />}
+                  />
+                }
+              />
+              <ScriptFreeNavigation pathname={location.pathname} session={session} />
+              <div className="flex flex-1">
+                <NavigationColumn pathname={location.pathname} session={session} />
+                <SidebarInset
+                  id="main-content"
+                  tabIndex={-1}
+                  className="min-w-0 px-3 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] outline-none md:p-6"
+                >
+                  <div className="mx-auto w-full max-w-5xl">{children}</div>
+                </SidebarInset>
+              </div>
+              <PhoneNavigation
+                session={session}
+                csrfToken={csrfToken}
+                pathname={location.pathname}
+                account={<AccountMenu session={session} csrfToken={csrfToken} phone />}
+              />
+            </SidebarProvider>
           </HeaderSearchFilterProvider>
         </PhoneCreationProvider>
       </PhoneNavigationClearance>
