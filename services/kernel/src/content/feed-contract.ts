@@ -134,13 +134,13 @@ export const FeedSubjectReactionsSchema = t.Object(
       ),
       t.Object({ state: t.Literal('unavailable') }, closed),
     ]),
-    viewer: t.Optional(t.Union([
-      t.Object({ state: t.Literal('available'), kind: t.Union([FeedSubjectReactionKindSchema, t.Null()]) }, closed),
-      t.Object({ state: t.Literal('unavailable') }, closed),
-    ])),
-    action: t.Union([
-      t.Literal('sign_in'), t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable'),
-    ]),
+    viewer: t.Optional(
+      t.Union([
+        t.Object({ state: t.Literal('available'), kind: t.Union([FeedSubjectReactionKindSchema, t.Null()]) }, closed),
+        t.Object({ state: t.Literal('unavailable') }, closed),
+      ]),
+    ),
+    action: t.Union([t.Literal('sign_in'), t.Literal('allowed'), t.Literal('denied'), t.Literal('unavailable')]),
   },
   closed,
 );

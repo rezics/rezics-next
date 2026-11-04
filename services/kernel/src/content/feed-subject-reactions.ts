@@ -34,9 +34,11 @@ export async function prepareFeedSubjectReactions(
       item.destination.kind !== 'subject' ||
       item.key.id !== item.destination.id ||
       item.key.id !== item.summary.id ||
-      !('type' in item.summary) || item.key.kind !== item.summary.type ||
+      !('type' in item.summary) ||
+      item.key.kind !== item.summary.type ||
       routeOf(item.key.id) !== item.key.route
-    ) throw new TypeError('Ambiguous feed Subject reaction target');
+    )
+      throw new TypeError('Ambiguous feed Subject reaction target');
     const prior = selected.get(item.key.id);
     if (prior && prior.summary.type !== item.summary.type)
       throw new TypeError('Ambiguous feed Subject reaction target');
@@ -57,33 +59,62 @@ export async function prepareFeedSubjectReactions(
     const route = routeOf(id)!;
     const home = partitionOf(route);
     groups.set(home, [...(groups.get(home) ?? []), id]);
-    checks.set(id, await accessCheck(dependencies.access, actor, 'subject:read', {
-      route, id, eligibility: subjectReadEligibility({ route, id }),
-    }, context));
+    checks.set(
+      id,
+      await accessCheck(
+        dependencies.access,
+        actor,
+        'subject:read',
+        {
+          route,
+          id,
+          eligibility: subjectReadEligibility({ route, id }),
+        },
+        context,
+      ),
+    );
   }
   // Advice uses the writer's Global Context operand, never a Subject-local grant.
-  const advice = actor.kind === 'account'
-    ? await accessCheck(dependencies.access, actor, 'reaction:set', { route: 0, id: GLOBAL_CONTEXT }, context)
-    : undefined;
-  const observe = () => withReadTransaction(dependencies.pool, async (client) => {
-    await partitionReadClients(client, [...groups.keys(), ...(advice ? [0] : [])]);
-    const observed = new Map<string, Identity>();
-    for (const [partition, ids] of groups) {
-      const parameters = { partition, ids, routes: ids.map((id) => routeOf(id)!) };
-      const result = await client.query<(typeof identities)['~reylo']['element']>(
-        identities.sql, identities.params.map((name) => parameters[name as keyof typeof parameters]),
-      );
-      for (const row of result.rows) {
-        if (typeof row.id !== 'string' || typeof row.type !== 'string' ||
-          typeof row.securityRevision !== 'string' || !ids.includes(row.id) || observed.has(row.id))
-          throw new TypeError('Unexpected feed Subject identity');
-        const item = selected.get(row.id)!;
-        if (row.redirect !== null || row.type !== item.summary.type || !(await checks.get(row.id)!(client))) continue;
-        observed.set(row.id, { id: row.id, type: row.type, securityRevision: row.securityRevision, redirect: row.redirect });
-      }
-    }
-    return { observed, allowed: advice ? await advice(client) : false };
-  }, deadline);
+  const advice =
+    actor.kind === 'account'
+      ? await accessCheck(dependencies.access, actor, 'reaction:set', { route: 0, id: GLOBAL_CONTEXT }, context)
+      : undefined;
+  const observe = () =>
+    withReadTransaction(
+      dependencies.pool,
+      async (client) => {
+        await partitionReadClients(client, [...groups.keys(), ...(advice ? [0] : [])]);
+        const observed = new Map<string, Identity>();
+        for (const [partition, ids] of groups) {
+          const parameters = { partition, ids, routes: ids.map((id) => routeOf(id)!) };
+          const result = await client.query<(typeof identities)['~reylo']['element']>(
+            identities.sql,
+            identities.params.map((name) => parameters[name as keyof typeof parameters]),
+          );
+          for (const row of result.rows) {
+            if (
+              typeof row.id !== 'string' ||
+              typeof row.type !== 'string' ||
+              typeof row.securityRevision !== 'string' ||
+              !ids.includes(row.id) ||
+              observed.has(row.id)
+            )
+              throw new TypeError('Unexpected feed Subject identity');
+            const item = selected.get(row.id)!;
+            if (row.redirect !== null || row.type !== item.summary.type || !(await checks.get(row.id)!(client)))
+              continue;
+            observed.set(row.id, {
+              id: row.id,
+              type: row.type,
+              securityRevision: row.securityRevision,
+              redirect: row.redirect,
+            });
+          }
+        }
+        return { observed, allowed: advice ? await advice(client) : false };
+      },
+      deadline,
+    );
 
   const initial = await observe();
   return {
@@ -113,11 +144,14 @@ export async function prepareFeedSubjectReactions(
         projections.set(target.id, {
           target: { targetKind: 'subject', targetId: target.id },
           counts: source ? { state: 'available', values, asOf: source } : { state: 'unavailable' },
-          ...(actor.kind === 'account' ? {
-            viewer: Object.hasOwn(target, 'viewerReaction') && viewerKind !== undefined
-              ? { state: 'available' as const, kind: viewerKind }
-              : { state: 'unavailable' as const },
-          } : {}),
+          ...(actor.kind === 'account'
+            ? {
+                viewer:
+                  Object.hasOwn(target, 'viewerReaction') && viewerKind !== undefined
+                    ? { state: 'available' as const, kind: viewerKind }
+                    : { state: 'unavailable' as const },
+              }
+            : {}),
           action: actor.kind === 'anonymous' ? 'sign_in' : source ? 'denied' : 'unavailable',
         });
       }
@@ -132,9 +166,14 @@ export async function prepareFeedSubjectReactions(
         if (!before || !after || !projection || before.securityRevision !== after.securityRevision) return [];
         const subjectReactions: FeedSubjectReactions = {
           ...projection,
-          action: actor.kind === 'anonymous' ? 'sign_in'
-            : projection.counts.state !== 'available' || projection.viewer?.state !== 'available' ? 'unavailable'
-            : final.allowed ? 'allowed' : 'denied',
+          action:
+            actor.kind === 'anonymous'
+              ? 'sign_in'
+              : projection.counts.state !== 'available' || projection.viewer?.state !== 'available'
+                ? 'unavailable'
+                : final.allowed
+                  ? 'allowed'
+                  : 'denied',
         };
         return [{ ...item, summary: { ...item.summary, subjectReactions } } as SubjectItem];
       });
