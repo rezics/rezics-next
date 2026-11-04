@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { createElement } from 'react';
 import { creationFixture, approval, fill, flush, leave, open, send, session, dom } from './creation-page-fixture';
 import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
 import type { OrganizationDeletionReader } from '../src/organization-deletion';
@@ -25,11 +26,11 @@ test('return review, preflight and bounded write retries have explicit whole-cal
     };
   };
   const page = await open(
-    <OrganizationDeleteContent
-      organizationId={organization}
-      privacyContact="mailto:privacy@example.test"
-      read={read}
-    />,
+    createElement(OrganizationDeleteContent, {
+      organizationId: organization,
+      privacyContact: 'mailto:privacy@example.test',
+      read,
+    }),
     body,
   );
   expect(reads).toBe(1);
