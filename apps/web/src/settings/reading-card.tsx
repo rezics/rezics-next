@@ -296,7 +296,8 @@ export class ReadingDraftRecovery {
       this.state.phase === 'reloading'
     )
       return;
-    const adoptReceipt = this.state.confirmedReceipt !== null && !this.state.knownCurrent && this.state.pending === null;
+    const adoptReceipt =
+      this.state.confirmedReceipt !== null && !this.state.knownCurrent && this.state.pending === null;
     this.update({
       phase: 'reloading',
       knownCurrent: false,
