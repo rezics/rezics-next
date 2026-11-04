@@ -66,6 +66,17 @@ test('Album recovery retires every current surface and retains private drafts an
   const initial = await fixture.loadCorrection();
   const current = await fixture.editors.facts.read();
   if (!current.ok) throw new Error('Expected Album');
+  const inspectionActions = {
+    subject: {
+      state: 'available' as const,
+      actions: [{ action: 'subject:read', operations: ['subject.list_candidates'] }],
+    },
+    context: {
+      state: 'available' as const,
+      actions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
+    },
+  };
+  current.actions = inspectionActions;
   let next: EditorRead | Error | Promise<EditorRead> = current;
   let lateProposal: ((result: FactResult) => void) | undefined;
   const commands: FactCommand[] = [];
@@ -124,7 +135,11 @@ test('Album recovery retires every current surface and retains private drafts an
               id={albumId}
               locale="en"
               session="signed-in"
-              transport={{ ...fixture.transport, load: async () => initial }}
+              transport={{
+                ...fixture.transport,
+                load: async () =>
+                  initial.ok ? Object.assign({}, initial, { actions: inspectionActions }) : initial,
+              }}
               search={async () => []}
               editors={editors}
             />
@@ -259,9 +274,6 @@ test('Album recovery retires every current surface and retains private drafts an
     await click(m.facts_submit());
     expect(commands).toHaveLength(2);
     const exact = structuredClone(commands[1]!);
-    await waitFor(() =>
-      expect(within(field(properties[0]!)).getByRole('link', { name: m.correction_review() })).toBeDefined(),
-    );
     await act(async () => user.click(within(field(properties[0]!)).getByRole('link', { name: m.correction_review() })));
     await settle();
     expect(host.textContent).toContain(m.candidate_current());
