@@ -63,33 +63,39 @@ function SourcesRoute() {
   const { realm } = Route.useSearch();
   const session = useSession();
   const currentReader = useSubjectReaderRefresh(reader, subjectReaderPartition(realm, reader, session));
-  const scope = JSON.stringify([result, session.state, session.subject, session.csrfToken]);
-  const [current, setCurrent] = useState<{ scope: string; result: SourcesResult }>();
+  const scope = JSON.stringify([session.state, session.subject, session.csrfToken]);
+  const [current, setCurrent] = useState<{ source: SourcesResult; scope: string; result: SourcesResult }>();
   useEffect(() => {
     let live = true;
-    if (!realm && result.kind === 'ready' && session.state === 'signed-in' && session.subject) {
+    setCurrent(undefined);
+    if (
+      !realm &&
+      result.kind === 'ready' &&
+      (session.state === 'signed-out' || (session.state === 'signed-in' && session.subject))
+    ) {
+      const resultSource = result;
       void readCurrentSubjectSources({
         data: {
           id: result.kind === 'ready' ? result.page.id : '',
           locale: getLocale(),
-          expectedReader: session.subject,
+          expectedReader: session.subject ?? null,
         },
         headers: csrfHeaders(),
       })
         .then((result) => {
-          if (live) setCurrent({ scope, result });
+          if (live) setCurrent({ source: resultSource, scope, result });
         })
         .catch(() => {
-          if (live) setCurrent({ scope, result: { kind: 'unavailable' } });
+          if (live) setCurrent({ source: resultSource, scope, result: { kind: 'unavailable' } });
         });
     }
     return () => {
       live = false;
     };
-  }, [scope, realm]);
+  }, [result, scope, realm]);
   const selected =
-    !realm && result.kind === 'ready' && session.state === 'signed-in'
-      ? current?.scope === scope
+    !realm && result.kind === 'ready' && (session.state === 'signed-in' || session.state === 'signed-out')
+      ? current?.scope === scope && current.source === result
         ? current.result
         : { kind: 'loading' as const }
       : result;

@@ -16,10 +16,12 @@ const render = (result: SourcesResult) => renderToString(createElement(SubjectSo
 
 test('Explain the currently selected subject facts and their sources through the existing API and reader with honest failure states', async () => {
   const fixture = catalogueSourcesFixture();
-  fixture.read.viewerActions = {
-    state: 'available',
-    actions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
-  };
+  Object.assign(fixture.read, {
+    viewerActions: {
+      state: 'available',
+      actions: [{ action: 'statement:propose', operations: ['subject.propose'] }],
+    },
+  });
   const result = await readSubjectSources(fixture.client, fixture.id, 'en', sourceDefinitions);
   expect(result.kind).toBe('ready');
   if (result.kind !== 'ready') throw new Error('Expected selected public facts');
@@ -32,6 +34,11 @@ test('Explain the currently selected subject facts and their sources through the
   expect(html).toContain('CC0-1.0');
   expect(result.page.fields[0]?.compareHref).toContain('candidateField=schema%3AdatePublished');
   expect(html).toContain('returnTo=sources');
+  const comparison = new URL(result.page.fields[0]!.compareHref!, 'https://site.invalid');
+  expect(comparison.searchParams.get('sourceStatement')).toBe(
+    fixture.read.subject.statements['schema:datePublished']![0]!.id,
+  );
+  expect(comparison.searchParams.get('via')).toBe(`${result.page.sourcesHref}#subject-sources-heading`);
   expect(html).toContain(`href="${result.page.href}"`);
   expect(fixture.calls).toEqual([
     { path: `/v1/subjects/${fixture.id}`, authorization: null, session: 'sources-session' },
@@ -154,7 +161,7 @@ test('only selected disclosed values and their reference parts are explained; hi
 test('current native denial and unavailable actions preserve evidence without correction authority', () => {
   const fixture = catalogueSourcesFixture();
   for (const actions of [{ state: 'available' as const, actions: [] }, { state: 'unavailable' as const }]) {
-    fixture.read.viewerActions = actions;
+    Object.assign(fixture.read, { viewerActions: actions });
     const page = explainSubjectSources(fixture.read, 'en', sourceDefinitions);
     const html = render({ kind: 'ready', page });
     expect(html).toContain(citationUrl);

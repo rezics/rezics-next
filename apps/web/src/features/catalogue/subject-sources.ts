@@ -1,3 +1,4 @@
+import { actionState, type ConceptViewerActions } from './source-concept-explorer';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickLanguage } from '@rezics/composition';
 import {
@@ -38,7 +39,7 @@ export type SourceField = {
 export type SourcesPageData = {
   realm?: string | undefined;
   context?: import('@rezics/composition').SelectedContext | undefined;
-  viewer?: { state: 'public' | 'signed-in'; actions: NonNullable<SubjectRead['viewerActions']> };
+  viewer?: { state: 'public' | 'signed-in' | 'signed-out'; actions: ConceptViewerActions };
   id: string;
   title: ReturnType<typeof pageText>;
   typeLabel: ReturnType<typeof pageText>;
@@ -73,12 +74,13 @@ function presentable(snak: Snak, related: Related): boolean {
 export function explainSubjectSources(
   read: Pick<SubjectRead, 'subject' | 'related'> & {
     summary?: SubjectRead['summary'] | undefined;
-    viewerActions?: SubjectRead['viewerActions'];
+    account?: SubjectRead['account'];
   },
   locale: string,
   definitions?: SourceDefinitions,
 ): SourcesPageData {
   const { subject } = read;
+  const actions = actionState({ ...read, account: read.account ?? null });
   const original = originalLanguage(subject);
   const title = pageText(subject.labels, locale, original);
   const identity = { id: subject.id, label: title.text };
@@ -144,8 +146,8 @@ export function explainSubjectSources(
       definitions.properties[property] &&
       (!relation || relation.group === 'classification');
     const allowed =
-      read.viewerActions?.state === 'available' &&
-      read.viewerActions.actions.some(
+      actions.state === 'available' &&
+      actions.actions.some(
         (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
       );
     const returnTo = `${subjectViewHref(identity, locale, 'sources')}#subject-sources-heading`;
@@ -174,7 +176,7 @@ export function explainSubjectSources(
     });
   }
   return {
-    viewer: { state: 'public', actions: read.viewerActions ?? { state: 'unavailable' } },
+    viewer: { state: 'public', actions },
     id: subject.id,
     title,
     typeLabel: pageText(definitions?.types[subject.type]?.labels, locale),
@@ -230,9 +232,8 @@ export async function readSubjectSources(
 ): Promise<SourcesResult> {
   if (!uuid.test(id)) return { kind: 'missing' };
   try {
-    let current = await client
-      .subjects({ id })
-      .get({ query: { includeViewerActions }, fetch: { redirect: 'manual', cache: 'no-store' } });
+    const query = { language: locale, includeViewerActions };
+    let current = await client.subjects({ id }).get({ query, fetch: { redirect: 'manual', cache: 'no-store' } });
     let expected = id;
     if (current.status === 308) {
       const body = current.data ?? current.error?.value;
@@ -241,7 +242,7 @@ export async function readSubjectSources(
       expected = moved.to;
       current = await client
         .subjects({ id: expected })
-        .get({ query: { includeViewerActions }, fetch: { redirect: 'manual', cache: 'no-store' } });
+        .get({ query, fetch: { redirect: 'manual', cache: 'no-store' } });
     }
     if (current.status !== 200 || !current.data) return failure(current.status);
     if (current.data.subject.id !== expected) return { kind: 'unavailable' };

@@ -95,7 +95,7 @@ function isViewerAction(value: unknown): value is { action: string; operations: 
   );
 }
 
-function actionState(current: SubjectRead): ConceptViewerActions {
+export function actionState(current: Pick<SubjectRead, 'account'>): ConceptViewerActions {
   if (!('viewerActions' in current) || !isRecord(current.viewerActions)) return { state: 'unavailable' };
   const state = current.viewerActions;
   if (state.state !== 'available' || !Array.isArray(state.actions) || !state.actions.every(isViewerAction))
