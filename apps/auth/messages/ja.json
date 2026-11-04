@@ -44,7 +44,7 @@
   "auth_consent_approved_none": "権限は追加されていません。既存のアクセス権は変更されていません。",
   "auth_consent_approved_permissions": "今回送信した権限:",
   "auth_consent_decline": "拒否する",
-  "auth_consent_declined": "クライアントに新しいアクセス権は付与されませんでした。",
+  "auth_consent_declined": "確認を辞退しました。この選択では承認は送信されません。",
   "auth_consent_declined_after_submission": "今回の確認は拒否しました。以前の承認は反映されている可能性があります。",
   "auth_consent_empty": "要求された権限はありません。",
   "auth_consent_heading": "権限を確認",
@@ -649,5 +649,12 @@
   "auth_route_failure_exit_security": "アカウントのセキュリティ",
   "auth_route_failure_safe_navigation": "Auth のほかのページ",
   "auth_route_missing_title": "ページが見つかりません",
-  "auth_route_missing_body": "このアドレスに対応する Auth ページはありません。"
+  "auth_route_missing_body": "このアドレスに対応する Auth ページはありません。",
+  "auth_consent_history_unknown": "以前の承認結果は不明で、すでに反映されている可能性があります。現在の権限を確認しても、その結果は確定できません。",
+  "auth_consent_history_acknowledged": "承認の応答を受け取りました。この応答は、現在利用できる権限を示すものではありません。",
+  "auth_consent_history_next": "判断を送信せずに現在の権限を確認するか、セキュリティに移動できます。ページを離れても、送信済みの承認は取り消されません。",
+  "auth_consent_review_current": "現在の権限を確認",
+  "auth_consent_sending": "承認を送信中… 結果の応答はまだ届いていません。",
+  "auth_consent_departure_heading": "この確認ページを離れますか？",
+  "auth_consent_departure_description": "ページを離れた後も承認が反映される可能性があります。離れても承認は取り消されず、不明な結果も確定しません。現在の権限を確認するには残るか、このページを離れてください。"
 }

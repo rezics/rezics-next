@@ -44,7 +44,7 @@
   "auth_consent_approved_none": "No permissions were added. Existing access remains unchanged.",
   "auth_consent_approved_permissions": "The request submitted these permissions:",
   "auth_consent_decline": "Decline",
-  "auth_consent_declined": "The client got no new access.",
+  "auth_consent_declined": "Review declined. This choice sends no approval.",
   "auth_consent_declined_after_submission": "Review declined. An earlier approval may still have taken effect.",
   "auth_consent_empty": "No permissions requested.",
   "auth_consent_heading": "Review permissions",
@@ -649,5 +649,12 @@
   "auth_route_failure_exit_security": "Account security",
   "auth_route_failure_safe_navigation": "Other Auth pages",
   "auth_route_missing_title": "Page not found",
-  "auth_route_missing_body": "This address doesn't match an available Auth page."
+  "auth_route_missing_body": "This address doesn't match an available Auth page.",
+  "auth_consent_history_unknown": "An earlier approval result is unknown and may have taken effect. A current permissions review cannot resolve that result.",
+  "auth_consent_history_acknowledged": "An approval was acknowledged. That acknowledgement does not establish the permissions available now.",
+  "auth_consent_history_next": "Review current permissions without sending a decision, or go to Security. Leaving cannot undo a submitted approval.",
+  "auth_consent_review_current": "Review current permissions",
+  "auth_consent_sending": "Sending approval… The result has not been acknowledged.",
+  "auth_consent_departure_heading": "Leave this review?",
+  "auth_consent_departure_description": "An approval may still take effect after you leave. Leaving does not cancel it or resolve an unknown result. Stay to review current permissions, or leave this page."
 }

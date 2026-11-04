@@ -200,6 +200,24 @@ Uncertain writes remain unresolved and are never replayed automatically. Tab sto
 context for the admitted account, client and request. A legacy marker without an account remains visibly unattributed;
 a different account cannot inherit or resolve it from matching consent.
 
+Decision: mounted consent history retains only a generic acknowledged/unknown classification, with unknown taking
+precedence across account replacement, later acknowledgements and local refusal; it is never persisted.
+The historical notice remains visible while current review is loading, signed out, not found or unavailable. Current
+identity, client details and permissions disappear before cached-page suspension and are revealed only by a fresh
+exact review on return. Current permission readback is an observation, never proof of an earlier approval's outcome.
+A read Retry uses the same exact client/scope GET and sends no decision. Pending reduction advice and current read
+errors remain separate from historical uncertainty. Allow still requires fresh native advice and deliberate activation;
+Decline is local and sends nothing. Pending and unknown decisions protect account switching and navigation with
+Stay/Leave, plus the browser reload/close warning. Leaving retires callbacks without cancelling a native effect.
+Focus moves to the public review summary when private controls retire and after read Retry, or to the current error.
+The fixed exits are the exact review's sign-in return and Security; no client-supplied redirect is accepted.
+
+Whole-call costs: initial review, each explicit read Retry, focus return after blur and cached-document restoration
+perform at most one existing five-second bounded exact consent GET each (zero if the client is missing or the request
+is invalid). Each deliberate Allow performs one existing five-second bounded POST; there is no implicit resend,
+inventory read, marker scan, polling or per-permission call. Repeated activation shares the active read or decision;
+Decline, Stay and historical presentation perform zero requests. Leaving can only retire browser ownership.
+
 Page paths render only for GET and HEAD. Other methods, including `POST /consent` and `POST /signup`, pass the
 original request through to Auth at the issuer origin in production, or through the existing `AUTH_ORIGIN` proxy in
 development. Auth's response returns unchanged, without page headers.

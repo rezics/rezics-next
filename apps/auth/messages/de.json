@@ -44,7 +44,7 @@
   "auth_consent_approved_none": "Es wurden keine Berechtigungen hinzugefügt. Der bestehende Zugriff bleibt unverändert.",
   "auth_consent_approved_permissions": "Diese Berechtigungen wurden für die Anfrage übermittelt:",
   "auth_consent_decline": "Ablehnen",
-  "auth_consent_declined": "Der Client hat keinen neuen Zugriff erhalten.",
+  "auth_consent_declined": "Prüfung abgelehnt. Diese Auswahl sendet keine Zustimmung.",
   "auth_consent_declined_after_submission": "Prüfung abgelehnt. Eine frühere Zustimmung könnte trotzdem wirksam geworden sein.",
   "auth_consent_empty": "Keine Berechtigungen angefordert.",
   "auth_consent_heading": "Berechtigungen prüfen",
@@ -649,5 +649,12 @@
   "auth_route_failure_exit_security": "Kontosicherheit",
   "auth_route_failure_safe_navigation": "Weitere Auth-Seiten",
   "auth_route_missing_title": "Seite nicht gefunden",
-  "auth_route_missing_body": "Diese Adresse gehört zu keiner verfügbaren Auth-Seite."
+  "auth_route_missing_body": "Diese Adresse gehört zu keiner verfügbaren Auth-Seite.",
+  "auth_consent_history_unknown": "Das Ergebnis einer früheren Zustimmung ist unbekannt; sie könnte wirksam geworden sein. Eine Prüfung der aktuellen Berechtigungen klärt dieses Ergebnis nicht.",
+  "auth_consent_history_acknowledged": "Eine Zustimmung wurde bestätigt. Diese Bestätigung sagt nichts über die jetzt verfügbaren Berechtigungen aus.",
+  "auth_consent_history_next": "Prüfe die aktuellen Berechtigungen, ohne eine Entscheidung zu senden, oder öffne Sicherheit. Das Verlassen macht eine gesendete Zustimmung nicht rückgängig.",
+  "auth_consent_review_current": "Aktuelle Berechtigungen prüfen",
+  "auth_consent_sending": "Zustimmung wird gesendet… Das Ergebnis wurde noch nicht bestätigt.",
+  "auth_consent_departure_heading": "Diese Prüfung verlassen?",
+  "auth_consent_departure_description": "Eine Zustimmung kann auch nach dem Verlassen wirksam werden. Das Verlassen bricht sie nicht ab und klärt kein unbekanntes Ergebnis. Bleibe, um die aktuellen Berechtigungen zu prüfen, oder verlasse diese Seite."
 }

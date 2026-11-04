@@ -1,40 +1,19 @@
-import { afterAll, expect, test } from 'bun:test';
-import { dirname } from 'node:path';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { act } from 'react';
-
-// Reuse the mounted Auth DOM composition and consent browser fixture values, without a server.
-const { Window } = await import(
-  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
-);
-const dom = new Window({ url: 'https://auth.test/consent' });
-const saved = new Map<string, PropertyDescriptor | undefined>();
-for (const [key, value] of Object.entries({
-  window: dom,
-  document: dom.document,
-  navigator: dom.navigator,
-  HTMLElement: dom.HTMLElement,
-  Element: dom.Element,
-  Node: dom.Node,
-  scrollTo: dom.scrollTo.bind(dom),
-  IS_REACT_ACT_ENVIRONMENT: true,
-  fetch: globalThis.fetch,
-})) {
-  saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-  Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
-}
+import { creationFixture, dom } from './creation-page-fixture';
+creationFixture();
+const originalScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
+afterAll(() => {
+  if (originalScrollTo) Object.defineProperty(globalThis, 'scrollTo', originalScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
 const { createRoot } = await import('react-dom/client');
 const { createRootRoute, createRouter, createMemoryHistory, RouterProvider } = await import('@tanstack/react-router');
 const { Route } = await import('../src/routes/consent');
 const { signInTarget } = await import('../src/sign-in');
 const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 overwriteGetLocale(() => 'en');
-afterAll(async () => {
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  await dom.happyDOM.close();
-});
 
 test('consent reviews and decisions belong to the current visit and survive sign-in for fresh review', async () => {
   const calls: { url: string; init?: RequestInit; resolve: (response: Response) => void }[] = [];
@@ -91,18 +70,23 @@ test('consent reviews and decisions belong to the current visit and survive sign
     });
   const button = (label: string) =>
     [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
-  const navigate = (url: string) =>
-    flush(async () => {
-      await router.navigate({ to: url });
+  const navigate = async (url: string) => {
+    let navigation: Promise<void> | undefined;
+    await flush(() => {
+      navigation = router.navigate({ to: url });
     });
+    const leave = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Leave');
+    if (leave) await flush(() => leave.click());
+    await flush(() => navigation!);
+  };
   await router.load();
   await flush(() => root.render(<RouterProvider router={router} />));
   try {
     await answer(0, 503);
     expect(document.activeElement).toBe(host.querySelector('[role="alert"]'));
     await flush(() => {
-      button('Try this action again')!.click();
-      button('Try this action again')?.click();
+      button('Review current permissions')!.click();
+      button('Review current permissions')?.click();
     });
     expect(calls).toHaveLength(2);
     expect(calls.map((call) => call.url)).toEqual([
@@ -158,7 +142,7 @@ test('consent reviews and decisions belong to the current visit and survive sign
     expect(host.textContent).not.toContain('Access approved.');
     expect(button('Approve')).toBeUndefined();
     await answer(10);
-    expect(host.textContent).toContain('The approval result for this account is unknown');
+    expect(host.textContent).toContain('An earlier approval result is unknown');
     await flush(() => button('Decline')!.click());
     expect(host.textContent).toContain('An earlier approval may still have taken effect.');
     expect(calls).toHaveLength(11);
@@ -167,11 +151,11 @@ test('consent reviews and decisions belong to the current visit and survive sign
     await answer(11);
     expect(button('Approve')).toBeUndefined();
     await answer(12, 200, 'person-2');
-    expect(host.textContent).not.toContain('The approval result for this account is unknown');
+    expect(host.textContent).not.toContain('An earlier approval result is unknown');
     expect(host.textContent).toContain('An earlier submission for this client and request is unresolved.');
     await flush(() => button('Approve')!.click());
     await answer(13, 503);
-    expect(host.textContent).toContain('The approval result for this account is unknown');
+    expect(host.textContent).toContain('An earlier approval result is unknown');
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     await flush(() => button('Approve')!.click());
     await answer(14);
@@ -181,7 +165,7 @@ test('consent reviews and decisions belong to the current visit and survive sign
     expect(host.textContent).not.toContain('Access approved.');
     expect(button('Approve')).toBeUndefined();
     await answer(15, 200, 'person-2');
-    expect(host.textContent).toContain('The approval result for this account is unknown');
+    expect(host.textContent).toContain('An earlier approval result is unknown');
     await navigate(path('unknown'));
     await flush(() => root.unmount());
     expect(calls[16]!.init?.signal?.aborted).toBe(true);

@@ -44,7 +44,7 @@
   "auth_consent_approved_none": "未新增任何權限。現有存取權限維持不變。",
   "auth_consent_approved_permissions": "本次請求送出了以下權限：",
   "auth_consent_decline": "拒絕",
-  "auth_consent_declined": "用戶端未取得任何新權限。",
+  "auth_consent_declined": "已拒絕本次審核。此選擇不會傳送核准。",
   "auth_consent_declined_after_submission": "已拒絕本次檢視。先前的核准仍可能已經生效。",
   "auth_consent_empty": "未要求任何權限。",
   "auth_consent_heading": "檢視權限",
@@ -649,5 +649,12 @@
   "auth_route_failure_exit_security": "帳戶安全性",
   "auth_route_failure_safe_navigation": "其他 Auth 頁面",
   "auth_route_missing_title": "找不到頁面",
-  "auth_route_missing_body": "此網址沒有對應的 Auth 頁面。"
+  "auth_route_missing_body": "此網址沒有對應的 Auth 頁面。",
+  "auth_consent_history_unknown": "先前的核准結果未知，可能已經生效。查看目前權限無法確定那次核准的結果。",
+  "auth_consent_history_acknowledged": "一次核准已收到確認。該確認無法說明現在可用的權限。",
+  "auth_consent_history_next": "你可以只查看目前權限而不傳送決定，或前往安全性設定。離開不會撤銷已傳送的核准。",
+  "auth_consent_review_current": "查看目前權限",
+  "auth_consent_sending": "正在傳送核准… 尚未收到結果確認。",
+  "auth_consent_departure_heading": "離開此權限審核？",
+  "auth_consent_departure_description": "離開後，核准仍可能生效。離開不會取消核准，也無法確定未知結果。你可以留下查看目前權限，或離開此頁面。"
 }

@@ -44,7 +44,7 @@
   "auth_consent_approved_none": "Aucune permission n’a été ajoutée. Les accès existants restent inchangés.",
   "auth_consent_approved_permissions": "La demande a envoyé ces permissions :",
   "auth_consent_decline": "Refuser",
-  "auth_consent_declined": "Le client n’a obtenu aucun nouvel accès.",
+  "auth_consent_declined": "Vérification refusée. Ce choix n’envoie aucune approbation.",
   "auth_consent_declined_after_submission": "Examen refusé. Une approbation précédente peut tout de même avoir pris effet.",
   "auth_consent_empty": "Aucune autorisation demandée.",
   "auth_consent_heading": "Examiner les autorisations",
@@ -649,5 +649,12 @@
   "auth_route_failure_exit_security": "Sécurité du compte",
   "auth_route_failure_safe_navigation": "Autres pages Auth",
   "auth_route_missing_title": "Page introuvable",
-  "auth_route_missing_body": "Cette adresse ne correspond à aucune page Auth disponible."
+  "auth_route_missing_body": "Cette adresse ne correspond à aucune page Auth disponible.",
+  "auth_consent_history_unknown": "Le résultat d’une approbation précédente est inconnu et elle a peut-être pris effet. Consulter les autorisations actuelles ne permet pas de déterminer ce résultat.",
+  "auth_consent_history_acknowledged": "Une approbation a été confirmée. Cette confirmation ne détermine pas les autorisations disponibles maintenant.",
+  "auth_consent_history_next": "Consultez les autorisations actuelles sans envoyer de décision, ou ouvrez Sécurité. Quitter n’annule pas une approbation envoyée.",
+  "auth_consent_review_current": "Consulter les autorisations actuelles",
+  "auth_consent_sending": "Envoi de l’approbation… Le résultat n’a pas encore été confirmé.",
+  "auth_consent_departure_heading": "Quitter cette vérification ?",
+  "auth_consent_departure_description": "Une approbation peut prendre effet après votre départ. Quitter ne l’annule pas et ne résout pas un résultat inconnu. Restez pour consulter les autorisations actuelles, ou quittez cette page."
 }

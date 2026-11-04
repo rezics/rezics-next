@@ -44,7 +44,7 @@
   "auth_consent_approved_none": "未添加任何权限。现有访问权限保持不变。",
   "auth_consent_approved_permissions": "本次请求提交了以下权限：",
   "auth_consent_decline": "拒绝",
-  "auth_consent_declined": "客户端未获得任何新权限。",
+  "auth_consent_declined": "已拒绝本次审核。此选择不会发送批准。",
   "auth_consent_declined_after_submission": "已拒绝本次审核。先前的批准仍可能已经生效。",
   "auth_consent_empty": "未请求任何权限。",
   "auth_consent_heading": "查看权限",
@@ -649,5 +649,12 @@
   "auth_route_failure_exit_security": "账户安全",
   "auth_route_failure_safe_navigation": "其他 Auth 页面",
   "auth_route_missing_title": "找不到页面",
-  "auth_route_missing_body": "此地址没有对应的 Auth 页面。"
+  "auth_route_missing_body": "此地址没有对应的 Auth 页面。",
+  "auth_consent_history_unknown": "先前的批准结果未知，可能已经生效。查看当前权限无法确定那次批准的结果。",
+  "auth_consent_history_acknowledged": "一次批准已收到确认。该确认不能说明现在可用的权限。",
+  "auth_consent_history_next": "你可以只查看当前权限而不发送决定，或前往安全设置。离开不会撤销已发送的批准。",
+  "auth_consent_review_current": "查看当前权限",
+  "auth_consent_sending": "正在发送批准… 尚未收到结果确认。",
+  "auth_consent_departure_heading": "离开此权限审核？",
+  "auth_consent_departure_description": "离开后，批准仍可能生效。离开不会取消批准，也不能确定未知结果。你可以留下查看当前权限，或离开此页面。"
 }

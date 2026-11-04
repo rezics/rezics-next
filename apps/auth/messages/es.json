@@ -44,7 +44,7 @@
   "auth_consent_approved_none": "No se añadieron permisos. El acceso existente no cambia.",
   "auth_consent_approved_permissions": "La solicitud envió estos permisos:",
   "auth_consent_decline": "Rechazar",
-  "auth_consent_declined": "El cliente no ha obtenido ningún acceso nuevo.",
+  "auth_consent_declined": "Revisión rechazada. Esta elección no envía ninguna aprobación.",
   "auth_consent_declined_after_submission": "Revisión rechazada. Una aprobación anterior puede haber surtido efecto.",
   "auth_consent_empty": "No se han solicitado permisos.",
   "auth_consent_heading": "Revisar permisos",
@@ -649,5 +649,12 @@
   "auth_route_failure_exit_security": "Seguridad de la cuenta",
   "auth_route_failure_safe_navigation": "Otras páginas de Auth",
   "auth_route_missing_title": "No se encontró la página",
-  "auth_route_missing_body": "Esta dirección no corresponde a una página de Auth disponible."
+  "auth_route_missing_body": "Esta dirección no corresponde a una página de Auth disponible.",
+  "auth_consent_history_unknown": "El resultado de una aprobación anterior es desconocido y podría haberse aplicado. Revisar los permisos actuales no permite resolver ese resultado.",
+  "auth_consent_history_acknowledged": "Se confirmó una aprobación. Esa confirmación no establece qué permisos están disponibles ahora.",
+  "auth_consent_history_next": "Revisa los permisos actuales sin enviar una decisión o ve a Seguridad. Salir no deshace una aprobación enviada.",
+  "auth_consent_review_current": "Revisar permisos actuales",
+  "auth_consent_sending": "Enviando aprobación… El resultado aún no se ha confirmado.",
+  "auth_consent_departure_heading": "¿Salir de esta revisión?",
+  "auth_consent_departure_description": "Una aprobación puede aplicarse incluso después de salir. Salir no la cancela ni resuelve un resultado desconocido. Quédate para revisar los permisos actuales o sal de esta página."
 }

@@ -26,6 +26,7 @@ export type ConsentDecision = {
   pending: boolean;
   uncertain: boolean;
   unattributedUncertain: boolean;
+  history: 'none' | 'acknowledged' | 'unknown';
 };
 
 const markerPrefix = 'auth.consent.pending:';
@@ -41,17 +42,19 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
   let accountKey: string | undefined;
   let uncertain = false;
   let unattributedUncertain = false;
+  // Mounted presentation only: no identity, grants, payload or storage copy.
+  let history: ConsentDecision['history'] = 'none';
   try {
     unattributedUncertain = window.sessionStorage.getItem(legacyKey) === 'pending';
   } catch {
     // The mounted visit still protects results when browser storage is unavailable.
   }
-  let current: ConsentDecision = { state: 'loading', pending: false, uncertain, unattributedUncertain };
+  let current: ConsentDecision = { state: 'loading', pending: false, uncertain, unattributedUncertain, history };
   let reader: ReturnType<typeof createConsentReview> | undefined;
   let disposed = false;
 
-  function update(value: Omit<ConsentDecision, 'uncertain' | 'unattributedUncertain'>) {
-    current = { ...value, uncertain, unattributedUncertain };
+  function update(value: Omit<ConsentDecision, 'uncertain' | 'unattributedUncertain' | 'history'>) {
+    current = { ...value, uncertain, unattributedUncertain, history };
     publish(current);
   }
   function remember(key: string | undefined, pending: boolean) {
@@ -66,12 +69,17 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
   function bindAccount(accountId: string) {
     const key = `${markerPrefix}${JSON.stringify([accountId, clientId, scope])}`;
     if (key === accountKey) return;
+    retainHistory();
     accountKey = key;
     try {
       uncertain = window.sessionStorage.getItem(key) === 'pending';
     } catch {
       uncertain = false;
     }
+  }
+  function retainHistory() {
+    if (current.pending || uncertain) history = 'unknown';
+    else if (current.state === 'approved' && history !== 'unknown') history = 'acknowledged';
   }
   function restore() {
     if (disposed || reader) return;
@@ -82,6 +90,8 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
     void reader.load();
   }
   function suspend() {
+    if (disposed) return;
+    retainHistory();
     reader?.dispose();
     reader = undefined;
     if (current.pending) {
@@ -99,6 +109,9 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
     },
     load() {
       if (!current.pending) void reader?.load();
+    },
+    shouldWarn() {
+      return current.pending || uncertain || unattributedUncertain || history === 'unknown';
     },
     async approve() {
       const consent = current.consent;
@@ -125,18 +138,22 @@ export function createConsentDecision(clientId: string, scope: string, publish: 
         reviewed_requested: [...consent.requested],
       });
       const acknowledged = result.ok ? parseConsentDecisionResponse(result.body, consent, submitted) : null;
+      // Retired callbacks cannot clear a marker now owned by a newer attempt, or
+      // replace the generic history captured when their private review retired.
+      if (disposed || owner !== reader) return;
       if (acknowledged) {
         // A positive response identifies this action only. It cannot resolve an older unknown write.
         remember(submittedKey, priorUncertainty);
-        if (disposed || owner !== reader) return;
         uncertain = priorUncertainty;
+        if (priorUncertainty) history = 'unknown';
+        else if (history !== 'unknown') history = 'acknowledged';
         update({ state: 'approved', consent, approved: acknowledged, pending: false });
         return;
       }
       const uncertainAfter = priorUncertainty || (result.ok ? true : result.status >= 500);
       remember(submittedKey, uncertainAfter);
-      if (disposed || owner !== reader) return;
       uncertain = uncertainAfter;
+      if (uncertainAfter) history = 'unknown';
       if (!result.ok && result.status === 401) update({ state: 'signed-out', pending: false });
       else if (!result.ok && result.status === 404) update({ state: 'not-found', pending: false });
       else if (!result.ok && result.status === 409 && result.code === 'stale_review') {
