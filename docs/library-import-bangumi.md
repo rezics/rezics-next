@@ -97,8 +97,8 @@ The expiry fence covers fresh state and label admission. An already-started priv
 command crossing expiry still needs receipt-only recovery after source evidence is scrubbed.
 Examples above are constructed API guidance; focused native test execution is reported separately.
 
-Local verification attempted `bun run --cwd services/kernel typecheck`; it reported missing generated
-`packages/client/src/kernel/rating/own-votes-counted` and other Kernel diagnostics. The focused command
+Local verification attempted `bun run --cwd services/kernel typecheck`; it reported, among other diagnostics,
+`../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.` The focused command
 `bun run --cwd services/kernel check test/library/list-import-bangumi-http.test.ts test/library/library-export-http.test.ts test/library/erasure-owned-graph.test.ts`
 stopped before executing tests at `Schema dump differs from db/library/schema.sql.` The Content-owned schema
 derivation handoff is pending. Frozen acceptance, native64/512/4096 growth, browser and root checks were not run.

@@ -717,7 +717,7 @@ work with their existing owners; no completed score UI is claimed. The existing 
 generated state/tag delivery.
 The private note/privacy/source-date path still needs receipt-only recovery when an already-started native command
 crosses source expiry; expiry must not admit a new effect once the evidence is scrubbed. Local Kernel typecheck
-reported a missing generated client declaration and unrelated Kernel diagnostics. Focused HTTP/export/erasure tests
+reported `../../packages/client/src/index.ts(268,8): error TS2307: Cannot find module './kernel/rating/own-votes-counted' or its corresponding type declarations.` among other diagnostics. Focused HTTP/export/erasure tests
 did not execute because the check stopped at `Schema dump differs from db/library/schema.sql.` The Content-owned schema
 derivation is pending; no frozen, native growth, browser or root check was run.
 Focused scenarios: `services/kernel/test/library/list-import-bangumi-http.test.ts`; broader frozen acceptance
