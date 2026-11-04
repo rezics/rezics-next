@@ -16,7 +16,11 @@ const { CharacterRelationshipsView } = await import('../src/features/catalogue/c
 const { subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
 const { m } = await import('../src/paraglide/messages.js');
 
-function profile(read: SubjectRead, release: ReturnType<typeof personReaderExample>['release']): SubjectPageData {
+function profile(
+  read: SubjectRead,
+  release: ReturnType<typeof personReaderExample>['release'],
+  documents?: unknown,
+): SubjectPageData {
   const document: CompositionDocument = {
     root: { props: {} },
     content: [{ type: 'SubjectHeader', props: { id: 'header' } }],
