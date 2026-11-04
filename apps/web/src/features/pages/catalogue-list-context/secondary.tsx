@@ -22,10 +22,12 @@ export function CatalogueTargetLink({ children, locale, ...props }: LinkProps & 
 
 export function CatalogueSecondary({
   context,
+  title,
   value,
   nativeFacts,
 }: {
   context: CatalogueContext;
+  title: string;
   value: RowValue;
   nativeFacts: ReactNode;
 }) {
@@ -37,7 +39,8 @@ export function CatalogueSecondary({
   const source = (item: { label: Record<string, string>; observation: string }) => (
     <span data-source-observation={item.observation}> ({text(item.label)})</span>
   );
-  const target = context.target && relationTargetHref({ id: context.subject, label: '' }, value.locale, value.context);
+  const target =
+    context.target && relationTargetHref({ id: context.subject, label: title }, value.locale, value.context);
   const status =
     context.state === 'unknown'
       ? m.catalogue_context_unknown({}, o)

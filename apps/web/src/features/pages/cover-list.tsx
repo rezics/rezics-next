@@ -112,7 +112,11 @@ function ItemCard({
       {...(item.label.lang ? { titleLang: item.label.lang } : {})}
       cover={cover}
       secondary={
-        catalogue ? <CatalogueSecondary context={catalogue.context} value={value} nativeFacts={secondary} /> : secondary
+        catalogue ? (
+          <CatalogueSecondary context={catalogue.context} title={title} value={value} nativeFacts={secondary} />
+        ) : (
+          secondary
+        )
       }
     />
   );

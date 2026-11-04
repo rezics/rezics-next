@@ -7,7 +7,12 @@ const text = v.pipe(v.string(), v.maxLength(320));
 const property = v.pipe(v.string(), v.minLength(1), v.maxLength(160));
 const localized = v.pipe(
   v.record(v.string(), text),
-  v.check((value) => Object.keys(value).length <= 8),
+  v.check(
+    (value) =>
+      Object.keys(value).length > 0 &&
+      Object.keys(value).length <= 8 &&
+      Object.values(value).every((text) => text.trim().length > 0),
+  ),
 );
 const id = v.pipe(v.string(), v.uuid());
 const source = v.strictObject({

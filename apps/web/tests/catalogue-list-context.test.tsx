@@ -129,6 +129,7 @@ test('invalid, mismatched, excessive and wrong-direction contexts fail closed wi
   for (const patch of [
     { subject: catalogueIds.film },
     { target: { id: catalogueIds.film } },
+    { medium: {} },
     { creators: [{ ...creator, direction: 'creator-to-subject' }] },
     { creators: Array.from({ length: 4 }, () => creator) },
     { facts: [{ ...row.catalogueContext.facts[0]!, value: { kind: 'time', year: 2005, month: 2, day: 30 } }] },
