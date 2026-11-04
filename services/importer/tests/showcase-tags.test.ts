@@ -21,7 +21,7 @@ import { showcaseVocabularyExternalId } from '../src/showcase-manifest.ts';
 import type { CrossMediaPort } from '../src/cross-media-seed.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { parseAuthoredVndbCopy } from '../src/vndb-public-tags.ts';
-import { VNDB_PUBLIC_TAG_COLUMNS } from '../src/vndb-tables.ts';
+import { VNDB_PUBLIC_TAG_COLUMNS, vndbPublicTagLimits } from '../src/vndb-tables.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
 import type { ReviewedSubjectRead } from '../src/import-client.ts';
 import type { VndbTagRatingFetch } from '../src/showcase-vndb-tag-ratings.ts';
@@ -672,18 +672,11 @@ test('default seed publishes dictionary without a UUID file, rereads, and withho
         overflowParents.map((id) => `g311\t${id}\tt`),
       ),
     });
-    const overflowed = await prepareShowcaseVndbPublicTagVocabulary({
-      tables: overflow,
-      selectedVids: ['v410'],
-      plan,
-      port,
-      journal,
-      stage: 'concepts',
-    });
+    const overflowed = await projectShowcaseTagTables(overflow, ['v410']);
     expect(overflowed.truncated).toBe(true);
-    expect(overflowed.requirements.some((item) => item.sourceKey.endsWith(':g2000'))).toBe(true);
-    expect(overflowed.requirements.some((item) => item.sourceKey.endsWith(':g2519'))).toBe(false);
-    expect(overflowed.requirements.some((item) => item.sourceKey === 'vndb.tag.ero:g44')).toBe(true);
+    expect(overflowed.dictionary.size).toBe(vndbPublicTagLimits.dictionary);
+    expect(overflowed.dictionary.has('g2000')).toBe(true);
+    expect(overflowed.dictionary.has('g2519')).toBe(false);
   } finally {
     journal.close();
     await rm(directory, { recursive: true, force: true });
