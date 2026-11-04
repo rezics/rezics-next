@@ -48,6 +48,8 @@ authority before receipt lookup.
 command available for inspection; local drafts stay local, and a successful reacquisition must be reviewed before the
 original can be replayed.
 
+**Decision:** Reviewed Save/Restore stays visible but disabled until current native advice admits its exact retained intent; the unavailable state explains the denial and offers deliberate Reload to reacquire current advice.
+
 ## Reading
 
 `/settings#reading` inspects the confirmed spoiler and suitability pair, changes an allowed setting, and recovers a
