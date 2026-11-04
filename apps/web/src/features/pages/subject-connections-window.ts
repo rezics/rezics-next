@@ -85,7 +85,7 @@ export function createConnectionWindow(
       stream: resumed.stream,
       history: resumed.history.map((entry) => ({ ...entry })),
       index: resumed.index,
-      page: resumed.history[resumed.index]?.page,
+      ...(resumed.history[resumed.index]?.page !== undefined ? { page: resumed.history[resumed.index]!.page } : {}),
     };
   }
   const currentSnapshot = (next: Omit<ConnectionSnapshot, 'pages'>): ConnectionSnapshot =>
