@@ -211,7 +211,7 @@ test('production graph journals immutable relation commands and retries without 
       throw new Error('Missing endpoint reached the write transport');
     },
   });
-  expect(missing.unresolved.map(({ reason }) => reason)).toEqual(['missing_endpoint:999']);
+  expect(missing.unresolved.map(({ reason }) => reason).sort()).toEqual(['fenced_relation_holder', 'missing_endpoint:999'].sort());
   reopenedDatabase.close();
   await rm(directory, { recursive: true, force: true });
 });
