@@ -75,6 +75,6 @@ describe('bounded credited-name projection consumer', () => {
     expect(base).toEqual(before);
     expect(mapped.mappings.properties.credited_names).toMatchObject({ type: 'nested', dynamic: 'strict' });
     delete mapped.mappings.properties.credited_names;
-    expect(mapped).toEqual(base);
+    expect(mapped as Record<string, unknown>).toEqual(base);
   });
 });
