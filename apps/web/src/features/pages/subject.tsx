@@ -39,7 +39,7 @@ import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
-import type { Release } from '@rezics/definitions';
+import type { Release, ReleasedRelationDirectionResult } from '@rezics/definitions';
 import {
   planReads,
   documentRead,
@@ -123,6 +123,7 @@ export type SubjectPageData = {
     type: string;
     digest?: string;
     definitions?: Pick<Release, 'types' | 'properties'>;
+    directions?: ReleasedRelationDirectionResult[];
   };
   /** Caller-bound native action state; page responses containing it are private and no-store. */
   viewer?: {
@@ -762,6 +763,7 @@ export function SubjectPage({
           {...(typeLabel ? { typeLabel } : {})}
           {...(ratio ? { ratio } : {})}
           {...(relations ? { relations } : {})}
+          {...(page.catalogue?.directions !== undefined ? { directions: page.catalogue.directions } : {})}
           {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
         >
           <div className="flex w-full flex-col gap-8">

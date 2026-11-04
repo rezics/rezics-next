@@ -278,6 +278,7 @@ export function searchRoutes<App>(
                     digest: active.digest,
                     head: active.head ?? 0,
                     release: active.release as import('@rezics/filter').FilterRelease,
+                    definitions: active.release,
                   }
                 : null;
             };

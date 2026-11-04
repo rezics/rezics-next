@@ -202,6 +202,7 @@ export type DiscoveryReadContext = Pick<SummaryReaderDependencies, 'access' | 'a
     digest: string;
     head: number;
     release: import('@rezics/filter').FilterRelease;
+    definitions?: import('@rezics/definitions').Release;
   } | null>;
   matchEvidencePlan?: MatchEvidenceQuery;
 };

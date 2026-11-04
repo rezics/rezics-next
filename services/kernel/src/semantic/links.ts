@@ -7,7 +7,7 @@ import { privateLinks, refreshStatementReaderAuthorization } from './statement-d
 import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
-import type { Release } from '@rezics/definitions';
+import { releaseDigest, type Release } from '@rezics/definitions';
 import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
 import { readItemTypes, readLabels } from './subject.ts';
 import { languageRanges } from './language.ts';
@@ -1051,6 +1051,7 @@ export async function listSubjectLinks(
     includeLabels?: boolean;
     authorizeSummary?: SummaryDependencies['authorize'];
     release?: Release;
+    releasePin?: string;
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
     prepareAuthorization?: () => Promise<AccessCheck>;
@@ -1077,6 +1078,7 @@ export async function listSubjectLinks(
       filter: options.filter ?? null,
       type: options.type ?? null,
       language: languages.join(',') || null,
+      release: options.releasePin ?? (options.release ? releaseDigest(options.release) : null),
     },
   };
   const release =
@@ -1345,6 +1347,7 @@ type SubjectRelationsOptions = {
   languages?: readonly string[];
   cursor?: string;
   release: Release;
+  releasePin?: string;
   authorize: (client: PoolClient) => Promise<boolean>;
   prepareAuthorization?: () => Promise<AccessCheck>;
   deadline?: number;
@@ -1377,6 +1380,7 @@ export async function listSubjectRelations(
       filter: options.filter ?? null,
       type: options.type ?? null,
       language: languages.join(',') || null,
+      release: options.releasePin ?? releaseDigest(options.release),
     },
   };
   let cursor: { epoch: number; after: CursorKey[] } | null = null;

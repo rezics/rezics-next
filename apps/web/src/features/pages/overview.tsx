@@ -26,6 +26,7 @@ import { coverOf, coverSubject, type SubjectSummary } from '../../media/summary'
 import { m } from '../../paraglide/messages.js';
 import { originalLanguage } from '../../subject/language';
 import { RELATION_GROUPS, type RelationDefinition, type RelationGroup } from '../../subject/relations';
+import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Reader } from '../../subject/reader';
 import type { Related, Subject, Summary as SubjectCover } from '../../subject/types';
 import { subjectViewHref } from '../../subject/subject-href';
@@ -121,6 +122,8 @@ export type OverviewValue = {
   classifications?: import('./subject-classification-assessment').DisclosedClassificationAssociation[];
   /** How each relation property reads on this page, from the definition release; absent properties have no label. */
   relations: Record<string, RelationDefinition>;
+  /** Native admission for this page's exact released relation directions. */
+  relationDirections?: ReleasedRelationDirectionResult[];
   /** Every `RelationGroups` node of the page in document order; the first one renders all of them by group. */
   relationNodes: { id: string; props: Record<string, unknown> }[];
 };
@@ -576,6 +579,13 @@ function LinkSection(
     readerViewLabel(view, value.locale) ||
     value.unlabelled;
   const text = pageText(props.title, value.locale);
+  if (!forward && value.relationDirections !== undefined && typeof props.property === 'string') {
+    const admission = value.relationDirections.find(
+      (entry) => entry.property === props.property && entry.direction === 'inverse',
+    );
+    if (admission?.state !== 'admitted')
+      return <Failed slot={slot} id={id} title={text.text || title} titleLang={text.lang} locale={value.locale} />;
+  }
   if (props.paged === true)
     return (
       <RelationStream

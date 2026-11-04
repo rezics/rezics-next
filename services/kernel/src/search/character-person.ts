@@ -17,6 +17,8 @@ import {
 } from './source.ts';
 import { chooseTexts } from './hits.ts';
 import type { CharacterPersonDiscoveryContexts, DiscoveryContextSubject } from './discovery.ts';
+import type { Release } from '@rezics/definitions';
+import { createReleasedRelationDirectionResolver } from '../semantic/released-relation-direction.ts';
 
 /** An inverse edge from a selected work to the candidate Character or Person. */
 export type InverseRelationFacetProbe = {
@@ -27,17 +29,22 @@ export type InverseRelationFacetProbe = {
   spoilerThreshold?: SpoilerThreshold;
 };
 
-export type CurrentRelationRelease = { digest: string; head: number; release: FilterRelease };
+export type CurrentRelationRelease = {
+  digest: string;
+  head: number;
+  release: FilterRelease;
+  definitions?: Release;
+};
 
 /** No release permission survives foreign disclosure I/O. Missing/replaced releases withhold the window. */
 export async function withCurrentRelationRelease<T>(
   observe: () => Promise<CurrentRelationRelease | null>,
-  work: (release: FilterRelease) => Promise<T>,
+  work: (release: FilterRelease, pin: CurrentRelationRelease) => Promise<T>,
   unavailable: T,
 ): Promise<T> {
   const before = await observe();
   if (!before) return unavailable;
-  const result = await work(before.release);
+  const result = await work(before.release, before);
   const after = await observe();
   return after?.digest === before.digest && after.head === before.head ? result : unavailable;
 }
@@ -263,7 +270,15 @@ export async function projectCharacterPersonContexts(
   if (!unique.length) return { credits: empty, appearances: empty };
   const result = await withCurrentRelationRelease(
     options.observeRelationRelease,
-    async () => {
+    async (_release, pin) => {
+      if (subject.type === 'schema:Person' && pin.definitions) {
+        const resolver = createReleasedRelationDirectionResolver(pin.definitions, pin.digest);
+        const admission = resolver.resolve(subject.type, 'wdt:P725', 'inverse');
+        if (admission.state !== 'admitted') return null;
+        const admittedQualifiers = new Set(admission.qualifiers.map(({ id }) => id));
+        if (unique.some((probe) => probe.qualifiers?.some(({ property }) => !admittedQualifiers.has(property))))
+          return null;
+      }
       const admitted = new Set<string>();
       for (let offset = 0; offset < unique.length; offset += MAX_RELATION_FACET_PROBES) {
         const batch = unique.slice(offset, offset + MAX_RELATION_FACET_PROBES);

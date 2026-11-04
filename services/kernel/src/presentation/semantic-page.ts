@@ -20,6 +20,10 @@ import { readItemDetails } from '../semantic/subject.ts';
 import statesRead from '../semantic/subject-summary-states.sql';
 import type { SummaryReaderDependencies } from '../semantic/summaries.ts';
 import { activeProfile } from './profiles.ts';
+import {
+  createReleasedRelationDirectionResolver,
+  type ReleasedRelationDirectionResult,
+} from '../semantic/released-relation-direction.ts';
 
 /** Native correction operation on an admitted quotation; Type descriptors never grant this. */
 export const quotationCorrectionActions = [{ action: 'statement:propose', operationId: 'subject.propose' }] as const;
@@ -253,11 +257,13 @@ export type CataloguePageMetadata = {
   type: string;
   digest?: string;
   definitions?: CataloguePageDefinitions;
+  directions?: ReleasedRelationDirectionResult[];
 };
 
 const catalogueFileTypes = ['schema:MediaObject', 'rezics:CatalogueFile', 'wd:Q82753'];
 const catalogueGroupTypes = ['rezics:ReleaseGroup', 'wd:Q55327'];
 const catalogueMusicTypes = ['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'];
+const catalogueCharacterTypes = ['wd:Q95074'];
 const cataloguePeopleTypes = ['schema:Person', 'schema:Organization'];
 
 function typeIsA(release: CataloguePageDefinitions, type: string, base: string, seen = new Set<string>()): boolean {
@@ -272,9 +278,9 @@ export function peopleProducerTypeAdmitted(release: CataloguePageDefinitions | u
   return cataloguePeopleTypes.some((base) => release !== undefined && typeIsA(release, type, base));
 }
 
-/** The ordinary page carries the current file, group, music, person or organization descriptor and its directed relation vocabulary. */
+/** The ordinary page carries its current catalogue descriptor and released relation directions. */
 export function cataloguePageMetadata(
-  release: CataloguePageDefinitions | undefined,
+  release: Release | undefined,
   digest: string | undefined,
   type: string,
 ): CataloguePageMetadata | undefined {
@@ -282,15 +288,18 @@ export function cataloguePageMetadata(
     ...catalogueFileTypes,
     ...catalogueGroupTypes,
     ...catalogueMusicTypes,
+    ...catalogueCharacterTypes,
     ...cataloguePeopleTypes,
   ].includes(type);
   const file = catalogueFileTypes.some((base) => release && typeIsA(release, type, base));
   const group = catalogueGroupTypes.some((base) => release && typeIsA(release, type, base));
   const music = catalogueMusicTypes.some((base) => release && typeIsA(release, type, base));
+  const character = catalogueCharacterTypes.some((base) => release && typeIsA(release, type, base));
   const people = peopleProducerTypeAdmitted(release, type);
   if (!candidate && !file && !group && !music && !people) return;
-  if (!release || !digest) return { state: 'unavailable', type };
-  if (!release.types[type] || (!file && !group && !music && !people)) return { state: 'unsupported', type, digest };
+  if (!release || !digest) return { state: 'unavailable', type, directions: [] };
+  if (!release.types[type] || (!file && !group && !music && !character && !people))
+    return { state: 'unsupported', type, digest, directions: [] };
 
   const propertyIds = new Set(release.types[type]?.properties ?? []);
   const inversePropertyIds = new Set<string>();
@@ -310,6 +319,14 @@ export function cataloguePageMetadata(
   const properties = Object.fromEntries(
     [...propertyIds].flatMap((id) => (release.properties[id] ? [[id, release.properties[id]]] : [])),
   );
+  const resolveDirection = createReleasedRelationDirectionResolver(release, digest);
+  const directionProperties = new Set([...release.types[type]!.properties, ...inversePropertyIds]);
+  const directions = [...directionProperties]
+    .filter((id) => release.properties[id]?.relation)
+    .sort()
+    .map((id) =>
+      resolveDirection.resolve(type, id, inversePropertyIds.has(id) ? 'inverse' : 'forward'),
+    );
   const types = new Set<string>([type]);
   const addType = (id: string) => {
     if (types.has(id) || !release.types[id]) return;
@@ -326,6 +343,7 @@ export function cataloguePageMetadata(
     state: 'released',
     type,
     digest,
+    directions,
     definitions: { types: typeDefinitions, properties },
   };
 }

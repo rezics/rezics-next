@@ -2558,6 +2558,7 @@ function subjectRoutes(
                 ...(query.type === undefined ? {} : { type: query.type }),
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 release: active.release,
+                releasePin: active.digest,
                 includeLabels: true,
                 authorizeSummary: summaryAuthorization(async (id, batch) => {
                   const route = routeOf(id)!;
@@ -2678,6 +2679,7 @@ function subjectRoutes(
                 languages: languageRanges(request.headers.get('accept-language'), query.language),
                 ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
                 release: active.release,
+                releasePin: active.digest,
                 authorizeSummary: summaryAuthorization(async (id, batch) => {
                   const route = routeOf(id)!;
                   return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });

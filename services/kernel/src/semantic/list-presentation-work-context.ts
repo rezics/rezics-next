@@ -1,4 +1,4 @@
-import type { Release } from '@rezics/definitions';
+import { releaseDigest, type Release } from '@rezics/definitions';
 import { readNativeCalendarDate } from '@rezics/filter';
 import { chooseTexts } from '../search/hits.ts';
 import {
@@ -11,22 +11,39 @@ import {
   type WorkContextValue,
 } from '../search/work-context.ts';
 import type { FactRow } from './item.ts';
+import {
+  createReleasedRelationDirectionResolver,
+  type ReleasedRelationDirectionResolver,
+} from './released-relation-direction.ts';
 
 export type WorkGroup = 'creators' | 'relations' | 'dates';
 export type WorkPlan = { kind: CurrentWorkContext['kind']; creators: string[]; relations: string[]; dates: string[] };
 const association = new Set(['order', 'derivation', 'world', 'membership', 'association']);
 /** Semantic identities are the released terms, never a label/name heuristic or an inverse inference. */
-export function listWorkPlan(release: Release, typeId: string): WorkPlan | undefined {
+export function listWorkPlan(
+  release: Release,
+  typeId: string,
+  directionResolver?: ReleasedRelationDirectionResolver,
+): WorkPlan | undefined {
   const type = release.types[typeId];
   if (!type) return undefined;
+  const resolve = directionResolver ?? createReleasedRelationDirectionResolver(release, releaseDigest(release));
   const identities = [typeId, ...type.bases];
   if (!identities.includes('schema:CreativeWork')) return undefined;
   const kind = workContextKind(identities);
   const properties = type.properties;
   return {
     kind,
-    creators: properties.filter((id) => release.properties[id]?.relation?.group === 'credit'),
-    relations: properties.filter((id) => association.has(release.properties[id]?.relation?.group ?? '')),
+    creators: properties.filter(
+      (id) =>
+        release.properties[id]?.relation?.group === 'credit' &&
+        resolve.resolve(typeId, id, 'forward').state === 'admitted',
+    ),
+    relations: properties.filter(
+      (id) =>
+        association.has(release.properties[id]?.relation?.group ?? '') &&
+        resolve.resolve(typeId, id, 'forward').state === 'admitted',
+    ),
     dates: properties.filter((id) => release.properties[id]?.datatype === 'time'),
   };
 }
@@ -150,8 +167,9 @@ export function prepareListWorkContext(
   facts: readonly FactRow[],
   withheld: ReadonlySet<string>,
   languages?: readonly string[],
+  directionResolver?: ReleasedRelationDirectionResolver,
 ): WorkDraft | undefined {
-  const plan = listWorkPlan(release, type);
+  const plan = listWorkPlan(release, type, directionResolver);
   if (!plan) return undefined;
   const sections = Object.fromEntries(
     (['creators', 'relations', 'dates'] as const).map((group) => {

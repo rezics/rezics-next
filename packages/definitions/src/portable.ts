@@ -75,6 +75,38 @@ export type RelationDefinition = {
   filter?: string | string[];
   slotKey?: string;
 };
+export type RelationDirection = 'forward' | 'inverse';
+export type ReleasedRelationQualifierMeaning = {
+  id: string;
+  datatype: string;
+  labels: Record<string, string>;
+};
+export type ReleasedRelationDirection = {
+  state: 'admitted';
+  property: string;
+  direction: RelationDirection;
+  inverse: string | null;
+  sourceTypes: string[];
+  targetTypes: string[];
+  viaQualifier?: string;
+  release: string;
+  qualifiers: ReleasedRelationQualifierMeaning[];
+};
+export type ReleasedRelationDirectionFailure = {
+  state: 'unsupported' | 'unavailable';
+  property: string;
+  direction: RelationDirection;
+  release: string | null;
+  reason:
+    | 'missing-release-pin'
+    | 'stale-release'
+    | 'missing-property'
+    | 'missing-inverse'
+    | 'ambiguous-inverse'
+    | 'inapplicable-type'
+    | 'stale-descriptor';
+};
+export type ReleasedRelationDirectionResult = ReleasedRelationDirection | ReleasedRelationDirectionFailure;
 export type PropertyDefinition = {
   iri: string;
   labels: Record<string, string>;

@@ -59,6 +59,49 @@ export const PageResponseSchema = t.Object(
           definitions: t.Optional(
             t.Object({ types: t.Record(t.String(), t.Any()), properties: t.Record(t.String(), t.Any()) }, closed),
           ),
+          directions: t.Optional(
+            t.Array(
+              t.Union([
+                t.Object(
+                  {
+                    state: t.Literal('admitted'),
+                    property: t.String(),
+                    direction: t.Union([t.Literal('forward'), t.Literal('inverse')]),
+                    inverse: t.Union([t.String(), t.Null()]),
+                    sourceTypes: t.Array(t.String()),
+                    targetTypes: t.Array(t.String()),
+                    viaQualifier: t.Optional(t.String()),
+                    release: t.String(),
+                    qualifiers: t.Array(
+                      t.Object(
+                        { id: t.String(), datatype: t.String(), labels: t.Record(t.String(), t.String()) },
+                        closed,
+                      ),
+                    ),
+                  },
+                  closed,
+                ),
+                t.Object(
+                  {
+                    state: t.Union([t.Literal('unsupported'), t.Literal('unavailable')]),
+                    property: t.String(),
+                    direction: t.Union([t.Literal('forward'), t.Literal('inverse')]),
+                    release: t.Union([t.String(), t.Null()]),
+                    reason: t.Union([
+                      t.Literal('missing-release-pin'),
+                      t.Literal('stale-release'),
+                      t.Literal('missing-property'),
+                      t.Literal('missing-inverse'),
+                      t.Literal('ambiguous-inverse'),
+                      t.Literal('inapplicable-type'),
+                      t.Literal('stale-descriptor'),
+                    ]),
+                  },
+                  closed,
+                ),
+              ]),
+            ),
+          ),
         },
         closed,
       ),

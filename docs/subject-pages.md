@@ -1419,6 +1419,16 @@ envelope and add released identity meanings plus unavailable configuration; they
 permission engine. Viewer-bearing `POST /v1/pages:read` stays private,
 no-store; public facts remain independently comparable after omitting viewer.
 
+## Person voice credits
+
+The Person page keeps the released `wdt:P725` voice-credit group separate from author, contributor and other work
+credits. The current catalogue release is `1.0.4`, pinned by
+`sha256:1ded81205f3588d10a0cb5dab75bfaec1fcb22cac3e2e54809cf0086f54806f7`. Its direction examples are
+work `schema:character` → Character `rezics:appearsIn`, and work `wdt:P725` → Person `rezics:voiceActorOf`; both
+retain the original statement property and its exact qualifiers. `wdt:P453` stays the voice statement's character
+qualifier, not another assertion. A Person page continuation keeps the release pin, statement, revision, Context and
+current disclosure result. Decision: voice-credit language remains the work's released `schema:inLanguage` fact.
+
 ## Scores on pages
 
 A score is never shown without its population, question, scale and count. The installed public headline is the

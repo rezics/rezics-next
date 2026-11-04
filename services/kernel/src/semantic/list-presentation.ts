@@ -21,6 +21,10 @@ import {
 import type { WorkContext } from '../search/work-context.ts';
 import type { IndexedStatement } from '../search/source.ts';
 import { activeRelease } from './definitions.ts';
+import {
+  createReleasedRelationDirectionResolver,
+  type ReleasedRelationDirectionResolver,
+} from './released-relation-direction.ts';
 import { subjectReadEligibility } from './eligibility.ts';
 import { fenceKey, sourceTuple } from './fences.ts';
 import type { IdentityMapping } from './identity-epoch-contract.ts';
@@ -123,6 +127,7 @@ async function observeSubjects(
   facts: boolean,
   labels = false,
   workContext = false,
+  directionResolver?: ReleasedRelationDirectionResolver,
 ) {
   const results = new Map<string, SubjectObservation | null>();
   for (const [home, group] of groups(ids)) {
@@ -167,7 +172,7 @@ async function observeSubjects(
           if (header.redirect) return [];
           const type = release.types[header.type];
           if (!type) unready();
-          const plan = workContext ? listWorkPlan(release, header.type) : undefined;
+          const plan = workContext ? listWorkPlan(release, header.type, directionResolver) : undefined;
           return [
             ...new Set([
               ...(type.listPresentation?.keyFacts ?? []),
@@ -223,7 +228,7 @@ async function observeSubjects(
         const workCandidates = new Set<string>();
         if (workContext)
           for (const [id, observation] of visible) {
-            const plan = listWorkPlan(release, observation.header.type);
+            const plan = listWorkPlan(release, observation.header.type, directionResolver);
             if (!plan) continue;
             for (const group of ['creators', 'relations'] as const)
               for (const row of locators
@@ -420,6 +425,7 @@ export async function readListPresentationFacts(
           if (!valid.length) return result;
           const active = await snapshot(deps, 0, (client) => activeRelease(client));
           if (!active) unready();
+          const directionResolver = createReleasedRelationDirectionResolver(active.release, active.digest);
           const sources = await observeSubjects(deps, valid, active.release, false);
           const admitted = valid.filter((id) => sources.get(id) !== null);
           const mapping = await readIdentityMappings(deps.pool, admitted);
@@ -434,6 +440,7 @@ export async function readListPresentationFacts(
             true,
             false,
             options.workContext === true,
+            directionResolver,
           );
           const allSelected = [...subjects.values()].flatMap((value) => value?.selected ?? []);
           const sourceTuples = allSelected.flatMap(({ origin }) => {
@@ -480,7 +487,15 @@ export async function readListPresentationFacts(
               if (options.workContext)
                 workDrafts.set(
                   id,
-                  prepareListWorkContext(id, subject.header.type, active.release, allowed, withheld, languages),
+                  prepareListWorkContext(
+                    id,
+                    subject.header.type,
+                    active.release,
+                    allowed,
+                    withheld,
+                    languages,
+                    directionResolver,
+                  ),
                 );
               return [
                 [

@@ -22,6 +22,7 @@ import { m } from '../../paraglide/messages.js';
 import { languageName, LANGUAGE_PROPERTY, originalLanguage, originalTitle } from '../../subject/language';
 import { defaultReader, type Reader } from '../../subject/reader';
 import type { RelationDefinition } from '../../subject/relations';
+import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
 import type { Related, Subject, Summary } from '../../subject/types';
 import { subjectHref } from '../../subject/subject-href';
 import { quantityPresentation } from '../../subject/quantity-presentation';
@@ -803,6 +804,7 @@ export function PageData({
   typeLabel,
   ratio,
   relations = {},
+  directions,
   headerActions,
   readingView,
   children,
@@ -831,6 +833,8 @@ export function PageData({
   ratio?: Frame['ratio'];
   /** How each relation property reads from this page, from the definition release. */
   relations?: Record<string, RelationDefinition>;
+  /** Native admission for the page's exact released relation directions. */
+  directions?: ReleasedRelationDirectionResult[];
   /** Subject-only actions placed alongside the title in its header. */
   headerActions?: ReactNode;
   /** Only Overview bounds fact previews; Details retains every admitted value. */
@@ -966,6 +970,7 @@ export function PageData({
     ...(about ? { about } : {}),
     ...(aboutRead?.classifications?.length ? { classifications: aboutRead.classifications } : {}),
     relations,
+    ...(directions !== undefined ? { relationDirections: directions } : {}),
     relationNodes: nodesOfType(composition.content, 'RelationGroups'),
     ...(zoneRatio ? { ratio: zoneRatio } : {}),
     ...(ratio ? { frameRatio: ratio } : {}),
