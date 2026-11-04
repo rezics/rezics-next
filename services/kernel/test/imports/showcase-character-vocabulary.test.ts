@@ -112,7 +112,6 @@ test('selected character traits and appearances use current adopted vocabulary a
     );
     const facts = [
       ['trait-scheme', 'schema:url', characterTraitSchemeUri, characterTraitSchemeUri],
-      ['other-scheme', 'schema:url', 'https://example.test/other', 'https://example.test/other'],
       ['trait-i73', 'schema:url', characterTraitConceptUri('i73'), characterTraitConceptUri('i73')],
       ['trait-i73', 'skos:inScheme', ids.get('trait-scheme')!, characterTraitConceptUri('i73')],
       ['trait-i74', 'schema:url', characterTraitConceptUri('i74'), characterTraitConceptUri('i74')],
