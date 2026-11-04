@@ -1229,6 +1229,23 @@ creator never writes a parent-work classification or grants adoption. Unknown de
 after acknowledgement, recovery reads only the returned UUID. Creating a concept proposes no vocabulary release, source
 licence, provider claim, equivalence mapping, or ballot.
 
+The visit returns current Global Context `subject.create` eligibility through the private BFF, independently of
+definition success, and consumes that shared observation in the mounted controls. Guest, confirmed refusal and
+unavailable observation stay distinct; admitted Types remain readable when creation is unavailable. A stale allowed
+observation is not an authorization bypass: fresh submission re-reads current eligibility, and the native create
+command remains final. Identity search, definitions and authority stay independent; a matching title is not identity
+and confers no create grant. An expired or mismatched classification handoff cannot authorize a return or a write, and
+it does not discard a known create result.
+
+Decision: Concept creation observes current Global Context `subject.create` eligibility through the shared private BFF;
+definitions, identity search and authority stay independent.
+
+### Prepare a catalogue Concept or ConceptScheme identity
+
+- Touches: one successful active immutable release, one current Global Context `subject.create` observation, ordinary native subject POST, and one created-identity read.
+- Bound: retain existing field, statement, qualifier, serialized-command and held-retry caps; no permission request per field or suggested identity, history scan or polling.
+- Growth check: hold one released Concept or ConceptScheme Type and one parent action observation fixed while unrelated Types, grants and identities grow; charge native authority preparation with Access.
+
 ## Sources correction visit
 
 Sources keeps selected evidence, reviewed source-record attribution/licence, authored text rights and cover rights separate.
