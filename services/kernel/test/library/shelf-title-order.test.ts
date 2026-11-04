@@ -35,7 +35,7 @@ test('denied/hidden/partial title observations stay unavailable; visible missing
 
 test('an uninstalled or currentness-mismatched native generation cannot supply a title cursor', async () => {
   const client = new Pool();
-  spyOn(client, 'query').mockResolvedValue({ rows: [], command: 'SELECT', rowCount: 0, oid: 0, fields: [] });
+  spyOn(client, 'query').mockImplementation(async () => ({ rows: [], command: 'SELECT', rowCount: 0, oid: 0, fields: [] }));
   await expect(shelfTitleBinding(client, route, accountId, ['en'], 'new-source-basis'))
     .rejects.toBeInstanceOf(ShelfReadUnavailableError);
   expect(validShelfTitleSeek('m:')).toBe(true);
@@ -50,10 +50,10 @@ test('native title rows retain returned order, missing coverage and the exact pr
     createdAt: '2026-11-04T00:00:00Z', updatedAt: '2026-11-04T00:00:00Z',
     lastActivityAt: '2026-11-04T00:00:00Z', finishedAt: null, current: true,
     key: Buffer.from('road'), missing: false };
-  const query = spyOn(client, 'query').mockResolvedValue({
+  const query = spyOn(client, 'query').mockImplementation(async () => ({
     rows: [row, { ...row, subjectId: newId(0x7b20), missing: true, key: Buffer.alloc(0) }],
     command: 'SELECT', rowCount: 2, oid: 0, fields: [],
-  });
+  }));
   const page = await createShelfTitleReader().page(client, route, accountId, {
     orderBy: 'title', direction: 'desc', limit: 2, state: null, typeId: null, titleGeneration: newId(route),
   }, null);
@@ -62,7 +62,7 @@ test('native title rows retain returned order, missing coverage and the exact pr
   expect(page.after?.key).toBe('m:');
   expect(page.entries[0]).not.toHaveProperty('key');
   expect(page.entries[0]).not.toHaveProperty('current');
-  query.mockResolvedValue({ rows: [{ ...row, current: false }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] });
+  query.mockImplementation(async () => ({ rows: [{ ...row, current: false }], command: 'SELECT', rowCount: 1, oid: 0, fields: [] }));
   await expect(createShelfTitleReader().page(client, route, accountId, {
     orderBy: 'title', direction: 'asc', limit: 2, state: null, typeId: null, titleGeneration: newId(route),
   }, null)).rejects.toBeInstanceOf(ShelfReadUnavailableError);
