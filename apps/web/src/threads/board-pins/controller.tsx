@@ -489,9 +489,16 @@ export function BoardPinThreadControls({
   onRefresh(): void;
 }): ReactNode {
   const [pending, setPending] = useState<BoardPinAction | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const action: BoardPinAction | null = row ? (row.pinned ? 'unpin' : 'pin') : null;
   const actionable = Boolean(row && action && management === 'allowed' && sender && row.actions.includes(action));
   const blocked = status !== undefined && status.state !== 'applied';
+  useEffect(() => {
+    if (!actionable || blocked) {
+      setDialogOpen(false);
+      setPending(null);
+    }
+  }, [actionable, blocked]);
   const confirmTitle = pending === 'unpin' ? m.board_pin_confirm_title_unpin() : m.board_pin_confirm_title_pin();
   const confirmBody =
     pending === 'unpin'
@@ -523,8 +530,9 @@ export function BoardPinThreadControls({
     createElement(
       AlertDialog,
       {
-        open: pending !== null,
+        open: dialogOpen,
         onOpenChange: (open: boolean) => {
+          setDialogOpen(open);
           setPending(open ? action : null);
         },
       },
@@ -569,6 +577,7 @@ export function BoardPinThreadControls({
                 if (!pending) return;
                 onChange(pending);
                 setPending(null);
+                setDialogOpen(false);
               },
             },
             m.board_pin_confirm(),
