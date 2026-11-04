@@ -392,7 +392,11 @@ export function readyInboxPage<T extends { id: string; unread: boolean }>(
   accountId: string,
   selection: InboxSelection = DEFAULT_INBOX_SELECTION,
 ) {
-  return { signedIn: true as const, state: 'ready' as const, ...nativeInboxEnvelope(items, next, accountId, selection) };
+  return {
+    signedIn: true as const,
+    state: 'ready' as const,
+    ...nativeInboxEnvelope(items, next, accountId, selection),
+  };
 }
 
 /** A malformed or unknown row fails the complete page; the native page already owns disclosure and destinations. */
@@ -415,8 +419,7 @@ export function decodeInboxPage(value: unknown, accountId?: string): NoticePage 
   const next = value.next as string | null;
   const selection = value.selection;
   const actions = value.actions;
-  if (!validPageActions(actions, items, next, selection, viewer.accountId))
-    throw new InboxReadError({ status: 200 });
+  if (!validPageActions(actions, items, next, selection, viewer.accountId)) throw new InboxReadError({ status: 200 });
   return { items, next, viewer, selection, actions };
 }
 

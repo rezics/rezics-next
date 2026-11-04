@@ -1,9 +1,4 @@
-import {
-  DEFAULT_INBOX_SELECTION,
-  type InboxPage,
-  type InboxSelection,
-  type ResolvedInboxPage,
-} from './inbox-read';
+import { DEFAULT_INBOX_SELECTION, type InboxPage, type InboxSelection, type ResolvedInboxPage } from './inbox-read';
 
 /** Local to the mounted viewer owner; cursors are native opaque values bound to one selection. */
 export type InboxPagination = {

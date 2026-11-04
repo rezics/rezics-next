@@ -156,8 +156,7 @@ test('All/Unread restarts without a cursor, sparse unread is not empty, and inva
   const queries: InboxPageQuery[] = [];
   const view = await mount(async (query) => {
     queries.push(query);
-    if (query.selection === 'unread' && !query.cursor)
-      return readyInboxPage([], 'sparse-next', 'alice', 'unread');
+    if (query.selection === 'unread' && !query.cursor) return readyInboxPage([], 'sparse-next', 'alice', 'unread');
     if (query.cursor === 'sparse-next')
       return { signedIn: true, state: 'unavailable', failure: { status: 400, code: 'invalid_cursor' } };
     return readyInboxPage([notice('newest')], 'all-next', 'alice', query.selection);

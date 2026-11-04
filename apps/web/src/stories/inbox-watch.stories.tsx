@@ -66,8 +66,7 @@ function items(): ResolvedInboxPage['items'] {
 
 function Example({ state }: { state: 'mixed' | 'inaccessible' | 'failed' }) {
   const loadPage = async (query: InboxPageQuery): Promise<InboxPage> => {
-    if (state === 'failed')
-      return { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true } };
+    if (state === 'failed') return { signedIn: true, state: 'unavailable', failure: { status: 503, retryable: true } };
     if (state === 'mixed') return readyInboxPage(items(), null, 'alice', query.selection);
     const inaccessible = items()
       .slice(0, 2)

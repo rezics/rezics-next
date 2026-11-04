@@ -10,8 +10,14 @@ import {
   confirmInboxNoticeSeen,
 } from '../src/inbox/inbox-pagination';
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { decodeInboxPage, inboxReadFailure, loadInboxPage, markInboxNoticeSeen, nativeInboxEnvelope, resolveInboxItems } =
-  await import('../src/inbox/inbox-read');
+const {
+  decodeInboxPage,
+  inboxReadFailure,
+  loadInboxPage,
+  markInboxNoticeSeen,
+  nativeInboxEnvelope,
+  resolveInboxItems,
+} = await import('../src/inbox/inbox-read');
 type Notice = import('../src/inbox/inbox-read').InboxNotice;
 
 function notice(id: string, kind: Notice['kind']): Notice {
@@ -129,9 +135,7 @@ test('sparse continuation preserves its cursor and a failed page remains unavail
       const request = new Request(input, init);
       const url = new URL(request.url);
       cursors.push(url.searchParams.get('cursor'));
-      return Response.json(
-        nativeInboxEnvelope([], url.searchParams.has('cursor') ? null : cursor, 'alice'),
-      );
+      return Response.json(nativeInboxEnvelope([], url.searchParams.has('cursor') ? null : cursor, 'alice'));
     }) as typeof fetch,
   });
   const firstPage = await loadInboxPage(client, 'alice', 'Bearer alice');
@@ -263,5 +267,7 @@ test('unknown native rows fail closed instead of becoming replies', () => {
       markSeen: { method: 'POST' as const, path: '/v1/accounts/alice/notifications/generic-outcome:markSeen' },
     },
   };
-  expect(decodeInboxPage(nativeInboxEnvelope([genericOutcome], null, 'alice'), 'alice').items[0]?.actions?.open).toBeNull();
+  expect(
+    decodeInboxPage(nativeInboxEnvelope([genericOutcome], null, 'alice'), 'alice').items[0]?.actions?.open,
+  ).toBeNull();
 });

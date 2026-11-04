@@ -173,7 +173,11 @@ async function screen(strict = false) {
   sessionToken = 'original-token';
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, session());
-  const pageCalls: { cursor?: string; selection?: InboxPageQuery['selection']; work?: ReturnType<typeof deferred<InboxPage>> }[] = [];
+  const pageCalls: {
+    cursor?: string;
+    selection?: InboxPageQuery['selection'];
+    work?: ReturnType<typeof deferred<InboxPage>>;
+  }[] = [];
   const countCalls: ReturnType<typeof deferred<UnreadCount>>[] = [];
   const commands: {
     data: InboxSeenAttempt;

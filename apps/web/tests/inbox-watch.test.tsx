@@ -166,7 +166,11 @@ test('withheld actors and report targets conceal private context while the admit
     },
   });
   const page = await resolveInboxItems(
-    nativeInboxEnvelope(decodeInboxPage(nativeInboxEnvelope([hiddenNotice], null, 'viewer'), 'viewer').items, null, 'viewer'),
+    nativeInboxEnvelope(
+      decodeInboxPage(nativeInboxEnvelope([hiddenNotice], null, 'viewer'), 'viewer').items,
+      null,
+      'viewer',
+    ),
   );
   expect(page.items[0]).toMatchObject({
     unavailable: true,

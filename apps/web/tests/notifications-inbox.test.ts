@@ -689,10 +689,7 @@ test('discarded page responses cannot repopulate a restarted chain or outlive a 
       });
       const oldPage = deferred<InboxPage>();
       const old = client.fetchQuery(inboxPageQuery(viewer, undefined, () => oldPage.promise)).catch(() => null);
-      const loaded = receiveInboxPage(
-        emptyInboxPagination,
-        readyInboxPage([], 'rejected-cursor', 'alice'),
-      );
+      const loaded = receiveInboxPage(emptyInboxPagination, readyInboxPage([], 'rejected-cursor', 'alice'));
       const rejected = receiveInboxPage(nextInboxPage(loaded), {
         signedIn: true,
         state: 'unavailable',

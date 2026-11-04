@@ -20,7 +20,10 @@ mock.module('@tanstack/react-start/server', () => ({
 const secondCursor = 'opaque.signed+second/cursor==';
 const thirdCursor = 'opaque.signed+third/cursor==';
 const viewer = 'alice';
-const item = (id: string, extra: Partial<ResolvedInboxPage['items'][number]> = {}): ResolvedInboxPage['items'][number] => ({
+const item = (
+  id: string,
+  extra: Partial<ResolvedInboxPage['items'][number]> = {},
+): ResolvedInboxPage['items'][number] => ({
   id,
   kind: 'reply',
   createdAt: '2026-10-29T10:00:00.000Z',
@@ -120,13 +123,11 @@ test('signed-out, closed and non-transient native failures erase retained rows p
     { signedIn: false },
     { signedIn: true, state: 'closed', failure: { status: 503, code: 'platform_closed' } },
     { signedIn: true, state: 'unavailable', failure: { status: null, code: 'forbidden' } },
-    ...[401, 403, 404, 410, 422].map(
-      (status): InboxPage => ({
-        signedIn: true,
-        state: 'unavailable',
-        failure: { status, retryable: true },
-      }),
-    ),
+    ...[401, 403, 404, 410, 422].map((status): InboxPage => ({
+      signedIn: true,
+      state: 'unavailable',
+      failure: { status, retryable: true },
+    })),
     { signedIn: true, state: 'preparing', failure: { status: 503, retryable: false } },
   ];
   for (const failure of failures) {

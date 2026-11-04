@@ -58,7 +58,8 @@ function PaginationExample({ denied = false }: { denied?: boolean }) {
       const page = await readInboxPage({ data: { selection: query.selection } });
       if (!page.signedIn || page.state !== 'ready') return page;
       if (cursor === thirdCursor) return readyInboxPage([], fourthCursor, page.viewer.accountId, query.selection);
-      if (cursor === undefined) return readyInboxPage(page.items.slice(0, 1), secondCursor, page.viewer.accountId, query.selection);
+      if (cursor === undefined)
+        return readyInboxPage(page.items.slice(0, 1), secondCursor, page.viewer.accountId, query.selection);
       if (cursor === secondCursor)
         return readyInboxPage(page.items.slice(0, 2), thirdCursor, page.viewer.accountId, query.selection);
       await expect(cursor).toBe(fourthCursor);
@@ -158,7 +159,12 @@ function EmptyFilterContinuationCase({ mode }: { mode: 'unread' | 'all-empty' })
       const accountId = source.viewer.accountId;
       if (cursor === undefined) {
         return query.selection === 'unread' || mode === 'all-empty'
-          ? readyInboxPage([], query.selection === 'unread' ? unreadContinuationCursor : emptyContinuationCursor, accountId, query.selection)
+          ? readyInboxPage(
+              [],
+              query.selection === 'unread' ? unreadContinuationCursor : emptyContinuationCursor,
+              accountId,
+              query.selection,
+            )
           : readyInboxPage(
               source.items.slice(0, 1).map((item) => ({ ...item, unread: false })),
               unreadContinuationCursor,
