@@ -294,6 +294,7 @@ test('unknown retry keeps its original command and missing rows move focus to th
   expect(toggles).toHaveLength(1);
   toggles[0]!.focus();
   await act(async () => toggles[0]!.click());
+  await settle(() => toggles[0]?.getAttribute('aria-expanded') === 'true');
   const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
   await settle(() => !!dialog());
   const confirmation = dialog();
