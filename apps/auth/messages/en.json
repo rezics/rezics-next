@@ -434,5 +434,10 @@
   "auth_automated_leave": "Leave",
   "auth_automated_stay": "Stay",
   "auth_transfer_departure_heading": "Leave operator transfer?",
-  "auth_transfer_departure_description": "Your unsent transfer preparation and review will be discarded."
+  "auth_transfer_departure_description": "Your unsent transfer preparation and review will be discarded.",
+  "auth_security_passkey_unnamed": "Unnamed passkey",
+  "auth_security_passkeys_browser_unavailable": "This browser cannot create passkeys. You can still review and remove your saved passkeys.",
+  "auth_security_inventory_truncated": "Only the first inventory window is shown. Refresh after making changes; additional entries may exist.",
+  "auth_security_step_up_advice": "Confirm your identity again to continue.",
+  "auth_security_passkey_capacity": "You have reached the limit of 32 passkeys. Remove one before adding another."
 }

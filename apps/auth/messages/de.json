@@ -434,5 +434,10 @@
   "auth_automated_leave": "Verlassen",
   "auth_automated_stay": "Bleiben",
   "auth_transfer_departure_heading": "Operatorübertragung verlassen?",
-  "auth_transfer_departure_description": "Ihre noch nicht gesendete Vorbereitung und Prüfung der Übertragung werden verworfen."
+  "auth_transfer_departure_description": "Ihre noch nicht gesendete Vorbereitung und Prüfung der Übertragung werden verworfen.",
+  "auth_security_passkey_unnamed": "Unbenannter Passkey",
+  "auth_security_passkeys_browser_unavailable": "Dieser Browser kann keine Passkeys erstellen. Gespeicherte Passkeys können Sie weiterhin ansehen und entfernen.",
+  "auth_security_inventory_truncated": "Nur der erste Teil der Liste wird angezeigt. Weitere Einträge können vorhanden sein. Aktualisieren Sie nach Änderungen.",
+  "auth_security_step_up_advice": "Bestätigen Sie Ihre Identität erneut, um fortzufahren.",
+  "auth_security_passkey_capacity": "Sie haben das Limit von 32 Passkeys erreicht. Entfernen Sie einen, bevor Sie einen weiteren hinzufügen."
 }

@@ -20,6 +20,7 @@ import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
 import { securityInventory, type SecurityInventoryInput } from './security-inventory.ts';
+import { composeSecurityPage } from './security-page.ts';
 import { readNativeAccountIdentity } from './account-identity.ts';
 import {
   securityPageInput,
@@ -2011,9 +2012,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       const url = new URL(request.url);
       const inventoryRead = request.method === 'GET' && (url.pathname === '/clients' || url.pathname === '/consents');
       const identityRead = url.pathname === '/account-identity';
+      const securityRead = url.pathname === '/security-page';
       const respond = (data: unknown, status = 200) => {
         const response = json(data, status);
-        if (inventoryRead || identityRead) response.headers.set('cache-control', 'private, no-store');
+        if (inventoryRead || identityRead || securityRead) response.headers.set('cache-control', 'private, no-store');
         return response;
       };
       const deadline = Date.now() + 3000;
@@ -2031,6 +2033,39 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             throw new Denied(403);
           fields(await bodyOf(request), []);
           return respond(await readAccountIdentity(request.headers));
+        }
+        if (securityRead) {
+          if (request.method !== 'GET' || request.headers.has('authorization')) throw new Denied(403);
+          return respond(
+            await readSecurityInventory({ headers: request.headers }, async (binding) => {
+              const human = await humanProof(request.headers);
+              if (human.account_id !== binding.accountId || proofSources.get(human)!.id !== binding.sessionId)
+                throw new Denied();
+              const admitted = await database.query(
+                'SELECT client_id FROM auth_client WHERE client_id=$1 AND disabled=false AND NOT erasure_fenced',
+                [binding.clientId],
+              );
+              if (!admitted.rowCount) throw new Denied();
+              return composeSecurityPage(database, {
+                account_id: binding.accountId,
+                session_id: binding.sessionId,
+                client_id: binding.clientId,
+                now: trustedNowSeconds(),
+                fresh: trustedNowSeconds() - human.auth_time <= 600,
+                passwordCommands: !!(
+                  trustedAccess.approveCredentialEffect &&
+                  trustedAccess.revalidateCredentialEffect &&
+                  trustedAccess.advanceCredentialFloor
+                ),
+                credentialCommands: !!(
+                  trustedAccess.passkeys &&
+                  trustedAccess.approveCredentialEffect &&
+                  trustedAccess.revalidateCredentialEffect &&
+                  trustedAccess.advanceCredentialFloor
+                ),
+              });
+            }),
+          );
         }
         if (inventoryRead) {
           const input = { ...securityPageQuery(url.searchParams), headers: request.headers };

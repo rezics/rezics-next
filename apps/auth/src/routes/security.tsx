@@ -16,7 +16,7 @@ import { AccountIdentitySummary } from '../account-identity-view';
 import { failureMessage } from '../api';
 import { ErrorAlert } from '../alert';
 import { SecurityInventory, type InventorySource } from '../security-inventory-view';
-import type { ConsentReviewOperation } from '../security-inventory';
+import type { SecurityPageEnvelope, SecurityAdvice, ConsentReviewOperation } from '../security-inventory';
 import { addPasskey, passkeysSupported, removePasskey } from '../passkeys';
 import {
   readSecurityTarget,
@@ -84,6 +84,23 @@ function RoutedSecurityPage(props: SecurityPageProps) {
 }
 
 const STEP_UP_URL = '/step-up?return_to=%2Fsecurity';
+function canAct(advice: SecurityAdvice | undefined) {
+  return advice === 'allowed' || advice === 'step-up-required';
+}
+function AdviceHint({ advice }: { advice: SecurityAdvice | undefined }) {
+  if (advice === 'allowed') return null;
+  return (
+    <p className="auth-security-hint">
+      {advice === 'step-up-required'
+        ? m.auth_security_step_up_advice()
+        : advice === 'last-credential'
+          ? m.auth_security_passkey_last_credential()
+          : advice === 'capacity'
+            ? m.auth_security_passkey_capacity()
+            : m.auth_inventory_unavailable()}
+    </p>
+  );
+}
 
 function SecurityPageView({
   initial,
@@ -95,6 +112,7 @@ function SecurityPageView({
 }: SecurityPageProps & { departure?: MutableRefObject<DepartureState>; blocker?: DepartureBlocker }) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [accountId, setAccountId] = useState('');
+  const [page, setPage] = useState<SecurityPageEnvelope | null>(null);
   const [sessions, setSessions] = useState<SecuritySession[]>([]);
   const [loadMessage, setLoadMessage] = useState('');
   const [consentReduced, setConsentReduced] = useState(false);
@@ -126,6 +144,7 @@ function SecurityPageView({
   const [signedOutNotice, setSignedOutNotice] = useState('');
   const activeAccount = useRef('');
   const authorityGeneration = useRef(0);
+  const renderGeneration = authorityGeneration.current;
   const lifetime = useRef(new AbortController());
   const retryLoad = useRef<(() => void) | null>(null);
   const recoveryStatus = useRef<HTMLDivElement>(null);
@@ -166,6 +185,7 @@ function SecurityPageView({
       if (result.kind === 'ready') {
         activeAccount.current = result.accountId;
         setAccountId(result.accountId);
+        setPage(result.page ?? null);
         setSessions(result.sessions);
         setPasskeysLoad(result.passkeys);
         if (result.passkeys.kind === 'ready') setPasskeys(result.passkeys.passkeys);
@@ -277,6 +297,7 @@ function SecurityPageView({
     activeAccount.current = '';
     updateOperation(null);
     setAccountId('');
+    setPage(null);
     setSessions([]);
     setPasskeys([]);
     setPasskeysLoad({ kind: 'hidden' });
@@ -327,6 +348,7 @@ function SecurityPageView({
       return;
     }
     setSessionError('');
+    if (result.page) setPage(result.page);
     setSessions(result.sessions);
     if (result.passkeys) setPasskeys(result.passkeys);
     if (result.presence === 'absent') {
@@ -356,9 +378,11 @@ function SecurityPageView({
           'signed-out',
           result.kind === 'accepted' ? m.auth_security_action_accepted() : m.auth_security_action_unverified(),
         );
+        if (result.kind === 'accepted' && current && target.kind === 'session') window.location.assign('/login');
         return;
       }
       updateOperation({ kind: 'recovery', target, phase: result.kind, reading: false });
+      if (result.kind === 'accepted') void recoverTarget();
       return;
     }
     updateOperation(null);
@@ -372,6 +396,7 @@ function SecurityPageView({
   }
 
   async function runAction(target: SecurityTarget, current = false, retry = false) {
+    if (renderGeneration !== authorityGeneration.current) return;
     const held = activeOperation.current;
     const retryAllowed =
       retry &&
@@ -382,6 +407,20 @@ function SecurityPageView({
       held.target.kind === target.kind &&
       held.target.id === target.id;
     if ((held && !retryAllowed) || activeAccount.current !== target.accountId || !target.accountId) return;
+    const selected =
+      target.kind === 'session'
+        ? sessions.find((row) => row.id === target.id)
+        : passkeys.find((row) => row.id === target.id);
+    const advice =
+      target.kind === 'session'
+        ? (selected as SecuritySession | undefined)?.revoke
+        : (selected as SecurityPasskey | undefined)?.remove;
+    if (!selected || !canAct(advice)) return;
+    if (advice === 'step-up-required') {
+      clearPrivateData('signed-out');
+      window.location.assign(STEP_UP_URL);
+      return;
+    }
     const generation = authorityGeneration.current;
     if (
       !window.confirm(
@@ -442,7 +481,18 @@ function SecurityPageView({
 
   async function submitPasskey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (activeOperation.current || !activeAccount.current) return;
+    if (
+      activeOperation.current ||
+      !activeAccount.current ||
+      !passkeysSupported() ||
+      !canAct(page?.actions.register_passkey)
+    )
+      return;
+    if (page?.actions.register_passkey === 'step-up-required') {
+      clearPrivateData('signed-out');
+      window.location.assign(STEP_UP_URL);
+      return;
+    }
     updateOperation({ kind: 'passkey-add' });
     setPasskeyNotice('');
     setPasskeyError('');
@@ -453,7 +503,10 @@ function SecurityPageView({
     updateOperation(null);
     if (activeAccount.current !== owner) return;
     if (result.ok) {
-      setPasskeys((current) => [...current, result.passkey]);
+      // Retire earlier target advice until the native composition has caught up.
+      setPasskeys((current) => [...current.map((row) => ({ ...row, remove: undefined })), result.passkey]);
+      setPage(null);
+      void refreshRegistrationInventory(owner, generation);
       setPasskeyName('');
       setPasskeyNotice(m.auth_security_passkey_added());
     } else if (result.reason === 'step-up') {
@@ -463,6 +516,29 @@ function SecurityPageView({
       setPasskeyError(result.message);
     } else if (result.reason === 'unknown') {
       updateOperation({ kind: 'registration-review', accountId: owner, phase: 'unknown', reading: false });
+    }
+  }
+
+  async function refreshRegistrationInventory(owner: string, generation: number) {
+    updateOperation({ kind: 'passkey-add' });
+    setSessions((current) => current.map((row) => ({ ...row, revoke: undefined })));
+    const result = await (securitySource?.load ?? loadSecurity)(passkeysSupported()).catch((): SecurityLoadResult => ({
+      kind: 'failure',
+      message: m.auth_security_passkeys_failed(),
+    }));
+    if (authorityGeneration.current !== generation || activeAccount.current !== owner) return;
+    updateOperation(null);
+    if (result.kind === 'signed-out' || (result.kind === 'ready' && result.accountId !== owner)) {
+      clearPrivateData(result.kind === 'signed-out' ? 'signed-out' : 'failure');
+      return;
+    }
+    setPage(result.kind === 'ready' ? (result.page ?? null) : null);
+    if (result.kind === 'ready') {
+      setSessions(result.sessions);
+      setPasskeysLoad(result.passkeys);
+      setPasskeys(result.passkeys.kind === 'ready' ? result.passkeys.passkeys : []);
+    } else {
+      setPasskeysLoad({ kind: 'failure', message: m.auth_security_passkeys_failed() });
     }
   }
 
@@ -487,6 +563,7 @@ function SecurityPageView({
     }
     setPasskeys(result.passkeys);
     setPasskeysLoad(result);
+    setPage(null);
     setPasskeyError('');
     // Native row IDs are authoritative. Neither a name nor a WebAuthn credential ID identifies a saved row.
     updateOperation({ ...held, phase: 'reviewed', reading: false });
@@ -498,6 +575,7 @@ function SecurityPageView({
     updateOperation(null);
     setPasskeyName('');
     setPasskeyNotice(m.auth_security_passkey_registration_reviewed());
+    void refreshRegistrationInventory(held.accountId, authorityGeneration.current);
   }
 
   async function removeOnePasskey(passkey: SecurityPasskey) {
@@ -658,7 +736,13 @@ function SecurityPageView({
                       {passwordError}
                     </ErrorAlert>
                   ) : null}
-                  <Button type="submit" disabled={operationBlocked} aria-busy={passwordPending} className="w-full">
+                  <AdviceHint advice={page?.actions.change_password} />
+                  <Button
+                    type="submit"
+                    disabled={operationBlocked || !canAct(page?.actions.change_password)}
+                    aria-busy={passwordPending}
+                    className="w-full"
+                  >
                     {m.auth_security_password_submit()}
                   </Button>
                 </form>
@@ -695,7 +779,7 @@ function SecurityPageView({
                               <article className="flex w-full flex-col items-start gap-3.5 sm:flex-row sm:items-center">
                                 <ItemContent className="min-w-0 w-full sm:w-auto">
                                   <ItemTitle className="line-clamp-none wrap-anywhere">
-                                    <h3>{passkey.name}</h3>
+                                    <h3>{passkey.name.trim() || m.auth_security_passkey_unnamed()}</h3>
                                   </ItemTitle>
                                   <ItemDescription className="line-clamp-none wrap-anywhere">
                                     {m.auth_security_created_at()}{' '}
@@ -720,12 +804,15 @@ function SecurityPageView({
                                     type="button"
                                     variant="outline"
                                     onClick={() => void removeOnePasskey(passkey)}
-                                    disabled={operationBlocked}
+                                    disabled={operationBlocked || !canAct(passkey.remove)}
                                     aria-busy={passkeyRemoving === passkey.id}
-                                    aria-label={m.auth_security_passkey_remove_named({ name: passkey.name })}
+                                    aria-label={m.auth_security_passkey_remove_named({
+                                      name: passkey.name.trim() || m.auth_security_passkey_unnamed(),
+                                    })}
                                   >
                                     {m.auth_security_passkey_remove()}
                                   </Button>
+                                  <AdviceHint advice={passkey.remove} />
                                 </ItemActions>
                               </article>
                             </Item>
@@ -734,23 +821,36 @@ function SecurityPageView({
                       ) : (
                         <p>{m.auth_security_passkeys_empty()}</p>
                       )}
-                      <form className="auth-login-form" noValidate onSubmit={submitPasskey}>
-                        <Field>
-                          <FieldLabel htmlFor="security-passkey-name">{m.auth_security_passkey_name()}</FieldLabel>
-                          <Input
-                            id="security-passkey-name"
-                            name="passkey-name"
-                            autoComplete="off"
-                            maxLength={64}
-                            value={passkeyName}
-                            onChange={(event) => setPasskeyName(event.target.value)}
-                            readOnly={operationBlocked}
-                          />
-                        </Field>
-                        <Button type="submit" disabled={operationBlocked} aria-busy={passkeyAdding} className="w-full">
-                          {m.auth_security_passkey_add()}
-                        </Button>
-                      </form>
+                      {page?.passkeys.kind === 'ready' && page.passkeys.truncated ? (
+                        <p>{m.auth_security_inventory_truncated()}</p>
+                      ) : null}
+                      {!passkeysSupported() ? (
+                        <p>{m.auth_security_passkeys_browser_unavailable()}</p>
+                      ) : (
+                        <form className="auth-login-form" noValidate onSubmit={submitPasskey}>
+                          <Field>
+                            <FieldLabel htmlFor="security-passkey-name">{m.auth_security_passkey_name()}</FieldLabel>
+                            <Input
+                              id="security-passkey-name"
+                              name="passkey-name"
+                              autoComplete="off"
+                              maxLength={64}
+                              value={passkeyName}
+                              onChange={(event) => setPasskeyName(event.target.value)}
+                              readOnly={operationBlocked}
+                            />
+                          </Field>
+                          <Button
+                            type="submit"
+                            disabled={operationBlocked || !canAct(page?.actions.register_passkey)}
+                            aria-busy={passkeyAdding}
+                            className="w-full"
+                          >
+                            {m.auth_security_passkey_add()}
+                          </Button>
+                        </form>
+                      )}
+                      <AdviceHint advice={page?.actions.register_passkey} />
                     </>
                   )}
                 </section>
@@ -764,7 +864,23 @@ function SecurityPageView({
                   </div>
                 ) : null}
                 {sessionError ? <ErrorAlert>{sessionError}</ErrorAlert> : null}
-                {!orderedSessions.length ? <p>{m.auth_security_sessions_empty()}</p> : null}
+                {page?.sessions.kind === 'unavailable' || !page ? (
+                  <ErrorAlert>{m.auth_security_sessions_failed()}</ErrorAlert>
+                ) : null}
+                {page?.sessions.kind === 'ready' && page.sessions.truncated ? (
+                  <p>{m.auth_security_inventory_truncated()}</p>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={operationBlocked}
+                  onClick={() => retryLoad.current?.()}
+                >
+                  {m.auth_inventory_reload()}
+                </Button>
+                {page?.sessions.kind === 'ready' && !orderedSessions.length ? (
+                  <p>{m.auth_security_sessions_empty()}</p>
+                ) : null}
                 <ItemGroup aria-label={m.auth_security_sessions_heading()}>
                   {orderedSessions.map((session) => {
                     const parsedDevice = securityDevice(session.user_agent);
@@ -813,7 +929,7 @@ function SecurityPageView({
                               type="button"
                               variant="outline"
                               onClick={() => void revoke(session)}
-                              disabled={operationBlocked}
+                              disabled={operationBlocked || !canAct(session.revoke)}
                               aria-busy={sessionPending === session.id}
                               aria-label={m.auth_security_sign_out_session({ device })}
                             >

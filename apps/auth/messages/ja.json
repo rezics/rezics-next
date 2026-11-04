@@ -434,5 +434,10 @@
   "auth_automated_leave": "離れる",
   "auth_automated_stay": "この画面に留まる",
   "auth_transfer_departure_heading": "オペレーターの移管から離れますか？",
-  "auth_transfer_departure_description": "未送信の移管の準備内容と確認内容は破棄されます。"
+  "auth_transfer_departure_description": "未送信の移管の準備内容と確認内容は破棄されます。",
+  "auth_security_passkey_unnamed": "名前のないパスキー",
+  "auth_security_passkeys_browser_unavailable": "このブラウザーではパスキーを作成できません。保存済みのパスキーの確認と削除はできます。",
+  "auth_security_inventory_truncated": "最初の一覧のみ表示しています。他にも項目がある可能性があります。変更後は再読み込みしてください。",
+  "auth_security_step_up_advice": "続行するには、もう一度本人確認をしてください。",
+  "auth_security_passkey_capacity": "パスキーは上限の32件に達しています。追加する前に1件削除してください。"
 }

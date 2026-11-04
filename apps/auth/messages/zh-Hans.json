@@ -434,5 +434,10 @@
   "auth_automated_leave": "离开",
   "auth_automated_stay": "留下",
   "auth_transfer_departure_heading": "离开操作员转移？",
-  "auth_transfer_departure_description": "尚未提交的转移准备和审核内容将被丢弃。"
+  "auth_transfer_departure_description": "尚未提交的转移准备和审核内容将被丢弃。",
+  "auth_security_passkey_unnamed": "未命名的通行密钥",
+  "auth_security_passkeys_browser_unavailable": "此浏览器无法创建通行密钥。你仍可查看及移除已保存的通行密钥。",
+  "auth_security_inventory_truncated": "当前仅显示第一批项目，可能还有其他项目。更改后请刷新。",
+  "auth_security_step_up_advice": "请再次验证身份以继续。",
+  "auth_security_passkey_capacity": "通行密钥已达 32 组上限。请先移除一组再添加。"
 }

@@ -434,5 +434,10 @@
   "auth_automated_leave": "나가기",
   "auth_automated_stay": "머무르기",
   "auth_transfer_departure_heading": "운영자 이전에서 나가시겠습니까?",
-  "auth_transfer_departure_description": "아직 전송하지 않은 이전 준비 및 검토 내용이 삭제됩니다."
+  "auth_transfer_departure_description": "아직 전송하지 않은 이전 준비 및 검토 내용이 삭제됩니다.",
+  "auth_security_passkey_unnamed": "이름 없는 패스키",
+  "auth_security_passkeys_browser_unavailable": "이 브라우저에서는 패스키를 만들 수 없습니다. 저장된 패스키를 확인하고 삭제할 수는 있습니다.",
+  "auth_security_inventory_truncated": "목록의 첫 부분만 표시됩니다. 다른 항목이 있을 수 있으니 변경 후 새로고침하세요.",
+  "auth_security_step_up_advice": "계속하려면 본인 인증을 다시 해 주세요.",
+  "auth_security_passkey_capacity": "패스키가 최대 개수인 32개에 도달했습니다. 새로 추가하려면 하나를 삭제하세요."
 }

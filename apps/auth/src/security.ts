@@ -2,7 +2,12 @@ import { createServerFn } from '@tanstack/react-start';
 import { privateAuthRead } from './private-auth-read';
 import { authPost, failureMessage, type AuthPostResult } from './api';
 import { m } from './paraglide/messages.js';
-import { issuerSecurityRequest, loadPasskeyInventory } from './security-inventory';
+import {
+  issuerSecurityRequest,
+  loadSecurityPage,
+  type SecurityPageEnvelope,
+  type SecurityAdvice,
+} from './security-inventory';
 import { parseSecurityPasskeys, performSecurityAction } from './security-reconciliation';
 
 export type SecuritySession = {
@@ -12,7 +17,8 @@ export type SecuritySession = {
   expires_at: string;
   user_agent: string | null;
   current: boolean;
-  client_display_name?: string;
+  client_display_name?: string | null;
+  revoke?: SecurityAdvice;
 };
 
 export type SecurityPasskey = {
@@ -20,16 +26,23 @@ export type SecurityPasskey = {
   name: string;
   created_at: string;
   last_used_at: string | null;
+  remove?: SecurityAdvice;
 };
 
-// `hidden` when the browser has no WebAuthn, so the page shows no passkey controls and Auth is not asked.
+// Browser support only limits ceremonies; native inventory and permission remain visible.
 export type PasskeysLoad =
   | { kind: 'hidden' }
   | { kind: 'ready'; passkeys: SecurityPasskey[] }
   | { kind: 'failure'; message: string };
 
 export type SecurityLoadResult =
-  | { kind: 'ready'; accountId: string; sessions: SecuritySession[]; passkeys: PasskeysLoad }
+  | {
+      kind: 'ready';
+      accountId: string;
+      sessions: SecuritySession[];
+      passkeys: PasskeysLoad;
+      page?: SecurityPageEnvelope;
+    }
   | { kind: 'signed-out' }
   | { kind: 'failure'; message: string };
 
@@ -83,8 +96,6 @@ export async function reviewPasskeyRegistration(
   }
 }
 
-type SessionResponse = { account_id?: unknown };
-type SessionsResponse = { sessions?: unknown };
 type EffectStage = {
   effectRef: string;
   key: string;
@@ -94,80 +105,20 @@ type EffectStage = {
 };
 type EffectApproval = { reference: string; expiresAt: string };
 
-async function authGet<Body>(
-  path: string,
-  signal?: AbortSignal,
-): Promise<{ ok: true; body: Body } | { ok: false; status: number; code: string }> {
-  try {
-    return await privateAuthRead(async (readSignal) => {
-      const response = await fetch(path, {
-        method: 'GET',
-        signal: readSignal,
-        credentials: 'same-origin',
-        redirect: 'error',
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      if (response.status === 200) return { ok: true, body: (await response.json()) as Body };
-      const body: unknown = await response.json().catch(() => null);
-      const code =
-        body && typeof body === 'object'
-          ? 'error' in body && typeof body.error === 'string'
-            ? body.error
-            : 'code' in body && typeof body.code === 'string'
-              ? body.code
-              : ''
-          : '';
-      return { ok: false, status: response.status, code };
-    }, signal);
-  } catch {
-    return { ok: false, status: 503, code: 'unavailable' };
-  }
-}
-
-// One read of the person's own passkeys; entries that do not have the documented shape are dropped.
-async function loadPasskeys(signal?: AbortSignal): Promise<PasskeysLoad> {
-  const listed = await loadPasskeyInventory(signal);
-  if (!listed.ok) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
-  if (!Array.isArray(listed.body.passkeys)) return { kind: 'failure', message: m.auth_security_passkeys_failed() };
-  const passkeys = listed.body.passkeys.flatMap((entry: unknown): SecurityPasskey[] => {
-    if (!entry || typeof entry !== 'object') return [];
-    const { id, name, created_at: createdAt, last_used_at: lastUsedAt } = entry as Record<string, unknown>;
-    if (typeof id !== 'string' || typeof name !== 'string' || typeof createdAt !== 'string') return [];
-    return [{ id, name, created_at: createdAt, last_used_at: typeof lastUsedAt === 'string' ? lastUsedAt : null }];
-  });
-  return { kind: 'ready', passkeys };
-}
-
-export async function loadSecurity(withPasskeys: boolean, signal?: AbortSignal): Promise<SecurityLoadResult> {
-  const session = await authGet<SessionResponse>('/session', signal);
-  if (!session.ok) {
-    if (session.status === 401) return { kind: 'signed-out' };
-    return { kind: 'failure', message: failureMessage(session.status, session.code, null) };
-  }
-  if (typeof session.body.account_id !== 'string' || !session.body.account_id)
-    return { kind: 'failure', message: failureMessage(503, 'unavailable', null) };
-
-  const [listed, passkeys] = await Promise.all([
-    authGet<SessionsResponse>('/sessions', signal),
-    withPasskeys ? loadPasskeys(signal) : Promise.resolve<PasskeysLoad>({ kind: 'hidden' }),
-  ]);
-  if (!listed.ok) {
-    if (listed.status === 401) return { kind: 'signed-out' };
-    const message =
-      listed.status === 503 && listed.code === 'unavailable'
-        ? failureMessage(listed.status, listed.code, null)
-        : m.auth_security_sessions_failed();
-    return { kind: 'failure', message };
-  }
-  if (!Array.isArray(listed.body.sessions))
-    return { kind: 'failure', message: failureMessage(503, 'unavailable', null) };
-
+export async function loadSecurity(_withPasskeys: boolean, signal?: AbortSignal): Promise<SecurityLoadResult> {
+  const result = await loadSecurityPage(signal);
+  if (result.kind === 'signed-out') return result;
+  if (result.kind !== 'ready') return { kind: 'failure', message: failureMessage(503, 'unavailable', null) };
+  const { page } = result;
   return {
     kind: 'ready',
-    accountId: session.body.account_id,
-    sessions: (listed.body.sessions as SecuritySession[]).slice(0, 64),
-    passkeys,
+    accountId: page.viewer.account_id,
+    page,
+    sessions: page.sessions.kind === 'ready' ? page.sessions.rows : [],
+    passkeys:
+      page.passkeys.kind === 'ready'
+        ? { kind: 'ready', passkeys: page.passkeys.rows }
+        : { kind: 'failure', message: m.auth_security_passkeys_failed() },
   };
 }
 

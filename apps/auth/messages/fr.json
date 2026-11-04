@@ -434,5 +434,10 @@
   "auth_automated_leave": "Quitter",
   "auth_automated_stay": "Rester",
   "auth_transfer_departure_heading": "Quitter le transfert d’opérateur ?",
-  "auth_transfer_departure_description": "La préparation et la vérification du transfert non envoyées seront abandonnées."
+  "auth_transfer_departure_description": "La préparation et la vérification du transfert non envoyées seront abandonnées.",
+  "auth_security_passkey_unnamed": "Clé d’accès sans nom",
+  "auth_security_passkeys_browser_unavailable": "Ce navigateur ne peut pas créer de clés d’accès. Vous pouvez toujours consulter et supprimer vos clés enregistrées.",
+  "auth_security_inventory_truncated": "Seule la première partie de la liste est affichée. D’autres éléments peuvent exister. Actualisez après vos modifications.",
+  "auth_security_step_up_advice": "Confirmez à nouveau votre identité pour continuer.",
+  "auth_security_passkey_capacity": "Vous avez atteint la limite de 32 clés d’accès. Supprimez-en une avant d’en ajouter une autre."
 }

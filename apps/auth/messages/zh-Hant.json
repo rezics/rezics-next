@@ -434,5 +434,10 @@
   "auth_automated_leave": "離開",
   "auth_automated_stay": "留下",
   "auth_transfer_departure_heading": "離開操作員移轉？",
-  "auth_transfer_departure_description": "尚未提交的移轉準備與審閱內容將被捨棄。"
+  "auth_transfer_departure_description": "尚未提交的移轉準備與審閱內容將被捨棄。",
+  "auth_security_passkey_unnamed": "未命名的通行金鑰",
+  "auth_security_passkeys_browser_unavailable": "此瀏覽器無法建立通行金鑰。你仍可查看及移除已儲存的通行金鑰。",
+  "auth_security_inventory_truncated": "目前僅顯示第一批項目，可能還有其他項目。變更後請重新整理。",
+  "auth_security_step_up_advice": "請再次驗證身分以繼續。",
+  "auth_security_passkey_capacity": "通行金鑰已達 32 組上限。請先移除一組再新增。"
 }
