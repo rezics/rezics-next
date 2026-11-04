@@ -27,7 +27,8 @@ test('selected advice rejects duplicates, oversize and foreign places before obs
     Array.from({ length: 26 }, () => selection[0]!),
     [{ ...selection[0]!, placeId: threadId }],
     [{ ...selection[0]!, sourceRevisionId: 'not-an-id' }],
-  ]) expect(() => normalizeBoardPinAdviceSelection(boardId, invalid)).toThrow();
+  ])
+    expect(() => normalizeBoardPinAdviceSelection(boardId, invalid)).toThrow();
 });
 
 test('only current native curation advice permits a selected pin, even when other pins are hidden', () => {
@@ -35,8 +36,12 @@ test('only current native curation advice permits a selected pin, even when othe
   const full = { ...before, pinIds: Array.from({ length: 5 }, (_, i) => `hidden-${i}`) };
   const allowed = projectBoardPinAdvice('viewer', selection, before, before);
   expect(allowed).toEqual({
-    state: 'ready', boardId, viewer: { kind: 'account', id: 'viewer' }, pinRevision: '4',
-    management: 'allowed', threads: [{ threadId, pinned: false, actions: ['pin'] }],
+    state: 'ready',
+    boardId,
+    viewer: { kind: 'account', id: 'viewer' },
+    pinRevision: '4',
+    management: 'allowed',
+    threads: [{ threadId, pinned: false, actions: ['pin'] }],
   });
   expect(projectBoardPinAdvice('viewer', selection, full, full)).toMatchObject({
     threads: [{ threadId, pinned: false, actions: [] }],
@@ -47,7 +52,8 @@ test('only current native curation advice permits a selected pin, even when othe
     threads: [{ threadId, pinned: true, actions: ['unpin'] }],
   });
   expect(projectBoardPinAdvice('viewer', selection, before, { ...before, management: false })).toMatchObject({
-    management: 'denied', threads: [{ threadId, pinned: false, actions: [] }],
+    management: 'denied',
+    threads: [{ threadId, pinned: false, actions: [] }],
   });
 });
 
@@ -58,7 +64,8 @@ test('a changed pin generation, source, parent or home cannot refresh old select
     { ...before, boardWitness: 'another-parent' },
     { ...before, sources: [{ ...selection[0]!, witness: 'new-source' }] },
     { ...before, epochs: new Map([[1, 2]]) },
-  ]) expect(projectBoardPinAdvice('viewer', selection, before, after)).toEqual({ state: 'stale' });
+  ])
+    expect(projectBoardPinAdvice('viewer', selection, before, after)).toEqual({ state: 'stale' });
   expect(projectBoardPinAdvice('viewer', selection, before, before, '3')).toEqual({ state: 'stale' });
   expect(() => projectBoardPinAdvice('viewer', selection, before, { ...before, sources: [] })).toThrow();
 });
