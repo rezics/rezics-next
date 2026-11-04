@@ -150,7 +150,8 @@ test('current Person credit returns from work, Character and Sources with exact 
       let fiber = Reflect.get(card, Object.keys(card).find((key) => key.startsWith('__reactFiber'))!);
       while (fiber && fiber.type?.name !== 'CoverList') fiber = fiber.return;
       const state = fiber?.memoizedState?.next?.next?.memoizedState;
-      throw new Error(`Credit inspection did not open: ${JSON.stringify(state, (key, value) => key === 'trigger' ? value?.isConnected : value)}`);
+      const identity = (value: unknown) => JSON.stringify(value, (_key, part) => part && typeof part === 'object' && !Array.isArray(part) ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : part);
+      throw new Error(`Credit inspection did not open: ${JSON.stringify({owner: state?.owner === fiber?.memoizedState?.next?.memoizedState?.current, row: items.some((item) => identity(item) === state?.identity), body: window.document.body.textContent, suspense: fiber?.child?.child?.sibling?.child?.child?.memoizedState})}`);
     }
     expect(dialog.textContent).toContain(labels['wdt:P1932']);
     expect(dialog.textContent).toContain('Original credit');
