@@ -74,7 +74,7 @@ async function render(source: SubjectRead) {
   const router = createRouter({ routeTree: route, history: createMemoryHistory({ initialEntries: ['/'] }) });
   await router.load();
   const html = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router })));
-  client.clear(); router.dispose();
+  client.clear();
   return html;
 }
 const link = (html: string, target: string) => new RegExp(`<a\\b[^>]*href="([^"]*${target}[^"]*)"[^>]*>([\\s\\S]*?)<\\/a>`).exec(html);
