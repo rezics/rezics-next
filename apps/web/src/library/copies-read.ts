@@ -8,7 +8,7 @@ import type { CopyReadingContext, NativeCopyListContext, NativeCopyListRow } fro
 import { copyListContextFromNativeRow } from './copy-reading-context/read';
 import { deletionEvidence, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
-import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy } from './copies-server';
+import { nativeCopyPresentation, nativeCopyPresentationQuery, type NativeCopy, type NativeCopyList, type NativeCopyListQuery } from './copies-server';
 import { isPlatformClosedError, isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -61,6 +61,7 @@ export type CopiesPageData = {
   subjectId: string | null;
   kind?: string | null;
   status?: string | null;
+  filterOptions?: NativeCopyList['filterOptions'];
   /** Original requested cursor, including when the existing invalid-cursor fallback reads page one. */
   requestedCursor?: string | null;
   cursorRestarted?: boolean;
@@ -318,7 +319,7 @@ async function readCopyPage(
   recovered?: () => void,
 ) {
   const read = async (pageCursor?: string) => {
-    const query = {
+    const query: NativeCopyListQuery = {
       ...libraryListQuery(pageCursor),
       ...(input.subjectId ? { subjectId: input.subjectId } : {}),
       ...(input.kind ? { kind: input.kind } : {}),
@@ -392,6 +393,7 @@ export async function loadCopiesPage(
     ...provenance,
     ...(cursorRestarted ? { cursorRestarted: true } : {}),
     copies,
+    filterOptions: page.filterOptions,
     next: page.next,
     addKey: crypto.randomUUID(),
     sendKind,
