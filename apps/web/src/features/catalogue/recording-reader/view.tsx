@@ -105,13 +105,7 @@ function fieldValue({
     );
   } else {
     value = (
-      <CandidateValue
-        snak={fact}
-        related={read.related}
-        locale={locale}
-        link={VisitLink}
-        subject={read.subject.id}
-      />
+      <CandidateValue snak={fact} related={read.related} locale={locale} link={VisitLink} subject={read.subject.id} />
     );
   }
   return (
@@ -278,7 +272,10 @@ export function RecordingReader({
           <p className="text-sm text-muted-foreground">
             {m.profile_reader_page_incomplete({ label: incomplete[0]!.property }, options(locale))}
           </p>
-          <Link className={`${linkClass} ${linkColor} ${actionClass}`} href={withSubjectVisitReturn(relations, returnTo ?? '', locale)}>
+          <Link
+            className={`${linkClass} ${linkColor} ${actionClass}`}
+            href={withSubjectVisitReturn(relations, returnTo ?? '', locale)}
+          >
             {m.recording_reader_continue({}, options(locale))}
           </Link>
         </section>

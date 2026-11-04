@@ -83,11 +83,7 @@ export function recordingReaderVisit(input: {
     );
     if (!facts.length) continue;
     const group: RecordingGroup =
-      field.relation?.group === 'credit'
-        ? 'contributions'
-        : field.relation
-          ? 'associations'
-          : 'details';
+      field.relation?.group === 'credit' ? 'contributions' : field.relation ? 'associations' : 'details';
     groups[group].push({ property, label, definition: field, facts });
     if (field.relation) relationProperties.add(property);
   }

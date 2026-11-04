@@ -52,13 +52,7 @@ function RecordingReaderStory({ admitted = true }: { admitted?: boolean }) {
               {m.recording_reader_return({}, { locale: locale as never })}
             </a>
           </p>
-          <RecordingReader
-            visit={visit}
-            read={read}
-            release={fixture.release}
-            locale={locale}
-            returnTo={returnTo}
-          />
+          <RecordingReader visit={visit} read={read} release={fixture.release} locale={locale} returnTo={returnTo} />
         </main>
       </AppShell>
     </PatternStory>

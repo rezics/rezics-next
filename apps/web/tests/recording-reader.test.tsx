@@ -62,8 +62,8 @@ test('admitted credits retain exact targets, qualifiers, partial dates and retur
       returnTo,
     }),
   );
-  const links = [...html.matchAll(/href="([^"]+)"/g)].map((match) =>
-    new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.test'),
+  const links = [...html.matchAll(/href="([^"]+)"/g)].map(
+    (match) => new URL(match[1]!.replaceAll('&amp;', '&'), 'https://rezics.test'),
   );
   const target = (id: string) => links.find((link) => link.pathname.includes(`/subjects/${id}/`));
 
