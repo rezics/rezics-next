@@ -788,7 +788,7 @@ function ProgressIndexPageContent({
     );
   const ratio = rowRatio(sessions.map((session) => session.subject));
   return (
-      <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
+    <article className="max-w-4xl space-y-10 text-foreground" onClickCapture={protectNavigation}>
       <PageHeading>{m.library_progress_heading()}</PageHeading>
       {missingReturnRow && returnSelection ? (
         <ProgressReturnRecovery

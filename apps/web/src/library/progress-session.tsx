@@ -45,10 +45,7 @@ import { displayLibraryTitle, LibraryTitle } from './title';
 import { progressFailureMessage, progressView } from './progress-label';
 import { scalarRecordingValue } from './progress-view';
 import { ProgressCorrectionReview } from './progress-actions';
-import {
-  progressIndexSelectionLocationState,
-  type ProgressReturnContext,
-} from './progress-start-draft-navigation';
+import { progressIndexSelectionLocationState, type ProgressReturnContext } from './progress-start-draft-navigation';
 import { subjectProgressEntryLocationState, subjectSlotReturnTo } from './subject-slot-return-context';
 import { PrivateOccurrenceControls } from './private-diary/occurrence-detail';
 import { isPlatformClosedError } from '../kernel/platform-closed';
@@ -630,11 +627,7 @@ function ProgressSessionReturnControls({
       >
         {m.library_progress_return_to_progress()}
       </Link>
-      <Link
-        to="/library/progress"
-        search={progressRestartSearch(context, session.subjectId)}
-        className={buttonClass}
-      >
+      <Link to="/library/progress" search={progressRestartSearch(context, session.subjectId)} className={buttonClass}>
         {m.library_progress_restart()}
       </Link>
       {subjectReturn ? (

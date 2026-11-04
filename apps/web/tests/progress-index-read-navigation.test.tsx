@@ -97,7 +97,11 @@ test('disclosed Subject navigation survives read-only active and completed rows;
   setLocale('en', { reload: false });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute();
-  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/en/library/progress', component: () => null });
+  const indexRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/library/progress',
+    component: () => null,
+  });
   const detailRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/en/library/progress/$id',
@@ -125,7 +129,10 @@ test('disclosed Subject navigation survives read-only active and completed rows;
   const render = async (
     state: 'active' | 'completed',
     disclosed = true,
-    options: { cursor?: string; returnSelection?: ReturnType<typeof progressIndexReturnSelectionFromLocationState> } = {},
+    options: {
+      cursor?: string;
+      returnSelection?: ReturnType<typeof progressIndexReturnSelectionFromLocationState>;
+    } = {},
     row = profileSession,
   ) => {
     const session = { ...profileSession, state, subject: disclosed ? subject : null };

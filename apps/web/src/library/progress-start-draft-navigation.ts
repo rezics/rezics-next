@@ -1,7 +1,12 @@
 import { m } from '../paraglide/messages.js';
 import { isLocale } from '../paraglide/runtime.js';
 import type { AuthoringLocation } from '../threads/authoring-departure';
-import { progressAddressId, progressAddressIssue, progressIndexAddress, type ProgressIndexAddress } from './progress-address';
+import {
+  progressAddressId,
+  progressAddressIssue,
+  progressIndexAddress,
+  type ProgressIndexAddress,
+} from './progress-address';
 import type { ProgressIndex, ProgressMode } from './progress-reads';
 
 export type ProgressStartDraft = {
@@ -54,12 +59,7 @@ function indexAddressFromHref(value: unknown, locale: string): ProgressIndexAddr
   if (typeof value !== 'string' || value.length > 8192 || !isLocale(locale)) return;
   try {
     const url = new URL(value, privateOrigin);
-    if (
-      url.origin !== privateOrigin ||
-      url.hash ||
-      url.pathname !== `/${locale}/library/progress`
-    )
-      return;
+    if (url.origin !== privateOrigin || url.hash || url.pathname !== `/${locale}/library/progress`) return;
     const search: Record<string, string> = {};
     for (const [key, entry] of url.searchParams) {
       if (!returnSearchKeys.has(key) || Object.hasOwn(search, key)) return;
@@ -73,7 +73,11 @@ function indexAddressFromHref(value: unknown, locale: string): ProgressIndexAddr
   }
 }
 
-export function progressIndexHref(page: ProgressIndex, cursor: string | null | undefined, locale: string): string | undefined {
+export function progressIndexHref(
+  page: ProgressIndex,
+  cursor: string | null | undefined,
+  locale: string,
+): string | undefined {
   if (!isLocale(locale)) return;
   const search = progressIndexAddress({
     ...(page.subjectId ? { subjectId: page.subjectId } : {}),

@@ -151,7 +151,11 @@ async function mount(
   const root = createRoot(host as unknown as HTMLElement);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute();
-  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/en/library/progress', component: () => null });
+  const indexRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/en/library/progress',
+    component: () => null,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([indexRoute]),
     history: createMemoryHistory({ initialEntries: ['/en/library/progress'] }),
@@ -163,11 +167,7 @@ async function mount(
         <StrictMode>
           <QueryClientProvider client={client}>
             <RouterContextProvider router={router}>
-              <ProgressSessionPage
-                page={p}
-                logsCursor="logs-current/+?== &公開"
-                returnContext={returnContext}
-              />
+              <ProgressSessionPage page={p} logsCursor="logs-current/+?== &公開" returnContext={returnContext} />
             </RouterContextProvider>
           </QueryClientProvider>
         </StrictMode>,
@@ -384,15 +384,23 @@ test('a reviewed correction returns to its selected index only after the draft c
     await act(async () => h.user.click(returnLink));
     let decision = h.body.getByRole('alertdialog');
     expect(within(decision).getByRole('heading', { name: m.library_progress_draft_navigation_title() })).toBeDefined();
-    await act(async () => h.user.click(within(decision).getByRole('button', { name: m.library_progress_draft_navigation_stay() })));
+    await act(async () =>
+      h.user.click(within(decision).getByRole('button', { name: m.library_progress_draft_navigation_stay() })),
+    );
     expect(h.body.getByRole('dialog')).toBeDefined();
 
-    await act(async () => h.user.click(within(h.body.getByRole('dialog')).getByRole('link', { name: m.library_progress_return_to_progress() })));
+    await act(async () =>
+      h.user.click(
+        within(h.body.getByRole('dialog')).getByRole('link', { name: m.library_progress_return_to_progress() }),
+      ),
+    );
     decision = h.body.getByRole('alertdialog');
     await act(async () =>
       h.user.click(within(decision).getByRole('button', { name: m.library_progress_draft_navigation_discard() })),
     );
-    const state = h.router.state.location.state as { progressReturnSelection?: { sessionId?: string; subjectId?: string } };
+    const state = h.router.state.location.state as {
+      progressReturnSelection?: { sessionId?: string; subjectId?: string };
+    };
     expect(state.progressReturnSelection).toEqual({
       locale: 'en',
       sessionId: original.session.id,
