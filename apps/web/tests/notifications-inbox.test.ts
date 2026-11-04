@@ -94,8 +94,8 @@ test('the composed notice supplies current summaries and exact localized destina
     next: 'opaque/+cursor==',
   });
   expect(page.items.map((item) => item.href)).toEqual([
-    `/${getLocale()}/threads/thread-%E9%9B%AA?post=post-%E9%9B%AA#post-post-%E9%9B%AA`,
-    `/${getLocale()}/threads/${thread}?post=mentioned-post#post-mentioned-post`,
+    `/${getLocale()}/threads/thread-%E9%9B%AA/a-current-thread?post=post-%E9%9B%AA#post-post-%E9%9B%AA`,
+    `/${getLocale()}/threads/${thread}/a-current-thread?post=mentioned-post#post-mentioned-post`,
     `/${getLocale()}/moderation/reports/${report}`,
     `/${getLocale()}/moderation/decisions/${decision}`,
   ]);
@@ -158,7 +158,7 @@ test('the composed native post action gets its exact Thread post anchor without 
   const page = await loadInboxPage(client, 'reporter-1', 'Bearer reporter');
 
   expect(page.items[0]).toMatchObject({
-    href: `/${getLocale()}/threads/${thread}?post=native-post#post-native-post`,
+    href: `/${getLocale()}/threads/${thread}/a-current-thread?post=native-post#post-native-post`,
     text: 'A useful update summary',
     unavailable: false,
   });
