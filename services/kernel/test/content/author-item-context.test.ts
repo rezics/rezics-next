@@ -11,7 +11,12 @@ import { createReviewLifecycleFixture } from './review-native-lifecycle-fixture.
 test('author replies carry only their immediate public parent and retire changed parent context', async () => {
   const f = await createReviewLifecycleFixture();
   try {
-    const dependencies = { pool: f.system.database.pool, access: f.system.access, tokens: f.system.tokenKeys };
+    const dependencies = {
+      pool: f.system.database.pool,
+      access: f.system.access,
+      tokens: f.system.tokenKeys,
+      routeKey: f.system.routeKey,
+    };
     const context = { actor: { kind: 'anonymous' as const }, deadline: Date.now() + 120_000 };
     const created = await f.call('POST', '/v1/threads', {
       bearer: f.author.bearer,
@@ -58,6 +63,7 @@ test('author replies carry only their immediate public parent and retire changed
     const reference = { thread, post };
     const prepared = await prepareAuthorItemContext(dependencies, [reference], context);
     const result = (await prepared.finish()).get(childId)!;
+    await prepared.confirm();
     expect(result.parentContext).toMatchObject({
       kind: 'reply',
       parent: {
@@ -87,7 +93,10 @@ test('author replies carry only their immediate public parent and retire changed
     const removed = await f.call('DELETE', `/v1/posts/${parentId}`, { bearer: f.author.bearer });
     expect(removed.response.status, removed.text).toBe(204);
     await changing.finish().then(
-      (values) => expect(values.get(childId)?.parentContext).toEqual({ kind: 'reply', parent: { state: 'withheld' } }),
+      async (values) => {
+        expect(values.get(childId)?.parentContext).toEqual({ kind: 'reply', parent: { state: 'withheld' } });
+        await changing.confirm();
+      },
       (error: unknown) => expect(error).toMatchObject({ code: 'dependency_unavailable' }),
     );
     await expect(changing.finish()).rejects.toThrow('finish only once');
@@ -120,7 +129,12 @@ test('author page refuses publication revoked after selection without returning 
     expect(reply.response.status, reply.text).toBe(201);
     const gate = observer.hold({ statement: views.sql }, 'after');
     const pending = listAuthorPosts(
-      { pool: f.system.database.pool, access: f.system.access, tokens: f.system.tokenKeys },
+      {
+        pool: f.system.database.pool,
+        access: f.system.access,
+        tokens: f.system.tokenKeys,
+        routeKey: f.system.routeKey,
+      },
       f.author.accountId,
       { actor: { kind: 'anonymous' }, deadline: Date.now() + 120_000 },
     );

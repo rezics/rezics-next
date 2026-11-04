@@ -1,9 +1,16 @@
 import type { DocumentNode } from '@rezics/document';
+import { readSubjectSummaryObservation } from '../semantic/summaries.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { FeedConversationActivity } from './feed-contract.ts';
 import { createConversationActivityBatch } from './conversation-activity.ts';
-import type { AnchoredPosition, FeedParentContext, ReadContext } from './model.ts';
-import { readPost, type ContentReadDependencies, type PostEntry, type ThreadView } from './reads.ts';
+import type { AnchoredPosition, FeedParentContext, FeedReviewContext, ReadContext } from './model.ts';
+import {
+  readCitationDisclosure,
+  readPost,
+  type ContentReadDependencies,
+  type PostEntry,
+  type ThreadView,
+} from './reads.ts';
 
 const MAX_SELECTED = 20;
 const MAX_NODES = 4096;
@@ -16,7 +23,9 @@ export type AuthorContextReference = Readonly<{ thread: ThreadView; post?: PostE
 export type AuthorItemContext = Readonly<{
   parentContext?: FeedParentContext;
   conversationActivity: FeedConversationActivity;
+  reviewContext?: FeedReviewContext;
 }>;
+type AuthorItemContextDependencies = ContentReadDependencies & Readonly<{ routeKey: Uint8Array }>;
 
 /** Text only from visible document nodes. Attributes, annotation text, opaque
  * payloads, alt text, media captions and mention identities are not excerpts.
@@ -79,13 +88,14 @@ const parentKey = (threadId: string, postId: string) => `${threadId}:${postId}`;
  * Native readPost retains responsibility for ancestor/place/Access admission.
  */
 export async function prepareAuthorItemContext(
-  dependencies: ContentReadDependencies,
+  dependencies: AuthorItemContextDependencies,
   references: readonly AuthorContextReference[],
   context: ReadContext,
 ): Promise<
   Readonly<{
     anchors: AnchoredPosition[];
     finish(): Promise<ReadonlyMap<string, AuthorItemContext>>;
+    confirm(): Promise<void>;
   }>
 > {
   if (references.length > MAX_SELECTED) throw new RangeError('At most 20 author contexts');
@@ -96,7 +106,28 @@ export async function prepareAuthorItemContext(
     context.deadline,
   );
   const parents = new Map<string, { threadId: string; postId: string; initial: PostEntry | null }>();
+  const parentFinal = new Map<string, PostEntry | null>();
   const anchors = selectedActivity.flatMap((item) => (item.status === 'current' ? [item.witness.source] : []));
+  const subjectIds = new Set<string>();
+  for (const { thread, post } of references) {
+    const opening = thread.firstPost;
+    if (
+      !post &&
+      thread.kind === 'review' &&
+      thread.availability === 'available' &&
+      opening.availability === 'available' &&
+      thread.subjectIds.length === 1 &&
+      opening.subjectIds.length === 1 &&
+      thread.subjectIds[0] === opening.subjectIds[0]
+    )
+      subjectIds.add(thread.subjectIds[0]!);
+  }
+  const subjects = subjectIds.size
+    ? await readSubjectSummaryObservation(
+        { ...dependencies, actor: context.actor, deadline: context.deadline },
+        [...subjectIds],
+      )
+    : undefined;
   for (const { thread, post } of references) {
     if (!post || post.threadId !== thread.id) {
       if (post) throw new TypeError('Author context thread mismatch');
@@ -110,6 +141,7 @@ export async function prepareAuthorItemContext(
     parents.set(key, { threadId: thread.id, postId: post.parentId, initial: observed.value });
   }
   let finished = false;
+  let confirmed = false;
   return {
     anchors,
     async finish() {
@@ -124,6 +156,7 @@ export async function prepareAuthorItemContext(
       for (const [key, parent] of parents) {
         const current = await readPost(dependencies, parent.threadId, parent.postId, publicContext);
         anchors.push(current.anchor);
+        parentFinal.set(key, current.value);
         const initial = parent.initial;
         const value = current.value;
         const excerpt =
@@ -168,11 +201,60 @@ export async function prepareAuthorItemContext(
             ? { kind: 'opening' }
             : (parentViews.get(parentKey(thread.id, post.parentId)) ?? { kind: 'reply', parent: { state: 'withheld' } })
           : undefined;
-        result.set(post?.id ?? thread.id, { conversationActivity, ...(parentContext ? { parentContext } : {}) });
+        const opening = thread.firstPost;
+        let reviewContext: FeedReviewContext | undefined;
+        if (thread.kind === 'review') {
+          let target: FeedReviewContext['target'];
+          if (thread.availability !== 'available' || opening.availability !== 'available') {
+            target = { state: 'withheld' };
+          } else if (thread.subjectIds.length === 0 && opening.subjectIds.length === 0) {
+            target = { state: 'absent' };
+          } else if (
+            thread.subjectIds.length !== 1 ||
+            opening.subjectIds.length !== 1 ||
+            thread.subjectIds[0] !== opening.subjectIds[0]
+          ) {
+            target = { state: 'withheld' };
+          } else {
+            const id = thread.subjectIds[0]!;
+            const subject = subjects?.summaries.get(id) ?? null;
+            target = subject
+              ? { state: 'available', subject: { id, kind: subject.type, label: subject.label } }
+              : { state: 'withheld' };
+          }
+          // Exact published voteCitation remains on the native opening post. Its historical
+          // question label and scale are unavailable until an exact reader exists.
+          const citation =
+            opening.availability !== 'available' || readCitationDisclosure(opening) !== 'absent'
+              ? { state: 'withheld' as const }
+              : { state: 'absent' as const };
+          reviewContext = { target, citation };
+        }
+        result.set(post?.id ?? thread.id, {
+          conversationActivity,
+          ...(parentContext ? { parentContext } : {}),
+          ...(reviewContext ? { reviewContext } : {}),
+        });
       }
       if (Buffer.byteLength(JSON.stringify([...result])) > MAX_CONTEXT_BYTES)
         throw new ProblemError('dependency_unavailable');
       return result;
+    },
+    async confirm() {
+      if (!finished) throw new TypeError('Author context must finish before confirmation');
+      if (confirmed) throw new TypeError('Author context confirmation only once');
+      confirmed = true;
+      const confirmedActivity = await activity.confirm(selectedActivity, context.deadline);
+      if (confirmedActivity.some((item) => item.status === 'withheld' && item.reason === 'stale'))
+        throw new ProblemError('dependency_unavailable');
+      for (const item of confirmedActivity) if (item.status === 'current') anchors.push(item.witness.source);
+      for (const [key, parent] of parents) {
+        const current = await readPost(dependencies, parent.threadId, parent.postId, publicContext);
+        anchors.push(current.anchor);
+        if (JSON.stringify(current.value) !== JSON.stringify(parentFinal.get(key)))
+          throw new ProblemError('dependency_unavailable');
+      }
+      if (subjects && !(await subjects.current())) throw new ProblemError('dependency_unavailable');
     },
   };
 }
