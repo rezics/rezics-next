@@ -6,6 +6,7 @@ import type { MountedRoute } from '../../../src/http/request.ts';
 await import('reylo/register');
 const { actorFixture } = await import('../actor-side-fixture.ts');
 const { createPool } = await import('../../../src/database/pool.ts');
+const { configureTestReceiptKeys, testReceiptKeys } = await import('../../support/receipt-keys.ts');
 const { createAccess } = await import('../../../src/access/index.ts');
 const { GLOBAL_CONTEXT } = await import('../../../src/access/gates/catalogue.ts');
 const { readExposureManagementPage } = await import('../../../src/access/gates/management-read.ts');
@@ -80,6 +81,7 @@ async function nativeRead(
 }
 
 beforeAll(async () => {
+  configureTestReceiptKeys(pool);
   fixture = await actorFixture(pool);
   const requestId = newId(routeOf(fixture.principalId)!);
   await pool.query(
@@ -112,6 +114,7 @@ beforeAll(async () => {
       pool,
       routeKey: new Uint8Array(32).fill(113),
       tokens: cursorKeys,
+      receiptKeys: testReceiptKeys(),
       clock: () => instant,
       access: (config) => {
         access = createAccess({
