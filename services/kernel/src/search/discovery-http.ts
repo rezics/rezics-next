@@ -1,6 +1,7 @@
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
+import { EmptyRecoverySchema } from './http/empty-recovery-schemas.ts';
 import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import { routeOf } from '../route/route.ts';
@@ -266,6 +267,7 @@ export const DiscoveryPageSchema = t.Object(
     next: continuation,
     as_of: t.String({ format: 'date-time' }),
     viewerFacts: t.Optional(viewerFacts),
+    emptyRecovery: t.Optional(EmptyRecoverySchema),
   },
   closed,
 );
