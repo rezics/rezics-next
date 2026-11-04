@@ -19,6 +19,7 @@ import { GLOBAL, QUESTION } from '../src/features/pages/subject-ratings';
 type ChildReader = typeof releaseSearchQuery.readReleaseSearchChildren;
 type ChildReaderInput = Parameters<ChildReader>[0];
 type ChildReaderResult = Awaited<ReturnType<ChildReader>>;
+type ChildCard = Extract<ChildReaderResult, { status: 'ready' }>['page']['children'][number];
 
 let readChildren: ChildReader = releaseSearchQuery.readReleaseSearchChildren;
 mock.module('../src/search/release-search-query', () => ({
@@ -512,7 +513,9 @@ test('work expansions keep independent child progress and resume their own respo
     completeFirst = resolve;
   });
   const asOf = '2026-11-04T00:00:00Z';
-  const ready = (children: ReturnType<typeof groupedCard>[], next: string | null): ChildReaderResult => ({
+  const card = (date: object, id: string, title: string): ChildCard =>
+    groupedCard(date, id, releaseType, title) as unknown as ChildCard;
+  const ready = (children: ChildCard[], next: string | null): ChildReaderResult => ({
     status: 'ready',
     page: { status: 'ready', children, next, as_of: asOf },
   });
@@ -524,13 +527,13 @@ test('work expansions keep independent child progress and resume their own respo
     calls.push(data);
     if (data.work === firstWork && data.cursor === 'preview-one') return firstPending;
     if (data.work === firstWork && data.cursor === 'resume-one')
-      return Promise.resolve(ready([groupedCard({ year: 2024 }, firstRelease, releaseType, 'First edition')], 'first-next'));
+      return Promise.resolve(ready([card({ year: 2024 }, firstRelease, 'First edition')], 'first-next'));
     if (data.work === firstWork && data.cursor === 'first-next')
-      return Promise.resolve(ready([groupedCard({ year: 2025 }, `${firstRelease}-later`, releaseType, 'First later edition')], null));
+      return Promise.resolve(ready([card({ year: 2025 }, `${firstRelease}-later`, 'First later edition')], null));
     if (data.work === secondWork && data.cursor === 'preview-two')
-      return Promise.resolve(ready([groupedCard({ year: 2023 }, secondRelease, releaseType, 'Second edition')], 'second-next'));
+      return Promise.resolve(ready([card({ year: 2023 }, secondRelease, 'Second edition')], 'second-next'));
     if (data.work === secondWork && data.cursor === 'second-next')
-      return Promise.resolve(ready([groupedCard({ year: 2024 }, `${secondRelease}-later`, releaseType, 'Second later edition')], null));
+      return Promise.resolve(ready([card({ year: 2024 }, `${secondRelease}-later`, 'Second later edition')], null));
     throw new Error('Unexpected child continuation');
   };
   const host = window.document.createElement('div');
