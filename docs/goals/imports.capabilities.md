@@ -1142,7 +1142,7 @@ evidence.
 Staff `position` remains a role code, never `schema:position`. Credited spelling is emitted only when an association
 actually supplies it; `person-characters.summary` remains association commentary. Music and live-action staff, unprofiled
 type-3/type-6 roles, and retracted or wrong-scheme vocabulary bindings stay withheld. The exported role-binding helper
-accepts type 1 for the future book caller; book selection and author assignment remain with that worker. Ordinary
+also supplies type-1 author role 2001 to the existing Book adapter; Book selection and author assignment retain their owner. Ordinary
 imports stay proposal-only unless local showcase state is explicitly provided. The work-credit consumer requires
 public projections for `schema:author`, `schema:director`, the other mapped staff properties, and `wdt:P725` with
 `wdt:P453`/`wdt:P3831`; any missing projection field remains Semantic's producer contract and is not manufactured by

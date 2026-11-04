@@ -2474,9 +2474,9 @@ does not become `wdt:P1932`. Voice credits keep the bound character on
 `wdt:P453` for that performer and work. Music and live-action staff, unprofiled
 type-3/type-6 roles, and stale or wrong-scheme role bindings remain exact gaps.
 The default Book adapter derives type-1 author role 2001 through this helper;
-The Game adapter derives type-4 staff roles through the same helper. Book selection, grain and membership
-stay with the Book adapter. Ordinary imports without explicit showcase state
-remain proposal-only.
+the Game adapter derives type-4 staff roles through the same helper. Book
+selection, grain and membership stay with the Book adapter. Ordinary imports
+without explicit showcase state remain proposal-only.
 
 - Touches: at most 64 staff and 64 voice association rows per Bangumi work;
   selected type-2 anime and type-4 Game staff use the finite staff inventory,

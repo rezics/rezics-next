@@ -3187,7 +3187,7 @@ export async function runCrossMediaSeedCli(
                       review: importPort,
                       publicClient,
                       ...(priorShowcase ? { prior: priorShowcase } : {}),
-                      subjectTypes: [2],
+                      subjectTypes: [2, 4],
                       read,
                     });
                     creditResolution = prepared;
