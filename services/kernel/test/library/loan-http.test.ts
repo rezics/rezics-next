@@ -53,6 +53,7 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
 
   const openPath = '/v1/copy-loans?filter=open&limit=20';
   const onDueDay = await native.send('owner', 'GET', openPath);
+  if (onDueDay.status !== 200) throw new Error(`Loan list returned ${onDueDay.status}: ${await onDueDay.text()}`);
   expect(onDueDay.status).toBe(200);
   expect(await onDueDay.json()).toMatchObject({
     boundary: { calendar: 'gregorian', zone: 'UTC', today: '2026-10-26' },
