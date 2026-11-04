@@ -1594,6 +1594,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged dump bytes cannot hide missing or retracted Concepts. Completeness remains a review gap on `wdt:P31`; supersession is not proposed.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Publish selected-family VNDB release dates and states
+
+- Touches: the ordinary selected-family plan, already selected `releases` / `releases_vn` / `vn.devstatus` rows, current native scheme/concept point reads for required development-status and released-state codes, the existing seed/importer caller, and ordinary public batch/fence/candidate commands. The standalone first-64 archive planner is not invoked.
+- Bound: one date or released-state row per selected release and one development-status row per selected work, inside the existing per-record vocabulary (64 rows), candidate (≤300) and journal budgets. Completeness stays a `wdt:P31` qualifier gap. TBA/unknown stay mapper `property_not_admitted` on `schema:keywords` because the current Release profile omits that property; a newly available development-status binding publishes work keywords. Decision: selected-family `schema:exampleOfWork` stays on the existing graph edge; the mapper still records the completeness gap without a second association. Decision: do not remap TBA/unknown onto `schema:creativeWorkStatus`.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. Local proof: `bun test services/importer/tests/showcase-vndb-releases.test.ts`. Native outcome `services/kernel/test/imports/showcase-vndb-releases.test.ts` is registered and not executed as a worker check in this attempt.
+
 ### Import authored VNDB release titles
 
 - Touches: the same selected-family and date-fidelity operator entry points, plus `releases_titles` COPY rows whose exact release ID is already selected. Titles share `convertCrossMediaEntity`; they do not invent a second converter, identity or language-split release.
@@ -2035,11 +2041,20 @@ VNDB release supersession remains a release-to-release `wdt:P155` gap while the
 released VNDB Release profile lacks that property. The production release-fidelity
 operator now supplies `release-date`, `development-status` and `release-work` rows
 from authored COPY `releases.released`, `vn.devstatus` and `releases_vn.rtype`.
-TBA, unknown and absent release dates remain distinct outcomes; date precision is
-never guessed. Completeness stays a `wdt:P31` qualifier gap on the release-to-work
-fact. These proposals do not contain VNDB votes, personal lists or score-derived
-facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA
-and 00/99 omitted components to year or month precision.
+The default selected-family seed uses the same coordinator through
+[`showcase-vndb-releases.ts`](src/showcase-vndb-releases.ts): it collects facts
+only for already selected works and releases, verifies current bindings, and
+composes that admission with any sibling adapter. TBA, unknown and absent release
+dates remain distinct outcomes; date precision is never guessed. Completeness
+stays a `wdt:P31` qualifier gap on the release-to-work fact. These proposals do
+not contain VNDB votes, personal lists or score-derived facts. Decision: COPY
+integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA and 00/99 omitted
+components to year or month precision. Decision: default `schema:exampleOfWork`
+stays on the existing graph edge; the mapper records the completeness gap without
+a second association. TBA/unknown stay mapper `property_not_admitted` on
+`schema:keywords` because the current Release profile omits that property; a
+newly available development-status binding publishes work keywords. Decision: do
+not remap TBA/unknown onto `schema:creativeWorkStatus`.
 
 Selected-family `chars` rows already reach `convertCrossMediaEntity`. Revision
 `cross-media-entities@4` publishes admitted height and weight from those COPY

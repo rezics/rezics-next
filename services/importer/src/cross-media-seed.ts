@@ -80,6 +80,10 @@ export type BangumiCharacterAppearance = {
   roleCode: number | string;
   order?: number | string | null;
 };
+export type CrossMediaReleaseFacts = {
+  works: Map<string, { devstatus: number | undefined }>;
+  releases: Map<string, { released: unknown; links: { vid: string; completeness: string }[] }>;
+};
 export type CrossMediaPlan = {
   records: Record<Provider, SourceRecord[]>;
   entities: Record<Provider, SourceRecord[]>;
@@ -92,6 +96,8 @@ export type CrossMediaPlan = {
   relationScope: string[];
   relationSnapshotDigest: string;
   relationSnapshotComplete: boolean;
+  /** Selected-family VNDB release dates/states for the common showcase publisher. */
+  releaseFacts?: CrossMediaReleaseFacts;
 };
 function ensure(value: unknown, message: string): asserts value {
   if (!value) throw new TypeError(message);
@@ -1466,6 +1472,7 @@ export type CrossMediaSeedExtras = {
   sourceVocabulary?: SourceVocabularyBindings;
   providers?: readonly Provider[];
   mediaDeadlineMs?: ImporterOptions['mediaDeadlineMs'];
+  onConversionOutput?: ImporterOptions['onConversionOutput'];
 };
 
 export async function seedCrossMedia(
@@ -1482,6 +1489,7 @@ export async function seedCrossMedia(
     ...(extras?.vocabularyAdmission ? { vocabularyAdmission: extras.vocabularyAdmission } : {}),
     ...(extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
     ...(extras?.mediaDeadlineMs === undefined ? {} : { mediaDeadlineMs: extras.mediaDeadlineMs }),
+    ...(extras?.onConversionOutput === undefined ? {} : { onConversionOutput: extras.onConversionOutput }),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -1695,6 +1703,7 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
   const plan = await planCrossMediaSeed(input);
+  const { seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -1729,7 +1738,14 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   );
   await mkdir(dirname(statePath), { recursive: true });
   const port = createImportTransport({ origin: api, tokenProvider });
-  const result = await seedCrossMedia(plan, statePath, port, { origin: api }, undefined, characterBindings);
+  const result = await seedShowcaseVndbReleases({
+    tables: input,
+    plan,
+    path: statePath,
+    port,
+    destination: { origin: api },
+    ...(characterBindings === undefined ? {} : { characterBindings }),
+  });
   const { importShowcaseTags, parseShowcaseTagKnownBindings } = await import('./showcase-tags.ts');
   let knownTagBindings = parseShowcaseTagKnownBindings({ schemes: [], concepts: [] });
   if (tagBindingsPath) {
@@ -1754,6 +1770,10 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     `${JSON.stringify(
       {
         ...result,
+        facts: {
+          works: Object.fromEntries(result.facts.works),
+          releases: Object.fromEntries(result.facts.releases),
+        },
         publicTags: {
           admitted: publicTags.admitted,
           vocabulary: publicTags.vocabulary,
