@@ -87,7 +87,11 @@ function port(commands: BatchCommand[], known: Map<string, unknown>): CrossMedia
             created.set(command.source.external_id, { id, type: command.subject.type });
             return { key: command.key, status: 201 as const, value: { id, revision: 1 } };
           }
-          return { key: command.key, status: 201 as const, value: { candidate: randomUUID(), revision: 1 } };
+          return {
+            key: command.key,
+            status: 201 as const,
+            value: command.op === 'propose' ? { candidate: randomUUID(), revision: 1 } : { revision: 1 },
+          };
         }),
       };
     },
