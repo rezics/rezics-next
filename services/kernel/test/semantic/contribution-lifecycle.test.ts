@@ -285,3 +285,39 @@ test('restoration additionally requires current Global proposal permission while
   }
   status(await call('POST', `${path(record)}:restoreDeleted`, 'owner', {}), 200);
 });
+
+test('exact lifecycle recovers a candidate outside the first page with current author authority and no payload', async () => {
+  const subject = await person();
+  for (let i = 0; i < 21; i++) await proposal(subject);
+  const target = await proposal(subject);
+  for (let i = 0; i < 21; i++) await proposal(subject);
+  const page = await call('GET', `/v1/subjects/${subject}/candidates?property=schema%3Aurl&limit=20`, 'owner');
+  status(page, 200);
+  expect(page.body.candidates.some((candidate: { id: string }) => candidate.id === target.candidate)).toBe(false);
+  const address = `${path(target)}/lifecycle?property=schema%3Aurl`;
+  const available = await call('GET', address, 'owner');
+  status(available, 200);
+  expect(available.body).toMatchObject({
+    subject,
+    candidate: target.candidate,
+    state: 'available',
+    actions: { state: 'available', operations: ['delete'] },
+  });
+  const stranger = await call('GET', address, 'stranger');
+  status(stranger, 200);
+  expect(stranger.body.actions).toEqual({ state: 'available', operations: [] });
+  status(await call('DELETE', path(target), 'owner'), 200);
+  const deleted = await call('GET', address, 'owner');
+  status(deleted, 200);
+  expect(deleted.body).toMatchObject({
+    state: 'deleted',
+    selected: false,
+    actions: { state: 'available', operations: ['restore'] },
+  });
+  expect(JSON.stringify(deleted.body)).not.toContain(target.payload);
+  status(await call('POST', `${path(target)}:restoreDeleted`, 'owner', {}), 200);
+  const restored = await call('GET', address, 'owner');
+  status(restored, 200);
+  expect(restored.body).toMatchObject({ state: 'available', selected: false, actions: { operations: ['delete'] } });
+  expect(JSON.stringify(restored.body)).not.toContain(target.payload);
+});
