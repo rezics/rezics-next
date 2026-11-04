@@ -239,6 +239,19 @@ export function useOwnVotesCurrentOrigin(
           candidate.responseVersion === responseVersion &&
           responseVersion > previousResponseVersion &&
           responseReads.current.started === requestNumber;
+        console.log('read custody', {
+          count: state?.dataUpdateCount,
+          responseCount,
+          started: responseReads.current.started,
+          completed: responseReads.current.completed,
+          requestNumber,
+          exactQueryRead,
+          exactRouteRead,
+          sameData: state?.data === candidate.data,
+          success: candidate.isSuccess,
+          status: state?.status,
+          matches: isOwnVotesRead(candidate.data) && matches(candidate.data, responseSubject, cursor, locale),
+        });
         if (
           candidate.isSuccess !== true ||
           state?.status !== 'success' ||
