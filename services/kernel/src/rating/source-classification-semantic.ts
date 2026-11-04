@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { accessCheck, type Access, type Actor } from '../request/access.ts';
-import { resolveSubject } from '../library/subject-anchor.ts';
+import { resolveSubject, SubjectIdentityUnavailableError } from '../library/subject-anchor.ts';
 import { partitionReadClient } from '../database/read-snapshot.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { readContext, publicContextEligibility } from '../semantic/context.ts';
@@ -44,9 +44,21 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
     const ids = [...new Set(associations.flatMap((a) => [a.subjectId, a.targetId]))];
     const mappings = await identityEpochStore.readMappings(config.pool, ids);
     const subjects = new Map<string, string>();
+    const unavailableSubjects = new Set<string>();
     for (const [index, id] of ids.entries()) {
-      const current = await resolveSubject(config, actor, id, undefined, context);
       const mapping = mappings[index];
+      if (mapping?.state === 'unavailable') {
+        unavailableSubjects.add(id);
+        continue;
+      }
+      let current;
+      try {
+        current = await resolveSubject(config, actor, id, undefined, context);
+      } catch (error) {
+        if (!(error instanceof SubjectIdentityUnavailableError)) throw error;
+        unavailableSubjects.add(id);
+        continue;
+      }
       if (current?.subjectId !== id || mapping?.state !== 'mapped' || mapping.terminal !== id) continue;
       const version = await withReadTransaction(config.pool, async (client) => {
         await partitionReadClient(client, partitionOf(routeOf(id)!));
@@ -84,6 +96,10 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
     for (const a of associations) {
       const key = classificationAssociationKey(a);
       result.set(key, { state: 'unavailable', reason: 'not_found' });
+      if (unavailableSubjects.has(a.subjectId) || unavailableSubjects.has(a.targetId)) {
+        result.set(key, { state: 'unavailable', reason: 'authority_unavailable' });
+        continue;
+      }
       if (!subjects.get(a.subjectId) || !subjects.get(a.targetId) || !contexts.get(a.contextId)) continue;
       const release = releases.get(a.release);
       if (!release) {
