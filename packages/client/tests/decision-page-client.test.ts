@@ -52,3 +52,22 @@ test('the installed client returns available, concealed and unavailable target c
     expect(result.data).toEqual(page);
   }
 });
+
+test('the installed appeal command sends the statement and request credentials', async () => {
+  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    expect(String(input)).toBe('https://kernel.test/v1/moderation-decisions/decision-1:appeal');
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(String(init?.body))).toEqual({ statement: 'Please reconsider' });
+    const headers = new Headers(init?.headers);
+    expect(headers.get('authorization')).toBe('Bearer access-token');
+    expect(headers.get('idempotency-key')).toBe('appeal-key');
+    return Response.json({ id: 'appeal-1' }, { status: 201 });
+  }) as typeof globalThis.fetch;
+  const client = createKernelClient('https://kernel.test', { fetch });
+  const result = await client['moderation-decisions']({ id: 'decision-1' }).$appeal.post(
+    { statement: 'Please reconsider' },
+    { headers: { authorization: 'Bearer access-token', 'idempotency-key': 'appeal-key' } },
+  );
+  expect(result.error).toBeNull();
+  expect(result.data).toEqual({ id: 'appeal-1' });
+});
