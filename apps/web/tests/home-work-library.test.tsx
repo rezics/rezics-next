@@ -187,9 +187,9 @@ test('the mounted action keeps its destination while stale or missing private ro
   const reader = { state: 'signed-in', subject: scope.reader, csrfToken: 'credential' };
   client.setQueryData(['session'], reader);
   const destination = '/en/subjects/work-1/Example?slot=collections';
-  const render = (expectedScope = scope) => (
+  const render = (expectedScope = scope, prepared = current) => (
     <QueryClientProvider client={client}>
-      <HomeWorkLibraryProvider expectedScope={expectedScope} signedIn enabled projection={current}>
+      <HomeWorkLibraryProvider expectedScope={expectedScope} signedIn enabled projection={prepared}>
         <HomeWorkLibraryAction rowKey="occurrence-1" subjectId="work-1" href={destination} locale="en" />
         <HomeWorkLibraryAction subjectId="omitted-work" href={destination} locale="en" />
       </HomeWorkLibraryProvider>
@@ -204,6 +204,11 @@ test('the mounted action keeps its destination while stale or missing private ro
     expect(host.textContent).toContain('8 / 10');
     expect(host.querySelector(`a[href="${destination}"]`)).not.toBeNull();
     expect(host.querySelector('[data-slot="home-work-library-entry-unavailable"]')).not.toBeNull();
+    await act(async () => root.render(render({ ...scope, observation: 'withdrawn' })));
+    await act(async () => root.render(render()));
+    expect(host.querySelector('[data-slot="home-work-library-entry"]')).toBeNull();
+    await act(async () => root.render(render(scope, { ...current })));
+    expect(host.textContent).toContain('8 / 10');
     await act(async () => {
       client.setQueryData(['session'], { ...reader, subject: 'replacement' });
     });

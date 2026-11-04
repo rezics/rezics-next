@@ -51,6 +51,15 @@ export function HomeWorkLibraryProvider({
   if (admission.reader && (reading?.state !== 'signed-in' || reading.observation.id !== admission.reader.id))
     admission.retired = true;
   if (!admission.retired && !admission.reader && reading?.state === 'signed-in') admission.reader = reading.observation;
+  if (
+    hydrated &&
+    projection &&
+    (!enabled ||
+      !signedIn ||
+      !sameHomeWorkLibraryScope(expectedScope, projection.scope) ||
+      !projection.lease.isCurrent())
+  )
+    admission.retired = true;
   const subscribe = useMemo(
     () => (lease ? (listener: () => void) => lease.subscribe(listener) : subscribeNothing),
     [lease],
@@ -62,6 +71,7 @@ export function HomeWorkLibraryProvider({
     enabled &&
     signedIn &&
     projection &&
+    !admission.retired &&
     (!client ||
       (!admission.retired &&
         reading?.state === 'signed-in' &&
