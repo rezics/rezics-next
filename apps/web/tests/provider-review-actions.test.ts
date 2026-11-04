@@ -271,3 +271,24 @@ test('fresh decisions require native operations independently of queue eligibili
   expect(retried).toEqual(sealed.attempts.map(({ command }) => command));
   expect(prepareProviderBatch(scope, [row], selected, 'accept')).toBeNull();
 });
+
+test('a malformed native acknowledgment remains uncertain and retries the identical command', async () => {
+  const { scope, rows } = visible();
+  const batch = prepareProviderBatch(scope, rows, [providerRowKey(rows[0]!)], 'accept')!;
+  const received: string[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: async (input) => {
+      const request = input as Request;
+      received.push(JSON.stringify([await request.json(), request.headers.get('idempotency-key')]));
+      return Response.json({
+        acceptance: { context: scope.context, candidate: rows[0]!.candidate.id, decision: 'accept' },
+      });
+    },
+  });
+  const confirm = (command: ProviderDecision) => decideProviderCandidate(client, 'Bearer current', command);
+  const uncertain = await runProviderBatch(batch, confirm);
+  expect(uncertain.attempts[0]!.result).toEqual({ ok: false, reason: 'unavailable' });
+  await runProviderBatch(uncertain, confirm);
+  expect(received).toHaveLength(2);
+  expect(received[0]).toBe(received[1]);
+});

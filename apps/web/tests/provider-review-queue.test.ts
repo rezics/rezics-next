@@ -203,6 +203,6 @@ test('unavailable action hydration preserves comparisons but grants no fresh que
   );
   expect(html).toContain(m.prq_actions_unavailable());
   expect(html).toContain(fixture.native.publicRead.subject.labels.en!);
-  expect(html).toMatch(/role="checkbox"[^>]*disabled/);
+  expect(html).toMatch(/<[^>]+(?=[^>]*role="checkbox")(?=[^>]*disabled)[^>]+>/);
   expect(html).not.toContain(m.prq_selection_not_allowed());
 });
