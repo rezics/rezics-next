@@ -124,7 +124,9 @@ export function createShelfTitlePreparation(deps: {
                 )
               : { status: 'current' as const, entries: [] };
             if (labels.status !== 'current')
-              throw new ShelfReadUnavailableError('Content exact disclosed title batch under the captured source basis');
+              throw new ShelfReadUnavailableError(
+                'Content exact disclosed title batch under the captured source basis',
+              );
             const observations = shelfTitleObservations(
               selected.map((row) => row.subject_id),
               labels.entries,

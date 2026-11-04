@@ -41,17 +41,19 @@ test('title policy and cursor query distinguish language precedence, state, Type
 });
 
 test('denied/hidden/partial title observations stay unavailable; visible missing labels are explicit', async () => {
-  await expect(currentShelfTitleBasis(undefined, owner, ['en'], actor)).rejects.toMatchObject({
+  const missingProducer = currentShelfTitleBasis(undefined, owner, ['en'], actor);
+  await expect(missingProducer).rejects.toBeInstanceOf(ShelfReadUnavailableError);
+  await expect(missingProducer).rejects.toMatchObject({
     binding: 'Content shelfTitleInputs.observe complete-source producer installation',
   });
-  await expect(
-    currentShelfTitleBasis(
-      { basis: async () => ({ status: 'unavailable' }), labels: async () => ({ status: 'unavailable' }) },
-      owner,
-      ['en'],
-      actor,
-    ),
-  ).rejects.toMatchObject({
+  const incompleteSource = currentShelfTitleBasis(
+    { basis: async () => ({ status: 'unavailable' }), labels: async () => ({ status: 'unavailable' }) },
+    owner,
+    ['en'],
+    actor,
+  );
+  await expect(incompleteSource).rejects.toBeInstanceOf(ShelfReadUnavailableError);
+  await expect(incompleteSource).rejects.toMatchObject({
     binding: 'Content complete whole-source title/disclosure/redirect/identity/source-owner observation',
   });
   expect(() => shelfTitleObservations([subjectId], [])).toThrow(ShelfReadUnavailableError);
@@ -61,8 +63,12 @@ test('denied/hidden/partial title observations stay unavailable; visible missing
   expect(() =>
     shelfTitleObservations([subjectId, subjectId], [observation, { ...observation, subjectId: newId(0x7b20) }]),
   ).toThrow(ShelfReadUnavailableError);
+  const oversized = Array.from({ length: 101 }, () => ({ ...observation, subjectId: newId(0x7b20) }));
   expect(() =>
-    shelfTitleObservations(Array.from({ length: 101 }, () => newId(0x7b20)), []),
+    shelfTitleObservations(
+      oversized.map((row) => row.subjectId),
+      oversized,
+    ),
   ).toThrow(ShelfReadUnavailableError);
 });
 
