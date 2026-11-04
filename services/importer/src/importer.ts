@@ -354,7 +354,6 @@ export class Importer {
         record_revision: staged.row.recordRevision,
         record: staged.projection.normalizedRecord,
       },
-<<<<<<< HEAD
       {
         source: registration.source,
         ...(conversionContext.subjectId === undefined ? {} : { subjectId: conversionContext.subjectId }),
