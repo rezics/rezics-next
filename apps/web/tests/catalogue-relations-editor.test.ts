@@ -275,13 +275,13 @@ test('relationship eligibility batches exact disclosure with separate mounted op
   ]);
   fixture.concealSubjects([relationActor]);
   const concealed = await fixture.transport.read(fixture.slot);
-  expect(concealed.ok && concealed.authority.disclosure).toBe('unreadable');
+  expect(concealed.ok && concealed.authority?.disclosure).toBe('unreadable');
   fixture.setActions(null);
   const unavailable = await fixture.transport.read(fixture.slot);
-  expect(unavailable.ok && unavailable.authority.actions).toEqual({ state: 'unavailable' });
+  expect(unavailable.ok && unavailable.authority?.actions).toEqual({ state: 'unavailable' });
   fixture.setActions([]);
   const denied = await fixture.transport.read(fixture.slot);
-  expect(denied.ok && denied.authority.actions).toEqual({
+  expect(denied.ok && denied.authority?.actions).toEqual({
     state: 'available',
     context: candidateContext,
     operations: [],

@@ -44,8 +44,9 @@ export type RelationRead =
   | CandidateFailure
   | {
       ok: true;
-      viewer: 'signed-in';
-      authority: CandidateAuthority;
+      /** Profile-owned comparison seeds have no action evidence until the private read completes. */
+      viewer?: 'signed-in';
+      authority?: CandidateAuthority;
       public: SubjectRead;
       descriptor?: RelationTypeDescriptor;
       fields: RelationField[];
