@@ -209,6 +209,10 @@ test('Record and correct exact progress and a selected-field journal with retain
       // Query observers deliver batched notifications on the next scheduler turn.
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
+    // Admission may mount a fresh query; its response has a separate notification turn.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
   };
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
