@@ -1,5 +1,5 @@
-import type { AccountActor } from "../request/access.ts";
-import type { ModerationDirectoryScope } from "./moderation-directory-source.ts";
+import type { AccountActor } from '../request/access.ts';
+import type { ModerationDirectoryScope } from './moderation-directory-source.ts';
 
 /** Local composition seam for absent foreign authority CURRENTNESS, not a
  * second permission evaluator. Access still evaluates every scope exactly.
@@ -23,5 +23,4 @@ export type ModerationDirectoryAuthorityReader = (
  * base; membership inverses and Access known-resource roles are insufficient.
  * No scans, repairs or permission flags manufacture its replacement.
  */
-export const nativeModerationAuthorityUnavailable: ModerationDirectoryAuthorityReader =
-  async () => null;
+export const nativeModerationAuthorityUnavailable: ModerationDirectoryAuthorityReader = async () => null;
