@@ -17,11 +17,14 @@ export type ArcExample = 'admitted' | 'unsupported' | 'continuation-unavailable'
 /** Authored native-operation examples; these do not assert native publication or browser acceptance. */
 export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
   const release = structuredClone(bundledRelease);
+  // These authored examples explicitly admit spoiler-qualified narrative/membership assertions.
+  release.properties['rezics:storyArc']!.qualifiers.push('rezics:spoilerLevel');
+  release.properties['rezics:sideStoryOf']!.qualifiers.push('rezics:spoilerLevel');
   if (scenario === 'unsupported') delete release.types['wd:Q2620972'];
   const summary = (
     id: string,
     label: string,
-    type = 'schema:Book',
+    type = 'wd:Q689445',
   ): NonNullable<Forward['relations'][number]['summary']> => ({
     id,
     type,
@@ -47,7 +50,7 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
             },
           ]
         : []),
-    ],
+    ].filter((snak) => release.properties[property]!.qualifiers.includes(snak.property.id)),
     references: [
       {
         hash: 'arc-source',
@@ -72,7 +75,7 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
       property: 'rezics:storyArc',
       statement: assertion.id,
       assertion,
-      type: 'schema:Book',
+      type: 'wd:Q689445',
       label: id === workId ? 'Later title' : 'Earlier title',
       summary: summary(id, id === workId ? 'Later title' : 'Earlier title'),
       related: {},
@@ -122,7 +125,7 @@ export function arcExample(scenario: ArcExample = 'admitted', locale = 'en') {
   const publicRead = (id: string): SubjectRead => ({
     subject: {
       id,
-      type: id === arcId ? 'wd:Q2620972' : 'schema:Book',
+      type: id === arcId ? 'wd:Q2620972' : 'wd:Q689445',
       context: candidateContext,
       labels: { en: id === arcId ? 'Harbour arc' : 'Later title' },
       descriptions: {},

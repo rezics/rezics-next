@@ -157,9 +157,10 @@ test('replacement exposure retires accepted controls and an in-flight continuati
     expect(mounted.host.querySelectorAll('a')).toHaveLength(0);
     await mounted.render(props);
     expect(mounted.host.textContent).toContain(m.arc_reader_unavailable());
-    await mounted.render({ ...props, source: {}, transport: fixture.read });
+    const recovered = { ...props, source: {}, transport: fixture.read };
+    await mounted.render(recovered);
     expect(mounted.host.textContent).toContain('Later title');
-    await mounted.render({ ...props, locale: 'ja' });
+    await mounted.render({ ...recovered, locale: 'ja' });
     expect(mounted.host.querySelectorAll('a')).toHaveLength(0);
   } finally {
     await mounted.close();

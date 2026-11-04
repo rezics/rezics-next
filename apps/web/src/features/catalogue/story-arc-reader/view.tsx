@@ -112,6 +112,10 @@ function ArcWindow({
   const origin = useRef<HTMLAnchorElement | null>(null);
   const memberOrigin = useRef<HTMLButtonElement | null>(null);
   const returnFocus = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (!current()) {
+      event.preventDefault();
+      return;
+    }
     if (event.detail === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey) origin.current = event.currentTarget;
   };
   useEffect(() => {

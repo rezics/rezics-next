@@ -150,6 +150,13 @@ export async function readArc(
     const page = result.data;
     if ('links' in page && page.links.some((row) => row.property !== stream.property))
       return { ok: false, reason: 'unavailable' };
+    if (
+      'relations' in page &&
+      page.relations.some(
+        (row) => row.target !== (row.statement.value.type === 'value' ? row.statement.value.content : null),
+      )
+    )
+      return { ok: false, reason: 'unavailable' };
     const nativeRows = 'relations' in page ? page.relations : page.links;
     if (
       nativeRows.length > arcLimit ||

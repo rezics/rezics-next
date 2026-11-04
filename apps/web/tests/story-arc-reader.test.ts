@@ -57,7 +57,7 @@ test('arc-qualified appearances use one filtered work stream and fail closed on 
   });
   expect(await fixture.read()).toEqual({ ok: false, reason: 'unavailable' });
   delete fixture.release.properties['schema:character']!.relation!.filter;
-  expect(arcStreams(fixture.release, 'schema:Book', 'en', arcId)).toEqual([]);
+  expect(arcStreams(fixture.release, 'wd:Q689445', 'en', arcId)).toEqual([]);
   const unsupported = await arcExample('unsupported').read();
   expect(unsupported.ok && unsupported.stream).toBeUndefined();
   fixture.respond({ ...fixture.first, links: [], next: null });
