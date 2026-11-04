@@ -733,7 +733,7 @@ function personType(record: object): string {
     (mapping.term !== 'schema:Person' && mapping.term !== 'schema:Organization')
   )
     fail('/type', 'unsupported_type');
-  return mapping.term;
+  return mapping!.term!;
 }
 
 function producerType(record: object): string {
