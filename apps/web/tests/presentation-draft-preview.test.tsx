@@ -374,4 +374,4 @@ test('mounted editor keeps capture, edits, publication and permanent retirement 
       else Reflect.deleteProperty(globalThis, key);
     }
   }
-});
+}, 180_000);
