@@ -181,6 +181,13 @@ export function projectCommunityActionAdvice(
       watch.state === 'current' &&
       exactKeys(watch, ['state', 'watching']) &&
       typeof watch.watching === 'boolean' &&
+      (!exactThread || currentness.watch !== 'current')
+    )
+      watchAdvice = null;
+    else if (
+      watch.state === 'current' &&
+      exactKeys(watch, ['state', 'watching']) &&
+      typeof watch.watching === 'boolean' &&
       exactThread !== undefined &&
       currentness.watch === 'current'
     )

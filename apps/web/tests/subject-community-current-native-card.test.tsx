@@ -44,7 +44,7 @@ test('installed native cards render through the generated reader and original ac
     await import('../src/kernel/fake/subject-community');
   const { GLOBAL } = await import('../src/features/pages/subject-ratings');
   const { m } = await import('../src/paraglide/messages.js');
-  const row = communityThread('review');
+  const row = structuredClone(communityThread('review'));
   if (row.firstPost.availability !== 'available') throw new Error('Expected opening post');
   const post = row.firstPost;
   const imageId = '01a1a000-0000-7000-8000-000000000098';
