@@ -48,12 +48,23 @@ function TagDetails({
     spoiler: spoilerThreshold === 1 || spoilerThreshold === 2 ? spoilerThreshold : 0,
     focus,
   });
-  const conceptQuery = new URLSearchParams({ returnTo: returnToFor?.(selection('browse')) ?? workHref });
+  const conceptQuery = new URLSearchParams({
+    role: row.property,
+    returnTo: returnToFor?.(selection('browse')) ?? workHref,
+  });
   const evidenceQuery = new URLSearchParams({
     role: row.property,
     returnTo: returnToFor?.(selection('evidence')) ?? workHref,
   });
-  if (row.spoilerQualifiers.length) evidenceQuery.set('tagQualifiers', JSON.stringify(row.spoilerQualifiers));
+  if (row.spoilerQualifiers.length) {
+    const qualifiers = JSON.stringify(row.spoilerQualifiers);
+    conceptQuery.set('tagQualifiers', qualifiers);
+    evidenceQuery.set('tagQualifiers', qualifiers);
+  }
+  if (spoilerThreshold === 1 || spoilerThreshold === 2) {
+    conceptQuery.set('spoiler', String(spoilerThreshold));
+    evidenceQuery.set('spoiler', String(spoilerThreshold));
+  }
 
   return (
     <div className="grid min-w-0 gap-2 rounded-md border border-border/70 p-3">
