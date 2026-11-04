@@ -38,7 +38,7 @@ function isGroup(value: unknown): value is RelationGroup {
 /** Forward copy/release-to-work controls: complete-empty stays visible; a counted but hidden member is withheld. */
 export function copyWorkDisclosureControl(input: {
   items: readonly unknown[];
-  count?: { value: number } | null;
+  count?: { value: number } | null | undefined;
 }): 'available' | 'empty' | 'withheld' {
   if (input.items.length > 0) return 'available';
   if (input.count && input.count.value > 0) return 'withheld';

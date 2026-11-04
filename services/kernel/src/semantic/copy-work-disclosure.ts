@@ -23,11 +23,7 @@ import { relatedReadEligibility, subjectReadEligibility } from './eligibility.ts
 import { readIdentityMappings } from './identity-epoch-read.ts';
 import { isRelationProperty } from './item.ts';
 import { withReadTransaction } from './read.ts';
-import {
-  readSubjectSummaryObservation,
-  type SubjectSummary,
-  type SummarySources,
-} from './summaries.ts';
+import { readSubjectSummaryObservation, type SubjectSummary, type SubjectSummaryObservation } from './summaries.ts';
 
 export type {
   CopyWorkDisclosureDependencies,
@@ -141,7 +137,7 @@ export async function readCopyWorkDisclosure(
     throw new TypeError('Copy/work disclosure requires the trusted route key and finite request deadline');
   requireAccessDeadline(deps.deadline);
   const languages = request.languages?.length
-    ? validateHitOptions({ languages: [...request.languages] }).languages
+    ? (validateHitOptions({ languages: [...request.languages] }).languages ?? [])
     : [];
   const results = new Map<string, CopyWorkDisclosureState>();
   const originals = [...new Set(request.identities)];
@@ -269,9 +265,9 @@ export async function readCopyWorkDisclosure(
                 property: COPY_WORK_PROPERTY,
                 candidate: locator.candidate!,
                 target: locator.target,
-                slot: locator.slot ?? undefined,
                 context: GLOBAL_CONTEXT,
                 requireRelation: true,
+                ...(locator.slot ? { slot: locator.slot } : {}),
               });
             }
           }
@@ -319,11 +315,13 @@ export async function readCopyWorkDisclosure(
         }),
       ),
     ];
-    const languageOptions = languages.length ? { languages } : {};
     const summaryObservation =
       terminalTargets.length > 0
-        ? await readSummaries(deps, terminalTargets, languageOptions)
-        : { summaries: new Map<string, SubjectSummary | null>(), components: [] as SummarySources };
+        ? await readSummaries(deps, terminalTargets, { languages })
+        : {
+            summaries: new Map<string, SubjectSummary | null>(),
+            components: [] as SubjectSummaryObservation['components'],
+          };
     cuts.push(
       ...summaryObservation.components.map((component) => ({
         partition: component.partition,
@@ -421,10 +419,10 @@ async function mapIdentities(deps: CopyWorkDisclosureDependencies, ids: readonly
 async function readSummaries(
   deps: CopyWorkDisclosureDependencies,
   ids: readonly string[],
-  options: { languages?: readonly string[] },
+  options: { languages: readonly string[] },
 ) {
   const summaries = new Map<string, SubjectSummary | null>();
-  const components: SummarySources = [];
+  const components: SubjectSummaryObservation['components'][number][] = [];
   for (let offset = 0; offset < ids.length; offset += 256) {
     const batch = ids.slice(offset, offset + 256);
     const observed = await readSubjectSummaryObservation(deps, batch, options);
