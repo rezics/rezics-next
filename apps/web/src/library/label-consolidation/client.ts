@@ -14,10 +14,14 @@ export function consolidationClient(client: KernelClient, sourceLabelId: string,
   const writeHeaders = (key: string) => ({ ...headers, 'idempotency-key': key });
   return {
     review: (body: ReviewInput) => label.$reviewConsolidation.post(body, { headers }),
-    confirm: (body: ConfirmationInput, key: string) => label.$confirmConsolidation.post(body, { headers: writeHeaders(key) }),
-    apply: (confirmationId: string, key: string) => label.$applyConsolidation.post({ confirmationId }, { headers: writeHeaders(key) }),
-    retry: (confirmationId: string, item: number, key: string) => label.$retryConsolidation.post({ confirmationId, item }, { headers: writeHeaders(key) }),
-    cancel: (confirmationId: string, key: string) => label.$cancelConsolidation.post({ confirmationId }, { headers: writeHeaders(key) }),
+    confirm: (body: ConfirmationInput, key: string) =>
+      label.$confirmConsolidation.post(body, { headers: writeHeaders(key) }),
+    apply: (confirmationId: string, key: string) =>
+      label.$applyConsolidation.post({ confirmationId }, { headers: writeHeaders(key) }),
+    retry: (confirmationId: string, item: number, key: string) =>
+      label.$retryConsolidation.post({ confirmationId, item }, { headers: writeHeaders(key) }),
+    cancel: (confirmationId: string, key: string) =>
+      label.$cancelConsolidation.post({ confirmationId }, { headers: writeHeaders(key) }),
     result: (confirmationId: string) => label.consolidations({ confirmationId }).get({ headers }),
   };
 }

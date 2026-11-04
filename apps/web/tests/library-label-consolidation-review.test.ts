@@ -2,14 +2,25 @@ import { describe, expect, test } from 'bun:test';
 import { ConsolidationReview } from '../src/library/label-consolidation/review';
 import type { ReviewPage, SelectedAssignment } from '../src/library/label-consolidation/client';
 
-const selected = (n: number): SelectedAssignment[] => Array.from({ length: n }, (_, i) => ({
-  subjectId: `retained-subject-${i}`, assignmentId: `assignment-${i}`, revision: 3,
-}));
+const selected = (n: number): SelectedAssignment[] =>
+  Array.from({ length: n }, (_, i) => ({
+    subjectId: `retained-subject-${i}`,
+    assignmentId: `assignment-${i}`,
+    revision: 3,
+  }));
 function page(items: SelectedAssignment[], next: string | null = null): ReviewPage {
-  return { selection: 'advisory', sourceLabel: { id: 'source', revision: 2, name: 'Source' },
-    targetLabel: { id: 'target', revision: 4, name: 'Target' }, next,
-    items: items.map(item => ({ selected: item, source: { id: item.assignmentId, revision: 3, effective: true },
-      target: null, outcome: 'movable' })) };
+  return {
+    selection: 'advisory',
+    sourceLabel: { id: 'source', revision: 2, name: 'Source' },
+    targetLabel: { id: 'target', revision: 4, name: 'Target' },
+    next,
+    items: items.map((item) => ({
+      selected: item,
+      source: { id: item.assignmentId, revision: 3, effective: true },
+      target: null,
+      outcome: 'movable',
+    })),
+  };
 }
 
 describe('selected native consolidation review', () => {
@@ -32,14 +43,17 @@ describe('selected native consolidation review', () => {
     expect(review.confirmation()!.items[0]!.selected.revision).toBe(3);
   });
 
-  test.each(['changed', 'missing', 'inaccessible', 'capacity_limited'] as const)('%s cannot shrink the confirmed selection', outcome => {
-    const review = new ConsolidationReview('source', 'target', selected(1));
-    const value = page(selected(1));
-    value.items[0]!.outcome = outcome;
-    if (outcome === 'inaccessible') value.items[0]!.source = null;
-    expect(review.request(() => true).accept(value)).toBe(true);
-    expect(review.confirmation()).toBeNull();
-  });
+  test.each(['changed', 'missing', 'inaccessible', 'capacity_limited'] as const)(
+    '%s cannot shrink the confirmed selection',
+    (outcome) => {
+      const review = new ConsolidationReview('source', 'target', selected(1));
+      const value = page(selected(1));
+      value.items[0]!.outcome = outcome;
+      if (outcome === 'inaccessible') value.items[0]!.source = null;
+      expect(review.request(() => true).accept(value)).toBe(true);
+      expect(review.confirmation()).toBeNull();
+    },
+  );
 
   test('late pages and retired reader evidence are rejected', () => {
     const review = new ConsolidationReview('source', 'target', selected(1));
@@ -55,9 +69,15 @@ describe('selected native consolidation review', () => {
 
   test('renamed target, mismatched identities and oversized pages invalidate the visit', () => {
     for (const change of [
-      (value: ReviewPage) => { value.targetLabel.revision++; },
-      (value: ReviewPage) => { value.items[0]!.selected.assignmentId = 'recreated'; },
-      (value: ReviewPage) => { value.selection = 'x'.repeat(17000); },
+      (value: ReviewPage) => {
+        value.targetLabel.revision++;
+      },
+      (value: ReviewPage) => {
+        value.items[0]!.selected.assignmentId = 'recreated';
+      },
+      (value: ReviewPage) => {
+        value.selection = 'x'.repeat(17000);
+      },
     ]) {
       const review = new ConsolidationReview('source', 'target', selected(5));
       review.request(() => true).accept(page(selected(4), 'next'));
