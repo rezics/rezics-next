@@ -8,15 +8,22 @@ import { observeSql } from './sql-observer.ts';
 export async function createAuthorContributionActionsFixture() {
   const f = await createThreadReadingPageFixture();
   try {
-    await f.checked('PATCH', `/v1/accounts/${f.author.accountId}`, {
-      bearer: f.author.bearer,
-      body: { publicViews: { posts: true, reviews: true } },
-    }, 200);
+    await f.checked(
+      'PATCH',
+      `/v1/accounts/${f.author.accountId}`,
+      {
+        bearer: f.author.bearer,
+        body: { publicViews: { posts: true, reviews: true } },
+      },
+      200,
+    );
     const conceptId = await f.subject('Native contribution discussion board');
-    const discussionBoard = (await f.checked('POST', '/v1/boards', {
-      bearer: f.author.bearer,
-      body: { conceptId, title: 'Contribution discussions', purpose: 'discussion', visibility: 'published' },
-    })).board.id as string;
+    const discussionBoard = (
+      await f.checked('POST', '/v1/boards', {
+        bearer: f.author.bearer,
+        body: { conceptId, title: 'Contribution discussions', purpose: 'discussion', visibility: 'published' },
+      })
+    ).board.id as string;
     for (const person of [f.author, f.other])
       await f.grant(discussionBoard, person.accountId, ['thread:create', 'board:read']);
 
@@ -25,14 +32,20 @@ export async function createAuthorContributionActionsFixture() {
       // as incidental setup for another independently selected journey.
       const subjectIds = kind === 'review' ? [await f.subject('Selected contribution review')] : [];
       await f.setTime((f.dependencies.clock?.() ?? new Date()).getTime() + 1);
-      return (await f.checked('POST', '/v1/threads', {
-        bearer: f.author.bearer,
-        body: {
-          kind, title: 'Native selected contribution', body: fromPlainText('Exact contribution opening'),
-          licence: 'CC0-1.0', boardId: kind === 'review' ? f.boardId : discussionBoard,
-          subjectIds, visibility: 'published',
-        },
-      })).thread;
+      return (
+        await f.checked('POST', '/v1/threads', {
+          bearer: f.author.bearer,
+          body: {
+            kind,
+            title: 'Native selected contribution',
+            body: fromPlainText('Exact contribution opening'),
+            licence: 'CC0-1.0',
+            boardId: kind === 'review' ? f.boardId : discussionBoard,
+            subjectIds,
+            visibility: 'published',
+          },
+        })
+      ).thread;
     };
     const admit = async (view: AuthorContributionActionsInput['view'], cursor: string | null = null, limit = 20) => {
       const query = new URLSearchParams({ limit: String(limit) });
@@ -43,14 +56,18 @@ export async function createAuthorContributionActionsFixture() {
       if (page.response.status !== 200 || !page.value.actionSelection)
         throw new Error(`Native author admission failed: ${page.response.status} ${page.text}`);
       const input: AuthorContributionActionsInput = {
-        view, cursor, ...structuredClone(page.value.actionSelection),
+        view,
+        cursor,
+        ...structuredClone(page.value.actionSelection),
       };
       for (const reference of input.references) Object.freeze(reference);
       Object.freeze(input.references);
       Object.freeze(input);
-      const read = (bearer?: string) => f.call('POST', `/v1/accounts/${f.author.accountId}/contribution-actions`, {
-        ...(bearer === undefined ? {} : { bearer }), body: input,
-      });
+      const read = (bearer?: string) =>
+        f.call('POST', `/v1/accounts/${f.author.accountId}/contribution-actions`, {
+          ...(bearer === undefined ? {} : { bearer }),
+          body: input,
+        });
       return { page, input, read };
     };
     const duringAssembly = async (selected: Awaited<ReturnType<typeof admit>>, mutate: () => Promise<unknown>) => {

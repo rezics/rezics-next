@@ -15,9 +15,13 @@ beforeAll(async () => {
     throw new Error('Author contribution setup failed; no journey outcome reached', { cause });
   }
 }, 240_000);
-afterAll(async () => { await f?.close(); });
+afterAll(async () => {
+  await f?.close();
+});
 let minute = 0;
-beforeEach(async () => { await f.setTime(Date.now() + ++minute * 60_000); });
+beforeEach(async () => {
+  await f.setTime(Date.now() + ++minute * 60_000);
+});
 
 function status(result: Awaited<ReturnType<typeof f.call>>, expected: number) {
   expect(result.response.status, result.text).toBe(expected);
@@ -30,7 +34,8 @@ for (const view of ['posts', 'discussion', 'reviews'] as const) {
     const selected = await f.admit(view, null, 1);
     expect(selected.input.references).toHaveLength(1);
     expect(selected.input.references[0]).toMatchObject({
-      id: source.id, placeId: thread.boardId,
+      id: source.id,
+      placeId: thread.boardId,
       sourceRevisionId: view === 'posts' ? source.revisionId : thread.firstPost.revisionId,
     });
     expect(selected.page.text).not.toMatch(/viewerSelection|viewerReaction|watching|operations/);
@@ -60,7 +65,11 @@ test('unavailable aggregates and absent own slots stay unknown; same-input retry
   const selected = await f.admit('discussion', null, 1);
   const observer = observeSql(f.system.database.pool);
   try {
-    observer.armFault({ match: { statement: counts.sql }, boundary: 'before', error: new Error('Aggregate read unavailable') });
+    observer.armFault({
+      match: { statement: counts.sql },
+      boundary: 'before',
+      error: new Error('Aggregate read unavailable'),
+    });
     const unavailable = await selected.read(f.other.bearer);
     status(unavailable, 200);
     expect(unavailable.value.reactions).toMatchObject({ state: 'unavailable', retryable: true, reactionsAsOf: null });
@@ -69,12 +78,17 @@ test('unavailable aggregates and absent own slots stay unknown; same-input retry
       expect(item).not.toHaveProperty('viewerSelection');
       expect(item).not.toHaveProperty('counts');
     }
-  } finally { await observer.close(); }
+  } finally {
+    await observer.close();
+  }
   const retained = JSON.stringify(selected.input);
   const { viewerActionRuntime: _viewerActionRuntime, ...nativeSources } = f.dependencies;
   const unavailableAdvice = await readAuthorContributionActions(
-    nativeSources, f.author.accountId, selected.input,
-    f.system.actors.other.actor, Date.now() + 120_000,
+    nativeSources,
+    f.author.accountId,
+    selected.input,
+    f.system.actors.other.actor,
+    Date.now() + 120_000,
   );
   expect(unavailableAdvice.value.actions).toMatchObject({ state: 'unavailable', retryable: true, references: [] });
   const retry = await selected.read(f.other.bearer);
@@ -88,18 +102,24 @@ test('native reaction retries recover the original receipt once and reauthorize 
   const selected = await f.admit('discussion', null, 1);
   const advice = await selected.read(f.other.bearer);
   status(advice, 200);
-  const reference = advice.value.actions.references.find((item: any) => item.type === 'content.thread' && item.id === thread.id);
-  expect(reference.operations).toContainEqual(expect.objectContaining({ operationId: 'thread.set_reaction', state: 'available' }));
+  const reference = advice.value.actions.references.find(
+    (item: any) => item.type === 'content.thread' && item.id === thread.id,
+  );
+  expect(reference.operations).toContainEqual(
+    expect.objectContaining({ operationId: 'thread.set_reaction', state: 'available' }),
+  );
   const path = `/v1/threads/${thread.id}/reaction`;
   const key = crypto.randomUUID();
   const sender = Object.freeze({ bearer: f.other.bearer, key, body: Object.freeze({ kind: 'like' }) });
   const send = () => f.call('PUT', path, sender);
   // Lose only delivery of the first real committed response. Recovery keeps the
   // original sender, credentials, semantic payload and idempotency key.
-  await expect(send().then((result) => {
-    status(result, 200);
-    throw new Error('Committed response delivery lost');
-  })).rejects.toThrow('Committed response delivery lost');
+  await expect(
+    send().then((result) => {
+      status(result, 200);
+      throw new Error('Committed response delivery lost');
+    }),
+  ).rejects.toThrow('Committed response delivery lost');
   const readback = await selected.read(sender.bearer);
   status(readback, 200);
   const receipt = await send();
@@ -118,7 +138,12 @@ test('native reaction retries recover the original receipt once and reauthorize 
   expect(effects.rows).toEqual([{ count: 1 }]);
   await f.checked('POST', '/v1/grants', {
     bearer: f.governance.bearer,
-    body: { resource: { route: routeOf(thread.id), id: thread.id }, subject: { kind: 'account', id: f.other.accountId }, actions: ['reaction:set'], valid: '(,)' },
+    body: {
+      resource: { route: routeOf(thread.id), id: thread.id },
+      subject: { kind: 'account', id: f.other.accountId },
+      actions: ['reaction:set'],
+      valid: '(,)',
+    },
   });
   await f.admin.query(
     `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
@@ -153,9 +178,15 @@ test('concealed parents and erased sources never substitute current context for 
   const selected = await f.admit('posts', null, 1);
   expect(selected.input.references[0]!.id).toBe(child.id);
   await f.grant(parent.id, f.system.actors.moderator.actor.accountId, ['moderation:takedown']);
-  await f.checked('POST', `/v1/posts/${parent.id}:takeDown`, {
-    bearer: f.system.actors.moderator.bearer, body: { reason: 'Concealed parent' },
-  }, 200);
+  await f.checked(
+    'POST',
+    `/v1/posts/${parent.id}:takeDown`,
+    {
+      bearer: f.system.actors.moderator.bearer,
+      body: { reason: 'Concealed parent' },
+    },
+    200,
+  );
   status(await selected.read(f.author.bearer), 503);
   const otherThread = await f.thread();
   const erased = await f.admit('discussion', null, 1);
@@ -168,14 +199,28 @@ test('publication withdrawal during finish fails the selected cohort without mov
   await f.thread();
   const selected = await f.admit('discussion', null, 1);
   const original = JSON.stringify({ input: selected.input, next: selected.page.value.next });
-  const result = await f.duringAssembly(selected, () => f.checked('PATCH', `/v1/accounts/${f.author.accountId}`, {
-    bearer: f.author.bearer, body: { publicViews: { posts: false } },
-  }, 200));
+  const result = await f.duringAssembly(selected, () =>
+    f.checked(
+      'PATCH',
+      `/v1/accounts/${f.author.accountId}`,
+      {
+        bearer: f.author.bearer,
+        body: { publicViews: { posts: false } },
+      },
+      200,
+    ),
+  );
   status(result, 503);
   expect(result.value.code).toBe('dependency_unavailable');
   status(await selected.read(f.author.bearer), 404);
   expect(JSON.stringify({ input: selected.input, next: selected.page.value.next })).toBe(original);
-  await f.checked('PATCH', `/v1/accounts/${f.author.accountId}`, {
-    bearer: f.author.bearer, body: { publicViews: { posts: true } },
-  }, 200);
+  await f.checked(
+    'PATCH',
+    `/v1/accounts/${f.author.accountId}`,
+    {
+      bearer: f.author.bearer,
+      body: { publicViews: { posts: true } },
+    },
+    200,
+  );
 });

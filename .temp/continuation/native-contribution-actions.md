@@ -1,28 +1,31 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/author-contribution-actions*.ts",
-    "services/kernel/src/content/routes.ts",
-    "services/kernel/src/content/schemas.ts",
-    "services/kernel/src/content/README.md",
-    "services/kernel/test/content/author-contribution-actions*.ts",
-    "services/kernel/test/content/support/author-contribution-actions*.ts"
-  ],
-  "riskAreas": ["authorization", "disclosure", "rights", "deletion", "account"],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [],
-  "estimate": {"lines": 700, "files": 5},
-  "acceptance": {
-    "tests": [
-      "Complete native report/reply and registered command/effect/default-runner journeys, credential replacement, moved/stale sources, parent and identity replacement during finish, sparse frontier and aggregate freshness while retaining existing native assertions.",
-      "Prepare independent 256/1024/4096 authored-row, history, membership, reaction, watch and authority growth under fixed selected-key/home/page/raw/output/byte budgets, with shared catalog classification, async background attribution and invisible-MVCC exclusion; controller owns physical acceptance."
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/author-contribution-actions*.ts',
+      'services/kernel/src/content/routes.ts',
+      'services/kernel/src/content/schemas.ts',
+      'services/kernel/src/content/README.md',
+      'services/kernel/test/content/author-contribution-actions*.ts',
+      'services/kernel/test/content/support/author-contribution-actions*.ts',
     ],
-    "failing": true
-  }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 700, 'files': 5 },
+  'acceptance':
+    {
+      'tests':
+        [
+          'Complete native report/reply and registered command/effect/default-runner journeys, credential replacement, moved/stale sources, parent and identity replacement during finish, sparse frontier and aggregate freshness while retaining existing native assertions.',
+          'Prepare independent 256/1024/4096 authored-row, history, membership, reaction, watch and authority growth under fixed selected-key/home/page/raw/output/byte budgets, with shared catalog classification, async background attribution and invisible-MVCC exclusion; controller owns physical acceptance.',
+        ],
+      'failing': true,
+    },
 }
 ---
 
