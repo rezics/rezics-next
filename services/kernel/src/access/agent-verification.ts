@@ -20,7 +20,15 @@ import { requestDigest } from '../http/request.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
-import { prepareReadDecisions, type Access, type AccessContext, type Actor, type Resource } from '../request/access.ts';
+import {
+  prepareReadDecisions,
+  type Access,
+  type AccessContext,
+  type AccountAuthority,
+  type Actor,
+  type ReadDecisions,
+  type Resource,
+} from '../request/access.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { withReadTransaction } from '../semantic/read.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -395,10 +403,17 @@ async function unreadVerificationAdvice(
   context: VerificationContext,
   accountId: string,
 ): Promise<AgentVerificationStatus> {
+  requireAccessDeadline(context.deadline);
   return {
     verificationRequest: await readLatestAgentVerificationRequest(pool, access, context, accountId),
     viewerActions: [],
   };
+}
+
+class VerificationAdviceFallbackError extends Error {}
+
+function adviceUnavailable(error: unknown): boolean {
+  return error instanceof AccessUnavailableError || classifyUnavailability(error) !== undefined;
 }
 
 /** Private latest request plus closed request/withdraw advice. Advice never grants command authority. */
@@ -411,16 +426,29 @@ export async function readAgentVerificationStatus(
   const route = routeOf(accountId);
   const { actor } = context;
   if (route === null || actor.kind !== 'account') throw new AgentVerificationDeniedError();
+  let decisions: ReadDecisions;
   try {
-    const decisions = await prepareReadDecisions(access, {
+    decisions = await prepareReadDecisions(access, {
       actor,
       actions: ACCOUNT_AUTHORITY_ACTIONS,
       typeActions: new Map([['access.account', ACCOUNT_AUTHORITY_ACTIONS]]),
       context,
     });
-    if (!decisions.prepareAccountAuthority) return unreadVerificationAdvice(pool, access, context, accountId);
-    const authority = await decisions.prepareAccountAuthority([accountId]);
-    const time = viewerActionReadTime(access, context);
+  } catch (error) {
+    if (!adviceUnavailable(error)) throw error;
+    return unreadVerificationAdvice(pool, access, context, accountId);
+  }
+  if (!decisions.prepareAccountAuthority) return unreadVerificationAdvice(pool, access, context, accountId);
+  let authority: AccountAuthority;
+  let time: ReturnType<typeof viewerActionReadTime>;
+  try {
+    authority = await decisions.prepareAccountAuthority([accountId]);
+    time = viewerActionReadTime(access, context);
+  } catch (error) {
+    if (!adviceUnavailable(error)) throw error;
+    return unreadVerificationAdvice(pool, access, context, accountId);
+  }
+  try {
     return await within(context.deadline, () =>
       withConnection(pool, async (connection) => {
         const client = deadlineClient(connection, context.deadline);
@@ -441,22 +469,24 @@ export async function readAgentVerificationStatus(
             account_id: accountId,
           })) as VerificationAccount | null;
           let viewerActions: AgentVerificationViewerAction[] = [];
+          let writable: Awaited<ReturnType<AccountAuthority['decide']>>;
           try {
-            const writable = await authority.decide(
+            writable = await authority.decide(
               client,
               { kind: 'verification', action: 'account:update', ids: [accountId] },
               time,
             );
-            const write = writable[accountId];
-            if (write?.allowed) {
-              const operations: string[] = [];
-              if (requestCommandEligible(target, verificationRequest)) operations.push(REQUEST_OPERATION);
-              if (withdrawCommandEligible(verificationRequest)) operations.push(WITHDRAW_OPERATION);
-              viewerActions = serializeVerificationActions(write.action, operations);
-            }
           } catch (error) {
             if (error instanceof AgentVerificationDeniedError) throw error;
-            viewerActions = [];
+            if (!adviceUnavailable(error)) throw error;
+            throw new VerificationAdviceFallbackError('Verification update advice is unavailable');
+          }
+          const write = writable[accountId];
+          if (write?.allowed) {
+            const operations: string[] = [];
+            if (requestCommandEligible(target, verificationRequest)) operations.push(REQUEST_OPERATION);
+            if (withdrawCommandEligible(verificationRequest)) operations.push(WITHDRAW_OPERATION);
+            viewerActions = serializeVerificationActions(write.action, operations);
           }
           requireAccessDeadline(context.deadline);
           await client.query('COMMIT');
@@ -466,18 +496,14 @@ export async function readAgentVerificationStatus(
             await connection.query('ROLLBACK');
           } catch (rollbackError) {
             discardConnection(connection, rollbackError as Error);
+            if (error instanceof VerificationAdviceFallbackError) throw rollbackError;
           }
           throw error;
         }
       }),
     );
   } catch (error) {
-    if (error instanceof AgentVerificationDeniedError) throw error;
-    if (
-      error instanceof AccessUnavailableError ||
-      error instanceof RangeError ||
-      classifyUnavailability(error) !== undefined
-    )
+    if (error instanceof VerificationAdviceFallbackError)
       return unreadVerificationAdvice(pool, access, context, accountId);
     throw error;
   }
