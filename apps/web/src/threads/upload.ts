@@ -459,15 +459,20 @@ export async function readSiteAvatarUploadAdvice(signal: AbortSignal): Promise<{
   const retryAfter = response.headers.get('retry-after') ?? undefined;
   if (!response.ok) {
     const refusal = await refusalFrom(response);
-    refusal.retryAfterHeader = retryAfter;
+    if (retryAfter !== undefined) refusal.retryAfterHeader = retryAfter;
     refusal.responseTime = responseTime;
     throw refusal;
   }
   try {
-    return { ok: true, body: await response.json(), retryAfter, responseTime };
+    return {
+      ok: true,
+      body: await response.json(),
+      ...(retryAfter !== undefined ? { retryAfter } : {}),
+      responseTime,
+    };
   } catch {
     const refusal = new UploadRefusal('unavailable');
-    refusal.retryAfterHeader = retryAfter;
+    if (retryAfter !== undefined) refusal.retryAfterHeader = retryAfter;
     refusal.responseTime = responseTime;
     throw refusal;
   }
