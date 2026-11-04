@@ -8,7 +8,10 @@ remaining journeys. Lines, landings and attempts are diagnostics only; allowance
 not delivered output.
 
 Throughput target: product code landed on the integrated branch, held steadily at 20,000 lines an hour and aiming
-for 40,000. Lines measure throughput; they are not the goal. Quality comes first: never write code to raise the count.
+for 40,000. Lines measure throughput; they are not the goal. The target is a lot of good code: quality comes first,
+never write code to raise the count, and never lower throughput to gain quality. Count added product lines only.
+Deleted lines are ignored and never offset output, so deleting bad code (duplicates, dead code, wrong abstractions)
+is encouraged.
 
 Size each brief as one complete user journey of about 2,000–3,000 lines, backend and interface together, which a
 worker finishes in under an hour. With 32 workers, that gives 30,000–40,000 lines an hour. Split a journey only

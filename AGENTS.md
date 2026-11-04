@@ -36,6 +36,8 @@ The `legacy` branch (tags `legacy-final` and `legacy-main-final`) is a read-only
 - Keep task and ticket IDs out of code and documents; put them in commit messages.
 - Follow [agent conduct](docs/development/agent-conduct.md): bounded reading and verification, act instead of asking,
   no receipts.
+- Deliver a lot of good code: [delivery efficiency](docs/development/efficiency.md) sets the throughput target. Deleting
+  bad code is encouraged and never offsets output.
 
 A worker starts from its brief and reads only what the brief links. Other roles read the
 [development workflow](docs/development/README.md) and its linked Goal definitions, and load
