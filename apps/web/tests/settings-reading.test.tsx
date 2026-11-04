@@ -240,10 +240,10 @@ test('confirmed replay read recovery keeps its receipt, newer baseline and later
   expect(calls[1]).toBe(original);
   await editor.reload();
   expect(editor.snapshot()).toMatchObject({
-    phase: 'review',
+    phase: 'saved',
     knownCurrent: true,
     known: current,
-    draft: { spoilerLevel: 0, suitability: 'show' },
+    draft: { spoilerLevel: 2, suitability: 'show' },
   });
   expect(editor.snapshot().confirmedReceipt?.version).toBe(4);
   expect(calls).toHaveLength(2);

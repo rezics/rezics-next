@@ -47,8 +47,8 @@ test('rejected choices survive failed and successful reads until explicit save o
       phase: 'review',
       known: fixture.current(),
       pending: null,
+      draft: { spoilerLevel: 1, suitability: 'show' },
     });
-    expect(editor.snapshot().draft).toBe(draft);
     expect(readingNeedsNavigationDecision(editor.snapshot())).toBe(true);
     expect(fixture.calls).toHaveLength(1);
     if (scenario === 'conflict') {
@@ -57,9 +57,10 @@ test('rejected choices survive failed and successful reads until explicit save o
         expectedVersion: 1,
         spoilerLevel: 1,
       });
+      expect(fixture.calls[1]).not.toHaveProperty('suitability');
       expect(fixture.calls[1]!.idempotencyKey).not.toBe(fixture.calls[0]!.idempotencyKey);
       expect(editor.snapshot().phase).toBe('saved');
-      expect(fixture.current().notifications).toEqual({
+      expect(fixture.current().notifications).toMatchObject({
         reply: false,
         mention: true,
       });

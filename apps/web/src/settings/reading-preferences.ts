@@ -20,6 +20,14 @@ export function sameReading(a: ReadingValues, b: ReadingValues): boolean {
   return a.spoilerLevel === b.spoilerLevel && a.suitability === b.suitability;
 }
 
+/** Keep only values changed from base; untouched fields take the current native pair. */
+export function rebaseReading(base: ReadingValues, draft: ReadingValues, current: ReadingValues): ReadingValues {
+  return {
+    spoilerLevel: draft.spoilerLevel !== base.spoilerLevel ? draft.spoilerLevel : current.spoilerLevel,
+    suitability: draft.suitability !== base.suitability ? draft.suitability : current.suitability,
+  };
+}
+
 /** Capture just the changed reading fields; a notification version is never a reading baseline. */
 export function readingMutation(known: ReadingPreferences, draft: ReadingValues): Readonly<PreferenceChange> | null {
   if (sameReading(known, draft)) return null;
