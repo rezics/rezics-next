@@ -53,6 +53,18 @@ export const LIBRARY_IDENTITY_PLAN_RESULT_BYTES = Buffer.byteLength(
   }),
 );
 
+/** Rewrite one exact clause of TypeScript-owned statement text; refuse drift instead of dispatching an unbounded projection. */
+function projectNativeSQL(sql: string, projections: readonly (readonly [string, string])[]): string {
+  let projected = sql;
+  for (const [selected, bounded] of projections) {
+    const at = projected.indexOf(selected);
+    if (at === -1 || projected.indexOf(selected, at + selected.length) !== -1)
+      throw new Error(`Native Library projection requires exactly one ${selected}`);
+    projected = projected.replace(selected, bounded);
+  }
+  return projected;
+}
+
 // The native writer's immutable effect key is library-native:SHA256(operation), never user text.
 export const libraryIdentityBoundedEffectPageSQL = projectNativeSQL(libraryIdentitySQL.effectPage, [
   [
