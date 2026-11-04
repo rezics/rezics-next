@@ -1,5 +1,5 @@
 import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
-import type { Release } from '@rezics/definitions';
+import type { PropertyDefinition, Release } from '@rezics/definitions';
 import { deadlineClient } from '../access/authenticate.ts';
 import { CommandUnavailableError, requireAccessDeadline } from '../access/unavailable.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -62,6 +62,88 @@ export function pageViewerActions(
       }),
     },
   };
+}
+
+export const characterWorkType = 'wd:Q95074';
+export const appearanceProperty = 'schema:character';
+export const identityProperty = 'rezics:relatedCharacterIdentity';
+export const appearanceAgeProperty = 'wdt:P3629';
+export const spoilerProperty = 'rezics:spoilerLevel';
+export type CharacterWorkUnavailableId = 'age-at-appearance' | 'main-character-linkage' | 'character-relationship';
+export type CharacterWorkIdentityOverlay = {
+  unavailable: { id: CharacterWorkUnavailableId; admitted: false }[];
+  meanings: Record<string, { text: string; lang: string | null }>;
+};
+
+function isType(release: Pick<Release, 'types'>, type: string, target: string, seen = new Set<string>()): boolean {
+  if (type === target) return true;
+  if (seen.has(type)) return false;
+  seen.add(type);
+  return (release.types[type]?.bases ?? []).some((base) => isType(release, base, target, seen));
+}
+
+function targetsCharacter(property: PropertyDefinition | undefined, release: Pick<Release, 'types'>): boolean {
+  return !!property?.targets?.some(
+    (target) => isType(release, characterWorkType, target) || isType(release, target, characterWorkType),
+  );
+}
+
+function pickLabel(labels: Record<string, string> | undefined, locale: string): { text: string; lang: string | null } {
+  const text = labels?.[locale] ?? labels?.en ?? '';
+  return { text, lang: labels?.[locale] ? locale : labels?.en ? 'en' : null };
+}
+
+/** Released Character identity, appearance-age and relationship admission for the current release. */
+export function characterWorkIdentityOverlay(
+  release: Pick<Release, 'types' | 'properties'>,
+  type: string,
+  locale: string,
+): CharacterWorkIdentityOverlay | undefined {
+  if (type !== characterWorkType) return;
+  const appearance = release.properties[appearanceProperty];
+  const unavailable: CharacterWorkIdentityOverlay['unavailable'] = [];
+  const ageAdmitted =
+    !!appearance?.qualifiers.includes(appearanceAgeProperty) ||
+    !!appearance?.qualifiers.some(
+      (id) => release.properties[id]?.datatype === 'quantity' && id !== spoilerProperty,
+    );
+  if (!ageAdmitted) unavailable.push({ id: 'age-at-appearance', admitted: false });
+  const identity = release.properties[identityProperty];
+  const identityAdmitted =
+    identity?.datatype === 'wikibase-item' &&
+    identity.relation?.group === 'association' &&
+    targetsCharacter(identity, release);
+  if (!identityAdmitted) unavailable.push({ id: 'main-character-linkage', admitted: false });
+  const relationships = Object.entries(release.properties).some(([id, property]) => {
+    if (id === identityProperty) return false;
+    const group = property.relation?.group;
+    return (
+      property.datatype === 'wikibase-item' &&
+      (group === 'association' || group === 'world') &&
+      targetsCharacter(property, release)
+    );
+  });
+  if (!relationships) unavailable.push({ id: 'character-relationship', admitted: false });
+  const meanings: CharacterWorkIdentityOverlay['meanings'] = {};
+  for (const id of [
+    appearanceProperty,
+    appearanceAgeProperty,
+    identityProperty,
+    'wdt:P26',
+    'wdt:P3373',
+    'wdt:P22',
+    'wdt:P25',
+    'wdt:P451',
+    'rezics:characterRival',
+    spoilerProperty,
+    'wdt:P3831',
+    'wdt:P1932',
+    'wdt:P518',
+  ]) {
+    const property = release.properties[id];
+    if (property) meanings[id] = pickLabel(property.labels, locale);
+  }
+  return { unavailable, meanings };
 }
 
 /** The ordinary native page's template order and offered views, shared with pages.read. */

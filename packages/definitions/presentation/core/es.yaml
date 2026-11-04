@@ -47,6 +47,7 @@ properties:
   schema:character: 'personajes'
   wdt:P179: 'serie'
   rezics:spoilerLevel: 'nivel de destripe'
+  wdt:P3629: 'edad en la aparición'
   schema:alternateName: nombre alternativo
   rezics:representativeEdition: 'Edición representativa'
   rezics:crossMediaCounterpart: 'Obra en otro medio'
@@ -134,7 +135,8 @@ propertyDescriptions:
   wdt:P1932: 'La forma exacta con la que la fuente nombra el objeto de la declaración, como un nombre en los créditos.'
   wdt:P3831: 'Un concepto que especifica el puesto del equipo o el papel de una aparición; no un nombre de crédito en texto libre.'
   wdt:P453: 'El personaje ficticio interpretado en este crédito de voz.'
-  schema:character: 'Un personaje que aparece en esta obra; se puede precisar su papel, arco narrativo o nivel de spoiler.'
+  schema:character: 'Un personaje que aparece en esta obra; se puede precisar su papel, nombre acreditado, spoiler, parte, edad y referencias.'
+  wdt:P3629: 'La edad del personaje en esta aparición concreta, como cantidad no negativa en años (wd:Q577); una edad de toda la fuente no es este calificador.'
   wdt:P179: 'La serie a la que pertenece este miembro; el calificador de posición indica su número de orden.'
   rezics:spoilerLevel: 'Nivel de revelación como entero sin unidad: 0 sin spoilers, 1 para spoilers menores y 2 para importantes.'
   schema:alternateName: 'Un título alternativo o alias como texto con idioma, conservando su escritura original.'

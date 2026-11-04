@@ -63,6 +63,10 @@ export const PageResponseSchema = t.Object(
       ),
     ),
     reads: t.Record(t.String(), readResult),
+    meanings: t.Optional(
+      t.Record(t.String(), t.Object({ text: t.String(), lang: t.Union([t.String(), t.Null()]) }, closed)),
+    ),
+    unavailable: t.Optional(t.Array(t.Object({ id: t.String(), admitted: t.Literal(false) }, closed))),
     actions: t.Optional(
       t.Union([
         t.Object(

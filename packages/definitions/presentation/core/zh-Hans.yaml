@@ -47,6 +47,7 @@ properties:
   schema:character: '登场角色'
   wdt:P179: '系列'
   rezics:spoilerLevel: '剧透程度'
+  wdt:P3629: '登场时年龄'
   schema:alternateName: 别名
   rezics:representativeEdition: '代表版本'
   rezics:crossMediaCounterpart: '跨媒体对应作品'
@@ -134,7 +135,8 @@ propertyDescriptions:
   wdt:P1932: '来源中称呼陈述对象的原文写法，例如演职员表上的署名。'
   wdt:P3831: '具体工作人员职务或登场身份的概念，不是自由填写的署名文本。'
   wdt:P453: '此次配音署名所饰演的虚构角色。'
-  schema:character: '在此作品中登场的角色，可限定其身份、故事篇章和剧透等级。'
+  schema:character: '在此作品中登场的角色，可限定其身份、署名、剧透、篇章、年龄和参考文献。'
+  wdt:P3629: '该登场陈述上的年龄，以非负年数（wd:Q577）记录；来源整体年龄不是此限定。'
   wdt:P179: '此成员所属的系列，用位置限定词记录系列内编号。'
   rezics:spoilerLevel: '无单位整数表示的披露等级：0 为无剧透，1 为轻微剧透，2 为重大剧透。'
   schema:alternateName: '别名或其他标题，以带语言文本保存原有拼写及语言。'

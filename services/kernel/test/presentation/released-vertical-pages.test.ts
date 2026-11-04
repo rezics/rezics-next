@@ -56,6 +56,8 @@ type Page = {
   views: View[];
   reads: Record<string, ReadValue>;
   catalogue?: { state: string; type: string; digest?: string };
+  meanings?: Record<string, { text: string; lang: string | null }>;
+  unavailable?: { id: string; admitted: false }[];
   viewer?: {
     state: 'anonymous' | 'account';
     account?: string;
@@ -250,6 +252,15 @@ for (const [vertical, types] of Object.entries(launch)) {
           const editorStatus = (editor as { actions?: { status: string } }).actions?.status ?? 'missing';
           expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(anonymousStatus);
           expect(['ready', 'withheld', 'unavailable', 'denied']).toContain(editorStatus);
+          if (type === 'wd:Q95074') {
+            expect(anonymous.unavailable).toEqual([]);
+            expect(anonymous.meanings?.['rezics:relatedCharacterIdentity']?.text.length).toBeGreaterThan(0);
+            expect(anonymous.viewer).toMatchObject({
+              state: 'anonymous',
+              actions: { statementPropose: 'denied' },
+            });
+            expect(editor.viewer).toMatchObject({ state: 'account' });
+          }
           if (['schema:MusicAlbum', 'schema:MusicRelease', 'schema:MusicRecording'].includes(type)) {
             expect(anonymous.catalogue).toMatchObject({ state: 'released', type });
             expect(anonymous.viewer).toMatchObject({

@@ -47,6 +47,7 @@ properties:
   schema:character: 'characters'
   wdt:P179: 'part of the series'
   rezics:spoilerLevel: 'spoiler level'
+  wdt:P3629: 'age at appearance'
   schema:alternateName: alternate name
   rezics:representativeEdition: 'Representative edition'
   rezics:crossMediaCounterpart: 'Cross-media counterpart'
@@ -128,7 +129,8 @@ propertyDescriptions:
   wdt:P1932: "The exact wording used in the source to name the statement's object, such as a credited name."
   wdt:P3831: 'A Concept identifying the detailed staff job or appearance role; not a free-text credit name.'
   wdt:P453: 'The fictional character portrayed in this voice credit.'
-  schema:character: 'A character appearing in this work; qualify the appearance with its role, arc or spoiler level where stated.'
+  schema:character: 'A character appearing in this work; qualify the appearance with its role, credited name, spoiler, part, age and references where stated.'
+  wdt:P3629: 'The character’s age on this exact work appearance as a nonnegative quantity in years (wd:Q577); a source-wide age is not this qualifier.'
   wdt:P179: "The series containing this member; its position qualifier records the member's ordinal."
   rezics:spoilerLevel: 'Disclosure level as a unitless integer: 0 for no spoiler, 1 for minor and 2 for major spoilers.'
   schema:alternateName: 'An alternate title or alias as language-tagged text, preserving its spelling and language.'

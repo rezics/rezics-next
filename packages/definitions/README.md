@@ -39,7 +39,7 @@ The published inventory in `catalogue/` gives every Type a portrait 5:7 cover fr
 including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, person and
 character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
 any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
-is immutable: 1.0.3 is current, while release 1.0.0, 1.0.1 and 1.0.2 bytes and their digests remain loadable for existing pins. Book
+is immutable: 1.0.4 is current, while release 1.0.0, 1.0.1, 1.0.2 and 1.0.3 bytes and their digests remain loadable for existing pins. Book
 selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
 cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
 MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
@@ -278,7 +278,12 @@ Bundled facts are stored on the later work (`wdt:P155`), derived work
 (credits and `schema:character`). Their reverse terms are metadata, never
 additional properties. `wdt:P1889` is symmetric. Credits admit credited-as,
 position and detailed role, sort by position, and filter by `[wdt:P3831, wdt:P518]`;
-appearances filter by either that role or a story arc and sort by name. Series members sort by
+appearances filter by either that role or a story arc and sort by name. `schema:character` admits
+the appearance-age qualifier `wdt:P3629` (years, `wd:Q577`) on that exact work statement; a source-wide
+character age is not this qualifier. Character-to-character identity is `rezics:relatedCharacterIdentity`
+(VNDB `chars.main`), distinct from the appearance role concept `main`. Spouse, sibling, father, mother,
+partner and rival are association relations targeting Character; unknown Bangumi relation codes stay
+omitted. Series members sort by
 position; follows and edition-of reads sort by date. Other bundled relations
 sort by name without inventing a source ordinal. Episode, edition and release
 profiles admit the credit properties with the same qualifiers as works.

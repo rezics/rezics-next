@@ -6,9 +6,19 @@ properties:
   schema:weight: Masse
   wdt:P1853: Blutgruppe
   wdt:P6296: Bangumi-Charakterkennung
+  rezics:relatedCharacterIdentity: zugehörige Figurenidentität
+  wdt:P26: Ehepartner
+  wdt:P3373: Geschwister
+  wdt:P22: Vater
+  wdt:P25: Mutter
+  wdt:P451: Partner
+  rezics:characterRival: Rivale
 inverseProperties:
   schema:gender: 'Subjekte dieses Geschlechts'
   wdt:P1853: 'Subjekte dieser Blutgruppe'
+  rezics:relatedCharacterIdentity: zugehörige Identität von
+  wdt:P22: Vater von
+  wdt:P25: Mutter von
 typeDescriptions:
   wd:Q95074: 'Eine eigenständig identifizierbare fiktive Figur, auch Maschine, Schiff oder Organisation; Auftritte und Sprechrollen werden am Werk erfasst.'
 propertyDescriptions:
@@ -17,3 +27,10 @@ propertyDescriptions:
   schema:weight: 'Die angegebene Masse als nichtnegative Menge in Kilogramm (wd:Q11570) oder Gramm (wd:Q41803), mit ursprünglicher Einheit.'
   wdt:P1853: 'Die ausdrücklich angegebene Blutgruppe als Konzept, etwa A; fehlende Angaben bleiben unbekannt.'
   wdt:P6296: 'Die positive numerische Bangumi-Figurenkennung; weder Werk- noch Personenkennung oder Seiten-URL.'
+  rezics:relatedCharacterIdentity: 'Eine andere Figur, mit der diese Identität verknüpft ist; kein Zusammenführen, keine Umleitung, keine Klasseninstanz, keine gemeinsame Biografie und nicht die Auftrittsrolle main.'
+  wdt:P26: 'Eine andere Figur, die als Ehepartner genannt wird, mit optionaler Spoilerstufe.'
+  wdt:P3373: 'Eine andere Figur, die als Geschwister genannt wird, mit optionaler Spoilerstufe.'
+  wdt:P22: 'Die Figur, die als Vater genannt wird, mit optionaler Spoilerstufe.'
+  wdt:P25: 'Die Figur, die als Mutter genannt wird, mit optionaler Spoilerstufe.'
+  wdt:P451: 'Eine andere Figur, die als unverheirateter Partner oder Geliebter genannt wird, mit optionaler Spoilerstufe.'
+  rezics:characterRival: 'Eine andere Figur, die als Rivale oder Gegner genannt wird; keine Auftrittsrolle.'

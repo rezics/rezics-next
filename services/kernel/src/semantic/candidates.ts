@@ -14,6 +14,7 @@ import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -89,6 +90,23 @@ import updateSubjectRelease from './update-subject-release.sql';
 export class SubjectNotFoundError extends Error {}
 export class EditorialConflictError extends Error {}
 const CANDIDATE_NS = '3c62c392-7c55-4fda-bf16-13b4853e7598';
+const PROPOSE_STATEMENT = 'subject.propose';
+const DECIDE_CANDIDATE = 'subject.decide';
+const ADOPT_CANDIDATES = 'subject.adopt';
+registerCommandHistoryKind(PROPOSE_STATEMENT, 3022);
+registerCommandHistoryKind(DECIDE_CANDIDATE, 3023);
+registerCommandHistoryKind(ADOPT_CANDIDATES, 3024);
+
+async function declareEditorialHistory(
+  tx: CommandTransaction,
+  kind: typeof PROPOSE_STATEMENT | typeof DECIDE_CANDIDATE | typeof ADOPT_CANDIDATES,
+  events: readonly { type: string }[],
+) {
+  await declareCommandHistory(tx, kind, {
+    response: { artifactType: 'command-receipt/v1', accounts: [] },
+    events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+  });
+}
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -181,7 +199,7 @@ export async function proposeStatement(
       deadline: options.deadline,
       receipt: {
         actorAccountId: options.actor.accountId,
-        kind: 'subject.propose',
+        kind: PROPOSE_STATEMENT,
         key: options.idempotencyKey,
         digest: options.digest,
       },
@@ -194,7 +212,9 @@ export async function proposeStatement(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeProposal(tx, transactionId, { ...options, statement });
+      const result = await writeProposal(tx, transactionId, { ...options, statement });
+      await declareEditorialHistory(tx, PROPOSE_STATEMENT, result.events);
+      return result;
     },
   );
   return {
@@ -435,7 +455,7 @@ export async function decideCandidate(
       deadline: options.deadline,
       receipt: {
         actorAccountId: options.actor.accountId,
-        kind: 'subject.decide',
+        kind: DECIDE_CANDIDATE,
         key: options.idempotencyKey,
         digest: options.digest,
       },
@@ -594,7 +614,7 @@ export async function decideCandidate(
             });
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
-        return {
+        const result = {
           value: {
             acceptance: {
               context: options.context,
@@ -619,6 +639,8 @@ export async function decideCandidate(
             },
           ],
         };
+        await declareEditorialHistory(tx, DECIDE_CANDIDATE, result.events);
+        return result;
       } catch (error) {
         retryEditorialUniqueness(error);
         throw error;
@@ -654,7 +676,7 @@ export async function adoptCandidates(
       deadline: options.deadline,
       receipt: {
         actorAccountId: options.actor.accountId,
-        kind: 'subject.adopt',
+        kind: ADOPT_CANDIDATES,
         key: options.idempotencyKey,
         digest: options.digest,
       },
@@ -927,7 +949,7 @@ export async function adoptCandidates(
           }
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
-        return {
+        const result = {
           value: {
             adoption: {
               context: options.context,
@@ -940,6 +962,8 @@ export async function adoptCandidates(
           },
           events,
         };
+        await declareEditorialHistory(tx, ADOPT_CANDIDATES, result.events);
+        return result;
       } catch (error) {
         retryEditorialUniqueness(error);
         throw error;

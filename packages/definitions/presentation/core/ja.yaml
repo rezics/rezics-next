@@ -47,6 +47,7 @@ properties:
   schema:character: '登場キャラクター'
   wdt:P179: 'シリーズ'
   rezics:spoilerLevel: 'ネタバレ度'
+  wdt:P3629: '登場時の年齢'
   schema:alternateName: 別名
   rezics:representativeEdition: '代表版'
   rezics:crossMediaCounterpart: '別メディアの関連作品'
@@ -128,7 +129,8 @@ propertyDescriptions:
   wdt:P1932: '出典で文の対象を呼んでいる表記。クレジット名などを原文どおりに記します。'
   wdt:P3831: '具体的なスタッフの職務や登場時の役割を示す概念。自由記述のクレジット名とは区別します。'
   wdt:P453: 'この声の出演で演じられた架空のキャラクター。'
-  schema:character: 'この作品に登場するキャラクター。役割、物語の区間、ネタバレ度を修飾できます。'
+  schema:character: 'この作品に登場するキャラクター。役割、クレジット名、ネタバレ度、区間、年齢、典拠を修飾できます。'
+  wdt:P3629: 'この登場に限った年齢を0以上の年数（wd:Q577）で示します。出典全体の年齢はこの修飾子ではありません。'
   wdt:P179: 'この項目が属するシリーズ。位置の修飾子でシリーズ内の番号を記録します。'
   rezics:spoilerLevel: '単位のない整数で示す開示段階。0はネタバレなし、1は軽微、2は重大なネタバレです。'
   schema:alternateName: '別題や別名を言語付きテキストで記録します。元の綴りと言語を保ちます。'

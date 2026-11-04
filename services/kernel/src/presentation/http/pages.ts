@@ -41,7 +41,13 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { cataloguePageMetadata, pageViewerActions, semanticPageView } from '../semantic-page.ts';
+import {
+  cataloguePageMetadata,
+  characterWorkIdentityOverlay,
+  pageViewerActions,
+  semanticPageView,
+  type CharacterWorkIdentityOverlay,
+} from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -440,8 +446,12 @@ export function pageRoutes<App>(
       const pageCatalogue = subject
         ? cataloguePageMetadata(definitionRelease?.release, definitionRelease?.digest, subject.type)
         : undefined;
+      const identityOverlay =
+        subject && definitionRelease?.release
+          ? characterWorkIdentityOverlay(definitionRelease.release, subject.type, languages?.[0] ?? 'en')
+          : undefined;
       const pageViewer =
-        pageCatalogue?.state === 'released'
+        pageCatalogue?.state === 'released' || identityOverlay
           ? async () => {
               let statementPropose: 'allowed' | 'denied' | 'unavailable';
               try {
@@ -521,6 +531,7 @@ export function pageRoutes<App>(
         digest: active.digest,
         ...(pageCatalogue ? { catalogue: pageCatalogue } : {}),
         ...(pageViewer ? { viewer: pageViewer } : {}),
+        ...(identityOverlay ? { overlay: identityOverlay } : {}),
         resolved,
         views,
         subject: subject?.id ?? null,
@@ -555,6 +566,7 @@ async function pageAnswer(input: {
   finalGuard?: (session: string | null) => Promise<string | null>;
   resolveBuiltin: NonNullable<Parameters<typeof readPage>[0]['resolveBuiltin']>;
   catalogue?: ReturnType<typeof cataloguePageMetadata>;
+  overlay?: CharacterWorkIdentityOverlay;
   viewer?: () => Promise<{
     state: 'anonymous' | 'account';
     account?: string;
@@ -749,6 +761,7 @@ async function pageAnswer(input: {
       ...(input.catalogue ? { catalogue: input.catalogue } : {}),
       ...(input.viewer ? { viewer: await input.viewer() } : {}),
       reads,
+      ...(input.overlay ? { meanings: input.overlay.meanings, unavailable: input.overlay.unavailable } : {}),
       ...(viewerEnvelope ? { actions: viewerEnvelope.actions } : {}),
     },
     readSession,
