@@ -359,6 +359,56 @@ export function sameCandidateSelection(left: CandidateSelection[], right: Candid
   );
 }
 
+function acknowledgedCommand(
+  value: unknown,
+  input: CandidateCommand,
+  context: string,
+  mode: NonNullable<CandidateCommand['mode']>,
+  selection: CandidateSelection[],
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (!Number.isSafeInteger(record.revision) || (record.revision as number) < 0) return false;
+  if (input.operation !== 'adopt') {
+    const acceptance = record.acceptance;
+    if (!acceptance || typeof acceptance !== 'object' || Array.isArray(acceptance)) return false;
+    const decision = acceptance as Record<string, unknown>;
+    return (
+      decision.context === context &&
+      decision.candidate === input.candidate &&
+      decision.decision === input.operation &&
+      Number.isSafeInteger(decision.head) &&
+      (decision.head as number) >= 0
+    );
+  }
+  const adoption = record.adoption;
+  if (!adoption || typeof adoption !== 'object' || Array.isArray(adoption)) return false;
+  const result = adoption as Record<string, unknown>;
+  if (
+    result.context !== context ||
+    result.property !== input.property ||
+    result.mode !== mode ||
+    !Number.isSafeInteger(result.head) ||
+    (result.head as number) < 0 ||
+    !Array.isArray(result.selection) ||
+    result.selection.length !== selection.length
+  )
+    return false;
+  const remaining = new Map(selection.map((entry) => [entry.candidate, entry.rank]));
+  for (const entry of result.selection) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const acknowledged = entry as Record<string, unknown>;
+    if (
+      typeof acknowledged.candidate !== 'string' ||
+      (acknowledged.rank !== 'normal' && acknowledged.rank !== 'preferred') ||
+      remaining.get(acknowledged.candidate) !== acknowledged.rank
+    )
+      return false;
+    remaining.delete(acknowledged.candidate);
+  }
+  return remaining.size === 0;
+}
+
 /** One confirmed native command, followed by one ordinary public read; never substitute proposal JSON. */
 export async function selectCandidate(
   client: KernelClient,
@@ -404,6 +454,7 @@ export async function selectCandidate(
               options,
             );
     if (result.status !== 200 || !result.data) return candidateFailure(result.status);
+    if (!acknowledgedCommand(result.data, input, context, mode, selection)) return candidateFailure(503);
     const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
     let current: SubjectRead | null = null;
     try {
