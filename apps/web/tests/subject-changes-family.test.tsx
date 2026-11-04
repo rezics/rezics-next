@@ -753,7 +753,7 @@ test('the complete Subject history family keeps independent headings, bounded su
         headers: { 'X-CSRF-Token': 'fresh-csrf' },
       },
     ]);
-    expect(host.querySelector('nav a')?.getAttribute('href')).toBe(address.currentHref);
+    expect(host.querySelector('nav a')?.getAttribute('href')).toBe(currentHref);
     let pendingList = Promise.withResolvers<ChangesRead>();
     historyRead = async (input) => {
       requests.push(input);
