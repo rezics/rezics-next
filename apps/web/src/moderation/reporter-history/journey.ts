@@ -15,6 +15,7 @@ export type ReporterHistoryVisit = ReporterHistoryRead & {
   locale: string;
   generation: string;
 };
+export type ReporterHistoryNavigation = PrivateReaderNavigation;
 export type ReporterHistoryState = ReporterHistoryResult | { state: 'loading' | 'retired' };
 const unavailable = { state: 'unavailable' } as const;
 const retired = { state: 'retired' } as const;
@@ -118,6 +119,7 @@ export function createReporterHistoryJourney(
     snapshot,
     // Admission remains mandatory on the browser, even after a server rendering.
     serverSnapshot: () => serverResult,
+    operands: () => pending,
     retire: () => {
       owner.retire();
       publish(retired);

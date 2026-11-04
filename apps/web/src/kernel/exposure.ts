@@ -9,6 +9,7 @@ export const operationGroups = {
   'subject.create': 'subject.create',
   'realm.create': 'realm.create',
   'provider_review.list': 'provider_review.list',
+  'report.own_history': 'report.own_history',
   'agent_verification.request': 'agent_verification',
   'agent_verification.withdraw': 'agent_verification',
   'account.collections': 'collections',

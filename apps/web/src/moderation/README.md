@@ -159,4 +159,6 @@ this seam alone is not a served history page. Installed declaration head and nat
 
 Decision: an own-history visit retains one replacement page and exact selection; failed continuation retries its original operands, expiry restarts explicitly, and locale or native source replacement retires the visit.
 
+Decision: My reports opens at `/moderation/reports`; its status return uses a fixed local destination carrying the exact cursor and selected report ID.
+
 `reporter-history/journey.ts` owns prepared browser admission and page replacement through the shared private-reader lifetime. It does not mount the inventory route.
