@@ -1351,7 +1351,8 @@ remain on their existing paths.
 
 - Touches: one source-identified Bangumi Game and at most one cited
   `schema:datePublished` candidate on its VideoGame.
-- Bound: 64 top-level infobox fields, at most 16 diagnostic entries, and the
+- Bound: one shared Game-field scan visits at most 64 top-level fields, at most
+  16 combined diagnostic entries, and the
   existing 65,536-character infobox plus 64 KiB projected source/command
   envelopes. The parser does not recursively evaluate wiki syntax or fetch a
   linked page.

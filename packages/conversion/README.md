@@ -996,7 +996,7 @@ selected-family import, malformed-to-corrected refresh, citations and stable
 identity; the connected native acceptance is
 `services/kernel/test/imports/bangumi-book-names.test.ts`.
 
-### Bangumi Game publication date
+## Bangumi Game publication date
 
 `bangumi@10` reads only one unqualified `发行日期` occurrence from the pinned
 Game infobox. The accepted scalar grammar is the existing strict Gregorian
@@ -1006,7 +1006,8 @@ remain unavailable. Other Game fields stay on their current paths.
 
 - Touches: one `schema:datePublished` proposal on a source-bound VideoGame with
   the exact Bangumi subject citation.
-- Bound: at most 64 top-level infobox fields and one sanitized omission inside
+- Bound: one shared pass visits at most 64 top-level infobox fields and emits
+  at most one date omission inside
   the existing 65,536-character infobox, 64 KiB projection and command limits.
   No recursive wiki evaluation or linked-page fetch is used.
 - Growth check: `services/importer/tests/bangumi-game-publication.test.ts`

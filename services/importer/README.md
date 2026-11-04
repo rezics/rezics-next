@@ -2289,7 +2289,8 @@ Selected-family Bangumi source envelopes use the combined native/entity
 
 - Touches: one bounded source record and at most one first-publication
   candidate; independent names and other valid source facts remain usable.
-- Bound: 64 infobox field visits, 16 diagnostic entries, the existing 65,536
+- Bound: one shared Game-field pass visits at most 64 fields, 16 combined
+  diagnostic entries, the existing 65,536
   character infobox and 64 KiB projected record/command envelopes. No recursive
   wiki evaluation or linked-page fetch is performed.
 - Growth check: `services/importer/tests/bangumi-game-publication.test.ts`

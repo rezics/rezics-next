@@ -69,7 +69,7 @@ export function scanBangumiGameInfobox(record: {
   let foundTemplate = false;
   let closed = false;
   let depth = 0;
-  for (const raw of infobox.split('\n')) {
+  for (const raw of record.infobox.split('\n')) {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
     const trimmed = line.replace(horizontalSpace, '');
     if (!trimmed) continue;
@@ -142,7 +142,7 @@ export function scanBangumiGameInfobox(record: {
     handledInfobox: foundTemplate,
     fields,
     overflow,
-    malformed: malformed || (foundTemplate && !closed),
+    malformed: !overflow && (malformed || (foundTemplate && !closed)),
   };
 }
 

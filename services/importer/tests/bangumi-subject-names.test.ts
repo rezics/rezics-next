@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
 import {
   CrossMediaDumpFiles,
   crossMediaAliases,
@@ -158,7 +159,7 @@ test('selected-family Bangumi TVAnime imports bounded names through the register
         source: crossMediaAliases.bangumi,
         external_id: String(targetId),
         record_revision: 'unversioned',
-        converter_revision: entityRevision,
+        converter_revision: `${bangumiRevision}+${entityRevision}`,
       });
       expect(command.statement.references).toEqual([
         {

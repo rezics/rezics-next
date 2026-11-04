@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { converter_revision as selectedFamilyRevision } from '@rezics/conversion/cross-media-entities';
+import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
 import { converter_revision as bangumiRevision } from '@rezics/conversion/bangumi';
 import { extractBangumiSubjectNames } from '../../../packages/conversion/src/bangumi-subject-names.ts';
 import {
@@ -15,6 +15,8 @@ import {
 } from '../src/cross-media-seed.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
+
+const selectedFamilyRevision = `${bangumiRevision}+${entityRevision}`;
 
 const bookId = 990401;
 const sameTitleId = 990402;
