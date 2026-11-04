@@ -3299,6 +3299,12 @@ Cost: public Realm discovery
 
 ## Realm publication subject choice
 
+`RealmMembership` and `RealmShelf` accept optional `onCompleted(receipt) => boolean`: receipts carry the operation
+identity and live `current()`/`focusEligible()` predicates, are delivered once after acknowledgement and an admitted
+refresh has rendered, and retain local keyboard focus unless the eligible outer callback actually hands it off.
+The shelf refresh reuses the existing reader at the selected publication cursor; outer selected-shelf consumption
+stays with the page host. Uncertain commands and retired readers never produce completion receipts.
+
 The existing Space/Realm `RealmShelf` integrates `community/publication-controls-view.tsx`. Its shared `EntityPicker`
 uses `publicationSubjectSearch` to present Search's existing authorized, private, no-store `/api/search/suggestions`
 response. There is no second query endpoint, subject lookup, prefill or permission producer. The shared picker owns

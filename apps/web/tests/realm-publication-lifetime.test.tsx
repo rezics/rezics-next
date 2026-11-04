@@ -478,9 +478,15 @@ describe('Complete Realm publication original caller lifetime', () => {
         as_of: '2026-10-31T00:00:00Z',
       }) satisfies SuggestionResult,
   );
+  type Completion = import('../src/community/space-page').RealmPublicationCompletion;
+  let onCompleted: ((receipt: Completion) => boolean) | undefined;
+  let completionRead:
+    | ReturnType<typeof deferred<import('../src/community/space').ShelfPage<PublishedSubject>>>
+    | undefined;
   const hostTransport = {
     boards: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
-    publications: async () => ({ kind: 'page' as const, items: [], next: null, unavailable: 0 }),
+    publications: async () =>
+      completionRead ? completionRead.promise : { kind: 'page' as const, items: [], next: null, unavailable: 0 },
     prepare,
     change: (input: Write['input']) => {
       const call = { ...deferred<PublicationOutcome>(), input: structuredClone(input) };
@@ -489,7 +495,14 @@ describe('Complete Realm publication original caller lifetime', () => {
     },
   };
   function RealmShelfHost() {
-    return <RealmShelf realm={realm} transport={hostTransport} search={hostSearch} />;
+    return (
+      <RealmShelf
+        realm={realm}
+        transport={hostTransport}
+        search={hostSearch}
+        {...(onCompleted ? { onCompleted } : {})}
+      />
+    );
   }
 
   async function paintShelf() {
@@ -536,7 +549,7 @@ describe('Complete Realm publication original caller lifetime', () => {
     });
   }
 
-  async function shelfPublish() {
+  async function shelfPublish(keyboard = false) {
     await act(async () => {
       shelfButton(m.realm_publication_curate()).click();
       await tick();
@@ -559,10 +572,62 @@ describe('Complete Realm publication original caller lifetime', () => {
       await tick();
     });
     await act(async () => {
-      shelfButton(m.realm_publication_publish()).click();
+      const button = shelfButton(m.realm_publication_publish());
+      if (keyboard) button.focus();
+      button.click();
       await tick();
     });
   }
+
+  test.each(['handoff', 'decline', 'pointer', 'retired', 'unavailable', 'uncertain'])(
+    '%s publication completion waits for an admitted committed shelf refresh',
+    async (scenario) => {
+      await mountHook();
+      completionRead = deferred();
+      const completions: Completion[] = [];
+      const sentinel = window.document.createElement('button');
+      window.document.body.append(sentinel);
+      onCompleted = (receipt) => {
+        expect(receipt.current()).toBe(true);
+        expect(host.querySelectorAll('a')).toHaveLength(0);
+        expect(receipt.focusEligible()).toBe(scenario !== 'pointer');
+        completions.push(receipt);
+        if (scenario === 'handoff' && receipt.focusEligible()) {
+          sentinel.focus();
+          return true;
+        }
+        return false;
+      };
+      try {
+        await paintShelf();
+        await shelfPublish(true);
+        await settleHost(0, scenario === 'uncertain' ? { kind: 'unavailable' } : { kind: 'saved', head: nextHead });
+        expect(completions).toHaveLength(0);
+        if (scenario === 'pointer') window.document.dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+        if (scenario === 'retired') await updateSession(viewer(reader, 'csrf-two'));
+        await act(async () => {
+          completionRead!.resolve(
+            scenario === 'unavailable'
+              ? { kind: 'unavailable' }
+              : { kind: 'page', items: [], next: null, unavailable: 0 },
+          );
+          await tick();
+        });
+        expect(completions).toHaveLength(['retired', 'unavailable', 'uncertain'].includes(scenario) ? 0 : 1);
+        if (scenario === 'handoff') expect(window.document.activeElement).toBe(sentinel);
+        if (scenario === 'decline')
+          expect(window.document.activeElement).toBe(host.querySelector('#realm-published-heading'));
+        await paintShelf();
+        expect(completions.length).toBeLessThanOrEqual(1);
+        await close();
+        expect(completions.every((receipt) => !receipt.current() && !receipt.focusEligible())).toBe(true);
+      } finally {
+        onCompleted = undefined;
+        completionRead = undefined;
+        sentinel.remove();
+      }
+    },
+  );
 
   test('a successful republish replaces the existing Realm slot with its authoritative head once', async () => {
     await mountHook();

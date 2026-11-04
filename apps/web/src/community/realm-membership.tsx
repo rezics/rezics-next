@@ -25,6 +25,14 @@ import {
 import { RealmLeaveRecovery, type RealmLeaveCheck } from './realm-leave-recovery.tsx';
 import type { NativeRealmHomeObservation } from './realm-home-native';
 import { useSpacePageLifetime } from './space-page-lifetime';
+import {
+  useRealmCompletionFocus,
+  type RealmCompleted,
+  type RealmMembershipCompletion,
+  type RealmCompletionFocus,
+} from './realm-community/completion';
+
+export type { RealmMembershipCompletion } from './realm-community/completion';
 
 type MembershipOperation = {
   caller: RealmMembershipCaller;
@@ -47,6 +55,7 @@ export function RealmMembership({
   memberLabel,
   admittedAction,
   nativeObservation,
+  onCompleted,
 }: {
   realm: Pick<RealmHome, 'id' | 'viewer'> & { visibility: RealmHome['visibility'] | 'unknown' };
   returnTo: string;
@@ -54,6 +63,7 @@ export function RealmMembership({
   memberLabel?: string;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
   nativeObservation?: NativeRealmHomeObservation;
+  onCompleted?: RealmCompleted<RealmMembershipCompletion>;
 }) {
   const { state: session, csrfToken, subject } = useSession();
   if (nativeObservation)
@@ -67,6 +77,7 @@ export function RealmMembership({
         session={session}
         subject={subject ?? null}
         csrfToken={csrfToken}
+        onCompleted={onCompleted}
       />
     );
   if (session === 'unknown' || session === 'unavailable') return null;
@@ -105,6 +116,7 @@ export function RealmMembership({
       csrfToken={csrfToken}
       memberLabel={memberLabel}
       admittedAction={admittedAction}
+      onCompleted={onCompleted}
       {...(spaceId ? { spaceId } : {})}
     />
   );
@@ -119,6 +131,7 @@ function NativeMembership({
   session,
   subject,
   csrfToken,
+  onCompleted,
 }: {
   realmId: string;
   visibility: RealmHome['visibility'] | 'unknown';
@@ -128,6 +141,7 @@ function NativeMembership({
   session: ReturnType<typeof useSession>['state'];
   subject: string | null;
   csrfToken: string | null;
+  onCompleted?: RealmCompleted<RealmMembershipCompletion> | undefined;
 }) {
   const router = useRouter();
   const client = useQueryClient();
@@ -135,6 +149,18 @@ function NativeMembership({
   const caller = useRealmMembershipCaller(client, realmId, subject ?? '', csrfToken);
   const currentObservation = useRef(observation);
   currentObservation.current = observation;
+  const captureFocus = useRealmCompletionFocus();
+  const summary = useRef<HTMLElement>(null);
+  const acknowledged = useRef<{
+    command: RealmMembershipCommandAttempt;
+    caller: RealmMembershipCaller;
+    focus: RealmCompletionFocus;
+  } | null>(null);
+  const [completed, setCompleted] = useState<{
+    receipt: RealmMembershipCompletion;
+    focus: RealmCompletionFocus;
+  } | null>(null);
+  const delivered = useRef(new WeakSet<RealmMembershipCompletion>());
   const source = observation;
   const observationVersion = realmMembershipObservationVersion(source);
   const [attemptRevision, setAttemptRevision] = useState(0);
@@ -200,11 +226,36 @@ function NativeMembership({
         ? source.viewer.membership === 'member' || source.viewer.membership === 'pending'
         : source.viewer.membership === 'none';
     if (confirmed) {
+      const accepted = acknowledged.current;
+      acknowledged.current = null;
       caller.store.discardNativeCommand(realmId, subject, attempt);
       setAttemptRevision((revision) => revision + 1);
       setBusy(null);
+      if (accepted?.command === attempt && accepted.caller.isCurrent() && current()) {
+        const receiptCurrent = () => accepted.caller.isCurrent() && current();
+        setCompleted({
+          receipt: {
+            realmId,
+            action: attempt.body.action,
+            membership: source.viewer.membership,
+            current: receiptCurrent,
+            focusEligible: () => receiptCurrent() && accepted.focus.eligible(),
+          },
+          focus: accepted.focus,
+        });
+      }
     }
   }, [attempt, caller, observationVersion, realmId, source, subject]);
+
+  useEffect(() => {
+    if (!completed || attempt || !completed.receipt.current() || delivered.current.has(completed.receipt)) return;
+    delivered.current.add(completed.receipt);
+    setCompleted(null);
+    const eligible = completed.receipt.focusEligible();
+    const handedOff = onCompleted?.(completed.receipt) === true;
+    if (eligible && !handedOff && completed.receipt.current()) completed.focus.restore(summary.current);
+    else completed.focus.cancel();
+  }, [completed, attempt, onCompleted]);
 
   const message = (() => {
     if (attempt) return busyNow ? m.realm_membership_checking() : m.realm_membership_command_uncertain();
@@ -232,7 +283,11 @@ function NativeMembership({
     return null;
   })();
 
-  async function submit(action: 'join' | 'leave' | null, retry?: RealmMembershipCommandAttempt) {
+  async function submit(
+    action: 'join' | 'leave' | null,
+    event: MouseEvent<HTMLButtonElement>,
+    retry?: RealmMembershipCommandAttempt,
+  ) {
     if (busyNow || !current() || !caller.isCurrent() || session !== 'signed-in' || !subject || !csrfToken) return;
     if (!retry && (!action || (action === 'join' ? !canJoin : source.actions.leave !== 'admitted'))) return;
     const command =
@@ -245,6 +300,7 @@ function NativeMembership({
         observation: observationVersion,
       });
     if (retry && caller.store.nativeCommand(realmId, subject) !== retry) return;
+    const focus = captureFocus(event);
     setAttemptRevision((revision) => revision + 1);
     setBusy({ attempt: command, caller });
     const stillCurrent = () =>
@@ -256,6 +312,7 @@ function NativeMembership({
       });
       if (!stillCurrent()) return;
       if (result.outcome === 'accepted') {
+        acknowledged.current = { command, caller, focus };
         if (spaceId) await client.invalidateQueries({ queryKey: ['follow-state', spaceId] });
         if (!stillCurrent()) return;
         await client.invalidateQueries({ queryKey: ['my-realms'] });
@@ -273,6 +330,8 @@ function NativeMembership({
   function discardAttempt() {
     if (!subject || !attempt) return;
     caller.store.discardNativeCommand(realmId, subject, attempt);
+    acknowledged.current?.focus.cancel();
+    acknowledged.current = null;
     setAttemptRevision((revision) => revision + 1);
     setBusy(null);
   }
@@ -288,6 +347,8 @@ function NativeMembership({
   if (!message && !action && !signIn && !attempt && !adviceRetry) return null;
   return (
     <section
+      ref={summary}
+      tabIndex={-1}
       aria-label={m.realm_membership_label()}
       className="flex min-w-0 flex-wrap items-center gap-3"
       data-member-state={source.viewer.state === 'member' ? source.viewer.membership : source.viewer.state}
@@ -313,7 +374,7 @@ function NativeMembership({
           <Button
             className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
             disabled={busyNow || !current() || !caller.isCurrent() || session !== 'signed-in' || !subject || !csrfToken}
-            onClick={() => void submit(null, attempt)}
+            onClick={(event) => void submit(null, event, attempt)}
           >
             {busyNow ? m.realm_membership_checking() : m.realm_membership_command_retry()}
           </Button>
@@ -332,7 +393,7 @@ function NativeMembership({
         <Button
           className="h-auto min-h-11 max-w-full whitespace-normal px-6 text-base"
           disabled={session !== 'signed-in' || !subject || !csrfToken || !current() || (action === 'join' && !canJoin)}
-          onClick={() => void submit(action)}
+          onClick={(event) => void submit(action, event)}
         >
           {action === 'join' ? m.realm_join() : m.realm_leave()}
         </Button>
@@ -353,6 +414,7 @@ function PersonalMembership({
   spaceId,
   memberLabel,
   admittedAction,
+  onCompleted,
 }: {
   realm: Pick<RealmHome, 'id' | 'viewer'> & { visibility: RealmHome['visibility'] | 'unknown' };
   subject: string;
@@ -360,10 +422,12 @@ function PersonalMembership({
   spaceId?: string;
   memberLabel?: string | undefined;
   admittedAction?: 'join' | 'leave' | 'sign-in' | null | undefined;
+  onCompleted?: RealmCompleted<RealmMembershipCompletion> | undefined;
 }) {
   const client = useQueryClient();
   const router = useRouter();
   const caller = useRealmMembershipCaller(client, realm.id, subject, csrfToken);
+  const lifetime = useSpacePageLifetime();
   const query = useQuery(realmMembershipQuery(realm.id, subject, caller));
   const [pending, setPending] = useState<{
     target?: 'member' | 'none' | undefined;
@@ -390,6 +454,8 @@ function PersonalMembership({
   const activation = useRef<HTMLElement | null>(null);
   const resultFocus = useRef<MembershipFocus | null>(null);
   const [settledFocus, setSettledFocus] = useState<MembershipFocus | null>(null);
+  const [completed, setCompleted] = useState<RealmMembershipCompletion | null>(null);
+  const delivered = useRef(new WeakSet<RealmMembershipCompletion>());
   const standingIsCurrent = hasCurrentRealmMembership(client, realm.id, subject, caller);
   const viewer = standingIsCurrent ? query.data : undefined;
   const currentPending = pending?.caller.isCurrent() ? pending : null;
@@ -445,6 +511,16 @@ function PersonalMembership({
   }
 
   useEffect(() => () => resultFocus.current?.cancel(), [caller]);
+
+  useEffect(() => {
+    if (!completed || !completed.current() || currentBusy || currentPending || query.isFetching || query.isError)
+      return;
+    if (delivered.current.has(completed)) return;
+    delivered.current.add(completed);
+    const eligible = completed.focusEligible();
+    const handedOff = onCompleted?.(completed) === true;
+    if (eligible && handedOff) resultFocus.current?.cancel();
+  }, [completed, currentBusy, currentPending, query.isFetching, query.isError, onCompleted]);
 
   useEffect(() => {
     const handoff = resultFocus.current;
@@ -523,6 +599,25 @@ function PersonalMembership({
         if (!current()) return;
         await router.invalidate();
         if (!current()) return;
+        if (result.kind === 'settled' && cycle.target && result.viewer.state !== 'pending') {
+          const receiptCurrent = () =>
+            cycle.caller.isCurrent() &&
+            (!lifetime || lifetime.current()) &&
+            hasCurrentRealmMembership(client, realm.id, subject, cycle.caller) &&
+            client.getQueryData(realmMembershipQuery(realm.id, subject, cycle.caller).queryKey) === result.viewer;
+          setCompleted({
+            realmId: realm.id,
+            action: cycle.target === 'member' ? 'join' : 'leave',
+            membership: cycle.target,
+            current: receiptCurrent,
+            focusEligible: () =>
+              receiptCurrent() &&
+              !!cycle.focus &&
+              resultFocus.current === cycle.focus &&
+              (cycle.focus.control.ownerDocument.activeElement === cycle.focus.control ||
+                cycle.focus.control.ownerDocument.activeElement === cycle.focus.control.ownerDocument.body),
+          });
+        }
         setSettledFocus(cycle.focus ?? null);
         setPending(null);
         setRefresh(null);

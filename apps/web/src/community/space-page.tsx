@@ -54,6 +54,15 @@ import { nativeRealmHomeShelves, type NativeRealmHomeOperations } from './realm-
 import { realmReadingReturn, realmReadingSelection, realmShelfReturn } from './realm-reading-return';
 import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
 import { requestLanguages } from '../kernel/languages';
+import {
+  useRealmCompletionFocus,
+  type RealmCompleted,
+  type RealmPublicationCompletion,
+  type RealmCompletionFocus,
+} from './realm-community/completion';
+import type { PublicationChange } from './publication-controls';
+
+export type { RealmPublicationCompletion } from './realm-community/completion';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
   return (
@@ -158,6 +167,7 @@ function Published({
   focus,
   returnFor,
   current,
+  onCommand,
 }: {
   returnFor: (id: string) => string | undefined;
   current: () => boolean;
@@ -169,6 +179,7 @@ function Published({
   refresh: () => Promise<void>;
   search?: EntityPickerSearch | undefined;
   focus: ReturnType<typeof useShelfContinuationFocus>;
+  onCommand?: ((event: React.MouseEvent<HTMLButtonElement>) => void) | undefined;
 }) {
   const locale = getLocale();
   const titled: { subject: PublishedSubject; cover: CoverSubject }[] = realm.published.map((subject) => ({
@@ -183,7 +194,9 @@ function Published({
       </h2>
       <p className="text-sm text-muted-foreground">{m.realm_publication_open_view()}</p>
       <p className="max-w-prose text-sm text-muted-foreground">{m.realm_catalogue_publications_context()}</p>
-      {editable ? <PublicationControls control={control} refresh={refresh} search={search} /> : null}
+      {editable ? (
+        <PublicationControls control={control} refresh={refresh} search={search} onCommand={onCommand} />
+      ) : null}
       {titled.length ? (
         <CoverRow ratio={ratio} label={`${m.realm_published_heading()} (${titled.length})`}>
           {titled.map(({ subject, cover }) => (
@@ -275,9 +288,11 @@ export function RealmShelf({
   search,
   returnTo,
   onReadingChange,
+  onCompleted,
 }: {
   returnTo?: string;
   onReadingChange?: (href: string) => void;
+  onCompleted?: RealmCompleted<RealmPublicationCompletion>;
   realm: RealmHome;
   transport?: RealmShelfTransport;
   frozen?: boolean;
@@ -301,6 +316,16 @@ export function RealmShelf({
     };
   }, [lease]);
   const current = () => lease.active && lease.connected && (!lifetime || lifetime.current());
+  const captureFocus = useRealmCompletionFocus();
+  const commandFocus = useRef<RealmCompletionFocus | null>(null);
+  const [completed, setCompleted] = useState<{
+    input: PublicationChange;
+    head: string;
+    intent: object;
+    current: () => boolean;
+    focus: RealmCompletionFocus | null;
+  } | null>(null);
+  const delivered = useRef(new WeakSet<object>());
   const boards = useShelfList(
     {
       items: realm.boards,
@@ -417,20 +442,55 @@ export function RealmShelf({
   const control = usePublicationControls(
     realm.id,
     sendPublication,
-    (input, target, head) =>
+    (input, target, head) => {
       publications.update((previous) => ({
         ...previous,
         items:
           input.action === 'publish'
             ? [{ ...target, publicationId: head }, ...previous.items.filter((subject) => subject.id !== target.id)]
             : previous.items.filter((subject) => subject.id !== target.id),
-      })),
+      }));
+      if (!onCompleted || !current() || !control.current()) return;
+      const intent = {};
+      const draftCurrent = control.current;
+      setCompleted({ input, head, intent, focus: commandFocus.current, current: () => current() && draftCurrent() });
+      // Use the existing shelf reader and its admission receipt, including the selected physical window.
+      if (selection.node === 'publications' && selection.cursor) void publications.restore(selection.cursor, intent);
+      else void publications.load(true, intent);
+    },
     publications.items,
     !frozen && state === 'signed-in' && Boolean(csrfToken),
     reader ?? '',
     preparePublication,
     realm,
   );
+  useEffect(() => {
+    const receipt = publications.continuation;
+    if (
+      !completed ||
+      !completed.current() ||
+      publications.busy ||
+      publications.failure ||
+      receipt?.intent !== completed.intent ||
+      !receipt.current() ||
+      delivered.current.has(completed.intent)
+    )
+      return;
+    delivered.current.add(completed.intent);
+    const receiptCurrent = () => completed.current() && receipt.current();
+    const result: RealmPublicationCompletion = {
+      realmId: realm.id,
+      subjectId: completed.input.subjectId,
+      action: completed.input.action,
+      head: completed.head,
+      current: receiptCurrent,
+      focusEligible: () => receiptCurrent() && !!completed.focus?.eligible(),
+    };
+    const eligible = result.focusEligible();
+    const handedOff = onCompleted?.(result) === true;
+    if (eligible && !handedOff && result.current()) completed.focus?.restore(publicationFocus.boundaryRef.current);
+    else completed.focus?.cancel();
+  }, [completed, publications.continuation, publications.busy, publications.failure, onCompleted]);
   return (
     <>
       <Boards
@@ -461,6 +521,9 @@ export function RealmShelf({
           unavailablePublished: publications.unavailable,
         }}
         control={control}
+        onCommand={(event) => {
+          commandFocus.current = captureFocus(event);
+        }}
         editable={!frozen && !publicationRestoring && state === 'signed-in' && Boolean(csrfToken)}
         complete={!publicationRestoring && !publications.next && !publications.failure}
         refresh={() => publications.load(true)}
