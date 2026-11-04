@@ -1,16 +1,22 @@
 import { t } from 'elysia';
+import { isDeepStrictEqual } from 'node:util';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { BOARD_RECENT_THREAD_LIMIT, observeBoardRecentThreads, type ContentBoardDependencies } from './boards.ts';
 import { createConversationActivityBatch } from './conversation-activity.ts';
 import {
-  projectBoardOpeningActivitySelection,
-  projectBoardOpeningComments,
-  type BoardOpeningCard,
-} from './board-page.ts';
+  projectCommunityActivitySelection,
+  projectCommunityCommentsBatch,
+  type CommunityComments,
+} from './community-projection/index.ts';
 import type { BoardRecord, ReadContext } from './model.ts';
+import type { ThreadView } from './reads.ts';
 import { BoardOpeningCardSchema } from './schemas.ts';
 
-export type RealmCommunityThread = Pick<BoardOpeningCard, 'thread' | 'target' | 'comments'>;
+export type RealmCommunityThread = Readonly<{
+  thread: ThreadView;
+  target: Readonly<{ kind: 'thread'; id: string; boardId: string }>;
+  comments: CommunityComments;
+}>;
 export type RealmCommunityRecent = Readonly<{
   state: 'current';
   threads: readonly RealmCommunityThread[];
@@ -66,7 +72,12 @@ export async function observeRealmCommunity(
     )
       throw new AccessUnavailableError('contention');
   }
-  const comments = new Map(projectBoardOpeningActivitySelection(selected).items.map((item) => [item.threadId, item]));
+  const threadIds = threads.map((thread) => thread.id);
+  const comments = projectCommunityCommentsBatch(
+    threadIds,
+    projectCommunityActivitySelection(selected).items,
+    context.actor,
+  );
   const recent = new Map<string, RealmCommunityRecent>();
   for (const [boardId, observation] of observations) {
     recent.set(boardId, {
@@ -75,7 +86,7 @@ export async function observeRealmCommunity(
       threads: observation.threads.map((thread) => ({
         thread,
         target: { kind: 'thread', id: thread.id, boardId },
-        comments: projectBoardOpeningComments(thread.id, comments.get(thread.id), context.actor),
+        comments: comments.get(thread.id) ?? { state: 'unavailable' },
       })),
     });
   }
@@ -84,7 +95,11 @@ export async function observeRealmCommunity(
     async current() {
       for (const observation of observations.values()) if (!(await observation.current())) return false;
       const confirmed = await activity.confirm(selected, context.deadline);
-      return confirmed.every((item) => item.status !== 'withheld' || item.reason !== 'stale');
+      if (confirmed.some((item) => item.status === 'withheld' && item.reason === 'stale')) return false;
+      return isDeepStrictEqual(
+        comments,
+        projectCommunityCommentsBatch(threadIds, projectCommunityActivitySelection(confirmed).items, context.actor),
+      );
     },
   };
 }

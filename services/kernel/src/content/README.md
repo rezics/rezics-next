@@ -3098,10 +3098,19 @@ Decision: Board comments are current only from a request-bound cohort witness; e
 
 Decision: Board binds the installed producer's public-cohort `select` before hydration and `confirm` afterward; it returns the producer source head and partition anchor, while withheld cohorts remain unavailable.
 
+Decision: Board and Realm share `community-projection/index.ts` for selected activity, cohort matching, zero/null consistency and detached count/source snapshots; Feed and Subject reuse only the equal public count/time rule, keeping their native disclosure and Subject partition-anchor semantics.
+
+The public pure entry owns the selected-value contracts and accepts explicit actor identity, cohort and source values.
+It has no runtime or database imports. `conversation-activity.ts` binds its generic anchor types to native partitions
+and remains the only activity producer. Board owns its request-bound select/confirm reader and final hydration
+comparison. Realm owns its bounded recent-thread observations and confirms the same projected comments before
+returning the page; it never calls the full Board opening for each row. Duplicate selected evidence is unavailable
+on both surfaces. The registered Realm Board adapter entry remains `realm-board-home.ts`.
+
 The native factory remains `createBoardPageReader(dependencies)`, returning
 `readBoardOpeningPage(boardId, { actor, deadline }, { cursor?, sort?: 'new' | 'active' | 'hot' })`.
 Its producer seam is `readConversationActivityBatch(threadIds, { actor, deadline })`, returning
-`{ items: BoardOpeningActivityWitness[], anchors: AnchoredPosition[] }`. Each current witness binds one thread to
+`{ items: CommunityActivityWitness[], anchors: AnchoredPosition[] }`. Each current witness binds one thread to
 `cohort: {kind:'public'}` or `cohort: {kind:'viewer', accountId}`, a `{kind:'exact'|'lower-bound', value}` count,
 `lastActivityAt`, and `{epoch, position}` source; withheld witnesses return only `{state:'unavailable', threadId}`.
 The HTTP response head is `board`, `pinnedThreads`, `threads`, `next`, `rankRefreshedAt`, `reactionsAsOf`, `viewer`,

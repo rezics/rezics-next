@@ -8192,11 +8192,6 @@
         {
           "rule": "rule 2",
           "file": "services/kernel/src/community/realm-home.ts",
-          "edge": "value import \"../content/realm-board-home.ts\" #1 => services/kernel/src/content/realm-board-home.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/realm-home.ts",
           "edge": "value import \"../database/pool.ts\" #1 => services/kernel/src/database/pool.ts"
         },
         {
@@ -8413,11 +8408,6 @@
           "rule": "rule 2",
           "file": "services/kernel/src/community/routes.ts",
           "edge": "value import \"../content/reads.ts\" #1 => services/kernel/src/content/reads.ts"
-        },
-        {
-          "rule": "rule 2",
-          "file": "services/kernel/src/community/routes.ts",
-          "edge": "value import \"../content/realm-board-home.ts\" #1 => services/kernel/src/content/realm-board-home.ts"
         },
         {
           "rule": "rule 2",

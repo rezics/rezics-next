@@ -207,7 +207,8 @@
       "kind": "adapter",
       "owner": "content",
       "paths": ["services/kernel/src/content/**", "services/kernel/db/content/**"],
-      "publicEntries": [],
+      "excludes": ["services/kernel/src/content/community-projection/**"],
+      "publicEntries": ["services/kernel/src/content/realm-board-home.ts"],
       "allowedDependencies": [
         "definitions",
         "document",
@@ -215,6 +216,7 @@
         "kernel-access",
         "kernel-commerce",
         "kernel-community",
+        "kernel-content-community-projection",
         "kernel-library",
         "kernel-platform",
         "kernel-rating",
@@ -223,6 +225,15 @@
       ],
       "capabilities": ["content"],
       "postgresPaths": ["services/kernel/src/content/**"]
+    },
+    {
+      "id": "kernel-content-community-projection",
+      "kind": "core",
+      "owner": "content",
+      "paths": ["services/kernel/src/content/community-projection/**"],
+      "publicEntries": ["services/kernel/src/content/community-projection/index.ts"],
+      "allowedDependencies": [],
+      "capabilities": ["community-activity-projection"]
     },
     {
       "id": "kernel-community",

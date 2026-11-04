@@ -1,3 +1,9 @@
+import {
+  projectCommunityActivitySelection,
+  projectCommunityCommentsBatch,
+  type CommunityActivityRead,
+  type CommunityComments,
+} from './community-projection/index.ts';
 import { isDeepStrictEqual } from 'node:util';
 import { readPublicIdentities, type PublicIdentity } from '../access/account-data.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
@@ -45,33 +51,10 @@ export type BoardOpeningMedia = Readonly<
   | { state: 'available'; images: readonly DocumentImagePresentation[] }
   | { state: 'unavailable'; images: readonly [] }
 >;
-export type BoardOpeningActivityWitness =
-  | Readonly<{
-      state: 'current';
-      threadId: string;
-      cohort: Readonly<{ kind: 'public' }> | Readonly<{ kind: 'viewer'; accountId: string }>;
-      count: Readonly<{ kind: 'exact' | 'lower-bound'; value: number }>;
-      lastActivityAt: string | null;
-      source: Readonly<{ epoch: number; position: string }>;
-    }>
-  | Readonly<{ state: 'unavailable'; threadId: string }>;
-export type BoardOpeningActivityRead = Readonly<{
-  items: readonly BoardOpeningActivityWitness[];
-  anchors: readonly AnchoredPosition[];
-}>;
-export type BoardOpeningActivityReader = (
+type BoardOpeningActivityReader = (
   threadIds: readonly string[],
   context: Readonly<{ actor: Actor; deadline: number }>,
-) => Promise<BoardOpeningActivityRead>;
-export type BoardOpeningComments =
-  | Readonly<{
-      state: 'current';
-      cohort: 'public' | 'viewer';
-      count: Readonly<{ kind: 'exact' | 'lower-bound'; value: number }>;
-      lastActivityAt: string | null;
-      source: Readonly<{ epoch: number; position: string }>;
-    }>
-  | Readonly<{ state: 'unavailable' }>;
+) => Promise<CommunityActivityRead<AnchoredPosition>>;
 export type BoardOpeningCard = Readonly<{
   thread: ThreadView;
   target: Readonly<{ kind: 'thread'; id: string; boardId: string }>;
@@ -84,7 +67,7 @@ export type BoardOpeningCard = Readonly<{
       | Readonly<{ state: 'unavailable' }>;
     viewer: Readonly<{ state: 'current'; reaction: string | null }> | Readonly<{ state: 'not-applicable' }>;
   }>;
-  comments: BoardOpeningComments;
+  comments: CommunityComments;
   actions: Readonly<{ reply: BoardAdvice; react: BoardAdvice; share: 'available' }>;
 }>;
 export type BoardOpeningPage = Readonly<{
@@ -233,29 +216,7 @@ function imageProjection(
   return { state: 'available', images: selected as DocumentImagePresentation[] };
 }
 
-const unavailableComments: BoardOpeningComments = { state: 'unavailable' };
-
-export function projectBoardOpeningActivitySelection(
-  selected: readonly ConversationActivitySelection[],
-): BoardOpeningActivityRead {
-  return {
-    items: selected.map((item): BoardOpeningActivityWitness => {
-      if (item.status !== 'current') return { state: 'unavailable', threadId: item.threadId };
-      return {
-        state: 'current',
-        threadId: item.threadId,
-        cohort: { kind: 'public' },
-        count: { ...item.replyCount },
-        lastActivityAt: item.lastContributionAt,
-        source: {
-          epoch: item.witness.sourceHead.epoch,
-          position: item.witness.sourceHead.position.toString(),
-        },
-      };
-    }),
-    anchors: selected.flatMap((item) => (item.status === 'current' ? [item.witness.source] : [])),
-  };
-}
+const unavailableComments: CommunityComments = { state: 'unavailable' };
 
 /** Binds one selected producer cohort to the Board page's initial and final observations. */
 function createConversationActivityReader(dependencies: BoardOpeningDependencies): BoardOpeningActivityReader {
@@ -268,43 +229,10 @@ function createConversationActivityReader(dependencies: BoardOpeningDependencies
       observed = true;
       selectedIds = [...threadIds];
       selected = await activity.select(threadIds, deadline);
-      return projectBoardOpeningActivitySelection(selected);
+      return projectCommunityActivitySelection(selected);
     }
     if (!isDeepStrictEqual(selectedIds, threadIds)) throw new BoardOpeningChangedError();
-    return projectBoardOpeningActivitySelection(await activity.confirm(selected, deadline));
-  };
-}
-
-export function projectBoardOpeningComments(
-  threadId: string,
-  witness: BoardOpeningActivityWitness | undefined,
-  actor: Actor,
-): BoardOpeningComments {
-  if (!witness || witness.state !== 'current' || witness.threadId !== threadId) return unavailableComments;
-  if (witness.cohort.kind === 'viewer') {
-    if (actor.kind !== 'account' || witness.cohort.accountId !== actor.accountId) return unavailableComments;
-  } else if (witness.cohort.kind !== 'public') {
-    return unavailableComments;
-  }
-  if (
-    !Number.isSafeInteger(witness.count.value) ||
-    witness.count.value < 0 ||
-    (witness.count.kind !== 'exact' && witness.count.kind !== 'lower-bound') ||
-    (witness.count.value === 0 && witness.lastActivityAt !== null) ||
-    (witness.lastActivityAt !== null && !Number.isFinite(Date.parse(witness.lastActivityAt))) ||
-    !Number.isSafeInteger(witness.source.epoch) ||
-    witness.source.epoch < 1 ||
-    !/^[1-9][0-9]*$/.test(witness.source.position)
-  )
-    return unavailableComments;
-  return {
-    state: 'current',
-    cohort: witness.cohort.kind,
-    // Keep the selected observation independent of a producer's retained objects.
-    // Hydration must compare two observations even if the producer reuses its cache.
-    count: { ...witness.count },
-    lastActivityAt: witness.lastActivityAt,
-    source: { ...witness.source },
+    return projectCommunityActivitySelection(await activity.confirm(selected, deadline));
   };
 }
 
@@ -318,7 +246,7 @@ export function projectBoardOpeningReactionCounts(
 }
 
 type BoardActivityProjection = Readonly<{
-  comments: ReadonlyMap<string, BoardOpeningComments>;
+  comments: ReadonlyMap<string, CommunityComments>;
   anchors: readonly AnchoredPosition[];
 }>;
 
@@ -332,29 +260,16 @@ async function readBoardActivity(
     .filter((thread) => thread.availability === 'available' && availablePost(thread) !== null)
     .map((thread) => thread.id);
   if (threadIds.length > 25) throw new RangeError('Board opening activity accepts at most twenty-five threads');
-  const comments = new Map<string, BoardOpeningComments>(threadIds.map((id) => [id, unavailableComments]));
+  const comments = new Map<string, CommunityComments>(threadIds.map((id) => [id, unavailableComments]));
   if (threadIds.length === 0 || !dependencies.readConversationActivityBatch) return { comments, anchors: [] };
 
   const result = await within(deadline, () =>
     dependencies.readConversationActivityBatch!(threadIds, { actor, deadline }),
   );
-  const requested = new Set(threadIds);
-  const seen = new Set<string>();
-  const duplicates = new Set<string>();
-  for (const witness of result.items) {
-    if (!requested.has(witness.threadId)) continue;
-    if (seen.has(witness.threadId)) {
-      duplicates.add(witness.threadId);
-      comments.set(witness.threadId, unavailableComments);
-      continue;
-    }
-    seen.add(witness.threadId);
-    if (witness.state === 'current')
-      comments.set(witness.threadId, projectBoardOpeningComments(witness.threadId, witness, actor));
-    else comments.set(witness.threadId, unavailableComments);
-  }
-  for (const id of duplicates) comments.set(id, unavailableComments);
-  return { comments, anchors: result.anchors };
+  return {
+    comments: projectCommunityCommentsBatch(threadIds, result.items, actor),
+    anchors: result.anchors,
+  };
 }
 
 function reactionProjectionView(projection: Awaited<ReturnType<typeof withReactionCountsAndCoverage>>) {

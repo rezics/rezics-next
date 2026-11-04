@@ -74,6 +74,11 @@ capabilities it registers. The kinds are:
 landing's final candidate. It needs no database and runs in seconds. Workers run the same check with `--changed`
 before they hand off. Every worker prompt carries the module map generated from the manifest.
 
+Content's `community-projection/index.ts` is a registered pure core with no dependencies. Board and Realm adapters
+supply selected native activity values and actor identity through that public entry, including its contract types;
+`realm-board-home.ts` is the registered effectful Realm Board entry. DB reads, source selection/confirmation,
+Access and schema mounting stay in adapters. The native conversation activity producer remains the one authority.
+
 **Access.** The access model is a small pure policy core in `packages/access`. It compiles the permission catalogue
 and plans the facts a decision needs. It decides with a per-operand explanation, and it partially evaluates list
 requests into a closed filter that compiles to SQL over a bounded neighbourhood. Conformance vectors specify it

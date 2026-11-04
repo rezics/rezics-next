@@ -1,3 +1,4 @@
+import { projectPublicConversationActivity } from './community-projection/index.ts';
 import { requireAccessDeadline } from '../access/unavailable.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { ConversationActivitySelection } from './conversation-activity.ts';
@@ -172,12 +173,10 @@ function comments(
 ): CardComments {
   if (selectedState === 'erased' || postAvailability !== 'available') return { state: 'withheld' };
   if (!selection) throw new ProblemError('dependency_unavailable');
-  if (selection.status !== 'current') return { state: 'withheld' };
+  const activity = projectPublicConversationActivity(selection);
+  if (selection.status !== 'current' || activity.state !== 'current') return { state: 'withheld' };
   return {
-    state: 'current',
-    cohort: 'public',
-    count: selection.replyCount,
-    lastActivityAt: selection.lastContributionAt,
+    ...activity,
     source: {
       epoch: selection.witness.source.epoch,
       position: selection.witness.source.position.toString(),

@@ -1,5 +1,6 @@
+import { projectPublicConversationActivity } from './community-projection/index.ts';
 import type { ConversationActivitySelection } from './conversation-activity.ts';
-import type { FeedConversationActivity, FeedItem } from './feed-contract.ts';
+import type { FeedItem } from './feed-contract.ts';
 
 export type FeedActivityLane = 'discovery' | 'following';
 export type FeedActivityReferences = Readonly<{
@@ -52,16 +53,6 @@ export function staleFeedActivityThreads(selections: readonly ConversationActivi
   );
 }
 
-function pageActivity(selection: ConversationActivitySelection | undefined): FeedConversationActivity {
-  if (!selection || selection.status !== 'current') return { state: 'withheld' };
-  return {
-    state: 'current',
-    cohort: 'public',
-    count: selection.replyCount,
-    lastActivityAt: selection.lastContributionAt,
-  };
-}
-
 /** Attach the confirmed producer result without changing a card's native destination or actions. */
 export function projectFeedConversationActivity(
   items: readonly FeedItem[],
@@ -71,7 +62,7 @@ export function projectFeedConversationActivity(
   for (const item of items) {
     const selected = reference(item);
     if (!selected) continue;
-    const activity = pageActivity(byThread.get(selected.threadId));
+    const activity = projectPublicConversationActivity(byThread.get(selected.threadId));
     item.summary = { ...item.summary, conversationActivity: activity };
   }
 }

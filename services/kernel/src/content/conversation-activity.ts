@@ -1,3 +1,9 @@
+import type {
+  ConversationActivityReplyCount,
+  ConversationActivityWitness as SelectedActivityWitness,
+  ConversationActivityCurrent as SelectedActivityCurrent,
+  ConversationActivitySelection as SelectedActivitySelection,
+} from './community-projection/index.ts';
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
 import type { AccessClient } from '../request/access.ts';
@@ -50,35 +56,11 @@ export type ConversationActivitySource = Readonly<{
   anchor: AnchoredPosition;
 }>;
 
-export type ConversationActivityReplyCount = Readonly<
-  { kind: 'exact'; value: number } | { kind: 'lower-bound'; value: number }
->;
-export type ConversationActivityWitness = Readonly<{
-  threadId: string;
-  boardId: string;
-  threadSecurityRevision: string;
-  boardSecurityRevision: string;
-  realmId: string | null;
-  boardGeneration: string;
-  generation: string;
-  /** eventSeq 1000 marks a repair cut after every event at this partition position. */
-  sourceHead: Readonly<{ epoch: number; position: bigint; eventSeq: number }>;
-  source: AnchoredPosition;
-}>;
-export type ConversationActivityCurrent = Readonly<{
-  threadId: string;
-  status: 'current';
-  cohort: 'public';
-  replyCount: ConversationActivityReplyCount;
-  lastContributionAt: string | null;
-  witness: ConversationActivityWitness;
-}>;
-export type ConversationActivityWithheld = Readonly<{
-  threadId: string;
-  status: 'withheld';
-  reason: 'missing' | 'coverage' | 'unsupported-cohort' | 'stale';
-}>;
-export type ConversationActivitySelection = ConversationActivityCurrent | ConversationActivityWithheld;
+// Native adapters bind the pure selected-value contracts to their partition anchor.
+export type { ConversationActivityReplyCount, ConversationActivityWithheld } from './community-projection/index.ts';
+export type ConversationActivityWitness = SelectedActivityWitness<AnchoredPosition>;
+export type ConversationActivityCurrent = SelectedActivityCurrent<AnchoredPosition>;
+export type ConversationActivitySelection = SelectedActivitySelection<AnchoredPosition>;
 export type ConversationActivityBatch = Readonly<{
   /** Selects by raw keys, before consumer hydration. It never returns a protected cohort. */
   select(threadIds: readonly string[], deadline: number): Promise<readonly ConversationActivitySelection[]>;

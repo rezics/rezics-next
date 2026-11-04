@@ -2,11 +2,11 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { realmBoardWorld } from './realm-board-create-support.ts';
 import {
-  projectBoardOpeningActivitySelection,
-  projectBoardOpeningComments,
-  projectBoardOpeningReactionCounts,
-  type BoardOpeningActivityWitness,
-} from '../../src/content/board-page.ts';
+  projectCommunityActivitySelection,
+  projectCommunityComments,
+  type CommunityActivityWitness,
+} from '../../src/content/community-projection/index.ts';
+import { projectBoardOpeningReactionCounts } from '../../src/content/board-page.ts';
 import type { ConversationActivitySelection } from '../../src/content/conversation-activity.ts';
 import type { AnchoredPosition } from '../../src/content/model.ts';
 import type { Actor } from '../../src/request/access.ts';
@@ -23,7 +23,7 @@ afterAll(async () => {
 
 test('Board comments require a current matching cohort witness and reaction zero differs from unavailable', () => {
   const threadId = 'thread-one';
-  const publicZero: BoardOpeningActivityWitness = {
+  const publicZero: CommunityActivityWitness = {
     state: 'current',
     threadId,
     cohort: { kind: 'public' },
@@ -31,7 +31,7 @@ test('Board comments require a current matching cohort witness and reaction zero
     lastActivityAt: null,
     source: { epoch: 2, position: '10' },
   };
-  const privateActivity: BoardOpeningActivityWitness = {
+  const privateActivity: CommunityActivityWitness = {
     ...publicZero,
     cohort: { kind: 'viewer', accountId: 'account-one' },
     count: { kind: 'lower-bound', value: 2 },
@@ -40,25 +40,25 @@ test('Board comments require a current matching cohort witness and reaction zero
   const anonymous = { kind: 'anonymous' } as Actor;
   const account = { kind: 'account', accountId: 'account-one' } as Actor;
 
-  expect(projectBoardOpeningComments(threadId, publicZero, anonymous)).toMatchObject({
+  expect(projectCommunityComments(threadId, publicZero, anonymous)).toMatchObject({
     state: 'current',
     cohort: 'public',
     count: { kind: 'exact', value: 0 },
     lastActivityAt: null,
   });
-  expect(projectBoardOpeningComments(threadId, privateActivity, anonymous)).toEqual({ state: 'unavailable' });
-  expect(projectBoardOpeningComments(threadId, privateActivity, account)).toMatchObject({
+  expect(projectCommunityComments(threadId, privateActivity, anonymous)).toEqual({ state: 'unavailable' });
+  expect(projectCommunityComments(threadId, privateActivity, account)).toMatchObject({
     state: 'current',
     cohort: 'viewer',
     count: { kind: 'lower-bound', value: 2 },
   });
-  expect(projectBoardOpeningComments('other-thread', publicZero, anonymous)).toEqual({ state: 'unavailable' });
+  expect(projectCommunityComments('other-thread', publicZero, anonymous)).toEqual({ state: 'unavailable' });
 
-  const selected = projectBoardOpeningComments(threadId, publicZero, anonymous);
+  const selected = projectCommunityComments(threadId, publicZero, anonymous);
   // A producer may refresh a retained summary object while the page hydrates.
   Object.assign(publicZero.count, { value: 1 });
   Object.assign(publicZero.source, { position: '11' });
-  const refreshed = projectBoardOpeningComments(threadId, publicZero, anonymous);
+  const refreshed = projectCommunityComments(threadId, publicZero, anonymous);
   expect(selected).toMatchObject({ count: { value: 0 }, source: { position: '10' } });
   expect(refreshed).toMatchObject({ count: { value: 1 }, source: { position: '11' } });
   expect(selected).not.toEqual(refreshed);
@@ -104,7 +104,7 @@ test('Board projects only the producer count and source head while retaining its
       source: anchor,
     },
   };
-  expect(projectBoardOpeningActivitySelection([selected])).toEqual({
+  expect(projectCommunityActivitySelection([selected])).toEqual({
     items: [
       {
         state: 'current',
