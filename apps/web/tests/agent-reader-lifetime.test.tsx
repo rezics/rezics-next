@@ -131,6 +131,11 @@ mock.module('cloudflare:workers', () => ({ env }));
 // The only native boundary is the existing own-account preferences GET. Session preparation,
 // its same-request account provenance, the query, and the mounted observer remain real.
 mock.module('../src/kernel/client', () => ({
+  requestLocale: () => 'en',
+  acceptLanguage: (locale: string) => locale,
+  preparePrivatePage: () => {},
+  hasKernelOrigin: () => false,
+  configuredKernelOrigin: () => undefined,
   kernelClient: () => ({
     accounts: ({ accountId }: { accountId: string }) => ({
       preferences: {
@@ -595,7 +600,9 @@ test('public account readers retire old admissions across sign-out, replacement,
     expectAdmittedReader();
     await act(async () => {
       client.setQueryData(sessionModule.sessionQuery.queryKey, {
-        state: 'signed-in', subject: alice, csrfToken: 'replacement-credential',
+        state: 'signed-in',
+        subject: alice,
+        csrfToken: 'replacement-credential',
       });
     });
     expectSafeReader();
@@ -660,7 +667,17 @@ function PublicReaderConsumer({
 
 /** Both focused files use the same prepared-session/native transport boundary. */
 export const readerTestRuntime = {
-  installWindow, settle, markCoversWithheld, result, nativeReads,
-  setReader(reader: string | null) { sessionReader = reader; bffReader = reader; },
-  reset() { nativeReads.length = 0; readerEnvelopes.length = 0; },
+  installWindow,
+  settle,
+  markCoversWithheld,
+  result,
+  nativeReads,
+  setReader(reader: string | null) {
+    sessionReader = reader;
+    bffReader = reader;
+  },
+  reset() {
+    nativeReads.length = 0;
+    readerEnvelopes.length = 0;
+  },
 };

@@ -5,7 +5,15 @@ import { useSession } from '../../../session/query';
 import type { Reader } from '../../../subject/reader';
 
 export type ProfileReadingState =
-  | 'conservative' | 'loading' | 'ready' | 'unavailable' | 'rejected' | 'signed-out' | 'closed' | 'preparing' | 'retired';
+  | 'conservative'
+  | 'loading'
+  | 'ready'
+  | 'unavailable'
+  | 'rejected'
+  | 'signed-out'
+  | 'closed'
+  | 'preparing'
+  | 'retired';
 export type ProfileReading = {
   state: ProfileReadingState;
   reader: Reader;
@@ -28,8 +36,13 @@ export function useProfileReading(input: {
   const reader = useAgentReaderResult(scope, query.data, query.status);
   let state: ProfileReadingState = 'conservative';
   if (scope.enabled) {
-    state = scope.failure() ?? (query.status === 'error' ? 'unavailable' :
-      scope.accepts(query.data) && query.data?.kind === 'ready' ? 'ready' : 'loading');
+    state =
+      scope.failure() ??
+      (query.status === 'error'
+        ? 'unavailable'
+        : scope.accepts(query.data) && query.data?.kind === 'ready'
+          ? 'ready'
+          : 'loading');
   } else if (session.state === 'unavailable') state = 'unavailable';
   else if (session.state === 'signed-out') state = 'signed-out';
   return {

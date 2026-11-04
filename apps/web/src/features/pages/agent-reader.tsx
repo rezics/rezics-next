@@ -69,10 +69,14 @@ export function useAgentReaderScope({
     let response: AgentReaderResult | undefined;
     const listeners = new Set<() => void>();
     const ownsRoute = () =>
-      active && current.current?.observation === observation && sessions.getSnapshot() === snapshot && admitted && !!reader;
+      active &&
+      current.current?.observation === observation &&
+      sessions.getSnapshot() === snapshot &&
+      admitted &&
+      !!reader;
     // Active effect replay is separate from permanent address retirement.
-    const address = addressLease(() =>
-      current.current?.observation === observation && sessions.getSnapshot() === snapshot && admitted,
+    const address = addressLease(
+      () => current.current?.observation === observation && sessions.getSnapshot() === snapshot && admitted,
     );
     const read = readLease(reader ?? '', address, () => !retired);
     const retire = (notify: boolean, reason: ReaderFailure = 'retired') => {
@@ -85,20 +89,30 @@ export function useAgentReaderScope({
       if (notify) for (const listener of listeners) listener();
     };
     observation = {
-      reader, route, revision, mount, generation,
+      reader,
+      route,
+      revision,
+      mount,
+      generation,
       enabled: admitted && reader !== null,
       queryKey,
       current: () => active && typeof window !== 'undefined' && read.current(),
       retire: (reason) => retire(true, reason),
-      accept: (result) => { if (observation.current()) response = result; },
+      accept: (result) => {
+        if (observation.current()) response = result;
+      },
       accepts: (result) => observation.current() && response === result,
       subscribe: (listener) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
       version: () => version,
-      activate: () => { if (!retired) active = true; },
-      deactivate: () => { active = false; },
+      activate: () => {
+        if (!retired) active = true;
+      },
+      deactivate: () => {
+        active = false;
+      },
       invalidate: (notify) => retire(notify),
       invalidated: () => retired,
       active: () => active,
@@ -129,8 +143,10 @@ export function useAgentReaderScope({
         observation.retire();
       } else if (query.status === 'error') {
         observation.retire('unavailable');
-      } else if (query.isInvalidated || (query.status === 'success' &&
-        (query.fetchStatus !== 'idle' || !observation.accepts(query.data)))) {
+      } else if (
+        query.isInvalidated ||
+        (query.status === 'success' && (query.fetchStatus !== 'idle' || !observation.accepts(query.data)))
+      ) {
         observation.retire();
       }
     });

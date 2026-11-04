@@ -28,7 +28,12 @@ export function ProfileReadingStatus({ reading, locale }: { reading: ProfileRead
   }[reading.state]({}, options);
   return (
     <section data-slot="profile-reading" className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-      <p role="status" aria-live="polite" aria-atomic="true" className="min-w-0 max-w-prose wrap-anywhere text-muted-foreground">
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="min-w-0 max-w-prose wrap-anywhere text-muted-foreground"
+      >
         {text}
       </p>
       {reading.retry && (
@@ -38,7 +43,9 @@ export function ProfileReadingStatus({ reading, locale }: { reading: ProfileRead
           size="sm"
           className="min-h-11 max-w-full whitespace-normal text-start"
           aria-disabled={reading.state === 'loading'}
-          onClick={() => { if (reading.state !== 'loading') reading.retry?.(); }}
+          onClick={() => {
+            if (reading.state !== 'loading') reading.retry?.();
+          }}
         >
           {m.profile_reading_retry({}, options)}
         </Button>
