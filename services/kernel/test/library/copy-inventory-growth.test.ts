@@ -7,7 +7,13 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { newId } from '../../src/route/route.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
-import { assertGrowth, measure, openGrowthDatabase, type GrowthDatabase, type GrowthSample } from '../support/growth.ts';
+import {
+  assertGrowth,
+  measure,
+  openGrowthDatabase,
+  type GrowthDatabase,
+  type GrowthSample,
+} from '../support/growth.ts';
 import { createProfileEntryFixture, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -69,9 +75,7 @@ beforeAll(async () => {
     fixture({
       id: 'fixture.copy-inventory-growth',
       copies: {
-        kinds: [
-          { id: 'physical', statuses: [{ id: 'ordered' }, { id: 'owned' }, { id: 'lent' }, { id: 'disposed' }] },
-        ],
+        kinds: [{ id: 'physical', statuses: [{ id: 'ordered' }, { id: 'owned' }, { id: 'lent' }, { id: 'disposed' }] }],
       },
     }),
   );

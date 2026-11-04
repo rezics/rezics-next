@@ -75,9 +75,7 @@ function selectedLabel(
   const candidate =
     row.dimension === 'kind'
       ? profile.copies?.kinds.find((kind) => kind.id === row.id)
-      : profile.copies?.kinds
-          .find((kind) => kind.id === row.copyKind)
-          ?.statuses.find((status) => status.id === row.id);
+      : profile.copies?.kinds.find((kind) => kind.id === row.copyKind)?.statuses.find((status) => status.id === row.id);
   if (!candidate) return { id: row.id, label: row.id, meaning: 'unsupported' };
   const label = chooseLabel(candidate.labels, languages);
   if (!label || new TextEncoder().encode(label.value).byteLength > 256)

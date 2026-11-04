@@ -1,37 +1,31 @@
 ---
 {
-  "goal": "commerce",
-  "manager": "commerce",
-  "kind": "implementation",
-  "paths": [
-    "apps/web/src/library/copies-*",
-    "apps/web/src/library/copy-inventory*",
-    "apps/web/src/routes/library/copies*",
-    "apps/web/test/library/copy-inventory*"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "account",
-    "deletion"
-  ],
-  "criticalPath": false,
-  "after": [],
-  "waiting": [],
-  "estimate": {
-    "lines": 520,
-    "files": 8
-  },
-  "acceptance": {
-    "tests": [
-      "Native kind/status choices and current allowed actions render on the existing Copies page using the published typed GET /v1/copies contract.",
-      "Address parsing, active filters, reset, reload/back navigation, exact Subject context, selection/detail/draft origin and account/query-bound cursors work without changing copy or loan command authority.",
-      "The installed current-read envelope preserves sessionSubject, requested address, current-reader CSRF provenance and invalid-cursor recovery; account replacement and late old-filter responses are discarded."
+  'goal': 'commerce',
+  'manager': 'commerce',
+  'kind': 'implementation',
+  'paths':
+    [
+      'apps/web/src/library/copies-*',
+      'apps/web/src/library/copy-inventory*',
+      'apps/web/src/routes/library/copies*',
+      'apps/web/test/library/copy-inventory*',
     ],
-    "failing": true,
-    "workerOwned": true
-  }
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'account', 'deletion'],
+  'criticalPath': false,
+  'after': [],
+  'waiting': [],
+  'estimate': { 'lines': 520, 'files': 8 },
+  'acceptance':
+    {
+      'tests':
+        [
+          'Native kind/status choices and current allowed actions render on the existing Copies page using the published typed GET /v1/copies contract.',
+          'Address parsing, active filters, reset, reload/back navigation, exact Subject context, selection/detail/draft origin and account/query-bound cursors work without changing copy or loan command authority.',
+          'The installed current-read envelope preserves sessionSubject, requested address, current-reader CSRF provenance and invalid-cursor recovery; account replacement and late old-filter responses are discarded.',
+        ],
+      'failing': true,
+      'workerOwned': true,
+    },
 }
 ---
 

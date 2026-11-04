@@ -346,21 +346,22 @@ export async function pageCopies(
     limit: Math.min(MAX_LIBRARY_PAGE_SIZE, page.limit),
   };
   const query = queryClient(client);
-  const rows = subjectId !== null
-    ? kind !== null && status !== null
-      ? await copySubjectKindStatusPage.run(query, { ...parameters, subject_id: subjectId, kind, status })
-      : kind !== null
-        ? await copySubjectKindPage.run(query, { ...parameters, subject_id: subjectId, kind })
-        : status !== null
-          ? await copySubjectStatusPage.run(query, { ...parameters, subject_id: subjectId, status })
-          : await copySubjectPage.run(query, { ...parameters, subject_id: subjectId })
-    : kind !== null && status !== null
-      ? await copyKindStatusPage.run(query, { ...parameters, kind, status })
-      : kind !== null
-        ? await copyKindPage.run(query, { ...parameters, kind })
-        : status !== null
-          ? await copyStatusPage.run(query, { ...parameters, status })
-          : await copyPage.run(query, parameters);
+  const rows =
+    subjectId !== null
+      ? kind !== null && status !== null
+        ? await copySubjectKindStatusPage.run(query, { ...parameters, subject_id: subjectId, kind, status })
+        : kind !== null
+          ? await copySubjectKindPage.run(query, { ...parameters, subject_id: subjectId, kind })
+          : status !== null
+            ? await copySubjectStatusPage.run(query, { ...parameters, subject_id: subjectId, status })
+            : await copySubjectPage.run(query, { ...parameters, subject_id: subjectId })
+      : kind !== null && status !== null
+        ? await copyKindStatusPage.run(query, { ...parameters, kind, status })
+        : kind !== null
+          ? await copyKindPage.run(query, { ...parameters, kind })
+          : status !== null
+            ? await copyStatusPage.run(query, { ...parameters, status })
+            : await copyPage.run(query, parameters);
   if (rows.some((row) => row.libraryProfilePin === null)) {
     await assertPreProfileLibraryRead(client, accountId);
     for (const row of rows) if (row.libraryProfilePin === null) assertStatus(row.status);

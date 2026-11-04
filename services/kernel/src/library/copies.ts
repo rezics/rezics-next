@@ -623,61 +623,65 @@ export function createCopyCommands(config: Dependencies) {
     };
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
     const readPage = () =>
-      readOnly(owner, async (client) => {
-        const partition = await readPartition(client, partitionOf(accountRoute));
-        let after: { createdAt: string; copyId: string } | null = null;
-        if (options.cursor !== undefined) {
-          const cursor = decodeCursor(tokens, binding, options.cursor);
-          const createdAt = cursor.ok ? cursor.after[0] : undefined;
-          const cursorId = cursor.ok ? cursor.after[1] : undefined;
-          if (
-            !cursor.ok ||
-            cursor.after.length !== 2 ||
-            typeof createdAt !== 'string' ||
-            !Number.isFinite(Date.parse(createdAt)) ||
-            typeof cursorId !== 'string' ||
-            routeOf(cursorId) !== accountRoute
-          ) {
-            throw new ProblemError('invalid_cursor');
+      readOnly(
+        owner,
+        async (client) => {
+          const partition = await readPartition(client, partitionOf(accountRoute));
+          let after: { createdAt: string; copyId: string } | null = null;
+          if (options.cursor !== undefined) {
+            const cursor = decodeCursor(tokens, binding, options.cursor);
+            const createdAt = cursor.ok ? cursor.after[0] : undefined;
+            const cursorId = cursor.ok ? cursor.after[1] : undefined;
+            if (
+              !cursor.ok ||
+              cursor.after.length !== 2 ||
+              typeof createdAt !== 'string' ||
+              !Number.isFinite(Date.parse(createdAt)) ||
+              typeof cursorId !== 'string' ||
+              routeOf(cursorId) !== accountRoute
+            ) {
+              throw new ProblemError('invalid_cursor');
+            }
+            if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+            after = { createdAt, copyId: cursorId };
           }
-          if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
-          after = { createdAt, copyId: cursorId };
-        }
-        const rows = await store.pageCopies(
-          client,
-          accountRoute,
-          owner.accountId,
-          { after, limit: Math.min(MAX_LIMIT, size + 1) },
-          filterSubjectId,
-          filterKind,
-          filterStatus,
-        );
-        const copies = rows.slice(0, size);
-        const last = copies.at(-1);
-        let more = rows.length > size;
-        if (!more && size === MAX_LIMIT && last) {
-          const probe = await store.pageCopies(
+          const rows = await store.pageCopies(
             client,
             accountRoute,
             owner.accountId,
-            { after: { createdAt: last.createdAt, copyId: last.id }, limit: 1 },
+            { after, limit: Math.min(MAX_LIMIT, size + 1) },
             filterSubjectId,
             filterKind,
             filterStatus,
           );
-          more = probe.length > 0;
-        }
-        const inventoryValues = await readCopyInventoryValues(client, accountRoute, owner.accountId);
-        return {
-          copies,
-          next:
-            more && last && partition
-              ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.createdAt, last.id] })
-              : null,
-          accountEpoch: partition?.epoch ?? null,
-          inventoryValues,
-        };
-      }, deadline);
+          const copies = rows.slice(0, size);
+          const last = copies.at(-1);
+          let more = rows.length > size;
+          if (!more && size === MAX_LIMIT && last) {
+            const probe = await store.pageCopies(
+              client,
+              accountRoute,
+              owner.accountId,
+              { after: { createdAt: last.createdAt, copyId: last.id }, limit: 1 },
+              filterSubjectId,
+              filterKind,
+              filterStatus,
+            );
+            more = probe.length > 0;
+          }
+          const inventoryValues = await readCopyInventoryValues(client, accountRoute, owner.accountId);
+          return {
+            copies,
+            next:
+              more && last && partition
+                ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.createdAt, last.id] })
+                : null,
+            accountEpoch: partition?.epoch ?? null,
+            inventoryValues,
+          };
+        },
+        deadline,
+      );
 
     return withRequestDeadline(deadline, async () => {
       const first = await readPage();

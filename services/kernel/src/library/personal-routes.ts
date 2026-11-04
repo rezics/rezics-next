@@ -128,10 +128,7 @@ const copyInventoryFacetSchema = t.Object(
   },
   closed,
 );
-const copyInventorySchema = t.Object(
-  { kinds: copyInventoryFacetSchema, statuses: copyInventoryFacetSchema },
-  closed,
-);
+const copyInventorySchema = t.Object({ kinds: copyInventoryFacetSchema, statuses: copyInventoryFacetSchema }, closed);
 const entrySchema = t.Object(
   {
     subjectId: id,
@@ -1288,7 +1285,9 @@ export function personalLibraryRoutes(app: ReturnType<typeof definitionRoutes>, 
         const pageQuery = basicQuery(query);
         const languages = languageRanges(request.headers.get('accept-language'));
         const readPage = () =>
-          admission.run('normal', job, () => command(() => copies().listCopiesWithObservation(actor, pageQuery, languages)));
+          admission.run('normal', job, () =>
+            command(() => copies().listCopiesWithObservation(actor, pageQuery, languages)),
+          );
         const result = await readPage();
         if (query.view !== 'FULL' || result.copies.length === 0)
           return fullView(config(), actor, query.view, {

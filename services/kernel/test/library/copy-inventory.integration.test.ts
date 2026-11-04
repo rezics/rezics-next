@@ -137,9 +137,10 @@ test('native filters select past unrelated pages, bind cursors, and keep tuple o
     }),
   ).rejects.toMatchObject({ code: 'invalid_cursor' });
   await expect(commands.listCopies(other, { cursor: first.next! })).rejects.toMatchObject({ code: 'invalid_cursor' });
-  await expect(
-    commands.listCopies(owner, { subjectId: target, kind: 'physical and digital' }),
-  ).rejects.toMatchObject({ name: 'CopyInvalidError', field: 'kind' });
+  await expect(commands.listCopies(owner, { subjectId: target, kind: 'physical and digital' })).rejects.toMatchObject({
+    name: 'CopyInvalidError',
+    field: 'kind',
+  });
   expect(
     (await commands.listCopies(owner, { subjectId: target, kind: 'removed-kind', status: 'ordered' })).copies,
   ).toEqual([]);
