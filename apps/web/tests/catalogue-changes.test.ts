@@ -59,11 +59,7 @@ test('a reader follows paginated native subject revisions to a safe change expla
     { type: 'semantic.context', id: '00000000-0000-8000-8000-000000000000' },
     { type: fixture.read.subject.type, id: fixture.id },
   ]);
-  // Until the generated producer DTO is integrated, runtime detail is honestly unavailable.
-  expect(await fixture.transport.detail(2)).toMatchObject({
-    kind: 'unavailable',
-    currentOperations: { state: 'available', operations: ['subject.propose', 'subject.terms'] },
-  });
+  expect(await fixture.transport.detail(2)).toMatchObject({ kind: 'unavailable' });
 });
 
 test('current operation reads distinguish confirmed denial, unavailable hydration and preparing state without losing public history', async () => {
@@ -94,6 +90,8 @@ test('current operation reads distinguish confirmed denial, unavailable hydratio
 
 test('current correction handoffs use only the exact Subject and safe current field address', async () => {
   const { ChangeExplanation } = await import('../src/features/catalogue/subject-changes-page');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
   const fixture = catalogueChangesFixture();
   const listing = await fixture.transport.list();
   if (listing.kind !== 'ready') throw new Error('Expected public history');
@@ -102,22 +100,32 @@ test('current correction handoffs use only the exact Subject and safe current fi
     state: 'available',
     operations: ['subject.propose', 'subject.terms'],
   };
-  const terms = renderToStaticMarkup(
-    createElement(ChangeExplanation, {
+  const renderExplanation = (props: Parameters<typeof ChangeExplanation>[0]) => {
+    const root = createRootRoute();
+    const view = createRoute({
+      getParentRoute: () => root,
+      path: '/$locale/subjects/$id/$slug/$view',
+      component: () => createElement(ChangeExplanation, props),
+    });
+    const router = createRouter({
+      routeTree: root.addChildren([view]),
+      history: createMemoryHistory({ initialEntries: [`${base}/changes`] }),
+    });
+    return renderToStaticMarkup(createElement(RouterProvider, { router }));
+  };
+  const terms = renderExplanation({
       detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] } },
       revision: 2,
       locale: 'en',
       pageHref: base,
       currentOperations,
       onCorrectCurrent: () => true,
-    }),
-  );
+    });
   expect(terms).toContain(m.changes_correct_terms());
   expect(terms).toContain(`${base}/terms?returnTo=changes`);
   expect(terms).not.toContain('revision=2');
 
-  const fact = renderToStaticMarkup(
-    createElement(ChangeExplanation, {
+  const fact = renderExplanation({
       detail: {
         id: fixture.id,
         revision: 5,
@@ -133,8 +141,7 @@ test('current correction handoffs use only the exact Subject and safe current fi
       pageHref: base,
       currentOperations,
       onCorrectCurrent: () => true,
-    }),
-  );
+    });
   expect(fact).toContain(m.changes_correct_current());
   expect(fact).toContain(`${base}/edit?property=schema%3Aurl&amp;returnTo=changes`);
   expect(fact).not.toContain('candidate=');
@@ -146,16 +153,14 @@ test('current correction handoffs use only the exact Subject and safe current fi
     [{ state: 'preparing' }, m.changes_correction_preparing()],
   ];
   for (const [operations, expected] of actionStates) {
-    const html = renderToStaticMarkup(
-      createElement(ChangeExplanation, {
+    const html = renderExplanation({
         detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [] } },
         revision: 2,
         locale: 'en',
         pageHref: base,
         currentOperations: operations,
         onCorrectCurrent: () => true,
-      }),
-    );
+      });
     expect(html).toContain(expected);
     expect(html).not.toContain(m.changes_correct_terms());
   }

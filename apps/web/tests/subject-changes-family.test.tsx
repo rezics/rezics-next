@@ -550,8 +550,18 @@ test('the complete Subject history family keeps independent headings, bounded su
       expect(page.querySelector('dl')?.querySelectorAll('dt')).toHaveLength(3);
       authoredControls(page, m.changes_current({}, o));
       // Preserve the original exact dt/dd HTML and inclusion oracle.
-      const html = renderToStaticMarkup(<ChangeExplanation detail={detail} locale={locale} />);
-      expect(renderToStaticMarkup(<SubjectChangesPage state={state} locale={locale} />)).toContain(html);
+      const html = renderToStaticMarkup(
+        <QueryClientProvider client={client}>
+          <ChangeExplanation detail={detail} locale={locale} />
+        </QueryClientProvider>,
+      );
+      expect(
+        renderToStaticMarkup(
+          <QueryClientProvider client={client}>
+            <SubjectChangesPage state={state} locale={locale} />
+          </QueryClientProvider>,
+        ),
+      ).toContain(html);
       expect(html).toContain('</dt><dd>');
     }
     await show(state);
