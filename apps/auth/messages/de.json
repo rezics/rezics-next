@@ -786,5 +786,11 @@
   "auth_home_transfer_exit": "Sicherheit vor einer Betreiberübertragung prüfen",
   "auth_home_opening": "Betriebene Sitzung öffnen",
   "auth_home_opening_description": "Verwenden Sie den genauen automatisierten Akteur und seinen aktuellen Betreiber im Ablauf zur Sitzungsöffnung. Ein aktuell authentifizierter Mensch und native Berechtigungsprüfungen sind erforderlich. Bestätigen Sie sorgfältig: Die Browsersitzung wird ersetzt; menschliche Zugangsdaten und Betreiberrechte werden nicht kopiert.",
-  "auth_home_opening_exit": "Sicherheit vor dem Identitätswechsel prüfen"
+  "auth_home_opening_exit": "Sicherheit vor dem Identitätswechsel prüfen",
+  "auth_members_return_heading": "Frühere Mitgliedschaftsprüfung",
+  "auth_members_return_unsent": "Diese Prüfung endete, bevor die Änderung gesendet wurde. Prüfe die aktuelle Mitgliedschaft, um neu zu beginnen.",
+  "auth_members_return_refused": "Der native Dienst hat diesen Versuch abgelehnt. Eine frühere Anfrage mit unbekanntem Ergebnis bleibt ungeklärt.",
+  "auth_members_return_boundary": "Der Verlauf ist von der aktuellen Mitgliedschaft getrennt. Ausblenden verbirgt nur diesen Text; es bricht keinen Vorgang ab und erlaubt keinen erneuten Versuch.",
+  "auth_members_return_dismiss": "Verlauf ausblenden",
+  "auth_members_current_heading": "Aktuelle Mitgliedschaft"
 }

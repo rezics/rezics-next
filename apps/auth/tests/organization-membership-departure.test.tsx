@@ -248,3 +248,187 @@ test('paging Leave rereads current advice before restoring an unresolved review'
   expect(membership.readMembershipCommand()).toEqual(saved);
   expect(requests.filter((path) => path.endsWith('/execute'))).toHaveLength(1);
 });
+
+function transition(type: 'pagehide' | 'pageshow') {
+  const event = new dom.Event(type);
+  if (type === 'pageshow') Object.defineProperty(event, 'persisted', { value: true });
+  window.dispatchEvent(event);
+}
+const writes = () => requests.filter((path) => /\/(approve|execute)$/.test(path));
+
+test('pagehide removes private DOM in the event turn and a stale selection cannot repopulate it', async () => {
+  await mount();
+  let release!: (response: Response) => void;
+  const normal = globalThis.fetch;
+  globalThis.fetch = (async (input, init) =>
+    String(input).endsWith('/member')
+      ? new Promise<Response>((resolve) => {
+          release = resolve;
+        })
+      : normal(input, init)) as typeof fetch;
+  await click(m.auth_members_change_role());
+  await flush(() => {
+    transition('pagehide');
+    // Assert inside the event turn, before act can flush scheduled updates.
+    expect(host.textContent).not.toContain('Current Member');
+    expect(host.textContent).not.toContain(org);
+    expect(host.textContent).not.toContain(member);
+    expect(host.querySelector('#membership-confirmation')).toBeNull();
+  });
+  const reads = list.mock.calls.length;
+  await flush(() =>
+    release(
+      Response.json({
+        organizationId: org,
+        memberAccountId: member,
+        membership: { role: 'member', reservationId: reservation },
+      }),
+    ),
+  );
+  expect(list.mock.calls).toHaveLength(reads);
+  expect(membership.readMembershipCommand()).toBeNull();
+  expect(host.textContent).toContain(m.auth_members_return_unsent());
+  expect(document.activeElement?.id).toBe('membership-history-heading');
+  expect(writes()).toHaveLength(0);
+});
+
+test('native acknowledgement survives failed observation and restoration; history dismissal changes no continuation', async () => {
+  await mount();
+  await click(m.auth_members_change_role());
+  const normal = globalThis.fetch;
+  let executed = false;
+  globalThis.fetch = (async (input, init) => {
+    const path = String(input);
+    if (path.endsWith('/execute')) executed = true;
+    else if (executed && path.endsWith('/member')) return Response.json({}, { status: 503 });
+    return normal(input, init);
+  }) as typeof fetch;
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  expect(host.textContent).toContain(m.auth_members_acknowledged());
+  expect(host.textContent).not.toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(member);
+  const sent = writes().length;
+  list.mockResolvedValueOnce({ kind: 'unavailable' });
+  await flush(() => transition('pageshow'));
+  expect(host.textContent).toContain(m.auth_members_acknowledged());
+  expect(host.textContent).toContain(m.auth_members_unavailable());
+  const saved = membership.readMembershipCommand();
+  await click(m.auth_members_return_dismiss());
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(document.activeElement?.id).toBe('membership-current-heading');
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain('Current Member');
+  expect(writes()).toHaveLength(sent);
+});
+
+test('unknown history survives exact later acknowledgement and matching state without changing submitted identity', async () => {
+  await mount();
+  await click(m.auth_members_change_role());
+  execute = async () => Response.json({}, { status: 503 });
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  const saved = membership.readMembershipCommand();
+  expect(saved && saved !== 'invalid' && saved.unresolved).toBe(true);
+  execute = async () => Response.json({ accountId: member });
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_retry_exact());
+  expect(host.textContent).toContain(m.auth_members_acknowledged());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  await click(m.auth_members_return_dismiss());
+  expect(membership.readMembershipCommand()).toEqual(saved);
+  expect(writes().filter((p) => p.endsWith('/approve'))).toHaveLength(1);
+});
+
+test('restoration creates a new read generation; released old page never replaces current advice', async () => {
+  await mount();
+  let release!: (page: membership.MembershipPage) => void;
+  list.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  await click(m.auth_inventory_reload());
+  await flush(() => transition('pagehide'));
+  list.mockResolvedValueOnce({ kind: 'denied' });
+  await flush(() => transition('pageshow'));
+  const reads = list.mock.calls.length;
+  await flush(() =>
+    release({
+      kind: 'ready',
+      organizationId: org,
+      viewer: { accountId: account, role: 'owner', leave: 'unavailable' },
+      members: { state: 'ready', holders: [], next: null },
+    }),
+  );
+  expect(list.mock.calls).toHaveLength(reads);
+  expect(host.textContent).toContain(m.auth_members_denied());
+  expect(host.textContent).not.toContain(org);
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain('Current Member');
+  expect(writes()).toHaveLength(0);
+});
+
+test('lost continuation closes exact recovery while generic history and presentation dismissal remain honest', async () => {
+  await mount();
+  await click(m.auth_members_change_role());
+  execute = async () => Response.json({}, { status: 503 });
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  await flush(() => transition('pagehide'));
+  window.sessionStorage.clear();
+  const reads = list.mock.calls.length,
+    sent = writes().length;
+  await click(m.auth_members_recovery_retry());
+  expect(host.textContent).toContain(m.auth_members_unknown());
+  expect(host.textContent).not.toContain(member);
+  expect(list.mock.calls).toHaveLength(reads);
+  expect(writes()).toHaveLength(sent);
+  await click(m.auth_members_return_dismiss());
+  expect(unload()).toBe(true);
+  expect(membership.readMembershipCommand()).toBeNull();
+  expect(
+    [...host.querySelectorAll('button')].find((b) => b.textContent === m.auth_members_recovery_retry())?.disabled,
+  ).toBe(true);
+});
+
+test('pagehide synchronously clears prepared authentication inputs and stale sign-in cannot restore authority', async () => {
+  await mount();
+  await click(m.auth_members_change_role());
+  const normal = globalThis.fetch;
+  globalThis.fetch = (async (input, init) =>
+    String(input).endsWith('/approve')
+      ? Response.json({ code: 'step_up_required' }, { status: 401 })
+      : normal(input, init)) as typeof fetch;
+  await flush(() => host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click());
+  await click(m.auth_members_submit());
+  await flush(() => {
+    for (const [id, value] of [
+      ['membership-email', 'private@example.test'],
+      ['membership-password', 'private-password'],
+    ]) {
+      const field = host.querySelector<HTMLInputElement>(`#${id}`)!;
+      Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, 'value')!.set!.call(field, value);
+      field.dispatchEvent(new dom.Event('input', { bubbles: true }));
+    }
+  });
+  let release!: (response: Response) => void;
+  globalThis.fetch = (async () =>
+    new Promise<Response>((resolve) => {
+      release = resolve;
+    })) as typeof fetch;
+  await click(m.auth_members_reauthenticate());
+  const reads = list.mock.calls.length;
+  await flush(() => {
+    transition('pagehide');
+    expect(host.querySelector('#membership-email')).toBeNull();
+    expect(host.querySelector('#membership-password')).toBeNull();
+    expect(host.textContent).not.toContain(reservation);
+    expect(host.textContent).not.toContain(account);
+  });
+  await flush(() => release(Response.json({ account_id: account })));
+  expect(list.mock.calls).toHaveLength(reads);
+  expect(host.querySelector('#membership-confirmation')).toBeNull();
+});

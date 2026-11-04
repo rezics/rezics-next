@@ -786,5 +786,11 @@
   "auth_home_transfer_exit": "Revisar Seguridad antes de transferir un operador",
   "auth_home_opening": "Abrir una sesión operada",
   "auth_home_opening_description": "Usa el actor automatizado exacto y su operador actual en el flujo de apertura de sesión. Se exigen una persona actualmente autenticada y comprobaciones nativas de autoridad. Confirma con cuidado: se sustituye tu sesión del navegador; no se copian las credenciales humanas ni los permisos del operador.",
-  "auth_home_opening_exit": "Revisar Seguridad antes de cambiar de identidad"
+  "auth_home_opening_exit": "Revisar Seguridad antes de cambiar de identidad",
+  "auth_members_return_heading": "Revisión anterior de membresía",
+  "auth_members_return_unsent": "La revisión terminó antes de enviar el cambio. Revisa la membresía actual para empezar de nuevo.",
+  "auth_members_return_refused": "El servicio nativo rechazó este intento. Esto no resuelve una solicitud anterior de resultado desconocido.",
+  "auth_members_return_boundary": "El historial es independiente de la membresía actual. Descartarlo solo oculta este texto; no cancela operaciones ni autoriza un reintento.",
+  "auth_members_return_dismiss": "Ocultar historial",
+  "auth_members_current_heading": "Membresía actual"
 }

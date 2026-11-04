@@ -786,5 +786,11 @@
   "auth_home_transfer_exit": "转移运营者前审阅安全性",
   "auth_home_opening": "打开受运营会话",
   "auth_home_opening_description": "在会话打开流程中，使用确切的自动化行为者及其当前运营者。需要当前已验证的人类账号，并通过原生权限检查。请慎重确认：打开后会替换浏览器会话，不会复制人类凭据或运营者权限。",
-  "auth_home_opening_exit": "切换身份前审阅安全性"
+  "auth_home_opening_exit": "切换身份前审阅安全性",
+  "auth_members_return_heading": "先前的成员变更审核",
+  "auth_members_return_unsent": "本次审核在发送变更前已结束。请查看当前成员状态后重新开始。",
+  "auth_members_return_refused": "原生服务拒绝了本次尝试。这并未确定先前结果未知的请求。",
+  "auth_members_return_boundary": "历史结果与当前成员状态各自独立。关闭历史只会隐藏文字，不会取消操作，也不会授权重试。",
+  "auth_members_return_dismiss": "关闭历史",
+  "auth_members_current_heading": "当前成员状态"
 }

@@ -577,6 +577,28 @@ keeps the current review usable.
 
 membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
 
+Mounted membership return keeps the first generic unknown and the latest local interruption or native result,
+at most two classifications, independently of current membership. A native acknowledgement is recorded before
+readback and survives an unavailable or subsequently changed membership. Matching state, absence and later native
+refusal or acknowledgement never erase an earlier unknown. Dismiss history hides presentation only; exact stored
+continuations and their native retry gates are unchanged. Ordinary fresh documents make no mounted-history claim.
+
+Authority retirement closes callbacks before a synchronous React commit removes roster identity, exact review,
+confirmation and authentication inputs from the DOM, including before a cached page snapshot. A retained unknown
+uses only the installed exact continuation. Return and visible read Retry create fresh read generations; released
+older reads cannot repopulate private content. Current membership has its own heading and read-only refresh.
+Stay preserves a current review; Leave discards an unsent review and retains a dispatched marker.
+
+One ordinary entry, restored ordinary page or explicit refresh uses at most three native requests: route session,
+page preparation session and one bounded page (up to 20 holders). An unresolved restored document reads only the
+route session until explicit review. One explicit recovery review still uses at most four native requests: session,
+page preparation session, bounded page and selected membership. Selection adds one selected-member point read.
+A fresh submit uses session, selected-member preparation, approval and execute (four), then selected readback and
+page preparation/session plus page (three); exact retry uses session, selected-member preparation and execute
+(three), then those same three observation requests. Reauthentication uses sign-in and session (two), followed by
+the existing explicit review. Local history, retirement, dismissal and focus add zero calls; there is no scan,
+refill, polling, per-row authorization or automatic command on restoration, Retry or locale change.
+
 ## Operator transfer
 
 Imported transfer data follows the [Accounts operator contract](../../docs/accounts.md#2-operators-and-automated-accounts);

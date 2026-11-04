@@ -786,5 +786,11 @@
   "auth_home_transfer_exit": "Vérifier la sécurité avant un transfert d’opérateur",
   "auth_home_opening": "Ouvrir une session opérée",
   "auth_home_opening_description": "Utilisez l’acteur automatisé exact et son opérateur actuel dans le parcours d’ouverture de session. Un humain actuellement authentifié et des contrôles natifs d’autorisation sont requis. Confirmez avec soin : votre session de navigateur sera remplacée ; les identifiants humains et les droits de l’opérateur ne sont pas copiés.",
-  "auth_home_opening_exit": "Vérifier la sécurité avant de changer d’identité"
+  "auth_home_opening_exit": "Vérifier la sécurité avant de changer d’identité",
+  "auth_members_return_heading": "Examen précédent de l’adhésion",
+  "auth_members_return_unsent": "Cet examen s’est terminé avant l’envoi du changement. Consultez l’adhésion actuelle pour recommencer.",
+  "auth_members_return_refused": "Le service natif a refusé cette tentative. Cela ne résout pas une demande antérieure dont le résultat reste inconnu.",
+  "auth_members_return_boundary": "L’historique est distinct de l’adhésion actuelle. Le masquer cache uniquement ce texte ; cela n’annule aucune opération et n’autorise aucune nouvelle tentative.",
+  "auth_members_return_dismiss": "Masquer l’historique",
+  "auth_members_current_heading": "Adhésion actuelle"
 }

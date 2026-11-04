@@ -786,5 +786,11 @@
   "auth_home_transfer_exit": "運営者の移管前にセキュリティを確認",
   "auth_home_opening": "運営対象のセッションを開く",
   "auth_home_opening_description": "セッション開始フローで正確な自動化アクターと現在の運営者を指定します。現在認証済みの人間のアカウントとネイティブの権限確認が必要です。ブラウザーのセッションが置き換わるため、慎重に確定してください。人間の認証情報や運営者の権限は複製されません。",
-  "auth_home_opening_exit": "アカウントの切り替え前にセキュリティを確認"
+  "auth_home_opening_exit": "アカウントの切り替え前にセキュリティを確認",
+  "auth_members_return_heading": "以前のメンバー変更の確認",
+  "auth_members_return_unsent": "変更を送信する前に確認を終了しました。やり直すには現在のメンバー情報を確認してください。",
+  "auth_members_return_refused": "ネイティブサービスは今回の試行を拒否しました。結果が不明な以前の要求は未解決のままです。",
+  "auth_members_return_boundary": "履歴と現在のメンバー情報は別です。履歴を閉じても文章が非表示になるだけで、処理の取消しや再試行の許可にはなりません。",
+  "auth_members_return_dismiss": "履歴を閉じる",
+  "auth_members_current_heading": "現在のメンバー情報"
 }

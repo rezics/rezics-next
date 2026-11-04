@@ -786,5 +786,11 @@
   "auth_home_transfer_exit": "移轉營運者前審閱安全性",
   "auth_home_opening": "開啟受營運工作階段",
   "auth_home_opening_description": "在工作階段開啟流程中，使用確切的自動化行為者及其目前營運者。需要目前已驗證的人類帳號，並通過原生權限檢查。請審慎確認：開啟後會取代瀏覽器工作階段，不會複製人類憑證或營運者權限。",
-  "auth_home_opening_exit": "切換身分前審閱安全性"
+  "auth_home_opening_exit": "切換身分前審閱安全性",
+  "auth_members_return_heading": "先前的成員變更審核",
+  "auth_members_return_unsent": "本次審核在送出變更前已結束。請查看目前成員狀態後重新開始。",
+  "auth_members_return_refused": "原生服務拒絕了本次嘗試。這並未確定先前結果未知的請求。",
+  "auth_members_return_boundary": "歷史結果與目前成員狀態各自獨立。關閉歷史只會隱藏文字，不會取消操作，也不會授權重試。",
+  "auth_members_return_dismiss": "關閉歷史",
+  "auth_members_current_heading": "目前成員狀態"
 }
