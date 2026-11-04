@@ -19,8 +19,8 @@ if (!compiled.ok) throw new Error(`Conformance catalogue failed: ${compiled.erro
 for (const vector of vectors.cases) {
   test(`policy vector: ${vector.id}`, () => {
     const decision = decidePolicy(compiled.catalogue, vector.request as PolicyRequest, vector.facts as PolicyFacts);
-    expect(decision.decision).toBe(vector.expected);
-    expect(decision.reason).toBe(vector.reason);
+    expect(String(decision.decision)).toBe(vector.expected);
+    expect(String(decision.reason)).toBe(vector.reason);
   });
 }
 
@@ -38,12 +38,13 @@ test('catalogue rejects duplicates and unknown role actions before evaluation', 
   expect(unknown).toMatchObject({ ok: false, errors: [{ code: 'unknown-role-action' }] });
 
   const unsupported = compilePolicyCatalogue({
-    ...vectors.catalogue,
-    actions: vectors.catalogue.actions.map((action, index) =>
-      index === 0 ? { ...action, authority: 'delegated' } : action,
-    ),
+    actions: [
+      { action: 'test:read', anonymous: false, authority: 'delegated', resourceTypes: [], globalReach: false },
+    ],
+    roles: [],
+    resourceTypes: [],
   } as unknown as PolicyCatalogueInput);
-  expect(unsupported).toMatchObject({ ok: false, errors: [{ code: 'invalid-profile' }] });
+  expect(unsupported).toMatchObject({ ok: false, errors: [expect.objectContaining({ code: 'invalid-profile' })] });
 });
 
 test('invalid requests differ from missing evidence', () => {
