@@ -34,13 +34,7 @@ test('reaction advice preserves duplicate Home occurrences and drops a post rebo
       [duplicate.id, JSON.stringify({ threadId, parentId, place: 'global' })],
     ]);
     const actor: Actor = { kind: 'anonymous' };
-    const prepared = prepareFeedReactionAdvice(
-      [row, duplicate],
-      contexts,
-      { pool },
-      actor,
-      Date.now() + 10_000,
-    );
+    const prepared = prepareFeedReactionAdvice([row, duplicate], contexts, { pool }, actor, Date.now() + 10_000);
     const admitted = await prepared.finish(prepared.items);
     expect(admitted.map((item) => item.id)).toEqual([row.id, duplicate.id]);
     for (const item of admitted)
@@ -56,13 +50,7 @@ test('reaction advice preserves duplicate Home occurrences and drops a post rebo
         parentContext: { kind: 'reply', parent: { state: 'removed', id: otherParentId } },
       },
     } satisfies FeedItem;
-    const reboundPreparation = prepareFeedReactionAdvice(
-      [duplicate],
-      contexts,
-      { pool },
-      actor,
-      Date.now() + 10_000,
-    );
+    const reboundPreparation = prepareFeedReactionAdvice([duplicate], contexts, { pool }, actor, Date.now() + 10_000);
     const stale = await reboundPreparation.finish([rebound]);
     expect(stale[0]?.summary).not.toHaveProperty('reactionAdvice');
   } finally {
