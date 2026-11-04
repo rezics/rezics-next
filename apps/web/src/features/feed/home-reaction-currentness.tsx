@@ -16,6 +16,16 @@ export function useHomeReactionCurrentness(
   const revision = useSyncExternalStore(observation.subscribe, observation.snapshot, observation.serverSnapshot);
   const session = observation.read();
   const reader = session?.state === 'signed-in' ? (session.subject ?? null) : null;
+  const sessionIdentity = () => {
+    const current = observation.read();
+    return JSON.stringify([
+      observation.healthy(),
+      current?.state ?? null,
+      current?.subject ?? null,
+      current?.csrfToken ?? null,
+    ]);
+  };
+  const identity = sessionIdentity();
   const page = result.state === 'ready' ? result.page : undefined;
   const source = JSON.stringify([
     stream,
@@ -31,14 +41,15 @@ export function useHomeReactionCurrentness(
     busy ||
     result.state !== 'ready' ||
     (signedIn && !!client && (!observation.healthy() || !reader || !session?.csrfToken));
-  const [binding, setBinding] = useState({ result, source, observation, revision, retired, visit: 0 });
+  const [binding, setBinding] = useState({ result, source, observation, revision, identity, retired, visit: 0 });
   if (binding.result !== result)
-    setBinding({ result, source, observation, revision, retired, visit: binding.visit + 1 });
+    setBinding({ result, source, observation, revision, identity, retired, visit: binding.visit + 1 });
   else if (
     !binding.retired &&
-    (retired || binding.source !== source || binding.observation !== observation || binding.revision !== revision)
+    (retired || binding.source !== source || binding.observation !== observation || binding.identity !== identity)
   )
     setBinding({ ...binding, retired: true, visit: binding.visit + 1 });
+  else if (!binding.retired && binding.revision !== revision) setBinding({ ...binding, revision });
   const current = useRef(binding);
   current.current = binding;
   return {
@@ -46,7 +57,11 @@ export function useHomeReactionCurrentness(
     origin: {
       key: String(binding.visit),
       reader,
-      isCurrent: () => current.current === binding && !binding.retired && observation.snapshot() === binding.revision,
+      isCurrent: () =>
+        current.current === binding &&
+        !binding.retired &&
+        observation.snapshot() === binding.revision &&
+        sessionIdentity() === binding.identity,
     },
   };
 }
