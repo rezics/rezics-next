@@ -1,11 +1,5 @@
 import { platformRegistry, profileDigest, validateProfile, type PresentationProfile } from '@rezics/composition';
-import type {
-  ActivationInput,
-  CurationFailure,
-  PublishInput,
-  PublishReceipt,
-  PublishResult,
-} from './curate';
+import type { ActivationInput, CurationFailure, PublishInput, PublishReceipt, PublishResult } from './curate';
 import type { CurationAdmissionLease } from './curation-reader-admission';
 import { admitCurationInspection, curationInspectionRetryAt } from './curation-inspection-retry';
 import { admitPublicationRetry, publicationRetryAt } from './curation-retry-admission';
@@ -36,7 +30,11 @@ export type PublicationState = {
 export type CurationPublicationVisit = {
   readonly incarnation: number;
   isCurrent(): boolean;
-  start(profile: PresentationProfile, expectedHead: number, advice?: CurationCommandAdvice): Promise<PublicationConfirmation | null>;
+  start(
+    profile: PresentationProfile,
+    expectedHead: number,
+    advice?: CurationCommandAdvice,
+  ): Promise<PublicationConfirmation | null>;
   retry(advice?: CurationCommandAdvice): Promise<PublicationConfirmation | null>;
   inspect(): Promise<void>;
   reconcile(profile: PresentationProfile, choice: 'keep' | 'discard'): ActiveCuration | null;
@@ -139,9 +137,7 @@ export class CurationPublication {
         busy: false,
         active: null,
         readFailure: null,
-        ...(uncertain
-          ? { result: { ok: false, reason: 'unavailable', outcome: 'unknown', phase } as const }
-          : {}),
+        ...(uncertain ? { result: { ok: false, reason: 'unavailable', outcome: 'unknown', phase } as const } : {}),
       },
       notify,
     );
@@ -155,7 +151,8 @@ export class CurationPublication {
       retry: (advice) => this.retry(advice, incarnation),
       inspect: () => this.inspect(incarnation),
       reconcile: (profile, choice) => this.reconcile(profile, choice, incarnation),
-      replaceInvalid: (profile, expectedHead, advice) => this.replaceInvalid(profile, expectedHead, advice, incarnation),
+      replaceInvalid: (profile, expectedHead, advice) =>
+        this.replaceInvalid(profile, expectedHead, advice, incarnation),
     };
   }
 
@@ -308,7 +305,10 @@ export class CurationPublication {
     this.operation = null;
     this.update({
       result,
-      publishedDigest: !result.ok && result.phase === 'activate' ? (result as CurationFailure & { publishedDigest?: string }).publishedDigest ?? null : null,
+      publishedDigest:
+        !result.ok && result.phase === 'activate'
+          ? ((result as CurationFailure & { publishedDigest?: string }).publishedDigest ?? null)
+          : null,
       retryAt: !result.ok && result.reason === 'rate-limited' ? publicationRetryAt(result.retryAfter) : undefined,
       ...(result.ok ? { intent: null, active: null, readFailure: null, readRetryAt: undefined } : {}),
     });

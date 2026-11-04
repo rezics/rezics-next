@@ -214,7 +214,11 @@ export const activateCuration = createServerFn({ method: 'POST' })
     if (!authorization) return { ok: false, reason: 'forbidden', admissionChanged: true };
     if (!reader || reader !== data.expectedReader) return { ok: false, reason: 'forbidden', admissionChanged: true };
     const intent = data.intent as PublishInput;
-    const input: ActivationInput = { digest: data.digest, expectedHead: intent.expectedHead, key: intent.keys.activate };
+    const input: ActivationInput = {
+      digest: data.digest,
+      expectedHead: intent.expectedHead,
+      key: intent.keys.activate,
+    };
     return activatePublishedProfile(kernelClient(), { ...input, authorization });
   });
 

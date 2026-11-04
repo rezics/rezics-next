@@ -30,7 +30,12 @@ function record(value: unknown): value is Record<string, unknown> {
 
 /** Only a complete, exact Global Context viewer-actions row can give a denial. */
 export function curationAdviceFromViewerActions(value: unknown): CurationActionAdvice {
-  if (!record(value) || !closed(value, ['resources']) || !Array.isArray(value.resources) || value.resources.length !== 1)
+  if (
+    !record(value) ||
+    !closed(value, ['resources']) ||
+    !Array.isArray(value.resources) ||
+    value.resources.length !== 1
+  )
     return unavailable();
   const resource = value.resources[0];
   if (

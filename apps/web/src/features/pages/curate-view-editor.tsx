@@ -1056,7 +1056,9 @@ function AdmittedPresentationViewEditor({
         const result = publication.getSnapshot().result;
         if (
           result?.ok === false &&
-          (result.reason === 'forbidden' || result.reason === 'stale' || (result.reason === 'unavailable' && result.outcome === 'unknown'))
+          (result.reason === 'forbidden' ||
+            result.reason === 'stale' ||
+            (result.reason === 'unavailable' && result.outcome === 'unknown'))
         )
           void refreshAdvice();
       }

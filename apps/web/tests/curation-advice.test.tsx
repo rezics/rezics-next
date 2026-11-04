@@ -51,13 +51,22 @@ test('admission requires a closed native opening and preserves independent actio
   expect(
     await admitCurationOpening(reader, {
       status: 200,
-      data: { state: 'active', viewer: 'account', digest, head: 7, profile, advice: { publish: 'allowed', activate: 'denied', extra: true } },
+      data: {
+        state: 'active',
+        viewer: 'account',
+        digest,
+        head: 7,
+        profile,
+        advice: { publish: 'allowed', activate: 'denied', extra: true },
+      },
     }),
   ).toEqual({ ok: false, reason: 'unavailable' });
 });
 
 test('mounted advice controls stay independent; failed refresh keeps the draft and advice never confirms a lost write', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://site.test/en/curate/presentation', width: 1280, height: 900 });
   const globals = {
     window,
@@ -136,12 +145,19 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
         }),
       ),
     );
-  const button = (label: string) => [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label)!;
+  const button = (label: string) =>
+    [...host.querySelectorAll('button')].find((item) => item.textContent?.trim() === label)!;
   const draftRoute = async () => {
-    await user.selectOptions([...host.querySelectorAll('select')].find((item) =>
-      [...host.querySelectorAll('label')].some((label) => label.textContent === m.curation_scope() && label.control === item),
-    )!, 'route');
-    const key = [...host.querySelectorAll('label')].find((label) => label.textContent === m.curation_key())!.control as HTMLInputElement;
+    await user.selectOptions(
+      [...host.querySelectorAll('select')].find((item) =>
+        [...host.querySelectorAll('label')].some(
+          (label) => label.textContent === m.curation_scope() && label.control === item,
+        ),
+      )!,
+      'route',
+    );
+    const key = [...host.querySelectorAll('label')].find((label) => label.textContent === m.curation_key())!
+      .control as HTMLInputElement;
     await user.type(key, '/books');
     await user.click(button(m.curation_add()));
     await settle(() => !!button(m.curation_close()));
@@ -164,7 +180,8 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
       await draftRoute();
       expect(button(m.curation_publish()).disabled).toBe(publish !== 'allowed');
       expect(host.textContent).toContain(m.curation_advice_heading());
-      if (publish === 'denied' && activate === 'allowed') expect(host.textContent).toContain(m.curation_advice_activate_only());
+      if (publish === 'denied' && activate === 'allowed')
+        expect(host.textContent).toContain(m.curation_advice_activate_only());
       await act(async () => root.render(null));
     }
 
@@ -188,7 +205,9 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
     await draftRoute();
     const beforeActivationRecovery = publishKeys.length;
     await act(async () => button(m.curation_publish()).click());
-    await settle(() => host.textContent?.includes(m.curation_published_waiting({ digest: lastReceiptDigest })) === true);
+    await settle(
+      () => host.textContent?.includes(m.curation_published_waiting({ digest: lastReceiptDigest })) === true,
+    );
     expect(activationCalls).toBe(0);
     refresh = async (expectedReader) => ({
       ...opening(advice('denied', 'allowed')),
@@ -231,4 +250,3 @@ test('mounted advice controls stay independent; failed refresh keeps the draft a
     window.happyDOM.abort();
   }
 });
-

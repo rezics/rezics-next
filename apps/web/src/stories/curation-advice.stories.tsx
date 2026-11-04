@@ -20,8 +20,22 @@ const profile: PresentationProfile = {
 function advice(scenario: Scenario): CurationAdvice {
   return {
     viewer: 'account',
-    publish: scenario === 'publish-only' ? 'allowed' : scenario === 'activate-only' ? 'denied' : scenario === 'unavailable' ? 'unavailable' : 'denied',
-    activate: scenario === 'publish-only' ? 'denied' : scenario === 'activate-only' ? 'allowed' : scenario === 'unavailable' ? 'unavailable' : 'denied',
+    publish:
+      scenario === 'publish-only'
+        ? 'allowed'
+        : scenario === 'activate-only'
+          ? 'denied'
+          : scenario === 'unavailable'
+            ? 'unavailable'
+            : 'denied',
+    activate:
+      scenario === 'publish-only'
+        ? 'denied'
+        : scenario === 'activate-only'
+          ? 'allowed'
+          : scenario === 'unavailable'
+            ? 'unavailable'
+            : 'denied',
   };
 }
 

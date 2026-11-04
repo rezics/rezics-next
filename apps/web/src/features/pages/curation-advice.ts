@@ -13,7 +13,7 @@ export type CurationOpening = {
   profile: PresentationProfile;
   advice: CurationAdvice;
 };
-export type CurationOpeningResult = { ok: true } & CurationOpening | CurationFailure;
+export type CurationOpeningResult = ({ ok: true } & CurationOpening) | CurationFailure;
 
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
 const actionStates = new Set<CurationActionState>(['allowed', 'denied', 'unavailable']);
@@ -32,7 +32,10 @@ function unavailable(): CurationFailure {
 }
 
 /** Admit the closed opening projection before it can replace a mounted reader's baseline. */
-export async function admitCurationOpening(reader: string, response: NativeReadResponse): Promise<CurationOpeningResult> {
+export async function admitCurationOpening(
+  reader: string,
+  response: NativeReadResponse,
+): Promise<CurationOpeningResult> {
   if (response.status >= 400) {
     if (response.status === 404) return { ok: false, reason: 'forbidden' };
     return curationFailure(response.status, response.error?.value, response.headers);
@@ -66,10 +69,14 @@ export async function admitCurationOpening(reader: string, response: NativeReadR
   )
     return unavailable();
 
-  const admitted = await admitCurationReads(reader, { status: 200, data: { digest: data.digest, head: data.head } }, async () => ({
-    status: 200,
-    data: { digest: data.digest, profile: data.profile },
-  }));
+  const admitted = await admitCurationReads(
+    reader,
+    { status: 200, data: { digest: data.digest, head: data.head } },
+    async () => ({
+      status: 200,
+      data: { digest: data.digest, profile: data.profile },
+    }),
+  );
   if (!admitted.ok || data.viewer !== 'account')
     return data.viewer === 'anonymous' ? { ok: false, reason: 'forbidden' } : unavailable();
   return {
