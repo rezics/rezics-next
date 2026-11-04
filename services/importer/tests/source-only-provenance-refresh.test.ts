@@ -47,7 +47,7 @@ test('source-only Bangumi change publishes fresh digest without inventing a fiel
       registration,
       (async function* () {
         yield new TextEncoder().encode(
-          JSON.stringify({ id: 1, type: 1, name: 'Same Book', date, user_posts: [{ text: privateText }] }) + '\n',
+          JSON.stringify({ id: 1, type: 2, name: 'Same Book', date, user_posts: [{ text: privateText }] }) + '\n',
         );
       })(),
     );
