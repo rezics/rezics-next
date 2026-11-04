@@ -1831,7 +1831,7 @@ function CommunityList({ kind, ...props }: Record<string, unknown> & { kind: 're
         subject={{ id: subject, label: value.subjectLabel ?? value.unlabelled }}
         locale={value.locale}
         href={href}
-        currentHref={value.currentHref}
+        {...(value.currentHref !== undefined ? { currentHref: value.currentHref } : {})}
         paged={props.paged === true}
       />
     </div>
