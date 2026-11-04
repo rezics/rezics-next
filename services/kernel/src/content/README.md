@@ -2,7 +2,6 @@
 
 Content owns boards, threads, posts, immutable documents, media state and publication, and content governance operations.
 
-
 ## Native moderation directory
 
 Decision: mount `GET /v1/me/moderation-directory` as additive public source for the complete-input publisher;
@@ -61,6 +60,7 @@ are public output bounds, not evidence of bounded upstream selection, native pro
 Growth check: focused contract tests cover schema bounds and unavailable behavior. Native authenticated read and
 actual runner measurements at independently grown 256/1024/4096 Boards, grants, actor candidates, memberships and
 repair backlog remain part of producer completion; no native Cost result is claimed for this seam.
+
 ## Public author contribution context
 
 Decision: anonymous native author pages issue a signed exact-cohort selection bound to the author, view,

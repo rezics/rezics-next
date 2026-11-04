@@ -7,6 +7,7 @@ import {
   ModerationDirectoryPageSchema,
   ModerationDirectoryQuerySchema,
   moderationDirectoryPageIssues,
+  type ModerationDirectoryPage,
 } from '../../src/content/moderation-directory-schemas.ts';
 import { readNativeModerationDirectory } from '../../src/content/moderation-directory.ts';
 import { testKernel } from '../support/test-kernel.ts';
@@ -20,7 +21,7 @@ const catalogue = {
   viewer: { open: 'permitted' },
 };
 const ready = { state: 'ready', items: [catalogue], next: null, source: 'opaque', validUntil: new Date(now + 1000).toISOString() };
-const unavailable = { state: 'unavailable', items: [], next: null };
+const unavailable = { state: 'unavailable', items: [], next: null } satisfies ModerationDirectoryPage;
 const actor: AccountActor = {
   kind: 'account', accountId: 'account', clientId: 'web', scopes: ['account:read'], requestedBy: null, authnEpoch: 1,
 };
