@@ -128,11 +128,14 @@ export async function loadPublicAccountJourney(
         ).catch(() => null)
       : null;
     const identity = profile?.operatorId ? identities?.[profile.operatorId] : undefined;
-    const handle = typeof identity?.handle === 'string' && identity.handle ? identity.handle : null;
+    const handle =
+      identity && 'handle' in identity && typeof identity.handle === 'string' && identity.handle ? identity.handle : null;
     const displayName =
-      typeof identity?.displayName === 'string' && identity.displayName ? identity.displayName : null;
+      identity && 'displayName' in identity && typeof identity.displayName === 'string' && identity.displayName
+        ? identity.displayName
+        : null;
     const operator =
-      identity && identity.state !== 'deleted' && (handle || displayName)
+      identity && 'handle' in identity && identity.state !== 'deleted' && (handle || displayName)
         ? { id: identity.id, handle, displayName }
         : undefined;
     const page =
