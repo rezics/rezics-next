@@ -352,7 +352,7 @@ exact `0` is never a measured zero.
 
 ### VNDB release titles
 
-`cross-media-entities@5` projects admitted `releases_titles` rows onto
+`cross-media-entities@7` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -427,6 +427,28 @@ quantity in years (`wd:Q577`) with the VNDB release citation. It remains on the
 Release and is never copied to a work. Decision: `minage` accepts only canonical
 COPY integers or API integers; zero means all ages, while null and absent stay
 unknown.
+### VNDB release platforms and distribution media
+
+The production release operator carries selected `releases_platforms.platform`
+and `releases_media.medium` codes on that same Release. Inventory-admitted
+platform codes propose `schema:gamePlatform`; the finite medium inventory
+proposes `wdt:P437`. Each requires an independently adopted source Concept in
+the matching current scheme. Several codes remain several values; unknown or
+unbound codes become source-path gaps. Platform and medium lists never combine,
+and `releases_media.qty` is omitted.
+
+- Touches: selected release projection, exact source scheme/Concept bindings,
+  and the Release's existing multi-valued classification properties.
+- Bound: at most 64 selected releases and 4,096 selected child rows across the
+  two tables; per-release vocabulary rows fit the existing 64-row ceiling after
+  its date and work-link rows. Binding reads retain at most 64 schemes and 512
+  concepts, with one cached current read per identity.
+- Growth check: the focused importer test covers shuffled duplicates, multiple
+  values, an unknown code and refresh. The connected native review/adoption test
+  is registered; native execution is deferred to integration.
+
+Decision: source-specific schemes are `https://vndb.org/releases/platforms` and `https://vndb.org/releases/media`, with taxonomies `vndb.releases.platform` and `vndb.releases.media`; these Concepts do not assert canonical equivalence.
+Decision: platform and medium projections advance the converter from `@6` to `@7`, preserving the release minimum-age mapping while enabling deliberate refresh of unchanged source revisions.
 
 ### VNDB character names and aliases
 

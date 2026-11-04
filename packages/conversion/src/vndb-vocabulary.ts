@@ -1,4 +1,4 @@
-import { vndbProducerParentEnds } from './cross-media-entities.ts';
+import { mapSourceEnumeration, vndbProducerParentEnds } from './cross-media-entities.ts';
 import {
   createMappingEnvironment,
   finishMapping,
@@ -9,8 +9,15 @@ import {
   type SourceVocabularyResult,
   type VndbVocabularyRow,
 } from './source-vocabulary.ts';
+import {
+  vndbReleaseMediumCodes,
+  vndbReleaseMediumSchemeUri,
+  vndbReleaseMediumTaxonomy,
+  vndbReleasePlatformSchemeUri,
+  vndbReleasePlatformTaxonomy,
+} from './support.ts';
 
-export const vndbVocabularyRevision = 'vndb-vocabulary@1';
+export const vndbVocabularyRevision = 'vndb-vocabulary@2';
 const calendarModel = 'http://www.wikidata.org/entity/Q1985727';
 const developmentStatus = new Map<number, string>([
   [0, 'Finished'],
@@ -95,6 +102,51 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
     return;
   }
   switch (row.kind) {
+    case 'release-platform':
+    case 'release-medium': {
+      const code = environment.sourceCode(row.code);
+      const platform = row.kind === 'release-platform';
+      const property = platform ? 'schema:gamePlatform' : 'wdt:P437';
+      if (code === null) {
+        rowGap(
+          environment,
+          row,
+          'invalid_source_value',
+          platform ? 'releases_platforms.platform' : 'releases_media.medium',
+        );
+        return;
+      }
+      const admitted =
+        platform
+          ? (() => {
+              const mapping = mapSourceEnumeration('vndb', 'platform', code);
+              return mapping?.term === property;
+            })()
+          : vndbReleaseMediumCodes.has(code);
+      if (!admitted) {
+        rowGap(
+          environment,
+          row,
+          'unknown_code',
+          platform ? 'releases_platforms.platform' : 'releases_media.medium',
+          code ?? undefined,
+        );
+        return;
+      }
+      const taxonomy = platform ? vndbReleasePlatformTaxonomy : vndbReleaseMediumTaxonomy;
+      const schemeUri = platform ? vndbReleasePlatformSchemeUri : vndbReleaseMediumSchemeUri;
+      const resolved = exactConcept(environment, taxonomy, code, path, schemeUri);
+      if (resolved)
+        environment.propose({
+          row,
+          subject: row.release,
+          property,
+          content: resolved.id,
+          target: conceptIdentity(resolved),
+          mappingRevision: `${row.kind}@1:${code}`,
+        });
+      return;
+    }
     case 'release-date': {
       if (row.value === null) {
         rowGap(environment, row, 'unsupported_source_case', 'schema:datePublished', 'absent');
@@ -484,6 +536,8 @@ export function mapVndbVocabulary(input: SourceVocabularyInput): SourceVocabular
   }
   const kinds = [
     'release-date',
+    'release-platform',
+    'release-medium',
     'development-status',
     'release-supersedes',
     'release-work',

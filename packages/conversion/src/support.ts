@@ -454,3 +454,25 @@ export const vndbPublicTagScheme = (category: VndbPublicTagCategory) =>
 export const vndbPublicTagConceptUri = (category: VndbPublicTagCategory, code: string) =>
   `${vndbPublicTagScheme(category)}/${code}`;
 export const vndbPublicTagTaxonomy = (category: VndbPublicTagCategory) => `vndb.tag.${category}`;
+
+export const vndbReleasePlatformSchemeUri = 'https://vndb.org/releases/platforms';
+export const vndbReleasePlatformTaxonomy = 'vndb.releases.platform';
+export const vndbReleasePlatformConceptUri = (code: string) => `${vndbReleasePlatformSchemeUri}/${code}`;
+export const vndbReleaseMediumSchemeUri = 'https://vndb.org/releases/media';
+export const vndbReleaseMediumTaxonomy = 'vndb.releases.media';
+export const vndbReleaseMediumConceptUri = (code: string) => `${vndbReleaseMediumSchemeUri}/${code}`;
+export const vndbReleaseMediumCodes: ReadonlySet<string> = new Set([
+  'blr',
+  'mrt',
+  'cas',
+  'cd',
+  'dc',
+  'dvd',
+  'flp',
+  'gdr',
+  'in',
+  'mem',
+  'nod',
+  'umd',
+  'otc',
+]);

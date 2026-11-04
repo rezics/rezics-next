@@ -26,6 +26,7 @@ const INDEX_HTML = `<h1>VNDB Database Downloads</h1>
 const CURRENT_DUMP_URL = 'https://dl.vndb.org/dump/vndb-db-2026-11-03.tar.zst';
 
 async function packVndbArchive(archive: string): Promise<void> {
+  // Authored table files and headers; this fixture is not observed provider data.
   const root = await mkdtemp(`${archive}.src-`);
   await writeFile(join(root, 'README.txt'), 'VNDB dump\n');
   await writeFile(join(root, 'schema_vndbid.sql'), 'CREATE TYPE vndbid;\n');
@@ -53,9 +54,11 @@ async function tempCache(): Promise<{ cacheRoot: string; dispose: () => Promise<
   return { cacheRoot: join(temp, 'cache'), dispose: () => rm(temp, { recursive: true, force: true }) };
 }
 
-test('VNDB dump cache requires admitted character-name and external-link tables with their COPY headers', () => {
+test('VNDB dump cache requires admitted character-name, external-link, and release-classification tables with exact COPY headers', () => {
   expect(VNDB_DUMP_TABLES).toContain('releases_titles');
-  expect(VNDB_DUMP_TABLES).toEqual(expect.arrayContaining(['chars_names', 'chars_alias']));
+  expect(VNDB_DUMP_TABLES).toEqual(
+    expect.arrayContaining(['chars_names', 'chars_alias', 'releases_media', 'releases_platforms']),
+  );
   expect(VNDB_DUMP_HEADERS.chars_names).toEqual(['id', 'lang', 'name', 'latin']);
   expect(VNDB_DUMP_HEADERS.chars_alias).toEqual(['id', 'spoil', 'name', 'latin']);
   expect(VNDB_DUMP_TABLES).toEqual(
@@ -68,6 +71,8 @@ test('VNDB dump cache requires admitted character-name and external-link tables 
       'tags',
       'tags_parents',
       'tags_vn',
+      'releases_media',
+      'releases_platforms',
     ]),
   );
   expect(VNDB_DUMP_HEADERS).toMatchObject({
@@ -79,6 +84,8 @@ test('VNDB dump cache requires admitted character-name and external-link tables 
     tags: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'],
     tags_parents: ['id', 'parent', 'main'],
     tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
+    releases_media: ['id', 'medium', 'qty'],
+    releases_platforms: ['id', 'platform'],
   });
 });
 
@@ -118,6 +125,13 @@ test("When the pinned VNDB dump URL is gone, the fetch resolves the current dump
     expect(refreshed.manifest).toEqual(result.manifest);
     expect(await readFile(join(refreshed.vndb, 'db', 'chars_names.header'), 'utf8')).toBe('id\tlang\tname\tlatin\n');
     expect(await readFile(join(refreshed.vndb, 'db', 'chars_names'), 'utf8')).toBe('v1\n');
+
+    await rm(join(result.vndb, 'db', 'releases_media'));
+    await rm(join(result.vndb, 'db', 'releases_platforms.header'));
+    const repaired = await fetchVndbDump({ cacheRoot, fetchImpl });
+    expect(repaired.vndb).toBe(result.vndb);
+    expect(await readFile(join(repaired.vndb, 'db', 'releases_media'), 'utf8')).toBe('v1\n');
+    expect(await readFile(join(repaired.vndb, 'db', 'releases_platforms.header'), 'utf8')).toBe('id\tplatform\n');
   } finally {
     await dispose();
   }
