@@ -27,8 +27,7 @@ const FORMAT = 'rezics-native-git-snapshot-v2';
 const OBJECT_FORMATS = ['sha1', 'sha256'] as const;
 // Dozens of workers pack concurrently on a loaded host; two minutes was too short at load 70.
 const GIT_OPERATION_TIMEOUT_MS = 600_000;
-export const CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION =
-  'check-git: preparation failed before publication';
+export const CHECK_GIT_FETCH_FAILED_BEFORE_PUBLICATION = 'check-git: preparation failed before publication';
 export const CHECK_GIT_RUN_IDENTITY_IN_USE_EXIT = 73;
 
 type ObjectFormat = (typeof OBJECT_FORMATS)[number];
