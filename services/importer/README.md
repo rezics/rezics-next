@@ -1479,6 +1479,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: existing source-vocabulary row/command/gap caps (64/100/64) and sequential CrossMedia seed conversion so appearance rows reuse already bound character identities. No catalogue scan, voter, identity-merge or classification write.
 - Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
 
+### Publish admitted VNDB public tag associations
+
+- Touches: extracted `tags` and `tags_vn` COPY rows for the selected works, one reviewed scheme/concept read per admitted binding, and the existing ordinary batch/candidate/current paths.
+- Bound: dictionary ≤512 tags, ≤256 associations, ≤64 vocabulary rows per work, remaining slots in the existing 100-command batch; diagnostics carry exact source path and tag code only.
+- Growth check: existing importer and source-vocabulary bounds. This journey adds no new PostgreSQL growth series.
+
 ### Operate a permitted scalar source feed
 
 - Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.
@@ -1574,6 +1580,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 - Touches: one bounded authored VNDB COPY set (cap 64 works and 64 releases) plus current native scheme/concept point reads, the existing seed/importer caller and ordinary public batch/fence/candidate commands. A source release stays one native release; platform and language lists do not form a Cartesian product.
 - Bound: O((W+R) log S) indexed importer work for admitted works W and releases R≤64, with the existing per-record converter, candidate (≤300) and journal budgets. Vocabulary bindings are re-read on each convert so unchanged dump bytes cannot hide missing or retracted Concepts. Completeness remains a review gap on `wdt:P31`; supersession is not proposed.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
+### Import authored VNDB public tag associations
+
+- Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.
+- Bound: O((W+T+A) log R) indexed importer work for admitted works W, dictionary tags T≤512 and associations A≤256, with at most 64 vocabulary rows per work and the existing per-record converter, candidate (≤300) and journal budgets. Bindings and admitted associations are re-read on each convert so unchanged VN bytes cannot hide a retracted Concept or a changed spoiler. Positive integer votes 1–3 with `ignore=f`, `lie=f` and applicable tags publish exact `schema:genre` facts; other associations stay review gaps without native ballots or aggregates.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
 ### Import run (processor)
@@ -1965,6 +1977,18 @@ never guessed. Completeness stays a `wdt:P31` qualifier gap on the release-to-wo
 fact. These proposals do not contain VNDB votes, personal lists or score-derived
 facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA
 and 00/99 omitted components to year or month precision.
+
+The production VNDB public-tag operator
+[`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and
+`tags_vn` COPY tables through the inventoried columns in
+[`vndb-tables.ts`](src/vndb-tables.ts), binds currently accepted/adopted
+category schemes and source Concepts, and supplies those rows to the existing
+vocabulary admission seam. Positive integer votes 1–3 with `ignore=f`, `lie=f`
+and applicable dictionary tags publish exact `schema:genre` facts and spoiler
+qualifiers. Lie flags, non-positive or non-integer votes, ignore flags,
+unresolved codes and duplicate `(vid,tag)` rows stay review gaps. User ids,
+notes and vote values never appear in diagnostics. Native classification
+ballots are not written.
 
 ### Bangumi creator and voice credits
 

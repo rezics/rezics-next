@@ -368,3 +368,9 @@ export function reviewedReferenceKey(schemeURI: string, literal: string): string
 }
 
 export const bangumiPublicTagScheme = 'https://rezics.com/schemes/bangumi/public-tags';
+export type VndbPublicTagCategory = 'cont' | 'ero' | 'tech';
+export const vndbPublicTagScheme = (category: VndbPublicTagCategory) =>
+  `https://rezics.com/schemes/vndb/public-tags/${category}`;
+export const vndbPublicTagConceptUri = (category: VndbPublicTagCategory, code: string) =>
+  `${vndbPublicTagScheme(category)}/${code}`;
+export const vndbPublicTagTaxonomy = (category: VndbPublicTagCategory) => `vndb.tag.${category}`;

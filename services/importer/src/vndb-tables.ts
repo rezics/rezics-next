@@ -170,6 +170,14 @@ const COLUMNS: Record<Table, readonly string[]> = {
   entry_meta: ['id', 'created', 'lastmod', 'revision', 'num_edits', 'num_users'],
 };
 const TABLES = Object.keys(COLUMNS) as Table[];
+
+/** Inventoried public tag dictionary and association COPY columns from schema_vndbid.sql. */
+export const VNDB_PUBLIC_TAG_COLUMNS = Object.freeze({
+  tags: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'],
+  tags_vn: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'],
+} as const);
+export type VndbPublicTagTable = keyof typeof VNDB_PUBLIC_TAG_COLUMNS;
+export const vndbPublicTagLimits = Object.freeze({ dictionary: 512, associations: 256, perWork: 64 });
 const ROW_BYTES = 64 * 1024;
 const BATCH = 32;
 const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
@@ -1226,4 +1234,90 @@ export class VndbTablesStore {
       if (rows.length < BATCH) break;
     }
   }
+}
+
+export function parseVndbCopyCells(raw: Uint8Array): Array<string | null> {
+  return columns(raw);
+}
+
+export function parseVndbCopyHeader(text: string, table: VndbPublicTagTable): string[] {
+  const names = text.replace(/\r$/, '').split('\t');
+  const expected = VNDB_PUBLIC_TAG_COLUMNS[table];
+  check(names.length === expected.length && new Set(names).size === names.length);
+  check(names.every((name) => (expected as readonly string[]).includes(name)));
+  return names;
+}
+
+export function parseVndbCopyLine(header: readonly string[], line: string): Record<string, string | null> {
+  const values = columns(new TextEncoder().encode(line.replace(/\r$/, '')));
+  check(values.length === header.length);
+  return Object.fromEntries(header.map((name, index) => [name, values[index]!]));
+}
+
+export type VndbPublicTagDictionaryRow = Readonly<{
+  id: string;
+  category: 'cont' | 'ero' | 'tech';
+  defaultSpoiler: number;
+  searchable: boolean;
+  applicable: boolean;
+}>;
+
+export type VndbPublicTagAssociationRow = Readonly<{
+  tag: string;
+  vid: string;
+  spoiler: number | null;
+  vote: number;
+  ignore: boolean;
+  lie: boolean;
+}>;
+
+function copyFlag(value: string | null | undefined): boolean {
+  check(value === 't' || value === 'f');
+  return value === 't';
+}
+
+function copyNumber(value: string | null | undefined): number {
+  check(typeof value === 'string' && /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value));
+  const number = Number(value);
+  check(Number.isFinite(number));
+  return number;
+}
+
+/** Project one admitted `tags` COPY row. Name, alias and description stay unprojected. */
+export function projectVndbPublicTag(cells: Record<string, string | null>): VndbPublicTagDictionaryRow {
+  const id = nativeId(cells.id, false);
+  check(id[0] === 'g');
+  const category = cells.cat;
+  check(category === 'cont' || category === 'ero' || category === 'tech');
+  const defaultSpoiler = integer(cells.defaultspoil, 2);
+  return {
+    id,
+    category,
+    defaultSpoiler,
+    searchable: copyFlag(cells.searchable),
+    applicable: copyFlag(cells.applicable),
+  };
+}
+
+/**
+ * Project one `tags_vn` COPY row. User id, notes and vote date are read only to
+ * occupy inventoried columns and are never returned.
+ */
+export function projectVndbPublicTagAssociation(cells: Record<string, string | null>): VndbPublicTagAssociationRow {
+  const tag = nativeId(cells.tag, false);
+  check(tag[0] === 'g');
+  const vid = nativeId(cells.vid);
+  if (cells.uid !== null) {
+    const uid = nativeId(cells.uid, false);
+    check(uid[0] === 'u');
+  }
+  const spoiler = cells.spoiler === null ? null : integer(cells.spoiler, 2);
+  return {
+    tag,
+    vid,
+    spoiler,
+    vote: copyNumber(cells.vote),
+    ignore: copyFlag(cells.ignore),
+    lie: copyFlag(cells.lie),
+  };
 }

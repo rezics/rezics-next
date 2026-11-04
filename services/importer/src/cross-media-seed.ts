@@ -1053,6 +1053,7 @@ export async function seedCrossMedia(
     vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
     recordConcurrency?: ImporterOptions['recordConcurrency'];
     sourceVocabulary?: SourceVocabularyBindings;
+    providers?: readonly Provider[];
   },
 ) {
   const importer = createImporter({
@@ -1073,7 +1074,8 @@ export async function seedCrossMedia(
   const readings: CrossMediaReading[] = [];
   try {
     const nativeTypes = new Map<string, string>();
-    for (const provider of ['bangumi', 'vndb'] as const) {
+    const providers = extras?.providers ?? (['bangumi', 'vndb'] as const);
+    for (const provider of providers) {
       if (!plan.records[provider].length && !plan.entities[provider].length) continue;
       const registration = createSourceRegistration(provider, {
         source: crossMediaAliases[provider],

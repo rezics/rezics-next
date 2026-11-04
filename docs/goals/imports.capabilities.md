@@ -638,6 +638,20 @@ not additional check requests.
   keeps 0/00000000 as unknown, 99999999 as TBA and 00/99 components omitted; completeness stays a `wdt:P31` qualifier
   gap; `schema:exampleOfWork` is the release-to-work fact; supersession stays unproposed until the Release profile
   admits `wdt:P155`.
+- `production operator publishes authored VNDB public tags through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-public-tags.test.ts`.
+  Frozen scenario names:
+  `production VNDB public tag caller admits exact categories and spoilers`;
+  `unresolved VNDB tag codes remain structured gaps without a substituted concept`;
+  `extracted COPY public tag columns project exact category and spoiler cells`;
+  `operator plans authored public tags and imports exact genre proposals through the seed caller`;
+  `production operator publishes authored VNDB public tags through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed as worker-check in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: one
+  reviewed ConceptScheme per VNDB tag category at `https://rezics.com/schemes/vndb/public-tags/{cont|ero|tech}`;
+  concept codes are exact dump tag ids (`g…`); positive integer votes 1–3 with ignore/lie false publish exact
+  genre and spoiler facts; lie, non-positive or non-integer votes, ignore flags and duplicate associations stay
+  review gaps without native ballots or aggregates.
 - `Ordinary operator exact ACK interruption and restart recovery`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts`.
   The [ACK report](../research/imports-audit/cli-ack-recovery.md#native-receipt) records one native case,
