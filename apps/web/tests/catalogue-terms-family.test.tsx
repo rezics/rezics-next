@@ -633,6 +633,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
         </QueryClientProvider>,
       ),
     );
+    expect(router.state.location.pathname).toBe('/terms');
     await settle(() => !!host.querySelector('form'));
     const page = () => host.querySelector<HTMLElement>('article')!;
     const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
