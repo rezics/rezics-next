@@ -166,7 +166,7 @@ function fetchPublication(publication: CheckGitPublication, checkout: string, st
   });
 }
 
-test('GitHub fetch serializes only fetch and ref verify on the store lock', () => {
+test('a fetch owns the run lock before ref mutation and removes its pathname under the store lock', () => {
   const publication: CheckGitPublication = {
     format: 'rezics-native-git-snapshot-v2',
     objectFormat: 'sha1',
@@ -180,9 +180,11 @@ test('GitHub fetch serializes only fetch and ref verify on the store lock', () =
   const lockFile = "lock='/tmp/check-git.git.lock'";
   const pinFile = "preparing='/tmp/check-git.git.preparing/lock-scope'";
   const gcLock = "flock -x '/tmp/check-git.git.lock'";
+  const storeLock = script.indexOf('flock -x 9');
+  const rootGuard = script.indexOf('if [ -e "$root" ] || [ -L "$root" ]; then');
+  const pin = script.indexOf('if ! flock -n 8; then');
   const fetch = script.indexOf('fetch --no-tags --no-write-fetch-head');
-  const pin = script.indexOf('flock -x 8');
-  const release = script.indexOf('flock -u 9');
+  const release = script.indexOf('store_locked=0\nflock -u 9');
   const checkout = script.indexOf('checkout-index --all --force');
   const lockFetchPhase = script.indexOf('REMOTE_CHECK_PHASE\\tshared-store lock/fetch');
   const checkoutStart = script.indexOf("checkout_started=$(python3 -c 'import time; print(time.monotonic_ns())')");
@@ -192,14 +194,14 @@ test('GitHub fetch serializes only fetch and ref verify on the store lock', () =
   expect(script.indexOf(pinFile)).toBeGreaterThan(-1);
   expect(script.indexOf('exec 9>>"$lock"')).toBeGreaterThan(-1);
   expect(script.indexOf('exec 8>>"$preparing"')).toBeGreaterThan(-1);
-  expect(script.indexOf('flock -x 9')).toBeGreaterThan(-1);
-  expect(fetch).toBeGreaterThan(script.indexOf('flock -x 9'));
-  expect(pin).toBeGreaterThan(fetch);
-  expect(script.indexOf(pinFile)).toBeLessThan(pin);
-  expect(release).toBeGreaterThan(pin);
+  expect(rootGuard).toBeGreaterThan(storeLock);
+  expect(pin).toBeGreaterThan(rootGuard);
+  expect(fetch).toBeGreaterThan(pin);
+  expect(release).toBeGreaterThan(fetch);
+  expect(checkout).toBeGreaterThan(release);
+  expect(script.lastIndexOf('rm -f -- "$preparing"')).toBeGreaterThan(checkout);
   expect(lockFetchPhase).toBeGreaterThan(release);
   expect(checkoutStart).toBeGreaterThan(lockFetchPhase);
-  expect(checkout).toBeGreaterThan(release);
   expect(checkoutPhase).toBeGreaterThan(checkout);
   expect(script.indexOf(gcLock)).toBeGreaterThan(checkout);
   expect(gc).toBeGreaterThan(script.indexOf(gcLock));
@@ -586,6 +588,63 @@ test('a live preparation pin keeps reused objects through another run forced GC'
     expect(git(checkoutA, 'rev-parse', 'dev')).toBe(base);
     expect(readFileSync(join(checkoutA, 'staged.txt'), 'utf8')).toBe('alpha unique\n');
     expect(git(checkoutB, 'write-tree')).toBe(beta.indexTree);
+  } finally {
+    paused.kill('SIGKILL');
+    pokeFifo(barrier.go);
+    await paused.exited;
+  }
+}, 30000);
+
+test('same-run publications reject active and published identities without replacing their Git roots', async () => {
+  const root = sandbox();
+  const { source } = repository(root);
+  const origin = publicOrigin(root, source);
+  const alpha = await publishCandidate(source, join(root, 'pub-alpha'), 'refs/checks/alpha', 'alpha unique\n');
+  const beta = await publishCandidate(source, join(root, 'pub-beta'), 'refs/checks/beta', 'beta unique\n');
+  const store = join(root, 'check-git.git');
+  const checkout = join(root, 'runs', 'shared-run');
+  const preparing = join(`${store}.preparing`, 'shared-run');
+  const barrier = mktempBarrier(root);
+  const paused = Bun.spawn(['sh', '-c', fetchCheckGitScript(alpha.publication, checkout, store, origin)], {
+    env: barrier.env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  try {
+    expect(readFileSync(barrier.ready, 'utf8')).toContain('ready');
+    expect(alpha.publication.remote.commit).not.toBe(beta.publication.remote.commit);
+    const originalPin = statSync(preparing).ino;
+    const activeSuccessor = fetchPublication(beta.publication, checkout, store, origin);
+    expect(activeSuccessor.exitCode, activeSuccessor.stderr.toString()).toBe(73);
+    expect(git(root, '--git-dir', store, 'rev-parse', 'refs/check-runs/shared-run')).toBe(
+      alpha.publication.remote.commit,
+    );
+    expect(statSync(preparing).ino).toBe(originalPin);
+    expect(storeHas(store, alpha.blob)).toBe(true);
+
+    ageStore(store);
+    const activeGc = fetchPublication(beta.publication, join(root, 'runs', 'active-gc-run'), store, origin);
+    expect(activeGc.exitCode, activeGc.stderr.toString()).toBe(0);
+    expect(git(root, '--git-dir', store, 'rev-parse', 'refs/check-runs/shared-run')).toBe(
+      alpha.publication.remote.commit,
+    );
+    expect(storeHas(store, alpha.blob)).toBe(true);
+
+    pokeFifo(barrier.go);
+    expect(await paused.exited, await new Response(paused.stderr).text()).toBe(0);
+    expect(readFileSync(join(checkout, 'staged.txt'), 'utf8')).toBe('alpha unique\n');
+    expect(existsSync(preparing)).toBe(false);
+
+    ageStore(store);
+    const publishedGc = fetchPublication(beta.publication, join(root, 'runs', 'published-gc-run'), store, origin);
+    expect(publishedGc.exitCode, publishedGc.stderr.toString()).toBe(0);
+    const publishedSuccessor = fetchPublication(beta.publication, checkout, store, origin);
+    expect(publishedSuccessor.exitCode, publishedSuccessor.stderr.toString()).toBe(73);
+    expect(git(root, '--git-dir', store, 'rev-parse', 'refs/check-runs/shared-run')).toBe(
+      alpha.publication.remote.commit,
+    );
+    expect(storeHas(store, alpha.blob)).toBe(true);
+    expect(existsSync(preparing)).toBe(false);
   } finally {
     paused.kill('SIGKILL');
     pokeFifo(barrier.go);
