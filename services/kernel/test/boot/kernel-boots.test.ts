@@ -1,12 +1,6 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
-import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { trustedAccessPorts } from '../../../auth/test/support/trusted-access.ts';
 import { withThrowawayDatabase } from '../../scripts/derived.ts';
-import { createAuthDatabase } from '../support/auth-database.ts';
-import { testReceiptKeys } from '../support/receipt-keys.ts';
-import { workerTestEnv } from '../support/worker-env.ts';
 
 setDefaultTimeout(600_000);
 
@@ -54,6 +48,10 @@ async function startKernelApi(databaseUrl: string) {
 
 async function startAuthHost(databaseUrl: string) {
   const { createAuthHost } = await import('../../../auth/src/host.ts');
+  const { trustedAccessPorts } = await import('../../../auth/test/support/trusted-access.ts');
+  const { createAuthDatabase } = await import('../support/auth-database.ts');
+  const { Pool } = await import('pg');
+  const { exportJWK, generateKeyPair } = await import('jose');
   const authUrl = await createAuthDatabase(databaseUrl, `auth_boot_${crypto.randomUUID().replaceAll('-', '')}`);
   const database = new Pool({ connectionString: authUrl });
   const system = new Pool({ connectionString: authUrl, max: 8 });
@@ -81,6 +79,7 @@ async function startAuthHost(databaseUrl: string) {
 
 async function startKernelWorker(databaseUrl: string) {
   const { readWorkerConfig, startWorker } = await import('../../src/worker.ts');
+  const { workerTestEnv } = await import('../support/worker-env.ts');
   const workerKeys = {
     ...workerTestEnv(),
     ...serverKeys(databaseUrl),
@@ -104,6 +103,8 @@ async function startPersonaSeed(databaseUrl: string) {
     import('../../src/server.ts'),
     import('../../src/access/management-source.ts'),
   ]);
+  const { Pool } = await import('pg');
+  const { testReceiptKeys } = await import('../support/receipt-keys.ts');
   const pool = new Pool({ connectionString: databaseUrl });
   try {
     const kernel = createKernel({
@@ -111,14 +112,16 @@ async function startPersonaSeed(databaseUrl: string) {
       routeKey: randomBytes(32),
       receiptKeys: testReceiptKeys(),
     });
-    let history = 0;
+    const history: string[] = [];
     for (const route of kernel.routes) {
       const detail = route.hooks?.detail as Record<string, unknown> | undefined;
       if (!detail || detail.hide === true) continue;
       expect(detail.operationId).toMatch(OPERATION_ID);
-      if (String(route.path).includes('/structure-history')) history += 1;
+      if (String(route.path).includes('/structure-history')) {
+        history.push(String(detail.operationId));
+      }
     }
-    expect(history).toBe(2);
+    expect(history.sort()).toEqual(['collection.structure_history_compare', 'collection.structure_history_list']);
   } finally {
     await pool.end();
   }
@@ -126,6 +129,9 @@ async function startPersonaSeed(databaseUrl: string) {
 
 async function boot(env: NodeJS.ProcessEnv) {
   const databaseUrl = env.DATABASE_URL!;
+  // The root acceptance command does not inherit the Kernel workspace's Reylo preload.
+  // Match dev-stack's loader before any entry or SQL-loading support import.
+  await import('reylo/register');
   // DBOS is process-global; production runs these entries in separate processes.
   await startPersonaSeed(databaseUrl);
   await startKernelApi(databaseUrl);
