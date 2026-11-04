@@ -175,6 +175,7 @@ test('native inverse stays bounded, distinguishes exact empty and readiness, and
       value: { type: 'value', content: '未知/المصدر/00-A' },
       qualifiers: [],
       references: [],
+      rezics: { release: subject.subject.release, revision: 1 },
     },
   ];
   subject.related[schemeB] = { labels: {} };

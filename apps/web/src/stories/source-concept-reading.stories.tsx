@@ -14,6 +14,8 @@ const disclosed = '00000000-0000-4000-8000-00000000c002';
 const withheld = '00000000-0000-4000-8000-00000000c003';
 const plainSubject = '00000000-0000-4000-8000-00000000c004';
 const originalRole = 'source:不明な役割/المصدر/00-A';
+const originalRelease = `sha256:${'a'.repeat(64)}`;
+const activeRelease = `sha256:${'b'.repeat(64)}`;
 type State =
   | 'current'
   | 'loading'
@@ -41,14 +43,14 @@ function fixture(state: State, locale: string) {
     value: { type: 'value' as const, content },
     qualifiers: [],
     references: [],
-    rezics: { release: 'sha256:original-source-release', revision: 1 },
+    rezics: { release: originalRelease, revision: 1 },
   });
   const source: SubjectRead = {
     subject: {
       id,
       type: state === 'not-concept' ? 'schema:Book' : 'skos:Concept',
       revision: 1,
-      release: 'sha256:original-source-release',
+      release: originalRelease,
       context: disclosed,
       labels: { en: 'Original source concept', ja: '原本の分類概念', ar: 'مفهوم المصدر الأصلي' },
       descriptions: { ja: '原本の定義を保持する。العربية — Définition originale — '.repeat(24) },
@@ -137,7 +139,7 @@ function fixture(state: State, locale: string) {
               },
             }
           : bundledRelease;
-      return readSourceConcept(client, undefined, { ...release, digest: 'sha256:active-release' }, id, locale, {
+      return readSourceConcept(client, undefined, { ...release, digest: activeRelease }, id, locale, {
         ...input,
         role: originalRole,
       });
