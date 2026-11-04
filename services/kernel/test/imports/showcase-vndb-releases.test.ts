@@ -9,7 +9,7 @@ import {
   developmentStatusSchemeUri,
   developmentStatusTaxonomy,
 } from '../../../importer/src/vndb-release-fidelity.ts';
-import { crossMediaAliases, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
+import { crossMediaAliases, planCrossMediaSeed, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
 import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
@@ -181,13 +181,16 @@ test('ordinary selected-family seed publishes current VNDB release dates and sta
       expect(adopted.status).toBe(200);
     }
     const path = join(directory, 'state.sqlite');
+    const tables = family();
+    const plan = await planCrossMediaSeed(tables);
+    const extras = { providers: ['vndb'] as const, mediaDeadlineMs: 0 };
     const first = await seedShowcaseVndbReleases({
-      tables: family(),
+      tables,
+      plan,
       path,
       port: runtime.importTransport,
-      groups: [],
       destination: { origin: 'https://kernel.import.test' },
-      extras: { providers: ['vndb'], mediaDeadlineMs: 0, recordConcurrency: 1 },
+      extras,
     });
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
     expect(first.bindings.releaseDigest).toBe(bundledDigest);
@@ -287,12 +290,13 @@ test('ordinary selected-family seed publishes current VNDB release dates and sta
       },
     ];
     const refreshed = await seedShowcaseVndbReleases({
-      tables: family(),
+      tables,
+      plan,
       path,
       port: runtime.importTransport,
       groups,
       destination: { origin: 'https://kernel.import.test' },
-      extras: { providers: ['vndb'], mediaDeadlineMs: 0, recordConcurrency: 1 },
+      extras,
     });
     expect(idOf(refreshed.readings.find((row) => row.externalId === 'r1')!)).toBe(exactId);
     await acceptAdopt(workId!, 'schema:keywords');
@@ -308,11 +312,12 @@ test('ordinary selected-family seed publishes current VNDB release dates and sta
     expect(fence.status).toBe(200);
     await seedShowcaseVndbReleases({
       tables: family('20200401'),
+      plan,
       path,
       port: runtime.importTransport,
       groups,
       destination: { origin: 'https://kernel.import.test' },
-      extras: { providers: ['vndb'], mediaDeadlineMs: 0, recordConcurrency: 1 },
+      extras,
     });
     const fencedDates = await editor.http(
       `/v1/subjects/${exactId}/candidates?${new URLSearchParams({ property: 'schema:datePublished', context: globalContext, limit: '100' })}`,
