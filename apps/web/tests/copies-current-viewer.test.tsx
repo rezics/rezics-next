@@ -513,7 +513,7 @@ test('The actual Copies route retires retained private rows and editor state on 
     const label = [...form().querySelectorAll('label')].find((label) => label.textContent === m.library_copy_note())!;
     const field = document.getElementById(label.htmlFor)!;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(field, value);
+      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(field, value);
       field.dispatchEvent(new window.Event('input', { bubbles: true }));
     });
   };
