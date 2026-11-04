@@ -77,7 +77,7 @@ async function fixture() {
     value: { type: 'value' as const, content: catalogueEpisode },
   };
   hash.qualifiers.push(item);
-  hash.references.push({ parts: [item] });
+  hash.references.push({ hash: '0000000000000000000000000000000000000001', parts: [item] });
   const visit = () =>
     catalogueFileReaderVisit({ public: read, locale: 'en', release: result.release, digest: result.digest });
   return { read, visit };
@@ -111,6 +111,7 @@ test('ordinary item, qualifier, reference and association visits return to the e
       expect(receipt.context).toBe(current.public.subject.context);
       expect(receipt.realm).toBe(realm);
       expect(receipt.kind).toBe(kind === 'association' ? 'association' : 'assertion');
+      expect(receipt.part).toBe(kind === 'qualifier' ? 'q:1' : kind === 'reference' ? 'r:0:0' : 'value');
       expect(new URL(destination, 'https://site.test').searchParams.get('fileSource')).toBe(catalogueFile);
       expect(destination).not.toContain('/file?');
       await render(
@@ -123,7 +124,11 @@ test('ordinary item, qualifier, reference and association visits return to the e
       await render(createElement(CatalogueFileReader, { key: `return-${kind}`, visit: visit(), currentHref: back }));
       const panel = host.querySelector<HTMLElement>('[data-slot="catalogue-file-inspection"]')!;
       expect(panel).not.toBeNull();
-      expect(host.ownerDocument.activeElement).toBe(panel.querySelector('h2'));
+      expect(host.ownerDocument.activeElement).toBe(
+        receipt.part === 'value'
+          ? panel.querySelector('h2')
+          : panel.querySelector(`[data-file-evidence-part="${receipt.part}"]`),
+      );
       expect(host.querySelector('[aria-expanded="true"][data-inspection-trigger]')).not.toBeNull();
     }
   });
@@ -189,6 +194,7 @@ test('concealed and spoiler evidence has no href, identifier or inspection fallb
     association.readability = 'concealed';
     association.statement.references = [
       {
+        hash: '0000000000000000000000000000000000000002',
         parts: [
           {
             property: { id: 'schema:description', data_type: 'string' },

@@ -13,6 +13,7 @@ export type FileEvidenceReturn = {
   kind: 'assertion' | 'association';
   group: string;
   key: string;
+  part: string;
 };
 const groups = new Set(['identifiers', 'technical', 'language', 'group', 'credits', 'facts', 'associations']);
 const fragmentPrefix = `#${CATALOGUE_FILE_READER_ANCHOR}?evidence=`;
@@ -21,11 +22,11 @@ const token = (value: unknown, max: number): value is string =>
 
 /** Only address and selection keys. Neither a body nor an arbitrary return URL can enter this receipt. */
 export function fileEvidenceReturn(hash: string): FileEvidenceReturn | undefined {
-  if (!hash.startsWith(fragmentPrefix) || new TextEncoder().encode(hash).length > 4096) return;
+  if (!hash.startsWith(fragmentPrefix) || hash.length > 4096 || new TextEncoder().encode(hash).length > 4096) return;
   try {
     const value: unknown = JSON.parse(decodeURIComponent(hash.slice(fragmentPrefix.length)));
-    if (!Array.isArray(value) || value.length !== 9 || value[0] !== 1) return;
-    const [, source, realm, context, definition, kind, group, key, slug] = value;
+    if (!Array.isArray(value) || value.length !== 10 || value[0] !== 1) return;
+    const [, source, realm, context, definition, kind, group, key, slug, part] = value;
     if (
       !catalogueFileSourceId(source) ||
       (realm !== null && !catalogueFileSourceId(realm)) ||
@@ -36,10 +37,12 @@ export function fileEvidenceReturn(hash: string): FileEvidenceReturn | undefined
       !token(key, 1024) ||
       (kind === 'association') !== (group === 'associations') ||
       !token(slug, 512) ||
-      !/^[A-Za-z0-9_%~-]+$/.test(slug)
+      !/^[A-Za-z0-9_%~-]+$/.test(slug) ||
+      typeof part !== 'string' ||
+      !/^(?:value|q:(?:0|[1-9]\d{0,3})|r:(?:0|[1-9]\d{0,3}):(?:0|[1-9]\d{0,3}))$/.test(part)
     )
       return;
-    return { source, slug, ...(realm ? { realm } : {}), context, definition, kind, group, key };
+    return { source, slug, part, ...(realm ? { realm } : {}), context, definition, kind, group, key };
   } catch {
     return;
   }
@@ -59,6 +62,7 @@ export function fileEvidenceFragment(value: FileEvidenceReturn): string | undefi
         value.group,
         value.key,
         value.slug,
+        value.part,
       ]),
     );
   return fileEvidenceReturn(hash) ? hash : undefined;

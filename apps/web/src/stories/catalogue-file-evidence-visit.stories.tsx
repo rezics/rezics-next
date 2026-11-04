@@ -51,6 +51,7 @@ function EvidenceVisit({
       if (partial)
         assertion.references = [
           {
+            hash: '0000000000000000000000000000000000000001',
             parts: [
               {
                 property: { id: 'schema:encodesCreativeWork', data_type: 'wikibase-item' },
@@ -131,6 +132,26 @@ export const TargetAndCurrentReturn: Story = {
     await expect(await canvas.findByRole('region', { name: m.catalogue_file_inspection_title() })).toBeVisible();
   },
 };
-export const ReplacedAssertion: Story = { ...TargetAndCurrentReturn, args: { replaced: true }, play: undefined };
+export const ReplacedAssertion: Story = {
+  args: { replaced: true },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const inspect = await canvas.findAllByRole('button', { name: m.catalogue_file_inspect_association() });
+    await userEvent.click(inspect[0]!);
+    await userEvent.click(
+      within(canvasElement.querySelector<HTMLElement>('[data-slot="catalogue-file-inspection"]')!).getByRole('link'),
+    );
+    await userEvent.click(await canvas.findByRole('link', { name: m.catalogue_file_reader_return() }));
+    await expect(await canvas.findByText(m.catalogue_file_return_changed())).toBeVisible();
+  },
+};
+export const RetiredReading: Story = {
+  async play(context) {
+    await TargetAndCurrentReturn.play!(context);
+    const canvas = within(context.canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_file_reader_open_again() }));
+    await expect(await canvas.findByText(m.catalogue_file_return_retired())).toBeVisible();
+  },
+};
 export const PartialEvidence: Story = { args: { partial: true } };
 export const SignedIn: Story = { args: { signedIn: true } };
