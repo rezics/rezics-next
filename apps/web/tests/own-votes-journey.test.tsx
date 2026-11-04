@@ -124,8 +124,8 @@ function RatingsScreen() {
   const heading = useRef<HTMLHeadingElement>(null);
   const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const receipt = useOwnVotesReturnReceipt(historyKey, value.cursor, 'en');
-  receiptTrace.push(`${instance.current}:${historyKey}:${receipt?.phase ?? 'none'}`);
   const [outcome, setOutcome] = useState<OwnVotesReturnOutcome | null>(null);
+  receiptTrace.push(`${instance.current}:${historyKey}:${receipt?.phase ?? 'none'}:${outcome?.kind ?? 'none'}`);
   const owner = (): OwnVotesReturnOwner => ({
     visitKey: 'journey',
     responseVersion: 0,

@@ -71,6 +71,7 @@ const { CurrentViewerOwnVotesPage } = await import('../src/ratings/own-votes/pag
 const { OwnVotesReturnProvider } = await import('../src/ratings/own-votes/return');
 const { ownVotesQuery } = await import('../src/ratings/own-votes/current-origin');
 const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+const { m } = await import('../src/paraglide/messages.js');
 const oldLocale = getLocale();
 await setLocale('en', { reload: false });
 
@@ -224,7 +225,10 @@ test('an admitted current page returns once to the exact inspected original pair
       throw new Error(JSON.stringify({ text: view.host.textContent, reads: reads.length, location: view.router.state.location }));
     expect(view.host.querySelectorAll('[data-own-vote-pair]')).toHaveLength(1);
     expect(reads).toHaveLength(0);
-    const inspect = [...view.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Inspect');
+    const inspect = [...view.host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === m.library_my_ratings_inspect(),
+    );
+    if (!inspect) throw new Error(`Missing inspection action: ${view.host.textContent}`);
     expect(inspect).toBeDefined();
     await view.click(inspect!);
     await visitSubject(view);
