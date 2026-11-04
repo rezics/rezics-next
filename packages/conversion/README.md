@@ -278,7 +278,7 @@ access authority.
 Decision: original-run admission advances `bangumi@7` to `bangumi@8` so
 unchanged dumps offer the new facts; TVAnime name extraction is preserved.
 
-Bangumi revision `bangumi@9` converts pinned Game infobox `游玩人数` on type 4
+Bangumi revision `bangumi@13` converts pinned Game infobox `游玩人数` on type 4
 through the same bound proposal path, preserving `bangumi@8` TVAnime original-run
 mapping. A single stated maximum emits only `schema:numberOfPlayers`. An
 inclusive lower/upper range emits the upper endpoint as the exact unit-1 amount
@@ -291,8 +291,9 @@ dump bytes refresh under this revision without inventing a native record
 revision.
 Decision: Game-template `游玩人数` admits only an entire-field unqualified
 positive integer or inclusive range; a lone count invents no minimum.
-Decision: player-count admission advances `bangumi@8` to `bangumi@9` so
-unchanged dumps offer the new fact; TVAnime original-run mapping is preserved.
+Decision: Game source-genre admission advances `bangumi@12` to `bangumi@13` so
+unchanged dumps offer the new fact; player count and TVAnime original-run
+mapping are preserved.
 
 Cross-media entity revision `cross-media-entities@6` retains an admitted
 Bangumi `person.summary` for the source-selected `schema:Person` or
@@ -594,7 +595,18 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@11` preserves Bangumi character names, physical profiles and person biographies while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types.
+Combined revision decision: `cross-media-entities@11` preserves Bangumi character names, physical profiles, biographies, Game appearances and performer associations, plus VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Game source genres advance `bangumi@12` to `bangumi@13` while preserving its existing mappings.
+
+### Bangumi Game source genres
+
+Decision: each complete Game-template `游戏类型` occurrence is one exact literal; separators are not guessed, so compound values stay intact and structured or continued values are withheld.
+
+Type-4 `{{Infobox Game` conversion emits `schema:genre` only after the caller supplies the exact Concept UUID resolved for the pinned source scheme `https://rezics.com/schemes/bangumi/genres`. The conversion preserves source spelling, uses the exact Bangumi Game record URL as its citation and does not claim canonical taxonomy equivalence. Missing references withhold only the affected genre occurrence; no title, platform, public tag or label lookup supplies a genre.
+The ordinary importer profile and selected-family caller both obtain those references through current public Scheme and Concept reads before invoking this pure converter.
+
+- Touches: one selected Game, at most 16 exact `schema:genre` proposals, each cited to its Bangumi Game record.
+- Bound: the shared 65,536-character infobox and 64-field parser, at most 16 genre occurrences and 16 sanitized omissions, 200 code units and 1,024 UTF-8 bytes per literal, and the existing 64 KiB command envelope.
+- Growth check: `services/importer/tests/bangumi-game-source-genres.test.ts` covers exact occurrence conversion and binding omissions; `services/kernel/test/imports/bangumi-game-source-genres.test.ts` covers current finite binding, separate review/adoption, current public read, unavailable binding recovery and stable Game identity. Fixtures are authored examples, not observed source-dump records.
 
 ### VNDB native alternate-name contract
 
@@ -978,7 +990,7 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 Decision: `bangumi@12` adds official websites to the integrated `bangumi@11`
 Game-name mapping; the combined registration keeps `cross-media-entities@11`.
 
-Current `bangumi@12` shares one bounded infobox scan for the exact pinned
+Current `bangumi@13` shares one bounded infobox scan for the exact pinned
 `{{Infobox animanga/TVAnime` template on selected type-2 `schema:TVSeries`
 records. It preserves the existing cited name, original-run and work-evidence
 mappings while adding the explicit `官方网站` URL fact. The top-level `name` and
@@ -1076,15 +1088,15 @@ identity; the connected native acceptance is
 
 ## Bangumi book grain
 
-The current `bangumi@12` converter dispatches type 1 Book versus BookSeries from
+The current `bangumi@13` converter dispatches type 1 Book versus BookSeries from
 the source series flag, novel platform and wiki template. Comic/manga stays
 generic Book so a novel family is never filled with manga. Type 1 cites a
 parseable `date` as `schema:datePublished` on Book or BookSeries. ISBN,
 publisher and pages stay off the work as withheld edition assertions; volume
 counts stay counts.
-Decision: type 1 Book/BookSeries dispatch remains in `bangumi@12`, preserving
+Decision: type 1 Book/BookSeries dispatch remains in `bangumi@13`, preserving
 TVAnime names, Book-template names, original-run, Game player-count and work
-evidence and Game names while the new revision adds official websites. One Bangumi subject stays one
+evidence and Game names while the new revision adds Game source genres. One Bangumi subject stays one
 identity; ISBN does not create a `bf:Instance`.
 
 ## Bangumi TVAnime work evidence
@@ -1094,7 +1106,7 @@ Decision: plain TVAnime `链接` values become cited `wdt:P973` facts;
 only horizontal template/list boundary whitespace.
 
 `bangumi@10` introduced the exact pinned TVAnime `链接` and `Copyright`
-mapping, retained by current `bangumi@12`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
+mapping, retained by current `bangumi@13`. A plain HTTP(S) destination becomes a descriptive `wdt:P973` value;
 source spelling and URL bytes are kept, and the URL is never a source citation
 or identity claim. A plain notice becomes `schema:copyrightNotice` with its
 source text preserved. Both facts cite only the exact Bangumi subject record.
@@ -1109,8 +1121,8 @@ diagnostics. The exact selected TVSeries schema bounds both URLs and notices to
 descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
-- Touches: ordinary `bangumi@12` and selected-family
-  `cross-media-entities@11+bangumi@12` publication for one TVAnime source record,
+- Touches: ordinary `bangumi@13` and selected-family
+  `cross-media-entities@11+bangumi@13` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights

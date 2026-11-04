@@ -17,6 +17,7 @@ export async function runDevelopmentSeed(
     env?: NodeJS.ProcessEnv;
     fetchDumps?: typeof fetchCrossMediaDumps;
     runSeed?: typeof runCrossMediaSeedCli;
+    seedReviewedCatalogue?: typeof seedReviewedCatalogue;
     root?: string;
   } = {},
 ): Promise<void> {
@@ -27,6 +28,7 @@ export async function runDevelopmentSeed(
   const auth = requiredEnvironment('AUTH_ORIGIN', env);
   const api = env.KERNEL_ORIGIN || 'http://127.0.0.1:' + (env.KERNEL_PORT || '4100');
   const characterVocabulary = env.REZICS_DEV_VNDB_CHARACTER_VOCABULARY?.trim();
+  const gameGenreBindings = env.REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS?.trim();
   const dumps = await (options.fetchDumps ?? fetchCrossMediaDumps)();
   const root = options.root ?? resolve(import.meta.dir, '../..');
   const state = join(root, '.temp', 'cross-media-seed', 'state.sqlite');
@@ -40,7 +42,7 @@ export async function runDevelopmentSeed(
     authOrigin: auth,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
-  const reviewedCatalogue = await seedReviewedCatalogue({
+  const reviewedCatalogue = await (options.seedReviewedCatalogue ?? seedReviewedCatalogue)({
     path: state,
     port: createImportTransport({ origin: api, tokenProvider }),
   });
@@ -66,6 +68,7 @@ export async function runDevelopmentSeed(
     '--client',
     client,
   ];
+  if (gameGenreBindings) args.push('--bangumi-game-genre-bindings', gameGenreBindings);
   if (characterVocabulary) args.push('--vndb-character-vocabulary', characterVocabulary);
   await (options.runSeed ?? runCrossMediaSeedCli)(args, {
     episodeCatalogueSubjects: reviewedCatalogue.subjects,

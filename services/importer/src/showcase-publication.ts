@@ -853,8 +853,13 @@ export async function publishShowcase(input: {
     existing: input.journal.acknowledgedCommands(),
   });
   const genre = input.result.bangumiGenrePublication;
+  const gameGenre = input.result.bangumiGameGenrePublication;
   const acknowledgementByCandidate = new Map<string, ShowcaseAcknowledgement>();
-  for (const acknowledgement of [...recovered.acknowledgements, ...(genre?.acknowledgements ?? [])]) {
+  for (const acknowledgement of [
+    ...recovered.acknowledgements,
+    ...(genre?.acknowledgements ?? []),
+    ...(gameGenre?.acknowledgements ?? []),
+  ]) {
     const key = acknowledgement.candidateId ?? acknowledgement.command.key;
     acknowledgementByCandidate.set(key, acknowledgement);
   }
@@ -870,6 +875,12 @@ export async function publishShowcase(input: {
           reviewedVocabulary: genre.vocabulary,
           currentBangumiGenreCandidateIds: genre.candidateIds,
           bangumiGenreOwnerKeys: genre.ownerKeys,
+        }
+      : {}),
+    ...(gameGenre
+      ? {
+          currentBangumiGameGenreCandidateIds: gameGenre.candidateIds,
+          bangumiGameGenreOwnerKeys: gameGenre.ownerKeys,
         }
       : {}),
   });
@@ -890,6 +901,9 @@ export async function publishShowcase(input: {
     omissions.push({ provider: 'bangumi', sourceKey: unresolved.holder, code: 'source-claim-withheld' });
   if (result.creditGaps.length || result.characterDiagnostics.length)
     omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'source-claim-withheld' });
+  if (gameGenre?.diagnostics.length)
+    for (const item of gameGenre.diagnostics.slice(0, showcaseLimits.omissions - omissions.length))
+      omissions.push({ provider: 'bangumi', sourceKey: item.sourceKey, code: 'source-claim-withheld' });
   const assertions = [
     ...manifest.records.flatMap((record) => record.assertions.map((assertion) => ({ record, assertion }))),
     ...manifest.vocabulary.flatMap((record) =>
@@ -1427,6 +1441,12 @@ export async function publishShowcase(input: {
           reviewedVocabulary: genre.vocabulary,
           currentBangumiGenreCandidateIds: genre.candidateIds,
           bangumiGenreOwnerKeys: genre.ownerKeys,
+        }
+      : {}),
+    ...(gameGenre
+      ? {
+          currentBangumiGameGenreCandidateIds: gameGenre.candidateIds,
+          bangumiGameGenreOwnerKeys: gameGenre.ownerKeys,
         }
       : {}),
   });

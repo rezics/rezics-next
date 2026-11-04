@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -44,33 +44,41 @@ test('seed origins allow loopback HTTP and require HTTPS elsewhere', () => {
 
 test('development seed fetches the shared cache once and passes the local persona to the importer', async () => {
   const root = resolve(import.meta.dir, '../../..');
-  const key = join(root, '.temp', 'persona.key');
+  const key = join(root, '.temp', `persona-${randomUUID()}.key`);
   const args: string[] = [];
   let fetches = 0;
-  await runDevelopmentSeed({
-    root,
-    env: {
-      REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
-      REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
-      REZICS_DEV_PERSONA_CLIENT: 'local-cli',
-      REZICS_DEV_VNDB_CHARACTER_VOCABULARY: '/shared/vocabulary.json',
-      KERNEL_PORT: '4100',
-      AUTH_ORIGIN: 'http://localhost:4300',
-    },
-    fetchDumps: async () => {
-      fetches++;
-      return {
-        cacheRoot: '/shared/dumps',
-        bangumi: '/shared/dumps/bangumi',
-        vndb: '/shared/dumps/vndb',
-        bangumiArchive: '/shared/dumps/bangumi.zip',
-        vndbArchive: '/shared/dumps/vndb.tar.zst',
-      };
-    },
-    runSeed: async (argv) => {
-      args.push(...argv);
-    },
-  });
+  const privateKey = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
+  await writeFile(key, JSON.stringify({ ...privateKey, kid: randomUUID(), alg: 'ES256' }), { mode: 0o600 });
+  try {
+    await runDevelopmentSeed({
+      root,
+      env: {
+        REZICS_DEV_PERSONA_ACCOUNT_KEY: key,
+        REZICS_DEV_PERSONA_ACCOUNT: 'local-importer',
+        REZICS_DEV_PERSONA_CLIENT: 'local-cli',
+        REZICS_DEV_VNDB_CHARACTER_VOCABULARY: '/shared/vocabulary.json',
+        REZICS_DEV_BANGUMI_GAME_GENRE_BINDINGS: '/private/game-genres.json',
+        KERNEL_PORT: '4100',
+        AUTH_ORIGIN: 'http://localhost:4300',
+      },
+      fetchDumps: async () => {
+        fetches++;
+        return {
+          cacheRoot: '/shared/dumps',
+          bangumi: '/shared/dumps/bangumi',
+          vndb: '/shared/dumps/vndb',
+          bangumiArchive: '/shared/dumps/bangumi.zip',
+          vndbArchive: '/shared/dumps/vndb.tar.zst',
+        };
+      },
+      seedReviewedCatalogue: async () => ({ subjects: {}, facts: [] }),
+      runSeed: async (argv) => {
+        args.push(...argv);
+      },
+    });
+  } finally {
+    await rm(key, { force: true });
+  }
   const option = (name: string) => args[args.indexOf(name) + 1];
   expect(fetches).toBe(1);
   expect(option('--bangumi')).toBe('/shared/dumps/bangumi');
@@ -81,4 +89,5 @@ test('development seed fetches the shared cache once and passes the local person
   expect(option('--account')).toBe('local-importer');
   expect(option('--client')).toBe('local-cli');
   expect(option('--vndb-character-vocabulary')).toBe('/shared/vocabulary.json');
+  expect(option('--bangumi-game-genre-bindings')).toBe('/private/game-genres.json');
 });
