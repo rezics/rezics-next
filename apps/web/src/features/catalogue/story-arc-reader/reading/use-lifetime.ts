@@ -13,6 +13,11 @@ export function useArcLifetime(input: { source: object | string; descriptor: str
     const snapshot = () => {
       const session = client?.getQueryState(['session']);
       const exposure = client?.getQueryState(['exposure', 'viewer']);
+      const reader = store?.getSnapshot();
+      const scopedExposure =
+        reader?.state === 'signed-in'
+          ? client?.getQueryState(['exposure', 'viewer', reader.observation.subject, reader.observation.id])
+          : undefined;
       const next = JSON.stringify([
         session?.status,
         session?.fetchStatus,
@@ -22,6 +27,10 @@ export function useArcLifetime(input: { source: object | string; descriptor: str
         exposure?.status,
         exposure?.dataUpdateCount,
         exposure?.errorUpdateCount,
+        scopedExposure?.status,
+        scopedExposure?.dataUpdateCount,
+        scopedExposure?.errorUpdateCount,
+        scopedExposure?.isInvalidated,
         store?.getSnapshot(),
       ]);
       if (next !== previous) {
