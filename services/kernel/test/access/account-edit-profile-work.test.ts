@@ -19,29 +19,29 @@ test('private profile advice is closed per viewer and kind at three unrelated po
   const organization = accountProfileEditing(actorId, { id: organizationId, kind: 'organization' });
   const managed = accountProfileEditing(operatorId, { id: actorId, kind: 'actor' });
   const identity = {
-    displayName: { applicable: true as const, maxLength: PROFILE_TEXT_MAX_LENGTH },
-    biography: { applicable: true as const, maxLength: PROFILE_TEXT_MAX_LENGTH },
-    avatar: { applicable: true as const },
+    displayName: { applicable: true, maxLength: PROFILE_TEXT_MAX_LENGTH },
+    biography: { applicable: true, maxLength: PROFILE_TEXT_MAX_LENGTH },
+    avatar: { applicable: true },
     links: {
-      applicable: true as const,
+      applicable: true,
       maxItems: PROFILE_LINK_MAX_ITEMS,
       labelMaxLength: PROFILE_LINK_LABEL_MAX_LENGTH,
       urlMaxLength: PROFILE_LINK_URL_MAX_LENGTH,
     },
-    publicViews: { applicable: true as const, flags: PROFILE_PUBLIC_VIEW_FLAGS },
+    publicViews: { applicable: true, flags: PROFILE_PUBLIC_VIEW_FLAGS },
   };
-  expect(actor).toEqual({
+  expect(actor as object).toEqual({
     viewer: { accountId: actorId },
     target: { accountId: actorId, kind: 'actor' },
     fields: identity,
   });
   expect(actor.fields).not.toHaveProperty('speakersListed');
-  expect(organization).toEqual({
+  expect(organization as object).toEqual({
     viewer: { accountId: actorId },
     target: { accountId: organizationId, kind: 'organization' },
-    fields: { ...identity, speakersListed: { applicable: true as const } },
+    fields: { ...identity, speakersListed: { applicable: true } },
   });
-  expect(managed).toEqual({
+  expect(managed as object).toEqual({
     viewer: { accountId: operatorId },
     target: { accountId: actorId, kind: 'actor' },
     fields: identity,
