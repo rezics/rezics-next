@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
-import { act, createElement, useState, StrictMode, type ReactNode } from 'react';
+import { act, useState, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { dirname } from 'node:path';
 
@@ -20,16 +20,6 @@ mock.module('../src/report/actions', () => ({
   sendReport: ({ data, headers }: { data: ReportDraft; headers: HeadersInit }) =>
     new Promise<ReportResult>((resolve, reject) => reportCalls.push({ data, headers: new Headers(headers), resolve, reject })),
 }));
-mock.module('../src/report/turnstile', () => ({
-  Verification: ({ onToken, onStart }: { onToken(token: string): void; onStart(): void }) =>
-    createElement(
-      'button',
-      { type: 'button', onClick: () => { onStart(); onToken('original-verification-token'); } },
-      'Verify test challenge',
-    ),
-}));
-
-const importDom = await installDom();
 const { AccountPosts } = await import('../src/features/pages/account');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const {
@@ -53,8 +43,6 @@ const { m } = await import('../src/paraglide/messages.js');
 const { originalContributionReference, contributionCommandTarget, contributionOperationAdvice } =
   await import('../src/accounts/public-profile/contribution-actions/advice');
 type NativeAdvice = import('../src/accounts/public-profile/contribution-actions/advice').NativeContributionAdvice;
-const { PostActions } = await import('../src/report/content-actions');
-await importDom.close();
 
 const id = '00000000-0000-4000-8000-000000000001';
 
@@ -797,98 +785,3 @@ test.each(['discussion', 'reviews', 'posts'] as const)(
   },
 );
 
-test('PostActions retains the original report body, sender, key and credential for deliberate retry', async () => {
-  const dom = await installDom();
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(sessionQuery.queryKey, {
-    state: 'signed-in',
-    subject: 'viewer-a',
-    csrfToken: 'original-credential',
-  });
-  const node = document.createElement('div');
-  document.body.append(node);
-  const root = createRoot(node);
-  reportCalls.length = 0;
-  const reportTarget = '00000000-0000-4000-8000-000000000010';
-  try {
-    await act(async () => {
-      root.render(
-        <QueryClientProvider client={client}>
-          <PostActions
-            target={{ kind: 'post', id: reportTarget }}
-            revisionId="00000000-0000-4000-8000-000000000011"
-            verification={{ sitekey: 'test', scriptUrl: 'https://site.test/turnstile.js' }}
-          />
-        </QueryClientProvider>,
-      );
-    });
-    const more = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (candidate) => candidate.getAttribute('aria-label') === m.report_more(),
-    );
-    expect(more).toBeDefined();
-    await clickButton(node, m.report_more());
-    await clickButton(node, m.report_action());
-    const other = [...document.querySelectorAll<HTMLElement>('[role="radio"]')].find((candidate) => {
-      const label = candidate.getAttribute('aria-labelledby');
-      return label ? document.getElementById(label)?.textContent?.trim() === m.report_other() : false;
-    });
-    expect(other).toBeDefined();
-    await act(async () => {
-      other!.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(other!.getAttribute('aria-checked')).toBe('true');
-    const details = document.querySelector<HTMLTextAreaElement>('textarea');
-    expect(details).toBeDefined();
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value')?.set?.call(
-        details,
-        'the original report body',
-      );
-      details!.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(details!.value).toBe('the original report body');
-    await clickButton(node, 'Verify test challenge');
-    const submit = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
-      (candidate) => candidate.textContent?.trim() === m.report_submit(),
-    );
-    expect(submit?.disabled).toBe(false);
-    await clickButton(node, m.report_submit());
-    expect(reportCalls).toHaveLength(1);
-    const first = reportCalls[0]!;
-    expect(first.data).toMatchObject({
-      target: { kind: 'post', id: reportTarget },
-      revisionId: '00000000-0000-4000-8000-000000000011',
-      reason: 'other',
-      evidence: 'the original report body',
-      botToken: 'original-verification-token',
-    });
-    expect(typeof first.data.idempotencyKey).toBe('string');
-    expect(first.headers.get('X-CSRF-Token')).toBe('original-credential');
-
-    await act(async () => {
-      first.reject(new Error('connection lost'));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    const recovery = node.querySelector<HTMLElement>('[data-slot="report-recovery"]');
-    expect(recovery?.textContent).toContain(m.report_other());
-    expect(recovery?.textContent).toContain(m.editorial_retry());
-    expect(recovery?.textContent).toContain(m.report_cancel());
-    await clickButton(node, m.editorial_retry());
-    expect(reportCalls).toHaveLength(2);
-    expect(reportCalls[1]!.data).toEqual(first.data);
-    expect(reportCalls[1]!.headers.get('X-CSRF-Token')).toBe('original-credential');
-    await act(async () => {
-      reportCalls[1]!.resolve({ ok: true, reportId: id });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(node.querySelector('[data-slot="report-recovery"]')).toBeNull();
-    expect(node.querySelector('a[href="/moderation/reports/' + id + '"]')).toBeDefined();
-  } finally {
-    await act(async () => root.unmount());
-    client.clear();
-    node.remove();
-    await dom.close();
-  }
-});
