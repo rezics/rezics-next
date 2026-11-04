@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import type { Locator, Page } from 'playwright';
 import { expect as playExpect } from 'playwright/test';
+import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { hydrate, readPublicStatements, readSlotCandidates, waitForSuggestion } from './catalogue-relations-fixture.ts';
 import { startCatalogueStoryArcFixture, type NativeStoryArcFixture } from './catalogue-story-arc-fixture.ts';
@@ -81,6 +82,7 @@ test('creating a story arc keeps parent linking, read recovery, and selection as
   expect(await page.locator('html').getAttribute('lang')).toBe('en');
   expect(new URL(page.url()).pathname).toBe('/en/catalogue/story-arc');
   await playExpect(page.getByRole('heading', { name: fixture.parent.label })).toBeVisible();
+  await playExpect(page.getByText(/you can create a new catalogue identity/i)).toBeVisible();
   await page.getByRole('textbox', { name: 'Name', exact: true }).fill(arcLabel);
   await fixture.stack.injectCreatedSubjectReadFailureOnce({
     status: 503,
@@ -249,3 +251,141 @@ test('a Realm address stays unavailable, and a volume, season or release is not 
   ).toEqual([]);
   await page.close();
 });
+
+test('guest, unsigned grant, and unavailable observation keep work readable and do not create', async () => {
+  const createPath = `/en/catalogue/story-arc?work=${fixture.parent.id}`;
+  const guest = await (await fixture.auth.context('anonymous')).newPage();
+  guest.setDefaultTimeout(30_000);
+  await guest.goto(`${fixture.stack.web}${createPath}`, { waitUntil: 'domcontentloaded' });
+  await hydrate(guest);
+  await playExpect(guest.getByRole('heading', { name: fixture.parent.label })).toBeVisible();
+  await guest.getByText(/sign in to create a catalogue identity/i).waitFor({ state: 'visible' });
+  expect(await guest.getByRole('textbox', { name: 'Name', exact: true }).count()).toBeGreaterThan(0);
+  expect(await guest.getByRole('button', { name: 'Create subject', exact: true }).isDisabled()).toBe(true);
+  await guest.close();
+
+  const bob = await fixture.auth.signIn('bob', { returnTo: createPath });
+  const bobPage = bob.context.pages().at(-1)!;
+  bobPage.setDefaultTimeout(30_000);
+  await hydrate(bobPage);
+  await playExpect(bobPage.getByRole('heading', { name: fixture.parent.label })).toBeVisible();
+  await bobPage.getByText(/does not allow creating a catalogue identity/i).waitFor({ state: 'visible' });
+  const bobLabel = `Unsigned story arc ${crypto.randomUUID()}`;
+  await bobPage.getByRole('textbox', { name: 'Name', exact: true }).fill(bobLabel);
+  expect(await bobPage.getByRole('button', { name: 'Create subject', exact: true }).isDisabled()).toBe(true);
+  await fixture.stack.syncKernelRequests();
+  expect(subjectPosts(bobLabel)).toHaveLength(0);
+  await bobPage.close();
+
+  const page = await fixture.alice.context.newPage();
+  page.setDefaultTimeout(60_000);
+  await fixture.stack.injectKernelFailureOnce({
+    method: 'POST',
+    path: '/v1/viewerActions',
+    status: 503,
+    body: '{"title":"Temporarily unavailable","status":503,"code":"dependency_unavailable"}',
+  });
+  await page.goto(`${fixture.stack.web}${createPath}`, { waitUntil: 'domcontentloaded' });
+  await hydrate(page);
+  await playExpect(page.getByRole('heading', { name: fixture.parent.label })).toBeVisible();
+  await page.getByText(/required service is unavailable/i).waitFor({ state: 'visible' });
+  expect(await page.getByRole('textbox', { name: 'Name', exact: true }).count()).toBeGreaterThan(0);
+  expect(await page.getByRole('button', { name: 'Create subject', exact: true }).isDisabled()).toBe(true);
+  await page.getByRole('button', { name: /retry creation eligibility/i }).click();
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  await page.close();
+}, 300_000);
+
+test('revoked Story Arc eligibility refuses a stale review, then exact-key recovery retries only the known read', async () => {
+  const marker = crypto.randomUUID().slice(0, 8);
+  const arcLabel = `Native eligibility arc ${marker}`;
+  const page = await fixture.alice.context.newPage();
+  page.setDefaultTimeout(60_000);
+  const createPath = `/en/catalogue/story-arc?work=${fixture.parent.id}`;
+  await page.goto(`${fixture.stack.web}${createPath}`, { waitUntil: 'domcontentloaded' });
+  await hydrate(page);
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill(arcLabel);
+  const create = page.getByRole('button', { name: 'Create subject', exact: true });
+  await create.click();
+  await playExpect(page.getByRole('region', { name: 'Review this story arc' })).toBeVisible();
+
+  const alice = await fixture.stack.authPersona('alice');
+  const revoked = await fixture.stack.kernel(
+    '/v1/grants:revoke',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: alice.accountId },
+        actions: ['subject:create'],
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+  expect([200, 201, 204, 409]).toContain(revoked.status);
+  await create.click();
+  await page.getByText(/does not allow creating a catalogue identity/i).waitFor({ state: 'visible' });
+  await fixture.stack.syncKernelRequests();
+  expect(subjectPosts(arcLabel)).toHaveLength(0);
+
+  const restored = await fixture.stack.kernel(
+    '/v1/grants',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: alice.accountId },
+        actions: ['subject:create'],
+        valid: '(,)',
+      }),
+    },
+    'governor',
+  );
+  expect([200, 201, 204, 409]).toContain(restored.status);
+  await page.getByRole('button', { name: /retry creation eligibility/i }).click();
+  await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
+
+  let droppedResponse: { status: number; body: string } | undefined;
+  const dropFirstCreateResponse = async (route: import('playwright').Route) => {
+    if (!droppedResponse && route.request().method() === 'POST') {
+      const response = await route.fetch();
+      droppedResponse = { status: response.status(), body: await response.text() };
+      await route.abort('failed');
+      return;
+    }
+    await route.continue();
+  };
+  await page.route('**/_serverFn/**', dropFirstCreateResponse);
+  await create.click();
+  await page.getByRole('alert').waitFor({ state: 'visible' });
+  await fixture.stack.injectCreatedSubjectReadFailureOnce({
+    status: 503,
+    body: '{"title":"Reader temporarily unavailable"}',
+  });
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await page.unroute('**/_serverFn/**', dropFirstCreateResponse);
+  await playExpect(page.getByRole('status').filter({ hasText: 'Subject created.' })).toBeVisible();
+  const createdId = (await page.locator('code').innerText()).trim();
+  expect(createdId).toMatch(/^[0-9a-f-]{36}$/i);
+  await fixture.stack.syncKernelRequests();
+  const created = subjectPosts(arcLabel);
+  expect(created.length).toBeGreaterThanOrEqual(1);
+  expect(created.every((request) => request.idempotencyKey === created[0]?.idempotencyKey)).toBe(true);
+  expect(created.every((request) => request.body === created[0]?.body)).toBe(true);
+  await page.getByRole('button', { name: 'Retry', exact: true }).click();
+  await playExpect(page.getByRole('link', { name: 'Connect and correct this arc' })).toBeVisible();
+  await fixture.stack.syncKernelRequests();
+  expect(subjectPosts(arcLabel).length).toBe(created.length);
+  const native = await fixture.stack.kernel(`/v1/subjects/${createdId}`);
+  expect(native.status).toBe(200);
+  expect(((await native.json()) as { subject: { id: string; type: string } }).subject).toMatchObject({
+    id: createdId,
+    type: storyArcType,
+  });
+  expect(await readPublicStatements(fixture.stack, fixture.parent.id, storyArcProperty)).toEqual([]);
+  await page.close();
+}, 300_000);

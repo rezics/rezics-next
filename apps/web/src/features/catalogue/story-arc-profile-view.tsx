@@ -284,22 +284,23 @@ function StoryArcProfileLive({
           )}
         </div>
       )}
-      {session !== 'signed-in' && (
-        <p role="status">
-          {session === 'signed-out'
-            ? m.catalogue_create_signed_out({}, o)
-            : session === 'unavailable'
-              ? m.catalogue_create_unavailable({}, o)
-              : m.candidate_loading({}, o)}{' '}
-          {session === 'signed-out' && (
-            <a
-              className={`${callerTextActionClass} underline`}
-              href={`/auth/sign-in?return_to=${encodeURIComponent(address)}`}
-            >
-              {m.account_sign_in({}, o)}
-            </a>
-          )}
-        </p>
+      {session === 'unavailable' ? (
+        <p role="status">{m.catalogue_create_unavailable({}, o)}</p>
+      ) : (
+        session !== 'signed-in' &&
+        (!!id || !transport.creation.eligibility) && (
+          <p role="status">
+            {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}{' '}
+            {session === 'signed-out' && (
+              <a
+                className={`${callerTextActionClass} underline`}
+                href={`/auth/sign-in?return_to=${encodeURIComponent(address)}`}
+              >
+                {m.account_sign_in({}, o)}
+              </a>
+            )}
+          </p>
+        )
       )}
       <div className="space-y-8">
         <section
@@ -345,7 +346,7 @@ function StoryArcProfileLive({
               )}
             </>
           ) : null}
-          {!id && privateRead && (
+          {!id && privateRead && (session === 'signed-in' || !!transport.creation.eligibility) && (
             <div className="space-y-6">
               <EntityPicker
                 disabled={!editable}

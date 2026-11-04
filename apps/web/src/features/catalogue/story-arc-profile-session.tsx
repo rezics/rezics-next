@@ -9,7 +9,12 @@ import { StoryArcProfile } from './story-arc-profile-view';
 import type { StoryArcAddress } from './story-arc-profile';
 import { storyArcClassificationCurrent } from './story-arc-classification-review';
 import { loadStoryArcProfile } from './story-arc-profile-actions';
-import { readCreateDefinitions, createCatalogueSubject, readCreatedCatalogueSubject } from './create-subject-actions';
+import {
+  readCatalogueCreateEligibility,
+  readCreateDefinitions,
+  createCatalogueSubject,
+  readCreatedCatalogueSubject,
+} from './create-subject-actions';
 import { relationTargetSearch } from './relation-editor-search';
 import { submitFactCorrection } from './subject-facts-actions';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../pages/curate-actions';
@@ -45,6 +50,7 @@ function StoryArcProfileSessionLive({
         load: (data) => loadStoryArcProfile({ data }),
         creation: {
           definitions: (data) => readCreateDefinitions({ data }),
+          eligibility: () => readCatalogueCreateEligibility(),
           submit: (data) => createCatalogueSubject({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
           read: (data) => readCreatedCatalogueSubject({ data }),
         },

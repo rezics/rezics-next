@@ -8,11 +8,13 @@ export const storyArcType = 'wd:Q2620972';
 export const storyArcProperty = 'rezics:storyArc';
 export const storyArcUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export type StoryArcAddress = { id?: string | undefined; work?: string | undefined };
+/** Public admission evidence. Creation permission is CreateTransport.eligibility, not this read. */
 export type StoryArcRead =
   | { ok: false; reason: 'invalid' | 'denied' | 'stale' | 'unavailable' }
   | { ok: true; release: Release; arc: SubjectRead | null; work: SubjectRead | null };
 export type StoryArcTransport = {
   load: (address: StoryArcAddress) => Promise<StoryArcRead>;
+  /** Creation consumes the shared parent subject.create observation. */
   creation: CreateTransport;
 };
 
