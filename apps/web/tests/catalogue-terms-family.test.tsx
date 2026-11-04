@@ -635,7 +635,14 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     );
     expect(router.state.location.pathname).toBe('/terms');
     expect(router.state.matches.map((match) => match.routeId)).toContain('/terms');
-    await settle(() => !!host.querySelector('form'));
+    for (let attempt = 0; attempt < 50 && !host.querySelector('form'); attempt++)
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    expect(
+      !!host.querySelector('form'),
+      `path=${router.state.location.pathname}; matches=${router.state.matches.map((match) => match.routeId).join(',')}; html=${host.innerHTML.slice(0, 700)}`,
+    ).toBe(true);
     const page = () => host.querySelector<HTMLElement>('article')!;
     const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
     const attempt = (path: string) => act(async () => void router.navigate({ to: path as never }));
