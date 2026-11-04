@@ -43,6 +43,7 @@ export interface ArchitectureManifest {
 export interface ImportEdge {
   specifier: string;
   kind: "value" | "type";
+  ordinal: number;
   line: number;
   column: number;
   targets: string[];
@@ -92,6 +93,12 @@ const KINDS = new Set<ModuleKind>([
   "UI/transport library",
 ]);
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]);
+const EMITTED_SOURCE_EXTENSIONS: Record<string, string[]> = {
+  ".js": [".ts", ".tsx", ".d.ts", ".js"],
+  ".jsx": [".tsx", ".ts", ".d.ts", ".jsx"],
+  ".mjs": [".mts", ".d.ts", ".mjs"],
+  ".cjs": [".cts", ".d.ts", ".cjs"],
+};
 const FORBIDDEN_PACKAGES = new Set(["elysia", "pg", "react", "react-dom"]);
 const NODE_BUILTINS = new Set([
   "assert",
@@ -117,6 +124,8 @@ const NODE_BUILTINS = new Set([
 
 const pathMappingsCache = new Map<string, { baseUrl: string; paths: Record<string, string[]> }>();
 const transpilerCache = new Map<string, Bun.Transpiler>();
+const jsonCache = new Map<string, Record<string, unknown> | undefined>();
+const globCache = new Map<string, RegExp>();
 
 function slash(path: string): string {
   return path.split(sep).join("/");
@@ -131,6 +140,8 @@ function canonical(value: unknown): string {
 }
 
 function globRegex(pattern: string): RegExp {
+  const cached = globCache.get(pattern);
+  if (cached) return cached;
   let source = "^";
   for (let index = 0; index < pattern.length; index += 1) {
     const character = pattern[index]!;
@@ -152,7 +163,9 @@ function globRegex(pattern: string): RegExp {
       source += character;
     }
   }
-  return new RegExp(`${source}$`);
+  const result = new RegExp(`${source}$`);
+  globCache.set(pattern, result);
+  return result;
 }
 
 function matchesAny(path: string, patterns: string[] | undefined): boolean {
@@ -173,9 +186,14 @@ function workspaceRootForFile(root: string, path: string): string {
 }
 
 function readJson(path: string): Record<string, unknown> | undefined {
+  const absolute = resolve(path);
+  if (jsonCache.has(absolute)) return jsonCache.get(absolute);
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    const result = JSON.parse(readFileSync(absolute, "utf8")) as Record<string, unknown>;
+    jsonCache.set(absolute, result);
+    return result;
   } catch {
+    jsonCache.set(absolute, undefined);
     return undefined;
   }
 }
@@ -244,6 +262,11 @@ function enumerateProductionFiles(root: string, manifest: ArchitectureManifest):
 function resolveCandidate(root: string, candidate: string, knownFiles: Set<string>): string[] {
   const normalized = slash(relative(root, resolve(root, candidate)));
   const candidates = [normalized];
+  const emittedExtension = extname(normalized);
+  if (EMITTED_SOURCE_EXTENSIONS[emittedExtension]) {
+    const base = normalized.slice(0, -emittedExtension.length);
+    for (const extension of EMITTED_SOURCE_EXTENSIONS[emittedExtension]!) candidates.push(`${base}${extension}`);
+  }
   if (!extname(normalized)) {
     for (const extension of [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs", ".d.ts", ".json", ".sql", ".css", ".yaml", ".yml", ".svg"]) {
       candidates.push(`${normalized}${extension}`);
@@ -346,7 +369,11 @@ function readPathMappings(root: string, sourcePath: string): { baseUrl: string; 
     const options = config.compilerOptions && typeof config.compilerOptions === "object"
       ? config.compilerOptions as Record<string, unknown>
       : {};
-    const baseUrl = typeof options.baseUrl === "string" ? resolve(dirname(absolute), options.baseUrl) : parent.baseUrl;
+    const baseUrl = typeof options.baseUrl === "string"
+      ? resolve(dirname(absolute), options.baseUrl)
+      : options.paths
+        ? dirname(absolute)
+        : parent.baseUrl;
     const paths = options.paths && typeof options.paths === "object" && !Array.isArray(options.paths)
       ? Object.fromEntries(Object.entries(options.paths as Record<string, unknown>).flatMap(([key, values]) =>
           Array.isArray(values) ? [[key, values.filter((value): value is string => typeof value === "string")]] : [],
@@ -419,7 +446,6 @@ function resolveSpecifier(
   root: string,
   fromPath: string,
   specifier: string,
-  manifest: ArchitectureManifest,
   packages: Map<string, string>,
   knownFiles: Set<string>,
 ): string[] {
@@ -453,12 +479,15 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
   }
   const errors: string[] = [];
   const valueImports = new Map<string, number>();
+  let scannerAvailable = true;
   try {
     for (const found of transpiler.scanImports(source)) {
       valueImports.set(found.path, (valueImports.get(found.path) ?? 0) + 1);
     }
   } catch (error) {
-    errors.push(`${file}: parser: ${error instanceof Error ? error.message : String(error)}`);
+    const message = error instanceof Error ? error.message : String(error);
+    scannerAvailable = false;
+    if (!message.includes("Falling back to classic runtime")) errors.push(`${file}: parser: ${message}`);
   }
 
   const code = codeCharacterMap(source);
@@ -480,7 +509,7 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
       if (!specifier) continue;
       const explicitType = /^\s*(?:import|export)\s+type\b/.test(match[0]);
       const remaining = valueImports.get(specifier) ?? 0;
-      const kind = explicitType || remaining === 0 ? "type" : "value";
+      const kind = explicitType ? "type" : scannerAvailable ? (remaining === 0 ? "type" : "value") : "value";
       if (!explicitType && remaining > 0) valueImports.set(specifier, remaining - 1);
       const position = start + match[0].lastIndexOf(specifier);
       const before = source.slice(0, position);
@@ -499,6 +528,12 @@ function collectImports(source: string, file: string): { imports: ImportEdge[]; 
       const before = source.slice(0, Math.max(position, 0));
       imports.push({ specifier, kind: "value", line: before.split("\n").length, column: Math.max(position, 0) - before.lastIndexOf("\n"), targets: [] });
     }
+  }
+  const occurrences = new Map<string, number>();
+  for (const edge of imports) {
+    const key = `${edge.kind}\n${edge.specifier}`;
+    edge.ordinal = (occurrences.get(key) ?? 0) + 1;
+    occurrences.set(key, edge.ordinal);
   }
   return { imports, errors };
 }
@@ -593,6 +628,7 @@ function environmentHash(root: string, manifest: ArchitectureManifest): string {
 export function buildGraph(rootInput: string, manifest: ArchitectureManifest): ArchitectureGraph {
   const root = resolve(rootInput);
   pathMappingsCache.clear();
+  jsonCache.clear();
   const files = enumerateProductionFiles(root, manifest);
   const knownFiles = new Set(files);
   const packages = packageRoots(root, manifest);
@@ -606,7 +642,7 @@ export function buildGraph(rootInput: string, manifest: ArchitectureManifest): A
     parseErrors.push(...parsed.errors);
     imports[file] = parsed.imports.map((edge) => ({
       ...edge,
-      targets: resolveSpecifier(root, file, edge.specifier, manifest, packages, knownFiles),
+      targets: resolveSpecifier(root, file, edge.specifier, packages, knownFiles),
     }));
   }
   return {
@@ -655,6 +691,7 @@ export function changedGraph(
   const files = enumerateProductionFiles(root, manifest);
   const fileSet = new Set(files);
   pathMappingsCache.clear();
+  jsonCache.clear();
   const normalizedChanged = new Set(changedFiles.map((file) => slash(relative(root, resolve(root, file)))));
   const hashes: Record<string, string> = {};
   const actualChanged = new Set<string>();
@@ -682,7 +719,7 @@ export function changedGraph(
       imports[file] = structureChanged
         ? previous.map((edge) => ({
             ...edge,
-            targets: resolveSpecifier(root, file, edge.specifier, manifest, packages, knownFiles),
+            targets: resolveSpecifier(root, file, edge.specifier, packages, knownFiles),
           }))
         : previous;
       continue;
@@ -691,7 +728,7 @@ export function changedGraph(
     parseErrors.push(...parsed.errors);
     imports[file] = parsed.imports.map((edge) => ({
       ...edge,
-      targets: resolveSpecifier(root, file, edge.specifier, manifest, packages, knownFiles),
+      targets: resolveSpecifier(root, file, edge.specifier, packages, knownFiles),
     }));
   }
   const graph: ArchitectureGraph = {
@@ -801,7 +838,7 @@ export function validateBaseline(baseline: BoundaryBaseline): string[] {
 }
 
 function stableEdge(edge: ImportEdge, target: string): string {
-  return `${edge.kind} import ${JSON.stringify(edge.specifier)} => ${target}`;
+  return `${edge.kind} import ${JSON.stringify(edge.specifier)} #${edge.ordinal} => ${target}`;
 }
 
 function packageExportTargetMap(root: string, manifest: ArchitectureManifest): Map<string, Set<string>> {
@@ -987,6 +1024,13 @@ export function auditArchitecture(
   for (const parseError of graph.parseErrors) errors.push(`parser: ${parseError}`);
   errors.push(...validateBaseline(baseline));
   const modules = new Map(manifest.modules.map((module) => [module.id, module]));
+  for (const [moduleId, group] of Object.entries(baseline.modules)) {
+    if (!group || typeof group !== "object") continue;
+    const module = modules.get(moduleId);
+    if (!module) errors.push(`rule 8: baseline module ${moduleId} has no manifest owner`);
+    if (module && group.owner !== module.owner) errors.push(`rule 8: baseline module ${moduleId} owner ${group.owner} does not match manifest owner ${module.owner}`);
+    if (group.reason !== "pre-boundary code") errors.push(`rule 8: baseline module ${moduleId} must use reason pre-boundary code`);
+  }
   const packages = packageRoots(root, manifest);
   const exportTargets = packageExportTargetMap(root, manifest);
   const locatedEdges: LocatedEdge[] = [];
@@ -1017,6 +1061,12 @@ export function auditArchitecture(
         }
         if (moduleRank(sourceModule.kind) < moduleRank(targetModule.kind)) {
           add(sourceModule.id, "rule 3", source, stableEdge(edge, `${target} (${sourceModule.kind} cannot depend on ${targetModule.kind})`));
+        }
+        if (
+          (sourceModule.kind === "application" && ["adapter", "composition root"].includes(targetModule.kind)) ||
+          (sourceModule.kind === "adapter" && targetModule.kind === "composition root")
+        ) {
+          add(sourceModule.id, "rule 5", source, stableEdge(edge, `${target} (${sourceModule.kind} cannot select or import ${targetModule.kind})`));
         }
         if (
           sourceModule.kind === "adapter" &&
