@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createContext, useContext, type ReactNode } from 'react';
 import type { NativeRealmHomeOperations, NativeRealmHomePage } from '../src/community/realm-home-native';
@@ -8,6 +8,7 @@ import { createKernelClient, type KernelClient } from '@rezics/client';
 import type { SpacePageAdmission } from '../src/community/space-page-lifetime';
 import * as start from '../.storybook/react-start';
 import { available, image } from '../src/kernel/fake/community';
+import { realmMembershipTestReaders } from './realm-membership-test-fixture';
 
 const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -21,6 +22,7 @@ const globals = {
       .map((key) => [key, window[key as keyof typeof window]]),
   ),
   getComputedStyle: window.getComputedStyle.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -32,15 +34,15 @@ mock.module('cloudflare:workers', () => ({ env: {} }));
 const realmMembershipActions = await import('../src/community/realm-membership-actions');
 const sessionModule = await import('../src/session/query');
 let session = { state: 'signed-in' as 'signed-in' | 'signed-out', subject: 'reader', csrfToken: 'one' };
-mock.module('../src/session/query', () => ({ ...sessionModule, useSession: () => session }));
 let joinAdvice: RealmJoinAdvice = { state: 'current', allowed: true };
 const joinAdviceReads: string[] = [];
 mock.module('../src/community/realm-membership-actions', () => ({
   ...realmMembershipActions,
-  readRealmMembership: () => Promise.resolve(null),
+  readRealmMembership: ({ data }: { data: { realmId: string } }) =>
+    realmMembershipTestReaders.readMembership(data.realmId),
   readRealmJoinAdvice: ({ data }: { data: { realmId: string } }) => {
     joinAdviceReads.push(data.realmId);
-    return Promise.resolve(joinAdvice);
+    return realmMembershipTestReaders.readJoinAdvice(data.realmId);
   },
 }));
 const { bindNativeRealmHomeOperations, readNativeRealmHome, nativeRealmHomeShelves } =
@@ -252,7 +254,7 @@ test('Realm Home and shelves stay unavailable until the official root-derived cl
   const publications = await bound.publicationShelf({ realmId: id(1), languages: ['ja'], cursor: 'publications-raw' });
   expect(requests).toEqual([]);
   expect([home.status, boards.status, publications.status]).toEqual([503, 503, 503]);
-  expect((home.error as Error).message).toContain('official Realm Home client contract');
+  expect((home.error as Error).message).toContain('Realm Home client contract is unavailable');
 });
 
 test('Realm join advice needs both the exact action and mounted operation', async () => {
@@ -317,6 +319,7 @@ function capture() {
 }
 async function paint(page: SpacePageData, source = operations, admission?: SpacePageAdmission) {
   const content = <SpacePage page={page} nativeOperations={source} />;
+  client.setQueryData(sessionModule.sessionQuery.queryKey, session);
   await settle(() =>
     root.render(
       <Frame.Provider
@@ -343,6 +346,12 @@ async function paint(page: SpacePageData, source = operations, admission?: Space
     ),
   );
 }
+beforeEach(() => {
+  joinAdviceReads.length = 0;
+  joinAdvice = { state: 'current', allowed: true };
+  realmMembershipTestReaders.readMembership = async () => null;
+  realmMembershipTestReaders.readJoinAdvice = async () => joinAdvice;
+});
 afterEach(async () => {
   await settle(() => root.unmount());
   root = createRoot(host);
