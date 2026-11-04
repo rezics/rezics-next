@@ -249,6 +249,12 @@ export function DiscoveryResults({
               <DiscoveryPublicRow
                 key={discoveryKey(hit)}
                 hit={hit}
+                actions={hit.summary.kind === 'space' ? renderPersonal?.(hit, hit.summary.value.title) : undefined}
+                entry={
+                  state.page.spaceEntries?.reader === null
+                    ? state.page.spaceEntries.rows.find((row) => row.id === hit.key.id)
+                    : undefined
+                }
                 kind={kind}
                 locale={locale}
                 subjectHrefFor={subjectHrefFor}

@@ -7998,5 +7998,20 @@
   "own_classifications_readback": "Leer la evaluación actual",
   "own_classifications_readback_separate": "El estado actual no confirma la solicitud original.",
   "own_classifications_refresh": "Recargar esta página",
-  "own_classifications_coverage": "Evaluaciones conservadas actualmente · historial incompleto"
+  "own_classifications_coverage": "Evaluaciones conservadas actualmente · historial incompleto",
+  "search_space_standalone": "Space independiente",
+  "search_space_sign_in": "Inicia sesión para seguir",
+  "search_space_pending": "Guardando seguimiento…",
+  "search_space_follow_disabled": "El seguimiento está desactivado para este lector.",
+  "search_space_follow_unavailable": "Tu estado de seguimiento no está disponible.",
+  "search_space_enter_realm": "Abrir Realm y reglas de acceso",
+  "search_space_open": "Abrir Space",
+  "search_space_entry_unavailable": "La información de acceso no está disponible.",
+  "search_space_rules": "Revisa las reglas actuales y tu membresía en la página del Realm.",
+  "search_space_admission_disabled": "No se ofrecen cambios de membresía a este lector.",
+  "search_space_admission_sign_in": "Inicia sesión en la página del Realm para revisar el acceso.",
+  "search_space_admission_unavailable": "La información de membresía no está disponible.",
+  "search_space_failed": "No se pudo cambiar el seguimiento. Se conservó tu búsqueda.",
+  "search_space_image_unavailable": "Imagen no disponible",
+  "search_space_entry_disabled": "La entrada está deshabilitada actualmente."
 }

@@ -7998,5 +7998,20 @@
   "own_classifications_readback": "Aktuelle Bewertung lesen",
   "own_classifications_readback_separate": "Der aktuelle Zustand bestätigt nicht die ursprüngliche Anfrage.",
   "own_classifications_refresh": "Diese Seite neu laden",
-  "own_classifications_coverage": "Aktuell gespeicherte Bewertungen · kein vollständiger Verlauf"
+  "own_classifications_coverage": "Aktuell gespeicherte Bewertungen · kein vollständiger Verlauf",
+  "search_space_standalone": "Eigenständiger Space",
+  "search_space_sign_in": "Zum Folgen anmelden",
+  "search_space_pending": "Folgen wird gespeichert…",
+  "search_space_follow_disabled": "Folgen ist für diesen Leser deaktiviert.",
+  "search_space_follow_unavailable": "Dein Folgestatus ist nicht verfügbar.",
+  "search_space_enter_realm": "Realm und Zugangsregeln öffnen",
+  "search_space_open": "Space öffnen",
+  "search_space_entry_unavailable": "Zugangshinweise sind nicht verfügbar.",
+  "search_space_rules": "Prüfe die aktuellen Regeln und die Mitgliedschaft auf der Realm-Seite.",
+  "search_space_admission_disabled": "Mitgliedschaftsänderungen werden diesem Leser nicht angeboten.",
+  "search_space_admission_sign_in": "Melde dich auf der Realm-Seite an, um den Zugang zu prüfen.",
+  "search_space_admission_unavailable": "Mitgliedschaftshinweise sind nicht verfügbar.",
+  "search_space_failed": "Die Folgebeziehung konnte nicht geändert werden. Deine Suche wurde beibehalten.",
+  "search_space_image_unavailable": "Bild nicht verfügbar",
+  "search_space_entry_disabled": "Der Eintritt ist derzeit deaktiviert."
 }

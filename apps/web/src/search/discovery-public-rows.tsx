@@ -1,3 +1,7 @@
+import type { ReactNode } from 'react';
+import type { SpaceEntryRow } from './space-entry/contract';
+import { SpaceEntryAvatar } from './space-entry/presentation';
+import { SpaceEntryControls } from './space-entry/controls';
 import { ContentItem } from '@rezics/ui/content-item';
 import { Cover } from '@rezics/ui/cover';
 import { m } from '../paraglide/messages.js';
@@ -116,9 +120,13 @@ function SpaceRow({
   summary,
   kind,
   locale,
+  actions,
+  entry,
 }: {
   id: string;
   summary: PublicSpaceSummary;
+  actions?: ReactNode;
+  entry?: SpaceEntryRow | undefined;
   kind: string;
   locale: string;
 }) {
@@ -126,12 +134,44 @@ function SpaceRow({
   return (
     <ContentItem
       data-discovery-space={id}
-      title={summary.title}
+      data-discovery-personal-row={JSON.stringify(['community', 'space', id])}
+      title={summary.presentation?.identity.name ?? summary.title}
+      visual={
+        summary.presentation ? (
+          <SpaceEntryAvatar
+            key={JSON.stringify(summary.presentation)}
+            presentation={summary.presentation}
+            locale={locale}
+          />
+        ) : undefined
+      }
+      actions={
+        actions ?? (
+          <SpaceEntryControls
+            id={id}
+            row={entry}
+            locale={locale}
+            returnTo={
+              typeof window === 'undefined'
+                ? `/${locale}/search`
+                : window.location.pathname + window.location.search + window.location.hash
+            }
+          />
+        )
+      }
+
       href={discoverySpaceHref(summary.address, locale)}
       context={
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
           <span>{kind}</span>
-          {realmTitle ? <span>{realmTitle}</span> : null}
+          {summary.realm ? (
+            <span>{realmTitle ?? m.space_realm_heading({}, options(locale))}</span>
+          ) : (
+            <span>{m.search_space_standalone({}, options(locale))}</span>
+          )}
+          {summary.presentation?.identity.kind === 'realm' && summary.presentation.identity.name !== summary.title ? (
+            <span>{summary.title}</span>
+          ) : null}
         </span>
       }
       metadata={<span className="break-all">{summary.address}</span>}
@@ -146,7 +186,11 @@ export function DiscoveryPublicRow({
   kind,
   locale,
   subjectHrefFor,
+  actions,
+  entry,
 }: {
+  actions?: ReactNode;
+  entry?: SpaceEntryRow | undefined;
   hit: PublicDiscoveryHit;
   kind: string;
   locale: string;
@@ -160,6 +204,6 @@ export function DiscoveryPublicRow({
     case 'review':
       return <ReviewRow id={id} summary={summary.value} kind={kind} locale={locale} subjectHrefFor={subjectHrefFor} />;
     case 'space':
-      return <SpaceRow id={id} summary={summary.value} kind={kind} locale={locale} />;
+      return <SpaceRow id={id} summary={summary.value} kind={kind} locale={locale} actions={actions} entry={entry} />;
   }
 }

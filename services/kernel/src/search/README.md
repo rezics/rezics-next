@@ -1907,3 +1907,29 @@ The lifecycle unit regressions are authored; native population, factory, receivi
 remain separate acceptance obligations. The dedicated retained-lifetime regressions cover expiry
 during successful and refused owner reads, delayed timer delivery, caller deadline mutation and
 late native final completion. These unit cases remain authored UNRUN.
+
+### Space entry composition and Cost
+
+The mixed aggregate includes current Community `presentation` on Space summaries and a private
+`spaceEntries` envelope bound to the actual reader (null for anonymous). Rows retain page order and
+exact Space identity, with a separate admitted destination, entry/admission advice and Space follow
+observation. Carried Realm identity is obtained only from Community's occupied-slot producer.
+Concealed/removed carriers, stale claims or changed final source bindings restart disclosure;
+optional action/media/follow failures retain explicit unavailable states where public identity is
+still admitted. No Global fallback, counts, private rules or membership census are returned.
+
+The shared Library follow-discovery producer is not published on this base. Its minimal consumer
+seam accepts one bounded exact-key batch and a final-current callback. Production reports follow
+unavailable until that owner supplies the adapter. The injected seam must observe the current
+reader's Space edges and action advice; it neither writes nor hydrates details per hit. Anonymous
+readers receive sign-in advice. The Library writer and Realm membership/rules flows remain native.
+
+Incremental Cost is finite: S ≤ 100 Space hits, R ≤ S carried Realms, at most 2S native action resources
+in two batches per observation, R selected native avatars, and two complete observations around
+final disclosure. Community's documented full-key/LIMIT bounds apply; its transactions end before
+foreign preparation. Presentation identity names are at most 1024 characters, addresses 256, and
+avatars expose a single admitted format/width (≤ 2560) rather than all media metadata. Serialized
+entry rows plus presentation are capped at 524288 UTF-8 bytes; the private envelope additionally
+fits the existing shared 65536-byte private-page allowance. Overflow cannot become a partial
+following census. Aggregate responses use `Cache-Control: private, no-store`. Existing source,
+credential, release, population and final-disclosure fences still apply after composition.

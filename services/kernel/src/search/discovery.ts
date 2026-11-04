@@ -133,6 +133,7 @@ export type PublicSpaceDiscoverySummary = Readonly<{
   address: string;
   summary?: string;
   realm?: Readonly<{ id: string; title: string | null }> | null;
+  presentation?: import('../community/space-discovery-entry-contract.ts').SpaceEntryPresentation;
 }>;
 export type DiscoveryOwnerSummary =
   | { kind: 'collection'; value: PublicCollectionDiscoverySummary }
@@ -162,6 +163,7 @@ export type DiscoveryKindMetadata = {
   count?: KindCountEvidence;
 };
 export type DiscoveryPage = {
+  spaceEntries?: import('../community/space-discovery-entry-contract.ts').SpaceEntryPage;
   hits: DiscoveryUnionHit[];
   kinds: { values: DiscoveryKindMetadata[]; next: string | null };
   next: string | null;

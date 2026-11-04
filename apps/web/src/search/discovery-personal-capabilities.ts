@@ -47,7 +47,11 @@ export function discoveryCapabilities(
 }
 export function boundDiscoveryPrivateBytes(state: DiscoveryState, capabilities: DiscoveryCapabilityPage | null) {
   return new TextEncoder().encode(
-    JSON.stringify({ viewerFacts: state.status === 'ready' ? state.page.viewerFacts : null, capabilities }),
+    JSON.stringify({
+      viewerFacts: state.status === 'ready' ? state.page.viewerFacts : null,
+      spaceEntries: state.status === 'ready' ? state.page.spaceEntries : null,
+      capabilities,
+    }),
   ).byteLength;
 }
 

@@ -1,3 +1,4 @@
+import { SpaceEntryPageSchema, SpaceEntryPresentationSchema } from '../community/space-discovery-entry-contract.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryPage, DiscoveryUnionHit } from './discovery.ts';
 import { SearchUnavailableError } from './opensearch.ts';
@@ -110,6 +111,7 @@ const reviewSummary = t.Object(
 );
 const spaceSummary = t.Object(
   {
+    presentation: t.Optional(SpaceEntryPresentationSchema),
     id,
     title: t.String({ minLength: 1 }),
     address: t.String({ minLength: 1, maxLength: 256 }),
@@ -212,6 +214,7 @@ const viewerFacts = t.Union([t.Null(), searchViewerFacts, viewerFactsUnavailable
 /** The owner-tagged key and non-null native summary close together; no Account Subject shell. */
 export const DiscoveryPageSchema = t.Object(
   {
+    spaceEntries: t.Optional(SpaceEntryPageSchema),
     hits: t.Array(
       t.Union([
         t.Object(
@@ -324,6 +327,37 @@ export function admitDiscoveryPage(value: unknown): asserts value is DiscoveryPa
     const identity = JSON.stringify([hit.key.owner, hit.key.kind, hit.key.route, hit.key.id]);
     if (identities.has(identity)) unavailable();
     identities.add(identity);
+  }
+  const spaces = page.hits.filter((hit) => hit.summary.kind === 'space');
+  for (const hit of spaces) {
+    if (hit.summary.kind !== 'space') continue;
+    const value = hit.summary.value,
+      presentation = value.presentation;
+    if (
+      presentation &&
+      (presentation.identity.id !== (value.realm?.id ?? value.id) ||
+        presentation.identity.kind !== (value.realm ? 'realm' : 'space') ||
+        (presentation.avatar.state === 'available' && presentation.avatar.realmId !== value.realm?.id))
+    )
+      unavailable();
+  }
+  if (page.spaceEntries) {
+    if (page.spaceEntries.rows.length !== spaces.length || Buffer.byteLength(JSON.stringify(page.spaceEntries)) > 65536)
+      unavailable();
+    page.spaceEntries.rows.forEach((row, index) => {
+      const hit = spaces[index]!;
+      if (hit.summary.kind !== 'space') unavailable();
+      const value = hit.summary.value;
+      if (
+        row.id !== hit.key.id ||
+        (row.destination.kind === 'realm' && row.destination.realmId !== value.realm?.id) ||
+        (row.destination.kind === 'space' &&
+          (value.realm || row.destination.spaceId !== value.id || row.destination.address !== value.address)) ||
+        (row.entry === 'allowed' && row.destination.kind === 'unavailable') ||
+        (page.spaceEntries!.reader === null ? row.follow.state !== 'sign-in' : row.follow.state === 'sign-in')
+      )
+        unavailable();
+    });
   }
   if (page.viewerFacts && page.viewerFacts !== null && page.viewerFacts.state === 'current') {
     const subjects = page.hits.filter((hit) => hit.summary.kind === 'subject');
@@ -503,5 +537,6 @@ export function discoveryHttpPage(page: DiscoveryPage): DiscoveryHttpPage {
       };
     }),
     ...(viewerFacts === undefined ? {} : { viewerFacts }),
+    ...(page.spaceEntries === undefined ? {} : { spaceEntries: structuredClone(page.spaceEntries) }),
   };
 }

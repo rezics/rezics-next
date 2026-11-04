@@ -121,3 +121,22 @@ Successful/uncertain overlapping settlement adds exactly one private assembly. E
 final authority check. A false viewer check retires the whole page without restart retry; ordinary producer failure
 retains the independently admitted public page. Cleanup aborts at most one assembly and disposes one page/registry
 subscription per incarnation; it starts no replacement read or continuation protocol.
+
+Space rows consume current native presentation and reader-bound `spaceEntries` from the aggregate;
+they issue no detail requests. Native community identity, Space address/summary and carried-Realm
+context remain separate. Avatar absence, withheld media and unavailable/loading-failed media have
+explicit fallbacks. Standalone Spaces are named as standalone. A carried Realm always uses the
+admitted Realm destination, with current entry and rules/admission advice separate from following.
+No carrier is inferred from labels or an address, and no Global destination is substituted.
+
+Decision: absent the shared Library follow-discovery producer, signed-in follow controls show
+unavailable; the consumer seam can mount exact current following and allowed/disabled advice when
+the owner supplies it. Allowed commands call the existing Library Space-follow writer with a final
+expected-reader/credential fence. They never join a Realm. The mounted Search lifetime shares the
+existing no-queue command registry, announces pending/failure, and performs one aggregate refresh
+after settled successful or uncertain commands. Known rejection keeps the current row. Refresh
+failure keeps public presentation with private advice unavailable. Reader, credential, locale,
+request and exposure retirement discard delayed writes and out-of-order reads. Query, filters,
+scope, layout, continuation, focus and scroll remain in the Search visit; native entry/rules links
+use normal navigation so browser return restores the original URL. All advice is localized in the
+eight supported locales.

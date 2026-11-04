@@ -1,3 +1,4 @@
+import { spaceEntryPage, spaceEntryPresentation } from './space-entry/contract';
 import * as v from 'valibot';
 import { isCalendarDate } from '@rezics/filter';
 import type { KernelClient } from '@rezics/client';
@@ -185,6 +186,7 @@ const publicReviewSummary = v.strictObject({
   subject: v.exactOptional(v.nullable(reviewSubject)),
 });
 const publicSpaceSummary = v.strictObject({
+  presentation: v.exactOptional(spaceEntryPresentation),
   id: resourceId,
   title: v.pipe(v.string(), v.minLength(1)),
   address: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
@@ -295,6 +297,7 @@ const viewerFacts = v.union([
   }),
 ]);
 const page = v.object({
+  spaceEntries: v.exactOptional(spaceEntryPage),
   hits: v.pipe(v.array(hit), v.maxLength(100)),
   kinds,
   next: v.nullable(v.string()),
@@ -377,6 +380,40 @@ export function parseDiscoveryPage(value: unknown): DiscoveryPage | undefined {
       case 'space':
         if (hit.key.owner !== 'community' || hit.key.kind !== 'space') return;
         break;
+    }
+  }
+  const spaces = result.hits.filter((hit) => hit.summary.kind === 'space');
+  for (const hit of spaces) {
+    if (hit.summary.kind !== 'space') continue;
+    const value = hit.summary.value,
+      presentation = value.presentation;
+    if (
+      presentation &&
+      (presentation.identity.id !== (value.realm?.id ?? value.id) ||
+        presentation.identity.kind !== (value.realm ? 'realm' : 'space') ||
+        (presentation.avatar.state === 'available' && presentation.avatar.realmId !== value.realm?.id))
+    )
+      return;
+  }
+  if (result.spaceEntries) {
+    if (
+      result.spaceEntries.rows.length !== spaces.length ||
+      new TextEncoder().encode(JSON.stringify(result.spaceEntries)).byteLength > 65536
+    )
+      return;
+    for (const [index, row] of result.spaceEntries.rows.entries()) {
+      const hit = spaces[index]!;
+      if (hit.summary.kind !== 'space') return;
+      const value = hit.summary.value;
+      if (
+        row.id !== hit.key.id ||
+        (row.destination.kind === 'realm' && row.destination.realmId !== value.realm?.id) ||
+        (row.destination.kind === 'space' &&
+          (value.realm || row.destination.spaceId !== value.id || row.destination.address !== value.address)) ||
+        (row.entry === 'allowed' && row.destination.kind === 'unavailable') ||
+        (result.spaceEntries.reader === null ? row.follow.state !== 'sign-in' : row.follow.state === 'sign-in')
+      )
+        return;
     }
   }
   if (result.viewerFacts && result.viewerFacts !== null && result.viewerFacts.state === 'current') {
