@@ -23,19 +23,22 @@ type Visit = {
  * Its reader observation belongs to the existing candidate session, with no additional subscription.
  * A full reload intentionally loses this receipt.
  */
-let receipt: {
-  token: string;
-  id: string;
-  locale: string;
-  page: Page;
-  previous?: Page | undefined;
-  origin?: string | undefined;
-  current: () => boolean;
-} | undefined;
+let receipt:
+  | {
+      token: string;
+      id: string;
+      locale: string;
+      page: Page;
+      previous?: Page | undefined;
+      origin?: string | undefined;
+      current: () => boolean;
+    }
+  | undefined;
 
 function safePath(value?: string) {
   return value && value.length <= 2048 && value.startsWith('/') && !value.startsWith('//') && !value.startsWith('/\\')
-    ? value : undefined;
+    ? value
+    : undefined;
 }
 
 export function useQuotationVisit(props: {
@@ -64,8 +67,13 @@ export function useQuotationVisit(props: {
     const saved = receipt;
     receipt = undefined;
     if (!returnToken) return undefined;
-    return saved?.token === returnToken && saved.id === id && saved.locale === locale &&
-      saved.page.quote === quote && saved.current() ? saved : null;
+    return saved?.token === returnToken &&
+      saved.id === id &&
+      saved.locale === locale &&
+      saved.page.quote === quote &&
+      saved.current()
+      ? saved
+      : null;
   });
   const safeOrigin = safePath(props.returnTo) ?? restoration?.origin;
   const [visit, setVisit] = useState<Visit>(() => ({
@@ -100,11 +108,19 @@ export function useQuotationVisit(props: {
     focus.current = focusSelected ? { owner, element: document.activeElement } : undefined;
     publish({ intent: { ...intent }, previous, phase: 'loading', observation: owner });
     let result: QuotationRead;
-    try { result = await transport.current.read({ ...intent }); }
-    catch { result = { ok: false, reason: 'unavailable' }; }
+    try {
+      result = await transport.current.read({ ...intent });
+    } catch {
+      result = { ok: false, reason: 'unavailable' };
+    }
     if (!mounted.current || !work.active() || owner !== sequence.current || source.current !== address) return;
-    publish({ intent: { ...intent, ...(result.ok ? { session: result.session } : {}) }, previous,
-      phase: result.ok ? 'ready' : 'failed', result, observation: owner });
+    publish({
+      intent: { ...intent, ...(result.ok ? { session: result.session } : {}) },
+      previous,
+      phase: result.ok ? 'ready' : 'failed',
+      result,
+      observation: owner,
+    });
     if (push && result.ok) history({ ...intent, quote: result.selected?.id });
   }
 
@@ -132,22 +148,33 @@ export function useQuotationVisit(props: {
     expectedQuote.current = quote;
     // A URL is only selection intent. Without an admitted descriptor it starts at page one.
     const retained = current.current;
-    const onCurrentPage = quote && retained.result?.ok && retained.result.rows.some(row => row.id === quote);
+    const onCurrentPage = quote && retained.result?.ok && retained.result.rows.some((row) => row.id === quote);
     const onPreviousPage = quote && retained.previous?.quote === quote;
-    void request(onCurrentPage ? { ...retained.intent, quote } : onPreviousPage ? retained.previous! : { quote },
-      onCurrentPage ? retained.previous : undefined, true);
+    void request(
+      onCurrentPage ? { ...retained.intent, quote } : onPreviousPage ? retained.previous! : { quote },
+      onCurrentPage ? retained.previous : undefined,
+      true,
+    );
   }, [quote]);
 
   useLayoutEffect(() => {
     const ticket = focus.current;
     if (visit.phase === 'loading' || !ticket || ticket.owner !== visit.observation) return;
     focus.current = undefined; // Consumed even if focus moved; blur cannot re-arm this ticket.
-    if (work.active() && mounted.current && visit.result?.ok && visit.result.selected &&
-      (document.activeElement === ticket.element || (!ticket.element?.isConnected && document.activeElement === document.body))) selectedRef.current?.focus();
+    if (
+      work.active() &&
+      mounted.current &&
+      visit.result?.ok &&
+      visit.result.selected &&
+      (document.activeElement === ticket.element ||
+        (!ticket.element?.isConnected && document.activeElement === document.body))
+    )
+      selectedRef.current?.focus();
   }, [visit, work]);
 
   const read: Success | undefined = visit.phase === 'ready' && visit.result?.ok ? visit.result : undefined;
-  const error: Failure | undefined = visit.phase === 'failed' && visit.result && !visit.result.ok ? visit.result : undefined;
+  const error: Failure | undefined =
+    visit.phase === 'failed' && visit.result && !visit.result.ok ? visit.result : undefined;
   const facts = subjectHref({ id, label: read?.public.subject.labels[locale] ?? '' }, locale).href;
   const returnUrl = new URL(`${facts}/quotations`, 'https://local.invalid');
   if (read?.selected) returnUrl.searchParams.set('quote', read.selected.id);
@@ -160,30 +187,58 @@ export function useQuotationVisit(props: {
     if (!read?.selected || !link?.getAttribute('href')?.startsWith('/') || !work.active()) return;
     const store = browserObservation(client);
     const observed = store.getSnapshot();
-    receipt = { token, id, locale, page: { ...current.current.intent, quote: read.selected.id },
-      previous: current.current.previous, origin: safeOrigin,
-      current: () => store.getSnapshot() === observed };
+    receipt = {
+      token,
+      id,
+      locale,
+      page: { ...current.current.intent, quote: read.selected.id },
+      previous: current.current.previous,
+      origin: safeOrigin,
+      current: () => store.getSnapshot() === observed,
+    };
     // Departure retires every pending focus ticket without changing the admitted page.
     focus.current = undefined;
-    if (router && event.type === 'click' && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+    if (
+      router &&
+      event.type === 'click' &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey
+    ) {
       event.preventDefault();
       void router.navigate({ href: link.getAttribute('href')! });
     }
   }
 
   return {
-    read, error, selectedRef, safeOrigin, returnHref, depart,
-    loading: visit.phase === 'loading', observation: visit.observation,
+    read,
+    error,
+    selectedRef,
+    safeOrigin,
+    returnHref,
+    depart,
+    loading: visit.phase === 'loading',
+    observation: visit.observation,
     hasPrevious: !!visit.previous,
-    select: (selected: string) => read?.rows.some(row => row.id === selected)
-      ? request({ ...current.current.intent, quote: selected, session: read.session }, visit.previous, true, true)
-      : Promise.resolve(),
-    more: () => read?.next ? request({ cursor: read.next, session: read.session },
-      { ...current.current.intent, quote: read.selected?.id }, false, true) : Promise.resolve(),
-    previous: () => visit.previous ? request(visit.previous, undefined, true, true) : Promise.resolve(),
+    select: (selected: string) =>
+      read?.rows.some((row) => row.id === selected)
+        ? request({ ...current.current.intent, quote: selected, session: read.session }, visit.previous, true, true)
+        : Promise.resolve(),
+    more: () =>
+      read?.next
+        ? request(
+            { cursor: read.next, session: read.session },
+            { ...current.current.intent, quote: read.selected?.id },
+            false,
+            true,
+          )
+        : Promise.resolve(),
+    previous: () => (visit.previous ? request(visit.previous, undefined, true, true) : Promise.resolve()),
     restart: () => request({}, undefined, false, true),
     refresh: () => request(current.current.intent, current.current.previous),
-    retry: () => error?.reason === 'unavailable'
-      ? request(current.current.intent, current.current.previous) : Promise.resolve(),
+    retry: () =>
+      error?.reason === 'unavailable' ? request(current.current.intent, current.current.previous) : Promise.resolve(),
   };
 }

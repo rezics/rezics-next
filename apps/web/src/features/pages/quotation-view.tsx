@@ -17,8 +17,7 @@ import { ViewHeading } from './view-heading';
 import { SpoilerGate } from './values';
 import { webUrl } from './shared';
 
-const actionClass =
-  'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
+const actionClass = 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2';
 const linkClass =
   'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal underline underline-offset-4 [overflow-wrap:anywhere] rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
@@ -255,8 +254,14 @@ function QuotationVisitView({
       )}
       {error && (
         <div className="flex flex-wrap gap-3">
-          {error.reason === 'unavailable' && <Button className={actionClass} onClick={() => void visit.retry()}>{m.quotation_retry({}, o)}</Button>}
-          <Button variant="outline" className={actionClass} onClick={() => void visit.restart()}>{m.quotation_restart({}, o)}</Button>
+          {error.reason === 'unavailable' && (
+            <Button className={actionClass} onClick={() => void visit.retry()}>
+              {m.quotation_retry({}, o)}
+            </Button>
+          )}
+          <Button variant="outline" className={actionClass} onClick={() => void visit.restart()}>
+            {m.quotation_restart({}, o)}
+          </Button>
         </div>
       )}
       {read && !read.admitted && (
@@ -300,9 +305,17 @@ function QuotationVisitView({
             </Button>
           )}
           <div className="flex flex-wrap gap-3">
-            {visit.hasPrevious && <Button variant="outline" className={actionClass} onClick={() => void visit.previous()}>{m.quotation_previous({}, o)}</Button>}
-            <Button variant="outline" className={actionClass} onClick={() => void visit.refresh()}>{m.quotation_refresh({}, o)}</Button>
-            <Button variant="outline" className={actionClass} onClick={() => void visit.restart()}>{m.quotation_restart({}, o)}</Button>
+            {visit.hasPrevious && (
+              <Button variant="outline" className={actionClass} onClick={() => void visit.previous()}>
+                {m.quotation_previous({}, o)}
+              </Button>
+            )}
+            <Button variant="outline" className={actionClass} onClick={() => void visit.refresh()}>
+              {m.quotation_refresh({}, o)}
+            </Button>
+            <Button variant="outline" className={actionClass} onClick={() => void visit.restart()}>
+              {m.quotation_restart({}, o)}
+            </Button>
           </div>
           {selected && (
             <section
@@ -314,9 +327,15 @@ function QuotationVisitView({
               data-quotation-id={selected.id}
               data-source-observation={selected.observation}
             >
-              <h2 ref={selectedRef} tabIndex={-1} className="font-semibold">{m.quotation_selected({ id: selected.id }, o)}</h2>
+              <h2 ref={selectedRef} tabIndex={-1} className="font-semibold">
+                {m.quotation_selected({ id: selected.id }, o)}
+              </h2>
               {selected.statements.length === 0 && <p role="status">{m.quotation_unavailable({}, o)}</p>}
-              {selected.statements.some(text => text.status === 'unavailable') && <Button className={actionClass} onClick={() => void visit.refresh()}>{m.quotation_retry({}, o)}</Button>}
+              {selected.statements.some((text) => text.status === 'unavailable') && (
+                <Button className={actionClass} onClick={() => void visit.refresh()}>
+                  {m.quotation_retry({}, o)}
+                </Button>
+              )}
               {selected.statements.map((statement) => (
                 <QuotationStatement
                   key={statement.statementId ?? statement.property}
