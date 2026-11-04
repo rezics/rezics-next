@@ -108,17 +108,6 @@ export type PersonalEntrySourceCorrection = Readonly<{
     sourceCreated: FieldChange<TimestampInput>;
     sourceUpdated: FieldChange<TimestampInput>;
 }>;
-/** Internal transaction binding for a selected archive observation. It is never accepted by public routes. */
-export type PersonalEntryArchiveObservationGuard = Readonly<{
-    uploadId: string;
-    ordinal: number;
-    reviewRevision: number;
-    sourceFingerprint: string;
-    action: 'admit' | 'correct';
-    expectedRevision: number | null;
-    fields: Readonly<Partial<Record<'privacy' | 'sourceCreated' | 'sourceUpdated', 'preserve' | 'set' | 'clear'>>>;
-    profileGuard: PersonalEntryProfileGuard;
-}>;
 export declare function parsePersonalRevision(value: unknown, allowInitial?: boolean): number;
 export declare function parsePersonalNote(value: unknown): string;
 export declare function parsePersonalPriority(value: unknown): number;

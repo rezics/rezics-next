@@ -21,10 +21,10 @@ export type ProgressSessionJournalAdmission = {
 };
 type ExpectedProgressBinding = {
     subjectId: string;
-    requestedSubjectId?: string | null;
+    requestedSubjectId: string | null;
     acceptingType: string;
     identityEpoch: string;
-    component?: {
+    component: {
         partition: number;
         epoch: number;
         position: string;

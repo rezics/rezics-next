@@ -21,10 +21,7 @@ export declare class QuestionDefinitionInvalidError extends Error {
 /** This envelope is the installed vote SQL/event capability, not a scale codec.
  * Scale delivery owns expanding it across persistence, events and aggregates. */
 export declare function validateQuestionDefinition(input: RealmQuestionInput): void;
-/** Definitions are immutable after insertion. Any future definition-changing
- * writer must update the owning question tuple before dependent heads, sharing
- * question-vote-admission's native lock order; captions have a separate head.
- * One Realm-home command, receipt and event. The current native manage decision
+/** One Realm-home command, receipt and event. The current native manage decision
  * precedes receipt lookup on every attempt, including an exact replay. */
 export declare function createRealmRatingQuestion(deps: {
     pool: Pool;

@@ -1,11 +1,11 @@
-import { type AuthoritativeTime, type CommandOutcome } from '../command/command.ts';
+import { type CommandOutcome } from '../command/command.ts';
 import { type Actor } from '../request/access.ts';
 import { type RatingQuestion } from '../rating/votes.ts';
 import { createEntryCommands } from './entries.ts';
 import { type VndbEntryReview } from './list-import-vndb-admission.ts';
 import { type SourceValue, type VndbRow } from './list-import-vndb-parser.ts';
 import { type ImportConsumptionDateIntent, type ImportConsumptionDateReview, type ImportDateAction, type ImportDateField, type ImportDateSessionIdentity } from './import-consumption.ts';
-import { type EntryImportMetadataOutcome, type EntryImportMetadataProposals, type EntryImportMetadataReview } from './list-import-entry-metadata.ts';
+import { type EntryImportMetadataProposals, type EntryImportMetadataReview, type EntryImportMetadataView } from './list-import-entry-metadata.ts';
 type Config = Parameters<typeof createEntryCommands>[0] & {
     routeKey: Uint8Array;
 };
@@ -106,12 +106,6 @@ type Decision = {
     replace: boolean;
     commandKey: string;
     guard: VndbEntryReview | null;
-    receipt?: {
-        partition: number;
-        epoch: number;
-        position: string;
-        transactionId: string;
-    };
     matchDigest?: string;
     metadata?: EntryImportMetadataReview[];
     score?: ScoreDecision;
@@ -292,15 +286,7 @@ export declare function createVndbImport(config: Config): {
         ordinal: number;
         reviewToken: string;
     }>>;
-    metadata: (actor: Actor, id: string, ordinal: number, token: string) => Promise<Readonly<{
-        status: 'current' | 'stale';
-        reviewToken: string;
-        sourceReviewToken: string;
-        subjectId: string;
-        personal: import("./entry-personal-model.ts").PersonalEntry;
-        proposals: EntryImportMetadataProposals;
-        outcome: EntryImportMetadataOutcome | null;
-    }>>;
+    metadata: (actor: Actor, id: string, ordinal: number, token: string) => Promise<EntryImportMetadataView>;
     applyMetadata: (actor: Actor, id: string, ordinal: number, reviewToken: string, fields: unknown, recordCommand?: (outcome: CommandOutcome<unknown>) => void, signal?: AbortSignal) => Promise<Readonly<{
         reviewToken: string;
         fields: readonly import("./list-import-entry-metadata.ts").EntryImportMetadataFieldOutcome[];
@@ -357,7 +343,7 @@ export declare function createVndbImport(config: Config): {
             } | null;
         } | null;
     }>;
-    authorized: (actor: Actor) => Promise<AuthoritativeTime>;
+    authorized: (actor: Actor) => Promise<import("../command/command.ts").AuthoritativeTime>;
     source: (actor: Actor, id: string) => Promise<{
         xml: string;
     }>;

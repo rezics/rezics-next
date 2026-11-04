@@ -31,11 +31,6 @@ export type NativeWorkLinkEvidence = Readonly<{
     /** An empty complete list proves no current work link. */
     values: readonly NativeWorkLinkValue[];
 }>;
-/** Internal native work charged by the complete work-link reader before it performs each bounded stage. */
-export type CompleteWorkLinkReservation = Readonly<{
-    operations: number;
-    keys: number;
-}>;
 /**
  * Filterable form of a statement value.
  * Time keeps its astronomical year and only the month/day represented by native precision.
@@ -135,9 +130,7 @@ export interface SubjectSource {
     prepareRelationFacets?(probes: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage>;
     matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
     /** Read the complete adopted Global exampleOfWork selection for current visible releases. */
-    readCompleteWorkLinks?(partition: number, ids: readonly string[], options?: Readonly<{
-        reserve?: (reservation: CompleteWorkLinkReservation) => void;
-    }>): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
+    readCompleteWorkLinks?(partition: number, ids: readonly string[]): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
 }
 /** Active public Collection counts for subjects in one partition. Only the count is read. */
 export interface SubjectListingSource {

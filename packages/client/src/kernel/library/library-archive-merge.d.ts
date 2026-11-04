@@ -17,7 +17,6 @@ export declare const LIBRARY_ARCHIVE_MERGE_LIMITS: {
     readonly page: 100;
     readonly reviewItems: 20;
     readonly applyItems: 20;
-    readonly selectedJournalFields: 4;
     readonly cleanupItems: 100;
     readonly lifetimeDays: 7;
 };
@@ -67,32 +66,6 @@ export type ArchiveMergeReviewInput = {
         startDate?: ArchiveFieldChoice;
         finishDate?: ArchiveFieldChoice;
         reflection?: ArchiveFieldChoice;
-        assessment?: ArchiveFieldChoice;
-    };
-} | {
-    ordinal: number;
-    kind: 'observation';
-    subjectId: string;
-    provider: string;
-    recordId: string;
-    action: 'admit';
-    fields: {
-        privacy: Exclude<ArchiveFieldChoice, 'preserve'>;
-        sourceCreated: Exclude<ArchiveFieldChoice, 'preserve'>;
-        sourceUpdated: Exclude<ArchiveFieldChoice, 'preserve'>;
-    };
-} | {
-    ordinal: number;
-    kind: 'observation';
-    subjectId: string;
-    provider: string;
-    recordId: string;
-    action: 'correct';
-    revision: number;
-    fields: {
-        privacy?: ArchiveFieldChoice;
-        sourceCreated?: ArchiveFieldChoice;
-        sourceUpdated?: ArchiveFieldChoice;
     };
 };
 export type ArchiveMergeSelection = {

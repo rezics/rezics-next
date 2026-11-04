@@ -5,7 +5,6 @@ import type { MediaDependencies } from './media.ts';
 import { type ReadingPageDependencies, type SelectedReadingCardBatchResult } from './reading-page.ts';
 import type { ReactionCountFreshness } from './reads.ts';
 import type { SubjectThreadWithReactions } from './subject-threads-reactions.ts';
-import { type SubjectThreadConversationActivity } from './subject-threads-conversation-activity.ts';
 export type SubjectThreadCardDependencies = ReadingPageDependencies & MediaDependencies;
 type CardAuthor = Readonly<{
     state: 'current';
@@ -90,5 +89,5 @@ export type SubjectThreadCardProjection = Readonly<{
     reactionsAsOf: ReactionCountFreshness | null;
 }>;
 /** Adds bounded card fields around Subject's selected native threads and retains every final source check. */
-export declare function projectSubjectThreadCards(dependencies: SubjectThreadCardDependencies, subjectId: string, placeId: string, selected: readonly SubjectThreadWithReactions[], context: ReadContext, activitySnapshot: SubjectThreadConversationActivity, reactionsAsOf: SubjectThreadCardProjection['reactionsAsOf'], finalDisclosure: () => Promise<void>): Promise<SubjectThreadCardProjection>;
+export declare function projectSubjectThreadCards(dependencies: SubjectThreadCardDependencies, subjectId: string, placeId: string, selected: readonly SubjectThreadWithReactions[], context: ReadContext, reactionsAsOf: SubjectThreadCardProjection['reactionsAsOf']): Promise<SubjectThreadCardProjection>;
 export {};

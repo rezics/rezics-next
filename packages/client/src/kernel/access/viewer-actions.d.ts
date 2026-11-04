@@ -194,7 +194,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -208,7 +208,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -222,7 +222,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
     };
@@ -418,7 +418,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -432,7 +432,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -446,7 +446,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
         };
@@ -595,7 +595,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -609,7 +609,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -623,7 +623,7 @@ export declare function viewerActionsRoutes(app: ReturnType<typeof createApp>, d
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
     };

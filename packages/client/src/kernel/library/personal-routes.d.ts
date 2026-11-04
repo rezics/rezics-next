@@ -5935,23 +5935,6 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                 startedAt: string;
                                 completedAt: string | null;
                             } | null;
-                            facts?: Record<string, ({
-                                kind: "item";
-                                id: string;
-                                labels: Record<string, string>;
-                            } | {
-                                kind: "time";
-                                year: number;
-                                month?: number;
-                                day?: number;
-                            } | {
-                                kind: "quantity";
-                                amount: number;
-                                unit: string;
-                            } | {
-                                kind: "code";
-                                value: string;
-                            })[]>;
                         } | {
                             subject?: {
                                 id: string;
@@ -5999,23 +5982,6 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                             revision: number;
                             createdAt: string;
                             updatedAt: string;
-                            facts?: Record<string, ({
-                                kind: "item";
-                                id: string;
-                                labels: Record<string, string>;
-                            } | {
-                                kind: "time";
-                                year: number;
-                                month?: number;
-                                day?: number;
-                            } | {
-                                kind: "quantity";
-                                amount: number;
-                                unit: string;
-                            } | {
-                                kind: "code";
-                                value: string;
-                            })[]>;
                         })[];
                         scoreQuestion?: {
                             id: string;
@@ -6071,10 +6037,6 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                                     reason: "question" | "scope";
                                 };
                             }[];
-                        } | {
-                            state: "unavailable";
-                            reason: "currentness" | "identity" | "response_limit";
-                            retryable: boolean;
                         };
                     };
                     400: Response | {
@@ -9298,7 +9260,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -9312,7 +9274,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -9326,7 +9288,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -9340,7 +9302,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -9354,7 +9316,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -9368,7 +9330,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -9382,7 +9344,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         200: import("typebox").TObject<{
@@ -9796,7 +9758,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -9810,7 +9772,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             403: import("typebox").TObject<{
@@ -9824,7 +9786,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             404: import("typebox").TObject<{
@@ -9838,7 +9800,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             409: import("typebox").TObject<{
@@ -9852,7 +9814,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             422: import("typebox").TObject<{
@@ -9866,7 +9828,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -9880,7 +9842,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
             }>;
             200: import("typebox").TObject<{
@@ -10049,7 +10011,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -10063,7 +10025,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -10077,7 +10039,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         404: import("typebox").TObject<{
@@ -10091,7 +10053,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -10105,7 +10067,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -10119,7 +10081,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -10133,7 +10095,7 @@ export declare function personalLibraryRoutes(app: ReturnType<typeof definitionR
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
         }>;
         200: import("typebox").TObject<{

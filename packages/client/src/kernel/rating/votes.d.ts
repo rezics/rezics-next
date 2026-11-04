@@ -4,10 +4,9 @@ import type { SessionComponent } from '../tokens/session.ts';
 import type { Access, Actor } from '../request/access.ts';
 import { type RatingQuestionScale } from './question-scale.ts';
 import { type VoteReviewGuard } from './own-votes-review.ts';
-export { STANDARD_QUESTION_ID } from './standard-question.ts';
 export { VoteReviewStaleError, VoteReviewUnavailableError } from './own-votes-review.ts';
 export type { VoteReviewGuard } from './own-votes-review.ts';
-import { type VoteObservation } from './vote-observation.ts';
+export declare const STANDARD_QUESTION_ID = "00000000-0000-7000-8000-000000000001";
 export declare const VOTE_SCOPE = "rating:vote";
 export type RatingQuestion = RatingQuestionScale & {
     id: string;
@@ -34,7 +33,6 @@ export type PutVoteInput = {
     targetId: string;
     units: number | null;
     guard?: VoteReviewGuard;
-    observation?: VoteObservation;
 };
 export type PutVoteOutcome = {
     vote: Vote | null;

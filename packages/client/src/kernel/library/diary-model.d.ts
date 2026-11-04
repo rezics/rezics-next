@@ -9,13 +9,10 @@ export type DiaryOccurrence = {
     recordedStartedAt: string;
     recordedCompletedAt: string | null;
     /** Read from the installed journal owner; unknown dates stay null, with their original precision. */
-    reportedDates: ({
+    reportedDates: {
         availability: 'available';
-    } & Pick<ProgressSessionJournal, 'revision' | 'startDate' | 'finishDate'>) | {
-        availability: 'unavailable';
-    };
-    /** Omitted when the optional assessment columns or their meaning are unsupported. Null units are a clear. */
-    assessment?: ProgressSessionJournalAssessment;
+    } & Pick<ProgressSessionJournal, 'revision' | 'startDate' | 'finishDate'>;
+    assessment: ProgressSessionJournalAssessment;
     subject: DiarySubject | null;
     versionSubject: DiarySubject | null;
 };

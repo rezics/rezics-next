@@ -96,7 +96,29 @@ export declare const ReadingPageResponseSchema: import("typebox").TObject<{
     authors: import("typebox").TObject<{
         state: import("typebox").TUnion<[import("typebox").TLiteral<"current">, import("typebox").TLiteral<"unavailable">]>;
         retryable: import("typebox").TBoolean;
-        items: import("typebox").TArray<import("typebox").TUnsafe<AuthorView>>;
+        items: import("typebox").TArray<import("typebox").TObject<{
+            id: import("typebox").TString;
+            displayName: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            handle: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
+            avatar: import("typebox").TUnion<[import("typebox").TObject<{
+                media: import("typebox").TString;
+                width: import("typebox").TInteger;
+                height: import("typebox").TInteger;
+                placeholder: import("typebox").TObject<{
+                    thumbhash: import("typebox").TString;
+                    color: import("typebox").TString;
+                }>;
+                variants: import("typebox").TArray<import("typebox").TObject<{
+                    format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                    width: import("typebox").TInteger;
+                }>>;
+                focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                    x: import("typebox").TNumber;
+                    y: import("typebox").TNumber;
+                }>, import("typebox").TNull]>;
+                credit: import("typebox").TNull;
+            }>, import("typebox").TNull]>;
+        }>>;
     }>;
     actions: import("typebox").TObject<{
         state: import("typebox").TUnion<[import("typebox").TLiteral<"current">, import("typebox").TLiteral<"unavailable">]>;
@@ -253,6 +275,10 @@ export type ContentReadingCardBatch = Readonly<{
     selected: readonly SelectedReadingCardReference[];
     finish(): Promise<SelectedReadingCardBatchResult>;
 }>;
+type EntryWithReaction = PostEntry & {
+    readonly viewerReaction?: string | null;
+    readonly reactions?: Readonly<Record<string, number>>;
+};
 type AccountSummaryMap = Awaited<ReturnType<typeof readAccountDiscoverySummaries>>;
 type AccountSummaryValue = AccountSummaryMap extends ReadonlyMap<string, infer Value> ? Value : never;
 type AccountSummary = NonNullable<AccountSummaryValue>;
@@ -270,7 +296,6 @@ type ReadingReference = {
     state: 'current' | 'withheld';
     operations: ReadingOperation[];
 };
-export declare function readingPageEntryWitness(entry: PostEntry): string;
 export declare function readingPageOperationState(actor: Actor, operationId: string, allowed: ReadonlySet<string>, guestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'>, watch: {
     state: 'current';
     watching: boolean;
@@ -300,16 +325,17 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
             boardSecurityRevision: string;
         };
         viewer: {
-            kind: "anonymous";
-        } | {
-            kind: "account";
+            kind: 'account';
             id: string;
+        } | {
+            id?: never;
+            kind: 'anonymous';
         };
         query: {
             cursor: string | null;
-            limit: 20;
+            limit: typeof READING_PAGE_REPLY_LIMIT;
         };
-        thread: Omit<Readonly<{
+        thread: {
             id: import("./model.ts").ThreadId;
             route: import("./model.ts").Route;
             authorId: import("./model.ts").ContentId;
@@ -322,57 +348,19 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
             securityRevision: import("./model.ts").SecurityRevision;
             availability: import("./model.ts").Availability;
             createdAt: string;
-            firstPost: import("./model.ts").PostEntry;
-        }>, "firstPost"> & Readonly<{
-            firstPost: PostEntry;
-        }> & {
-            readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-        } & {
-            readonly reactions?: {
-                readonly downvote?: number;
-                readonly insightful?: number;
-                readonly laugh?: number;
-                readonly like?: number;
-                readonly love?: number;
-                readonly sad?: number;
-                readonly upvote?: number;
-            };
-        } & Readonly<{
-            reviewContext?: import("./model.ts").FeedReviewContext;
-        }>;
+            firstPost: EntryWithReaction;
+        };
         replies: {
-            items: ({
+            items: (Readonly<{
                 id: string;
                 threadId: string;
                 route: number;
                 parentId: string | null;
                 removed: true;
-                availability: "withheld";
+                availability: 'withheld';
                 body: null;
                 sha256: null;
-            } | {
-                id: string;
-                threadId: string;
-                route: number;
-                parentId: string | null;
-                removed: true;
-                availability: "erased";
-                restorableUntil?: string;
-                body: null;
-                sha256: null;
-            } | (import("./reads.ts").ItemView & {
-                readonly viewerReaction?: ("downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote") | null;
-            } & {
-                readonly reactions?: {
-                    readonly downvote?: number;
-                    readonly insightful?: number;
-                    readonly laugh?: number;
-                    readonly like?: number;
-                    readonly love?: number;
-                    readonly sad?: number;
-                    readonly upvote?: number;
-                };
-            }))[];
+            }> | EntryWithReaction)[];
             next: string | null;
         };
         authors: {
@@ -383,56 +371,47 @@ export declare function readContentReadingPage(dependencies: ReadingPageDependen
         actions: {
             state: "current" | "unavailable";
             retryable: boolean;
-            references: {
-                type: "content.post" | "content.thread";
-                id: string;
-                sourceRevisionId?: string;
-                state: "current" | "withheld";
-                operations: {
-                    action: string;
-                    operationId: string;
-                    state: "available" | "denied" | "not_applicable" | "sign_in_required" | "unavailable" | "withheld";
-                }[];
-            }[];
+            references: ReadingReference[];
             reply: {
-                state: "available" | "denied" | "sign_in_required" | "unavailable" | "withheld";
+                state: "unavailable" | "withheld";
             };
         };
         watch: {
-            state: "current";
+            state: 'current';
             watching: boolean;
         } | {
-            state: "sign_in_required";
+            state: 'sign_in_required';
         } | {
-            state: "unavailable";
+            state: 'unavailable';
             retryable: true;
         };
         slowMode: {
-            state: "current";
+            state: 'unavailable';
+            retryable: true;
+        } | ({
+            state: 'current';
+        } & Readonly<{
             intervalSeconds: number;
             retryAt: string | null;
             nextEligibleAt: string | null;
             canChange: boolean;
             exempt: boolean;
-            admissionState: "interval" | "pending" | "ready";
+            admissionState: 'ready' | 'interval' | 'pending';
             retryAfterSeconds: number;
-        } | {
-            state: "unavailable";
-            retryable: true;
-        };
+        }>);
         currentness: {
-            source: "current";
-            place: "current";
+            source: 'current';
+            place: 'current';
             reactions: "current" | "unavailable";
             authors: "current" | "unavailable";
             actions: "current" | "unavailable";
             watch: "current" | "sign_in_required" | "unavailable";
             slowMode: "current" | "unavailable";
         };
-        reactionsAsOf: {
+        reactionsAsOf: Readonly<{
             epoch: number;
             position: string;
-        } | null;
+        }> | null;
         authorErasure?: {
             authorId: string;
             mayErase: boolean;

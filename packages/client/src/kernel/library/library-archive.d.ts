@@ -20,7 +20,7 @@ export declare const LIBRARY_ARCHIVE_RECOVERY_LIMITS: {
     readonly applyCommands: 25;
     readonly cleanupRows: 100;
 };
-export declare const archiveMergeSections: readonly ['entries', 'labels', 'assignments', 'annotations', 'journals', 'provenance'];
+export declare const archiveMergeSections: readonly ['entries', 'labels', 'assignments', 'annotations', 'journals'];
 type ObjectValue = Record<string, unknown>;
 export type ArchiveRecord = ObjectValue & {
     section: LibraryExportSection;

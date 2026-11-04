@@ -9,8 +9,8 @@ export type OwnMediaDependencies = Readonly<{
     tokens: KeyRing;
     clock: () => Date;
 }>;
-/** Add a committed browser or imported reservation to the existing account-home erasure locator.
- * The upsert is safe to repeat when the original reservation key is replayed. */
+/** Add a committed browser reservation to the existing account-home erasure locator.
+ * The registered reserved-event projection repeats this upsert as its durable repair path. */
 export declare function recordOwnMediaReservation(pool: Pool, actor: AccountActor, mediaId: string): Promise<void>;
 /** Read a raw keyset page from the actor home, then batch current state and authority
  * in each selected media home. A failed home fails the whole page so its cursor
