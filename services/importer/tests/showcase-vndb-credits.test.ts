@@ -107,7 +107,7 @@ function port(commands: BatchCommand[], known: Map<string, unknown>): CrossMedia
       const entry = [...created.values()].find((candidate) => candidate.id === id);
       return {
         subject: { id, type: entry?.type, labels: { en: entry?.type ?? 'Imported subject' }, statements: {} },
-      } as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
+      } as unknown as Awaited<ReturnType<CrossMediaPort['readReviewedSubject']>>;
     },
   };
 }
@@ -156,10 +156,20 @@ test('the selected-family seed qualifies staff and voice credits without alias i
         command.source.converter_revision === vndbStaffCreditConverterRevision,
     );
     expect(credits).toHaveLength(3);
-    expect(credits.every((command) => command.op === 'propose' && command.statement.value.content === person)).toBe(true);
-    const author = credits.find((command) => command.op === 'propose' && command.statement.property.id === 'schema:author')!;
-    const illustrator = credits.find((command) => command.op === 'propose' && command.statement.property.id === 'schema:illustrator')!;
-    const voice = credits.find((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P725')!;
+    expect(
+      credits.every(
+        (command) =>
+          command.op === 'propose' &&
+          command.statement.value.type === 'value' &&
+          command.statement.value.content === person,
+      ),
+    ).toBe(true);
+    const proposals = credits.filter(
+      (command): command is Extract<BatchCommand, { op: 'propose' }> => command.op === 'propose',
+    );
+    const author = proposals.find((command) => command.statement.property.id === 'schema:author')!;
+    const illustrator = proposals.find((command) => command.statement.property.id === 'schema:illustrator')!;
+    const voice = proposals.find((command) => command.statement.property.id === 'wdt:P725')!;
     const qualifiers = (command: typeof author) => command.statement.qualifiers ?? [];
     expect(author.source).toEqual(
       expect.objectContaining({
