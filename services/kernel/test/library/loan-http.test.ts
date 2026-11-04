@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { compileCatalogue } from '@rezics/definitions/compile';
 import { fixture, libraryProfile } from '../../../../packages/definitions/test/support/library-profiles.ts';
+import { createLoanCommands } from '../../src/library/loan-commands.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 import { createProfileEntryFixture, entryKey, type NativeProfileFixture } from './support/profile-entry-fixture.ts';
 
 const scopes = ['copy:create', 'copy:update', 'copy:delete', 'copy:list', 'copy:read'];
@@ -38,7 +40,23 @@ test('mounted private loan journey replays receipts, orders by the UTC due bound
   };
   const createKey = entryKey();
   const created = await native.send('owner', 'POST', '/v1/copy-loans', input, createKey);
-  if (created.status !== 201) throw new Error(`Loan create returned ${created.status}: ${await created.text()}`);
+  if (created.status !== 201) {
+    try {
+      const command = createLoanCommands({
+        pool: native.pool,
+        access: native.access,
+        routeKey: testRouteKey(),
+        tokens: native.tokens,
+        clock: () => new Date(now),
+      });
+      await command.createLoan(native.owner.actor, input, entryKey());
+      throw new Error(`HTTP create returned ${created.status}; direct native dispatch succeeded`);
+    } catch (error) {
+      throw new Error(
+        `HTTP create returned ${created.status}: ${await created.text()}; direct dispatch: ${error instanceof Error ? `${error.name}: ${error.message}\n${error.stack}` : String(error)}`,
+      );
+    }
+  }
   expect(created.status).toBe(201);
   const original = await created.json();
   expect(original).toMatchObject({
