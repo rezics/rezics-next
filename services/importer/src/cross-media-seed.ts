@@ -926,12 +926,16 @@ export async function seedCrossMedia(
   path: string,
   port: CrossMediaPort,
   destination?: { origin: string },
-  extras?: { vocabularyAdmission?: ImporterOptions['vocabularyAdmission'] },
+  extras?: {
+    vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
+    recordConcurrency?: ImporterOptions['recordConcurrency'];
+  },
 ) {
   const importer = createImporter({
     path,
     ...(destination ? { destination } : {}),
     ...(extras?.vocabularyAdmission ? { vocabularyAdmission: extras.vocabularyAdmission } : {}),
+    ...(extras?.recordConcurrency === undefined ? {} : { recordConcurrency: extras.recordConcurrency }),
     transport: {
       batchWrite: (request) => port.batch(request),
       setSourceRecordMetadata: (request, signal) => port.setSourceRecordMetadata(request, signal),
@@ -945,6 +949,7 @@ export async function seedCrossMedia(
   const readings: CrossMediaReading[] = [];
   try {
     for (const provider of ['bangumi', 'vndb'] as const) {
+      if (!plan.records[provider].length && !plan.entities[provider].length) continue;
       const registration = createSourceRegistration(provider, {
         source: crossMediaAliases[provider],
         converterRevision: entityRevision,

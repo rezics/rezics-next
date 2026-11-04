@@ -1451,6 +1451,12 @@ bounds belong to the linked owners; conversion itself has no purge work.
 - Bound: one in-memory omission lookup within at most three groups, no additional SQL or fence request, and zero statistic HTTP writes for the fenced tuple.
 - Growth check: the production importer/registration caller test above proves suppression; existing source-statistic native/cost suites retain their independent scope. This guard adds no native growth measurement.
 
+### Import VNDB character traits and qualified appearances
+
+- Touches: bounded authored COPY rows for `chars`, `chars_traits`, `chars_vns` and the parent work tables; exact owner/run/journal; ordinary public create/propose/accept/adopt/read.
+- Bound: existing source-vocabulary row/command/gap caps (64/100/64) and sequential CrossMedia seed conversion so appearance rows reuse already bound character identities. No catalogue scan, voter, identity-merge or classification write.
+- Growth check: existing conversion/importer counted suites remain the measured evidence. The connected native file is registered and not executed in this attempt.
+
 ### Operate a permitted scalar source feed
 
 - Touches: supplied native bytes, exact current-run tuple/journal and existing ordinary Auth/public commands.

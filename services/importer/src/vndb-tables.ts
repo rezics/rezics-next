@@ -145,6 +145,10 @@ function interrupted(error: unknown, signal?: AbortSignal): boolean {
 // Other VN columns are validated and discarded, including Bayesian ratings,
 // description and image identifiers.
 // The licensed average and count are retained only for a separate source statistic.
+/** COPY columns for the character-trait/appearance operator; grouped VN staging does not ingest them. */
+export const VNDB_CHARACTER_TRAIT_COLUMNS = ['id', 'tid', 'spoil', 'lie'] as const;
+export const VNDB_CHARACTER_APPEARANCE_COLUMNS = ['id', 'vid', 'rid', 'role', 'spoil'] as const;
+
 const COLUMNS: Record<Table, readonly string[]> = {
   vn: [
     'id',

@@ -100,7 +100,11 @@ they are not converted to placeholder dates. Release supersession stays a
 release-to-release `wdt:P155` relation and reports the missing profile admission
 on `wd:Q20631656`; it is never moved to the represented work. Tag spoiler levels
 and character-trait spoiler levels remain qualifiers, while votes, list membership
-and user data remain outside these proposals. Mapping-specific revisions and the
+and user data remain outside these proposals. A `chars_traits.lie` true flag is
+withheld as a false-positive association rather than published as a trait.
+Character appearance roles publish `schema:character` with an exact `wdt:P3831`
+concept and spoiler qualifier; a present `chars_vns.rid` withholds the appearance
+instead of asserting an unqualified work-level fact. Mapping-specific revisions and the
 complete source, reference, statement and rights bytes are part of deterministic
 command keys, so a sealed command cannot be replayed with changed mapping bytes.
 

@@ -122,7 +122,24 @@ export type VndbVocabularyRow =
       code: string;
       spoiler: number;
     })
-  | (RowBase & { kind: 'character-trait'; character: NativeIdentity; code: string; spoiler: number });
+  | (RowBase & {
+      kind: 'character-trait';
+      character: NativeIdentity;
+      code: string;
+      spoiler: number;
+      /** Source false-positive flag; true withholds the trait rather than publishing it. */
+      lie?: boolean;
+    })
+  | (RowBase & {
+      kind: 'character-appearance';
+      subject: NativeIdentity;
+      character?: NativeIdentity;
+      characterCode: string;
+      roleCode: string;
+      spoiler: number;
+      /** Release-scoped appearance context; a present value withholds the appearance. */
+      releaseCode?: string | null;
+    });
 
 export type SourceVocabularyRow = BangumiVocabularyRow | VndbVocabularyRow;
 export type SourceVocabularyRequest = Readonly<{

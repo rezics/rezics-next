@@ -615,6 +615,17 @@ not additional check requests.
   ISO-8601 or named second/minute/hour units to seconds (`wd:Q11574`); clock-style and unitless values stay unknown;
   kind uses operator vocabulary rows over currently accepted/adopted scheme and concepts; disc stays omitted from
   identity.
+- `production operator imports authored VNDB character traits and appearances through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-character-traits.test.ts`.
+  Frozen scenario names:
+  `production caller publishes exact traits and appearance roles and withholds lie and release-scoped rows`;
+  `operator plans authored COPY character traits and imports exact supported facts through the seed caller`;
+  `production operator imports authored VNDB character traits and appearances through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: `chars_traits.lie`
+  withholds the association as a false-positive rather than publishing a trait or writing VNDB classification
+  (`ODbL-1.0` remains unadmitted); `chars_vns.rid` withholds the appearance rather than asserting an unqualified
+  work-level fact; `chars.main` stays a referenced endpoint.
 - `Ordinary operator exact ACK interruption and restart recovery`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/cli-ack-recovery.test.ts`.
   The [ACK report](../research/imports-audit/cli-ack-recovery.md#native-receipt) records one native case,

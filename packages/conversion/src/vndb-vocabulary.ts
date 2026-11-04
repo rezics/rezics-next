@@ -29,6 +29,8 @@ const creditProperties: Readonly<Record<string, string>> = {
   staff: 'schema:contributor',
 };
 const releaseTypes = new Set(['complete', 'partial', 'trial']);
+const appearanceRoles = new Set(['main', 'primary', 'side', 'appears']);
+export const vndbAppearanceRoleSchemeUri = 'https://rezics.com/schemes/vndb/character-roles';
 
 function conceptIdentity(value: ResolvedConcept): NativeIdentity {
   return { id: value.id, type: value.type, releaseDigest: value.releaseDigest };
@@ -73,7 +75,15 @@ function exactConcept(
   taxonomy: string,
   code: string,
   path: string,
+  expectedScheme?: string,
 ): ResolvedConcept | null {
+  if (expectedScheme) {
+    const scheme = environment.input.bindings.schemes.find((item) => item.taxonomy === taxonomy);
+    if (scheme && scheme.uri !== expectedScheme) {
+      environment.pushGap({ path, code, reason: 'missing_scheme', property: expectedScheme });
+      return null;
+    }
+  }
   return environment.concept(taxonomy, code, path);
 }
 
@@ -268,6 +278,14 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
         rowGap(environment, row, 'invalid_source_value', 'rezics:spoilerLevel', code);
         return;
       }
+      if (row.lie !== undefined && typeof row.lie !== 'boolean') {
+        rowGap(environment, row, 'invalid_source_value', 'chars_traits.lie', code);
+        return;
+      }
+      if (row.lie === true) {
+        rowGap(environment, row, 'unsupported_source_case', 'chars_traits.lie', code);
+        return;
+      }
       const resolved = exactConcept(environment, 'vndb.character-trait', code, path);
       if (resolved)
         environment.propose({
@@ -278,6 +296,54 @@ function mapRow(environment: MappingEnvironment, row: VndbVocabularyRow): void {
           target: conceptIdentity(resolved),
           qualifiers: [spoilerQualifier(row.spoiler)],
           mappingRevision: 'character-trait@1',
+        });
+      return;
+    }
+    case 'character-appearance': {
+      const role = environment.sourceCode(row.roleCode);
+      if (!role || !appearanceRoles.has(role)) {
+        rowGap(environment, row, 'unknown_code', 'chars_vns.role', role ?? undefined);
+        return;
+      }
+      if (!Number.isInteger(row.spoiler) || row.spoiler < 0 || row.spoiler > 2) {
+        rowGap(environment, row, 'invalid_source_value', 'rezics:spoilerLevel', role);
+        return;
+      }
+      const release =
+        row.releaseCode === undefined || row.releaseCode === null ? null : environment.sourceCode(row.releaseCode);
+      if (row.releaseCode !== undefined && row.releaseCode !== null && !release) {
+        rowGap(environment, row, 'invalid_source_value', 'chars_vns.rid');
+        return;
+      }
+      if (release) {
+        rowGap(environment, row, 'unsupported_source_case', 'chars_vns.rid', release);
+        return;
+      }
+      if (!row.character) {
+        rowGap(
+          environment,
+          row,
+          'missing_identity',
+          'schema:character',
+          environment.sourceCode(row.characterCode) ?? undefined,
+          environment.sourceCode(row.characterCode) ?? undefined,
+        );
+        return;
+      }
+      const resolved = exactConcept(environment, 'vndb.char_role', role, path, vndbAppearanceRoleSchemeUri);
+      if (resolved)
+        environment.propose({
+          row,
+          subject: row.subject,
+          property: 'schema:character',
+          content: '',
+          target: row.character,
+          sourceEndpoint: row.characterCode,
+          qualifiers: [
+            { property: 'wdt:P3831', content: resolved.id, identity: conceptIdentity(resolved) },
+            spoilerQualifier(row.spoiler),
+          ],
+          mappingRevision: 'appearance-role@1',
         });
       return;
     }
@@ -299,6 +365,7 @@ export function mapVndbVocabulary(input: SourceVocabularyInput): SourceVocabular
     'staff',
     'tag',
     'character-trait',
+    'character-appearance',
   ];
   for (const row of environment.rows) {
     if (!environment.isRow(row, kinds)) {
