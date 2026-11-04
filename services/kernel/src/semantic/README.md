@@ -14,6 +14,9 @@ and statement/adoption DTOs retain `normal`, `preferred` and `deprecated` ranks 
 The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ordinary multilingual corrections and
 minimal current-disclosure revision explanations. `correctTerms` is the native command; the mounted PATCH exports
 `TermsPatchSchema`/`TermsResultSchema` from `http/subjects.ts`. Native acceptance remains post-integration proof.
+Ordinary authored text reads the mounted `subject.propose` operation on the fixed Global Context alongside the
+separate `subject.accept_candidate`, `subject.reject_candidate` and `subject.adopt` operations on their own current
+Context authorities. The proposal command still reauthorizes the exact admitted target and property at execution.
 
 The mounted facts correction reader uses the same generated `viewerActions` endpoint for the exact visible
 `semantic.subject` and the fixed Global Context. The generic Subject resolver applies current disclosure before

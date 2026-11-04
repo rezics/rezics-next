@@ -22,6 +22,7 @@ import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-selec
 import type { Violation } from '@rezics/definitions/validate';
 import { CandidateReview, type CandidateTransport } from '../../subject/candidate-review';
 import { subjectHref } from '../../subject/subject-href';
+import { nativeOperationAvailability } from '../../subject/candidates';
 import { m } from '../../paraglide/messages.js';
 import { editorLabels } from '../../threads/composer';
 import { CandidateValue, pageText } from '../pages/data';
@@ -127,7 +128,15 @@ function Body({
   );
 }
 
-type PreparedReview = { subject: string; property: string; statement: AuthoredStatement; original: true };
+type PreparedReview = {
+  subject: string;
+  subjectRevision: number;
+  property: string;
+  releaseDigest: string;
+  reader: string;
+  statement: AuthoredStatement;
+  original: true;
+};
 type AuthoredCurrent = Extract<AuthoredRead, { ok: true }>;
 
 function selectedLanguage(current: AuthoredCurrent): string | undefined {
@@ -282,6 +291,7 @@ function AuthoredFieldLive({
   const [busy, setBusy] = useState(false);
   const [reading, setReading] = useState(false);
   const [readFailure, setReadFailure] = useState(initial.ok ? undefined : initial.reason);
+  const [actionReadUnavailable, setActionReadUnavailable] = useState(false);
   const [errors, setErrors] = useState<Violation[]>([]);
   const [stage, setStage] = useState<'compose' | 'preview' | 'review'>('compose');
   const [prepared, setPrepared] = useState<PreparedReview>();
@@ -464,6 +474,11 @@ function AuthoredFieldLive({
         (statement.rank === 'normal' || statement.rank === 'preferred'),
     );
   const locked = busy || !!command || !!proposed || !current || failure === 'denied';
+  const proposalAvailability = current
+    ? nativeOperationAvailability(current.actions.context, 'statement:propose', 'subject.propose')
+    : 'unavailable';
+  const proposalAllowed =
+    actionReadUnavailable || proposalAvailability === 'unavailable' ? undefined : proposalAvailability === 'allowed';
   const canDiscard = !locked && failure !== 'stale' && !!draft;
   const confirmingDiscard = canDiscard && discarding?.property === property && discarding.draft === draft;
   const title = current ? pageText(current.public.subject.labels, locale).text : '';
@@ -566,7 +581,10 @@ function AuthoredFieldLive({
     }
     const next: PreparedReview = {
       subject: current.public.subject.id,
+      subjectRevision: current.public.subject.revision,
       property,
+      releaseDigest: current.releaseDigest,
+      reader: work.reader,
       statement: structuredClone(statement),
       original: true,
     };
@@ -587,6 +605,11 @@ function AuthoredFieldLive({
       return;
     }
     const live = retireReading(!readingOnly, focus);
+    if (nextProperty !== property) {
+      preparedReview.current = undefined;
+      setPrepared(undefined);
+      setStage('compose');
+    }
     if (focus) focus.generation = readGeneration.current;
     // The owner now holds recovery; retiring its child comparison must not cancel this read.
     const readWork = { reader: origin.reader, live };
@@ -615,6 +638,10 @@ function AuthoredFieldLive({
       }
       dispatch({ type: 'read', read: next, reviewDraft });
       setReadFailure(next.ok ? undefined : next.reason);
+      setActionReadUnavailable(
+        !next.ok ||
+          nativeOperationAvailability(next.actions.context, 'statement:propose', 'subject.propose') === 'unavailable',
+      );
       if (!next.ok) {
         comparisonGeneration.current++;
         setComparisonCurrent(undefined);
@@ -689,6 +716,60 @@ function AuthoredFieldLive({
         prepared.property !== property
       )
         return;
+      running.current = true;
+      setBusy(true);
+      try {
+        const latest = await transport.read(property || undefined, session.current);
+        if (!readingLive()) return;
+        if (!latest.ok) {
+          setActionReadUnavailable(true);
+          setReadFailure(latest.reason);
+          setCurrent(undefined);
+          setProposalBody(undefined);
+          setComparisonCurrent(undefined);
+          setReviewing(false);
+          dispatch({ type: 'read', read: latest, reviewDraft: false });
+          return;
+        }
+        session.current = latest.session ?? session.current;
+        setCurrent(latest);
+        setMetadata(latest);
+        setActionReadUnavailable(
+          nativeOperationAvailability(latest.actions.context, 'statement:propose', 'subject.propose') === 'unavailable',
+        );
+        dispatch({ type: 'read', read: latest, reviewDraft: false });
+        setReadFailure(undefined);
+        if (
+          prepared.reader !== work.reader ||
+          prepared.subject !== latest.public.subject.id ||
+          prepared.subjectRevision !== latest.public.subject.revision ||
+          prepared.property !== property ||
+          prepared.releaseDigest !== latest.releaseDigest ||
+          !authoredProperties(latest.release, latest.public.subject.type).includes(prepared.property)
+        ) {
+          preparedReview.current = undefined;
+          setPrepared(undefined);
+          setStage('compose');
+          return;
+        }
+        if (nativeOperationAvailability(latest.actions.context, 'statement:propose', 'subject.propose') !== 'allowed')
+          return;
+      } catch {
+        if (readingLive()) {
+          setActionReadUnavailable(true);
+          setCurrent(undefined);
+          setProposalBody(undefined);
+          setComparisonCurrent(undefined);
+          setReviewing(false);
+          dispatch({ type: 'read', read: { ok: false, reason: 'unavailable' }, reviewDraft: false });
+        }
+        return;
+      } finally {
+        if (readingLive()) {
+          running.current = false;
+          setBusy(false);
+        }
+      }
       request = {
         id: prepared.subject,
         key: crypto.randomUUID(),
@@ -942,6 +1023,24 @@ function AuthoredFieldLive({
         <p className="text-sm text-muted-foreground">{m.authored_intro({}, o)}</p>
       </header>
       {stageNavigation}
+      {current && !proposed && !command && proposalAllowed !== true && (
+        <div role="status" className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+          <p>
+            {proposalAllowed === false
+              ? m.authored_action_denied({}, o)
+              : m.authored_actions_unavailable({}, o)}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className={actionClassName}
+            disabled={busy}
+            onClick={() => void refresh(property, false, false)}
+          >
+            {m.authored_check_actions({}, o)}
+          </Button>
+        </div>
+      )}
       {failure && (
         <ContentItemFrame as="div" className="min-w-0 space-y-3 p-4">
           {readFailure && !command ? (
@@ -1280,7 +1379,7 @@ function AuthoredFieldLive({
                 >
                   {m.authored_back_to_preview({}, o)}
                 </Button>
-                {!proposed && (
+                {!proposed && (command || proposalAllowed === true) && (
                   <Button type="button" className={actionClassName} disabled={locked} onClick={() => void submit()}>
                     {command && failure === 'unavailable'
                       ? m.correction_retry({}, o)
@@ -1318,6 +1417,7 @@ function AuthoredFieldLive({
                     id={id}
                     locale={locale}
                     transport={review}
+                    requireActionObservation
                     initialProperty={property}
                     exactCandidate={proposed.candidate}
                     documents={{

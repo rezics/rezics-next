@@ -79,6 +79,27 @@ test('a contributor submits, retries, reviews and selects an original abstract t
   const page = await journey.context.newPage();
   page.setDefaultTimeout(30_000);
   try {
+    const actionRead = await stack.kernel(
+      '/v1/viewerActions',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ resources: [{ type: 'semantic.context', id: globalContext }] }),
+      },
+      'alice',
+    );
+    expect(actionRead.status).toBe(200);
+    const actionBody = (await actionRead.json()) as {
+      resources: { type: string; id: string; viewerActions: { action: string; operations: string[] }[] }[];
+    };
+    const mountedActions = actionBody.resources[0]?.viewerActions ?? [];
+    expect(mountedActions).toContainEqual({ action: 'statement:propose', operations: ['subject.propose'] });
+    expect(mountedActions).toContainEqual({
+      action: 'context:accept',
+      operations: ['subject.accept_candidate', 'subject.reject_candidate'],
+    });
+    expect(mountedActions).toContainEqual({ action: 'context:adopt', operations: ['subject.adopt'] });
+
     const href = subjectHref({ id: subjectId, label: title }, 'en').href;
     await page.goto(`${stack.web}${href}/authored`, { waitUntil: 'domcontentloaded' });
     await page.locator('html[data-hydrated]').waitFor({ state: 'attached' });
@@ -101,17 +122,23 @@ test('a contributor submits, retries, reviews and selects an original abstract t
 
     const candidatePath = `/v1/subjects/${subjectId}/candidates`;
     const observedFrom = stack.kernelRequests().length;
-    await stack.injectKernelFailureOnce({
-      method: 'POST',
-      path: candidatePath,
-      status: 503,
-      body: JSON.stringify({ code: 'dependency_unavailable' }),
-    });
+    let droppedResponse: { status: number; body: string } | undefined;
+    const dropFirstProposalResponse = async (route: import('playwright').Route) => {
+      if (!droppedResponse && route.request().method() === 'POST' && route.request().postData()?.includes(replacementText)) {
+        const response = await route.fetch();
+        droppedResponse = { status: response.status(), body: await response.text() };
+        await route.abort('failed');
+        return;
+      }
+      await route.continue();
+    };
+    await page.route('**/_serverFn/**', dropFirstProposalResponse);
     await form.getByRole('button', { name: m.correction_submit() }).click();
     const retry = page.getByRole('button', { name: m.correction_retry() });
     await expect(retry).toBeVisible();
     await expect(selectedRegion).toContainText(currentText);
     await retry.click();
+    await page.unroute('**/_serverFn/**', dropFirstProposalResponse);
     await expect(page.getByRole('button', { name: m.correction_review() })).toBeVisible();
     await expect(selectedRegion).toContainText(currentText);
     await expect(selectedRegion).not.toContainText(replacementText);
@@ -122,7 +149,9 @@ test('a contributor submits, retries, reviews and selects an original abstract t
       .slice(observedFrom)
       .filter((request) => request.method === 'POST' && request.url.split('?')[0] === candidatePath);
     expect(attempts).toHaveLength(2);
-    expect(attempts[0]?.failure?.status).toBe(503);
+    expect(droppedResponse?.status).toBe(200);
+    expect(droppedResponse?.body).not.toContain('Bearer ');
+    expect(attempts[0]?.responseStatus).toBe(201);
     expect(attempts[0]?.authorization).toMatch(/^Bearer /);
     expect(attempts[1]?.authorization).toMatch(/^Bearer /);
     expect(attempts[0]?.idempotencyKey).toBeTruthy();
@@ -172,9 +201,15 @@ test('a contributor submits, retries, reviews and selects an original abstract t
     if (!candidate?.statement.value.content.document || !candidate.statement.value.content.digest)
       throw new Error('The native candidate did not return its authored document locator and digest');
 
+    await stack.injectKernelFailureOnce({
+      method: 'GET',
+      path: `/v1/documents/${candidate.statement.value.content.document}`,
+      status: 503,
+      body: JSON.stringify({ code: 'dependency_unavailable' }),
+    });
     await page.getByRole('button', { name: m.correction_review() }).click();
     const candidateBody = page.getByRole('region', { name: m.authored_candidate() });
-    await expect(candidateBody).toContainText(replacementText);
+    await expect(candidateBody).toContainText(m.authored_body_unavailable());
     const candidateDocumentId = candidate.statement.value.content.document;
     const candidateDocumentResponse = await stack.kernel(`/v1/documents/${candidateDocumentId}`, undefined, 'alice');
     expect(candidateDocumentResponse.status).toBe(200);

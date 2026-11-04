@@ -2,7 +2,7 @@ import { createKernelClient } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { candidateFixture } from './subject-candidates';
-import { selectCandidate } from '../../subject/candidates';
+import { candidateContext, selectCandidate } from '../../subject/candidates';
 import {
   authoredStatement,
   proposeAuthoredField,
@@ -21,6 +21,8 @@ export type AuthoredScenario =
   | 'invalid'
   | 'stale'
   | 'unavailable'
+  | 'actions-unavailable'
+  | 'actions-denied'
   | 'lost-response'
   | 'body-unavailable';
 export const authoredProperty = 'schema:abstract';
@@ -87,6 +89,24 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
       authorization: request.headers.get('authorization'),
       session: request.headers.get('rezics-session-token'),
     });
+    if (path === '/v1/viewerActions' && scenario === 'actions-unavailable')
+      return json({ code: 'dependency_unavailable' }, 503);
+    if (path === '/v1/viewerActions') {
+      const viewerActions =
+        scenario === 'actions-denied'
+          ? []
+          : [
+              { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+              { action: 'context:adopt', operations: ['subject.adopt'] },
+              { action: 'statement:propose', operations: ['subject.propose'] },
+            ];
+      return json({
+        resources: [
+          { type: 'semantic.subject', id: base.id, viewerActions },
+          { type: 'semantic.context', id: candidateContext, viewerActions },
+        ],
+      });
+    }
     if (path === '/v1/definitions/active') return json({ digest: definitions.digest, head: 1 });
     if (path === `/v1/definitions/releases/${encodeURIComponent(definitions.digest)}`)
       return json({ ...definitions, release });
@@ -150,6 +170,7 @@ export function authoredFixture(scenario: AuthoredScenario = 'ready', locale = '
         client,
         { id: base.id, ...(property ? { property } : {}), ...(session ? { session } : {}) },
         locale,
+        'Bearer fixture',
       ),
     propose: (command) => proposeAuthoredField(client, 'Bearer fixture', command),
     review: (property, candidate, cursor, session) =>
