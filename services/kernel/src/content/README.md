@@ -114,6 +114,7 @@ construction failure; setup errors are reported before any journey outcome is co
 covers Posts/Discussion/Reviews, anonymous and signed advice, unavailable aggregates, original-key reaction
 recovery, thread watch, exact-source replacement, concealed ancestry and publication withdrawal. Execution and
 the remaining complete native command/effect and physical-growth outcomes retain controller ownership.
+Selection issuance and private admission use the same configured native clock for the existing cursor lifetime.
 
 `author_posts.list` adds `parentContext` and `conversationActivity`; `author_threads.list` adds
 `conversationActivity`. These additive public fields use the existing Web contribution renderers. They never

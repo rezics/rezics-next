@@ -44,11 +44,13 @@ export async function createThreadReadingPageFixture() {
     access: system.access,
     tokens: system.tokenKeys,
     routeKey: system.routeKey,
+    clock: () => new Date(commandTime),
     viewerActionRuntime: () => ({
       access: system.access,
       resources: contentViewerActionResources,
       bindings: compileViewerActionBindings(system.kernel.routes),
       guestSecurity,
+      clock: () => new Date(commandTime),
     }),
   };
   const thread = async () =>

@@ -221,7 +221,7 @@ export async function readAuthorContributionActions(
   actor: Actor,
   deadline: number,
 ) {
-  const selected = admission(dependencies.tokens, accountId, input, Date.now());
+  const selected = admission(dependencies.tokens, accountId, input, (dependencies.clock?.() ?? new Date()).getTime());
   const firstPublication = await publication(dependencies, accountId, input.view, selected.epoch, deadline);
   const initial = await sources(dependencies, accountId, input.view, selected.references, deadline);
   if (initial.witness !== selected.witness) throw changed();
