@@ -18,10 +18,8 @@ import type { SessionStore } from '../src/session/store';
 const latest = () => 0;
 
 test('Retry-After accepts delay-seconds and HTTP dates without guessing invalid delays', () => {
-  const now = Date.UTC(2026, 10, 5);
-  const date = new Date(now + 5_000).toUTCString();
-  expect(preferenceRetryDeadline('2', now)).toBe(now + 2_000);
-  expect(preferenceRetryDeadline(date, now)).toBe(Date.parse(date));
+  const now = Date.UTC(2026, 10, 5), date = new Date(now + 5_000).toUTCString();
+  expect(preferenceRetryDeadline('2', now)).toBe(now + 2_000); expect(preferenceRetryDeadline(date, now)).toBe(Date.parse(date));
   expect(preferenceRetryDeadline('later', now)).toBe(0);
 });
 
