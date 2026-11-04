@@ -65,6 +65,10 @@ export function notificationIntentAllowed(intent: NotificationPatch | undefined,
   return admitted !== undefined && preferencePageAllows(page, admitted === null ? 'reset' : 'edit');
 }
 
+function retainedNotificationIntent(intent: NotificationPatch | undefined, page: PreferencePage) {
+  return intent === null ? null : admittedNotificationPatch(intent, page);
+}
+
 export function notificationOriginalAllowed(
   input: Pick<NotificationChange, 'notifications'> | null,
   page: PreferencePage | null,
@@ -179,7 +183,7 @@ export class NotificationEditor {
           ]),
         )
       : { ...known.notifications };
-    const intent = preserveDraft ? admittedNotificationPatch(this.state.intent, page) : undefined;
+    const intent = preserveDraft ? retainedNotificationIntent(this.state.intent, page) : undefined;
     const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
     this.confirm(known);
     this.update({
@@ -205,7 +209,7 @@ export class NotificationEditor {
         kind in this.state.draft ? this.state.draft[kind]! : enabled,
       ]),
     );
-    const intent = admittedNotificationPatch(this.state.intent, page);
+    const intent = retainedNotificationIntent(this.state.intent, page);
     this.confirm(known);
     this.update({
       currentAdvice: page,
