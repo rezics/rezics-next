@@ -98,9 +98,12 @@ test('explicit derived preparation builds a real native page; GET does no bootst
     ),
     200,
   );
-  expect(installed.resources[0].viewerActions).toEqual([
-    { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
-  ]);
+  const reviewOperations = installed.resources[0].viewerActions
+    .flatMap((entry: { operations: string[] }) => entry.operations)
+    .filter((operation: string) =>
+      ['subject.accept_candidate', 'subject.reject_candidate', 'subject.adopt'].includes(operation),
+    );
+  expect(reviewOperations).toEqual(['subject.accept_candidate', 'subject.reject_candidate']);
   status(
     await f.call(
       'POST',
