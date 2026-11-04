@@ -99,7 +99,7 @@ test('complete Manga creation keeps series and volume drafts, independent contro
   const replace = (control: HTMLElement, text: string) =>
     act(async () => {
       await user.clear(control);
-      if (text) await user.type(control, text);
+      if (text) await user.paste(text);
     });
   const posts = (fixture: ReturnType<typeof mangaFixture>) => fixture.calls.filter((call) => call.method === 'POST');
   const title = (fixture: ReturnType<typeof mangaFixture>, property: string) =>
