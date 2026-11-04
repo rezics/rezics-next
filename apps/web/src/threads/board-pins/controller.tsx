@@ -550,7 +550,11 @@ export function BoardPinThreadControls({
             'aria-describedby': `board-pin-confirm-description-${row.threadId}`,
             className: 'min-w-0 max-w-full basis-full space-y-2 rounded-md border p-3 [overflow-wrap:anywhere]',
           },
-          createElement('h4', { id: `board-pin-confirm-title-${row.threadId}`, className: 'font-medium' }, confirmTitle),
+          createElement(
+            'h4',
+            { id: `board-pin-confirm-title-${row.threadId}`, className: 'font-medium' },
+            confirmTitle,
+          ),
           createElement(
             'p',
             { id: `board-pin-confirm-description-${row.threadId}`, className: 'text-sm text-muted-foreground' },
