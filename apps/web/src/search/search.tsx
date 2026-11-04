@@ -344,7 +344,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         fallbackLanguages,
         requestedFacets,
       );
-      refinementRequests = { ...searchRequest, facets: optionRequest.facets };
+      refinementRequests = { ...searchRequest, ...(optionRequest.facets ? { facets: optionRequest.facets } : {}) };
     } catch {
       refinementRequests = undefined;
     }
