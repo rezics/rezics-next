@@ -1069,6 +1069,7 @@ $$;
 
 CREATE FUNCTION library.fence_profile_migration_writer() RETURNS trigger
     LANGUAGE plpgsql
+    SET plan_cache_mode TO 'force_custom_plan'
     AS $$
 DECLARE
   phase text;
