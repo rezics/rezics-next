@@ -246,8 +246,7 @@ test('individual Retry-After survives a shorter page wait and one deliberate ret
     false,
     async (attempt) => {
       attempts.push(attempt);
-      if (attempts.length === 1)
-        throw new InboxSeenError({ status: 503, retryable: true, retryAfter: '2' });
+      if (attempts.length === 1) throw new InboxSeenError({ status: 503, retryable: true, retryAfter: '2' });
     },
   );
   try {

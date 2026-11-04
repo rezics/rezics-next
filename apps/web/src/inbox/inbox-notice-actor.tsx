@@ -29,7 +29,8 @@ export type InboxNoticeActorPresentation = {
 export function inboxNoticeActorPresentation(input: InboxNoticeActorInput): InboxNoticeActorPresentation {
   const actor = input.actor;
   const hiddenLegacy = input.hideLegacy ?? false;
-  const actorId = actor?.state === 'available' ? actor.accountId : actor || hiddenLegacy ? null : input.actorId ?? null;
+  const actorId =
+    actor?.state === 'available' ? actor.accountId : actor || hiddenLegacy ? null : (input.actorId ?? null);
   const label =
     actor?.state === 'available'
       ? actor.displayName.trim() || m.inbox_actor_unknown()
@@ -40,7 +41,7 @@ export function inboxNoticeActorPresentation(input: InboxNoticeActorInput): Inbo
           : input.actorName || m.inbox_actor_unknown();
   const available = actor?.state === 'available';
   const identity = available ? actor.displayName.trim() || label : input.actorName || label;
-  const initialSource = available || actor ? identity : actorId ?? identity;
+  const initialSource = available || actor ? identity : (actorId ?? identity);
   return {
     label,
     actorId,
