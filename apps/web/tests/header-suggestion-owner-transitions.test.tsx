@@ -150,6 +150,7 @@ async function mountSearch() {
   }
 
   const input = () => host.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+  const open = () => host.querySelector<HTMLButtonElement>('button[aria-controls$="-form"]')!.click();
   const options = () => [...host.querySelectorAll<HTMLElement>('[role="option"]')];
   const key = (value: string) =>
     input().dispatchEvent(new window.KeyboardEvent('keydown', { key: value, bubbles: true }));
@@ -218,7 +219,7 @@ test('header suggestions retire at locale, scope and loader owner transitions', 
 
   try {
     await app.render(props);
-    await act(async () => app.input().focus());
+    await act(async () => app.open());
     await app.pause();
     const initial = app.requests.at(-1)!;
     expect(initial.producer).toBe('global-old');
@@ -342,7 +343,7 @@ test('same-title context stays accessible and pointer and keyboard choose the sa
     const app = await mountSearch();
     try {
       await app.render({ locale: 'en', boundary: 0, globalLoader: app.loader('context') });
-      await act(async () => app.input().focus());
+      await act(async () => app.open());
       await app.pause();
       await act(async () => app.requests.at(-1)!.resolve(contextualResult()));
 
