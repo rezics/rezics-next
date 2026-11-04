@@ -12,7 +12,12 @@ export const CLASSIFICATION_BALLOT_MINIMUM = 5;
 export const CLASSIFICATION_ASSESSMENT_PROVIDERS = ['vndb', 'bangumi'] as const;
 export const CONCEPT_TYPE = 'skos:Concept';
 
-export type ClassificationAssessment = 'support' | 'oppose';
+type BallotHandle = ReturnType<ReturnType<KernelClient['subjects']>['classification-associations']>;
+type BallotResponse<Call extends (...args: never[]) => unknown> = NonNullable<
+  Awaited<ReturnType<Call>> extends { data: infer Data } ? Data : never
+>;
+
+export type ClassificationAssessment = Parameters<BallotHandle['assessment']['put']>[0]['assessment'];
 export type ClassificationProvider = (typeof CLASSIFICATION_ASSESSMENT_PROVIDERS)[number];
 export type ClassificationQualifier = Readonly<{
   property: string;
@@ -45,34 +50,9 @@ export type ClassificationAssociationSelection =
   | ClassificationAssociationIdentity
   | { kind: 'unavailable'; reason: 'realm' | 'redirect' | 'not_classification' | 'concealed' };
 
-export type ClassificationOwnState = Readonly<{
-  associationId: string;
-  hasBallot: boolean;
-  assessment: ClassificationAssessment | null;
-  falsePositive: boolean;
-  revision: string | null;
-  pending: boolean;
-}>;
-
-export type ClassificationSetResult = Readonly<{
-  associationId: string;
-  revision: string;
-  delivery: 'enqueued' | 'unchanged';
-}>;
-
-export type ClassificationAggregate =
-  | Readonly<{ associationId: string; state: 'suppressed'; pending: 'unknown' }>
-  | Readonly<{
-      associationId: string;
-      state: 'published';
-      pending: 'unknown';
-      supportCount: number;
-      opposeCount: number;
-      falsePositiveCount: number;
-      supportFraction: number | null;
-      asOf: string;
-      generation: string;
-    }>;
+export type ClassificationOwnState = Readonly<BallotResponse<BallotHandle['assessment']['get']>>;
+export type ClassificationSetResult = Readonly<BallotResponse<BallotHandle['assessment']['put']>>;
+export type ClassificationAggregate = Readonly<BallotResponse<BallotHandle['aggregate']['get']>>;
 
 export type ClassificationOwnOutcome =
   | { kind: 'preparing' }
@@ -257,32 +237,17 @@ export function disclosedClassificationAssociations(input: {
   return selected;
 }
 
-type BallotCall = Promise<{ status: number; data?: unknown; headers?: unknown }>;
-type BallotHandle = {
-  assessment: {
-    get: (options?: { headers?: Record<string, string> }) => BallotCall;
-    put: (
-      body: { assessment: ClassificationAssessment; falsePositive: boolean },
-      options: { headers: Record<string, string> },
-    ) => BallotCall;
-    delete: (body: undefined, options: { headers: Record<string, string> }) => BallotCall;
-  };
-  aggregate: {
-    get: (options?: { headers?: Record<string, string> }) => BallotCall;
-  };
-};
-
-/** Installed native paths; generated KernelClient nested types do not yet export this handle. */
+/** Use the publisher's mounted methods while preserving unavailable handling for a missing producer. */
 export function classificationBallotHandle(
   client: KernelClient,
   subjectId: string,
   associationId: string,
 ): BallotHandle | null {
   if (!isClassificationUuid(subjectId) || !isClassificationUuid(associationId)) return null;
-  const subject = client.subjects({ id: subjectId }) as unknown as Record<string, unknown>;
+  const subject = client.subjects({ id: subjectId });
   const nested = subject['classification-associations'];
   if (typeof nested !== 'function') return null;
-  const handle = (nested as (params: { associationId: string }) => BallotHandle)({ associationId });
+  const handle = nested({ associationId });
   if (
     !handle ||
     typeof handle.assessment?.get !== 'function' ||

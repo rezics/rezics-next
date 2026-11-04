@@ -1,8 +1,8 @@
-import type { Static } from 'typebox';
+import type { KernelClient } from '@rezics/client';
 
-/** Source contract only. This does not declare an installed Client operation. */
-export type OwnClassificationsPage = Static<
-  typeof import('../../../../../services/kernel/src/rating/classification-ballot-own-page-schemas.ts').ClassificationBallotOwnPageSchema
+/** Successful page shape from the admitted mounted Client output. */
+export type OwnClassificationsPage = NonNullable<
+  Awaited<ReturnType<KernelClient['me']['classification-assessments']['get']>>['data']
 >;
 export type OwnClassification = OwnClassificationsPage['items'][number];
 export type ClassificationKey = Readonly<{ subjectId: string; associationId: string }>;

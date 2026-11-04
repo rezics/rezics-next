@@ -1809,6 +1809,9 @@ mounted response schemas from `rating/register.ts`. Its `set`, `clear`, `readOwn
 the existing Subject receiver. Client publication must derive methods and aliases from these mounted declarations.
 The native source does not supply a replacement Client DTO or a second presentation.
 
+Decision: the Subject receiver derives ballot methods and successful response types directly from the admitted
+mounted Client declarations, retaining its existing runtime validation and unavailable fallbacks.
+
 Decision: retain each represented actor partition as an aggregate source witness and return retryable unavailability
 while its native relay checkpoint trails its current head, including unrelated pending work, rather than publish
 potentially ineligible ballots during lifecycle cleanup.
