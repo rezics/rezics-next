@@ -27,7 +27,9 @@ export function LiteraryAssertionInspection({
         <dt className="font-medium">{m.literary_visit_candidate({}, o)}</dt>
         <dd className="min-w-0 [overflow-wrap:anywhere]">{candidate}</dd>
         <dt className="font-medium">{m.literary_visit_statement({}, o)}</dt>
-        <dd className="min-w-0 break-all"><code>{statement}</code></dd>
+        <dd className="min-w-0 break-all">
+          <code>{statement}</code>
+        </dd>
       </dl>
     </details>
   );

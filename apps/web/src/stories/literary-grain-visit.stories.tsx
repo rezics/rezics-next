@@ -2,10 +2,7 @@ import { useEffect, useRef, type ComponentProps } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { LiteraryReaderEntry } from '../features/catalogue/literary-reader/entry';
-import {
-  literaryGrainExample,
-  literaryIds,
-} from '../features/catalogue/literary-reader/examples';
+import { literaryGrainExample, literaryIds } from '../features/catalogue/literary-reader/examples';
 
 const client = new QueryClient();
 const realm = '0192f3a0-6c1e-7b2a-9d4e-000000000941';
@@ -17,7 +14,11 @@ function Addressed({ args, search = '' }: { args: ComponentProps<typeof Literary
   useEffect(() => {
     if (typeof window === 'undefined') return;
     original.current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${window.location.hash}`);
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${search}${window.location.hash}`,
+    );
     window.dispatchEvent(new PopStateEvent('popstate'));
     return () => {
       if (original.current) window.history.replaceState(window.history.state, '', original.current);
@@ -142,7 +143,10 @@ export const LongNamesAndJapaneseLabels: Story = {
       ...window,
       rows: window.rows.map((row) => ({
         ...row,
-        summary: { ...row.summary, label: { value: '港の物語とそこに暮らした人々の長い記録'.repeat(5), language: 'ja' } },
+        summary: {
+          ...row.summary,
+          label: { value: '港の物語とそこに暮らした人々の長い記録'.repeat(5), language: 'ja' },
+        },
       })),
     })),
   },
@@ -155,10 +159,7 @@ export const ContextRoundTrip: Story = {
 };
 
 const current = literaryGrainExample();
-const history = [
-  { view: 'overview' },
-  { view: 'contents', node: 'members', cursor: 'native/opaque?cursor=previous' },
-];
+const history = [{ view: 'overview' }, { view: 'contents', node: 'members', cursor: 'native/opaque?cursor=previous' }];
 export const CurrentPrevious: Story = {
   args: {
     ...current,
@@ -191,9 +192,7 @@ export const RemovedVolumeOnReturn: Story = {
 
 export const RetiredContext: Story = {
   args: { ...literaryGrainExample(), context, realm },
-  render: (args) => (
-    <Addressed args={args} search={`?realm=${realm}&context=0192f3a0-6c1e-7b2a-9d4e-000000000949`} />
-  ),
+  render: (args) => <Addressed args={args} search={`?realm=${realm}&context=0192f3a0-6c1e-7b2a-9d4e-000000000949`} />,
 };
 
 const independent = literaryGrainExample('schema:Book');

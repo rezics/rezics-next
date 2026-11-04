@@ -31,8 +31,7 @@ function validLiteraryHistory(value: string): boolean {
         return (
           Object.keys(item).every((key) => ['view', 'node', 'cursor', 'focus'].includes(key)) &&
           (item.view === 'overview' || item.view === 'contents' || item.view === 'editions') &&
-          (item.node === undefined ||
-            (typeof item.node === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(item.node))) &&
+          (item.node === undefined || (typeof item.node === 'string' && /^[A-Za-z0-9_-]{1,64}$/u.test(item.node))) &&
           (item.cursor === undefined ||
             (item.node !== undefined &&
               typeof item.cursor === 'string' &&
@@ -526,8 +525,7 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (property !== null &&
         (!subject?.[2] || !property.trim() || property.length > 256 || /[\u0000-\u001f\u007f]/u.test(property))) ||
       (history !== null && (url.hash !== '#literary-reader' || !validLiteraryHistory(history))) ||
-      (focus !== null &&
-        (url.hash !== '#literary-reader' || !/^[A-Za-z0-9:._~-]{1,256}$/u.test(focus))) ||
+      (focus !== null && (url.hash !== '#literary-reader' || !/^[A-Za-z0-9:._~-]{1,256}$/u.test(focus))) ||
       (screenReturn &&
         (subject?.[2] !== undefined ||
           (screenCursor !== null &&

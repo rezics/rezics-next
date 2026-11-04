@@ -86,8 +86,12 @@ export function LiteraryAssertionView({
     );
   };
   return (
-    <div id={focusId ? literaryFocusId(focusId) : undefined} tabIndex={focusId ? -1 : undefined}
-      data-statement-id={statement.id} className="min-w-0 space-y-2">
+    <div
+      id={focusId ? literaryFocusId(focusId) : undefined}
+      tabIndex={focusId ? -1 : undefined}
+      data-statement-id={statement.id}
+      className="min-w-0 space-y-2"
+    >
       {showValue && <DisclosedValue snak={statement} related={related} locale={locale} link={link} />}
       {statement.qualifiers.length > 0 && (
         <ul className="space-y-1 border-l border-border pl-3 text-sm">{statement.qualifiers.map(part)}</ul>
@@ -175,8 +179,7 @@ export function LiteraryNativeWindow({
               <li key={row.key} data-statement-id={row.statement.id} className="min-w-0 space-y-1 py-3">
                 <ExactEditionLink
                   id={literaryFocusId(rowFocus)}
-                  href={literaryDestination(row.id, row.label.text, locale, rowReturn, realm,
-                    context)}
+                  href={literaryDestination(row.id, row.label.text, locale, rowReturn, realm, context)}
                   lang={row.label.lang}
                   className={action}
                 >

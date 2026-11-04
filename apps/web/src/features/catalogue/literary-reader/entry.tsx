@@ -140,12 +140,7 @@ export function LiteraryReaderEntry({
     previous: currentPrevious,
   });
   const freshAddress = literaryAddress({ id: work.id, label: '', locale, view: 'overview', realm, context });
-  const returnAddressFor = (
-    focus: string,
-    addressView = view,
-    addressContinuation = continuation,
-    node?: string,
-  ) =>
+  const returnAddressFor = (focus: string, addressView = view, addressContinuation = continuation, node?: string) =>
     literaryAddress({
       id: work.id,
       label: pageText(work.labels, locale).text,
@@ -166,35 +161,37 @@ export function LiteraryReaderEntry({
   const grain = literaryGrain(work.type, definitions);
   const type = pageText(definitions?.types[work.type]?.labels, locale);
   const matching = value?.subject === work.id && (value.context?.id ?? null) === (context?.id ?? null);
-  const factsHref = literaryAddress({ id: work.id, label: '', locale, view: 'details', realm, context })
-    .replace(/#literary-reader$/, '');
-  const editionHref = matching && value?.sections.has('editions')
-    ? literaryAddress({ id: work.id, label: '', locale, view: 'editions', realm, context })
-        .replace(/#literary-reader$/, '')
-    : undefined;
-  const sourcesHref = literaryAddress({ id: work.id, label: '', locale, view: 'sources', realm, context })
-    .replace(/#literary-reader$/, '');
-  const linkFor = (returnAddress: string): PageLink => ({ href, ...props }) => {
-    const destination = new URL(href, 'https://rezics.invalid');
-    const match = /^\/[^/]+\/subjects\/([^/]+)\/([^/]+)/.exec(destination.pathname);
-    return match ? (
-      <a
-        {...props}
-        href={literaryDestination(
-          match[1]!,
-          decodeURIComponent(match[2]!),
-          locale,
-          returnAddress,
-          realm,
-          context,
-        )}
-        target="_blank"
-        rel="noopener noreferrer"
-      />
-    ) : (
-      <a {...props} href={href} />
-    );
-  };
+  const factsHref = literaryAddress({ id: work.id, label: '', locale, view: 'details', realm, context }).replace(
+    /#literary-reader$/,
+    '',
+  );
+  const editionHref =
+    matching && value?.sections.has('editions')
+      ? literaryAddress({ id: work.id, label: '', locale, view: 'editions', realm, context }).replace(
+          /#literary-reader$/,
+          '',
+        )
+      : undefined;
+  const sourcesHref = literaryAddress({ id: work.id, label: '', locale, view: 'sources', realm, context }).replace(
+    /#literary-reader$/,
+    '',
+  );
+  const linkFor =
+    (returnAddress: string): PageLink =>
+    ({ href, ...props }) => {
+      const destination = new URL(href, 'https://rezics.invalid');
+      const match = /^\/[^/]+\/subjects\/([^/]+)\/([^/]+)/.exec(destination.pathname);
+      return match ? (
+        <a
+          {...props}
+          href={literaryDestination(match[1]!, decodeURIComponent(match[2]!), locale, returnAddress, realm, context)}
+          target="_blank"
+          rel="noopener noreferrer"
+        />
+      ) : (
+        <a {...props} href={href} />
+      );
+    };
   const [focusMissing, setFocusMissing] = useState(false);
   useEffect(() => {
     if (!currentFocus || readingRetired || typeof document === 'undefined') {
@@ -259,11 +256,12 @@ export function LiteraryReaderEntry({
                         locale={locale}
                       />
                     ) : (
-                      statements.map((statement) => (
+                      statements.map((statement) =>
                         (() => {
-                          const target = statement.value.type === 'value' && typeof statement.value.content === 'string'
-                            ? related[statement.value.content]
-                            : undefined;
+                          const target =
+                            statement.value.type === 'value' && typeof statement.value.content === 'string'
+                              ? related[statement.value.content]
+                              : undefined;
                           const candidateText = target ? pageText(target.labels, locale) : undefined;
                           const focus = `direct:${property}:${statement.id}`;
                           const assertionReturn = returnAddressFor(focus);
@@ -286,8 +284,8 @@ export function LiteraryReaderEntry({
                                 : {})}
                             />
                           );
-                        })()
-                      ))
+                        })(),
+                      )
                     )}
                     {!relationUnavailable &&
                       !statements.length &&
@@ -337,31 +335,27 @@ export function LiteraryReaderEntry({
               };
               const nextHistory = appendLiteraryPrevious(currentPrevious, currentPage);
               const rowContinuation = continuation?.node === native.node ? continuation : undefined;
-              const rowReturnTo = (focus: string) =>
-                returnAddressFor(
-                  focus,
-                  streamView,
-                  rowContinuation,
-                  native.node,
-                );
+              const rowReturnTo = (focus: string) => returnAddressFor(focus, streamView, rowContinuation, native.node);
               const previous = currentPrevious.at(-1);
-              const previousHref = previous && view !== 'overview' &&
+              const previousHref =
+                previous &&
+                view !== 'overview' &&
                 (native.node === continuation?.node || (!continuation && streamView === view))
-                ? literaryAddress({
-                    id: work.id,
-                    label: '',
-                    locale,
-                    view: previous.view,
-                    realm,
-                    context,
-                    ...(previous.node ? { node: previous.node } : {}),
-                    ...(previous.node && previous.cursor
-                      ? { continuation: { node: previous.node, cursor: previous.cursor } }
-                      : {}),
-                    focus: previous.focus,
-                    previous: currentPrevious.slice(0, -1),
-                  })
-                : undefined;
+                  ? literaryAddress({
+                      id: work.id,
+                      label: '',
+                      locale,
+                      view: previous.view,
+                      realm,
+                      context,
+                      ...(previous.node ? { node: previous.node } : {}),
+                      ...(previous.node && previous.cursor
+                        ? { continuation: { node: previous.node, cursor: previous.cursor } }
+                        : {}),
+                      focus: previous.focus,
+                      previous: currentPrevious.slice(0, -1),
+                    })
+                  : undefined;
               return (
                 <LiteraryNativeWindow
                   key={native.node}
@@ -385,8 +379,15 @@ export function LiteraryReaderEntry({
                           previous: nextHistory,
                         })
                       : native.next
-                        ? literaryAddress({ id: work.id, label: '', locale, view: streamView, realm, context,
-                            previous: nextHistory })
+                        ? literaryAddress({
+                            id: work.id,
+                            label: '',
+                            locale,
+                            view: streamView,
+                            realm,
+                            context,
+                            previous: nextHistory,
+                          })
                         : undefined
                   }
                   restartHref={literaryAddress({ id: work.id, label: '', locale, view: streamView, realm, context })}

@@ -47,6 +47,9 @@ export function literaryDestination(
   realm?: string,
   context?: SelectedContext | null,
 ) {
-  const href = literaryAddress({ id, label, locale, view: 'overview', realm, context }).replace(/#literary-reader$/, '');
+  const href = literaryAddress({ id, label, locale, view: 'overview', realm, context }).replace(
+    /#literary-reader$/,
+    '',
+  );
   return withSubjectVisitReturn(href, returnTo, locale);
 }
