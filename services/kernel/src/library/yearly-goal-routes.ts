@@ -231,9 +231,12 @@ export function yearlyCompletionGoalRoutes(
             target: currentTarget,
             progress,
           };
-          if (new TextEncoder().encode(JSON.stringify(result)).byteLength > MAX_YEARLY_COMPLETION_GOAL_RESPONSE_BYTES)
+          const encoded = JSON.stringify(result);
+          if (new TextEncoder().encode(encoded).byteLength > MAX_YEARLY_COMPLETION_GOAL_RESPONSE_BYTES)
             throw new ProblemError('dependency_unavailable');
-          return result;
+          return new Response(encoded, {
+            headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+          });
         });
       },
     )
