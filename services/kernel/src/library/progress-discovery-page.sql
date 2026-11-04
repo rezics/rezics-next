@@ -18,7 +18,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.state <> 'retired' AND args.filter_kind = 'owner' AND args.subject_id IS NULL
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
   UNION ALL
   (
@@ -28,7 +28,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.state <> 'retired' AND args.filter_kind = 'subject' AND session.subject_id = args.subject_id
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
   UNION ALL
   (
@@ -38,7 +38,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.state <> 'retired' AND args.filter_kind = 'state' AND session.state = args.state_filter
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
   UNION ALL
   (
@@ -48,7 +48,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.state <> 'retired' AND args.filter_kind = 'mode' AND session.mode = args.mode_filter
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
   UNION ALL
   (
@@ -59,7 +59,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.library_profile_pin ->> 'profileId' = args.profile_filter
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
   UNION ALL
   (
@@ -70,7 +70,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.subject_id = args.subject_id AND session.state = args.state_filter
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
   UNION ALL
   (
@@ -81,7 +81,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.subject_id = args.subject_id AND session.mode = args.mode_filter
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
   UNION ALL
   (
@@ -93,7 +93,7 @@ WITH args AS NOT MATERIALIZED (
       AND session.library_profile_pin ->> 'profileId' = args.profile_filter
       AND (NOT args.has_cursor OR session.started_at < args.after_started_at
         OR (session.started_at = args.after_started_at AND session.session_id > args.after_session_id))
-    ORDER BY session.started_at DESC, session.session_id LIMIT args.page_limit
+    ORDER BY session.started_at DESC, session.session_id LIMIT (SELECT page_limit FROM args)
   )
 )
 SELECT session.route,
