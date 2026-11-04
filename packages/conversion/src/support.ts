@@ -218,13 +218,19 @@ export function projectVndbReleaseMinimumAge(
   value: unknown,
   present: boolean,
 ): {
-    sourceValue?: string | number | boolean | null | undefined;
+  sourceValue?: string | number | boolean | null | undefined;
   quantity?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
-  diagnostic?: 'missing_minimum_age' | 'unknown_minimum_age' | 'invalid_minimum_age' | 'non_integral_minimum_age' | 'out_of_range_minimum_age';
+  diagnostic?:
+    | 'missing_minimum_age'
+    | 'unknown_minimum_age'
+    | 'invalid_minimum_age'
+    | 'non_integral_minimum_age'
+    | 'out_of_range_minimum_age';
 } {
   if (!present) return { diagnostic: 'missing_minimum_age' };
   const sourceValue =
-    value === null || typeof value === 'boolean' ||
+    value === null ||
+    typeof value === 'boolean' ||
     (typeof value === 'string' && value.length <= 32 && value.isWellFormed()) ||
     (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER)
       ? value
@@ -244,7 +250,11 @@ export function projectVndbReleaseMinimumAge(
     if (age > 18) return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
     return { sourceValue, quantity: { amount: `+${age}`, unit: 'http://www.wikidata.org/entity/Q577' } };
   }
-  if (/^-?(?:0|[1-9][0-9]*)\.[0-9]+$/u.test(value) && Number.isFinite(Number(value)) && !Number.isInteger(Number(value)))
+  if (
+    /^-?(?:0|[1-9][0-9]*)\.[0-9]+$/u.test(value) &&
+    Number.isFinite(Number(value)) &&
+    !Number.isInteger(Number(value))
+  )
     return { sourceValue, diagnostic: 'non_integral_minimum_age' };
   if (/^-?(?:0|[1-9][0-9]*)$/u.test(value) && Number(value) < 0)
     return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
