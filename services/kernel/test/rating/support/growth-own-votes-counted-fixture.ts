@@ -61,7 +61,7 @@ export async function createCountedGrowthFixture() {
     for (const home of [partitionOf(0x6a20), partitionOf(0x6a30)]) {
       await stepIdentityEpochBootstrap(db.pool, home);
       const epoch = await withReadTransaction(db.pool, (client) => identityEpochStore.readEpoch(client, home));
-      expect(epoch.state, stringify(epoch)).toBe('published');
+      expect(epoch.state, epoch.state === 'unavailable' ? epoch.reason : epoch.state).toBe('published');
     }
     db.pool.options.max = 1;
     await bootstrapRelease(db.pool, bundledRelease);
