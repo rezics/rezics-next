@@ -127,6 +127,8 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
     const node = validatePageNode(search.node);
     const streamProperty = search.streamProperty;
     const streamDirection = search.streamDirection;
+    const validatedStreamDirection: 'forward' | 'inverse' | undefined =
+      streamDirection === 'forward' || streamDirection === 'inverse' ? streamDirection : undefined;
     if (
       (search.cursor !== undefined && node === undefined) ||
       (streamProperty !== undefined &&
@@ -144,7 +146,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/$view')({
       realm: validatePageRealm(search.realm),
       node,
       ...(typeof streamProperty === 'string' ? { streamProperty } : {}),
-      ...(streamDirection === 'forward' || streamDirection === 'inverse' ? { streamDirection } : {}),
+      ...(validatedStreamDirection ? { streamDirection: validatedStreamDirection } : {}),
       via: subjectVisitReturn(search.via, getLocale()),
     };
   },
