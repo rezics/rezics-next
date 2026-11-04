@@ -107,7 +107,9 @@ export class NotificationEditor {
       readRetryAt: 0,
       commandRetryAt: 0,
     };
+    const listeners = [...this.listeners];
     this.listeners.clear();
+    listeners.forEach((listener) => listener());
   };
   private live = () => {
     if (this.disposed) return false;

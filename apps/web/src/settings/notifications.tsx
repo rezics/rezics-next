@@ -72,6 +72,9 @@ export function NotificationsCard({
   );
   const state = useSyncExternalStore(editor.subscribe, editor.snapshot, editor.snapshot);
   useSettingsDisposal(editor.dispose);
+  useLayoutEffect(() => {
+    if (!isCurrent()) editor.dispose();
+  });
   useSettingsNavigationDraft(
     'notifications',
     isCurrent() && notificationsNeedNavigationDecision(state),
