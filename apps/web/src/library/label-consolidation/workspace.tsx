@@ -364,6 +364,11 @@ export function ConsolidationWorkspace({
                 {visit.review.evidence[0] ? (
                   <p className="break-words">
                     {visit.review.evidence[0].sourceLabel.name} → {visit.review.evidence[0].targetLabel.name}
+                    <code className="block break-all text-xs">
+                      {visit.review.evidence[0].sourceLabel.id} · {visit.review.evidence[0].sourceLabel.revision}
+                      {' → '}
+                      {visit.review.evidence[0].targetLabel.id} · {visit.review.evidence[0].targetLabel.revision}
+                    </code>
                   </p>
                 ) : null}
                 <SelectionReviewList
