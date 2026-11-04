@@ -53,7 +53,7 @@ function viewOf(target: DraftPreviewTarget) {
 }
 
 function realmOf(target: DraftPreviewTarget) {
-  return 'subject' in target ? (target.realm?.trim() || null) : null;
+  return 'subject' in target ? target.realm?.trim() || null : null;
 }
 
 function targetFromFields(kind: Kind, address: string, realm: string, view: View): DraftPreviewTarget {
@@ -118,9 +118,7 @@ function TargetSummary({
       {kind === 'subject' && (
         <div className="min-w-0 rounded-md bg-muted/40 p-3">
           <dt className="text-muted-foreground">{m.presentation_preview_realm({}, options)}</dt>
-          <dd className="mt-1 break-all font-medium">
-            {realmOf(target) ?? m.draft_preview_global_realm({}, options)}
-          </dd>
+          <dd className="mt-1 break-all font-medium">{realmOf(target) ?? m.draft_preview_global_realm({}, options)}</dd>
         </div>
       )}
       {page && (
@@ -189,20 +187,19 @@ export function DraftPreviewPanel({
   const localErrors = useMemo(() => {
     const localeError = !(UI_LOCALES as readonly string[]).includes(locale);
     const entered = address.trim();
-    const addressError =
-      !entered
-        ? 'required'
-        : kind === 'subject'
-          ? uuidPattern.test(entered)
+    const addressError = !entered
+      ? 'required'
+      : kind === 'subject'
+        ? uuidPattern.test(entered)
+          ? null
+          : 'subject'
+        : kind === 'account'
+          ? accountPattern.test(entered)
             ? null
-            : 'subject'
-          : kind === 'account'
-            ? accountPattern.test(entered)
-              ? null
-              : 'account'
-            : isSupportedDraftPreviewTarget(candidateTarget, locale)
-              ? null
-              : 'route';
+            : 'account'
+          : isSupportedDraftPreviewTarget(candidateTarget, locale)
+            ? null
+            : 'route';
     const realmError = kind === 'subject' && realm.trim() && !uuidPattern.test(realm.trim()) ? 'realm' : null;
     return { localeError, addressError, realmError };
   }, [address, candidateTarget, kind, locale, realm]);
@@ -359,8 +356,7 @@ export function DraftPreviewPanel({
             ? m.draft_preview_account_invalid({}, options)
             : m.draft_preview_route_invalid({}, options)
       : null;
-  const realmError =
-    attempted && localErrors.realmError ? m.draft_preview_realm_invalid({}, options) : null;
+  const realmError = attempted && localErrors.realmError ? m.draft_preview_realm_invalid({}, options) : null;
   const localeError = attempted && localErrors.localeError ? m.draft_preview_locale_invalid({}, options) : null;
   const currentCandidateInvalid = attempted && !candidateInput && !addressError && !realmError && !localeError;
 
@@ -397,12 +393,7 @@ export function DraftPreviewPanel({
   function takeCapture(event: FormEvent) {
     event.preventDefault();
     setAttempted(true);
-    if (
-      localErrors.localeError ||
-      localErrors.addressError ||
-      localErrors.realmError ||
-      !candidateInput
-    ) return;
+    if (localErrors.localeError || localErrors.addressError || localErrors.realmError || !candidateInput) return;
     if (!lease.isCurrent()) return;
     const captured = { owner, input: candidateInput, digest: profileDigest(candidateInput.profile) };
     setCapture(captured);
@@ -475,9 +466,7 @@ export function DraftPreviewPanel({
                   className="w-full min-w-0 [&_select]:min-h-11"
                   onChange={(event) => setKind(event.target.value as Kind)}
                 >
-                  <NativeSelectOption value="subject">
-                    {m.presentation_preview_subject({}, options)}
-                  </NativeSelectOption>
+                  <NativeSelectOption value="subject">{m.presentation_preview_subject({}, options)}</NativeSelectOption>
                   <NativeSelectOption value="account">{m.draft_preview_account({}, options)}</NativeSelectOption>
                   <NativeSelectOption value="route">{m.presentation_preview_route({}, options)}</NativeSelectOption>
                 </NativeSelect>
@@ -542,7 +531,11 @@ export function DraftPreviewPanel({
                 </Field>
               )}
             </div>
-            {localeError && <p role="alert" className="text-sm text-destructive">{localeError}</p>}
+            {localeError && (
+              <p role="alert" className="text-sm text-destructive">
+                {localeError}
+              </p>
+            )}
             {currentCandidateInvalid && (
               <p role="alert" className="text-sm text-destructive">
                 {m.draft_preview_profile_invalid({}, options)}
@@ -624,9 +617,7 @@ export function DraftPreviewPanel({
                       {realmOf(candidateTarget) ?? m.draft_preview_global_realm({}, options)}
                     </p>
                   )}
-                  {currentProfileDigest !== active.digest && (
-                    <p>{m.draft_preview_profile_changed({}, options)}</p>
-                  )}
+                  {currentProfileDigest !== active.digest && <p>{m.draft_preview_profile_changed({}, options)}</p>}
                 </div>
               )}
               <details className="text-sm">
@@ -657,9 +648,7 @@ export function DraftPreviewPanel({
               <div role="alert" className="space-y-2">
                 <p>{failures[result.reason]({}, options)}</p>
                 {result.reason === 'interrupted' && (
-                  <p className="text-sm text-muted-foreground">
-                    {m.draft_preview_stop_request({}, options)}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{m.draft_preview_stop_request({}, options)}</p>
                 )}
                 {result.reason === 'redirect' && (
                   <Button
@@ -680,7 +669,9 @@ export function DraftPreviewPanel({
             )}
             {active && result?.ok && (
               <div className="min-w-0 space-y-3">
-                <p role="status" aria-live="polite">{m.draft_preview_success({}, options)}</p>
+                <p role="status" aria-live="polite">
+                  {m.draft_preview_success({}, options)}
+                </p>
                 <p className="text-sm text-muted-foreground">{m.draft_preview_not_publication({}, options)}</p>
                 <PublishedPresentationPage result={result} />
               </div>

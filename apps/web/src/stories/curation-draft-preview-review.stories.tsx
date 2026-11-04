@@ -51,10 +51,8 @@ function pageFor(input: DraftPreviewInput): SubjectPageData {
   return {
     profile: digest,
     subject: 'route' in input.target ? null : recorded.subject.id,
-    ...( 'account' in input.target ? { account: { handle: input.target.account } } : {}),
-    template: 'route' in input.target
-      ? { scope: 'route', key: input.target.route }
-      : { scope: 'generic', key: null },
+    ...('account' in input.target ? { account: { handle: input.target.account } } : {}),
+    template: 'route' in input.target ? { scope: 'route', key: input.target.route } : { scope: 'generic', key: null },
     document,
     reads,
     draft: { digest, target: input.target, advice: 'allowed' },
@@ -149,7 +147,9 @@ export const UnavailableRetryVersusRecapture: Story = {
     const subject = canvas.getByRole('textbox', { name: 'Subject ID' });
     await userEvent.type(subject, recorded.subject.id);
     await userEvent.click(canvas.getByRole('button', { name: 'Capture current candidate' }));
-    await waitFor(() => expect(canvas.getByText(/preview service or one of its required reads is unavailable/i)).toBeVisible());
+    await waitFor(() =>
+      expect(canvas.getByText(/preview service or one of its required reads is unavailable/i)).toBeVisible(),
+    );
     await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'Target' }), 'account');
     await userEvent.type(canvas.getByRole('textbox', { name: 'Account handle' }), 'current-reader');
     await userEvent.click(within(panel).getByRole('button', { name: 'Retry captured target' }));

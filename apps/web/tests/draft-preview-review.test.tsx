@@ -52,10 +52,8 @@ function pageFor(input: DraftPreviewInput) {
   return {
     profile: digest,
     subject: 'route' in input.target ? null : subjectId,
-    ...( 'account' in input.target ? { account: { handle: input.target.account } } : {}),
-    template: 'route' in input.target
-      ? { scope: 'route', key: input.target.route }
-      : { scope: 'generic', key: null },
+    ...('account' in input.target ? { account: { handle: input.target.account } } : {}),
+    template: 'route' in input.target ? { scope: 'route', key: input.target.route } : { scope: 'generic', key: null },
     document,
     reads,
     draft: { digest, target: input.target, advice: 'allowed' },
@@ -104,12 +102,7 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   mock.module('cloudflare:workers', () => ({ env: {} }));
-  const [
-    { createRoot },
-    { QueryClient, QueryClientProvider },
-    { DraftPreviewPanel },
-    { m },
-  ] = await Promise.all([
+  const [{ createRoot }, { QueryClient, QueryClientProvider }, { DraftPreviewPanel }, { m }] = await Promise.all([
     import('react-dom/client'),
     import('@tanstack/react-query'),
     import('../src/features/pages/draft-preview-view'),
@@ -123,8 +116,7 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
   const calls: { input: DraftPreviewInput; resolve: (value: DraftPreviewResult) => void }[] = [];
-  const read: DraftPreviewRead = (input) =>
-    new Promise((resolve) => calls.push({ input, resolve }));
+  const read: DraftPreviewRead = (input) => new Promise((resolve) => calls.push({ input, resolve }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   let returned = 0;
 
@@ -134,7 +126,9 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
     const [profile, setProfile] = useState(initialProfile);
     return (
       <div className="p-4">
-        <h1 ref={heading} tabIndex={-1}>Current curation editor</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          Current curation editor
+        </h1>
         <label>
           Unsaved editor value
           <input value={draftValue} onChange={(event) => setDraftValue(event.target.value)} />
@@ -165,19 +159,27 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
   const canvas = within(host);
   const panel = () => canvas.getByRole('region', { name: m.draft_preview_title({}, { locale: 'en' }) });
   const controls = () => within(panel());
-  const selectKind = (value: string) => act(async () => user.selectOptions(
-    controls().getByRole('combobox', { name: m.presentation_preview_target({}, { locale: 'en' }) }), value,
-  ));
+  const selectKind = (value: string) =>
+    act(async () =>
+      user.selectOptions(
+        controls().getByRole('combobox', { name: m.presentation_preview_target({}, { locale: 'en' }) }),
+        value,
+      ),
+    );
   const field = (name: string) => controls().getByRole('textbox', { name });
   const submit = (name: string) => act(async () => user.click(controls().getByRole('button', { name })));
-  const settle = async (index: number, value: DraftPreviewResult) => act(async () => {
-    calls[index]!.resolve(value);
-    await Promise.resolve();
-  });
+  const settle = async (index: number, value: DraftPreviewResult) =>
+    act(async () => {
+      calls[index]!.resolve(value);
+      await Promise.resolve();
+    });
   const waitForCalls = async (count: number) => waitFor(() => expect(calls).toHaveLength(count));
 
   try {
-    for (const [width, theme] of [[390, 'light'], [1440, 'dark']] as const) {
+    for (const [width, theme] of [
+      [390, 'light'],
+      [1440, 'dark'],
+    ] as const) {
       returned = 0;
       window.happyDOM.setWindowSize({ width, height: 900 });
       host.className = theme === 'dark' ? 'dark' : '';
@@ -206,10 +208,12 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       expect(controls().getByText(m.draft_preview_realm_invalid({}, { locale: 'en' }))).toBeTruthy();
       await act(async () => user.clear(realmField));
       await act(async () => user.type(realmField, '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11'));
-      await act(async () => user.selectOptions(
-        controls().getByRole('combobox', { name: m.draft_preview_view({}, { locale: 'en' }) }),
-        'details',
-      ));
+      await act(async () =>
+        user.selectOptions(
+          controls().getByRole('combobox', { name: m.draft_preview_view({}, { locale: 'en' }) }),
+          'details',
+        ),
+      );
       await submit(captureLabel);
       await waitForCalls(1);
       expect(calls[0]!.input.target).toEqual({
@@ -220,12 +224,16 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await settle(0, successful(calls[0]!.input));
       await waitFor(() => expect(controls().getByRole('heading', { name: 'Captured profile details' })).toBeTruthy());
       expect(controls().getByText(m.draft_preview_not_publication({}, { locale: 'en' }))).toBeTruthy();
-      expect((controls().getByRole('button', { name: m.draft_preview_recapture({}, { locale: 'en' }) }) as HTMLElement).className)
-        .toContain('min-h-11');
+      expect(
+        (controls().getByRole('button', { name: m.draft_preview_recapture({}, { locale: 'en' }) }) as HTMLElement)
+          .className,
+      ).toContain('min-h-11');
 
       // A profile edit changes the unsent candidate while the captured page stays bound to its original profile.
       await act(async () => user.click(canvas.getByRole('button', { name: 'Edit current profile' })));
-      await waitFor(() => expect(controls().getByText(m.draft_preview_profile_changed({}, { locale: 'en' }))).toBeTruthy());
+      await waitFor(() =>
+        expect(controls().getByText(m.draft_preview_profile_changed({}, { locale: 'en' }))).toBeTruthy(),
+      );
       expect(controls().getByRole('heading', { name: 'Captured profile details' })).toBeTruthy();
       expect(calls).toHaveLength(1);
 
@@ -242,10 +250,15 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await submit(m.draft_preview_recapture({}, { locale: 'en' }));
       await waitForCalls(2);
       expect(calls[1]!.input.target).toEqual({ account: longHandle, view: 'details' });
-      expect(controls().getAllByText(longHandle).some((element: HTMLElement) => element.className.includes('break-all')))
-        .toBe(true);
+      expect(
+        controls()
+          .getAllByText(longHandle)
+          .some((element: HTMLElement) => element.className.includes('break-all')),
+      ).toBe(true);
 
-      await act(async () => user.click(controls().getByRole('button', { name: m.draft_preview_interrupt({}, { locale: 'en' }) })));
+      await act(async () =>
+        user.click(controls().getByRole('button', { name: m.draft_preview_interrupt({}, { locale: 'en' }) })),
+      );
       expect(controls().getByText(m.draft_preview_stop_request({}, { locale: 'en' }))).toBeTruthy();
       await settle(1, successful(calls[1]!.input));
       expect(controls().queryByRole('heading', { name: 'Unsent profile update details' })).toBeNull();
@@ -255,7 +268,9 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await waitForCalls(3);
       expect(calls[2]!.input).toEqual(calls[1]!.input);
       await settle(2, { ok: false, reason: 'unavailable' });
-      await waitFor(() => expect(controls().getByText(m.draft_preview_dependency_failure({}, { locale: 'en' }))).toBeTruthy());
+      await waitFor(() =>
+        expect(controls().getByText(m.draft_preview_dependency_failure({}, { locale: 'en' }))).toBeTruthy(),
+      );
 
       await selectKind('route');
       const routeField = field(m.presentation_preview_route({}, { locale: 'en' }));
@@ -270,7 +285,9 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await waitForCalls(4);
       expect(calls[3]!.input.target).toEqual(calls[1]!.input.target);
       await settle(3, { ok: false, reason: 'unavailable' });
-      await waitFor(() => expect(controls().getByText(m.draft_preview_dependency_failure({}, { locale: 'en' }))).toBeTruthy());
+      await waitFor(() =>
+        expect(controls().getByText(m.draft_preview_dependency_failure({}, { locale: 'en' }))).toBeTruthy(),
+      );
 
       await submit(m.draft_preview_recapture({}, { locale: 'en' }));
       await waitForCalls(5);
@@ -279,12 +296,17 @@ test('review keeps captured output frozen, diagnoses local targets, retries the 
       await settle(4, successful(calls[4]!.input));
       await waitFor(() => expect(controls().getByRole('heading', { name: 'Unsent profile update' })).toBeTruthy());
 
-      await act(async () => user.click(controls().getByRole('button', { name: m.draft_preview_return_editor({}, { locale: 'en' }) })));
+      await act(async () =>
+        user.click(controls().getByRole('button', { name: m.draft_preview_return_editor({}, { locale: 'en' }) })),
+      );
       expect(returned).toBe(1);
       expect(window.document.activeElement?.textContent).toBe('Current curation editor');
-      expect((canvas.getByRole('textbox', { name: 'Unsaved editor value' }) as HTMLInputElement).value)
-        .toBe('unsaved editor text');
-      await act(async () => user.click(controls().getByRole('button', { name: m.draft_preview_reopen({}, { locale: 'en' }) })));
+      expect((canvas.getByRole('textbox', { name: 'Unsaved editor value' }) as HTMLInputElement).value).toBe(
+        'unsaved editor text',
+      );
+      await act(async () =>
+        user.click(controls().getByRole('button', { name: m.draft_preview_reopen({}, { locale: 'en' }) })),
+      );
       await waitFor(() => expect(controls().getByRole('heading', { name: 'Unsent profile update' })).toBeTruthy());
 
       await act(async () => root.render(<></>));
