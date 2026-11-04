@@ -195,6 +195,11 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
       <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_metadata_history()}</summary>
       <div className="space-y-4 pt-3">
         <p className="max-w-3xl text-sm text-muted-foreground">{m.library_collection_metadata_history_description()}</p>
+        {cursor !== null ? (
+          <Button type="button" variant="outline" onClick={() => readPage(null)}>
+            {m.library_collection_metadata_history_first_page()}
+          </Button>
+        ) : null}
         {page.state === 'loading' ? <p role="status">{m.library_collection_metadata_history_loading()}</p> : null}
         {page.state === 'unavailable' ? (
           <div role="alert" className="space-y-2">
@@ -202,11 +207,6 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
             <Button type="button" variant="outline" onClick={() => readPage(cursor)}>
               {m.library_collection_move_retry()}
             </Button>
-            {cursor !== null ? (
-              <Button type="button" variant="outline" onClick={() => readPage(null)}>
-                {m.library_collection_metadata_history_first_page()}
-              </Button>
-            ) : null}
           </div>
         ) : null}
         {page.state === 'available' ? (
@@ -262,11 +262,6 @@ function MetadataHistoryVisit({ collectionId, isCurrent, source = defaultSource 
               >
                 {m.library_collection_metadata_history_compare()}
               </Button>
-              {cursor !== null ? (
-                <Button type="button" variant="outline" onClick={() => readPage(null)}>
-                  {m.library_collection_metadata_history_first_page()}
-                </Button>
-              ) : null}
               {page.value.next ? (
                 <Button type="button" variant="outline" onClick={() => readPage(page.value.next)}>
                   {m.library_collection_metadata_history_next_page()}

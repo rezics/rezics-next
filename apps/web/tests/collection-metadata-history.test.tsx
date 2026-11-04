@@ -234,7 +234,9 @@ test('an unavailable supplier stays distinct from empty history and revision one
   await expect(
     readCollectionMetadataHistoryChange({ data: { collectionId: 'collection', revision: 2 } }),
   ).resolves.toEqual({ state: 'unavailable' });
-  await expect(async () =>
-    readCollectionMetadataHistoryChange({ data: { collectionId: 'collection', revision: 1 } }),
+  await expect(
+    Promise.resolve().then(() =>
+      readCollectionMetadataHistoryChange({ data: { collectionId: 'collection', revision: 1 } }),
+    ),
   ).rejects.toThrow('Invalid Collection metadata history revision');
 });
