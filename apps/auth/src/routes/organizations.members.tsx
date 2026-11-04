@@ -454,10 +454,11 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         return;
       }
       const saved = readMembershipCommand();
+      const discardedUnsent = !!command && !command.unresolved && saved === null;
       if (
         saved === 'invalid' ||
         (saved && saved.operation.organizationId !== organizationId) ||
-        (command && !sameMembershipCommand(saved, command))
+        (command && !sameMembershipCommand(saved, command) && !discardedUnsent)
       ) {
         setRecoveryBlocked(true);
         setRecoveryStatus('unavailable');

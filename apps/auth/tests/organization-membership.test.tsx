@@ -175,6 +175,7 @@ test('refresh retires previously advised actions when the current viewer loses m
 for (const stage of ['list', 'selection', 'signin', 'session', 'reservation', 'approval', 'execute', 'readback'])
   test(`leaving during ${stage} cannot advance an old review or browser request`, async () => {
     await mount();
+    const normalReply = reply;
     const pending = deferred<Response>();
     const pendingList = deferred<membership.MembershipPage>();
     if (stage === 'list') {
@@ -183,6 +184,7 @@ for (const stage of ['list', 'selection', 'signin', 'session', 'reservation', 'a
     } else if (stage === 'selection') {
       reply = () => pending.promise;
       await click(m.auth_members_change_role());
+      reply = normalReply;
     } else {
       await click(m.auth_members_change_role());
       const saved = membership.readMembershipCommand();
@@ -202,6 +204,7 @@ for (const stage of ['list', 'selection', 'signin', 'session', 'reservation', 'a
         });
         reply = () => pending.promise;
         await click(m.auth_members_reauthenticate());
+        reply = normalReply;
       } else {
         const target = {
           session: '/session',
@@ -223,6 +226,7 @@ for (const stage of ['list', 'selection', 'signin', 'session', 'reservation', 'a
                   : Response.json({ accountId: memberAccountId });
         await confirm();
         await click(m.auth_members_submit());
+        reply = normalReply;
       }
     }
     await leave(stage !== 'execute');
@@ -246,7 +250,8 @@ for (const stage of ['list', 'selection', 'signin', 'session', 'reservation', 'a
     expect(window.sessionStorage.getItem('rezics.organization-membership.command')).toBe(stored);
     if (stage === 'selection') expect(stored).toBeNull();
     if (stage === 'execute') expect(JSON.parse(stored!).unresolved).toBe(true);
-    else expect(host.textContent).toContain(other);
+    if (stage === 'list' || stage === 'selection') expect(host.textContent).toContain(other);
+    else expect(host.textContent).not.toContain(other);
     expect(host.querySelector('#membership-confirmation')).toBeNull();
   });
 
