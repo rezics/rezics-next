@@ -79,7 +79,8 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
 import { recentSearchRoutes } from '../search/recent-searches.ts';
-import { searchRoutes, type SearchService } from '../search/http/routes.ts';
+import { searchRoutes } from '../search/http/routes.ts';
+import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
 import { configureDefinitionCatalogue, createNativeDefinitionCatalogue } from '../semantic/definition-catalogue.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
@@ -141,7 +142,7 @@ export type KernelDependencies = Parameters<typeof createApp>[0] & {
     Pick<ContentBoardDependencies, 'cursorNow'> & {
       readConsent?: CurrentConsentReader;
     };
-  search?: SearchService;
+  search?: SearchRuntime;
   /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
   shelves?: ShelfNativeReadBindings;
   /** Per-kernel private Type dictionary digest; defaults to SHA-256. */
@@ -626,7 +627,10 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(granted), realmRoleReader }),
     realmRoleReader,
-    grantResources: () => viewerResources,
+    grantResources: () => {
+      if (!viewerResources) throw new ProblemError('dependency_unavailable');
+      return viewerResources;
+    },
   });
   const exposed = exposureRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
@@ -703,7 +707,7 @@ export function createKernel(dependencies: KernelDependencies): Kernel {
     tokens,
     clock,
     workClient,
-    journalCommands,
+    ...(journalCommands === undefined ? {} : { journalCommands }),
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
   copyArchiveRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
