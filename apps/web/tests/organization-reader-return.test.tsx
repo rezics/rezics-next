@@ -215,7 +215,7 @@ test('failed fallback offers a Context-preserving page refresh and rejects retir
     expect(host.textContent).not.toContain('Mira directs independent films.');
     source = {};
     await show('en');
-    const old = pending[3]!;
+    const old = pending[2]!;
     await act(async () => client.setQueryData(['exposure', 'viewer'], { revision: 1 }));
     expect(old.signal.aborted).toBe(true);
     await act(async () => old.resolve(read));
