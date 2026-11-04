@@ -144,10 +144,9 @@ export function isCreateAuthority(value: unknown): value is CreateAuthority {
   return false;
 }
 
-export function isAllowedCreateAuthority(value: CreateAuthority | null | undefined): value is Extract<
-  CreateAuthority,
-  { state: 'allowed' }
-> {
+export function isAllowedCreateAuthority(
+  value: CreateAuthority | null | undefined,
+): value is Extract<CreateAuthority, { state: 'allowed' }> {
   return value?.state === 'allowed';
 }
 

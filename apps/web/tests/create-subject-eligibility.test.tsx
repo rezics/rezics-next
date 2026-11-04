@@ -112,7 +112,9 @@ async function renderCreator(eligibility: () => Promise<CreateAuthority>, scenar
       await user.type(input, 'food');
       await user.click(canvas().getByRole('button', { name: m.catalogue_create_type_search_action() }));
       const results = await canvas().findByRole('list', { name: m.catalogue_create_type_results() });
-      await user.click(within(results).getByRole('button', { name: `${m.catalogue_create_type_select()} ${food.label}` }));
+      await user.click(
+        within(results).getByRole('button', { name: `${m.catalogue_create_type_select()} ${food.label}` }),
+      );
     },
     async close() {
       await act(async () => root.unmount());
@@ -128,13 +130,15 @@ async function renderCreator(eligibility: () => Promise<CreateAuthority>, scenar
 test('refused parent eligibility keeps the draft and match search, and blocks a new create', async () => {
   const page = await renderCreator(async () => ({ state: 'refused', reason: 'permission' }));
   try {
-    await page.waitFor(() => expect(page.canvas().getByRole('alert')).toHaveTextContent(page.m.identity_intake_authority_refused_permission()));
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('alert')).toHaveTextContent(page.m.identity_intake_authority_refused_permission()),
+    );
     await page.user.type(page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }), 'Kept draft');
     await page.chooseFood();
     expect(page.canvas().getByRole('button', { name: page.m.catalogue_create_submit() })).toBeDisabled();
-    expect((page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
-      'Kept draft',
-    );
+    expect(
+      (page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }) as HTMLInputElement).value,
+    ).toBe('Kept draft');
     expect(page.fixture.calls.filter((call) => call.method === 'POST')).toHaveLength(0);
   } finally {
     await page.close();
@@ -146,7 +150,10 @@ test('fresh create uses a current allowed observation; a later refusal does not 
   const page = await renderCreator(async () => observation, 'uncertain');
   try {
     await page.waitFor(() => expect(page.canvas().getByText(page.m.identity_intake_authority_allowed())).toBeDefined());
-    await page.user.type(page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }), 'Eligible food');
+    await page.user.type(
+      page.canvas().getByRole('textbox', { name: page.m.catalogue_create_label() }),
+      'Eligible food',
+    );
     await page.chooseFood();
     const submit = () => page.canvas().getByRole('button', { name: page.m.catalogue_create_submit() });
     await page.waitFor(() => expect(submit()).not.toBeDisabled());
@@ -163,7 +170,9 @@ test('fresh create uses a current allowed observation; a later refusal does not 
     await page.user.click(page.canvas().getByRole('button', { name: page.m.identity_intake_authority_retry() }));
     await page.waitFor(() => expect(page.canvas().getByText(page.m.identity_intake_authority_allowed())).toBeDefined());
     await page.user.click(submit());
-    await page.waitFor(() => expect(page.canvas().getByRole('button', { name: page.m.catalogue_create_retry() })).toBeDefined());
+    await page.waitFor(() =>
+      expect(page.canvas().getByRole('button', { name: page.m.catalogue_create_retry() })).toBeDefined(),
+    );
     observation = { state: 'refused', reason: 'permission' };
     await page.user.click(page.canvas().getByRole('button', { name: page.m.catalogue_create_retry() }));
     await page.waitFor(() => expect(page.host.textContent).toContain('00000000-0000-4000-8000-00000000c001'));

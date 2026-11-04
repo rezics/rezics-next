@@ -197,6 +197,9 @@ test('temporarily unknown eligibility and a failed suggestion keep creation sepa
   await page.locator('#create-language-0').fill('en');
   await page.locator('#create-label-0').fill(`Allowed despite search ${crypto.randomUUID()}`);
   await page.getByRole('button', { name: /search catalogue identities/i }).click();
-  await page.getByRole('alert').filter({ hasText: /search is unavailable/i }).waitFor({ state: 'visible' });
+  await page
+    .getByRole('alert')
+    .filter({ hasText: /search is unavailable/i })
+    .waitFor({ state: 'visible' });
   await page.getByText(/you can create a new catalogue identity/i).waitFor({ state: 'visible' });
 }, 300_000);

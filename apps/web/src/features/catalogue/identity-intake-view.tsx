@@ -52,8 +52,7 @@ export function CreateAuthorityStatus({
       </div>
     );
   if (!authority) return null;
-  if (authority.state === 'allowed')
-    return <p role="status">{m.identity_intake_authority_allowed({}, options)}</p>;
+  if (authority.state === 'allowed') return <p role="status">{m.identity_intake_authority_allowed({}, options)}</p>;
   if (authority.state === 'guest')
     return (
       <p role="status">

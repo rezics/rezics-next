@@ -52,9 +52,7 @@ function makeRuntime(
       searchCalls++;
       return readSuggestions(...args);
     },
-    readCreateEligibility: async (
-      ...args: Parameters<IdentityIntakeRuntime['readCreateEligibility']>
-    ) => {
+    readCreateEligibility: async (...args: Parameters<IdentityIntakeRuntime['readCreateEligibility']>) => {
       eligibilityCalls++;
       if (options.readCreateEligibility) return options.readCreateEligibility(...args);
       return options.eligibility ?? allowedCreateAuthority;
@@ -160,7 +158,13 @@ test('suggestion failure keeps a current allowed create observation', async () =
   const failed = makeRuntime(async () => {
     throw problem(503, 'dependency_unavailable', 'Search unavailable');
   });
-  const page = await (await identityIntakeResponse(new Request(`https://site.test/api/catalogue/identity-intake?${query}`), {}, failed.runtime)).json();
+  const page = await (
+    await identityIntakeResponse(
+      new Request(`https://site.test/api/catalogue/identity-intake?${query}`),
+      {},
+      failed.runtime,
+    )
+  ).json();
   expect(page).toMatchObject({
     status: 'unavailable',
     results: [],
@@ -170,13 +174,15 @@ test('suggestion failure keeps a current allowed create observation', async () =
 });
 
 test('successful suggestions cannot grant creation when the parent action is absent', async () => {
-  const refused = makeRuntime(
-    async () => ({ subjects: [], as_of: '2026-11-03T00:00:00.000Z' }) as never,
-    'release-1',
-    { eligibility: { state: 'refused', reason: 'permission' } },
-  );
+  const refused = makeRuntime(async () => ({ subjects: [], as_of: '2026-11-03T00:00:00.000Z' }) as never, 'release-1', {
+    eligibility: { state: 'refused', reason: 'permission' },
+  });
   const page = await (
-    await identityIntakeResponse(new Request(`https://site.test/api/catalogue/identity-intake?${query}`), {}, refused.runtime)
+    await identityIntakeResponse(
+      new Request(`https://site.test/api/catalogue/identity-intake?${query}`),
+      {},
+      refused.runtime,
+    )
   ).json();
   expect(page).toMatchObject({
     status: 'empty',
@@ -185,13 +191,16 @@ test('successful suggestions cannot grant creation when the parent action is abs
 });
 
 test('a guest visit reports guest eligibility without treating the empty session as a permission denial', async () => {
-  const guest = makeRuntime(
-    async () => ({ subjects: [], as_of: '2026-11-03T00:00:00.000Z' }) as never,
-    'release-1',
-    { credential: null, eligibility: { state: 'guest' } },
-  );
+  const guest = makeRuntime(async () => ({ subjects: [], as_of: '2026-11-03T00:00:00.000Z' }) as never, 'release-1', {
+    credential: null,
+    eligibility: { state: 'guest' },
+  });
   const page = await (
-    await identityIntakeResponse(new Request(`https://site.test/api/catalogue/identity-intake?${query}`), {}, guest.runtime)
+    await identityIntakeResponse(
+      new Request(`https://site.test/api/catalogue/identity-intake?${query}`),
+      {},
+      guest.runtime,
+    )
   ).json();
   expect(page).toMatchObject({
     viewer: { state: 'signed-out' },
@@ -201,7 +210,11 @@ test('a guest visit reports guest eligibility without treating the empty session
 
 test('parent viewerActions map gate, suspension, dependency and empty permission honestly', async () => {
   const post = async (result: { status: number; data?: unknown; error?: { value?: unknown } }) =>
-    observeCreateEligibility({ viewerActions: { post: async () => result } } as never, 'Bearer current-reader', 'signed-in');
+    observeCreateEligibility(
+      { viewerActions: { post: async () => result } } as never,
+      'Bearer current-reader',
+      'signed-in',
+    );
   expect(await observeCreateEligibility({} as never, null, 'signed-out')).toEqual({ state: 'guest' });
   expect(
     await post({
@@ -221,9 +234,7 @@ test('parent viewerActions map gate, suspension, dependency and empty permission
     await post({
       status: 200,
       data: {
-        resources: [
-          { type: 'semantic.context', id: '00000000-0000-8000-8000-000000000000', viewerActions: [] },
-        ],
+        resources: [{ type: 'semantic.context', id: '00000000-0000-8000-8000-000000000000', viewerActions: [] }],
       },
     }),
   ).toEqual({ state: 'refused', reason: 'permission' });
