@@ -3,6 +3,7 @@ import { deadlineClient, within } from '../access/authenticate.ts';
 import { readPublicViews } from '../access/public-views.ts';
 import { accessCheck, type AccessCheck, type Actor } from '../request/access.ts';
 import { CommandUnavailableError } from '../command/command.ts';
+import { ProblemError } from '../http/problem.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -19,13 +20,15 @@ import {
 } from './reads.ts';
 import threadPage from './author-item-threads.sql';
 import postPage from './author-item-posts.sql';
+import { prepareAuthorItemContext, type AuthorContextReference, type AuthorItemContext } from './author-item-context.ts';
 
 export type AuthorThreadKind = 'discussion' | 'review';
 export type AuthorPageInput = { cursor?: string; limit?: number };
 export type AuthorThreadPageInput = AuthorPageInput & { kind?: AuthorThreadKind };
 export type AuthorPostEntry = Extract<ItemView, { availability: 'available' }> & {
   thread: { id: string; title: string | null };
-};
+} & Partial<AuthorItemContext>;
+export type AuthorThreadEntry = ThreadView & Partial<AuthorItemContext>;
 export type AuthorItemDependencies = ContentReadDependencies & { cursorNow?: () => number };
 export type AuthorPage<T> = { entries: readonly T[]; nextCursor: string | null; anchors: readonly AnchoredPosition[] };
 type Key = { createdAt: string; itemId: string };
@@ -202,7 +205,7 @@ async function listAuthorItems(
   input: AuthorPageInput,
   list: List,
   kind: AuthorThreadKind | null,
-): Promise<AuthorPage<ThreadView | AuthorPostEntry>> {
+): Promise<AuthorPage<AuthorThreadEntry | AuthorPostEntry>> {
   const limit = input.limit ?? PAGE_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > PAGE_LIMIT) throw new RangeError('Page limit must be 1 to 20');
   const now = (dependencies.cursorNow ?? Date.now)();
@@ -234,7 +237,8 @@ async function listAuthorItems(
     now,
     presentationCheck,
   );
-  const entries: (ThreadView | AuthorPostEntry)[] = [];
+  const entries: (AuthorThreadEntry | AuthorPostEntry)[] = [];
+  const selected: AuthorContextReference[] = [];
   const anchors = [page.anchor];
   let scanned = 0;
   let last: Candidate | undefined;
@@ -247,7 +251,10 @@ async function listAuthorItems(
     const thread = result.value;
     if (!thread || !listed(thread)) continue;
     if (list === 'threads') {
-      if (thread.authorId === accountId && thread.kind === kind && listed(thread.firstPost)) entries.push(thread);
+      if (thread.authorId === accountId && thread.kind === kind && listed(thread.firstPost)) {
+        entries.push(thread);
+        selected.push({ thread });
+      }
     } else {
       // Opening-post erasure leaves reply context readable, with the disclosed null title.
       if (thread.firstPost.availability !== 'erased' && !listed(thread.firstPost)) continue;
@@ -264,12 +271,53 @@ async function listAuthorItems(
         post.value.authorId === accountId
       ) {
         entries.push({ ...post.value, thread: { id: thread.id, title: thread.title } });
+        selected.push({ thread, post: post.value });
       }
     }
   }
   const hasMore = scanned < page.candidates.length || page.candidates.length === limit * SCAN_FACTOR;
+  const prepared = await prepareAuthorItemContext(dependencies, selected, context);
+  const contexts = await prepared.finish();
+  anchors.push(...prepared.anchors);
+  // Reobserve precisely the selected sources, with no candidate refill or new
+  // frontier. Context may not turn a changed source into a fresh baseline.
+  for (const reference of selected) {
+    const thread = await readThread(dependencies, reference.thread.id, context);
+    anchors.push(thread.anchor);
+    if (JSON.stringify(thread.value) !== JSON.stringify(reference.thread))
+      throw new ProblemError('dependency_unavailable');
+    if (reference.post) {
+      const post = await readPost(dependencies, reference.thread.id, reference.post.id, context);
+      anchors.push(post.anchor);
+      if (JSON.stringify(post.value) !== JSON.stringify(reference.post))
+        throw new ProblemError('dependency_unavailable');
+    }
+  }
+  // Last asynchronous owner call: account deletion/fencing, publication choice
+  // and current editor authority use the same native snapshot as initial choice.
+  const final = await within(context.deadline, () => withConnection(dependencies.pool, async (connection) => {
+    const client = deadlineClient(connection, context.deadline);
+    try {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      await client.query("SET LOCAL statement_timeout = '3000ms'");
+      const partition = await readPartition(client, partitionOf(accountRoute!));
+      if (!partition || partition.writeState === 'moved' || partition.epoch !== page.anchor.epoch)
+        throw new ProblemError('dependency_unavailable');
+      const views = (await readPublicViews(client, [accountId])).get(accountId);
+      const enabled = list === 'posts' || kind === 'discussion' ? views?.posts : views?.reviews;
+      if (!enabled && !self && !(presentationCheck && await presentationCheck(client)) && entries.length > 0)
+        throw new ProblemError('dependency_unavailable');
+      await client.query('COMMIT');
+      return { partition, epoch: partition.epoch, position: partition.position };
+    } catch (error) {
+      try { await connection.query('ROLLBACK'); }
+      catch (rollbackError) { discardConnection(connection, rollbackError as Error); }
+      throw error;
+    }
+  }));
+  anchors.push(final);
   return {
-    entries,
+    entries: entries.map((entry) => ({ ...entry, ...contexts.get(entry.id) })),
     anchors,
     nextCursor: hasMore && last ? encodeAuthorItemKey(dependencies.tokens, scope, last, page.anchor.epoch, now) : null,
   };
@@ -280,10 +328,10 @@ export async function listAuthorThreads(
   accountId: string,
   context: ReadContext,
   input: AuthorThreadPageInput = {},
-): Promise<AuthorPage<ThreadView>> {
+): Promise<AuthorPage<AuthorThreadEntry>> {
   const kind = input.kind ?? 'discussion';
   if (kind !== 'discussion' && kind !== 'review') throw new TypeError('Invalid author thread kind');
-  return (await listAuthorItems(dependencies, accountId, context, input, 'threads', kind)) as AuthorPage<ThreadView>;
+  return (await listAuthorItems(dependencies, accountId, context, input, 'threads', kind)) as AuthorPage<AuthorThreadEntry>;
 }
 
 export async function listAuthorPosts(

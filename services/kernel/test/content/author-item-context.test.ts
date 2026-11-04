@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, normalizeDocument } from '@rezics/document';
 import { listAuthorPosts } from '../../src/content/author-item-reads.ts';
 import { prepareAuthorItemContext } from '../../src/content/author-item-context.ts';
 import { readPost, readThread } from '../../src/content/reads.ts';
@@ -21,9 +21,15 @@ test('author replies carry only their immediate public parent and retire changed
     expect(created.response.status, created.text).toBe(201);
     const threadId = created.value.thread.id as string;
     async function reply(text: string, parentId?: string) {
+      const body = normalizeDocument({ ...fromPlainText(text), doc: { type: 'doc', content: [
+        { type: 'paragraph', attrs: { id: 'parent-text', lang: 'ja' }, content: [
+          { type: 'text', text, marks: [{ type: 'spoiler' }] },
+          { type: 'ruby', attrs: { rt: 'Invisible annotation' }, content: [{ type: 'text', text: 'visible' }] },
+        ] },
+      ] } });
       const result = await f.call('POST', `/v1/threads/${threadId}/posts`, {
         bearer: f.author.bearer,
-        body: { body: fromPlainText(text), licence: 'CC0-1.0', subjectIds: [], ...(parentId ? { parentId } : {}) },
+        body: { body, licence: 'CC0-1.0', subjectIds: [], ...(parentId ? { parentId } : {}) },
       });
       expect(result.response.status, result.text).toBe(201);
       return result.value.post.id as string;
@@ -36,18 +42,18 @@ test('author replies carry only their immediate public parent and retire changed
     const prepared = await prepareAuthorItemContext(dependencies, [reference], context);
     const result = (await prepared.finish()).get(childId)!;
     expect(result.parentContext).toMatchObject({ kind: 'reply', parent: {
-      state: 'available', id: parentId, author: null, spoiler: false,
+      state: 'available', id: parentId, author: null, spoiler: true, language: 'ja',
     } });
     if (result.parentContext?.kind !== 'reply' || result.parentContext.parent.state !== 'available')
       throw new Error('Expected disclosed parent');
     expect(result.parentContext.parent.excerpt!.length).toBeLessThanOrEqual(160);
-    expect(result.parentContext.parent.revisionId).toBe(
-      (await readPost(dependencies, threadId, parentId, context)).value!.revisionId,
-    );
+    const parent = (await readPost(dependencies, threadId, parentId, context)).value!;
+    expect(result.parentContext.parent.revisionId).toBe('revisionId' in parent ? parent.revisionId : null);
     expect(JSON.stringify(result)).not.toContain('Opening');
+    expect(JSON.stringify(result)).not.toContain('Invisible annotation');
     const changing = await prepareAuthorItemContext(dependencies, [reference], context);
     const removed = await f.call('DELETE', `/v1/posts/${parentId}`, { bearer: f.author.bearer });
-    expect(removed.response.status, removed.text).toBe(200);
+    expect(removed.response.status, removed.text).toBe(204);
     expect((await changing.finish()).get(childId)?.parentContext).toEqual({
       kind: 'reply', parent: { state: 'withheld' },
     });
@@ -72,7 +78,7 @@ test('author page refuses publication revoked after selection without returning 
       body: { body: fromPlainText('Published reply'), licence: 'CC0-1.0', subjectIds: [] },
     });
     expect(reply.response.status, reply.text).toBe(201);
-    const gate = observer.hold({ statement: views.sql, occurrence: 2 }, 'before');
+    const gate = observer.hold({ statement: views.sql }, 'after');
     const pending = listAuthorPosts(
       { pool: f.system.database.pool, access: f.system.access, tokens: f.system.tokenKeys },
       f.author.accountId,

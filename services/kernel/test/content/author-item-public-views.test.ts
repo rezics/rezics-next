@@ -327,7 +327,7 @@ test('deleted, fenced and unknown accounts return empty author pages', async () 
 
 // access.account grows in production; the bounded neighbourhood is one author's page and one public view read
 // of that author. Seed unrelated accounts in the same route with production row shapes to observe the unforced plan.
-test('one public view read is added to each author page at any item count', async () => {
+test('two public view observations fence each author page at any item count', async () => {
   const author = newId(authorRoute);
   await account(author);
   await item(author, 'discussion', 20);
@@ -350,21 +350,25 @@ test('one public view read is added to each author page at any item count', asyn
   async function reads() {
     const result = await capture(db, () => get(path(author, 'threads')));
     expect(result.value.status).toBe(200);
-    expect(result.capture.statements.filter((statement) => statement.includes('public_views'))).toHaveLength(1);
+    expect(result.capture.statements.filter((statement) => statement.includes('public_views'))).toHaveLength(2);
     const statement = result.capture.statements.find((statement) => statement.includes('public_views'));
     const plans = result.capture.plans
       .flatMap((plan): unknown[] => (Array.isArray(plan) ? plan : [plan]))
       .filter(
         (plan) => plan !== null && typeof plan === 'object' && 'Query Text' in plan && plan['Query Text'] === statement,
       );
-    expect(plans).toHaveLength(1);
+    expect(plans).toHaveLength(2);
     expect(accountScans(plans)).toEqual([
       expect.objectContaining({
         'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
         'Index Name': 'account_pkey',
       }),
+      expect.objectContaining({
+        'Node Type': expect.stringMatching(/^Index (?:Only )?Scan$/),
+        'Index Name': 'account_pkey',
+      }),
     ]);
-    expect(costOf(result.capture).relations['access.account']?.rows).toBe(1);
+    expect(costOf(result.capture).relations['access.account']?.rows).toBe(2);
   }
 
   await reads();
