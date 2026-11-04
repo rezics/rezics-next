@@ -134,7 +134,9 @@ async function preserveVolumeDraft({ canvasElement }: { canvasElement: HTMLEleme
   await userEvent.click(canvas.getByRole('button', { name: m.library_progress_measure_save() }));
   await canvas.findByRole('region', { name: m.library_progress_measures_review() });
   await expect(canvas.getByText(m.library_progress_measures_review_unchanged({ unit: 'chapter' }))).toBeVisible();
-  await expect(canvas.getByText(m.library_progress_measures_review_amount({ unit: 'volume', amount: '7' }))).toBeVisible();
+  await expect(
+    canvas.getByText(m.library_progress_measures_review_amount({ unit: 'volume', amount: '7' })),
+  ).toBeVisible();
 }
 
 async function correctChangedRules({ canvasElement }: { canvasElement: HTMLElement }) {

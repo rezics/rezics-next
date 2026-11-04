@@ -115,11 +115,7 @@ export function IndependentMeasuresVisit({
       setValidationSubmitted(false);
       setVisit((latest) => {
         if (latest.sessionId !== sessionId || latest.kind === 'submitting') return latest;
-        return refreshIndependentVisit(
-          latest,
-          page.session.revision,
-          projectIndependentMeasures(page.session),
-        );
+        return refreshIndependentVisit(latest, page.session.revision, projectIndependentMeasures(page.session));
       });
     } finally {
       if (refreshCycle.current === cycle) {
@@ -169,7 +165,8 @@ export function IndependentMeasuresVisit({
   async function retry() {
     if (!current() || !visit.retry) return;
     const original = visit.retry;
-    const command = commands.current.find((candidate) => sameCommand(candidate, original)) ?? bindMeasureCommand(original, sender);
+    const command =
+      commands.current.find((candidate) => sameCommand(candidate, original)) ?? bindMeasureCommand(original, sender);
     try {
       const result = await retryOriginal(command, current);
       if (!result || !current()) return;
@@ -184,11 +181,13 @@ export function IndependentMeasuresVisit({
       }
       const outcome = outcomeFromResult(original, result, visit.edits);
       if (!['conflict', 'uncertain', 'unavailable'].includes(outcome.state)) commands.current = [];
-      setVisit((latest) => latest.sessionId === session.id ? applyIndependentOutcome(latest, outcome) : latest);
+      setVisit((latest) => (latest.sessionId === session.id ? applyIndependentOutcome(latest, outcome) : latest));
     } catch {
       if (current()) {
         setVisit((latest) =>
-          latest.sessionId === session.id ? applyIndependentOutcome(latest, { state: 'uncertain', command: original }) : latest,
+          latest.sessionId === session.id
+            ? applyIndependentOutcome(latest, { state: 'uncertain', command: original })
+            : latest,
         );
       }
     }
@@ -241,7 +240,9 @@ export function IndependentMeasuresVisit({
           busy={busy}
           correction={correctionUnits.length > 0}
           {...(visit.retry ? {} : { onConfirm: () => void submit() })}
-          {...(visit.retry ? {} : { onCancel: () => current() && setVisit((latest) => cancelIndependentReview(latest)) })}
+          {...(visit.retry
+            ? {}
+            : { onCancel: () => current() && setVisit((latest) => cancelIndependentReview(latest)) })}
         />
       ) : (
         <IndependentMeasuresEditor
@@ -256,7 +257,8 @@ export function IndependentMeasuresVisit({
             current() && (setValidationSubmitted(false), setVisit((latest) => editMeasure(latest, unit, { text })))
           }
           onClear={(unit) =>
-            current() && (setValidationSubmitted(false), setVisit((latest) => editMeasure(latest, unit, { clear: true })))
+            current() &&
+            (setValidationSubmitted(false), setVisit((latest) => editMeasure(latest, unit, { clear: true })))
           }
           onReview={stageReview}
         />

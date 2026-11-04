@@ -30,7 +30,11 @@ import {
   observeIndependentWork,
   workWithinBound,
 } from '../src/library/independent-measures/cost';
-import { retryOriginal, submitIndependentEdits, type MeasureSender } from '../src/library/independent-measures/commands';
+import {
+  retryOriginal,
+  submitIndependentEdits,
+  type MeasureSender,
+} from '../src/library/independent-measures/commands';
 import { independentActionClass } from '../src/library/independent-measures/recovery';
 import { newCsrfToken } from '../src/session/csrf';
 
@@ -182,11 +186,7 @@ test('new, withdrawn and unsupported measures keep their own saved values withou
   ];
   const page = { ...volume, unit: 'page', label: 'pages', amount: '4', kind: 'recorded' as const };
   const edited = editMeasure(readyVisit(sessionId, 3, oldMeasures), 'volume', { text: '8' });
-  const replaced = refreshIndependentVisit(
-    edited,
-    4,
-    [{ ...chapter, amount: '11', kind: 'recorded' as const }, page],
-  );
+  const replaced = refreshIndependentVisit(edited, 4, [{ ...chapter, amount: '11', kind: 'recorded' as const }, page]);
   expect(replaced.drafts.map(({ unit, text }) => [unit, text])).toEqual([
     ['chapter', '11'],
     ['page', '4'],
@@ -586,9 +586,9 @@ test('mounted visit refreshes pristine props and preserves a later field edit th
     expect(review?.textContent).toContain(m.library_progress_measures_review_unchanged({ unit: 'chapter' }));
     expect(review?.textContent).toContain(m.library_progress_measures_review_amount({ unit: 'volume', amount: '7' }));
     await click(m.library_progress_confirm_correction());
-    expect(calls.map(({ sessionId: id, revision, measureId, amount }) => ({ id, revision, measureId, amount }))).toEqual([
-      { id: sessionId, revision: 5, measureId: 'volume', amount: '7' },
-    ]);
+    expect(
+      calls.map(({ sessionId: id, revision, measureId, amount }) => ({ id, revision, measureId, amount })),
+    ).toEqual([{ id: sessionId, revision: 5, measureId: 'volume', amount: '7' }]);
 
     await act(async () => root!.unmount());
     root = undefined;
