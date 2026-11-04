@@ -293,7 +293,7 @@ function validJournalDate(value: unknown): boolean {
   return day <= days;
 }
 
-function supportedRecord(row: ObjectValue, section: MergeSection) {
+function supportedRecord(row: ObjectValue, section: MergeSection, version: LibraryArchiveManifest['version']) {
   if (section === 'annotations') {
     if (
       !exactKeys(
@@ -503,7 +503,8 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (size > LIBRARY_ARCHIVE_LIMITS.pageBytes) fail('bounds');
     recordBytes += size;
     if (recordBytes > LIBRARY_ARCHIVE_LIMITS.recordBytes) fail('bounds');
-    if ((archiveMergeSections as readonly string[]).includes(section)) supportedRecord(row, section as MergeSection);
+    if ((archiveMergeSections as readonly string[]).includes(section))
+      supportedRecord(row, section as MergeSection, manifest.version);
     const key = recordKey(row, section);
     if (seen.has(key)) fail('duplicate_record');
     seen.add(key);
@@ -520,7 +521,7 @@ export function decodeLibraryArchive(bytes: Uint8Array): LibraryArchive {
     if (section === 'assignments' && !labelIds.has(row.label_id as string)) fail('incomplete_capture');
   }
   if (recordBytes !== manifest.recordBytes) fail('inconsistent_manifest');
-  if (manifest.version >= 2) {
+  if (manifest.version === 2 || manifest.version === 3) {
     for (const section of exportSectionsV2) {
       const expected = manifest.sectionTotals[section];
       const actual = totals.get(section)!;
