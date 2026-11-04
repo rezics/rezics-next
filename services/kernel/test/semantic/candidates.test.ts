@@ -450,6 +450,12 @@ test('revisions and candidates page in order and every command is one revision o
 
 test('the kernel contract documents proposals, candidates and revisions', () => {
   const paths = openApiDocument(kernel).paths;
+  expect(paths['/v1/subjects/{id}/candidates']!.post).toMatchObject({
+    operationId: 'subject.propose',
+    'x-resource-types': ['semantic.revision'],
+    'x-authority-resource-types': ['semantic.context'],
+    'x-authority-resource-id': '00000000-0000-8000-8000-000000000000',
+  });
   const operations = [
     [
       paths['/v1/subjects/{id}/candidates']!.post!,

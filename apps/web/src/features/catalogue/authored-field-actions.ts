@@ -42,8 +42,7 @@ export const loadAuthoredField = createServerFn({ method: 'POST', strict: false 
   .validator(originalReaderInput(address))
   .handler(async ({ data }): Promise<AuthoredRead> => {
     const authorization = await candidateAuthorization(data.expectedReader);
-    if (!authorization) return { ok: false, reason: 'denied' };
-    return readAuthoredField(kernelClient(), data, requestLocale() ?? 'en');
+    return readAuthoredField(kernelClient(), data, requestLocale() ?? 'en', authorization ?? undefined);
   });
 
 export const submitAuthoredField = createServerFn({ method: 'POST', strict: false })

@@ -14,8 +14,10 @@ import {
   candidateContext,
   candidateFailure,
   readCandidates,
+  readCandidateViewerActions,
   type CandidateFailure,
   type CandidateRead,
+  type ViewerActionsObservation,
 } from '../../subject/candidates';
 import { originalLanguage } from '../../subject/language';
 import { bestRank, isRecord } from '../pages/shared';
@@ -36,9 +38,11 @@ export type AuthoredRead =
       ok: true;
       public: SubjectRead;
       release: Release;
+      releaseDigest: string;
       property: string;
       selected: Statement | null;
       body: AuthoredBody | null;
+      actions: ViewerActionsObservation;
       session?: string;
     };
 export type AuthoredReview = {
@@ -163,6 +167,7 @@ export async function readAuthoredField(
   client: KernelClient,
   address: AuthoredAddress,
   locale: string,
+  authorization?: string,
 ): Promise<AuthoredRead> {
   try {
     // These reads are independent. Public selection never borrows the editor's bearer.
@@ -201,14 +206,19 @@ export async function readAuthoredField(
           statement.value.content.language === language,
       ) ?? null;
     const session = new Headers(current.headers).get('rezics-session-token') ?? address.session;
-    const body = statement ? await readAuthoredBody(client, address.id, statement, undefined, session) : null;
+    const [body, actions] = await Promise.all([
+      statement ? readAuthoredBody(client, address.id, statement, undefined, session) : null,
+      readCandidateViewerActions(client, authorization),
+    ]);
     return {
       ok: true,
       public: current.data,
       release,
+      releaseDigest: active.data.digest,
       property,
       selected: statement,
       body,
+      actions,
       ...(session ? { session } : {}),
     };
   } catch {
@@ -261,7 +271,7 @@ export async function readAuthoredReview(
 ): Promise<AuthoredReview> {
   const [comparison, form] = await Promise.all([
     readCandidates(client, authorization, address.id, address.property, address.cursor, undefined, address.session),
-    readAuthoredField(client, address, locale),
+    readAuthoredField(client, address, locale, authorization),
   ]);
   if (!comparison.ok) return { comparison, body: null };
   if (!form.ok) return { comparison: form, body: null };
@@ -274,6 +284,7 @@ export async function readAuthoredReview(
     current: form,
     comparison: {
       ...comparison,
+      actions: form.actions,
       fields: [{ id: address.property, label: pickText(field.labels, locale).text, multivalued: field.multivalued }],
       names: Object.fromEntries(Object.entries(form.release.properties).map(([id, field]) => [id, field.labels])),
     },

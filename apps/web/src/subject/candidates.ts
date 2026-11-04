@@ -11,6 +11,20 @@ export function candidateHasPayload(candidate: NativeCandidatePage['candidates']
 }
 export type CandidateField = { id: string; label: string; multivalued?: boolean };
 export type CandidateSlot = { target?: string; sameAs?: string; key?: string };
+export type ViewerActionsObservation =
+  | { state: 'available'; actions: { action: string; operations: string[] }[] }
+  | { state: 'unavailable' };
+
+/** A missing component is unknown, while a present projection without this pair is a current denial. */
+export function viewerOperationAllowed(
+  observation: ViewerActionsObservation | undefined,
+  action: string,
+  operation: string,
+): boolean | undefined {
+  if (!observation || observation.state !== 'available') return undefined;
+  return observation.actions.some((entry) => entry.action === action && entry.operations.includes(operation));
+}
+
 export type CandidateSelection = { candidate: string; rank: 'normal' | 'preferred' };
 export type ReviewContext = NonNullable<
   Awaited<ReturnType<ReturnType<KernelClient['contexts']>['get']>>['data']
@@ -32,6 +46,7 @@ export type CandidateRead =
       fields: CandidateField[];
       names: Record<string, Record<string, string>>;
       page: CandidatePage | null;
+      actions?: ViewerActionsObservation;
       contextReview?: ContextComparison;
       session?: string;
     };
@@ -123,6 +138,29 @@ export async function readCandidateAuthority(
     };
   } catch {
     return unavailable;
+  }
+}
+
+/** Read the exact mounted operation projection for the Global Context used by subject candidates. */
+export async function readCandidateViewerActions(
+  client: KernelClient,
+  authorization?: string,
+): Promise<ViewerActionsObservation> {
+  if (!authorization) return { state: 'unavailable' };
+  try {
+    const authority = await readCandidateAuthority(client, authorization, candidateContext);
+    if (authority.actions.state !== 'available') return { state: 'unavailable' };
+    const granted = new Set(authority.actions.operations);
+    return {
+      state: 'available',
+      actions: [
+        { action: 'statement:propose', operations: ['subject.propose'] },
+        { action: 'context:accept', operations: ['subject.accept_candidate', 'subject.reject_candidate'] },
+        { action: 'context:adopt', operations: ['subject.adopt'] },
+      ].map(({ action, operations }) => ({ action, operations: operations.filter((operation) => granted.has(operation)) })),
+    };
+  } catch {
+    return { state: 'unavailable' };
   }
 }
 
