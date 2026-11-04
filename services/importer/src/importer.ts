@@ -2385,6 +2385,7 @@ export class Importer {
               if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
             return planned;
           } catch (error) {
+            console.error('showcase-credit staged record failed:', error);
             if (error instanceof Interrupted) throw error;
             if (
               error instanceof ObservationConflictError ||
