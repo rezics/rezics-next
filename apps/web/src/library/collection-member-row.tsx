@@ -109,9 +109,7 @@ export function CollectionMemberViewerDetails({
             </p>
           )}
           {!currentVote ? (
-            <p className="text-muted-foreground">
-              {m.collection_viewer_score_unavailable()}
-            </p>
+            <p className="text-muted-foreground">{m.collection_viewer_score_unavailable()}</p>
           ) : row!.vote.state === 'present' ? (
             <p className="text-muted-foreground" title={question!.meaning}>
               <span className="sr-only">{question!.meaning}: </span>

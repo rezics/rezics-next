@@ -70,9 +70,9 @@ test('current private facts match duplicate occurrences by exact row key and ori
     rowKey: memberIds[1],
     entry: { state: 'absent' },
   });
-  expect(collectionViewerFactForMember(projection, { ...members[0]!, id: '00000000-0000-4000-8000-000000000299' })).toBe(
-    undefined,
-  );
+  expect(
+    collectionViewerFactForMember(projection, { ...members[0]!, id: '00000000-0000-4000-8000-000000000299' }),
+  ).toBe(undefined);
   expect(collectionViewerVoteCurrent(facts.rows[0]!, facts.question)).toBe(true);
   expect(
     collectionViewerVoteCurrent(facts.rows[0]!, { ...facts.question!, revision: facts.question!.revision + 1 }),

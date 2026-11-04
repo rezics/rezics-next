@@ -404,9 +404,9 @@ function CollectionPageLifetime({
   );
   const personalActionAllowed = Boolean(
     viewerId &&
-      session.csrfToken &&
-      personalEntryReadAdmitted &&
-      (personalEntryWriteAdmitted || personalEntryDeleteAdmitted),
+    session.csrfToken &&
+    personalEntryReadAdmitted &&
+    (personalEntryWriteAdmitted || personalEntryDeleteAdmitted),
   );
   const updateAdmitted = admitsCollectionOperation(page.viewerActions, 'collection:update', 'collection.update');
   // The editor also needs the loaded private metadata, independently of native action admission.
@@ -2215,10 +2215,7 @@ function CollectionPageLifetime({
                       if (!memberId) return undefined;
                       const title = pageText(libraryTitleValue(member.subject.label), getLocale()).text;
                       const subject = subjectHref({ id: member.subject.id, label: title }, getLocale()).href;
-                      return collectionViewerActionHref(
-                        subject,
-                        collectionMemberReturnAddress(currentHref, memberId),
-                      );
+                      return collectionViewerActionHref(subject, collectionMemberReturnAddress(currentHref, memberId));
                     },
                   }
                 : {})}
@@ -2492,9 +2489,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
               ratio: collectionMemberRatio(subject, typeRatios, listPresentations),
               ...(presentation ? { listPresentation: presentation } : {}),
             }}
-            state={
-              rowDetails
-            }
+            state={rowDetails}
             menuTrigger={menu}
           />
         </div>

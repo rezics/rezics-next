@@ -3,10 +3,7 @@ import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
 import { CollectionReadMembers } from '../library/collection-page';
 import type { CollectionViewerProjection } from '../library/collection-viewer/model';
-import {
-  collectionMemberReturnAddress,
-  collectionViewerActionHref,
-} from '../library/collection-viewer/model';
+import { collectionMemberReturnAddress, collectionViewerActionHref } from '../library/collection-viewer/model';
 import { subjectHref } from '../subject/subject-href';
 import type { CollectionMember } from '../library/reads';
 
@@ -25,7 +22,13 @@ const subject: NonNullable<CollectionMember['subject']> = {
 };
 const members: CollectionMember[] = [
   { id: memberIds[0]!, subjectId, subject, note: 'Curator note: start here.', addedAt: '2026-10-01T00:00:00Z' },
-  { id: memberIds[1]!, subjectId, subject, note: 'Curator note: a second occurrence.', addedAt: '2026-10-02T00:00:00Z' },
+  {
+    id: memberIds[1]!,
+    subjectId,
+    subject,
+    note: 'Curator note: a second occurrence.',
+    addedAt: '2026-10-02T00:00:00Z',
+  },
   { id: memberIds[2]!, subjectId, subject, note: 'Curator note: score is withheld.', addedAt: '2026-10-03T00:00:00Z' },
 ];
 const questionId = '00000000-0000-7000-8000-000000000001';
@@ -42,7 +45,12 @@ const projection: CollectionViewerProjection = {
     {
       rowKey: memberIds[0]!,
       subjectId,
-      entry: { state: 'present', incarnationId: '00000000-0000-4000-8000-000000000301', entryState: 'in_progress', revision: 4 },
+      entry: {
+        state: 'present',
+        incarnationId: '00000000-0000-4000-8000-000000000301',
+        entryState: 'in_progress',
+        revision: 4,
+      },
       vote: { state: 'present', questionId, questionRevision: 1, units: 14, revision: 5 },
     },
     {
@@ -65,10 +73,7 @@ const collectionHref =
 function actionHref(member: CollectionMember) {
   if (!member.subject) return undefined;
   const destination = subjectHref({ id: member.subject.id, label: 'The same book' }, 'en').href;
-  return collectionViewerActionHref(
-    destination,
-    collectionMemberReturnAddress(collectionHref, member.id),
-  );
+  return collectionViewerActionHref(destination, collectionMemberReturnAddress(collectionHref, member.id));
 }
 
 function Showcase({ layout }: { layout: 'grid' | 'list' }) {

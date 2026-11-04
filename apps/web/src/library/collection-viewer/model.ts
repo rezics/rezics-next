@@ -44,10 +44,7 @@ export function collectionViewerFactForMember(
   return matches.length === 1 ? matches[0] : undefined;
 }
 
-export function collectionViewerVoteCurrent(
-  row: CollectionViewerFact,
-  question: CollectionViewerQuestion,
-): boolean {
+export function collectionViewerVoteCurrent(row: CollectionViewerFact, question: CollectionViewerQuestion): boolean {
   return (
     question !== null &&
     question.id === QUESTION &&
