@@ -527,7 +527,10 @@ function OccurrenceControls({
                   if (!enabled || !isCurrent() || !journalUpdateAllowed || custody.command || custody.flight || review)
                     return;
                   setDraft((current) => ({ ...current, [field]: selection }));
-                  setJournalNotice(null);
+                  // Editing a retained field cannot remove the only current-read/re-review recovery.
+                  setJournalNotice(
+                    conflictRevision !== null && reviewedRevision !== journal.revision ? 'conflict' : null,
+                  );
                   setRefusedField(null);
                 }}
               />

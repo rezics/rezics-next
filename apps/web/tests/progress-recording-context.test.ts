@@ -367,13 +367,15 @@ test('Record and correct exact progress and a selected-field journal with retain
     await act(async () => button(m.library_occurrence_save()).click());
     expect(journalSection().textContent).toContain(m.library_journal_draft_retained());
     expect(field(m.library_occurrence_start_date()).value).toBe('2025');
+    await setField(m.library_occurrence_start_date(), '2026');
+    expect(journalSection().textContent).toContain(m.library_journal_draft_retained());
     journal = { ...journal, revision: 2, reflection: 'Changed elsewhere' };
     await act(async () => button(m.library_occurrence_read_current()).click());
     await act(async () => button(m.library_occurrence_review_latest()).click());
     refuse = false;
     await act(async () => button(m.library_journal_review()).click());
     await act(async () => button(m.library_occurrence_save()).click());
-    expect(journalWrites[3]?.body).toEqual({ revision: 2, startDate: { year: 2025 } });
+    expect(journalWrites[3]?.body).toEqual({ revision: 2, startDate: { year: 2026 } });
     expect(journalWrites[3]?.key).not.toBe(journalWrites[2]?.key);
   } finally {
     await act(async () => root.unmount());
