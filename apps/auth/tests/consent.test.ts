@@ -266,7 +266,13 @@ test(
       expect(await row.innerText()).toContain('Not available');
       expect(await row.getByRole('checkbox').count()).toBe(0);
       await approve(page);
-      expect(JSON.parse(writes()[0]!.body)).toEqual({ client_id: 'unnamed', scope: [...granted, 'offline_access'] });
+      expect(JSON.parse(writes()[0]!.body)).toEqual({
+        client_id: 'unnamed',
+        scope: [...granted, 'offline_access'],
+        reviewed_account_id: 'person-1',
+        reviewed_scopes: granted,
+        reviewed_requested: ['offline_access', unavailable],
+      });
       expect(await page.locator('main script').count()).toBe(0);
     } finally {
       await page.context().close();
@@ -283,7 +289,7 @@ test(
     try {
       await ready(page);
       await page.getByRole('button', { name: 'Decline', exact: true }).click();
-      await page.getByRole('status').filter({ hasText: 'The client got no new access.' }).waitFor();
+      await page.getByRole('status').filter({ hasText: 'Review declined. This choice sends no approval.' }).waitFor();
       expect(writes()).toHaveLength(0);
       expect(reads()).toHaveLength(1);
       expect(new URL(page.url()).origin).toBe(origin);
