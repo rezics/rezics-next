@@ -57,7 +57,17 @@ const source: VndbRow = {
     baseline: null,
   },
   decision: null,
-  fieldsTreatment: { state: 'review', other: 'retain' },
+  scoreDecision: null,
+  consumptionDateReview: null,
+  consumptionDateOutcome: null,
+  nativeScore: {
+    question: null,
+    currentVote: { state: 'unavailable' },
+    sourceReason: 'private source',
+    exactUnits: null,
+    admission: { status: 'unavailable', reason: 'native-question-unavailable' },
+  },
+  fieldsTreatment: { state: 'review', score: 'private source', other: 'retain' },
 };
 function visit(): VndbVisit {
   const controller = new AbortController();
@@ -137,6 +147,7 @@ test('XML → exact target/state review → explicit selected apply → a separa
             state: 'playing',
             baseline: null,
             replace: false,
+            action: 'state',
           });
         if (path.endsWith(':apply'))
           return Response.json({ uploadId, outcomes: [{ ordinal: 0, reviewId, status: 'applied' }], stopped: null });

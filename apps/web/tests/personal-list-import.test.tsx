@@ -49,7 +49,17 @@ function row(ordinal: number): VndbRow {
     match: { status: 'unmatched', candidates: [] },
     target: null,
     decision: null,
-    fieldsTreatment: { state: 'review', other: 'retain' },
+    scoreDecision: null,
+    consumptionDateReview: null,
+    consumptionDateOutcome: null,
+    nativeScore: {
+      question: null,
+      currentVote: { state: 'unavailable' },
+      sourceReason: 'private source',
+      exactUnits: null,
+      admission: { status: 'unavailable', reason: 'native-question-unavailable' },
+    },
+    fieldsTreatment: { state: 'review', score: 'private source', other: 'retain' },
   };
 }
 
@@ -174,6 +184,7 @@ test('confirms only reviewed rows and retries an unknown apply with the identica
           state: command.body.action === 'state' ? command.body.state : null,
           baseline: null,
           replace: false,
+          action: 'state',
         },
       }),
       apply: async (command) => {
@@ -225,6 +236,7 @@ test('keeps acknowledged outcomes and the remaining selection after native cance
           state: null,
           baseline: null,
           replace: false,
+          action: 'state',
         },
       }),
       apply: async () => ({
@@ -303,6 +315,7 @@ test.each(['denied', 'unknown'] as const)('source replacement retires review bef
     state: null,
     baseline: null,
     replace: false,
+    action: 'state',
   };
   const journey = createVndbJourney({
     visit: visit(),
@@ -357,6 +370,7 @@ test('a lost review acknowledgement freezes its body and key and a new review ne
                 state: command.body.action === 'state' ? command.body.state : null,
                 baseline: null,
                 replace: false,
+                action: 'state',
               },
             };
       },

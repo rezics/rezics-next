@@ -9,8 +9,8 @@ Web owns a signed-in visit for a person's own VNDB XML export. Commerce owns pri
 row review, and application. The Kernel routes are mounted at `/v1/libraryImports/vndb`, and the native contract is
 documented in [Personal VNDB list import](../../../../docs/library-import-vndb.md). The installed `@rezics/client`
 surface exposes typed `libraryImports.vndb` methods for preview, bounded page reads, source evidence, state review,
-apply, cancel, and deletion. Its current page and review types do not publish score review/result fields, and Content
-has not admitted the score effect. Web keeps score actions unavailable until both boundaries are available; state
+apply, cancel, and deletion. Its current page and review types publish score context, but Content
+has not admitted the conditional score effect. Web keeps score actions unavailable until both boundaries are available; state
 import and source inspection remain usable.
 
 Decision: display native `fields.score` with its exact raw spelling, retaining `fields.vote` compatibility; keep the
@@ -22,16 +22,16 @@ authoritative page without a decision removes the previous local selection.
 
 Decision: derive page, review and apply-result types from the installed generated methods, freeze apply operands
 when confirmation opens, and withdraw the previous selection as soon as replacement review begins, including refusal.
-The installed declarations still lack `action: 'score'`, `nativeScore`, `scoreDecision` and `scoreReviewId`; the request
-aliases remain the minimal seam for their publication. Score review can become usable when those types are published;
-vote effects separately require Content's conditional writer.
+The generated declarations include score review and context fields; state commands select the generated state
+branch and require state review IDs. This visit keeps score actions unavailable while Content's conditional writer
+is unavailable.
 
-Decision: derive score-only aliases from generated fields, leaving unpublished fields as `never`; source replacement
+Decision: derive score-only aliases from generated fields; source replacement
 immediately retires private review authority even if deletion fails, and a credential change permanently retires its visit.
 Replacement retains only the upload identifier and exact cleanup/new-preview retry commands until native cleanup
 succeeds. It cannot reread the retired source, recover its selection or confirm an older review. A lost cleanup
-acknowledgement retries the same deletion before submitting the replacement XML. Score review, consent and vote
-effects remain unavailable on the current state-only client; completing them requires the published score contract.
+acknowledgement retries the same deletion before submitting the replacement XML. Score commands, consent and vote
+effects remain unavailable in this state-only visit; completing them requires Content's conditional admission.
 
 The native source accepts only the person's uploaded `vndb-export version="1.0"` XML. It does not claim another
 account, fetch provider data, create catalogue subjects or identities, publish reviews, or turn private notes into

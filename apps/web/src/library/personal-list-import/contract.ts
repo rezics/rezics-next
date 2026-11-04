@@ -49,9 +49,11 @@ export type VndbPreview = {
 };
 
 export type VndbPage = Omit<GeneratedVndbPage, 'rows'> & { rows: VndbRow[] };
-export type VndbDecision = GeneratedVndbDecision;
-export type VndbApplyResult = GeneratedVndbApplyResult;
-export type VndbOutcome = VndbApplyResult['outcomes'][number];
+export type VndbDecision = Extract<GeneratedVndbDecision, { state: string | null }>;
+/** This visit composes only state receipts, even when the producer also publishes score review. */
+export type VndbApplyRow = GeneratedVndbApply['rows'][number] & { reviewId: string; scoreReviewId?: never };
+export type VndbOutcome = GeneratedVndbApplyResult['outcomes'][number] & { reviewId: string; scoreReviewId?: never };
+export type VndbApplyResult = Omit<GeneratedVndbApplyResult, 'outcomes'> & { outcomes: VndbOutcome[] };
 
 export type VndbReviewInput = GeneratedVndbReview &
   (
@@ -64,7 +66,7 @@ export type VndbCommand =
   | { kind: 'page'; uploadId: string; offset: number }
   | { kind: 'source'; uploadId: string }
   | { kind: 'review'; key: string; uploadId: string; body: VndbReviewInput }
-  | { kind: 'apply'; uploadId: string; body: GeneratedVndbApply }
+  | { kind: 'apply'; uploadId: string; body: Omit<GeneratedVndbApply, 'rows'> & { rows: VndbApplyRow[] } }
   | { kind: 'cancel'; key: string; uploadId: string }
   | { kind: 'delete'; key: string; uploadId: string };
 
