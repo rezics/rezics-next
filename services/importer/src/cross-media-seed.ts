@@ -1550,7 +1550,7 @@ export async function seedCrossMedia(
         }
       }
       const run = await importer.runRecords(registration, records());
-      ensure(run.status === 'committed', `Cross-media ${provider} import failed: ${run.status}`);
+      ensure(run.status === 'committed', `Cross-media ${provider} import failed: ${run.status} (${run.diagnostic})`);
       runs[provider] = run;
     }
     const hasBangumiInput = plan.records.bangumi.length > 0 || plan.entities.bangumi.length > 0;
