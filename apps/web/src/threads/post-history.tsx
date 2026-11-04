@@ -272,6 +272,7 @@ function HistoryDisclosure({
   }, [connection, continuationStatus, lifetime, regionId, revisions]);
 
   async function load(cursor?: string, keyboardElement?: HTMLButtonElement) {
+    const requestConnection = lifetime.ticket();
     const pendingReturn = returnAttempt.current;
     const returning =
       pendingReturn !== undefined &&
@@ -286,13 +287,6 @@ function HistoryDisclosure({
         pathname,
         locationSearch,
       );
-    if (pendingReturn) {
-      console.log('history-return-load-debug', {
-        cursorMatches: pendingReturn.target.historyCursor === cursor,
-        returning,
-        ownsConnection: lifetime.ownsConnection(connection),
-      });
-    }
     if (pendingReturn && !returning) {
       retireHistoryReturnReceipt(pendingReturn.target.token);
       returnAttempt.current = undefined;
@@ -312,23 +306,16 @@ function HistoryDisclosure({
       cursor !== undefined && keyboardElement && document.activeElement === keyboardElement
         ? keyboardElement
         : undefined;
-    const request = lifetime.begin(connection, source, postId, cursor, locale, credentialMode, viewerId);
-    if (pendingReturn) console.log('history-return-request-debug', !!request);
+    const request = lifetime.begin(requestConnection, source, postId, cursor, locale, credentialMode, viewerId);
     if (!request) return;
-    const intent = keyboardOwner ? { connection, element: keyboardOwner } : undefined;
+    const intent = keyboardOwner ? { connection: requestConnection, element: keyboardOwner } : undefined;
     continuationIntent.current = intent;
     try {
       // Fence the queued transport itself, before it can borrow replacement session credentials.
       await Promise.resolve();
-      if (pendingReturn) {
-        console.log('history-return-fence-debug', {
-          owns: lifetime.owns(request),
-          bindingCurrent: historicalBindingCurrent(source, request.binding),
-        });
-      }
       if (!lifetime.owns(request) || !historicalBindingCurrent(source, request.binding)) return;
       if (!ready()) {
-        lifetime.resetDisclosure(connection);
+        lifetime.resetDisclosure(requestConnection);
         if (returning && pendingReturn) {
           retireHistoryReturnReceipt(pendingReturn.target.token);
           returnAttempt.current = undefined;
@@ -362,7 +349,7 @@ function HistoryDisclosure({
         !historicalBindingCurrent(source, request.binding, result.provenance.actualReader) ||
         !lifetime.acceptReader(request, result.provenance.actualReader)
       ) {
-        if (lifetime.owns(request)) lifetime.resetDisclosure(connection);
+        if (lifetime.owns(request)) lifetime.resetDisclosure(requestConnection);
         if (returning && pendingReturn) {
           retireHistoryReturnReceipt(pendingReturn.target.token);
           returnAttempt.current = undefined;
@@ -390,10 +377,10 @@ function HistoryDisclosure({
         intent &&
         continuationIntent.current === intent &&
         lifetime.snapshot().open &&
-        lifetime.ownsConnection(connection)
+        lifetime.ownsConnection(requestConnection)
       ) {
         continuationBoundary.current = {
-          connection,
+          connection: requestConnection,
           revisionId: page.revisions[0]?.revisionId ?? null,
           intent,
         };
@@ -443,24 +430,31 @@ function HistoryDisclosure({
     if (!returnIntent) return;
     const key = `${returnIntent.token}:${returnIntent.revisionId}`;
     if (startedReturn.current === key) return;
-    startedReturn.current = key;
-    const command = consumeHistoryReturnCommand({
-      intent: returnIntent,
-      locale,
-      credentialMode,
-      source,
-      pathname,
-      search: locationSearch,
+    let active = true;
+    queueMicrotask(() => {
+      if (!active || startedReturn.current === key) return;
+      startedReturn.current = key;
+      const command = consumeHistoryReturnCommand({
+        intent: returnIntent,
+        locale,
+        credentialMode,
+        source,
+        pathname,
+        search: locationSearch,
+      });
+      if (!command) {
+        setReturnState('lost');
+        return;
+      }
+      returnAttempt.current = { target: command.target, revisionId: returnIntent.revisionId };
+      returnFocusOwned.current = command.focusRequested;
+      setReturnState('loading');
+      lifetime.update(lifetime.ticket(), (view) => ({ ...view, open: true }));
+      void load(command.target.historyCursor);
     });
-    if (!command) {
-      setReturnState('lost');
-      return;
-    }
-    returnAttempt.current = { target: command.target, revisionId: returnIntent.revisionId };
-    returnFocusOwned.current = command.focusRequested;
-    setReturnState('loading');
-    lifetime.update(connection, (view) => ({ ...view, open: true }));
-    void load(command.target.historyCursor);
+    return () => {
+      active = false;
+    };
   }, [
     connection,
     credentialMode,
