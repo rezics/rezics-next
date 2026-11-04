@@ -113,7 +113,7 @@ async function presentProgressIndex(page: ProgressIndex, locale: string): Promis
     page.selectedSubject,
     ...page.sessions.flatMap((session) => [session.subject, session.versionSubject]),
   ]);
-  if (page.signedIn) {
+  if (page.signedIn && page.viewerState !== 'account_retired' && page.viewerState !== 'unavailable') {
     try {
       const release = await readRelease();
       const subject = page.selectedSubject;
@@ -137,7 +137,13 @@ export const readProgressIndex = createServerFn({ method: 'GET' })
 
 export type CurrentViewerProgressIndex = {
   viewer: string | null;
-  requested: { subjectId: string; cursor: string | null };
+  requested: {
+    subjectId: string;
+    state?: string;
+    mode?: string;
+    profileId?: string;
+    cursor: string | null;
+  };
   locale: string;
   page: ProgressIndex;
 };
@@ -149,7 +155,13 @@ export const readCurrentViewerProgressIndex = createServerFn({ method: 'GET' })
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
     const locale = requestLocale(request) ?? 'en';
-    const requested = { subjectId: data.subjectId ?? '', cursor: data.cursor ?? null };
+    const requested = {
+      subjectId: data.subjectId ?? '',
+      ...(data.state === undefined ? {} : { state: data.state }),
+      ...(data.mode === undefined ? {} : { mode: data.mode }),
+      ...(data.profileId === undefined ? {} : { profileId: data.profileId }),
+      cursor: data.cursor ?? null,
+    };
     // With these preconditions, a signed-in reader necessarily prepared the cookie's active
     // credential/subject pair. Explicit bearer requests have no such subject association;
     // missing cookies/configuration must never reuse WeakMap state left on a retained request.
@@ -163,10 +175,18 @@ export const readCurrentViewerProgressIndex = createServerFn({ method: 'GET' })
       locale,
       page: {
         signedIn: false,
+        viewerState: 'signed_out',
         subjectId: requested.subjectId,
+        ...(requested.state === undefined ? {} : { state: requested.state }),
+        ...(requested.mode === undefined ? {} : { mode: requested.mode }),
+        ...(requested.profileId === undefined ? {} : { profileId: requested.profileId }),
         selectedSubject: null,
         sessions: [],
         next: null,
+        emptyKind:
+          !requested.subjectId && requested.state === undefined && requested.mode === undefined && requested.profileId === undefined
+            ? 'owner-empty'
+            : 'filtered-empty',
         idempotencyKey,
       },
     });

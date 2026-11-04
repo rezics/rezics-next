@@ -47,7 +47,7 @@ test('route and server address admission retain invalid operands and share nativ
   expect(progressAddressIssue({ subjectId: id, cursor: 'x'.repeat(4096) })).toBeUndefined();
   expect(progressAddressIssue({ id, changes: opaque, units: opaque })).toBeUndefined();
   expect(progressAddressIssue(progressIndexAddress({}))).toBeUndefined();
-  expect(progressAddressIssue(progressIndexAddress({ cursor: opaque }))).toBe('subjectId');
+  expect(progressAddressIssue(progressIndexAddress({ cursor: opaque }))).toBeUndefined();
   expect(correctProgressAddress({ subjectId: id, cursor: 'invalid' }, 'cursor')).toEqual({ subjectId: id });
   expect(correctProgressAddress({ subjectId: 'invalid', cursor: opaque }, 'subjectId', id)).toEqual({
     subjectId: id,
@@ -66,38 +66,40 @@ test('route and server address admission retain invalid operands and share nativ
   });
 });
 
-test('invalid input makes no native read; valid empty history, missing subjects and native cursor refusal differ', async () => {
+test('owner discovery stays unavailable until its generated client route is installed', async () => {
   const calls: Request[] = [];
-  let status = 200;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input, init) => {
       const call = new Request(input, init);
       calls.push(call);
-      const body =
-        status !== 200
-          ? { code: status === 404 ? 'not_found' : 'invalid_cursor', status }
-          : call.url.includes('/subjects/')
-            ? { subject: { id, type: 'schema:Book' }, summary: { id, type: 'schema:Book', label: 'Book' } }
-            : { progressSessions: [], next: null };
-      return Response.json(body, { status });
+      return Response.json({ code: 'unexpected_request' }, { status: 500 });
     },
   });
-  for (const input of [{ subjectId: 'invalid' }, { subjectId: '' }, { subjectId: id, cursor: 'x'.repeat(4097) }]) {
+  for (const input of [
+    { subjectId: 'invalid' },
+    { subjectId: '' },
+    { subjectId: id, cursor: 'x'.repeat(4097) },
+    { state: 'retired' },
+    { mode: 'unknown' },
+    { state: 'active', profileId: 'legacy-fixed-v1' },
+  ]) {
     expect((await loadProgressIndex(client, request(), env, input)).addressIssue).toBeDefined();
   }
   for (const input of [{ id: 'invalid' }, { id, changes: '' }, { id, units: 'x'.repeat(4097) }])
     await expect(loadProgressSession(client, request(), env, input)).rejects.toBeInstanceOf(ProgressAddressError);
   expect(calls).toHaveLength(0);
-  const empty = await loadProgressIndex(client, request(), env, { subjectId: id });
-  expect(empty).toMatchObject({ signedIn: true, sessions: [], selectedSubject: { id } });
+  const ownerEmpty = await loadProgressIndex(client, request(), env, {});
+  expect(ownerEmpty).toMatchObject({ signedIn: true, viewerState: 'unavailable', sessions: [], next: null });
+  const empty = await loadProgressIndex(client, request(), env, { subjectId: id, mode: 'cursor_position' });
+  expect(empty).toMatchObject({
+    signedIn: true,
+    viewerState: 'unavailable',
+    sessions: [],
+    mode: 'cursor_position',
+    next: null,
+  });
   expect(empty.addressIssue).toBeUndefined();
-  expect(calls[0]!.headers.has('x-csrf-token')).toBe(false);
-  status = 404;
-  expect((await loadProgressIndex(client, request(), env, { subjectId: id })).addressIssue).toBe('subjectId');
-  status = 400;
-  expect((await loadProgressIndex(client, request(), env, { subjectId: id, cursor: opaque })).addressIssue).toBe(
-    'cursor',
-  );
+  expect(calls).toHaveLength(0);
 });
 
 test('native stale history recovery resets only its own position', async () => {

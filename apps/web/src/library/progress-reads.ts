@@ -1,9 +1,9 @@
 import { progressDecimalPattern as decimal } from './progress-decimal-input';
-import { isNotFound } from '@tanstack/react-router';
 import { progressAddressIssue, ProgressAddressError, type ProgressAddressField } from './progress-address';
 import type { ProgressChoices, ProgressInputRules as ProfileProgressInputRules } from './progress-profile';
 import type { ProgressLabelInput } from './progress-label';
 import type { KernelClient } from '@rezics/client';
+import { isNotFound } from '@tanstack/react-router';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
@@ -212,12 +212,24 @@ export type ProgressSessionCore = Pick<
   subject: LibrarySubject | null;
   versionSubject: LibrarySubject | null;
   measures?: ProgressMeasureView[];
+  allowedActions?: {
+    open: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    edit: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    complete: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    abandon: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+  };
 };
 
 export type ProgressIndex = {
   signedIn: boolean;
+  viewerState?: 'signed_in' | 'signed_out' | 'account_retired' | 'unavailable';
   addressIssue?: ProgressAddressField;
   subjectId: string;
+  state?: string;
+  mode?: string;
+  profileId?: string;
+  emptyKind?: 'owner-empty' | 'filtered-empty';
+  staleContinuation?: boolean;
   selectedSubject: LibrarySubject | null;
   progressChoices?: ProgressChoices;
   choicesUnavailable?: boolean;
@@ -557,32 +569,51 @@ async function readUnits(client: KernelClient, sessionId: string, authorization:
   return readAddressData<{ completedUnits: string[]; next: string | null }>(result, 'units');
 }
 
-/** The person's sessions for one subject. A missing subject id reads nothing; a closed gate stays closed. */
+/** Subject-only readers retain their installed route; owner discovery awaits Content's generated client publication. */
 export async function loadProgressIndex(
   client: KernelClient,
   request: Request,
   env: Partial<SessionEnv>,
-  input: { subjectId?: string; cursor?: string },
+  input: { subjectId?: string; state?: string; mode?: string; profileId?: string; cursor?: string },
 ): Promise<ProgressIndex> {
   const authorization = await bearer(request, env);
   const idempotencyKey = crypto.randomUUID();
   const subjectId = input.subjectId ?? '';
   const addressIssue = progressAddressIssue(input);
-  if (!authorization || addressIssue || !subjectId) {
+  if (!authorization || addressIssue) {
     return {
       signedIn: authorization !== null,
+      viewerState: authorization ? 'signed_in' : 'signed_out',
       ...(addressIssue ? { addressIssue } : {}),
       subjectId,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+      selectedSubject: null,
+      sessions: [],
+      next: null,
+      ...(addressIssue ? { emptyKind: 'filtered-empty' as const } : {}),
+      idempotencyKey,
+    };
+  }
+  const typedFilter = input.state !== undefined || input.mode !== undefined || input.profileId !== undefined;
+  if (!subjectId || typedFilter) {
+    return {
+      signedIn: true,
+      viewerState: 'unavailable',
+      subjectId,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
       selectedSubject: null,
       sessions: [],
       next: null,
       idempotencyKey,
     };
   }
-  const load = (cursor?: string) => readList(client, subjectId, authorization, cursor);
   let page: { progressSessions: RawSession[]; next: string | null };
   try {
-    page = await load(input.cursor);
+    page = await readList(client, subjectId, authorization, input.cursor);
   } catch (error) {
     if (error instanceof ProgressAddressError || isNotFound(error))
       return {
@@ -595,17 +626,16 @@ export async function loadProgressIndex(
         idempotencyKey,
       };
     if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
-    page = await load();
+    page = await readList(client, subjectId, authorization);
   }
   const sessions = page.progressSessions.map((session) => presentSession(session));
   const selectedSubject =
     sessions.find((session) => session.subjectId === subjectId)?.subject ??
-    (await readSelectedSubject(client, subjectId, authorization));
+    (subjectId ? await readSelectedSubject(client, subjectId, authorization) : null);
   return {
     signedIn: true,
     subjectId,
     selectedSubject,
-    ...(!selectedSubject && !sessions.length ? { addressIssue: 'subjectId' as const } : {}),
     sessions,
     next: page.next,
     idempotencyKey,

@@ -8,6 +8,7 @@ import { ownedQueries } from './erasure-owned-queries.ts';
 import session from './erasure-owned-session.sql';
 import collection from './erasure-owned-collection.sql';
 import sessionDelete from './erasure-owned-session-delete.sql';
+import discoveryGeneration from './erasure-owned-progress-discovery.sql';
 import collectionDelete from './erasure-owned-collection-delete.sql';
 import collectionRetain from './erasure-owned-collection-retain.sql';
 import units from './erasure-owned-progress-unit.sql';
@@ -73,6 +74,7 @@ export const OWNED_PHASES = [
   'entry_annotation_review',
   'library_archive_merge',
   'shelf_score_head',
+  'progress_discovery_generation',
 ] as const;
 const childQueries: {
   units: typeof units;
@@ -108,7 +110,8 @@ type Kind =
   | 'copy_archive'
   | 'vndb_import'
   | 'collection_archive_recovery'
-  | 'library_archive_merge';
+  | 'library_archive_merge'
+  | 'progress_discovery_generation';
 export type OwnedGraphInput = {
   accountId: string;
   kind: Kind;
@@ -286,6 +289,21 @@ export async function purgeOwnedGraphPage(pool: Pool, input: OwnedGraphInput): P
           return noEffect({ kind, removed: 0, parent: null, retain: false, blocked: false, hasMore: false });
         return {
           value: { kind, removed, parent: null, retain: false, blocked: false, hasMore: Boolean(remaining.rowCount) },
+          events: [
+            {
+              type: 'com.rezics.library.account-graph.purged.v1',
+              subject: accountId,
+              data: { accountId, kind, removed },
+            },
+          ],
+        };
+      }
+      if (kind === 'progress_discovery_generation') {
+        const removed = (await discoveryGeneration.run(tx, args)).length;
+        const value = { kind, removed, parent: null, retain: false, blocked: false, hasMore: false };
+        if (!removed) return noEffect(value);
+        return {
+          value,
           events: [
             {
               type: 'com.rezics.library.account-graph.purged.v1',

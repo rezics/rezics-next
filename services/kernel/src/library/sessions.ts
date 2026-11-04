@@ -56,7 +56,7 @@ import { enterShelfWrite } from './shelf-counter-owner.ts';
 import { parseProgressSessionJournalPatch } from './progress-journal.ts';
 
 type Dependencies = { pool: Pool; access: Access; tokens: KeyRing; clock?: KernelClock };
-type Page = { limit?: number; cursor?: string };
+type Page = { limit?: number; cursor?: string; origin?: string; language?: string };
 type Client = CommandTransaction;
 export type ProgressSessionJournalAdmission = {
   identity: unknown;
@@ -675,6 +675,74 @@ export function createSessionCommands(config: Dependencies) {
     });
   }
 
+  async function listOwnerSessions(actor: Actor, filter: store.ProgressDiscoveryFilter, options: Page = {}) {
+    return snapshot(actor, 'progress_session:list', async (client, owner) => {
+      const size = options.limit ?? 20;
+      if (!Number.isInteger(size) || size < 1 || size > 50) throw new ProgressInvalidError('limit');
+      const route = requireRoute(owner.accountId);
+      const generation = await store.progressDiscoveryGeneration(client, route, owner.accountId);
+      const predicate = JSON.stringify({
+        subjectId: filter.subjectId ?? null,
+        state: filter.state ?? null,
+        mode: filter.mode ?? null,
+        profileId: filter.profileId ?? null,
+      });
+      const binding: CursorBinding = {
+        operation: 'progress_session.discovery',
+        parameters: {
+          accountId: owner.accountId,
+          authnEpoch: owner.authnEpoch,
+          origin: options.origin ?? '',
+          language: options.language ?? '',
+          order: 'started_at_desc_session_id_asc',
+          predicate,
+        },
+      };
+      const partition = await readPartition(client, partitionOf(route));
+      let after: store.ProgressDiscoveryAfter | null = null;
+      if (options.cursor !== undefined) {
+        const cursor = decodeCursor(tokens, binding, options.cursor);
+        if (!cursor.ok) throw new ProblemError(cursor.reason === 'expired' ? 'stale_cursor' : 'invalid_cursor');
+        if (cursor.epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
+        if (
+          cursor.after.length !== 3 ||
+          cursor.after[0] !== generation ||
+          typeof cursor.after[1] !== 'string' ||
+          !Number.isFinite(Date.parse(cursor.after[1])) ||
+          typeof cursor.after[2] !== 'string' ||
+          routeOf(cursor.after[2]) !== route
+        )
+          throw new ProblemError(cursor.after[0] === generation ? 'invalid_cursor' : 'stale_cursor');
+        after = { startedAt: cursor.after[1], sessionId: cursor.after[2] };
+      }
+      const rows = await store.pageProgressDiscovery(client, route, owner.accountId, filter, after, size + 1);
+      const shown = rows.slice(0, size);
+      const last = shown.at(-1)?.session;
+      return {
+        sessions: shown,
+        generation,
+        partitionEpoch: partition?.epoch ?? null,
+        next:
+          rows.length > size && last !== undefined && partition
+            ? encodeCursor(tokens, binding, {
+                epoch: partition.epoch,
+                after: [generation, last.startedAt, last.id],
+              })
+            : null,
+      };
+    });
+  }
+
+  async function verifyOwnerDiscoveryCurrent(actor: Actor, generation: string, partitionEpoch: number | null) {
+    return snapshot(actor, 'progress_session:list', async (client, owner) => {
+      const route = requireRoute(owner.accountId);
+      const currentGeneration = await store.progressDiscoveryGeneration(client, route, owner.accountId);
+      const partition = await readPartition(client, partitionOf(route));
+      if (currentGeneration !== generation || (partition?.epoch ?? null) !== partitionEpoch)
+        throw new ProblemError('stale_cursor');
+    });
+  }
+
   async function listUnits(actor: Actor, sessionId: string, options: Page = {}) {
     return snapshot(actor, 'progress_session:read', async (client, owner) => {
       const session = await load(client, owner, sessionId);
@@ -735,6 +803,8 @@ export function createSessionCommands(config: Dependencies) {
     patchSessionJournal,
     readPresentedSession,
     listSessions,
+    listOwnerSessions,
+    verifyOwnerDiscoveryCurrent,
     listUnits,
     listChanges,
   };
