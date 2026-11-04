@@ -27,7 +27,9 @@ import {
 } from './subject-connections';
 import { createConnectionWindow, type ConnectionRead } from './subject-connections-window';
 import { loadSubjectConnections } from './subject-connections-query';
-import { connectionReturnHref, subjectVisitReturn, withSubjectVisitReturn } from './subject-visit-navigation';
+import { connectionReturnHref, connectionReturnWindow, subjectVisitReturn, withSubjectVisitReturn, type ConnectionReturnWindow } from './subject-visit-navigation';
+import { directedWorkRelations } from './showcase-work/model';
+import { WorkRelation } from './showcase-work/relation';
 
 const actionClass =
   'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -54,6 +56,7 @@ export function SubjectConnections({
     reader: string;
     read: ConnectionRead;
     window: ReturnType<typeof createConnectionWindow>;
+    resume?: ConnectionReturnWindow;
   } | null>(null);
   const reader = JSON.stringify([
     viewer.state,
@@ -69,11 +72,18 @@ export function SubjectConnections({
   const current = incarnation.current;
   if (!current || current.page !== page || current.reader !== reader || current.read !== read) {
     current?.window.retire(true);
+    const resume = typeof window !== 'undefined' && window.location.pathname.includes(`/subjects/${page.subject}/`)
+      ? connectionReturnWindow(window.location.hash) : undefined;
     const address: ConnectionAddress = {
       id: page.subject,
       locale: value.locale,
       realm: value.realm,
       context: value.context?.id,
+      ...(resume ? { selection: { relations: {
+        stream: resume.stream,
+        ...(resume.cursor ? { cursor: resume.cursor } : {}),
+        ...(resume.reading ? { reading: resume.reading } : {}),
+      } } } : {}),
       ...(viewer.state === 'signed-in' && viewer.subject ? { viewer: viewer.subject } : {}),
     };
     incarnation.current = {
@@ -82,6 +92,7 @@ export function SubjectConnections({
       reader,
       read,
       window: createConnectionWindow(address, read),
+      ...(resume ? { resume } : {}),
     };
   }
   return (
@@ -91,6 +102,7 @@ export function SubjectConnections({
       ready={ready}
       unavailable={viewer.state === 'unavailable'}
       returnTo={subjectVisitReturn(returnTo, value.locale)}
+      resume={incarnation.current!.resume}
     />
   );
 }
@@ -100,11 +112,13 @@ function ConnectionsReading({
   ready,
   unavailable,
   returnTo,
+  resume,
 }: {
   window: ReturnType<typeof createConnectionWindow>;
   ready: boolean;
   unavailable: boolean;
   returnTo?: string | undefined;
+  resume?: ConnectionReturnWindow | undefined;
 }) {
   const value = useContext(OverviewContext)!;
   const snapshot = useSyncExternalStore(window.subscribe, window.snapshot, window.snapshot);
@@ -112,6 +126,32 @@ function ConnectionsReading({
   const status = useRef<HTMLParagraphElement>(null);
   const focusIntent = useRef<HTMLButtonElement | null>(null);
   const [completion, setCompletion] = useState('');
+  const region = useRef<HTMLElement>(null);
+  const restore = useRef(resume?.focus ? resume : undefined);
+  useEffect(() => {
+    if (!restore.current) return;
+    const cancel = () => { restore.current = undefined; };
+    document.addEventListener('pointerdown', cancel, true);
+    document.addEventListener('keydown', cancel, true);
+    document.addEventListener('focusin', cancel, true);
+    return () => {
+      document.removeEventListener('pointerdown', cancel, true);
+      document.removeEventListener('keydown', cancel, true);
+      document.removeEventListener('focusin', cancel, true);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const target = restore.current;
+    if (!target || snapshot.pending.size || !snapshot.visit) return;
+    restore.current = undefined;
+    const section = snapshot.visit.sections.relations;
+    if (section?.section.ok && section.reading === target.reading) {
+      const row = [...(region.current?.querySelectorAll<HTMLElement>('[data-work-statement]') ?? [])].find(
+        (element) => element.dataset.workStatement === target.focus && element.dataset.workHolder === target.holder,
+      );
+      row?.querySelector<HTMLElement>('a, summary')?.focus();
+    } else status.current?.focus();
+  }, [snapshot]);
   useEffect(() => {
     window.activate();
     if (ready) void window.load();
@@ -162,6 +202,7 @@ function ConnectionsReading({
   return (
     <section
       id="connections"
+      ref={region}
       data-slot="subject-connections"
       aria-labelledby="connections-heading"
       className="min-w-0 scroll-mt-32 space-y-6"
@@ -210,7 +251,10 @@ function ConnectionsReading({
               : statementItems(section, current!.stream.property, 12, value)
             : undefined;
           const next = section?.ok && typeof section.body.next === 'string' ? section.body.next : undefined;
-          if (!choices.length) return null;
+          const works = group === 'relations' && current && section?.ok
+            ? directedWorkRelations(value.subject!, current.stream.property, current.stream.direction, section.body) ?? []
+            : [];
+          if (!choices.length) return group === 'relations' ? <p key={group} role="status">{m.work_relations_unsupported({}, o)}</p> : null;
           return (
             <section
               key={group}
@@ -251,14 +295,31 @@ function ConnectionsReading({
                     </p>
                   )}
                   {listed.items.length ? (
-                    <CoverList
-                      key={`${group}:${current?.stream.key}`}
-                      items={listed.items}
-                      value={rowValue}
-                      label={titles[group]}
-                    />
+                    <div className="min-w-0 space-y-4" key={`${group}:${current?.stream.key}`}>
+                      {works.map((work) => {
+                        const item = listed.items.find((item) => item.statement === work.statement.id && item.id === work.id);
+                        if (!item || !current) return null;
+                        const returnHref = connectionReturnHref(value.subject!, value.subjectLabel ?? value.unlabelled,
+                          value.locale, value.realm, current.reading ? {
+                            stream: current.stream.key, reading: current.reading,
+                            ...(section?.ok && 'cursor' in section.read && section.read.cursor ? { cursor: section.read.cursor } : {}),
+                            focus: work.statement.id, holder: work.holder,
+                          } : undefined);
+                        const WorkLink: typeof PlainLink = (props) => <Link {...props}
+                          href={withSubjectVisitReturn(props.href, returnHref, value.locale)} />;
+                        return <div key={JSON.stringify([work, value.context, value.reader])}
+                          data-work-statement={work.statement.id} data-work-holder={work.holder}>
+                          <WorkRelation relation={work} item={item} value={{ ...rowValue, link: WorkLink }} label={current.stream.label} />
+                        </div>;
+                      })}
+                      <CoverList items={listed.items.filter((item) => !works.some((work) => item.statement === work.statement.id && item.id === work.id))}
+                        value={rowValue} label={titles[group]} />
+                    </div>
                   ) : (
-                    <p role="status">{m.subject_relation_empty_page({}, o)}</p>
+                    <p role="status">{section?.ok &&
+                      Array.isArray(section.body[current?.stream.direction === 'in' ? 'links' : 'relations']) &&
+                      (section.body[current?.stream.direction === 'in' ? 'links' : 'relations'] as unknown[]).length > 0
+                      ? m.subject_relation_unavailable({}, o) : m.subject_relation_empty_page({}, o)}</p>
                   )}
                   {next && current && (
                     <Button
@@ -280,10 +341,12 @@ function ConnectionsReading({
                     variant="outline"
                     className={actionClass}
                     onClick={(event) =>
-                      act(event, () => window.load(group, { stream: current?.stream.key ?? choices[0]!.key }))
+                      act(event, () => section && !section.ok && section.status === 409
+                        ? window.load(group, { stream: current?.stream.key ?? choices[0]!.key })
+                        : window.retry(group))
                     }
                   >
-                    {m.subject_section_retry({}, o)}
+                    {section && !section.ok && section.status === 409 ? m.subject_relation_restart({}, o) : m.subject_section_retry({}, o)}
                   </Button>
                 </div>
               )}

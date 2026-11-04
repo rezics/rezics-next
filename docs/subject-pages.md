@@ -1778,11 +1778,29 @@ editors. Loading, sparse-empty, denied, stale and unavailable states retain expl
 recovery and reveal controls wrap at phone widths, keep a 44px target and return keyboard focus to the section status
 when an exhausted action disappears.
 
-Decision: cross-media navigation keeps one canonical public return destination and starts a fresh bounded visit;
-native graphs without a Realm Context selector remain unavailable in Realms.
+Decision: cross-media navigation keeps one immediate canonical public opener; a relation return can restore one validated stream/cursor and exact disclosure fingerprint, while changed readings require an explicit current restart. Native graphs without a Realm Context selector remain unavailable in Realms.
+
+Work links use the current native slot selection; legacy unselected Subject projections apply preferred-then-normal
+best rank before the compact cap of 20. An admitted native page window takes precedence over the Subject preview,
+including inverse assertions. Only released work classifications already used by the native reader become work
+links. Provider identifiers and title matches never supply a relationship. Each work assertion remains separate,
+with its original holder, direction, property, qualifiers and disclosed reference parts. The ordinary card and value
+renderers supply the reading; work relations do not open the qualified-credit inspector. Empty references mean
+that no citations are disclosed by this reading. Facts and Sources remain public destinations even when exact
+review metadata is unavailable to an anonymous reader.
+
+Decision: the bounded Connections fragment carries one stream, optional native cursor, SHA-256 reading locator
+and optional original holder/statement focus; it carries no row, reveal choice, credential or nested opener. A
+stream-only fragment is a handoff to a fresh current window. Restored windows are read again through current
+native authority; the locator only compares the exact page, release and delivered section representation. A mismatch
+leaves other sections readable and offers an explicit restart of the selected stream. Retry preserves the failed
+stream and cursor. A newly selected stream or replaced visit retires its prior explanation and spoiler choices.
+The original `CONNECTION_LIMIT = 12`, `CONNECTION_BYTES = 1_048_576`, three selected-stream ceiling and explicit
+limit-25 depth-1/2 graph remain unchanged. Fingerprinting and explanation consume only the page aggregate and
+returned native window; no history, catalogue index or per-card request is added.
 
 A `via` return address admits only a same-locale canonical Subject or Realm path, with at most one Realm operand.
-No nested return chain, cursor, credential, draft or private row travels with it. A link from a qualified note has
+No nested return chain, credential, draft or private row travels with it. A bounded Connections fragment may carry the selected native cursor and comparison locator described above. A link from a qualified note has
 the same return behavior as its main work/person link. Returning re-resolves the destination under current authority
 and anchors at Connections. Native canonical redirects continue to preserve the original bounded search operands.
 

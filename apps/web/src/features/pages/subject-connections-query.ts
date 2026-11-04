@@ -49,12 +49,14 @@ export function connectionAddress(value: unknown): ConnectionAddress {
       if (selected === undefined) continue;
       if (
         !isRecord(selected) ||
-        Object.keys(selected).some((key) => key !== 'stream' && key !== 'cursor') ||
+        Object.keys(selected).some((key) => key !== 'stream' && key !== 'cursor' && key !== 'reading') ||
         typeof selected.stream !== 'string' ||
         !selected.stream ||
         selected.stream.length > 512 ||
         (selected.cursor !== undefined &&
-          (typeof selected.cursor !== 'string' || !selected.cursor || selected.cursor.length > 32768))
+          (typeof selected.cursor !== 'string' || !selected.cursor || selected.cursor.length > 32768)) ||
+        (selected.reading !== undefined &&
+          (typeof selected.reading !== 'string' || !/^[a-f0-9]{64}$/.test(selected.reading)))
       )
         throw new Error('Invalid connections continuation');
       selection[group] = selected as ConnectionSelection;

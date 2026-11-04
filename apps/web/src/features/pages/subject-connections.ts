@@ -20,7 +20,7 @@ export type ConnectionStream = {
   language: string | null;
   filter?: string;
 };
-export type ConnectionSelection = { stream: string; cursor?: string };
+export type ConnectionSelection = { stream: string; cursor?: string; reading?: string };
 export type ConnectionAddress = {
   id: string;
   locale: string;
@@ -33,7 +33,7 @@ export type ConnectionAddress = {
   graph?: { properties: string[]; depth: 1 | 2 } | undefined;
 };
 export type ConnectionWork = { calls: number; values: number; bytes: number };
-export type ConnectionSection = { stream: ConnectionStream; section: Section };
+export type ConnectionSection = { stream: ConnectionStream; section: Section; reading?: string };
 type SubjectEndpoint = ReturnType<KernelClient['subjects']>;
 export type ConnectionGraph = NonNullable<Awaited<ReturnType<SubjectEndpoint['graph']['get']>>['data']>;
 export type ConnectionVisit =
@@ -91,7 +91,16 @@ export function connectionStreams(release: GuideRelease, type: string, id: strin
 }
 
 function representation(page: SubjectPageData): string {
-  return JSON.stringify([page.subject, page.profile, page.context ?? null]);
+  return JSON.stringify([subjectBody(page), page.profile, page.context ?? null, page.requestedReader ?? null]);
+}
+
+/** Compare delivered content without retaining it in a URL or treating a locator as authorization. */
+async function readingIdentity(value: unknown): Promise<string> {
+  const json = JSON.stringify(value, (_key, part: unknown) =>
+    isRecord(part) ? Object.fromEntries(Object.entries(part).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : part,
+  );
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(json));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function retained(value: unknown, work: ConnectionWork): boolean {
@@ -234,14 +243,22 @@ export async function readConnectionVisit(
             work,
             signal,
           );
-          return { group, stream, section };
+          const identity = section.ok ? await readingIdentity([
+            representation(first.page), release.digest, stream.key, selected?.cursor ?? null, section.body,
+          ]) : undefined;
+          return {
+            group, stream,
+            section: selected?.reading && identity && selected.reading !== identity
+              ? { ok: false as const, status: 409 } : section,
+            ...(identity ? { reading: identity } : {}),
+          };
         }),
       );
       for (let i = 0; i < results.length; i++) {
         const result = results[i]!;
         if (result.status === 'fulfilled' && result.value) {
-          const { group, stream, section } = result.value;
-          sections[group] = { stream, section };
+          const { group, ...section } = result.value;
+          sections[group] = section;
         } else if (result.status === 'rejected') {
           const group = requested[i]!;
           const stream = streams.find(

@@ -8708,5 +8708,7 @@
   "search_population_retry": "Reintentar esta búsqueda de Realm",
   "search_population_restart": "Reiniciar la misma búsqueda",
   "shell_client_unavailable": "No se pudieron cargar los controles interactivos. La respuesta del servidor sigue disponible abajo. Recarga esta página para reintentarlo.",
-  "shell_client_reload": "Recargar esta página"
+  "shell_client_reload": "Recargar esta página",
+  "work_relation_citations_undisclosed": "No se muestran citas en esta lectura.",
+  "work_relations_unsupported": "No hay una lista de relaciones entre obras configurada para este tipo publicado."
 }

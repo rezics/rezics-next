@@ -8800,5 +8800,7 @@
   "search_population_retry": "Retry this Realm search",
   "search_population_restart": "Restart the same search",
   "shell_client_unavailable": "Interactive controls could not load. The server response below is still available. Reload this page to try again.",
-  "shell_client_reload": "Reload this page"
+  "shell_client_reload": "Reload this page",
+  "work_relation_citations_undisclosed": "No citations are disclosed in this reading.",
+  "work_relations_unsupported": "No work relation stream is configured for this released type."
 }
