@@ -89,7 +89,14 @@ export async function readContributionAvailability(
     !result ||
     result.subject !== address.id ||
     result.candidate !== address.candidate ||
-    result.property !== address.property
+    result.property !== address.property ||
+    !['available', 'deleted'].includes(result.state) ||
+    typeof result.selected !== 'boolean' ||
+    !result.actions ||
+    !['available', 'unavailable'].includes(result.actions.state) ||
+    (result.actions.state === 'available' &&
+      (!Array.isArray(result.actions.operations) ||
+        result.actions.operations.some((operation) => operation !== 'delete' && operation !== 'restore')))
   )
     return { subject: 'unavailable', candidate: 'unconfirmed', selected: null, actions: { state: 'unavailable' } };
   const token = new Headers(response.headers).get('rezics-session-token');
