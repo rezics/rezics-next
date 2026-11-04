@@ -1,3 +1,4 @@
+import { useSearchWindow } from './search-window/use-search-window';
 import { SearchResultsRegion } from './search-regions/results';
 import { QuerySharePreview } from './query-share-preview';
 import { parseQueryShare, shareUnavailable } from './query-share';
@@ -297,7 +298,7 @@ const readKindsWithLocale = createServerFn({ method: 'GET' })
       async (body) => {
         const response = await kernelClient(data.locale).subjects.$search.post(body, {
           ...(reader ? { headers: { authorization: reader.authorization } } : {}),
-          fetch: { signal: getRequest().signal },
+          fetch: { signal: getRequest().signal, cache: 'no-store' },
         });
         if (response.error || response.status !== 200) recovery = searchRecoveryFromResponse(response);
         return response;
@@ -317,7 +318,7 @@ const prepareShareWithLocale = createServerFn({ method: 'GET' })
       { ...body, prepareShare: true },
       {
         ...(reader ? { headers: { authorization: reader.authorization } } : {}),
-        fetch: { signal: getRequest().signal },
+        fetch: { signal: getRequest().signal, cache: 'no-store' },
       },
     );
     return response.status === 200 ? parseQueryShare(response.data) : shareUnavailable();
@@ -377,7 +378,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
     ) => {
       const response = await kernelClient(data.locale).subjects.$search.post(request, {
         ...(reader ? { headers: { authorization: reader.authorization } } : {}),
-        fetch: { signal },
+        fetch: { signal, cache: 'no-store' },
       });
       return response;
     };
@@ -402,7 +403,7 @@ const readSearchWithLocale = createServerFn({ method: 'GET' })
         ? readFacetPage(facetRead, (request) =>
             kernelClient(data.locale).subjects.$facets.post(request, {
               ...(reader ? { headers: { authorization: reader.authorization } } : {}),
-              fetch: { signal },
+              fetch: { signal, cache: 'no-store' },
             }),
           ).catch((error): FacetState => {
             if (signal.aborted) throw error;
@@ -647,6 +648,15 @@ export function SearchPage({
     sort: data?.sort === 'rating' ? 'rating' : undefined,
     ratingPopulation: data?.ratingPopulation,
   };
+  const windowNavigation = useSearchWindow({
+    state: committedState,
+    locale,
+    session,
+    ready: data?.recovery?.status === 'ready',
+    settled: data?.recovery?.status !== 'loading',
+    checkpoint: discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of,
+    enabled: !filtersOnly,
+  });
   const stateKey = JSON.stringify(committedState);
   const latestStateKey = useRef(stateKey);
   latestStateKey.current = stateKey;
@@ -860,6 +870,7 @@ export function SearchPage({
       retryFocus={retryFocus}
       currentSearchHref={searchHref}
       personal={personal}
+      windowNavigation={windowNavigation}
     />
   );
   const navigate = (href: string, removingCondition = false) => {

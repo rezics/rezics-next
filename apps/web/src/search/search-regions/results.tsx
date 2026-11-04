@@ -1,5 +1,4 @@
 import { SearchCoverage } from '../search-context/coverage';
-import { Link } from '@tanstack/react-router';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { Empty, EmptyHeader, EmptyTitle } from '@rezics/ui/shadcn/empty';
 import { cn } from '@rezics/ui/utils';
@@ -14,6 +13,8 @@ import { discoverySearchHref, type SearchLoaderDeps } from '../search-params';
 import { ResultKindNavigation } from '../result-kind-navigation';
 import { DiscoveryResults } from '../discovery-results';
 import { realmCatalogueSubjectHref } from '../realm-catalogue-handoff';
+import { SearchWindowControls } from '../search-window/navigation';
+import type { SearchWindowNavigation } from '../search-window/use-search-window';
 
 import type { SearchPageData } from '../search';
 import type { useSearchRetryFocus } from '../search-retry-focus';
@@ -52,6 +53,7 @@ export type SearchResultsRegionProps = {
   retryState?: SearchLoaderDeps | undefined;
   retryFocus?: Pick<ReturnType<typeof useSearchRetryFocus>, 'regionRef' | 'retryRef' | 'captureRetryFocus'>;
   currentSearchHref?: string | undefined;
+  windowNavigation?: SearchWindowNavigation | undefined;
   personal?: Pick<ReturnType<typeof useDiscoveryPersonalResults>, 'regionRef' | 'renderPersonal'>;
 };
 const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
@@ -85,6 +87,7 @@ export function SearchResultsRegion({
   retryFocus,
   currentSearchHref,
   personal,
+  windowNavigation,
 }: SearchResultsRegionProps) {
   if (!result && !data?.discovery && !data?.recovery) return null;
   const options = messageOptions(locale);
@@ -164,11 +167,21 @@ export function SearchResultsRegion({
           </a>
         </p>
       )}
+      {data?.queryState && (
+        <SearchWindowControls
+          window={windowNavigation}
+          state={data.queryState}
+          locale={locale}
+          next={next}
+          enabled={continuationAllowed && !invalid && data.recovery?.status !== 'loading'}
+        />
+      )}
       <section
         id="search-results"
         ref={(element) => {
           if (retryFocus) retryFocus.regionRef.current = element;
           if (personal) personal.regionRef.current = element;
+          if (windowNavigation) windowNavigation.regionRef.current = element;
         }}
         tabIndex={-1}
         aria-label={m.search_results({}, options)}
@@ -273,31 +286,7 @@ export function SearchResultsRegion({
           </>
         )}
       </section>
-      {next && (
-        <Link
-          to="/search"
-          search={{
-            q: query,
-            type,
-            cursor: next,
-            sort: data?.sort === 'rating' ? 'rating' : undefined,
-            ratingPopulation: data?.queryState?.ratingPopulation,
-            kinds: data?.queryState?.kinds,
-            language: data?.queryState?.languages,
-            filter: data?.queryState?.filter,
-            condition: data?.condition ? JSON.stringify(data.condition) : undefined,
-            ...Object.fromEntries(
-              Object.entries(data?.ranges ?? {}).map(([property, range]) => [`r.${property}`, JSON.stringify(range)]),
-            ),
-            ...Object.fromEntries(
-              Object.entries(selectedFacets).map(([property, values]) => [`f.${property}`, values]),
-            ),
-          }}
-          className={buttonVariants({ variant: 'outline' })}
-        >
-          {m.search_more({}, options)}
-        </Link>
-      )}
+
     </>
   );
 }

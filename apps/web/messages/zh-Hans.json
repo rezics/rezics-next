@@ -9441,5 +9441,12 @@
   "library_journal_retry_identity": "The original command is retained. Retry sends the same fields, revision and key. Reading current values does not settle an uncertain save.",
   "library_journal_preserve_field": "Keep field untouched",
   "library_journal_no_value": "No value",
-  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work."
+  "library_progress_cursor_meaning": "The locator identifies the place you supplied. Its exact position does not prove completed units or completion of the work.",
+  "search_window_navigation": "结果页面",
+  "search_window_current": "第 {number} 页",
+  "search_window_address": "当前的结果页面",
+  "search_window_previous": "上一页",
+  "search_window_first": "第一页",
+  "search_window_limit": "仅保留最近 12 个已读取的页面。可选择第一页重新开始。",
+  "search_window_repeated": "此接续位置重复了先前的页面。请从第一页重新开始。"
 }

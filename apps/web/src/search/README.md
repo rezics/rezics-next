@@ -172,3 +172,15 @@ does not establish those outcomes.
 
 Composed Members replaces its single accepted native page only after successful explicit More (at most the planned limit, capped at 12 rows with facts when paged, or 24 in previews); sparse pages stay sparse, failures retry the same cursor, and cycles offer a fresh restart with at most 12 recent cursors plus one cycle checkpoint and two bounded counters per node. Outer or selected-leaf Retry-After is admitted as delay text on that list's failure; the list captures one absolute deadline when it accepts the failure, and expiry only enables an explicit retry of the same request.
 A malformed or over-limit native Members page is a 422 failed page before projection or cursor progress, not a sliced or filtered prefix. Retry-After delay text stays on outer and selected-leaf refusals; it is not attached to a 422 admission failure.
+
+Native result-window navigation retains at most 12 admitted opaque cursors for the active complete request, plus its
+first-page address (at most 131,072 characters). Each cursor is at most 4,864 characters. The address list is carried
+only by this visit's browser-history entry, bound to the reader observation and locale; it contains no result DTOs,
+labels, totals, credentials or viewer advice. When the ceiling drops an older window, Previous traverses the retained
+suffix and First window deliberately starts at the first address. A direct cursor link has no invented predecessor
+or absolute window number. An ancestor token cannot become a forward continuation. Return and browser traversal
+re-read one native address with no-store; a restart/refusal never replays the chain or falls back to Global. Opening
+an existing native result route uses normal browser return, which restores only addresses and re-reads current data.
+Query, ordered languages, predicates, scope and rating population remain in every window address. Activated page
+navigation owns one request-keyed focus handoff to surviving navigation/recovery or the named result region; reader,
+locale or request replacement, cancellation, leaving Search and a reader's focus move retire that handoff.
