@@ -254,7 +254,9 @@ test('account ABA and locale replacement retire a deferred return before status 
   readWaiters.length = 0;
   const view = await mounted();
   try {
-    const inspect = [...view.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Inspect')!;
+    const inspect = [...view.host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === m.library_my_ratings_inspect(),
+    )!;
     await view.click(inspect);
     await visitSubject(view);
     const old = await back(view);
@@ -268,7 +270,9 @@ test('account ABA and locale replacement retire a deferred return before status 
     expect(view.host.textContent).not.toContain('The same original question and Subject pair');
     expect(view.host.textContent).not.toContain('The inspected pair is not on this page');
 
-    const nextInspect = [...view.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Inspect');
+    const nextInspect = [...view.host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === m.library_my_ratings_inspect(),
+    );
     if (nextInspect) await view.click(nextInspect);
     await visitSubject(view);
     const localeRead = await back(view);
@@ -290,7 +294,9 @@ test('cursor and equal-response replacement reject the old refresh completion', 
   readWaiters.length = 0;
   const view = await mounted();
   try {
-    const inspect = [...view.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Inspect')!;
+    const inspect = [...view.host.querySelectorAll('button')].find(
+      (button) => button.textContent?.trim() === m.library_my_ratings_inspect(),
+    )!;
     await view.click(inspect);
     await visitSubject(view);
     const old = await back(view);
@@ -321,7 +327,9 @@ test('bfcache refresh is reader-local and two mounted readers cannot consume one
   let secondClosed = false;
   try {
     for (const view of [first, second]) {
-      const inspect = [...view.host.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Inspect')!;
+      const inspect = [...view.host.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === m.library_my_ratings_inspect(),
+      )!;
       await view.click(inspect);
       await visitSubject(view);
     }
