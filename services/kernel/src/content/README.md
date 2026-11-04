@@ -1122,7 +1122,8 @@ This API handoff does not establish rendered acceptance or the all-pool physical
   serialized response bytes, JSON stringify/parse counts and bytes, cold-backend discards and registered runner
   phases. Physical plans require full `(route, id)` lookup conditions; source-predicate assertions retain the
   target-kind residual joins, while measured rows and sequential scans verify physical work. The read path dispatches
-  no registered effect.
+  no registered effect. These are harness assertions; connected results remain unverified until full-tree
+  compilation and the mounted suites succeed.
 
 Only the target's author may appeal, once per decision, with a statement of at most 2,000 characters. The appeal
 deadline is the decision time plus 183 days, inclusive; the next instant is late. A second appeal returns 409,
