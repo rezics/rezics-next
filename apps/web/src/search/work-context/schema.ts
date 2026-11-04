@@ -53,7 +53,7 @@ const value = v.variant('state', [
         month: v.exactOptional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(12))),
         day: v.exactOptional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(31))),
       }),
-      v.check(isCalendarDate),
+      v.check((value) => isCalendarDate(value)),
     ),
   ]),
 ]);

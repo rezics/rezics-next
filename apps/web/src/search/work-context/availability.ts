@@ -3,7 +3,8 @@ import type { KernelClient } from '@rezics/client';
 type PublishedResponse = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
 type PublishedPage = Extract<PublishedResponse, { hits: unknown }>;
 type PublishedHit = PublishedPage extends { hits: (infer Hit)[] } ? Hit : never;
-type PublishedContext = PublishedHit extends { workContext?: infer Context } ? Context : never;
+type ContextOf<Hit> = Hit extends { workContext?: infer Context } ? Context : never;
+type PublishedContext = ContextOf<PublishedHit>;
 
 /**
  * The retained publisher must install the root-derived callable before production activation.
