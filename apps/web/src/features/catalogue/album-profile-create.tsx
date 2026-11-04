@@ -141,7 +141,6 @@ function AlbumProfileCreateLive({
     { id: 0, language: locale, label: '', description: '', aliases: '' },
   ]);
   const currentTerms = useRef(terms);
-  currentTerms.current = terms;
   const draftRevision = useRef(0);
   const replaceTerms = (next: TermRow[] | ((current: TermRow[]) => TermRow[])) => {
     const updated = typeof next === 'function' ? next(currentTerms.current) : next;
