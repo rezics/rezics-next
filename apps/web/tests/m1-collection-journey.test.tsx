@@ -265,7 +265,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
     const show = (value: EditableCollectionPage) =>
       render(
         <CollectionPage
-          queryKey={undefined}
+          queryKey={['collection-journey', value.viewerActions]}
           cursor={undefined}
           page={value}
           refreshPage={async () => {
