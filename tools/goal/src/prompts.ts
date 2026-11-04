@@ -430,6 +430,7 @@ export function renderWorkerPrompt(input: WorkerPromptInput): RenderedPrompt {
   const extras = [
     view.unfinished,
     view.testCommands,
+    selected.includes('local-placement') ? [view.localRun, view.wrapperResult].filter(Boolean).join(' ') : '',
     input.evidence ? `Continue from this retry manifest:\n${view.evidenceManifest}` : '',
     renderLaunchContext(input.launchContext, policy.launchContext),
     view.consultation,

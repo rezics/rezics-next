@@ -1,1 +1,1 @@
-{{task.checkOnce}} The acceptance placement is local. Ignore older prompt, saved session, remote invocation or `--wait` recipes. Do not invoke remote-check or any native, host or database route, and do not report an old check as cancelled. {{task.localRun}} {{task.wrapperResult}}
+{{task.checkOnce}} The acceptance placement is local. Ignore older prompt, saved session, remote invocation or `--wait` recipes. Do not invoke remote-check or any native, host or database route, and do not report an old check as cancelled.
