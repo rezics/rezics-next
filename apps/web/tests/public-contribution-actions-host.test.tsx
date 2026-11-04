@@ -14,11 +14,11 @@ const {
   sameContributionActionsEpisode,
   ContributionActionsPageScope,
 } = await import('../src/accounts/public-profile/contribution-actions/host');
-type ContributionActionsEpisode = import('../src/accounts/public-profile/contribution-actions/host').ContributionActionsEpisode;
+type ContributionActionsEpisode =
+  import('../src/accounts/public-profile/contribution-actions/host').ContributionActionsEpisode;
 const { sessionQuery } = await import('../src/session/query');
-const { unavailableAuthorContributionActionsWire } = await import(
-  '../src/accounts/public-profile/contribution-actions/receiver'
-);
+const { unavailableAuthorContributionActionsWire } =
+  await import('../src/accounts/public-profile/contribution-actions/receiver');
 
 const id = '00000000-0000-4000-8000-000000000001';
 
@@ -49,7 +49,9 @@ test('the one page host retires on page, read, source, author, credential and im
   const parent = {};
   const row = { id: 'rendered-row-only', threadId: id, parentContext: parent };
   const current = episode(client, row);
-  expect(sameContributionActionsEpisode(current, { ...current, rows: observeContributionActionsRows([row]) })).toBe(true);
+  expect(sameContributionActionsEpisode(current, { ...current, rows: observeContributionActionsRows([row]) })).toBe(
+    true,
+  );
   for (const replacement of [
     { page: {} },
     { read: {} },

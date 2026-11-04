@@ -192,7 +192,10 @@ export function sameContributionActionsEpisode(left: ContributionActionsEpisode,
     left.rows.length !== right.rows.length
   )
     return false;
-  return left.rows.every((row, index) => row.length === right.rows[index]?.length && row.every((value, i) => value === right.rows[index]?.[i]));
+  return left.rows.every(
+    (row, index) =>
+      row.length === right.rows[index]?.length && row.every((value, i) => value === right.rows[index]?.[i]),
+  );
 }
 
 export type ContributionActionsHostValue = {

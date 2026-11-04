@@ -307,7 +307,8 @@ function AccountList({ props, spec }: { props: Record<string, unknown>; spec: Li
       {items.map((item, index) => spec.row(item, value, index))}
     </ul>
   );
-  const actionView = spec.view === 'posts' || spec.view === 'reviews' || spec.view === 'discussion' ? spec.view : undefined;
+  const actionView =
+    spec.view === 'posts' || spec.view === 'reviews' || spec.view === 'discussion' ? spec.view : undefined;
   const actionProfile = value.profile;
   const actionPublication =
     actionPage && actionProfile ? contributionPublicationSource(actionPage.page, actionProfile.id) : null;

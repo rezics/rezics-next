@@ -41,10 +41,10 @@ after:
 waiting: []
 acceptance:
   tests:
-    - "The closed response adapter consumes only the installed public author-contribution DTO and exact advice; absent own slots and sparse pages remain absent."
-    - "Exact advice invokes existing reaction, containing-thread watch, report and safe reply owners; targets, frozen uncertain operands, retries and return focus remain owner-controlled."
-    - "Page, source, author publication, credential, QueryClient, locale and away/return replacement retire the host and all controls."
-    - "Only sparse, read-only, sign-in, failed, pending and uncertain stories exist, with keyboard and screen-reader checks at 390 and 1280 layouts."
+    - 'The closed response adapter consumes only the installed public author-contribution DTO and exact advice; absent own slots and sparse pages remain absent.'
+    - 'Exact advice invokes existing reaction, containing-thread watch, report and safe reply owners; targets, frozen uncertain operands, retries and return focus remain owner-controlled.'
+    - 'Page, source, author publication, credential, QueryClient, locale and away/return replacement retire the host and all controls.'
+    - 'Only sparse, read-only, sign-in, failed, pending and uncertain stories exist, with keyboard and screen-reader checks at 390 and 1280 layouts.'
   failing: true
 estimate:
   lines: 900
