@@ -283,13 +283,16 @@ async function form(page: Page) {
   const handleInput = page.getByLabel('Handle', { exact: true });
   const emailInput = page.getByLabel('Email', { exact: true });
   const passwordInput = page.getByLabel('Password', { exact: true });
+  const confirmationInput = page.getByLabel('Confirm password', { exact: true });
   expect(await handleInput.count(), 'sign-up has a labelled handle field').toBe(1);
   expect(await emailInput.count(), 'sign-up has a labelled email field').toBe(1);
   expect(await passwordInput.count(), 'sign-up has a labelled password field').toBe(1);
+  expect(await confirmationInput.count(), 'sign-up confirms the password locally').toBe(1);
   return {
     handle: handleInput,
     email: emailInput,
     password: passwordInput,
+    confirmation: confirmationInput,
     submit: page.getByRole('button', { name: 'Create an account', exact: true }),
   };
 }
@@ -301,11 +304,16 @@ async function waitEnabled(page: Page) {
   });
 }
 
-async function fill(page: Page, values: { handle?: string; email?: string; password?: string } = {}) {
+async function fill(
+  page: Page,
+  values: { handle?: string; email?: string; password?: string; confirmation?: string } = {},
+) {
   const controls = await form(page);
   if ((await controls.handle.inputValue()) === '') await controls.handle.fill(values.handle ?? handle);
   if ((await controls.email.inputValue()) === '') await controls.email.fill(values.email ?? email);
   if ((await controls.password.inputValue()) === '') await controls.password.fill(values.password ?? password);
+  if ((await controls.confirmation.inputValue()) === '')
+    await controls.confirmation.fill(values.confirmation ?? values.password ?? password);
   await page.waitForFunction(
     () => ((window as unknown as { __turnstileRenders?: unknown[] }).__turnstileRenders?.length ?? 0) > 0,
   );
@@ -360,6 +368,22 @@ test(
       await controls.handle.fill(handle);
       await controls.email.fill(email);
       await controls.password.fill(password);
+      await controls.confirmation.fill(`${password}-different`);
+      await controls.submit.click();
+      await page.waitForFunction(() => {
+        const element = document.activeElement;
+        return element instanceof HTMLInputElement && element.id === 'signup-confirm-password';
+      });
+      const mismatchId = await controls.confirmation.getAttribute('aria-describedby');
+      expect(mismatchId).toBe('signup-confirm-password-error');
+      expect(await page.locator('#signup-confirm-password-error').innerText()).toMatch(/do not match/i);
+      expect(signupCalls()).toHaveLength(0);
+      await controls.confirmation.fill(password);
+      const confirmVisibility = page.locator('button[aria-controls="signup-confirm-password"]');
+      await confirmVisibility.click();
+      expect(await controls.confirmation.getAttribute('type')).toBe('text');
+      await confirmVisibility.click();
+      expect(await controls.confirmation.getAttribute('type')).toBe('password');
       await page.waitForFunction(
         () => ((window as unknown as { __turnstileRenders?: unknown[] }).__turnstileRenders?.length ?? 0) > 0,
       );
@@ -422,8 +446,8 @@ test(
       const payload = JSON.parse(registration.body) as Record<string, unknown>;
       expect(payload).toEqual({
         key: expect.any(String),
-        handle,
-        email,
+        handle: handle.toLowerCase(),
+        email: email.toLowerCase(),
         password,
         turnstile_token: expect.any(String),
       });
@@ -432,7 +456,7 @@ test(
       const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
       expect(signIns).toHaveLength(1);
       expect(calls.indexOf(signIns[0]!)).toBeGreaterThan(calls.indexOf(registration));
-      expect(JSON.parse(signIns[0]!.body)).toEqual({ email, password, client_id: 'login', scope: [] });
+      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
       expect(page.url()).not.toContain(accountId);
       expect(decodeURIComponent(page.url())).not.toContain(accountId);
       assertSecret(page, urls);
@@ -444,7 +468,7 @@ test(
 );
 
 test(
-  "a submit needs a fresh verification, and a retry keeps the form's key",
+  'an uncertain submit locks its original input and only an explicit replay can reuse the key',
   async () => {
     signupStatus = 201;
     calls.length = 0;
@@ -484,21 +508,24 @@ test(
         () => ((window as unknown as { __turnstileResets?: number }).__turnstileResets ?? 0) > 0,
       );
       expect(bodies).toHaveLength(1);
-      expect(await controls.handle.inputValue()).toBe(handle);
-      expect(await controls.email.inputValue()).toBe(email);
-      expect(await controls.password.inputValue()).toBe(password);
+      const retry = page.getByRole('button', { name: 'Retry original attempt', exact: true });
+      await retry.waitFor({ state: 'visible' });
+      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      const uncertainty = await page.locator('#signup-uncertain-panel').innerText();
+      expect(uncertainty).toContain(handle.toLowerCase());
+      expect(uncertainty).toContain(email.toLowerCase());
+      expect(uncertainty).not.toContain(password);
       expect(
         await page.evaluate(() => (window as unknown as { __turnstileResets: number }).__turnstileResets),
       ).toBeGreaterThan(0);
       await page.evaluate(() =>
         (window as unknown as { __issueTurnstileToken: () => boolean }).__issueTurnstileToken(),
       );
-      await waitEnabled(page);
       await Promise.all([
         page.waitForResponse(
           (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
         ),
-        controls.submit.click(),
+        retry.click(),
       ]);
       expect(bodies).toHaveLength(2);
       const first = JSON.parse(bodies[0]!) as { key: string; turnstile_token: string; handle: string; email: string };
@@ -513,11 +540,14 @@ test(
       expect(second.key).toBe(first.key);
       expect(first.turnstile_token).not.toBe('');
       expect(second.turnstile_token).not.toBe(first.turnstile_token);
-      expect(first.handle).toBe(handle);
-      expect(first.email).toBe(email);
-      expect(second.handle).toBe(handle);
-      expect(second.email).toBe(email);
+      expect(first.handle).toBe(handle.toLowerCase());
+      expect(first.email).toBe(email.toLowerCase());
+      expect(second.handle).toBe(handle.toLowerCase());
+      expect(second.email).toBe(email.toLowerCase());
       expect(second.password).toBe(password);
+      const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
+      expect(signIns).toHaveLength(1);
+      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
     } finally {
       releaseFirstRequest();
       await page.context().close();
@@ -527,10 +557,86 @@ test(
 );
 
 test(
-  'a taken handle is shown at the handle field, and other conflicts never reveal whether an address exists',
+  'a refused challenge on an unresolved replay leaves the original creation uncertain',
+  async () => {
+    signupStatus = 503;
+    signupError = 'registration_denied';
+    calls.length = 0;
+    const { page } = await open();
+    try {
+      const controls = await fill(page);
+      await controls.submit.click();
+      const retry = page.getByRole('button', { name: 'Retry original attempt', exact: true });
+      await retry.waitFor({ state: 'visible' });
+      signupStatus = 400;
+      await Promise.all([
+        page.waitForResponse(
+          (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
+        ),
+        retry.click(),
+      ]);
+      const notice = await page.locator('#signup-uncertain-panel').innerText();
+      expect(notice).toMatch(/original account creation may still have completed/i);
+      expect(notice).not.toContain(password);
+      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      const requests = signupCalls().map((call) => JSON.parse(call.body) as Record<string, string>);
+      expect(requests).toHaveLength(2);
+      expect(requests[1]!.key).toBe(requests[0]!.key);
+      expect(requests[1]!.handle).toBe(requests[0]!.handle);
+      expect(requests[1]!.email).toBe(requests[0]!.email);
+      expect(requests[1]!.password).toBe(requests[0]!.password);
+      expect(requests[1]!.turnstile_token).not.toBe(requests[0]!.turnstile_token);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'an unreadable 201 body confirms creation and a failed automatic sign-in keeps the created account panel',
+  async () => {
+    signInStatus = 503;
+    calls.length = 0;
+    const { page } = await open(`/signup?${authorizationQuery}`);
+    const bodies: string[] = [];
+    await page.route('**/signup', async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      bodies.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 201, headers: { 'content-type': 'application/json' }, body: '{' });
+    });
+    try {
+      const controls = await fill(page);
+      await Promise.all([
+        page.waitForResponse(
+          (response) => new URL(response.url()).pathname === '/signin' && response.request().method() === 'POST',
+        ),
+        controls.submit.click(),
+      ]);
+      await page.getByRole('status').filter({ hasText: 'Your account was created' }).waitFor();
+      await page.getByRole('alert').waitFor();
+      expect(bodies).toHaveLength(1);
+      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
+      expect(signIns).toHaveLength(1);
+      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
+      expect(signupCalls()).toHaveLength(0);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a terminal taken-handle refusal needs a different handle and new key before creation',
   async () => {
     signupStatus = 409;
     signupError = 'handle_unavailable';
+    signInStatus = 503;
     calls.length = 0;
     const { page, origin } = await open(`/signup?${authorizationQuery}`);
     try {
@@ -554,28 +660,32 @@ test(
       expect(handleText).not.toContain(leaked);
       expect(handleText).not.toMatch(/email|address/i);
 
-      signupError = 'registration_denied';
-      await page.waitForFunction(() => {
-        const button = document.querySelector('button[type="submit"]');
-        return button instanceof HTMLButtonElement && !button.disabled;
-      });
+      const correction = page.getByRole('button', { name: 'Use this handle with a new request', exact: true });
+      expect(await correction.isDisabled()).toBe(true);
+      await controls.handle.fill('Reader_2');
+      expect(await correction.isEnabled()).toBe(true);
+      await correction.click();
+      signupStatus = 201;
       await Promise.all([
         page.waitForResponse(
           (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
         ),
-        controls.submit.click(),
+        page.getByRole('button', { name: 'Create an account', exact: true }).click(),
       ]);
-      await page.waitForFunction(() =>
-        [...document.querySelectorAll('[role="alert"]')].some((element) => /recover/i.test(element.textContent ?? '')),
-      );
-      const emailDescribed = await controls.email.getAttribute('aria-describedby');
-      expect(emailDescribed ?? '').toBe('');
-      const alertText = (await page.getByRole('alert').allInnerTexts()).join('\n');
-      expect(alertText).not.toContain(leaked);
-      expect(alertText).not.toContain(email);
-      expect(alertText).not.toMatch(/already exists|already registered|in use|address exists|email exists/i);
-      expect(alertText).toMatch(/sign in/i);
-      expect(alertText).toMatch(/recover/i);
+      await page.getByRole('status').filter({ hasText: 'Your account was created' }).waitFor();
+      const registrations = signupCalls();
+      expect(registrations).toHaveLength(2);
+      const first = JSON.parse(registrations[0]!.body) as { key: string; handle: string; email: string };
+      const second = JSON.parse(registrations[1]!.body) as { key: string; handle: string; email: string; password: string };
+      expect(first.handle).toBe(handle.toLowerCase());
+      expect(second.key).not.toBe(first.key);
+      expect(second.handle).toBe('reader_2');
+      expect(second.email).toBe(email.toLowerCase());
+      expect(second.password).toBe(password);
+      const signIns = calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin');
+      expect(signIns).toHaveLength(1);
+      expect(JSON.parse(signIns[0]!.body)).toEqual({ email: email.toLowerCase(), password, client_id: 'login', scope: [] });
+
       const links = await page.getByRole('link').evaluateAll((elements) =>
         elements.map((element) => ({
           href: (element as HTMLAnchorElement).href,
@@ -583,13 +693,46 @@ test(
         })),
       );
       const signIn = links.filter((link) => new URL(link.href).pathname === '/login');
-      expect(signIn.length).toBeGreaterThanOrEqual(1);
+      expect(signIn).toHaveLength(1);
       const kept = new URL(page.url()).search;
       expect(kept).toContain('max_age=600');
       for (const link of signIn) expect(link.href).toBe(`${origin}/login${kept}`);
       const recovery = links.filter((link) => new URL(link.href).pathname === '/recovery');
-      expect(recovery.length).toBeGreaterThanOrEqual(1);
+      expect(recovery).toHaveLength(1);
       expect(recovery.some((link) => /recover/i.test(link.text))).toBe(true);
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'a generic registration conflict stays non-enumerating and ends in explicit sign-in or recovery',
+  async () => {
+    signupStatus = 409;
+    signupError = 'registration_denied';
+    calls.length = 0;
+    const { page, origin } = await open(`/signup?${authorizationQuery}`);
+    try {
+      const controls = await fill(page);
+      await controls.submit.click();
+      await page.getByRole('link', { name: 'Recover access', exact: true }).waitFor();
+      const alertText = (await page.getByRole('alert').allInnerTexts()).join('\n');
+      expect(alertText).not.toContain(leaked);
+      expect(alertText).not.toContain(email);
+      expect(alertText).not.toMatch(/already exists|already registered|in use|address exists|email exists/i);
+      expect(alertText).toMatch(/sign in/i);
+      expect(alertText).toMatch(/recover/i);
+      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      const links = await page.getByRole('link').evaluateAll((elements) =>
+        elements.map((element) => ({ href: (element as HTMLAnchorElement).href, text: element.textContent?.trim() ?? '' })),
+      );
+      for (const link of links.filter((value) => ['/login', '/recovery'].includes(new URL(value.href).pathname))) {
+        expect(new URL(link.href).origin).toBe(origin);
+        expect(new URL(link.href).search).toBe(`?${authorizationQuery}`);
+      }
+      expect(signupCalls()).toHaveLength(1);
     } finally {
       await page.context().close();
     }
@@ -645,36 +788,30 @@ test(
 );
 
 test(
-  'rate limits and outages say when to try again',
+  'rate limits retain uncertainty and honor retry-after without automatically resending',
   async () => {
+    signupStatus = 429;
+    signupError = 'registration_denied';
     calls.length = 0;
     const { page } = await open();
     try {
       await fill(page);
-      for (const status of [429, 503] as const) {
-        signupStatus = status;
-        const button = page.getByRole('button', { name: 'Create an account', exact: true });
-        await waitEnabled(page);
-        await Promise.all([
-          page.waitForResponse(
-            (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
-          ),
-          button.click(),
-        ]);
-        await page.getByRole('alert').waitFor({ state: 'visible' });
-        const message = (await page.getByRole('alert').innerText()).trim();
-        expect(message).toMatch(/try again|later|wait/i);
-        expect(message).not.toContain(misleadingRetry);
-        if (status === 429) {
-          expect(message).toContain(String(retryAfter));
-          expect(message).toMatch(/seconds?/i);
-        }
-        await page.waitForFunction(() => {
-          const button = document.querySelector('button[type="submit"]');
-          return button instanceof HTMLButtonElement && !button.disabled;
-        });
-      }
-      expect(signupCalls()).toHaveLength(2);
+      await Promise.all([
+        page.waitForResponse(
+          (response) => new URL(response.url()).pathname === '/signup' && response.request().method() === 'POST',
+        ),
+        page.getByRole('button', { name: 'Create an account', exact: true }).click(),
+      ]);
+      const retry = page.getByRole('button', { name: 'Retry original attempt', exact: true });
+      await retry.waitFor({ state: 'visible' });
+      const message = (await page.getByRole('alert').innerText()).trim();
+      expect(message).toMatch(/try again|later|wait/i);
+      expect(message).not.toContain(misleadingRetry);
+      expect(message).toContain(String(retryAfter));
+      expect(message).toMatch(/seconds?/i);
+      expect(await retry.isDisabled()).toBe(true);
+      expect(await page.getByLabel('Handle', { exact: true }).count()).toBe(0);
+      expect(signupCalls()).toHaveLength(1);
     } finally {
       await page.context().close();
     }

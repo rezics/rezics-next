@@ -352,7 +352,29 @@ test('a retry with the same key and a new token returns the same account', async
   expect(await retry.json()).toEqual({ accountId: `signup-account-${key}` });
   expect(verificationForms.map((form) => form.response)).toEqual([`token-${key}`, 'fresh-retry-token']);
   expect(verificationForms[0]!.idempotency_key).not.toBe(verificationForms[1]!.idempotency_key);
-  expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [`signup-account-${key}`])).rows).toHaveLength(1);
+  const accountId = `signup-account-${key}`;
+  expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [accountId])).rows).toHaveLength(1);
+
+  const changedHandle = await signup({
+    ...original,
+    handle: `other-${original.handle}`,
+    turnstile_token: 'changed-handle-token',
+  });
+  expect(changedHandle.status).toBe(409);
+  expect(await changedHandle.json()).toEqual({ error: 'registration_denied' });
+
+  const changedCredentials = await signup({
+    ...original,
+    email: `changed-${original.email}`,
+    password: `${password}-changed`,
+    turnstile_token: 'changed-credentials-token',
+  });
+  expect(changedCredentials.status).toBe(409);
+  expect(await changedCredentials.json()).toEqual({ error: 'registration_denied' });
+  expect((await pool.query('SELECT id,email FROM "user" WHERE id=$1', [accountId])).rows).toEqual([
+    { id: accountId, email: original.email },
+  ]);
+  expect((await pool.query('SELECT id FROM "user" WHERE email=$1', [`changed-${original.email}`])).rows).toHaveLength(0);
 });
 
 test('signup answers 503 when Turnstile configuration is absent', async () => {
@@ -370,7 +392,7 @@ test('signup answers 503 when Turnstile configuration is absent', async () => {
   }
 });
 
-test('a taken handle refuses promptly after Turnstile without account effects or retained credentials', async () => {
+test('a taken handle refuses without account effects and a corrected new request can succeed', async () => {
   resetSiteverify();
   const key = 'taken-handle-without-effects';
   const input = body(key);
@@ -395,6 +417,17 @@ test('a taken handle refuses promptly after Turnstile without account effects or
     expect(staged).toHaveLength(1);
     expect(staged[0]).toMatchObject({ ciphertext: null, completed_at: null });
     expect(staged[0].expired_at).not.toBeNull();
+
+    const correctedKey = `${key}-corrected`;
+    const corrected = await signup(
+      body(correctedKey, { handle: `${input.handle}-corrected`, email: input.email }),
+    );
+    expect(corrected.status).toBe(201);
+    expect(await corrected.json()).toEqual({ accountId: `signup-account-${correctedKey}` });
+    expect(accounts.has(accountId)).toBe(false);
+    expect(accounts.get(`signup-account-${correctedKey}`)?.state).toBe('active');
+    expect(await stageCount(key)).toBe(1);
+    expect(await stageCount(correctedKey)).toBe(1);
   } finally {
     takenHandles.delete(input.handle);
   }

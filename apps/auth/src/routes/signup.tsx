@@ -1,8 +1,14 @@
 import { createFileRoute, useBlocker, useRouter } from '@tanstack/react-router';
 import { AuthButton as Button } from '../button';
-import { Field, FieldError, FieldLabel } from '@rezics/ui/shadcn/field';
-import { Input } from '@rezics/ui/shadcn/input';
-import { useCallback, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from 'react';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -12,33 +18,48 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@rezics/ui/shadcn/alert-dialog';
-import { PasswordInput } from '../password-input';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { AuthPage } from '../frame';
-import { createSignupKey, explainSignIn, normalizeSignupHandle, submitSignup } from '../signup';
+import { explainSignIn, normalizeSignupHandle, submitSignup } from '../signup';
 import { signIn, signInTarget } from '../sign-in';
 import { readRegistrationPage, type RegistrationPage } from '../registration-page';
 import { TurnstileWidget, type TurnstileHandle, type TurnstileStatus } from '../turnstile.tsx';
 import { ErrorAlert } from '../alert';
+import {
+  SignupAttemptController,
+  signupAttemptHasPrivateInput,
+  type SignupAttemptPhase,
+  type SignupDraft,
+} from '../signup-attempt';
+import { SignupCredentials, signupCredentialFieldIds, type SignupCredentialErrors } from '../signup-credentials';
 
-const handleId = 'signup-handle';
-const handleErrorId = 'signup-handle-error';
-const emailId = 'signup-email';
-const emailErrorId = 'signup-email-error';
-const passwordId = 'signup-password';
-const passwordErrorId = 'signup-password-error';
+const { handle: handleId, password: passwordId, confirmation: confirmationId } =
+  signupCredentialFieldIds;
 const turnstileErrorId = 'signup-turnstile-error';
+const uncertainPanelId = 'signup-uncertain-panel';
 
-export const Route = createFileRoute('/signup')({
-  head: () => ({ meta: [{ title: `${m.auth_signup_heading()} · REZICS` }] }),
-  loader: () => readRegistrationPage(),
-  component: SignupPage,
-});
+type SignupJourney = {
+  active: boolean;
+  sequence: number;
+  query: string;
+  attempt: SignupAttemptController;
+};
 
-type SignupJourney = { active: boolean; sequence: number; query: string };
+type ActiveSignupPhase = Extract<
+  SignupAttemptPhase,
+  { kind: 'draft' | 'dispatched' | 'uncertain' | 'handle-unavailable' }
+>;
 
-// Keep the router adapter with the form: Stay never replaces its journey or submission key.
+const emptyErrors = (): SignupCredentialErrors => ({ handle: '', email: '', password: '', confirmation: '' });
+
+function clearSignupInputs() {
+  document.querySelectorAll<HTMLInputElement>('#signup-form input').forEach((input) => {
+    input.value = '';
+  });
+}
+
+// Keep the router adapter with the journey: Stay retains its original attempt and focus.
 function SignupDeparture({
   shouldWarn,
   leave,
@@ -50,7 +71,6 @@ function SignupDeparture({
 }) {
   const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
   useLayoutEffect(() => {
-    // Creation finishes this draft even if the subsequent sign-in fails.
     if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
   });
   const stay = () => {
@@ -88,27 +108,49 @@ function SignupDeparture({
   );
 }
 
+export const Route = createFileRoute('/signup')({
+  head: () => ({ meta: [{ title: `${m.auth_signup_heading()} · REZICS` }] }),
+  loader: () => readRegistrationPage(),
+  component: SignupPage,
+});
+
 function SignupPage() {
   const router = useRouter();
   const { history } = router;
   const page = Route.useLoaderData();
-  const pageKey = page.kind === 'already-signed-in' ? `account:${page.viewer.account_id}` : page.kind;
+  const pageKey =
+    page.kind === 'already-signed-in' ? `account:${page.viewer.account_id}` : page.kind === 'registration' ? 'registration' : null;
   const sequence = useRef(0);
+  const currentJourney = useRef<SignupJourney | null>(null);
+  const replaceJourney = useRef<() => void>(() => {});
+  const lastAuthority = useRef<string | null>(null);
   const [journey, setJourney] = useState<SignupJourney | null>(null);
+
   useLayoutEffect(() => {
-    let current: SignupJourney | null = null;
     const leave = () => {
-      // This fences browser continuations; a dispatched server write may still complete.
-      if (current) current.active = false;
-      current = null;
+      const current = currentJourney.current;
+      if (current) {
+        current.active = false;
+        current.attempt.retire();
+      }
+      currentJourney.current = null;
+      clearSignupInputs();
       setJourney(null);
     };
     const replace = () => {
       leave();
       if (history.location.pathname !== '/signup') return;
-      current = { active: true, sequence: ++sequence.current, query: history.location.search };
-      setJourney(current);
+      const nextSequence = ++sequence.current;
+      const next: SignupJourney = {
+        active: true,
+        sequence: nextSequence,
+        query: history.location.search,
+        attempt: new SignupAttemptController(nextSequence),
+      };
+      currentJourney.current = next;
+      setJourney(next);
     };
+    replaceJourney.current = replace;
     const unsubscribe = history.subscribe(replace);
     const restore = (event: PageTransitionEvent) => {
       if (event.persisted) {
@@ -122,44 +164,90 @@ function SignupPage() {
     window.addEventListener('focus', refresh);
     replace();
     return () => {
-      if (current) current.active = false;
+      leave();
+      replaceJourney.current = () => {};
       unsubscribe();
       window.removeEventListener('pagehide', leave);
       window.removeEventListener('pageshow', restore);
       window.removeEventListener('focus', refresh);
     };
-  }, [history, pageKey, router]);
-  return journey ? <SignupPageState key={journey.sequence} journey={journey} page={page} /> : null;
+  }, [history, router]);
+
+  useLayoutEffect(() => {
+    if (pageKey === null) return;
+    const previous = lastAuthority.current;
+    if (previous !== null && previous !== pageKey) replaceJourney.current();
+    lastAuthority.current = pageKey;
+  }, [pageKey]);
+
+  return journey ? <SignupPageState key={journey.sequence} journey={journey} page={page} router={router} /> : null;
 }
 
-function SignupPageState({ journey, page }: { journey: SignupJourney; page: RegistrationPage }) {
-  const router = useRouter();
+function SignupPageState({
+  journey,
+  page,
+  router,
+}: {
+  journey: SignupJourney;
+  page: RegistrationPage;
+  router: ReturnType<typeof useRouter>;
+}) {
+  const controller = journey.attempt;
+  const [phase, setPhase] = useState(controller.phase);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const { history } = router;
+
+  useLayoutEffect(() => controller.subscribe(setPhase), [controller]);
+
+  useLayoutEffect(() => {
+    if (phase.kind === 'refused') document.getElementById('signup-refusal')?.focus();
+  }, [phase.kind]);
+
+  const shouldWarn = useCallback(() => {
+    const warn = journey.active && signupAttemptHasPrivateInput(controller.phase);
+    if (warn && !document.activeElement?.closest('[role="alertdialog"]'))
+      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return warn;
+  }, [controller, journey]);
+
+  const leave = useCallback(() => {
+    journey.active = false;
+    controller.retire();
+    clearSignupInputs();
+  }, [controller, journey]);
+
+  useLayoutEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (!shouldWarn()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', unload);
+    return () => window.removeEventListener('beforeunload', unload);
+  }, [shouldWarn]);
+
+  const departure = (
+    <SignupDeparture
+      shouldWarn={shouldWarn}
+      leave={leave}
+      focus={() => {
+        const previous = returnFocus.current;
+        if (previous?.isConnected && previous !== document.body) previous.focus();
+        else (document.getElementById(handleId) ?? document.getElementById(uncertainPanelId))?.focus();
+      }}
+    />
+  );
+
   function follow(event: MouseEvent<HTMLAnchorElement>) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     history.push(event.currentTarget.getAttribute('href')!);
   }
-  if (page.kind === 'unavailable') {
-    return (
-      <AuthPage heading={m.auth_signup_heading()}>
-        <ErrorAlert>
-          <p>{page.reason === 'verification' ? m.auth_signup_turnstile_failed() : m.auth_signup_page_unavailable()}</p>
-        </ErrorAlert>
-        <Button type="button" onClick={() => void router.invalidate()}>
-          {m.auth_signup_retry()}
-        </Button>
-        <nav className="auth-login-links" aria-label={m.auth_signup_sign_in()}>
-          <a href={`/login${journey.query}`} onClick={follow}>
-            {m.auth_signup_sign_in()}
-          </a>
-        </nav>
-      </AuthPage>
-    );
-  }
+
   if (page.kind === 'already-signed-in') {
     return (
       <AuthPage heading={m.auth_signup_heading()}>
+        {departure}
         <div className="auth-login-form">
           <p role="status">{m.auth_signup_already_signed_in()}</p>
           <nav className="auth-login-links" aria-label={m.auth_signup_continue()}>
@@ -172,334 +260,408 @@ function SignupPageState({ journey, page }: { journey: SignupJourney; page: Regi
       </AuthPage>
     );
   }
-  return <SignupForm journey={journey} registration={page} />;
+
+  if (isCompletionPhase(phase)) {
+    return (
+      <AuthPage heading={m.auth_signup_heading()}>
+        {departure}
+        <SignupCompletion phase={phase} query={journey.query} follow={follow} />
+      </AuthPage>
+    );
+  }
+
+  if (phase.kind === 'refused') {
+    return (
+      <AuthPage heading={m.auth_signup_heading()}>
+        {departure}
+        <SignupRefusal message={phase.message} query={journey.query} follow={follow} />
+      </AuthPage>
+    );
+  }
+
+  if (page.kind === 'unavailable') {
+    return (
+      <AuthPage heading={m.auth_signup_heading()}>
+        {departure}
+        <div className="auth-login-form">
+          {phase.kind === 'uncertain' ? (
+            <SignupUncertainty phase={phase} query={journey.query} follow={follow} unavailable />
+          ) : phase.kind === 'dispatched' ? (
+            <ErrorAlert>
+              <p role="status">{m.auth_signup_creating()}</p>
+              <p>{m.auth_signup_page_unavailable()}</p>
+              <SignupAuthLinks query={journey.query} follow={follow} />
+            </ErrorAlert>
+          ) : (
+            <ErrorAlert>
+              <p>{page.reason === 'verification' ? m.auth_signup_turnstile_failed() : m.auth_signup_page_unavailable()}</p>
+            </ErrorAlert>
+          )}
+          <Button type="button" onClick={() => void router.invalidate()}>
+            {m.auth_signup_retry()}
+          </Button>
+          {phase.kind !== 'uncertain' && phase.kind !== 'dispatched' ? (
+            <SignupAuthLinks query={journey.query} follow={follow} />
+          ) : null}
+        </div>
+      </AuthPage>
+    );
+  }
+
+  if (phase.kind === 'retired') return null;
+  return (
+    <AuthPage heading={m.auth_signup_heading()}>
+      {departure}
+      <SignupForm journey={journey} registration={page} phase={phase as ActiveSignupPhase} />
+    </AuthPage>
+  );
+}
+
+function isCompletionPhase(
+  phase: SignupAttemptPhase,
+): phase is Extract<SignupAttemptPhase, { kind: 'created' | 'signing-in' | 'sign-in-failed' | 'signed-in' }> {
+  return phase.kind === 'created' || phase.kind === 'signing-in' || phase.kind === 'sign-in-failed' || phase.kind === 'signed-in';
+}
+
+function SignupAuthLinks({ query, follow }: { query: string; follow: (event: MouseEvent<HTMLAnchorElement>) => void }) {
+  return (
+    <nav className="auth-signup-links" aria-label={m.auth_signup_sign_in()}>
+      <a href={`/login${query}`} onClick={follow}>
+        {m.auth_signup_sign_in()}
+      </a>
+      <a href={`/recovery${query}`} onClick={follow}>
+        {m.auth_signup_recovery()}
+      </a>
+    </nav>
+  );
+}
+
+function SignupCompletion({
+  phase,
+  query,
+  follow,
+}: {
+  phase: Extract<SignupAttemptPhase, { kind: 'created' | 'signing-in' | 'sign-in-failed' | 'signed-in' }>;
+  query: string;
+  follow: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  return (
+    <div className="auth-login-form" aria-busy={phase.kind === 'signing-in'}>
+      <p role="status">{phase.kind === 'signing-in' ? m.auth_signup_signing_in() : m.auth_signup_created()}</p>
+      {phase.kind === 'sign-in-failed' ? (
+        <ErrorAlert tabIndex={-1}>
+          <p>{phase.message}</p>
+        </ErrorAlert>
+      ) : null}
+      <SignupAuthLinks query={query} follow={follow} />
+    </div>
+  );
+}
+
+function SignupRefusal({
+  message,
+  query,
+  follow,
+}: {
+  message: string;
+  query: string;
+  follow: (event: MouseEvent<HTMLAnchorElement>) => void;
+}) {
+  return (
+    <div className="auth-login-form">
+      <ErrorAlert tabIndex={-1} id="signup-refusal">
+        <p>{message}</p>
+        <SignupAuthLinks query={query} follow={follow} />
+      </ErrorAlert>
+    </div>
+  );
+}
+
+function SignupUncertainty({
+  phase,
+  query,
+  follow,
+  unavailable = false,
+  onRetry,
+  retryDisabled = false,
+}: {
+  phase: Extract<SignupAttemptPhase, { kind: 'uncertain' }>;
+  query: string;
+  follow: (event: MouseEvent<HTMLAnchorElement>) => void;
+  unavailable?: boolean;
+  onRetry?: () => void;
+  retryDisabled?: boolean;
+}) {
+  return (
+    <ErrorAlert tabIndex={-1} id={uncertainPanelId}>
+      <h2>{m.auth_signup_uncertain_title()}</h2>
+      <p>{m.auth_signup_uncertain_body()}</p>
+      <dl>
+        <div>
+          <dt>{m.auth_signup_handle()}</dt>
+          <dd>{phase.attempt.handle}</dd>
+        </div>
+        <div>
+          <dt>{m.auth_signup_email()}</dt>
+          <dd>{phase.attempt.email}</dd>
+        </div>
+      </dl>
+      {phase.verificationFailed ? (
+        <p>{m.auth_signup_retry_verification_failed()}</p>
+      ) : phase.failure.kind === 'conflict' || phase.failure.kind === 'handle-unavailable' ? (
+        <p>{m.auth_signup_retry_refused()}</p>
+      ) : (
+        <p>{phase.failure.message}</p>
+      )}
+      {unavailable ? <p>{m.auth_signup_page_unavailable()}</p> : null}
+      {onRetry ? (
+        <Button type="button" disabled={retryDisabled} onClick={onRetry}>
+          {m.auth_signup_retry_original()}
+        </Button>
+      ) : null}
+      <SignupAuthLinks query={query} follow={follow} />
+    </ErrorAlert>
+  );
 }
 
 function SignupForm({
   journey,
   registration,
+  phase,
 }: {
   journey: SignupJourney;
   registration: Extract<RegistrationPage, { kind: 'registration' }>;
+  phase: ActiveSignupPhase;
 }) {
-  const { history } = useRouter();
+  const router = useRouter();
+  const { history } = router;
   const { siteKey, scriptUrl, requirements } = registration;
-  const { query } = journey;
-  const key = useRef(createSignupKey());
+  const { query, attempt: controller } = journey;
   const turnstile = useRef<TurnstileHandle>(null);
   const alert = useRef<HTMLDivElement>(null);
-  const submitting = useRef(false);
-  const [handle, setHandle] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [challengeStatus, setChallengeStatus] = useState<TurnstileStatus>('loading');
-  const [created, setCreated] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [handleError, setHandleError] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [turnstileError, setTurnstileError] = useState('');
-  const [message, setMessage] = useState('');
-  const [conflict, setConflict] = useState(false);
   const emailInput = useRef<HTMLInputElement>(null);
-  const form = useRef<HTMLFormElement>(null);
-  const protectedDraft = useRef(false);
-  const returnFocus = useRef<HTMLElement | null>(null);
-  protectedDraft.current = !created && Boolean(handle.trim() || email.trim() || password || pending);
-  const shouldWarn = useCallback(() => {
-    const warn = journey.active && protectedDraft.current;
-    if (warn && !document.activeElement?.closest('[role="alertdialog"]'))
-      returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    return warn;
-  }, [journey]);
-  const retire = useCallback(() => {
-    // Only browser continuations are retired; a dispatched creation can still finish on the server.
-    journey.active = false;
-    protectedDraft.current = false;
-    form.current?.querySelectorAll('input').forEach((input) => {
-      input.value = '';
-    });
-  }, [journey]);
-  const leave = () => {
-    retire();
-    setHandle('');
-    setEmail('');
-    setPassword('');
-  };
+  const submitting = useRef(false);
+  const [challengeStatus, setChallengeStatus] = useState<TurnstileStatus>('loading');
+  const [errors, setErrors] = useState<SignupCredentialErrors>(emptyErrors);
+  const [turnstileError, setTurnstileError] = useState('');
+  const [retryClock, setRetryClock] = useState(Date.now());
+
+  const values: SignupDraft | null =
+    phase.kind === 'draft' || phase.kind === 'handle-unavailable' || phase.kind === 'dispatched'
+      ? phase.values
+      : null;
+  const readOnly = phase.kind === 'dispatched';
+  const handleCorrectionReady =
+    phase.kind === 'handle-unavailable' &&
+    normalizeSignupHandle(phase.values.handle) !== null &&
+    normalizeSignupHandle(phase.values.handle) !== phase.attempt.handle;
+  const retryAt = phase.kind === 'uncertain' ? phase.retryAt : null;
+  const retryWait = retryAt !== null && retryClock < retryAt;
+
+  useEffect(() => {
+    if (retryAt === null || retryAt <= Date.now()) return;
+    const delay = retryAt - Date.now();
+    if (delay <= 0) return;
+    const timer = window.setTimeout(() => setRetryClock(Date.now()), Math.min(delay, 2_147_483_647));
+    return () => window.clearTimeout(timer);
+  }, [retryAt, retryClock]);
+
   useLayoutEffect(() => {
-    const unload = (event: BeforeUnloadEvent) => {
-      if (!shouldWarn()) return;
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', unload);
-    window.addEventListener('pagehide', leave);
-    return () => {
-      retire();
-      window.removeEventListener('beforeunload', unload);
-      window.removeEventListener('pagehide', leave);
-    };
-  }, [retire, shouldWarn]);
+    if (errors.handle) document.getElementById(handleId)?.focus();
+    else if (errors.email) emailInput.current?.focus();
+    else if (errors.password) document.getElementById(passwordId)?.focus();
+    else if (errors.confirmation) document.getElementById(confirmationId)?.focus();
+    else if (turnstileError) document.getElementById('signup-turnstile')?.focus();
+    else if (phase.kind === 'uncertain') alert.current?.focus();
+  }, [errors, phase, turnstileError]);
+
   function follow(event: MouseEvent<HTMLAnchorElement>) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     history.push(event.currentTarget.getAttribute('href')!);
   }
 
-  useLayoutEffect(() => {
-    if (handleError) document.getElementById(handleId)?.focus();
-    else if (emailError) emailInput.current?.focus();
-    else if (passwordError) document.getElementById(passwordId)?.focus();
-    else if (message) alert.current?.focus();
-    else if (turnstileError) document.getElementById('signup-turnstile')?.focus();
-  }, [handleError, emailError, passwordError, message, turnstileError]);
-
   function clearErrors() {
-    setHandleError('');
-    setEmailError('');
-    setPasswordError('');
+    setErrors(emptyErrors());
     setTurnstileError('');
-    setMessage('');
-    setConflict(false);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!journey.active || created || submitting.current || pending) return;
-    clearErrors();
-    const invalidHandle = normalizeSignupHandle(handle) === null;
-    const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
-    const invalidPassword =
-      password.length < requirements.password.minLength || password.length > requirements.password.maxLength;
-    setHandleError(invalidHandle ? (handle ? m.auth_signup_handle_invalid() : m.auth_form_required()) : '');
-    setEmailError(invalidEmail ? (email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '');
-    setPasswordError(
-      invalidPassword
-        ? password
-          ? m.auth_signup_password_invalid({
-              minimum: String(requirements.password.minLength),
-              maximum: String(requirements.password.maxLength),
-            })
-          : m.auth_form_required()
-        : '',
-    );
-    if (invalidHandle || invalidEmail || invalidPassword) return;
-    const challenge = turnstile.current;
-    const token = challenge?.getToken();
+  function change(field: keyof SignupDraft, value: string) {
+    controller.updateDraft(field, value);
+    setErrors((current) => ({ ...current, [field]: '' }));
+  }
+
+  async function sendAttempt(retrying: boolean, event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (!journey.active || submitting.current) return;
+    const current = controller.phase;
+    if (retrying ? current.kind !== 'uncertain' : current.kind !== 'draft') return;
+
+    if (!retrying) {
+      clearErrors();
+      const draft = current.values;
+      const invalidHandle =
+        normalizeSignupHandle(draft.handle) === null ||
+        draft.handle.length < requirements.handle.minLength ||
+        draft.handle.length > requirements.handle.maxLength;
+      const invalidEmail =
+        !draft.email.trim() ||
+        draft.email.length > requirements.email.maxLength ||
+        Boolean(emailInput.current?.validity.typeMismatch);
+      const invalidPassword =
+        draft.password.length < requirements.password.minLength ||
+        draft.password.length > requirements.password.maxLength;
+      const invalidConfirmation = Boolean(draft.password && draft.confirmation !== draft.password);
+      setErrors({
+        handle: invalidHandle ? (draft.handle ? m.auth_signup_handle_invalid() : m.auth_form_required()) : '',
+        email: invalidEmail ? (draft.email.trim() ? m.auth_form_email_invalid() : m.auth_form_required()) : '',
+        password: invalidPassword
+          ? draft.password
+            ? m.auth_signup_password_invalid({
+                minimum: String(requirements.password.minLength),
+                maximum: String(requirements.password.maxLength),
+              })
+            : m.auth_form_required()
+          : '',
+        confirmation: invalidConfirmation ? m.auth_signup_password_mismatch() : '',
+      });
+      if (invalidHandle || invalidEmail || invalidPassword || invalidConfirmation) return;
+    }
+
+    const token = turnstile.current?.getToken();
     if (!token) {
       setTurnstileError(m.auth_signup_turnstile_required());
       return;
     }
+    const dispatch = controller.dispatch(token);
+    if (!dispatch) return;
     submitting.current = true;
-    setPending(true);
-    const submission = await submitSignup(
-      {
-        key: key.current,
-        handle,
-        email,
-        password,
-        turnstile_token: token,
-      },
-      requirements.password,
-    );
+    setTurnstileError('');
+    const result = await submitSignup(dispatch.body, requirements.password);
     if (!journey.active) return;
-    if (submission.ok) {
-      protectedDraft.current = false;
-      setCreated(true);
-      setPassword('');
-      // Creation is final for this journey. A login failure only offers existing login/recovery routes.
-      const result = await signIn(email, password);
+    const resolution = controller.resolve(dispatch.attempt, result);
+
+    if (resolution.kind === 'created') {
+      controller.beginSignIn();
+      const signInResult = await signIn(resolution.credentials.email, resolution.credentials.password);
       if (!journey.active) return;
-      if (result.ok) {
+      submitting.current = false;
+      if (signInResult.ok) {
+        controller.finishSignIn(true);
         window.location.assign(signInTarget(query, window.location.origin));
         return;
       }
-      submitting.current = false;
-      setPending(false);
-      setMessage(explainSignIn(result));
+      controller.finishSignIn(false, explainSignIn(signInResult));
       return;
     }
+
     submitting.current = false;
-    setPending(false);
-    if (submission.failure.field === 'password') {
-      setPasswordError(submission.failure.message);
-      document.getElementById(passwordId)?.focus();
-      return;
+    if (resolution.kind === 'ignored') return;
+    turnstile.current?.reset();
+    if (resolution.kind === 'request-rejected') {
+      setTurnstileError(m.auth_signup_verification_failed());
+    } else if (resolution.kind === 'handle-unavailable') {
+      setErrors((currentErrors) => ({ ...currentErrors, handle: resolution.failure.message }));
     }
-    challenge?.reset();
-    if (submission.failure.field === 'handle') {
-      setHandleError(submission.failure.message);
-      document.getElementById(handleId)?.focus();
-      return;
-    }
-    setConflict(submission.failure.conflict);
-    setMessage(submission.failure.message);
   }
 
+  function useCorrectedHandle() {
+    clearErrors();
+    if (!controller.useDifferentHandle()) return;
+    turnstile.current?.reset();
+    document.getElementById(handleId)?.focus();
+  }
+
+  const draftForm = phase.kind === 'draft' || phase.kind === 'handle-unavailable' || phase.kind === 'dispatched';
   return (
-    <AuthPage heading={m.auth_signup_heading()}>
-      <SignupDeparture
-        shouldWarn={shouldWarn}
-        leave={leave}
-        focus={() => {
-          const previous = returnFocus.current;
-          if (previous?.isConnected && previous !== document.body) previous.focus();
-          else document.getElementById(handleId)?.focus();
-        }}
-      />
-      {created ? (
-        <div className="auth-login-form" aria-busy={pending}>
-          <p role="status">{m.auth_signup_created()}</p>
-          {message ? (
-            <ErrorAlert tabIndex={-1} ref={alert}>
-              <p>{message}</p>
-            </ErrorAlert>
-          ) : null}
-          <nav className="auth-signup-links" aria-label={m.auth_signup_sign_in()}>
-            <a href={`/login${query}`} onClick={follow}>
-              {m.auth_signup_sign_in()}
-            </a>
-            <a href={`/recovery${query}`} onClick={follow}>
-              {m.auth_signup_recovery()}
-            </a>
-          </nav>
-        </div>
-      ) : (
-        <form ref={form} className="auth-login-form" method="post" action="/signup" noValidate onSubmit={submit}>
-          <Field data-invalid={Boolean(handleError)}>
-            <FieldLabel htmlFor={handleId}>{m.auth_signup_handle()}</FieldLabel>
-            <Input
-              id={handleId}
-              name="handle"
-              minLength={requirements.handle.minLength}
-              maxLength={requirements.handle.maxLength}
-              value={handle}
-              onChange={(event) => {
-                setHandle(event.target.value);
-                setHandleError('');
-              }}
-              aria-invalid={handleError ? true : undefined}
-              aria-describedby={handleError ? handleErrorId : undefined}
-              readOnly={pending}
-              required
+    <>
+      <form
+        id="signup-form"
+        className="auth-login-form"
+        method="post"
+        action="/signup"
+        noValidate
+        onSubmit={(event) => void sendAttempt(false, event)}
+      >
+        {draftForm && values ? (
+          <SignupCredentials
+            values={values}
+            requirements={requirements}
+            errors={errors}
+            readOnly={readOnly}
+            emailRef={emailInput}
+            onChange={change}
+          />
+        ) : null}
+        {phase.kind === 'handle-unavailable' ? (
+          <ErrorAlert>
+            <p>{phase.message}</p>
+            <p>{m.auth_signup_handle_correction_body()}</p>
+            <Button type="button" disabled={!handleCorrectionReady} onClick={useCorrectedHandle}>
+              {m.auth_signup_handle_correction_action()}
+            </Button>
+          </ErrorAlert>
+        ) : null}
+        {phase.kind === 'uncertain' ? (
+            <div ref={alert} tabIndex={-1}>
+            <SignupUncertainty
+              phase={phase}
+              query={query}
+              follow={follow}
+              onRetry={() => void sendAttempt(true)}
+              retryDisabled={retryWait}
             />
-            {handleError ? <FieldError id={handleErrorId}>{handleError}</FieldError> : null}
-            <p className="text-sm text-muted-foreground">
-              {m.auth_signup_handle_requirement({
-                minimum: String(requirements.handle.minLength),
-                maximum: String(requirements.handle.maxLength),
-              })}
-            </p>
-          </Field>
-          <Field data-invalid={Boolean(emailError)}>
-            <FieldLabel htmlFor={emailId}>{m.auth_signup_email()}</FieldLabel>
-            <Input
-              ref={emailInput}
-              id={emailId}
-              name="email"
-              type="email"
-              autoComplete="email"
-              maxLength={requirements.email.maxLength}
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setEmailError('');
+          </div>
+        ) : null}
+        <Field data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
+          <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
+            <TurnstileWidget
+              ref={turnstile}
+              siteKey={siteKey}
+              scriptUrl={scriptUrl}
+              language={getLocale()}
+              onStatus={setChallengeStatus}
+              onToken={(value) => {
+                if (value) setTurnstileError('');
               }}
-              aria-invalid={emailError ? true : undefined}
-              aria-describedby={emailError ? emailErrorId : undefined}
-              readOnly={pending}
-              required
             />
-            {emailError ? <FieldError id={emailErrorId}>{emailError}</FieldError> : null}
-            <p className="text-sm text-muted-foreground">
-              {m.auth_signup_email_requirement({ maximum: String(requirements.email.maxLength) })}
-            </p>
-          </Field>
-          <Field data-invalid={Boolean(passwordError)}>
-            <FieldLabel htmlFor={passwordId}>{m.auth_signup_password()}</FieldLabel>
-            <PasswordInput
-              name="password"
-              autoComplete="new-password"
-              required
-              readOnly={pending}
-              id={passwordId}
-              minLength={requirements.password.minLength}
-              maxLength={requirements.password.maxLength}
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                setPasswordError('');
-              }}
-              aria-invalid={passwordError ? true : undefined}
-              aria-describedby={passwordError ? passwordErrorId : undefined}
-            />
-            {passwordError ? <FieldError id={passwordErrorId}>{passwordError}</FieldError> : null}
-            <p className="text-sm text-muted-foreground">
-              {m.auth_signup_password_requirement({
-                minimum: String(requirements.password.minLength),
-                maximum: String(requirements.password.maxLength),
-              })}
-            </p>
-          </Field>
-          <Field data-invalid={Boolean(turnstileError) || challengeStatus === 'failed'}>
-            <div id="signup-turnstile" tabIndex={-1} aria-describedby={turnstileError ? turnstileErrorId : undefined}>
-              <TurnstileWidget
-                ref={turnstile}
-                siteKey={siteKey}
-                scriptUrl={scriptUrl}
-                language={getLocale()}
-                onStatus={setChallengeStatus}
-                onToken={(value) => {
-                  if (value) setTurnstileError('');
+          </div>
+          <p className="text-sm text-muted-foreground">{m.auth_signup_turnstile_required()}</p>
+          {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
+          {challengeStatus === 'failed' ? (
+            <div>
+              <ErrorAlert>
+                <p>{m.auth_signup_turnstile_failed()}</p>
+              </ErrorAlert>
+              <Button
+                type="button"
+                disabled={readOnly}
+                onClick={() => {
+                  setTurnstileError('');
+                  turnstile.current?.retry();
                 }}
-              />
+              >
+                {m.auth_signup_turnstile_retry()}
+              </Button>
             </div>
-            <p className="text-sm text-muted-foreground">{m.auth_signup_turnstile_required()}</p>
-            {challengeStatus === 'loading' ? <p role="status">{m.auth_signup_turnstile_loading()}</p> : null}
-            {challengeStatus === 'failed' ? (
-              <div>
-                <FieldError role="alert">{m.auth_signup_turnstile_failed()}</FieldError>
-                <Button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    setTurnstileError('');
-                    turnstile.current?.retry();
-                  }}
-                >
-                  {m.auth_signup_turnstile_retry()}
-                </Button>
-              </div>
-            ) : null}
-            {turnstileError ? <FieldError id={turnstileErrorId}>{turnstileError}</FieldError> : null}
-          </Field>
-          {message ? (
-            <ErrorAlert tabIndex={-1} ref={alert}>
-              <p>{message}</p>
-              {conflict ? (
-                <nav className="auth-signup-links" aria-label={m.auth_signup_conflict()}>
-                  <a href={`/login${query}`} onClick={follow}>
-                    {m.auth_signup_sign_in()}
-                  </a>
-                  <a href={`/recovery${query}`} onClick={follow}>
-                    {m.auth_signup_recovery()}
-                  </a>
-                </nav>
-              ) : null}
-            </ErrorAlert>
           ) : null}
-          <Button type="submit" disabled={pending} aria-busy={pending}>
+          {turnstileError ? <p id={turnstileErrorId} role="alert">{turnstileError}</p> : null}
+        </Field>
+        {phase.kind === 'dispatched' ? (
+          <p role="status" aria-busy="true">{m.auth_signup_creating()}</p>
+        ) : phase.kind === 'draft' ? (
+          <Button type="submit" aria-busy={false}>
             {m.auth_signup_heading()}
           </Button>
-        </form>
-      )}
-      {!created ? (
+        ) : null}
+      </form>
+      {phase.kind === 'draft' || phase.kind === 'handle-unavailable' ? (
         <nav className="auth-login-links" aria-label={m.auth_signup_sign_in()}>
           <a href={`/login${query}`} onClick={follow}>
             {m.auth_signup_sign_in()}
           </a>
         </nav>
       ) : null}
-    </AuthPage>
+    </>
   );
 }

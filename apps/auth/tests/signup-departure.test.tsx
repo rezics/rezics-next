@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router';
 import { creationFixture, button, dom, fill, flush, open, send } from './creation-page-fixture';
 import { Route } from '../src/routes/signup';
+import type { RegistrationPage } from '../src/registration-page';
 creationFixture();
 const originalScroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
 beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true }));
@@ -17,17 +18,21 @@ document.head.appendChild = <T extends Node>(node: T): T => {
 let serial = 0;
 async function setup() {
   const root = createRootRoute({ component: Outlet });
-  const config = {
+  const registrationPage: Extract<RegistrationPage, { kind: 'registration' }> = {
     kind: 'registration',
+    viewer: null,
     requirements: {
       handle: { minLength: 3, maxLength: 64 },
       email: { maxLength: 254 },
       password: { minLength: 8, maxLength: 128 },
       verification: { provider: 'turnstile', required: true },
     },
+    verification: { configured: true },
+    actions: { register: true, continue: false },
     siteKey: 'key',
     scriptUrl: `https://challenge.test/signup-${++serial}.js`,
-  } as const;
+  };
+  let config: RegistrationPage = registrationPage;
   const route = Route.update({
     id: '/signup',
     path: '/signup',
@@ -53,7 +58,7 @@ async function setup() {
   };
   await flush(() =>
     document
-      .querySelector<HTMLScriptElement>(`script[src="${config.scriptUrl}"]`)!
+      .querySelector<HTMLScriptElement>(`script[src="${registrationPage.scriptUrl}"]`)!
       .dispatchEvent(new dom.Event('load') as unknown as Event),
   );
   const input = (name: string) => page.host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
@@ -70,6 +75,7 @@ async function setup() {
     await edit('handle', 'Reader_1');
     await edit('email', 'reader@example.test');
     await edit('password', 'private-password');
+    await edit('confirm', 'private-password');
     await flush(() => token('fresh-token'));
     await submit();
   };
@@ -77,6 +83,11 @@ async function setup() {
     ...page,
     query,
     router,
+    registrationPage,
+    setPage: async (next: RegistrationPage) => {
+      config = next;
+      await router.invalidate();
+    },
     input,
     edit,
     choose,
@@ -121,22 +132,65 @@ test('empty and whitespace-only details do not warn; Stay preserves invalid inpu
 test('Stay retains a pending creation and retry key; Leave fences late creation and clears secrets', async () => {
   const p = await setup();
   await p.ready();
+  const secret = p.input('password');
   await p.navigate();
   await p.choose('Stay');
   expect(p.input('password').value).toBe('private-password');
   await flush(() => p.calls[0]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
-  await p.submit();
+  expect(p.host.querySelector('input[name="handle"]')).toBeNull();
+  expect(p.host.querySelector('#signup-uncertain-panel')?.textContent).toContain('Reader_1');
+  expect(p.host.querySelector('#signup-uncertain-panel')?.textContent).not.toContain('private-password');
   expect(p.calls).toHaveLength(1); // A failed request consumes its token.
   await p.token('retry-token');
-  await p.submit();
+  await p.choose('Retry original attempt');
   expect(p.calls[1]!.body.key).toBe(p.calls[0]!.body.key);
+  expect(p.calls[1]!.body.handle).toBe(p.calls[0]!.body.handle);
+  expect(p.calls[1]!.body.email).toBe(p.calls[0]!.body.email);
+  expect(p.calls[1]!.body.password).toBe(p.calls[0]!.body.password);
   expect(p.calls[1]!.body.turnstile_token).toBe('retry-token');
-  const secret = p.input('password');
   await p.navigate();
   await p.choose('Leave');
-  expect(secret.value).toBe('');
+  expect(secret.isConnected).toBe(false);
+  expect(p.input('password').value).toBe('');
   await flush(() => p.calls[1]!.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
-  expect(p.calls).toHaveLength(2);
+  expect(p.calls).toHaveLength(2); // Leave retired the old callback, so late 201 cannot start sign-in.
   expect(p.input('password').value).toBe('');
   expect(p.unload()).toBe(false);
+});
+
+test('a failed registration-page refresh preserves an unresolved attempt without reopening editable fields', async () => {
+  const p = await setup();
+  await p.ready();
+  await flush(() => p.calls[0]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  const retained = p.host.querySelector('#signup-uncertain-panel')?.textContent ?? '';
+  expect(retained).toContain('Reader_1');
+  expect(p.calls).toHaveLength(1);
+
+  await p.setPage({ kind: 'unavailable', reason: 'dependency', actions: { register: false, continue: false } });
+  expect(p.host.querySelector('input[name="handle"]')).toBeNull();
+  expect(p.host.querySelector('#signup-uncertain-panel')?.textContent).toContain('Reader_1');
+  expect(p.host.querySelector('#signup-uncertain-panel')?.textContent).not.toContain('private-password');
+
+  await p.setPage(p.registrationPage);
+  expect(p.host.querySelector('input[name="handle"]')).toBeNull();
+  expect(p.host.querySelector('#signup-uncertain-panel')?.textContent).toContain('Reader_1');
+  expect(p.calls).toHaveLength(1); // Revalidation and challenge loading never replay creation.
+});
+
+test('a newly signed-in viewer closes pending signup advice and fences its late creation result', async () => {
+  const p = await setup();
+  await p.ready();
+  const signup = p.calls[0]!;
+  await p.setPage({
+    kind: 'already-signed-in',
+    viewer: { account_id: 'replacement-account' },
+    requirements: p.registrationPage.requirements,
+    verification: { configured: true },
+    actions: { register: false, continue: true },
+  });
+  expect(document.body.textContent).toContain('You are already signed in');
+  expect(p.host.querySelector('input[name="password"]')).toBeNull();
+  await flush(() => signup.resolve(Response.json({ accountId: 'created' }, { status: 201 })));
+  expect(p.calls).toHaveLength(1); // A stale 201 cannot start sign-in or redirect this viewer.
+  expect(document.body.textContent).toContain('You are already signed in');
 });
