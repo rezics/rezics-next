@@ -6,6 +6,7 @@ import { withThrowawayDatabase } from './derived.ts';
 import {
   compilerConfigArgs,
   compilerEnvironment,
+  isLocalTypecheckLanding,
   placeCompilerRun,
   type CompilerPlacementDependencies,
 } from '../../../scripts/typecheck.ts';
@@ -80,6 +81,7 @@ async function typecheck(
   emitSchema?: string,
   emitOpenApi = false,
 ): Promise<number> {
+  const incremental = localCompilerStateArgs(env);
   const compiled = await withCommandPhase(
     'compiler',
     async () => {
@@ -89,7 +91,11 @@ async function typecheck(
         const emitted = await compilerCommand('client-emit', ['bun', 'scripts/client.ts'], env);
         if (emitted !== 0) return emitted;
       }
-      const tsc = await compilerCommand('tsc', ['tsc', '--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
+      const tsc = await compilerCommand(
+        'tsc',
+        ['tsc', '--noEmit', ...incremental, '--runExternalCode', '-p', 'tsconfig.json'],
+        env,
+      );
       if (tsc !== 0) return tsc;
       const constructed = await compilerCommand('construct', ['bun', 'run', 'construct'], env);
       if (constructed !== 0) return constructed;
@@ -117,6 +123,15 @@ async function typecheck(
     );
   }
   return 0;
+}
+
+function localCompilerStateArgs(env: NodeJS.ProcessEnv): string[] {
+  if (!isLocalTypecheckLanding(env)) return [];
+  const file = env.TYPECHECK_BUILD_INFO_FILE;
+  const allowed = `${resolve(repository, '.temp/typecheck/compiler-state/runs')}${sep}`;
+  const stateFile = file ? resolve(file) : '';
+  if (!stateFile.startsWith(allowed)) throw new Error('Local landing typecheck has no safe compiler state file');
+  return ['--incremental', '--tsBuildInfoFile', stateFile];
 }
 
 export async function runKernelTypecheck(
@@ -151,7 +166,9 @@ export async function runKernelTypecheck(
     ...(emitSchema === undefined ? [] : [`--emit-schema=${emitSchema}`]),
     ...config,
   ];
-  const placed = await placeCompilerRun(
+  const placed = isLocalTypecheckLanding(env)
+    ? null
+    : await placeCompilerRun(
     {
       label: 'kernel typecheck',
       root: repository,
@@ -163,7 +180,7 @@ export async function runKernelTypecheck(
     directory,
     env,
     dependencies,
-  );
+      );
   if (placed !== null) return placed;
   writeCommandObservation('kernel typecheck', commandObservation(remoteCommand, repository, env), env);
   // The compiler database applies the same migrations as derived generation, in admitted custody only.

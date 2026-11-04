@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
@@ -334,6 +334,79 @@ test('a change checks the workspaces containing it and their dependents; a root 
   expect(names(['apps/web/README.md'])).toEqual([]);
   expect(names(['bun.lock'])).toHaveLength(4);
   expect(names(undefined)).toHaveLength(4);
+});
+
+test('a local Kernel landing reuses the prior dev compiler state and publishes the candidate state', async () => {
+  const { root, remove } = fixture();
+  try {
+    writeWorkspace(root, 'services/kernel', '@fixture/kernel', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': `
+const state = process.env.TYPECHECK_BUILD_INFO_FILE;
+if (!state) throw new Error('missing compiler state path');
+const previous = await Bun.file(state).text().catch(() => '');
+await Bun.write('reused', previous.length ? 'yes' : 'no');
+await Bun.write(state, previous + 'state');
+`,
+    });
+    const run = (base: string, candidate: string) =>
+      typecheck({
+        root,
+        changedFiles: ['services/kernel/src/changed.ts'],
+        env: { TYPECHECK_LOCAL: '1', TYPECHECK_DEV_COMMIT: base, TYPECHECK_CANDIDATE_COMMIT: candidate },
+        startDatabase: unusedDatabase(),
+        stdout: collector().stdout,
+      });
+
+    expect(await run('a'.repeat(40), 'b'.repeat(40))).toBe(0);
+    expect(readFileSync(join(root, 'services/kernel/reused'), 'utf8')).toBe('no');
+    expect(await run('b'.repeat(40), 'c'.repeat(40))).toBe(0);
+    expect(readFileSync(join(root, 'services/kernel/reused'), 'utf8')).toBe('yes');
+  } finally {
+    remove();
+  }
+});
+
+test('compiler database cleanup failure is infrastructure, and no-diagnostic command failures are not type errors', async () => {
+  const databaseFixture = fixture();
+  const error = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    writeWorkspace(databaseFixture.root, 'services/kernel', '@fixture/kernel', 'bun pass.ts', {
+      'tsconfig.json': '{ "contentMappers": [] }\n',
+      'pass.ts': passScript,
+    });
+    const local = {
+      TYPECHECK_LOCAL: '1',
+      TYPECHECK_DEV_COMMIT: 'a'.repeat(40),
+      TYPECHECK_CANDIDATE_COMMIT: 'b'.repeat(40),
+    };
+    const cleanupCode = await typecheck({
+      root: databaseFixture.root,
+      changedFiles: ['services/kernel/src/file.ts'],
+      env: local,
+      stdout: collector().stdout,
+      startDatabase: async () => ({ url: 'postgres://fixture/shared', remove() { throw new Error('volume remains'); } }),
+    });
+    expect(cleanupCode).toBe(75);
+    expect(error).toHaveBeenCalledWith('root typecheck infrastructure failure: compiler database cleanup could not be proven: volume remains');
+  } finally {
+    error.mockRestore();
+    databaseFixture.remove();
+  }
+
+  const commandFixture = fixture();
+  try {
+    writeWorkspace(commandFixture.root, 'packages/failing', '@fixture/failing', 'bun fail.ts', {
+      'fail.ts': 'process.exit(2)\n',
+    });
+    const output = collector();
+    const code = await typecheck({ root: commandFixture.root, changedFiles: ['packages/failing/fail.ts'], stdout: output.stdout });
+    expect(code).toBe(1);
+    expect(output.text()).toContain('execution after');
+    expect(output.text()).not.toContain('type-errors after');
+  } finally {
+    commandFixture.remove();
+  }
 });
 
 test('an admitted explicit root DATABASE_URL reaches the selected compiler without provisioning a replacement', () => {

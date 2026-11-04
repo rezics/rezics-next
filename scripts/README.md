@@ -41,7 +41,7 @@ returned file is merged.
 | Check        | Placement                                                                                                                                                                                                                                                                                                    |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Worker       | The shared classifier keeps only proven typecheck, formatter and bounded small-unit commands local. Heavy and unknown commands use hosts a/b; `--local`, off markers and learned memory weight cannot force local execution. Missing hosts and remote transport failure return nonzero without local replay. |
-| Kernel       | Kernel checks and SQL-mapped typechecks use hosts a/b. Only pure compiler commands without a Kernel/Auth database stay local. Missing hosts fail closed instead of starting a local database or suite.                                                                                                       |
+| Kernel       | Kernel checks and ordinary SQL-mapped typechecks use hosts a/b. The dev train's serial prelanding root typecheck runs on the train host and reuses compiler state from the prior dev commit; state is keyed by candidate commit and compiler/schema inputs and is published only after typecheck and database cleanup succeed. |
 | Auth service | `bun run --cwd services/auth check [files...]` places the database, compiler and test work through `stackRun`. `bun run --cwd services/auth typecheck` follows the kernel typecheck placement rule above, using a throwaway migrated Auth database when `DATABASE_URL` is absent.                            |
 | Browser      | The isolated runners in `apps/auth` and `apps/web` use the shared placement layer. The web check returns its browser report. UI browser tests in `packages/ui` also run on hosts as part of the remote gate.                                                                                                 |
 | Landing gate | Root `bun run check` splits all workspace checks into two duration-balanced remote groups when `KERNEL_CHECK_REMOTE` names a readable file. The lighter group also runs the control-plane gate.                                                                                                              |
@@ -275,6 +275,11 @@ both the kernel and Auth migrations, since Auth's imports also reach kernel SQL.
 tsc exits or fails to start. An explicit `DATABASE_URL` does not bypass placement: it is accepted only inside an
 already admitted physical check-host run because credentials cannot be relocated. Outside that run, typecheck exits
 75 before placement. Inside an admitted run, the supplied URL is used and the throwaway database is not started.
+
+Root typecheck preserves every compiler diagnostic with its file and line. Database setup or cleanup failure, check-host
+loss, timeout and compiler launch failure without diagnostics are reported as infrastructure or execution results,
+never as type errors without diagnostics. The local prelanding cache is copy-on-write from the dev commit to the
+candidate commit and includes compiler, lockfile, configuration and Kernel/Auth migration inputs.
 
 ### Controller-reserved proof binding
 
