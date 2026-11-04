@@ -40,7 +40,7 @@ const { ThreadReading } = await import('../src/threads/thread-reading');
 const { BoardCommunity } = await import('../src/threads/board-community');
 const { ThreadReadingHeader, ThreadReadingPost } = await import('../src/routes/threads/$id_.$slug');
 const { SignInPrompt } = await import('../src/threads/composer');
-const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+const { getLocale, setLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 
 async function render(component: ReactNode, path = '/') {
@@ -179,10 +179,10 @@ test('the real Realm shelves hand consumed returns to Board, work and participat
     'anonymous',
   );
   if (!page.realm) throw new Error('Recorded Realm unavailable');
-  const previous = getLocale();
+  const previous = getLocale;
   try {
     for (const locale of ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'fr', 'de', 'es'] as const) {
-      setLocale(locale, { reload: false });
+      overwriteGetLocale(() => locale);
       const origin = `/${locale}/realms/${page.realm.id}`;
       const html = await render(createElement(SpacePage, { page }), origin);
       const links = [...html.matchAll(/href="([^"]+)"/g)].map(
@@ -224,7 +224,7 @@ test('the real Realm shelves hand consumed returns to Board, work and participat
       expect(realmReadingReturn(selected, locale === 'en' ? 'ja' : 'en')).toBeUndefined();
       expect(realmReadingReturn(`//elsewhere.test${origin}`, locale)).toBeUndefined();
     }
-    setLocale('en', { reload: false });
+    overwriteGetLocale(() => 'en');
     const subject = page.realm.published[0]!;
     const source = `/en/subjects/${subject.id}/work/reviews?realm=${page.realm.id}&node=review-list&cursor=original%2Fwindow#subject-community-review-list`;
     expect(subjectCommunityVisitReturn(source, 'en')).toBe(source);
@@ -235,6 +235,6 @@ test('the real Realm shelves hand consumed returns to Board, work and participat
       ).searchParams.get('via'),
     ).toBe(source);
   } finally {
-    setLocale(previous, { reload: false });
+    overwriteGetLocale(previous);
   }
 });

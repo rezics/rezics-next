@@ -74,8 +74,8 @@ export function realmShelfReturn(input: {
   href: string;
   locale: string;
   node: RealmReadingNode;
-  cursor?: string | null;
-  id?: string;
+  cursor?: string | null | undefined;
+  id?: string | undefined;
 }): string | undefined {
   const accepted = realmReadingReturn(input.href, input.locale);
   if (!accepted) return;

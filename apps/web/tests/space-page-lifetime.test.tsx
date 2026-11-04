@@ -174,6 +174,11 @@ mock.module('../src/community/space-actions', () => ({
   },
   changeRealmPublication: async () => ({ kind: 'unavailable' }),
   readSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  changeSpaceSetup: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  resolveSpaceSetupChoice: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  searchSpaceSetupContexts: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  readSpaceSetupBoardChoices: async () => ({ kind: 'failure', reason: 'unavailable', status: 503 }),
+  readRealmPublicationPreparation: async () => ({ kind: 'unavailable' }),
 }));
 mock.module('../src/accounts/resource-access/link', () => ({ ResourceAccessLink: () => null }));
 mock.module('../src/library/follow-target-control', () => ({ FollowTargetControl: () => null }));
