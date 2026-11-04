@@ -23,7 +23,12 @@ const observation = (): BoardPinAdviceObservation => ({
 });
 
 test('createKernel mounts pin advice with its authenticated action, separate from board reads', () => {
-  const kernel = createKernel({ pool: {} as never, routeKey: new Uint8Array(32).fill(7) });
+  const kernel = createKernel({
+    pool: { on: () => {} } as never,
+    routeKey: new Uint8Array(32).fill(7),
+    tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) },
+    receiptKeys: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(9)]]) },
+  });
   const actions = actionCatalogue(kernel);
   expect(actions.get('board:read')?.anonymous).toBe(true);
   expect(actions.get('board:pin-advice')?.anonymous).toBe(false);
