@@ -2080,6 +2080,7 @@ export class Importer {
         throw new Error('Converter did not produce bound proposals');
       commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
     }
+    if (owner.external_id === 'v1') console.error('showcase-credit v1 command plan:', commands.length);
     if (!commands.length && !omissions.length && !deferredCover) {
       const kind = store.classify(run, row.recordKey, { commands: [] });
       if (conversion && 'outcome' in conversion && conversion.outcome === 'ignored')
