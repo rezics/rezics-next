@@ -60,7 +60,8 @@ const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPr
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 
-const { createRoot } = await import('react-dom/client');
+const { hydrateRoot } = await import('react-dom/client');
+const { renderToString } = await import('react-dom/server');
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider, useRouterState } =
   await import('@tanstack/react-router');
@@ -142,7 +143,6 @@ function ready(call: ReadCall, subject = call.subject, cursor = call.cursor) {
 async function mounted(initialPath = '/library/ratings') {
   const host = document.createElement('main');
   document.body.append(host);
-  const root = createRoot(host);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const stopObservation = viewerExposureLifetime(client).subscribe(() => {});
   client.setQueryData(sessionQuery.queryKey, session());
@@ -167,9 +167,10 @@ async function mounted(initialPath = '/library/ratings') {
       });
     });
   }
-  await act(async () =>
-    root.render(createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }))),
-  );
+  const tree = createElement(QueryClientProvider, { client }, createElement(RouterProvider, { router }));
+  host.innerHTML = renderToString(tree);
+  const root = hydrateRoot(host as unknown as HTMLElement, tree);
+  await act(async () => tick());
   return {
     host,
     client,
