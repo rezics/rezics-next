@@ -1250,6 +1250,7 @@ test('the mounted Realm return reads only its selected native window and keeps p
   expect(calls.publications).toEqual([]);
   expect(host.textContent).toContain('Selected board window');
   expect(host.textContent).not.toContain('Original board');
+  expect(window.document.activeElement?.id).toBe(`realm-board-${selectedId}`);
   const link = host.querySelector<HTMLAnchorElement>(`#realm-board-${selectedId} a`)!;
   expect(new URL(link.href).searchParams.get('returnTo')).toBe(
     `/en/realms/${realmId}?node=boards&cursor=original%2Fwindow#realm-board-${selectedId}`,
