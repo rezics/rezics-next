@@ -33,6 +33,7 @@ const globals = {
   matchMedia: window.matchMedia.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -157,7 +158,6 @@ async function mount(href: string) {
     link,
     async close() {
       await act(async () => root.unmount());
-      router.dispose();
       client.clear();
       host.remove();
     },
