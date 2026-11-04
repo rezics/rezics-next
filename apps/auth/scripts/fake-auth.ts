@@ -188,6 +188,26 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
         );
       }
 
+      if (url.pathname === '/account-management/deletion-page' && request.method === 'POST') {
+        if (state.signedOut) return Response.json({ kind: 'signed-out' }, { headers });
+        if (
+          state.sessionClientId !== AUTH_PAGE_OPERATION_CLIENT_ID ||
+          state.sessionScopes.length !== 1 ||
+          state.sessionScopes[0] !== AUTH_PAGE_OPERATION_SCOPES.delete[0]
+        )
+          return Response.json({ kind: 'authentication-required', accountId: state.sessionAccountId }, { headers });
+        return Response.json(
+          {
+            kind: 'review',
+            accountId: state.sessionAccountId,
+            email: 'reader@example.test',
+            action: 'available',
+            policy: 'personal-deletion',
+          },
+          { headers },
+        );
+      }
+
       if (url.pathname === '/sessions' && request.method === 'GET') {
         if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
         return Response.json(

@@ -442,5 +442,11 @@
   "auth_automated_leave": "Leave",
   "auth_automated_stay": "Stay",
   "auth_transfer_departure_heading": "Leave operator transfer?",
-  "auth_transfer_departure_description": "Your unsent transfer preparation and review will be discarded."
+  "auth_transfer_departure_description": "Your unsent transfer preparation and review will be discarded.",
+  "auth_account_delete_authentication_required": "Authenticate to review this account and its current deletion permission. Returning here never deletes the account.",
+  "auth_account_delete_authenticate": "Authenticate and return to review",
+  "auth_account_delete_advice_available": "Current permission allows a deletion request. Prerequisites and permission are checked again when you submit.",
+  "auth_account_delete_review_changed": "Your account or session changed. Reload the review and confirm again.",
+  "auth_account_delete_submit_requirements": "Submission also checks temporary holds and pending native work. This review does not verify that they are clear.",
+  "auth_account_delete_retention_limits": "Required retained records follow their adopted retention exceptions. Backup expiry and external copies are separate; this page cannot confirm their erasure."
 }

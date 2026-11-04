@@ -442,5 +442,11 @@
   "auth_automated_leave": "Verlassen",
   "auth_automated_stay": "Bleiben",
   "auth_transfer_departure_heading": "Operatorübertragung verlassen?",
-  "auth_transfer_departure_description": "Ihre noch nicht gesendete Vorbereitung und Prüfung der Übertragung werden verworfen."
+  "auth_transfer_departure_description": "Ihre noch nicht gesendete Vorbereitung und Prüfung der Übertragung werden verworfen.",
+  "auth_account_delete_authentication_required": "Authentifizieren Sie sich, um dieses Konto und die aktuelle Löschberechtigung zu prüfen. Die Rückkehr hierher löscht das Konto nicht.",
+  "auth_account_delete_authenticate": "Authentifizieren und zur Prüfung zurückkehren",
+  "auth_account_delete_advice_available": "Die aktuelle Berechtigung erlaubt eine Löschanfrage. Voraussetzungen und Berechtigung werden beim Absenden erneut geprüft.",
+  "auth_account_delete_review_changed": "Ihr Konto oder Ihre Sitzung hat sich geändert. Laden Sie die Prüfung neu und bestätigen Sie erneut.",
+  "auth_account_delete_submit_requirements": "Beim Absenden werden auch vorübergehende Sperren und ausstehende interne Arbeiten geprüft. Diese Prüfung bestätigt nicht, dass sie erledigt sind.",
+  "auth_account_delete_retention_limits": "Erforderliche aufbewahrte Daten unterliegen den festgelegten Ausnahmen. Backups und externe Kopien sind gesondert zu behandeln; diese Seite bestätigt deren Löschung nicht."
 }

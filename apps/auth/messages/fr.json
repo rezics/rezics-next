@@ -442,5 +442,11 @@
   "auth_automated_leave": "Quitter",
   "auth_automated_stay": "Rester",
   "auth_transfer_departure_heading": "Quitter le transfert d’opérateur ?",
-  "auth_transfer_departure_description": "La préparation et la vérification du transfert non envoyées seront abandonnées."
+  "auth_transfer_departure_description": "La préparation et la vérification du transfert non envoyées seront abandonnées.",
+  "auth_account_delete_authentication_required": "Authentifiez-vous pour examiner ce compte et son autorisation actuelle de suppression. Le retour ici ne supprime jamais le compte.",
+  "auth_account_delete_authenticate": "S’authentifier et revenir à la vérification",
+  "auth_account_delete_advice_available": "L’autorisation actuelle permet une demande de suppression. Les prérequis et l’autorisation seront revérifiés lors de l’envoi.",
+  "auth_account_delete_review_changed": "Votre compte ou votre session a changé. Rechargez la vérification et confirmez à nouveau.",
+  "auth_account_delete_submit_requirements": "L’envoi vérifie aussi les blocages temporaires et les tâches internes en attente. Cette page ne confirme pas leur résolution.",
+  "auth_account_delete_retention_limits": "Les données conservées suivent les exceptions de conservation adoptées. Les sauvegardes et copies externes sont distinctes ; cette page ne confirme pas leur effacement."
 }

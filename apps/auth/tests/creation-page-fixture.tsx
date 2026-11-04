@@ -60,7 +60,8 @@ export function creationFixture() {
 export async function open(page: ReactNode, sessionBody: object) {
   const calls: { path: string; body: any; resolve: (response: Response) => void }[] = [];
   globalThis.fetch = ((path, init) => {
-    if (String(path) === '/session') return Promise.resolve(Response.json(sessionBody));
+    if (['/session', '/account-management/deletion-page'].includes(String(path)))
+      return Promise.resolve(Response.json(sessionBody));
     const request = Promise.withResolvers<Response>();
     calls.push({ path: String(path), body: JSON.parse(String(init?.body)), resolve: request.resolve });
     return request.promise;
