@@ -67,10 +67,15 @@ export function MusicReleaseReader(props: Props) {
     descriptor,
   });
   const allowInitial = useRef(true);
-  const recovering = useRef(false);
+  const activeRecovery = useRef<Recovery | null>(null);
   const mounted = useRef(false);
   const latest = useRef({ source: props.source, descriptor });
   latest.current = { source: props.source, descriptor };
+  // A pending recovery belongs to the address that requested it, including away/back transitions.
+  if (recovery && recovery.descriptor !== descriptor) {
+    activeRecovery.current = null;
+    setRecovery(null);
+  }
   // A new source may be equal in content. It still invalidates every control from the previous observation.
   if (
     admission.source !== props.source ||
@@ -110,15 +115,20 @@ export function MusicReleaseReader(props: Props) {
   }, [admitted, admission]);
 
   const recover = async (event: MouseEvent<HTMLButtonElement>) => {
-    if (recovering.current || !props.recoverCurrentPage) return;
+    if (activeRecovery.current || !props.recoverCurrentPage) return;
     const trigger = event.currentTarget;
     const keyboard = event.detail === 0;
     const attempt: Recovery = { token: {}, source: props.source, descriptor, status: 'pending' };
-    recovering.current = true;
+    activeRecovery.current = attempt;
     setRecovery(attempt);
     try {
       await props.recoverCurrentPage();
-      if (!mounted.current || latest.current.descriptor !== attempt.descriptor) return;
+      if (
+        !mounted.current ||
+        activeRecovery.current?.token !== attempt.token ||
+        latest.current.descriptor !== attempt.descriptor
+      )
+        return;
       // A resolved invalidation without a newly admitted source never rebinds the old request.
       setRecovery({
         ...attempt,
@@ -130,10 +140,14 @@ export function MusicReleaseReader(props: Props) {
       )
         focusHeading();
     } catch {
-      if (mounted.current && latest.current.descriptor === attempt.descriptor)
+      if (
+        mounted.current &&
+        activeRecovery.current?.token === attempt.token &&
+        latest.current.descriptor === attempt.descriptor
+      )
         setRecovery({ ...attempt, status: 'failed' });
     } finally {
-      recovering.current = false;
+      if (activeRecovery.current?.token === attempt.token) activeRecovery.current = null;
     }
   };
   return (

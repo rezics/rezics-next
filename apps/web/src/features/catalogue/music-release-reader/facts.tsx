@@ -163,7 +163,10 @@ export function MusicReleaseFacts({
 export function MusicReleaseSlot({ row, page, locale }: { row: Ready['rows'][number]; page: Ready; locale: string }) {
   const o = { locale: locale as never };
   const slotKey = page.stream?.slotKey;
-  const slots = row.statement?.qualifiers.filter((snak) => snak.property.id === slotKey || snak.property.id === 'schema:position') ?? [];
+  const slots =
+    row.statement?.qualifiers.filter(
+      (snak) => snak.property.id === slotKey || snak.property.id === 'schema:position',
+    ) ?? [];
   if (!slots.length) return null;
   return (
     <dl className="flex min-w-0 flex-wrap gap-x-4 gap-y-2 text-sm [overflow-wrap:anywhere]">
@@ -201,11 +204,17 @@ export function MusicReleaseOccurrenceFacts({
   const summary = row.summary;
   const type = summary ? page.types[summary.type] : undefined;
   const statement = row.statement;
-  const assertionRelated = stream.direction === 'inverse'
-    ? { [page.identity.id]: { type: page.public.subject.type, labels: page.public.subject.labels } }
-    : summary
-      ? { [summary.id]: { type: summary.type, labels: summary.label ? { [summary.label.language]: summary.label.value } : {} } }
-      : {};
+  const assertionRelated =
+    stream.direction === 'inverse'
+      ? { [page.identity.id]: { type: page.public.subject.type, labels: page.public.subject.labels } }
+      : summary
+        ? {
+            [summary.id]: {
+              type: summary.type,
+              labels: summary.label ? { [summary.label.language]: summary.label.value } : {},
+            },
+          }
+        : {};
   const targetHref = summary
     ? contextHref(subjectHref({ id: summary.id, label: summary.label?.value ?? '' }, locale).href, realm)
     : undefined;
