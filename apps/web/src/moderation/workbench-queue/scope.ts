@@ -42,7 +42,7 @@ export function workbenchSearch(search: Record<string, unknown>): WorkbenchSearc
   const directoryCursor = token(search.directoryCursor, 4096);
   const directoryRealm = token(search.directoryRealm, 128);
   const directory = search.directory === true || search.directory === 'true' ? true : undefined;
-  const discovery = {
+  const discovery: Pick<WorkbenchSearch, 'directoryCursor' | 'directory' | 'directoryRealm'> = {
     ...(directoryCursor ? { directoryCursor } : {}),
     ...(directory ? { directory } : {}),
     ...(directory && directoryRealm ? { directoryRealm } : {}),
