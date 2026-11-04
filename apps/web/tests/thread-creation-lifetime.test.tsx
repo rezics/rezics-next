@@ -678,18 +678,104 @@ test('mounted future-thread attachments retain recovery only until the admitted 
     await page.settle(() => !!button(page.m.editor_retry_upload()));
     expect(page.title()?.value).toBe('Draft title');
     await act(async () => page.user.click(button(page.m.editor_retry_upload())));
-    await page.settle(() => reservations.length === 4);
-    expect(reservations[2]!.body).toMatchObject({ containerId: id(85) });
-    expect(reservations[3]).toEqual(reservations[2]);
+    await page.settle(() => reservations.length === 3);
+    expect(reservations[1]!.body).toMatchObject({ containerId: id(85) });
+    expect(reservations[2]).toEqual(reservations[1]);
     await act(async () => page.updateConfig((current) => ({ ...current, visible: false })));
     await act(async () => page.updateConfig((current) => ({ ...current, visible: true })));
     await page.settle(() => !!page.editor());
     await attach('new-visit.png');
-    await page.settle(() => reservations.length === 5);
-    expect(reservations[4]!.body).toHaveProperty('newThread');
-    expect(reservations[4]!.body).not.toHaveProperty('containerId');
+    await page.settle(() => reservations.length === 4);
+    expect(reservations[3]!.body).toHaveProperty('newThread');
+    expect(reservations[3]!.body).not.toHaveProperty('containerId');
   } finally {
     transport.mockRestore();
     await page.dispose();
+  }
+});
+
+test('retired page attachments ignore late reservation stages after departure and credential ABA; a fresh composer admits new files', async () => {
+  for (const reason of ['departure', 'account', 'csrf'] as const) {
+    const page = await mountPage({
+      boardId: id(101),
+      purpose: 'discussion',
+      presetSubject: id(102),
+      presetSubjectTitle: 'Subject',
+      key: id(103),
+      visible: true,
+    });
+    const late = deferred<Response>();
+    let posts = 0;
+    let puts = 0;
+    const transport = spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.method === 'POST') {
+        posts++;
+        if (posts === 1) return late.promise;
+        return Response.json({
+          media: { id: id(104), containerId: id(105), state: 'reserved', mediaType: 'image/png', byteCount: 3 },
+        });
+      }
+      if (init?.method === 'PUT') {
+        puts++;
+        return new Response(null, { status: 204 });
+      }
+      return Response.json({ media: { id: id(104), state: 'available', mediaType: 'image/png', byteCount: 3 } });
+    });
+    const button = (name: string) =>
+      [...page.host.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent?.trim() === name)!;
+    const attach = async () => {
+      await act(async () => page.user.click(button(page.m.editor_image())));
+      const panel = page.host.querySelector('[role="dialog"]')!;
+      await act(async () =>
+        page.user.upload(
+          panel.querySelector<HTMLInputElement>('input[type="file"]')!,
+          new File(['png'], 'same.png', { type: 'image/png' }),
+        ),
+      );
+      await act(async () => page.user.click(button(page.m.editor_insert_image())));
+    };
+    try {
+      await page.render();
+      await page.fill('Current draft', 'Keep until accepted departure.');
+      await attach();
+      await page.settle(() => posts === 1);
+      const staleRemove = button(page.m.editor_dismiss_upload());
+      if (reason === 'departure') {
+        await page.go(`/boards/${id(101)}`);
+        await page.choose('leave');
+      } else {
+        await act(async () => {
+          page.client.setQueryData(page.sessionKey, {
+            ...owner,
+            ...(reason === 'account' ? { subject: id(106) } : { csrfToken: 'replacement' }),
+          });
+          page.client.setQueryData(page.sessionKey, owner);
+        });
+      }
+      await act(async () => {
+        staleRemove.click();
+        late.resolve(
+          Response.json({
+            media: { id: id(107), containerId: id(108), state: 'reserved', mediaType: 'image/png', byteCount: 3 },
+          }),
+        );
+        await Promise.resolve();
+      });
+      expect(puts).toBe(0);
+      expect(page.host.querySelector('[role="img"]')).toBeNull();
+      if (reason === 'departure') await page.go(`/boards/${id(101)}/new`);
+      else {
+        await act(async () => page.updateConfig((current) => ({ ...current, visible: false })));
+        await act(async () => page.updateConfig((current) => ({ ...current, visible: true })));
+      }
+      await page.settle(() => !!page.editor());
+      await attach();
+      await page.settle(() => page.host.querySelector('[role="img"]') !== null);
+      expect(posts).toBe(2);
+      expect(puts).toBe(1);
+    } finally {
+      transport.mockRestore();
+      await page.dispose();
+    }
   }
 });

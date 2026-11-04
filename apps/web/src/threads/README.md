@@ -70,6 +70,34 @@ retires that image's recovery. Network uncertainty stays unknown. Submissions re
 retain the exact immutable command and key for current-editor retry. Leaving only retires local continuations; an
 already accepted native command is neither cancelled nor undone.
 
+The composer joins the editor's admitted image occurrences to `ComposerAttachmentEpisode` under
+`thread-upload-episode`. Each occurrence retains its exact File, native command, caller and target independently,
+including identical filenames or repeated selection of the same File. Current rows announce observed reservation,
+byte transfer and processing stages only when they change. Accepted bytes remain pending until the editor publishes
+the inserted occurrence in its validated current snapshot. An insertion failure retries that accepted occurrence
+without another native command or duplicate insertion. Failed and pending rows both prevent Send.
+
+Uncertain reservation failures offer only exact original-command retry. Known media recovery first reads that same
+reservation and sends the original bytes only when still needed; it retains the 32-observation/60-second processing
+bound, including the first resumed read. Neither stopped polling nor unavailable infrastructure means rejection.
+An unavailable exact recovery explains that limitation without inventing a replacement receipt. Rejected images and
+local type/size refusals offer fresh-file replacement. Replacement keeps the editor's tracked position and description,
+but retires the old occurrence before admitting the new File. Removal stops this caller's work and removes only that
+local occurrence; it makes no native cancellation or erasure claim. Unrelated text, accepted images and other failures
+remain intact. Closing the transient image chooser alone does not retire a draft or an uncertain command.
+
+One future-thread episode retains the disclosed native container across its current attachments, with independent
+reservation commands per occurrence. A second image can reserve directly in that admitted container. A disclosed 409
+can admit a container reservation; an undisclosed 409 without a current known container remains unavailable. Retries
+retain each original key, body, viewer and any admitted container command. Accepted discard, departure, successful
+creation receipt and account/credential/CSRF/board/key replacement retire the existing caller irreversibly. Old stage,
+insertion and action callbacks remain inert after A/B/A. A new composer starts independently; no File, command or
+private container identity is restored from browser storage. Native media already in a document retains the separate
+claim-failure/check/reupload path and gains no claimability from these attachment observations.
+
+Decision: The UI editor's narrow `renderUpload` port delegates existing retry, dismissal and replacement operations;
+Threads owns localized stage/recovery copy, while the editor remains the sole insertion, description and position owner.
+
 This behavior protects against accidental departure. Signed-in, admitted new-thread and reply editors also offer
 optional [browser-only writing recovery](#browser-only-writing-recovery). Unsaved changes and current-visit exact
 retry still need the departure guard. Inline edits remain current-visit-only. The guard does not create, replay or

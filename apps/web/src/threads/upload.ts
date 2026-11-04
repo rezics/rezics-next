@@ -56,6 +56,7 @@ export type ReplyImageReservation = {
 export type ReplyImageUploadOptions = {
   episode?: FutureThreadUploadEpisode;
   reservation: ReplyImageReservation;
+  onStage?: (stage: UploadStage) => void;
 };
 
 function isPostImageType(value: string): value is PostImageType {
@@ -397,22 +398,33 @@ export function uploadReplyImage(
   const originalTarget = command?.body;
   const reservedTarget =
     originalTarget && 'containerId' in originalTarget ? { containerId: originalTarget.containerId! } : target;
-  return uploadImage(reservedTarget, file, signal, 'post-image', command, undefined, options);
+  return uploadImage(reservedTarget, file, signal, 'post-image', command, options?.onStage, options);
 }
 
 /** Resume only missing bytes on the original reservation, then observe its native processing state. */
-export async function resumeReplyImageUpload(mediaId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
+export async function resumeReplyImageUpload(
+  mediaId: string,
+  file: File,
+  signal: AbortSignal,
+  onStage?: (stage: UploadStage) => void,
+): Promise<UploadedImage> {
   const started = Date.now();
   try {
     throwIfAborted(signal);
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
+    onStage?.('processing');
     const current = await readReservation(mediaId, signal);
     throwIfAborted(signal);
     if (current.mediaType !== file.type || current.byteCount !== file.size) throw new UploadRefusal('unavailable');
     if (current.state === 'rejected') throw new UploadRefusal('rejected');
-    if (current.state === 'reserved') await putBytes(current, file, signal);
+    if (current.state === 'reserved') {
+      onStage?.('transfer');
+      await putBytes(current, file, signal);
+      throwIfAborted(signal);
+      onStage?.('processing');
+    }
     return await readUploadedImage(mediaId, file, signal, current, started);
   } catch (error) {
     throwIfAborted(signal);

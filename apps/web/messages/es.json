@@ -8622,5 +8622,20 @@
   "library_collection_metadata_history_cover_none": "Sin portada",
   "library_collection_metadata_history_first_page": "Primera página",
   "library_collection_metadata_history_next_page": "Página siguiente",
-  "library_collection_metadata_history_return_editor": "Volver al editor de metadatos"
+  "library_collection_metadata_history_return_editor": "Volver al editor de metadatos",
+  "thread_attachment_image": "Imagen adjunta",
+  "thread_attachment_reserving": "Reservando esta imagen…",
+  "thread_attachment_transferring": "Transfiriendo los datos de la imagen…",
+  "thread_attachment_processing": "Esperando el procesamiento de la imagen…",
+  "thread_attachment_inserting": "Añadiendo la imagen aceptada al borrador…",
+  "thread_attachment_insertion_failed": "La imagen fue aceptada, pero no se pudo añadir a este borrador.",
+  "thread_attachment_known_unknown": "Se desconoce el resultado del procesamiento de la imagen original.",
+  "thread_attachment_reservation_unknown": "Se desconoce el resultado de la reserva original.",
+  "thread_attachment_insertion_retry": "Reintentar añade la imagen aceptada en su posición conservada. No hace falta otra subida.",
+  "thread_attachment_exact_retry": "Reintentar repite solo la reserva original de esta imagen, sin crear una reserva de sustitución.",
+  "thread_attachment_resume": "Reintentar comprueba la imagen original y envía sus datos originales solo si hace falta.",
+  "thread_attachment_replace_advice": "Elige un archivo nuevo para sustituir este adjunto. Se conservarán su descripción y posición.",
+  "thread_attachment_no_recovery": "La recuperación exacta no está disponible. Puedes quitar este adjunto local; salir no cancela la solicitud al servidor.",
+  "thread_attachment_replace": "Sustituir imagen",
+  "thread_attachment_local_remove": "Quitar afecta solo a este adjunto local. No cancela ni borra una subida al servidor."
 }

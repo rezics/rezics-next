@@ -7,7 +7,7 @@ export type ReplyUploadContext = {
   target: ReplyUploadTarget | undefined;
   session: { subject: string; csrfToken: string } | null;
 };
-type Resume = (mediaId: string, file: File, signal: AbortSignal) => Promise<UploadedImage>;
+type Resume = typeof source.resumeReplyImageUpload;
 type Transport = { uploadReplyImage: typeof source.uploadReplyImage; resumeReplyImageUpload?: Resume };
 // The original upload module wins as soon as its declared export is delivered. No second upload producer lives here.
 const native: Transport = source;
@@ -49,7 +49,7 @@ type Pending = {
 
 /** One mounted editor's original Files, never media IDs inferred from a document or another draft. */
 export class ReplyImageUploadRecovery {
-  private readonly pending = new Map<File, Pending>();
+  private readonly pending = new Map<object, Pending>();
   private episode: { context: ReplyUploadContext; identity: FutureThreadUploadEpisode } | undefined;
 
   private retireEpisode(): void {
@@ -79,17 +79,31 @@ export class ReplyImageUploadRecovery {
     for (const [file, entry] of this.pending) this.remove(file, entry);
   }
 
-  private remove(file: File, entry: Pending): void {
+  private remove(file: object, entry: Pending): void {
     if (this.pending.get(file) !== entry) return;
     this.pending.delete(file);
     entry.detach();
     entry.controller.abort();
   }
 
-  async upload(file: File, signal: AbortSignal): Promise<UploadedImage> {
+  /** Only a retained exact command or known media can be retried. No fresh reservation is inferred. */
+  recoveryFor(occurrence: object): 'exact' | 'known-media' | 'replace' | 'unavailable' {
+    const entry = this.pending.get(occurrence);
+    if (!entry || entry.blocked === 'target-changed') return 'unavailable';
+    if (entry.blocked === 'fresh-file') return 'replace';
+    if (entry.mediaId && this.transport.resumeReplyImageUpload) return 'known-media';
+    return entry.reservation ? 'exact' : 'unavailable';
+  }
+
+  async upload(
+    file: File,
+    signal: AbortSignal,
+    onStage?: (stage: source.UploadStage) => void,
+    occurrence: object = file,
+  ): Promise<UploadedImage> {
     signal.throwIfAborted();
     this.invalidate();
-    let entry = this.pending.get(file);
+    let entry = this.pending.get(occurrence);
     if (entry?.running) throw new source.UploadRefusal('unavailable');
     const context = this.current();
     if (!entry) {
@@ -113,7 +127,9 @@ export class ReplyImageUploadRecovery {
           ? {
               reservation: {
                 original: source.createMediaReservationIntent(
-                  context.target,
+                  this.episode?.identity.containerId
+                    ? { containerId: this.episode.identity.containerId }
+                    : context.target,
                   file,
                   'post-image',
                   context.session.subject,
@@ -122,22 +138,26 @@ export class ReplyImageUploadRecovery {
             }
           : {}),
       };
-      this.pending.set(file, entry);
+      this.pending.set(occurrence, entry);
     }
     entry.detach();
     entry.controller = new AbortController();
     const attempt = entry;
-    const remove = () => this.remove(file, attempt);
+    const remove = () => this.remove(occurrence, attempt);
     signal.addEventListener('abort', remove, { once: true });
     entry.detach = () => signal.removeEventListener('abort', remove);
     if (entry.blocked) throw new ReplyUploadRecoveryRefusal(entry.blocked);
     entry.running = true;
+    const stage = (value: source.UploadStage) => {
+      this.invalidate();
+      if (this.pending.get(occurrence) === entry && !entry.blocked && !signal.aborted) onStage?.(value);
+    };
     try {
       let uploaded: UploadedImage;
       if (entry.mediaId) {
         const resume = this.transport.resumeReplyImageUpload;
         if (!resume) throw new source.UploadRefusal('unavailable');
-        uploaded = await resume(entry.mediaId, file, entry.controller.signal);
+        uploaded = await resume(entry.mediaId, file, entry.controller.signal, stage);
         if (uploaded.src !== entry.mediaId) throw new source.UploadRefusal('unavailable');
       } else {
         // Without a returned reservation ID, another reserve could duplicate an uncertain upload.
@@ -150,6 +170,7 @@ export class ReplyImageUploadRecovery {
           entry.reservation
             ? {
                 reservation: entry.reservation,
+                onStage: stage,
                 ...(this.episode ? { episode: this.episode.identity } : {}),
               }
             : undefined,
@@ -157,15 +178,15 @@ export class ReplyImageUploadRecovery {
       }
       this.invalidate();
       if (entry.blocked) throw new ReplyUploadRecoveryRefusal(entry.blocked);
-      if (this.pending.get(file) !== entry) throw new DOMException('Upload removed', 'AbortError');
+      if (this.pending.get(occurrence) !== entry) throw new DOMException('Upload removed', 'AbortError');
       signal.throwIfAborted();
-      this.remove(file, entry);
+      this.remove(occurrence, entry);
       return uploaded;
     } catch (error) {
       this.invalidate();
       if (entry.blocked) throw new ReplyUploadRecoveryRefusal(entry.blocked);
-      if (this.pending.get(file) === entry && error instanceof source.UploadRefusal) {
-        if (error.reason === 'rejected') {
+      if (this.pending.get(occurrence) === entry && error instanceof source.UploadRefusal) {
+        if (['rejected', 'type', 'too-large'].includes(error.reason)) {
           entry.blocked = 'fresh-file';
           delete entry.mediaId;
         } else if (!entry.mediaId && error.mediaId) entry.mediaId = error.mediaId;

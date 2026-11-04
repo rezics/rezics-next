@@ -8622,5 +8622,20 @@
   "library_collection_metadata_history_cover_none": "表紙なし",
   "library_collection_metadata_history_first_page": "最初のページ",
   "library_collection_metadata_history_next_page": "次のページ",
-  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る"
+  "library_collection_metadata_history_return_editor": "メタデータ編集に戻る",
+  "thread_attachment_image": "画像の添付",
+  "thread_attachment_reserving": "この画像の領域を予約しています…",
+  "thread_attachment_transferring": "画像データを転送しています…",
+  "thread_attachment_processing": "画像の処理を待っています…",
+  "thread_attachment_inserting": "受け付けられた画像を下書きに追加しています…",
+  "thread_attachment_insertion_failed": "画像は受け付けられましたが、この下書きに追加できませんでした。",
+  "thread_attachment_known_unknown": "元の画像の処理結果は不明です。",
+  "thread_attachment_reservation_unknown": "元の予約操作の結果は不明です。",
+  "thread_attachment_insertion_retry": "再試行すると、受け付けられた画像を元の位置に追加します。再アップロードは不要です。",
+  "thread_attachment_exact_retry": "再試行するのはこの画像の元の予約操作だけです。代わりの予約は作成しません。",
+  "thread_attachment_resume": "再試行では元の画像を確認し、必要な場合だけ元のデータを送信します。",
+  "thread_attachment_replace_advice": "新しいファイルを選んで置き換えてください。説明と位置は保持されます。",
+  "thread_attachment_no_recovery": "元の操作を復旧する手段がありません。このローカル添付は削除できますが、離れてもサーバーへのリクエストは取り消されません。",
+  "thread_attachment_replace": "画像を置き換える",
+  "thread_attachment_local_remove": "削除されるのはこのローカル添付だけです。サーバー上のアップロードの取り消しや消去は行いません。"
 }

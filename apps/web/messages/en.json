@@ -8714,5 +8714,20 @@
   "profile_contribution_actions_sign_in": "Sign in to check current contribution actions",
   "profile_contribution_actions_preparing": "Checking current contribution actions…",
   "profile_contribution_actions_unavailable": "Private actions are unavailable. You can still open each contribution.",
-  "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again."
+  "profile_contribution_actions_retired": "These actions have expired. Return to the current page to check again.",
+  "thread_attachment_image": "Image attachment",
+  "thread_attachment_reserving": "Reserving this image…",
+  "thread_attachment_transferring": "Transferring image bytes…",
+  "thread_attachment_processing": "Waiting for image processing…",
+  "thread_attachment_inserting": "Adding the accepted image to your writing…",
+  "thread_attachment_insertion_failed": "The image was accepted, but could not be added to this draft.",
+  "thread_attachment_known_unknown": "The original image’s processing result is unknown.",
+  "thread_attachment_reservation_unknown": "The original reservation’s result is unknown.",
+  "thread_attachment_insertion_retry": "Retry adding this accepted image at its retained position. No new upload is needed.",
+  "thread_attachment_exact_retry": "Retry repeats only this image’s original reservation. It does not reserve a replacement.",
+  "thread_attachment_resume": "Retry checks the original image and sends its original bytes only if needed.",
+  "thread_attachment_replace_advice": "Choose a fresh file to replace this attachment. Its description and position will be kept.",
+  "thread_attachment_no_recovery": "Exact recovery is unavailable here. You can remove this local attachment; leaving does not cancel the native request.",
+  "thread_attachment_replace": "Replace image",
+  "thread_attachment_local_remove": "Remove affects only this local attachment. It does not cancel or erase a native upload."
 }
