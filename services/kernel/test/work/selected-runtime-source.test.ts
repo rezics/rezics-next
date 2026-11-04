@@ -47,7 +47,7 @@ test('One finite lifecycle spans select, released Source, apply and reached fail
   expect(runtime).toContain('selected-runtime-native-multiplicity-exhausted');
   expect(runtime).toContain('state.operations.add(operation)');
   expect(runtime).toContain('await Promise.allSettled([...state.operations])');
-  expect(executor).toContain('if (selected) { selected.finish(); throw error; }');
+  expect(executor).toContain('if (selected) {\n        selected.finish();\n        throw error;');
   expect(runtime).not.toContain('reserveOperationalWorkTransfer');
   expect(runtime).not.toContain('openOperationalWorkOriginal');
 });
@@ -60,7 +60,7 @@ test('Recovery reconciles a real durable outcome; rolled-back or uncertain pendi
   );
   expect(replacement).not.toContain('admission_spent');
   expect(patch).toContain('(OLD.admission_spent AND NOT NEW.admission_spent)');
-  expect(history).toContain('previous?.result ? previous.selected_tuple');
+  expect(history).toContain('previous?.result ? (previous.selected_tuple as Tuple)');
   expect(history).toContain('selected-runtime-recovery-spent-admission');
   expect(history).toContain('No heap committed flag');
 });
@@ -68,7 +68,7 @@ test('Tuple observations, continuation creation and final association remain nat
   expect(history).toContain('FOR SHARE OF c FOR UPDATE OF h');
   expect(history).toContain('h.reserved_generation=c.source_generation');
   expect(history).toContain('selected-runtime-observed-version-or-generation-changed');
-  expect(history).toContain('assertSelectedContinuation(tx,identity,result.continuation)');
+  expect(history).toContain('assertSelectedContinuation(tx, identity, result.continuation)');
   expect(runtime).toContain("if (!created) refuse('selected-runtime-continuation-not-new')");
   expect(history).toContain(
     'WHERE partition_no=$1 AND workflow_id=$2 AND function_id=$3 AND result IS NULL RETURNING result',
