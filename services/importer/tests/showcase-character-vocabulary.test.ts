@@ -3,7 +3,12 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import { CrossMediaDumpFiles, planCrossMediaSeed, type CrossMediaPort, type CrossMediaTables } from '../src/cross-media-seed.ts';
+import {
+  CrossMediaDumpFiles,
+  planCrossMediaSeed,
+  type CrossMediaPort,
+  type CrossMediaTables,
+} from '../src/cross-media-seed.ts';
 import {
   composeVndbCharacterVocabularyBindings,
   parseVndbCharacterVocabularyProfile,
@@ -36,7 +41,11 @@ test('default selected-family planning closes only evidenced VNDB character voca
       await writeFile(join(vndb, 'db', table), rows);
     };
     await copy('chars_traits', 'id\ttid\tspoil\tlie', 'c1\ti73\t1\tf\nc2\ti80\t0\tt\nc9\ti99\t0\tf\n');
-    await copy('chars_vns', 'id\tvid\trid\trole\tspoil', 'c1\tv1\t\\N\tmain\t0\nc2\tv1\t\\N\tsupport\t1\nc9\tv4\t\\N\tmain\t0\n');
+    await copy(
+      'chars_vns',
+      'id\tvid\trid\trole\tspoil',
+      'c1\tv1\t\\N\tmain\t0\nc2\tv1\t\\N\tsupport\t1\nc9\tv4\t\\N\tmain\t0\n',
+    );
     await copy(
       'traits',
       'id\tgid\tgorder\tdefaultspoil\tsexual\tsearchable\tapplicable\tname\talias\tdescription',
@@ -106,19 +115,35 @@ test('default selected-family planning closes only evidenced VNDB character voca
       subject: { id, type, statements },
     });
     const subjects = new Map<string, object>([
-      [traitSchemeId, subject(traitSchemeId, 'skos:ConceptScheme', { 'schema:url': [{ value: { content: characterTraitSchemeUri } }] })],
-      [roleSchemeId, subject(roleSchemeId, 'skos:ConceptScheme', { 'schema:url': [{ value: { content: appearanceRoleSchemeUri } }] })],
-      ...[...traitIds].map(([code, id]) => [
-        id,
-        subject(id, 'skos:Concept', {
-          'schema:url': [{ value: { content: characterTraitConceptUri(code) } }],
-          'skos:inScheme': [{ value: { content: traitSchemeId } }],
+      [
+        traitSchemeId,
+        subject(traitSchemeId, 'skos:ConceptScheme', {
+          'schema:url': [{ value: { content: characterTraitSchemeUri } }],
         }),
-      ] as [string, object]),
-      [mainRoleId, subject(mainRoleId, 'skos:Concept', {
-        'schema:url': [{ value: { content: appearanceRoleConceptUri('main') } }],
-        'skos:inScheme': [{ value: { content: roleSchemeId } }],
-      })],
+      ],
+      [
+        roleSchemeId,
+        subject(roleSchemeId, 'skos:ConceptScheme', {
+          'schema:url': [{ value: { content: appearanceRoleSchemeUri } }],
+        }),
+      ],
+      ...[...traitIds].map(
+        ([code, id]) =>
+          [
+            id,
+            subject(id, 'skos:Concept', {
+              'schema:url': [{ value: { content: characterTraitConceptUri(code) } }],
+              'skos:inScheme': [{ value: { content: traitSchemeId } }],
+            }),
+          ] as [string, object],
+      ),
+      [
+        mainRoleId,
+        subject(mainRoleId, 'skos:Concept', {
+          'schema:url': [{ value: { content: appearanceRoleConceptUri('main') } }],
+          'skos:inScheme': [{ value: { content: roleSchemeId } }],
+        }),
+      ],
     ]);
     const reads: string[] = [];
     const port = {
