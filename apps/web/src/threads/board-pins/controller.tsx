@@ -10,6 +10,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@rezics/ui/shadcn/alert-dialog';
 import {
   createElement,
@@ -521,15 +522,16 @@ export function BoardPinThreadControls({
     },
     actionable && !blocked && action
       ? createElement(
-          Button,
+          AlertDialogTrigger,
           {
-            type: 'button',
-            variant: 'outline',
-            className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
-            ...{ 'data-board-pin-focus': 'toggle' },
-            'aria-haspopup': 'dialog',
-            'aria-expanded': pending !== null,
-            onClick: () => setPending(action),
+            render: createElement(Button, {
+              type: 'button',
+              variant: 'outline',
+              className: 'h-auto min-h-11 min-w-11 max-w-full whitespace-normal',
+              ...{ 'data-board-pin-focus': 'toggle' },
+              'aria-haspopup': 'dialog',
+              'aria-expanded': pending !== null,
+            }),
           },
           action === 'pin' ? m.board_pin_pin() : m.board_pin_unpin(),
         )
@@ -539,7 +541,7 @@ export function BoardPinThreadControls({
       {
         open: pending !== null,
         onOpenChange: (open: boolean) => {
-          if (!open) setPending(null);
+          setPending(open ? action : null);
         },
       },
       createElement(
