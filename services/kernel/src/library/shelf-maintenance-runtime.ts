@@ -1,3 +1,4 @@
+import { cleanupShelfTitleKeys } from './shelf-title-maintenance-store.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import { shareAccount, fenceOperationalAccount } from '../access/account-share.ts';
@@ -478,7 +479,11 @@ async function purgePage(
   run: Run,
   cursor: ShelfMaintenanceCursor,
 ): Promise<{ complete: boolean; cursor: ShelfMaintenanceCursor }> {
-  if (run.phase === 'cancel-work') return { complete: true, cursor: [] };
+  if (run.phase === 'cancel-work') {
+    if (await cleanupShelfTitleKeys(tx, owner) === 100) return { complete: false, cursor: [] };
+    await tx.query('DELETE FROM library.shelf_title_head WHERE route=$1 AND account_id=$2::uuid', [owner.route, owner.accountId]);
+    return { complete: true, cursor: [] };
+  }
   if (run.phase === 'bulk-evidence') {
     if (await bulkPending.run(tx, ownerArgs(owner))) unavailable(owner);
     const sub = typeof cursor[0] === 'number' ? cursor[0] : 0;
@@ -971,6 +976,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           }
           const terminal = phase === 'complete';
           if (terminal && run.kind === 'purge') {
+            await tx.query('DELETE FROM library.shelf_title_owner WHERE route=$1 AND account_id=$2::uuid', [owner.route, owner.accountId]);
             gate.mode = 'purged';
             await saveGate(tx, owner, gate);
           }

@@ -17,7 +17,7 @@ helper; old readable HMAC tokens are refused. `direction` and `type` without
 
 | Parameter   | Values                                                                 |
 | ----------- | ---------------------------------------------------------------------- |
-| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`, `personalScore`, `priority` |
+| `orderBy`   | `lastActivity`, `finishedAt`, `createdAt`, `personalScore`, `priority`, `title` |
 | `direction` | `desc` (default), `asc`                                                |
 | `state`     | exact validated profile state ID, optional                             |
 | `type`      | exact full primary-type CURIE, optional                                |
@@ -510,3 +510,32 @@ This source currently exposes the key derivation only. The title order enum, lan
 title-basis binding, index readiness DTO, bounded producer, and page reader are not installed. Until those pieces can
 prove current disclosed source material for the entire selected shelf, title ordering must return a typed preparing or
 unavailable state and must not return a successful empty or date-ordered page.
+
+## Native title order
+
+Title mode is `GET /v1/libraryEntries?orderBy=title&direction=asc|desc`, with the existing state, Type, view, limit and
+opaque cursor operands. `Accept-Language` is selected by Semantic's `languageRanges`; repeat it for every page and
+preparation command. No label string or normalized ordering key appears on the wire. Each returned title row adds
+`titleCoverage: 'labelled' | 'missing'`. Missing labels sort last in both directions. Equal keys, including missing
+labels, use Subject UUID in the selected direction. Selection covers the entire native selected shelf, using separate
+indexed labelled/missing ranges before the bounded Entry/session enrichment.
+
+`POST /v1/libraryShelfTitlePreparation` has no body and uses the existing idempotency header and `library_entry:list`
+authority. Its response is `{installation:'pending'|'installed',prepared:number}` (0 through 100). The caller uses a new
+request key for each next page and retains the original key for retry. A replay returns the original preparation effect;
+only an admitted GET against the current source/native basis establishes present readiness. No Entry action operand,
+revision, incarnation or writer changes. Preparation uses the existing owner command fence; Entry writers and backfill
+atomically invalidate the population version, and the existing purge cleans derivative keys in batches.
+
+One account retains one selected-language generation. A policy, population or complete source-basis change starts
+bounded cleanup/build before the replacement is installed. Pages bind the exact key/language policy, source basis,
+materialized generation and population, account authentication lifetime and effective query. Rename, ownership changes,
+source denial, hidden identities or incomplete maintenance cannot silently fall through to an older index or a date page.
+
+Content publishes the root `KernelClient` route/enum above, its title row coverage DTO and preparation response/method;
+there is no new cursor DTO (the existing opaque `next` remains authoritative). Content also installs `ShelfTitleSource`
+from `shelf-title-source.ts`: its bounded whole-source version must account for all relevant foreign title and disclosure
+changes, and its exact <=100-subject batch must either cover every disclosed identity or report unavailable. A page digest,
+cached summaries or per-Entry Subject requests are insufficient. The native factories fail closed without this port.
+Until that root client is installed, the Web recognizes/preserves title URLs and shows preparation without sending an
+unsupported generated query, and saved title preferences do not replace a working date order.
