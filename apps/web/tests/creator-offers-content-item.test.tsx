@@ -4,7 +4,6 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import type { CreatorOfferMutation, CreatorOfferResult, CreatorOffersPageData } from '../src/checkout/creator-offers';
 
-// UNRUN: composed shared-UI assertions; acceptance, native and browser proof remain deferred.
 test('Creator Offer shared items preserve admitted destinations independent controls and exact uncertain operations', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -15,6 +14,7 @@ test('Creator Offer shared items preserve admitted destinations independent cont
     document: window.document,
     navigator: window.navigator,
     HTMLElement: window.HTMLElement,
+    HTMLAnchorElement: window.HTMLAnchorElement,
     Element: window.Element,
     Node: window.Node,
     NodeFilter: window.NodeFilter,
@@ -74,9 +74,10 @@ test('Creator Offer shared items preserve admitted destinations independent cont
   const host = document.createElement('main');
   document.body.append(host);
   const root = createRoot(host);
+  const guard = { isCurrent: () => true, csrfToken: () => data.csrfToken };
   const show = (value = data, offerPageAvailable = true) =>
     act(async () =>
-      root.render(<CreatorOffersPage locale="en" data={value} offerPageAvailable={offerPageAvailable} />),
+      root.render(<CreatorOffersPage locale="en" data={value} offerPageAvailable={offerPageAvailable} guard={guard} />),
     );
   const rows = () => [...host.querySelectorAll<HTMLLIElement>('ul > li')];
   const button = (row: HTMLElement, name: string) => {
@@ -121,7 +122,7 @@ test('Creator Offer shared items preserve admitted destinations independent cont
           : ['$12.00 USD', m.commerce_before_tax(), m.creator_offers_captured()],
       );
       if (index === 0) expect(heading.textContent).toBe(originalRows[2]!.querySelector('h2')!.textContent);
-      const details = row.querySelectorAll('details');
+      const details = row.querySelectorAll('[data-content-item-slot="actions"] details');
       expect(details).toHaveLength(2);
       const identity = details[1]!;
       const identitySummary = identity.querySelector('summary')!;
@@ -146,7 +147,7 @@ test('Creator Offer shared items preserve admitted destinations independent cont
     expect(rows()[0]!.querySelector('h2')?.textContent).toBe(first.title);
     await show();
     const row = originalRows[0]!;
-    const summary = row.querySelector<HTMLElement>('summary')!;
+    const summary = row.querySelector<HTMLElement>('[data-content-item-slot="actions"] summary')!;
     const price = row.querySelector<HTMLInputElement>('input[name="price"]')!;
     expect(summary.closest('[data-content-item-slot="actions"][data-slot="list-row-control"]')).not.toBeNull();
     expect(price.closest('[data-content-item-slot="trailing"][data-slot="list-row-control"]')).not.toBeNull();
@@ -154,18 +155,26 @@ test('Creator Offer shared items preserve admitted destinations independent cont
     expect(price.classList.contains('min-h-11')).toBe(true);
     row.querySelector('a')!.focus();
     await act(async () => user.tab());
+    expect(document.activeElement).toBe(row.querySelector('[data-content-item-slot="preview"] summary'));
+    await act(async () => user.tab());
     expect(document.activeElement).toBe(summary);
     await act(async () => user.click(summary));
-    expect(row.querySelector('details')?.open).toBe(true);
-    expect(row.querySelector('details > p')?.textContent).toBe(first.title);
+    expect(row.querySelector('[data-content-item-slot="actions"] details')?.open).toBe(true);
+    expect(row.querySelector('[data-content-item-slot="actions"] details > p')?.textContent).toBe(first.title);
     await act(async () => user.tab());
-    const identitySummary = row.querySelectorAll('summary')[1]!;
+    const identitySummary = row.querySelectorAll('[data-content-item-slot="actions"] summary')[1]!;
     expect(document.activeElement).toBe(identitySummary);
     await act(async () => user.click(identitySummary));
     const identityDetails = identitySummary.closest('details')!;
     expect(identityDetails.open).toBe(true);
     expect(identityDetails.textContent).toContain(first.id);
     expect(identityDetails.textContent).toContain(String(first.revision));
+    await act(async () => user.tab());
+    expect(document.activeElement).toBe(button(row, m.creator_inspect_open()));
+    await act(async () => user.tab());
+    const management = button(row, m.creator_offer_controls_manage());
+    expect(document.activeElement).toBe(management);
+    await act(async () => user.click(management));
     await act(async () => user.tab());
     expect(document.activeElement).toBe(price);
     await act(async () => user.type(price, '13.25'));
@@ -191,15 +200,18 @@ test('Creator Offer shared items preserve admitted destinations independent cont
       keys: { ...data.keys, [first.id]: { reprice: crypto.randomUUID(), delist: crypto.randomUUID() } },
     });
     expect(rows()[2]).toBe(row);
-    expect(row.querySelector('details')?.open).toBe(true);
+    expect(row.querySelector('[data-content-item-slot="actions"] details')?.open).toBe(true);
     expect(price.value).toBe('13.25');
     result = { kind: 'saved', id: first.id };
     await act(async () => user.click(button(row, m.creator_retry())));
     expect(calls[1]).toEqual(captured);
     expect(calls[1]!.data).toBe(calls[0]!.data);
-    expect(row.querySelector('[role="status"]')?.textContent).toBe(m.creator_saved());
+    expect([...row.querySelectorAll('[role="status"]')].some((node) => node.textContent === m.creator_saved())).toBe(
+      true,
+    );
 
     const delistRow = originalRows[1]!;
+    await act(async () => user.click(button(delistRow, m.creator_offer_controls_manage())));
     result = { kind: 'rejected' };
     await act(async () => user.click(button(delistRow, m.creator_delist())));
     expect(calls[2]).toEqual({
