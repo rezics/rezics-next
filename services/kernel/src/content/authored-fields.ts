@@ -267,7 +267,7 @@ export async function readAuthoredFieldBounded(
     revision: row.revision,
     authorAccountId: row.author_account_id,
     body: row.body === null ? null : Buffer.from(row.body),
-    bodyTooLarge: row.bodyTooLarge,
+    bodyTooLarge: row.bodyTooLarge ?? false,
     licence: row.licence,
     language: row.language,
     availability: row.availability as AuthoredFieldView['availability'],
