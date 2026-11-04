@@ -318,13 +318,14 @@ export function pageRoutes<App>(
         return result;
       };
       let selected: SelectedPage | undefined;
+      const pageAccess: Access =
+        typeof access === 'function'
+          ? access({ actions: actionCatalogue(routed) })
+          : (access ?? createAccess({ actions: actionCatalogue(routed) }));
       const authority = {
         deps: {
           pool,
-          access:
-            typeof access === 'function'
-              ? access({ actions: actionCatalogue(routed) })
-              : (access ?? createAccess({ actions: actionCatalogue(routed) })),
+          access: pageAccess,
           routeKey,
         },
         actor,
@@ -528,6 +529,7 @@ export function pageRoutes<App>(
         probes,
         budget,
         probeSession,
+        actor,
         ...(languages === undefined ? {} : { languages }),
       });
     },
@@ -561,6 +563,7 @@ async function pageAnswer(input: {
     context: string;
     actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
   }>;
+  actor: import('../../request/access.ts').Actor;
 }): Promise<Response> {
   const violations = validateDocumentFilters(
     platformRegistry,
@@ -689,6 +692,13 @@ async function pageAnswer(input: {
         : result;
   }
 
+  const catalogueViewer = input.viewer ? await input.viewer() : undefined;
+  const subjectViewer =
+    catalogueViewer === undefined && input.subject !== null
+      ? input.actor.kind === 'account'
+        ? { kind: 'account' as const, account: input.actor.accountId }
+        : { kind: 'anonymous' as const }
+      : undefined;
   let viewerEnvelope: ReturnType<typeof pageViewerActions> | undefined;
   if (input.subject) {
     const composed = Object.entries(plan.reads).find(
@@ -747,7 +757,8 @@ async function pageAnswer(input: {
       document: input.resolved.document,
       ...(input.views === null ? {} : { views: input.views }),
       ...(input.catalogue ? { catalogue: input.catalogue } : {}),
-      ...(input.viewer ? { viewer: await input.viewer() } : {}),
+      ...(catalogueViewer ? { viewer: catalogueViewer } : {}),
+      ...(subjectViewer ? { viewer: subjectViewer } : {}),
       reads,
       ...(viewerEnvelope ? { actions: viewerEnvelope.actions } : {}),
     },

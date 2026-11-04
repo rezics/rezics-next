@@ -90,6 +90,7 @@ classes:
       - numberOfPages
       - inLanguage
       - translator
+      - creativeWorkStatus
     annotations:
       list_presentation:
         imageAspect: portrait
@@ -292,7 +293,7 @@ slots:
       - wd:P629
     annotations:
       datatype: wikibase-item
-      qualifiers: openLibraryId sameAs
+      qualifiers: openLibraryId sameAs releaseType
       relation_group: derivation
       inverse: schema:workExample
       relation_order: date

@@ -78,7 +78,13 @@ test('a concrete edition shows work identity, language edition, two directed rel
   expect(page.work).toMatchObject({ id: releaseWork, readability: 'readable' });
   expect(page.date.kind).toBe('exact');
   expect(page.facts.identifiers?.some((fact) => fact.property === 'schema:isbn')).toBe(true);
-  expect(page.streams.map((stream) => stream.property).sort()).toEqual([basedOnProperty, replacedByProperty].sort());
+  expect(page.streams.some((stream) => stream.property === basedOnProperty && stream.direction === 'forward')).toBe(
+    true,
+  );
+  expect(page.streams.some((stream) => stream.property === replacedByProperty && stream.direction === 'forward')).toBe(
+    true,
+  );
+  expect(page.streams.some((stream) => stream.property === 'wdt:P155' && stream.direction === 'forward')).toBe(true);
   const based = page.streams.find((stream) => stream.property === basedOnProperty)!;
   const related = await fixture.read(based.key);
   if (!related.ok) throw new Error('Expected related releases');
@@ -87,7 +93,8 @@ test('a concrete edition shows work identity, language edition, two directed rel
   expect(related.rows[1]?.historical).toBe(true);
   const replaced = await fixture.read(page.streams.find((stream) => stream.property === replacedByProperty)!.key);
   expect(replaced.ok && replaced.stream?.property).toBe(replacedByProperty);
-  expect(page.statusProperty).toBeUndefined();
+  expect(page.statusProperty).toBe('schema:creativeWorkStatus');
+  expect(page.work.completeness).toMatchObject({ id: '00000000-0000-4000-8000-00000000a115', label: { text: 'Complete' } });
   expect(page.regionProperty).toBeUndefined();
 });
 
@@ -146,6 +153,15 @@ test('stale correction keeps the original statement and exact command key', asyn
   ]);
 });
 
+test('denied and unavailable controls stay distinct on the recorded native release page', async () => {
+  expect(await releaseFidelityFixture('denied').read()).toEqual({ ok: false, reason: 'denied' });
+  expect(await releaseFidelityFixture('unavailable').read()).toEqual({ ok: false, reason: 'unavailable' });
+  const recorded = await releaseFidelityFixture('ready').read();
+  expect(recorded.ok && recorded.statusProperty).toBe('schema:creativeWorkStatus');
+  expect(recorded.ok && recorded.release.types['bf:Instance']?.properties).toContain('schema:creativeWorkStatus');
+  expect(recorded.ok && recorded.release.properties['schema:exampleOfWork']?.qualifiers).toContain('wdt:P31');
+});
+
 test('visit work stays page-bounded at 32, 256 and 2048 related releases', async () => {
   const bound = visitBound();
   expect(RELEASE_VISIT_COMPONENTS).toBe(4);
@@ -157,7 +173,7 @@ test('visit work stays page-bounded at 32, 256 and 2048 related releases', async
   );
   const firstPages: number[] = [];
   const firstBytes: number[] = [];
-  for (const scale of [32, 256, 2048]) {
+  for (const scale of [32, 64, 256, 512, 2048, 4096]) {
     const fixture = releaseFidelityFixture('ready', 'en', scale);
     const first = await fixture.read(`forward:${basedOnProperty}`);
     if (!first.ok) throw new Error(`Expected first page at ${scale}`);

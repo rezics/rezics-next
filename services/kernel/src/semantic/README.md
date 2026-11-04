@@ -1918,6 +1918,7 @@ current inclusion through the original public Access and subject gates. It uses 
 the public statement audience, current Global selection and moderation, consent disclosure, relation target gates
 and imported tuple fences. At most eight stored identities are attempted. Labels alone confer no inclusion.
 Unknown historical time remains absent; original command time is retained across meaningful removals and replay.
+Decision: subject-page publication envelopes classify as non-personal public page state; command identity stays independent.
 Target Access evidence is prepared from bounded witness hints before the final read acquires a connection.
 The final snapshot rechecks current selection, target state and authorization; hints confer no inclusion.
 `readCurrent` also produces optional `originalLanguage` from currently public selected `schema:name` facts,
