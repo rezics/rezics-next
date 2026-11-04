@@ -205,6 +205,17 @@ bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/
 | Open Library | The JSON payload carried by the native TSV row, for `/type/work` or `/type/edition`. A work bootstraps as `schema:Book`; an edition as `bf:Instance`. The native revision is cited as `schema:version`, and `last_modified` is cited as a day-precision `schema:dateModified`. For editions, valid ISBN-10 values are checksum-validated and converted to ISBN-13; only ISBN-13 is proposed. An unresolved author or work relation has value `somevalue` and keeps its Open Library identifier as a `wdt:P648` qualifier; a real native resolution may be supplied in `resolvedReferences`.                                                                                                                                                                 | `CC0-1.0` describes the permitted bibliographic metadata source. Unknown-licensed descriptions are kept as metadata and never proposed as summary text. Links and publishers are metadata-only. Covers have separate unknown rights. This permission does not claim all dataset contents share the metadata license or set the output database's license.                                                                                                                     |
 | Wikidata     | A real Q entity with `type: 'item'`. Bundled exact type mappings plus the reviewed source bindings below control supported types. Bundled properties control claims, datatypes, ranks, qualifiers and time/quantity handling. Labels and descriptions become bootstrap terms; names and supported claims become bound proposals.                                                                                                                                                                                                                                                                                                                                                                                                                            | Labels, descriptions and claims cite CC0-1.0 structured data. Unknown properties, instruction text, `P18` and Commons images are excluded. No image assets or user/talk-page content are imported. CC0 source data does not set the output database's license.                                                                                                                                                                                                                |
 
+The default selected-family seed now supplies `vn_extlinks` and only their
+matching `extlinks` dictionary rows to each ordinary VN conversion. A selected
+`site=website` entry remains a source-listed `schema:url` proposal under the
+existing public URL policy. Separately, an admitted `https://bgm.tv/subject/N`
+or `https://bangumi.tv/subject/N` citation on that VN may propose exact
+`wdt:P5732` value `N`; other website values and entity-owner links remain URL
+assertions. The VN and anime keep separate identities and types; work relations
+come only from their source relation records. The caller records raw and
+normalized link digests under its own `vndb-work-links@1` proposal revision; the
+upstream VNDB revision stays sourced from `entry_meta.revision`.
+
 Wikidata revision `wikidata-5` adds conversion-local source type bindings. These
 classifications do not assert vocabulary equivalence and do not change Definitions:
 

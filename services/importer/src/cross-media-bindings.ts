@@ -23,6 +23,9 @@ export type GraphEdgeDraft = {
   membership: GraphMembership;
   record: Record<string, unknown>;
   fields: string[];
+  recordRevision?: string;
+  converterRevision?: string;
+  fenceFacts?: boolean;
   relation?: {
     family: 1 | 2 | 4 | 6;
     code: number;
@@ -191,6 +194,11 @@ export class CrossMediaGraph {
         const reason =
           holder?.state !== 'bound' ? `missing_holder:${draft.holder}` : `missing_endpoint:${draft.target}`;
         unresolved.push({ ...draft, reason });
+        mark.run('unresolved', null, graphEdgeKey(draft));
+        continue;
+      }
+      if (draft.fenceFacts && (await input.fence({ source: draft.alias, externalId: draft.holder, fieldGroup: 'facts' })).fenced) {
+        unresolved.push({ ...draft, reason: 'fenced_source_facts' });
         mark.run('unresolved', null, graphEdgeKey(draft));
         continue;
       }
@@ -457,8 +465,8 @@ export class CrossMediaGraph {
         source: {
           source: draft.alias,
           external_id: draft.holder,
-          record_revision: 'unversioned',
-          converter_revision: 'cross-media-entities@1',
+          record_revision: draft.recordRevision ?? 'unversioned',
+          converter_revision: draft.converterRevision ?? 'cross-media-entities@1',
           digest: sourceDigest(draft.record),
           field_group: 'facts',
         },

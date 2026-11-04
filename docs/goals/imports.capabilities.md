@@ -727,6 +727,29 @@ not additional check requests.
   `rezics:sourceTagWeight` remains a Semantic obligation. Parent relationships and
   unsupported associations stay explicit gaps. Refresh keeps the same native work
   identity.
+- The default selected-family seed supplies exact selected `vn_extlinks` joins and
+  their matching `extlinks` dictionary rows to ordinary VN conversion. `site=website`
+  links become cited `schema:url` candidates under the existing public URL policy;
+  only an admitted Bangumi subject URL can separately propose its exact `wdt:P5732`
+  identifier on the VN. The identifiers and work grains remain distinct, and the
+  source graph alone supplies work relations. Link proposals retain selected raw
+  source rows, a semantic digest, the unchanged VNDB entry revision and
+  `vndb-work-links@1`. The default family runner provides acknowledged current
+  source UUIDs and cached current reads to the existing local showcase publication
+  path. Missing members remain explicit gaps; required missing/corrupt tables fail
+  with their table name.
+  - Touches: `services/importer/src/cross-media-seed.ts`,
+    `services/importer/src/showcase-work-links.ts`, `services/importer/src/cross-media-bindings.ts`,
+    ordinary VN conversion and current source reads.
+  - Bound: 256 works per selected family (768 across the three named families),
+    32 external links per owner, existing 64 KiB converter and 1500-character
+    public URL limits; selected-key dictionary joins and per-operation UUID read
+    caching.
+  - Growth check: no database growth series; bounded join/read limits are stated
+    above. Local fixture proof is `services/importer/tests/showcase-work-links.test.ts`.
+    The connected native scenario in
+    `services/kernel/test/imports/showcase-work-links.test.ts` is authored and
+    deferred; the real-dump walkthrough also remains required after integration.
 - `production operator imports two VNDB staff aliases through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-staff-credits.test.ts`.
   Frozen scenario names:
