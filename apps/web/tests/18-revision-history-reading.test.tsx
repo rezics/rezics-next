@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode } from 'react';
 import type { ReactNode } from 'react';
@@ -28,6 +28,7 @@ const globals = {
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
   matchMedia: window.matchMedia.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
   fetch: async () => {
     calls++;
@@ -37,6 +38,8 @@ const globals = {
 const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 for (const [key, value] of Object.entries(globals))
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('../src/threads/exact-revision-read', () => ({ readExactRevision: async () => ({ state: 'unavailable' }) }));
 const { createRoot } = await import('react-dom/client');
 const { RevisionHistoryNavigation } = await import('../src/threads/revision-history-navigation');
 const { boundedHistoryText, projectRevisionSummaries } = await import('../src/threads/revision-history-summary');
@@ -120,6 +123,7 @@ async function key(control: HTMLElement, value: string) {
   );
 }
 afterAll(async () => {
+  mock.restore();
   await window.happyDOM.close();
   for (const [key, descriptor] of previous) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
