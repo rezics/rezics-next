@@ -53,5 +53,23 @@ const closure: [
 ] = [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true];
 
 test('official classification DTO aliases follow installed mounted declarations', () => {
-  expect(closure).toEqual([true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]);
+  expect(closure).toEqual([
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+  ]);
 });
