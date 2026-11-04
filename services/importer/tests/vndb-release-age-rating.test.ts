@@ -46,7 +46,10 @@ function transport(
         results: request.commands.map((command) => {
           const old = receipts.get(command.key);
           if (old) return structuredClone(old);
-          let value: unknown;
+          let value:
+            | { id: string; revision: number }
+            | { candidate: string; revision: number }
+            | { revision: number };
           if (command.op === 'create') {
             let id = ids.get(command.source.external_id);
             if (!id) ids.set(command.source.external_id, (id = randomUUID()));
