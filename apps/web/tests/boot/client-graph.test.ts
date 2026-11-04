@@ -52,7 +52,8 @@ function matchDelimited(source: string, start: number, open: string, close: stri
 function blankComments(source: string): string {
   return source
     .replace(/\/\*[\s\S]*?\*\//g, (block) => ' '.repeat(block.length))
-    .replace(/(?<!:)\/\/.*$/gm, (line) => ' '.repeat(line.length));
+    .replace(/(?<!:)\/\/.*$/gm, (line) => ' '.repeat(line.length))
+    .replace(/(['"`])(?:\\.|(?!\1)[\s\S])*?\1/g, (block) => ' '.repeat(block.length));
 }
 
 function bodyBrace(source: string, from: number): number {
@@ -81,26 +82,64 @@ function bodyBrace(source: string, from: number): number {
   return -1;
 }
 
+function skipGenerics(source: string, from: number): number {
+  let index = from;
+  while (/\s/.test(source[index] ?? '')) index += 1;
+  if (source[index] !== '<') return index;
+  let angle = 0;
+  for (; index < source.length; index += 1) {
+    if (source[index] === '<') angle += 1;
+    else if (source[index] === '>') {
+      angle -= 1;
+      if (angle === 0) return index + 1;
+    }
+  }
+  return from;
+}
+
 function functionBodies(source: string): Array<{ name: string; nameIndex: number; start: number; end: number }> {
   const bodies: Array<{ name: string; nameIndex: number; start: number; end: number }> = [];
-  const pattern = /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g;
+  const pattern = /(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g;
   for (const match of source.matchAll(pattern)) {
-    const open = (match.index ?? 0) + match[0].length - 1;
-    const paramsEnd = matchDelimited(source, open, '(', ')');
+    const nameIndex = (match.index ?? 0) + match[0].indexOf(match[1]!);
+    const afterName = skipGenerics(source, (match.index ?? 0) + match[0].length);
+    if (source[afterName] !== '(') continue;
+    const paramsEnd = matchDelimited(source, afterName, '(', ')');
     const brace = bodyBrace(source, paramsEnd + 1);
     if (brace === -1) continue;
     bodies.push({
       name: match[1]!,
-      nameIndex: (match.index ?? 0) + match[0].indexOf(match[1]!),
+      nameIndex,
       start: match.index ?? 0,
       end: matchDelimited(source, brace, '{', '}'),
+    });
+  }
+  const arrows = /(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(/g;
+  for (const match of source.matchAll(arrows)) {
+    const open = (match.index ?? 0) + match[0].length - 1;
+    const paramsEnd = matchDelimited(source, open, '(', ')');
+    const arrow = source.indexOf('=>', paramsEnd);
+    if (arrow === -1 || arrow > paramsEnd + 80) continue;
+    const bodyStart = skipGenerics(source, arrow + 2);
+    const end =
+      source[bodyStart] === '{'
+        ? matchDelimited(source, bodyStart, '{', '}')
+        : source.indexOf(';', bodyStart) === -1
+          ? source.length
+          : source.indexOf(';', bodyStart);
+    bodies.push({
+      name: match[1]!,
+      nameIndex: (match.index ?? 0) + match[0].indexOf(match[1]!),
+      start: match.index ?? 0,
+      end,
     });
   }
   return bodies;
 }
 
 function expandServerRanges(source: string, ranges: Array<[number, number]>): Array<[number, number]> {
-  const bodies = functionBodies(source);
+  const searchable = blankComments(source);
+  const bodies = functionBodies(searchable);
   let changed = true;
   while (changed) {
     changed = false;
@@ -108,17 +147,15 @@ function expandServerRanges(source: string, ranges: Array<[number, number]>): Ar
       if (covered(body.start, ranges)) continue;
       const pattern = new RegExp(`(?<![.\\w$])${body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w$])`, 'g');
       let onlyServer = true;
-      let used = false;
-      for (const match of source.matchAll(pattern)) {
+      for (const match of searchable.matchAll(pattern)) {
         const index = match.index ?? 0;
         if (index === body.nameIndex) continue;
-        used = true;
         if (!covered(index, ranges)) {
           onlyServer = false;
           break;
         }
       }
-      if (used && onlyServer) {
+      if (onlyServer) {
         ranges.push([body.start, body.end]);
         changed = true;
       }
