@@ -24,12 +24,20 @@ function page(state: AccountIdentityState) {
   );
 }
 
-const LocalizedPage = observeLocaleComponent(function LocalizedPage({ state }: { state: AccountIdentityState }) {
-  return page(state);
-});
+function localized(state: AccountIdentityState) {
+  return observeLocaleComponent(function LocalizedPage() {
+    return page(state);
+  });
+}
 
-export const Loading = { render: () => <LocalizedPage state={{ kind: 'loading' }} /> };
-export const ReadyWithoutEmail = { render: () => <LocalizedPage state={current} /> };
-export const SignedOut = { render: () => <LocalizedPage state={{ kind: 'signed-out' }} /> };
-export const Denied = { render: () => <LocalizedPage state={{ kind: 'denied' }} /> };
-export const Unavailable = { render: () => <LocalizedPage state={{ kind: 'unavailable' }} /> };
+const LoadingPage = localized({ kind: 'loading' });
+const ReadyPage = localized(current);
+const SignedOutPage = localized({ kind: 'signed-out' });
+const DeniedPage = localized({ kind: 'denied' });
+const UnavailablePage = localized({ kind: 'unavailable' });
+
+export const Loading = { render: () => <LoadingPage /> };
+export const ReadyWithoutEmail = { render: () => <ReadyPage /> };
+export const SignedOut = { render: () => <SignedOutPage /> };
+export const Denied = { render: () => <DeniedPage /> };
+export const Unavailable = { render: () => <UnavailablePage /> };
