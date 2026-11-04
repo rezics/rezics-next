@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
-import { act, createContext, useContext, useLayoutEffect, type ReactNode } from 'react';
+import { act, createContext, forwardRef, useContext, useLayoutEffect, type ReactNode } from 'react';
 import type { CopiesPageData, CopyItem, CopyRemoved } from '../src/library/copies-read';
 import { m } from '../src/paraglide/messages.js';
 
@@ -9,6 +9,13 @@ const { Window } = await import(
   Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
 );
 const window = new Window({ url: 'https://site.test/en/library/copies' });
+const mediaQueries = new Set<ReturnType<typeof window.matchMedia>>();
+const matchMedia = window.matchMedia.bind(window);
+window.matchMedia = (query: string) => {
+  const media = matchMedia(query);
+  mediaQueries.add(media);
+  return media;
+};
 const globals = {
   window,
   document: window.document,
@@ -60,8 +67,9 @@ mock.module('../src/library/copies-actions', () => ({
 mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'current-session' }) }));
 mock.module('../src/kernel/exposure', () => ({ Exposure: ({ children }: { children: ReactNode }) => children }));
 const router = await import('@tanstack/react-router');
+const actualRouter = { ...router };
 mock.module('@tanstack/react-router', () => ({
-  ...router,
+  ...actualRouter,
   Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
 }));
 const Part = ({ children }: { children: ReactNode }) => <div>{children}</div>;
@@ -140,6 +148,7 @@ mock.module('@rezics/ui/menu', () => ({
     </>
   ),
 }));
+const { CopyEditionPicker: ActualEditionPicker } = await import('../src/library/copy-edition-picker');
 mock.module('../src/library/copy-edition-picker', () => ({
   CopyEditionPicker: ({
     disabled,
@@ -173,6 +182,7 @@ beforeEach(() => {
   for (const requests of Object.values(calls)) requests.length = 0;
   shells.length = 0;
   focusTargets.length = 0;
+  mediaQueries.clear();
   window.happyDOM.setWindowSize({ width: 1440, height: 900 });
   contextRouter = router.createRouter({ routeTree: router.createRootRoute(), history: router.createMemoryHistory() });
   root = createRoot(host);
@@ -188,6 +198,8 @@ afterAll(async () => {
     else Reflect.deleteProperty(globalThis, key);
   }
   mock.restore();
+  mock.module('@tanstack/react-router', () => actualRouter);
+  mock.module('../src/library/copy-edition-picker', () => ({ CopyEditionPicker: ActualEditionPicker }));
 });
 
 const profile = { kinds: [{ id: 'physical', label: 'Physical', statuses: [{ id: 'owned', label: 'Owned' }] }] };
@@ -230,7 +242,7 @@ const render = (page: CopiesPageData) =>
 const form = () => host.querySelector<HTMLFormElement>('[role="dialog"] form')!;
 const button = (name: string, region: ParentNode = host) => {
   const control = [...region.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === name);
-  expect(control).toBeDefined();
+  expect(control, `Missing ${name} in ${region.textContent}`).toBeDefined();
   return control!;
 };
 const click = (name: string, region: ParentNode = host) => act(async () => button(name, region).click());
@@ -594,6 +606,7 @@ describe('Late Copy editor and Undo responses cannot modify a replacement page o
 async function resize(width: number) {
   await act(async () => {
     window.happyDOM.setWindowSize({ width, height: 844 });
+    for (const media of mediaQueries) media.dispatchEvent(new window.Event('change'));
   });
   await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
 }
@@ -614,6 +627,10 @@ test('actual create and edit controls, validation and selection survive both pre
     expect(input.getAttribute('aria-invalid')).toBe('true');
     expect(window.document.activeElement).toBe(input);
     expect(input.closest('[hidden]')).toBeNull();
+    await click(m.library_copy_less(), current);
+    await act(async () => current.querySelector<HTMLAnchorElement>(`a[href="#${input.id}"]`)!.click());
+    expect(window.document.activeElement).toBe(input);
+    input.dispatchEvent(new window.CompositionEvent('compositionstart', { bubbles: true, data: '📚' }));
     input.setSelectionRange(2, 6, 'backward');
     const key = current.dataset.idempotencyKey;
     for (const width of [390, 1440, 390]) {
@@ -626,6 +643,7 @@ test('actual create and edit controls, validation and selection survive both pre
       expect(input.getAttribute('aria-invalid')).toBe('true');
       expect(current.dataset.idempotencyKey).toBe(key);
     }
+    input.dispatchEvent(new window.CompositionEvent('compositionend', { bubbles: true, data: '📚' }));
     expect(calls[mode === 'create' ? 'create' : 'update']).toHaveLength(0);
     await render(pageOf(copy));
     expect(current.isConnected).toBe(false);
