@@ -406,11 +406,12 @@ test('failed return stays unavailable until the user retries the same page', asy
     await click(view, button(view, m.library_my_ratings_inspect()));
     await click(view, [...view.host.querySelectorAll('a')].find((link) => link.textContent === 'Kokoro')!);
     await back(view);
-    await act(async () => Promise.resolve());
+    await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
+    expect(view.refreshCount.value).toBe(1);
     expect(view.host.textContent).toContain(m.library_my_ratings_unavailable());
     expect(view.host.textContent).not.toContain(m.library_my_ratings_sparse());
     await click(view, button(view, m.library_my_ratings_retry_page()));
-    await act(async () => Promise.resolve());
+    await act(async () => new Promise((resolve) => view.window.requestAnimationFrame(() => resolve(undefined))));
     expect(view.refreshCount.value).toBe(2);
     expect(view.host.textContent).toContain(m.library_my_ratings_return_found());
     expect(view.calls).toHaveLength(0);
