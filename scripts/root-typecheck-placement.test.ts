@@ -232,6 +232,42 @@ test('admitted root shares one database with all selected SQL consumers and clea
   expect(consumers.every((c) => c.url === 'postgres://fixture/shared')).toBe(true);
 });
 
+test('root uses the admitted compiler entrypoint declared by a mapped workspace', async () => {
+  const f = fixture();
+  const web = join(f.root, 'apps/web');
+  mkdirSync(web, { recursive: true });
+  writeFileSync(
+    join(web, 'package.json'),
+    JSON.stringify({
+      name: '@fixture/web',
+      scripts: { check: 'true', typecheck: 'bun wrong.ts', 'typecheck:root': 'bun root.ts' },
+    }),
+  );
+  writeFileSync(join(web, 'tsconfig.json'), JSON.stringify({ contentMappers: [{ package: 'reylo', extensions: ['.sql'] }] }));
+  writeFileSync(join(web, 'wrong.ts'), "process.exit(23);\n");
+  writeFileSync(
+    join(web, 'root.ts'),
+    `import { appendFileSync, existsSync } from 'node:fs';
+if (!existsSync(${JSON.stringify(join(f.root, 'alive'))})) throw new Error('database removed early');
+appendFileSync(${JSON.stringify(join(f.root, 'consumers'))}, JSON.stringify({ name: 'apps/web', url: process.env.DATABASE_URL }) + '\\n');
+`,
+  );
+
+  expect(
+    await typecheck({
+      ...f,
+      env: {},
+      changedFiles: ['apps/web/src/view.ts'],
+      recognize: admitted,
+      place: async () => {
+        throw new Error('nested admission');
+      },
+    }),
+  ).toBe(0);
+  expect(f.events).toEqual(['database', 'cleanup']);
+  expect(readFileSync(join(f.root, 'consumers'), 'utf8')).toContain('"name":"apps/web"');
+});
+
 test('admitted root DB startup failures preserve the original error without compiler execution', async () => {
   const f = fixture();
   const failure = new Error('migration failed: exact diagnostic');
