@@ -82,6 +82,7 @@ test('choose a native released name, inspect, combine, deliberately apply and re
   await mounted(async (host, render, change) => {
     setLocale('ja', { reload: false });
     const locale = 'ja';
+    expect(getLocale()).toBe(locale);
     const options = { locale };
     const metadata = conditionMetadata(bundledRelease);
     const ordinary: FilterDocument = { statement: { property: 'schema:datePublished', range: { gte: 1980 } } };
@@ -275,7 +276,10 @@ test('equivalent rerenders retain inspection and focus; reader, request, locale,
       await change(picker.querySelector('select')!, 'anime/before-2000');
       expect(value).toEqual({ and: [{ saved: 'anime/all' }] });
     } finally {
-      client.clear();
+      await act(async () => {
+        await client.cancelQueries();
+        client.clear();
+      });
     }
   });
 });

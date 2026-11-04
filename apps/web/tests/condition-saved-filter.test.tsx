@@ -11,7 +11,7 @@ import { conditionTreeAdmission, type ConditionMetadata } from '../src/search/co
 const thing: FilterDocument = { type: { in: ['ex:Thing'] } };
 const metadata: ConditionMetadata = {
   types: { 'ex:Thing': { facets: ['ex:name'] } },
-  properties: { 'ex:name': { datatype: 'string' } },
+  properties: { 'ex:name': { datatype: 'string', value: { pattern: '.*' } } },
   filters: {
     'things/one': { filter: thing },
     'things/two': { filter: { and: [thing, { statement: { property: 'ex:name', in: ['x'] } }] } },
