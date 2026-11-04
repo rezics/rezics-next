@@ -278,9 +278,10 @@ test('interrupted mixed traversal revalidates rejected witnesses in either nativ
         () => f.cut,
         { windows: 1, rows: 64 },
         () => ({
-          read: async () => nativeFirst
-            ? { status: 'current', match: false, revalidate: async () => 'changed' }
-            : { status: 'unavailable' },
+          read: async () =>
+            nativeFirst
+              ? { status: 'current', match: false, revalidate: async () => 'changed' }
+              : { status: 'unavailable' },
         }),
       ),
     ).toMatchObject({ status: 'restart', match: 'not_proven', complete: false });
