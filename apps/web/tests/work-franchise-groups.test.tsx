@@ -30,7 +30,11 @@ const original = (n: number, inverse = false, spoiler = false) => ({
       property: { id: 'schema:datePublished', data_type: 'time' },
       value: {
         type: 'value',
-        content: { time: '+2001-00-00T', precision: 9, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' },
+        content: {
+          time: '+2001-00-00T00:00:00Z',
+          precision: 9,
+          calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        },
       },
     },
     ...(spoiler
@@ -223,14 +227,15 @@ test('mounted groups preserve originals, gated evidence, human labels and exact 
       });
     }
     browser.location.href = `https://site.test${new URL(sources.href).searchParams.get('via')}`;
-    await draw(structuredClone(windows));
+    const returned = structuredClone(windows);
+    await draw(returned);
     expect(document.activeElement?.closest('[data-work-statement]')?.getAttribute('data-work-statement')).toBe(id(20));
     const continuation = host.querySelector<HTMLAnchorElement>('[data-work-stream="in:wdt:P155"] > a')!;
     expect(new URL(continuation.href).hash).toBe('#connections?stream=in%3Awdt%3AP155');
     const reveal = host.querySelector<HTMLButtonElement>('button')!;
     await act(async () => reveal.click());
     expect(host.textContent).toContain('Secret sequel');
-    await draw(windows, { ...value, releaseDigest: 'sha256:changed-definitions' });
+    await draw(returned, { ...value, releaseDigest: 'sha256:changed-definitions' });
     expect(host.textContent).not.toContain('Secret sequel');
     await draw(
       structuredClone(windows),
