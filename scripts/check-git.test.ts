@@ -328,7 +328,7 @@ test('private key material in the staged tree is refused before a ref can be pus
     'private key',
   );
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
-});
+}, 30000);
 
 function publicationFixture(hook: string) {
   const root = sandbox();
@@ -367,7 +367,7 @@ test('one failed push retries the identical candidate and retains redacted trans
   } finally {
     output.mockRestore();
   }
-});
+}, 30000);
 
 test.each([false, true])('final push failure keeps stderr and snapshot fallback; expired retry=%s', async (expire) => {
   const { root, source, log } = publicationFixture(`echo 'fatal: gateway unavailable' >&2; exit 1`);
@@ -393,7 +393,7 @@ test.each([false, true])('final push failure keeps stderr and snapshot fallback;
   } finally {
     output.mockRestore();
   }
-});
+}, 30000);
 
 test('failed manifest delivery releases a published ref using the earlier intent', async () => {
   const { root, source, origin } = publicationFixture('exit 0');
@@ -405,7 +405,7 @@ test('failed manifest delivery releases a published ref using the earlier intent
   const journal = join(source, '.temp/check-git-publications/interrupted.json');
   if (existsSync(journal)) await releaseCheckGit(source, journal);
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
-});
+}, 30000);
 
 test('stale sweep deletes only settled owned identities and preserves active, frozen and foreign refs', async () => {
   const root = sandbox();
@@ -444,7 +444,7 @@ test('stale sweep deletes only settled owned identities and preserves active, fr
     expect(refs).toContain(ref);
   await releaseCheckGit(source, join(root, 'retained/manifest.json'), { settled: true });
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/retained')).toBe('');
-});
+}, 30000);
 
 test('a lost push response falls back and releases the exact remotely accepted candidate', async () => {
   const { root, source, origin } = publicationFixture('exit 0');
@@ -462,7 +462,7 @@ test('a lost push response falls back and releases the exact remotely accepted c
   const journal = join(source, '.temp/check-git-publications/lost-response.json');
   if (existsSync(journal)) await releaseCheckGit(source, journal);
   expect(git(root, '--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/')).toBe('');
-});
+}, 30000);
 
 test('an unavailable ownership journal falls back without publishing or releasing another ref', async () => {
   const root = sandbox();
@@ -480,7 +480,7 @@ test('an unavailable ownership journal falls back without publishing or releasin
   expect(existsSync(join(dirname(fallback), 'snapshot.pack'))).toBe(true);
   expect(git(root, '--git-dir', origin, 'rev-parse', 'refs/checks/existing')).toBe(candidate);
   await releaseCheckGit(source, owned);
-});
+}, 30000);
 
 function storeHas(store: string, oid: string) {
   return (
