@@ -4,7 +4,11 @@ import { noEffect, runCommand } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import type { IdentityEpochStep, IdentityJobRef } from '../semantic/identity-epoch-contract.ts';
-import { identityEpochStore, identityJobPartition, IdentityEpochStoreError } from '../semantic/identity-adapters/index.ts';
+import {
+  identityEpochStore,
+  identityJobPartition,
+  IdentityEpochStoreError,
+} from '../semantic/identity-adapters/index.ts';
 import {
   lookupIdentityReceivingEffect,
   prepareIdentityReceivingEffect,

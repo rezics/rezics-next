@@ -287,7 +287,10 @@ async function readQuestionObservation(
 }
 
 function identityObservationsEqual(left: readonly IdentityMapping[], right: readonly IdentityMapping[]): boolean {
-  return JSON.stringify(left.map(identityMappingObservationValue)) === JSON.stringify(right.map(identityMappingObservationValue));
+  return (
+    JSON.stringify(left.map(identityMappingObservationValue)) ===
+    JSON.stringify(right.map(identityMappingObservationValue))
+  );
 }
 
 function identityFingerprint(mappings: readonly IdentityMapping[]): string {

@@ -38,7 +38,11 @@ import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { withRequestDeadline } from '../request/deadline.ts';
 import { bindSemanticProducerRoles, recordSemanticSourceCommit } from './erasure-producer.ts';
-import { identityBindingData, lookupIdentityBinding, readAccountIdentityUndo } from './identity-adapters/identity-epoch-binding.ts';
+import {
+  identityBindingData,
+  lookupIdentityBinding,
+  readAccountIdentityUndo,
+} from './identity-adapters/identity-epoch-binding.ts';
 import {
   identityEpochStore,
   identityJobPartition,
