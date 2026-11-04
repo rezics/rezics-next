@@ -14,6 +14,7 @@ import { ConversionError, type ConversionInput, type ConvertedRecord, type Conve
 import {
   canonicalLanguageTag,
   commandKey,
+  inLanguageTag,
   latinLanguageTag,
   sourceDigest,
   sourceEnvelope,
@@ -23,7 +24,7 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@4';
+export const converter_revision = 'cross-media-entities@5';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxNames: vndbLimits.maxTitleCandidates,
@@ -31,7 +32,7 @@ export const vndbReleaseNameLimits = Object.freeze({
   stringBytes: vndbLimits.stringBytes,
   titleChars: 1500,
   recordBytes: vndbLimits.recordBytes,
-  maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases + vndbLimits.maxLinks,
+  maxCommands: 1 + vndbLimits.maxTitleCandidates + vndbLimits.maxAliases + vndbLimits.maxLinks + 1,
 });
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
@@ -574,6 +575,39 @@ function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** Raw `releases.olang` stays in the digest; canonical emission happens later. */
+function attachReleaseLanguage(raw: object, normalized: Normalized, diagnostics: ConversionDiagnostic[]): void {
+  const value = own(raw, 'olang', '/olang');
+  if (value === undefined) return;
+  if (value === null) {
+    normalized.olang = null;
+    return;
+  }
+  if (
+    typeof value !== 'string' ||
+    !value.isWellFormed() ||
+    Buffer.byteLength(value, 'utf8') > vndbReleaseNameLimits.stringBytes
+  ) {
+    diagnostics.push({ pointer: '/olang', code: 'unadmitted_language' });
+    return;
+  }
+  normalized.olang = value;
+}
+
+function proposeReleaseLanguage(
+  raw: unknown,
+  fact: (property: string, content: unknown) => BatchStatement,
+): {
+  statement?: BatchStatement;
+  diagnostic?: ConversionDiagnostic;
+} {
+  if (typeof raw !== 'string') return {};
+  const mapping = mapSourceEnumeration('vndb', 'language', raw);
+  const language = mapping?.term === 'schema:inLanguage' ? inLanguageTag(raw) : null;
+  if (language) return { statement: fact('schema:inLanguage', language) };
+  return { diagnostic: { pointer: '/olang', code: 'unadmitted_language' } };
+}
+
 function projectReleaseTitles(
   raw: object,
   releaseId: string,
@@ -747,6 +781,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
     projectEntityLinks(kind, raw, expected, normalized);
+    attachReleaseLanguage(raw, normalized, projectedTitles.diagnostics);
     if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > vndbReleaseNameLimits.recordBytes)
       fail('', 'invalid_record_byte_limit');
     const aliases = Object.keys(projectedTitles.aliases).length ? projectedTitles.aliases : undefined;
@@ -823,9 +858,11 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
       };
     type = live;
   }
+  const diagnostics: ConversionDiagnostic[] = [];
   if (kind === 'vndb-release') {
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
+    attachReleaseLanguage(raw, normalized, diagnostics);
   }
   if (kind === 'vndb-character') {
     for (const field of ['height', 'weight'] as const) {
@@ -849,7 +886,7 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
   }
   projectEntityLinks(kind, raw, expected, normalized);
   if (Buffer.byteLength(JSON.stringify(normalized), 'utf8') > 65_536) fail('', 'invalid_record_byte_limit');
-  return { normalized, type, labels, identifier: expected };
+  return { normalized, type, labels, identifier: expected, ...(diagnostics.length ? { diagnostics } : {}) };
 }
 
 export function convertCrossMediaEntity(
@@ -946,6 +983,11 @@ function convert(
           code: 'Unsupported external link site; retained as source metadata only',
         });
     }
+  }
+  if (kind === 'vndb-release') {
+    const language = proposeReleaseLanguage(projected.normalized.olang, fact);
+    if (language.statement) facts.push(language.statement);
+    if (language.diagnostic) diagnostics.push(language.diagnostic);
   }
   let descriptionText: string | undefined;
   if (kind === 'bangumi-episode') {

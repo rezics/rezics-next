@@ -55,7 +55,7 @@ test("cross-media seed preserves a credited person's raw biography for the curre
     { source: registration.source, subjectId: '11111111-1111-4111-8111-111111111111' },
   );
   const biographyCommand = converted.proposals.find((command) => command.source.field_group === 'summary');
-  expect(registration.converter_revision).toBe('cross-media-entities@4');
+  expect(registration.converter_revision).toBe(crossMediaRevision);
   expect(converted.normalized).toMatchObject({ summary: biography });
   expect(biographyCommand?.op === 'propose' ? biographyCommand.statement.property.id : undefined).toBe(
     'schema:abstract',

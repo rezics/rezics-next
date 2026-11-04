@@ -116,5 +116,5 @@ test('invalid language, malformed rows and bound edges stay at addressable paths
   );
   expectInvalid(record([{ id: 'r1', lang: 'en', mtl: 'yes', title: 'Harbor', latin: null }]), '/releases_titles/0/mtl');
   expectInvalid(record([title('en', '')]), '/releases_titles/0/title');
-  expect(vndbReleaseNameLimits.maxCommands).toBe(129);
+  expect(vndbReleaseNameLimits.maxCommands).toBe(162);
 });

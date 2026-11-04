@@ -1600,6 +1600,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: at most 64 title rows and 64 KiB per release, 64 names and 64 Romanized alternate names, within the existing per-record candidate and journal budgets. Nonselected owners, missing selected titles, overflow and duplicate associations are review gaps or converter refusals. Machine-translation flags are not a ranking rule.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
 
+### Import authored VNDB release original language
+
+- Touches: the same selected-family COPY set and seed caller, plus `releases.olang` on already selected releases. Language shares `convertCrossMediaEntity` with titles and identity; it does not split or merge releases, copy language onto a work, or invent platform language qualifiers.
+- Bound: one optional cited `schema:inLanguage` fact per release inside the existing 162-command, 64 KiB and 64-release caps. Inventory language codes canonicalise through `inLanguageTag`; COPY `\\N` and unmapped codes are review diagnostics only. No Concept reads or per-field authority queries.
+- Growth check: existing importer reconciliation and native sourced-write suites retain their units. This journey adds no PostgreSQL growth series.
+
 ### Import authored VNDB public tag associations
 
 - Touches: bounded `tags` (512) and `tags_vn` (256) COPY projections, matching VN title/revision rows, current native scheme/concept point reads, and ordinary public batch/fence/candidate commands through the existing seed/importer caller. User ids, notes and vote values stay unprojected.
@@ -2035,11 +2041,20 @@ Decision: dump-unknown height is COPY `0`; dump-unknown weight is COPY `\N`;
 exact `0` is never a measured zero.
 
 The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@4`.
+selected release payload and convert them through `cross-media-entities@5`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
 owned. Decision: label order is language then text; `mtl` never ranks names.
+
+The production release-language operator
+[`vndb-release-language.ts`](src/vndb-release-language.ts) reuses the selected-family
+planner and `convertCrossMediaEntity`. `releases.olang` is a cited literal, not a
+Concept binding. Title language never supplies the whole-release fact. COPY `\\N`
+and codes outside the inventory language enumeration withhold only that statement.
+Decision: converter `@5` offers the new fact on unchanged dump bytes without a
+fabricated source revision; a later absent or unsupported `olang` does not retract
+an independently adopted language.
 
 The production VNDB public-tag operator
 [`vndb-public-tags.ts`](src/vndb-public-tags.ts) traverses extracted `tags` and

@@ -253,6 +253,7 @@ Bangumi citation and CC-BY-SA-3.0 attribution and ShareAlike rights. Empty and
 absent summaries produce no document. Summary commands remain in `summary`,
 separate from identity facts, metadata licences and image rights.
 Decision: biography admission advances the existing `@3` converter to `@4`, preserving the prior VNDB release-title projection revision.
+Decision: release original language advances the existing `@4` converter to `@5`, preserving biography, websites, staff names and release-title projection.
 
 Decision: type 3 uses admitted `schema:MusicAlbum` because Semantic has no music work/release/track split; type 6 uses `schema:Movie` for pinned movie platforms and `schema:TVSeries` for pinned TV-template platforms, sharing `liveActionWorkType`; archive integer platform ids stringify; unknown live-action platform codes stay ignored at `/platform`. MusicAlbum has no library profile. Bangumi episode records stay the graph continuation.
 
@@ -277,8 +278,8 @@ silently truncating them. The main caps are:
 - VNDB: 64 KiB projection, at most 64 titles, 64 alias lines, and 32 external
   links; at most 162 commands (1 identifier + 64 names + 64 alternate names +
   32 URLs + 1 original language). A VideoGameRelease title projection reuses
-  those title/alias/byte caps and at most 129 commands (1 identifier + 64 names
-  - 64 Romanized alternate names).
+  those title/alias/byte caps and at most 162 commands (1 identifier + 64 names
+  + 64 Romanized alternate names + 32 URLs + 1 original language).
 - Open Library: 2 MiB projection, at most 64 entries per collection and 64
   combined author/work relations, at most 1 MiB of unlicensed prose retained as
   metadata, and at most 100 commands.
@@ -350,7 +351,7 @@ exact `0` is never a measured zero.
 
 ### VNDB release titles
 
-`cross-media-entities@4` projects admitted `releases_titles` rows onto
+`cross-media-entities@5` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -359,6 +360,16 @@ on this table and does not inherit the `vn_titles` empty-cell decision. Title
 language is not a whole-release `schema:inLanguage` fact. Scalar `{id,title}`
 payloads remain the untagged legacy envelope for sealed journals. Date, status
 and completeness stay on the release-fidelity vocabulary path.
+
+`releases.olang` is the original language explicitly stated for that release,
+not a UI, subtitle or audio list. The raw COPY string (or COPY `\\N`) enters
+the sanitized projection and digest. Bound proposals emit one canonical
+`schema:inLanguage` string through the inventory `language` enumeration and
+`inLanguageTag`, keeping script and region subtags the descriptor admits.
+Missing, unknown, malformed and unmapped codes withhold only that fact; they
+never become `und`, a title language, the work language or a viewer locale.
+Decision: raw `pt-br` stays distinct from canonical `pt-BR` in the digest;
+COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB staff preferred and additional source names
 
