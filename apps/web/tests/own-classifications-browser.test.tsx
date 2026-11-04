@@ -70,7 +70,7 @@ test('browser admission refreshes the selected frontier; readback leaves the ori
 test('replacement aborts old admission and commands; away and return require a new native observation', async () => {
   const host = window.document.createElement('div') as HTMLElement;
   const root = createRoot(host);
-  const requests: { signal?: AbortSignal; done: (value: OwnClassificationsRead) => void }[] = [];
+  const requests: { signal: AbortSignal | undefined; done: (value: OwnClassificationsRead) => void }[] = [];
   const initial = ready();
   const render = (episode: string) => root.render(<ClassificationsReader key={episode} initial={initial} frontier={frontier}
     locale="en" subject={accountId} state={null} isCurrent={() => true}

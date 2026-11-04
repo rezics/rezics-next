@@ -59,7 +59,7 @@ export async function createOwnClassificationClient(input: {
     headers.set('accept-language', requestLanguages(input.locale)
       .map((tag, index) => index === 0 ? tag : `${tag};q=${Math.max(1 - index / 10, 0.1).toFixed(1)}`).join(', '));
     return bounded(await (input.fetcher ?? globalThis.fetch)(url, {
-      ...init, headers, signal: input.signal, credentials: 'omit', cache: 'no-store', redirect: 'manual',
+      ...init, headers, signal: input.signal ?? null, credentials: 'omit', cache: 'no-store', redirect: 'manual',
     }));
   }) as typeof fetch;
   const client = createKernelClient(input.origin, { fetch: transport });

@@ -33,7 +33,7 @@ export function OwnClassificationsWorkspace({
   isCurrent: () => boolean;
   onRetry: (frontier: ClassificationFrontier) => Promise<unknown>;
   onNext: (frontier: ClassificationFrontier) => void;
-  commands?: ClassificationCommands;
+  commands?: ClassificationCommands | undefined;
 }) {
   const options = { locale: locales.find((value) => value === locale) ?? 'en' };
   const [selection, select] = useState<{ generation: number; key: string } | null>(null);
