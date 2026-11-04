@@ -5154,6 +5154,8 @@
   "settings_notifications_leave_title": "离开通知偏好设置？",
   "settings_privacy_leave_title": "离开收藏集隐私设置？",
   "settings_verification_leave_title": "离开代理身份认证？",
+  "settings_watches_leave_title": "离开订阅移除恢复？",
+  "settings_watches_leave_description": "将丢弃此次移除的本地重试信息。已发送的移除操作仍可能完成。",
   "settings_all_drafts_leave_title": "离开这些设置？",
   "settings_other_drafts_leave_description": "此页面保留的本地草稿和恢复密钥将丢失。已发送的命令仍可能完成。",
   "settings_account_rename_heading": "更改用户名",

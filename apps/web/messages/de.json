@@ -5154,6 +5154,8 @@
   "settings_notifications_leave_title": "Benachrichtigungseinstellungen verlassen?",
   "settings_privacy_leave_title": "Datenschutzeinstellungen der Sammlungen verlassen?",
   "settings_verification_leave_title": "Agentenverifizierung verlassen?",
+  "settings_watches_leave_title": "Wiederherstellung der Aboentfernung verlassen?",
+  "settings_watches_leave_description": "Die lokalen Informationen zum erneuten Versuch dieser Entfernung werden verworfen. Eine bereits gesendete Entfernung kann noch abgeschlossen werden.",
   "settings_all_drafts_leave_title": "Diese Einstellungen verlassen?",
   "settings_other_drafts_leave_description": "Lokale Entwürfe und die auf dieser Seite gespeicherten Wiederherstellungsschlüssel werden verworfen. Bereits gesendete Befehle können noch abgeschlossen werden.",
   "settings_account_rename_heading": "Benutzernamen ändern",
