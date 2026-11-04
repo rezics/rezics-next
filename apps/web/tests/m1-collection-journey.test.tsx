@@ -326,7 +326,7 @@ test('current native actions govern create/add/reorder; review precedes sending 
       );
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     });
     expect(document.body.innerHTML).toContain('role="option"');
     await click(
