@@ -127,13 +127,10 @@ function detail(operationId: string, actionName: string, isWrite = false) {
     operationId,
     'x-exposure': 'gate:reading_progress',
     'x-action': actionName,
+    'x-authority-anchor': 'own-account',
+    'x-authority-resource-types': Object.keys(bundledRelease.types),
     security: [{ bearerAuth: [] }],
-    ...(!isWrite
-      ? {
-          'x-authority-anchor': 'own-account',
-          'x-authority-resource-types': Object.keys(bundledRelease.types),
-        }
-      : { 'x-rate-limit': writeRate }),
+    ...(isWrite ? { 'x-rate-limit': writeRate } : {}),
   };
 }
 

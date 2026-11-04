@@ -194,7 +194,7 @@ test('foreign owners see only their own goal state and account retirement erases
     ])
   ).rows[0]!.route;
   await native.revokeIdentity(owner.actor.accountId);
-  expect((await native.send(owner.bearer, 'GET', `${path}?year=2040`)).status).toBe(403);
+  expect((await native.send(owner.bearer, 'GET', `${path}?year=2040`)).status).toBe(401);
   const erased = await purgeOwnedGraphPage(native.pool, {
     accountId: owner.actor.accountId,
     kind: 'yearly_completion_goals',
