@@ -20,7 +20,7 @@ import { exactRevisionRoute } from '../threads/exact-revision-href';
 import { historicalReaderSource } from '../threads/historical-reader-provenance';
 import { parseHistoryReturnToken, resolveHistoryReturnTarget } from '../threads/revision-return/history-return';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
+import { deLocalizeUrl, getLocale, localizeUrl } from '../paraglide/runtime.js';
 import { currentHistoryEnvelope } from './post-history-current-fixture';
 import { current, selected, exactRevisionViewports } from './exact-revision/fixture';
 
@@ -36,7 +36,10 @@ function ThreadHistoryRoute() {
         postId={selected.id}
         threadId={selected.threadId}
         review
-        returnOrigin={{ pathname: location.pathname, search: new URL(location.publicHref, 'https://site.test').search }}
+        returnOrigin={{
+          pathname: new URL(location.publicHref, 'https://site.test').pathname,
+          search: new URL(location.publicHref, 'https://site.test').search,
+        }}
         navigateToExactRevision={(identity, historyReturn) => {
           void router.navigate(exactRevisionRoute(identity, historyReturn));
         }}
@@ -75,10 +78,9 @@ function ReturnJourney({ lostReceipt = false }: { lostReceipt?: boolean }) {
   });
   const router = useMemo(() => {
     const root = createRootRouteWithContext<RouterContext>()({ component: Outlet });
-    const locale = createRoute({ getParentRoute: () => root, path: '/$locale', component: Outlet });
-    const thread = createRoute({ getParentRoute: () => locale, path: 'threads/$id_/$slug', component: ThreadHistoryRoute });
+    const thread = createRoute({ getParentRoute: () => root, path: 'threads/$id_/$slug', component: ThreadHistoryRoute });
     const exact = createRoute({
-      getParentRoute: () => locale,
+      getParentRoute: () => root,
       path: 'posts/$id/revisions/$revisionId',
       validateSearch: (search: Record<string, unknown>) => {
         const historyReturn = parseHistoryReturnToken(search.historyReturn);
@@ -90,9 +92,13 @@ function ReturnJourney({ lostReceipt = false }: { lostReceipt?: boolean }) {
       ? `/en/posts/${selected.id}/revisions/${selected.revisionId}?historyReturn=${lostToken}`
       : `/en/threads/${selected.threadId}/prepared?post=${selected.id}`;
     return createRouter({
-      routeTree: root.addChildren([locale.addChildren([thread, exact])]),
+      routeTree: root.addChildren([thread, exact]),
       context: { queryClient: client, credentialMode: 'anonymous' },
       history: createMemoryHistory({ initialEntries: [initial] }),
+      rewrite: {
+        input: ({ url }) => deLocalizeUrl(url).href,
+        output: ({ url }) => localizeUrl(url).href,
+      },
     });
   }, [client, lostReceipt]);
 

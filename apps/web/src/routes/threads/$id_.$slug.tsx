@@ -1133,7 +1133,10 @@ export function ThreadReadingPost({
               <PostHistory
                 postId={post.id}
                 readAuthority={historyScope}
-                returnOrigin={{ pathname: location.pathname, search: new URL(location.publicHref, 'https://rezics.invalid').search }}
+                returnOrigin={{
+                  pathname: new URL(location.publicHref, 'https://rezics.invalid').pathname,
+                  search: new URL(location.publicHref, 'https://rezics.invalid').search,
+                }}
                 navigateToExactRevision={(identity, historyReturn) => {
                   void router.navigate(exactRevisionRoute(identity, historyReturn));
                 }}
