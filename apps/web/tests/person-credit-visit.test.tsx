@@ -159,6 +159,12 @@ test('current Person credit returns from work, Character and Sources with exact 
       expect(target.target).toBe('_blank');
     }
     await click(m.credit_close());
+    await act(async () => {
+      host.querySelectorAll<HTMLButtonElement>('button[data-credit-statement]')[1]!.click();
+    });
+    expect(window.document.querySelector('[role="dialog"]')?.textContent).toContain('The narrator');
+    expect(window.document.querySelector('[role="dialog"]')?.textContent).not.toContain('The traveler');
+    await click(m.credit_close());
     // A navigation back mounts a new native reading, then verifies its exact assertion before reopening.
     window.history.replaceState(null, '', origin);
     await render('fresh-return');

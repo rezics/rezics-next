@@ -136,7 +136,7 @@ export function creditRelated(credit: CreditAssertion, locale = 'en'): SubjectRe
       const label = summary.label;
       return typeof label === 'string' && label.trim()
         ? [[id, { labels: { [locale]: label } }]]
-        : label && typeof label !== 'string' && label.value && label.language
+        : label && typeof label !== 'string' && label.value?.trim() && label.language?.trim()
           ? [[id, { labels: { [label.language]: label.value } }]]
           : [];
     }),

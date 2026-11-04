@@ -1648,7 +1648,8 @@ there is no per-row hydration or background authority probing. Unsupported docum
 Each destination retains one address, no body, label, source snapshot, draft or authority. Its opaque cursor keeps the
 existing 8192-character envelope, the local locator is at most 4096 characters, and the existing validated complete
 return address is capped at 32768 ASCII URL characters/UTF-8 bytes.
-Only one assertion locator is retained, with zero history addresses. Explicit return repeats the ordinary current-page
+Encoding that address once in a destination’s `via` costs at most 98304 ASCII bytes plus the destination path/query;
+the existing parser permits only one nested hop. Only one assertion locator is retained, with zero history addresses. Explicit return repeats the ordinary current-page
 reader once; opening revision metadata adds one exact revision request, and correction uses one existing exact slot-page
 read. Sources and destination pages retain their own current reader costs. No engine query, native index, polling or
 new growth-sensitive producer is introduced.
