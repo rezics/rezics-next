@@ -33,6 +33,7 @@ const context: CurrentWorkContext = {
           state: 'value',
           kind: 'item',
           id: target,
+          originalId: target,
           type: { id: 'schema:Person', labels: {} },
           labels: { en: 'Same name' },
         },

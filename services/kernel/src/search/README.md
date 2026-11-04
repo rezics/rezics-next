@@ -1926,7 +1926,7 @@ A denied target, including a qualifier or the lookahead, withholds its entire ca
 Every item retains `statementId`, `sourceId`, `direction: outgoing`, `property: {id, labels}`, `revision`, `release`,
 `rank`, `value`, and `qualifiers`. Qualifiers remain an ordered list of `{property: {id, labels}, value}` on their own
 statement, with independent empty/unsupported/unavailable states. Values distinguish `somevalue`, `novalue`,
-`unsupported`, and `value`. Actual values are `item` (current terminal `id`, Type identity and labels), `text`, exact
+`unsupported`, and `value`. Actual values are `item` (asserted `originalId`, current terminal `id`, Type identity and labels), `text`, exact
 signed-decimal `quantity` (string `amount` and `unit`), or Gregorian `time` (`year`, optional `month`, optional `day`).
 Missing calendar components are precision; unsupported calendars are explicitly unsupported. No credited name or
 role is borrowed from another credit. The property's identity is the role: contributor stays contributor.

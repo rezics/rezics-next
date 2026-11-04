@@ -214,6 +214,7 @@ export function finishListWorkContext(
           state: 'value',
           kind: 'item',
           id: target.id,
+          originalId: value.id,
           type: term(release, target.type, languages, true),
           labels: workLabels(target.labels, languages),
         }

@@ -23,7 +23,7 @@ const nonValue = [
 ] as const;
 const value = t.Union([
   ...nonValue,
-  t.Object({ state: t.Literal('value'), kind: t.Literal('item'), id, type: term, labels }, closed),
+  t.Object({ state: t.Literal('value'), kind: t.Literal('item'), id, originalId: id, type: term, labels }, closed),
   t.Object({ state: t.Literal('value'), kind: t.Literal('text'), text }, closed),
   t.Object({ state: t.Literal('value'), kind: t.Literal('quantity'), amount: text, unit: text }, closed),
   t.Object(
