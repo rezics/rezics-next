@@ -137,6 +137,22 @@ async function waitForRead(index: number): Promise<ReadCall> {
   while (!reads[index]) await new Promise<void>((resolve) => readWaiters.push(resolve));
   return reads[index]!;
 }
+async function waitForText(host: HTMLElement, text: string): Promise<boolean> {
+  if (host.textContent?.includes(text)) return true;
+  return new Promise((resolve) => {
+    const observer = new window.MutationObserver(() => {
+      if (!host.textContent?.includes(text)) return;
+      clearTimeout(timeout);
+      observer.disconnect();
+      resolve(true);
+    });
+    observer.observe(host, { subtree: true, childList: true, characterData: true });
+    const timeout = setTimeout(() => {
+      observer.disconnect();
+      resolve(false);
+    }, 1000);
+  });
+}
 function ready(call: ReadCall, subject = call.subject, cursor = call.cursor) {
   call.resolve(nativeRead(subject, cursor));
 }
@@ -369,12 +385,11 @@ test('bfcache refresh is reader-local and two mounted readers cannot consume one
     const bfcacheRead = await waitForRead(2);
     expect(reads).toHaveLength(3);
     ready(bfcacheRead);
-    await act(async () => {
+    const found = await act(async () => {
       await bfcacheRead.promise;
-      await tick();
+      return waitForText(first.host, 'The same original question and Subject pair');
     });
-    await act(async () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())));
-    expect(first.host.textContent).toContain('The same original question and Subject pair');
+    expect(found).toBe(true);
   } finally {
     await first.close();
     if (!secondClosed) await second.close();
