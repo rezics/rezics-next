@@ -164,12 +164,19 @@ test('an invalid Markdown continuation is kept with its reason and reported to i
     const source = join(task.worktree, '.temp/continuation');
     mkdirSync(source, { recursive: true });
     writeFileSync(join(source, 'invalid.md'), markdown.replace('goal: fixture', 'goal: web'));
-    const failure = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt }).dropped[0]!;
+    const failure = harvestContinuations(h.store, h.settings, task, { taskId: task.id, attempt: attempt.attempt })
+      .dropped[0]!;
     const failed = join(h.settings.stateDirectory, 'backlog', 'fixture', 'failed');
-    const saved = join(failed, readdirSync(failed).find((name) => name.endsWith('.md'))!);
+    const saved = join(
+      failed,
+      readdirSync(failed).find((name) => name.endsWith('.md'))!,
+    );
     const reason = readFileSync(`${saved}.reason`, 'utf8');
     const inbox = new SqliteManagerInbox(h.store.db, h.settings.stateDirectory);
-    const notice = inbox.pending(task.brief.manager).map(({ event }) => JSON.stringify(event) ?? '').join('\n');
+    const notice = inbox
+      .pending(task.brief.manager)
+      .map(({ event }) => JSON.stringify(event) ?? '')
+      .join('\n');
     expect(readFileSync(saved, 'utf8')).toContain('goal: web');
     expect(reason).toContain(failure.reason);
     expect(notice).toContain('instruction');

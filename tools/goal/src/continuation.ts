@@ -4,7 +4,16 @@ import { SqliteManagerInbox } from './inbox.ts';
 import { acquireDirectoryLeaseWaiting } from './lease.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { AttemptRef } from './contracts.ts';
 import {
@@ -472,15 +481,16 @@ export function harvestContinuations(
         result.dropped.push({ file: name, reason });
         store.event(ref, 'continuation-dropped', { file: name, reason });
         if (failedPath) {
-          const summary = `Continuation ${name} kept at failed/${basename(failedPath)}: ${reason}`
-            .replace(/\s+/g, ' ');
+          const summary = `Continuation ${name} kept at failed/${basename(failedPath)}: ${reason}`.replace(/\s+/g, ' ');
           new SqliteManagerInbox(store.db, settings.stateDirectory).deliver({
             managerId: task.brief.manager,
             goalId: task.brief.goal,
             kind: 'instruction',
             summary,
           });
-          console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} kept at ${failedPath}: ${reason}`);
+          console.error(
+            `Continuation ${name} from task ${task.id} attempt ${ref.attempt} kept at ${failedPath}: ${reason}`,
+          );
         } else {
           console.error(`Continuation ${name} from task ${task.id} attempt ${ref.attempt} dropped: ${reason}`);
         }
