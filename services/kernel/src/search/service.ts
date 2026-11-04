@@ -68,7 +68,6 @@ import {
   readReleaseSearchGroups,
   type ReleaseSearchGroupsResult,
 } from './release-search-source.ts';
-import type { ReleaseSearchCandidateReservation } from './release-search-native-stream.ts';
 import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
 import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import { publicHitFigures } from './public-figures.ts';
