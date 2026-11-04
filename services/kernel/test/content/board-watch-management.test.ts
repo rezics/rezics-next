@@ -422,14 +422,13 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   } finally {
     setup.release();
   }
-  await f.accounts.grant(reader, 'realm:read', { route, id: realm });
-  await f.accounts.grant(reader, 'realm:participate', { route, id: realm });
-  await f.accounts.grant(reader, 'board:read', { route, id: secondaryBoard });
-  const realmThread = await f.thread();
-  await f.db.admin.query(
-    'UPDATE content.thread SET board_id=$2,security_revision=security_revision+1 WHERE thread_id=$1',
-    [realmThread.id, secondaryBoard],
-  );
+  for (const account of [f.accounts.actor, f.accounts.principal, f.accounts.recipient]) {
+    await f.accounts.grant(account, 'realm:read', { route, id: realm });
+    await f.accounts.grant(account, 'realm:participate', { route, id: realm });
+    await f.accounts.grant(account, 'board:read', { route, id: secondaryBoard });
+    await f.accounts.grant(account, 'thread:create', { route, id: secondaryBoard });
+  }
+  const realmThread = await f.thread(f.accounts.recipient, 'published', secondaryBoard);
   const later = await f.thread();
   for (const thread of [realmThread, later])
     expect((await f.call(reader, 'PUT', `/v1/threads/${thread.id}/watch`)).status).toBe(204);
