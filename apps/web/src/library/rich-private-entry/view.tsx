@@ -1,9 +1,23 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { useOperation } from '../../kernel/exposure';
 import type { useSession } from '../../session/query';
-import { PRIVATE_NOTE_BYTES, annotationWrite, draftOf, type AnnotationDraft } from './contract';
+import {
+  annotationWrite,
+  annotationIssues,
+  annotationDraftChanged,
+  annotationConfirmation,
+  annotationVersion,
+  renewAnnotationDraft,
+  draftOf,
+  type AnnotationDraft,
+  type AnnotationConfirmation,
+  type AnnotationField,
+} from './contract';
+import { AnnotationEditor, focusAnnotationEditor } from './annotation-editor';
+import { AnnotationReview, AnnotationSaved } from './annotation-review';
+import { AnnotationDeparture, type AnnotationDepartureIntent } from './annotation-departure';
 import {
   readPrivateEntryForSubject,
   savePrivateAnnotations,
@@ -82,13 +96,6 @@ function timestampText(value: PersonalEntryObservation['sourceCreated']) {
   });
 }
 
-function validDraft(draft: AnnotationDraft) {
-  const bytes = new TextEncoder().encode(draft.note).byteLength;
-  if (bytes > PRIVATE_NOTE_BYTES) return false;
-  if (!draft.priority.trim()) return true;
-  return /^[0-9]{1,3}$/.test(draft.priority) && Number(draft.priority) >= 1 && Number(draft.priority) <= 100;
-}
-
 type PrivateEntryTransport = {
   read: (input: { data: { subjectId: string } }) => Promise<PrivateEntryReadResult>;
   annotations: (input: { data: AnnotationCommand }) => Promise<PrivateEntryCommandResult>;
@@ -100,8 +107,7 @@ const nativeTransport: PrivateEntryTransport = {
   sourceCorrection: savePrivateSourceCorrection,
 };
 type Review = { entry: PersonalEntry; guard: PersonalEntryGuard };
-const reviewVersion = (entry: PersonalEntry, guard: PersonalEntryGuard | null) =>
-  JSON.stringify([entry.annotationRevision, guard?.incarnationId, guard?.currentRevision]);
+const reviewVersion = annotationVersion;
 type PrivateEntryProps = {
   subject: { id: string; label: string };
   session: ReaderSession;
@@ -113,8 +119,6 @@ type PrivateEntryProps = {
 };
 
 export function RichPrivateEntry(props: PrivateEntryProps) {
-  const client = useQueryClient();
-  const receiver = useMemo(() => crypto.randomUUID(), [client]);
   return (
     <PrivateEntryReview
       key={JSON.stringify([
@@ -150,8 +154,10 @@ function PrivateEntryReview({
   const generation = useRef(0);
   const current = useRef({ origin, enabled, subjectId: subject.id, viewer, entryGuard });
   current.current = { origin, enabled, subjectId: subject.id, viewer, entryGuard };
-  const currentResult = () =>
-    mounted.current && !retired.current && current.current.enabled && current.current.origin.isCurrent();
+  const currentResult = () => {
+    if (!current.current.origin.isCurrent()) retired.current = true;
+    return mounted.current && !retired.current && current.current.enabled;
+  };
   const queryKey = useMemo(
     () => ['library', 'rich-private-entry', subject.id, viewer, origin.lifetime] as const,
     [subject.id, viewer, origin.lifetime],
@@ -182,6 +188,28 @@ function PrivateEntryReview({
   const [annotationNotice, setAnnotationNotice] = useState<'conflict' | 'uncertain' | 'denied' | 'missing' | null>(
     null,
   );
+  const [confirmation, setConfirmationState] = useState<AnnotationConfirmation | null>(null);
+  // Invalidate synchronously so two events in the same tick cannot reuse a closed confirmation.
+  const confirmationRef = useRef<AnnotationConfirmation | null>(null);
+  function setConfirmation(next: AnnotationConfirmation | null) {
+    confirmationRef.current = next;
+    setConfirmationState(next);
+  }
+  const [localOutcome, setLocalOutcome] = useState<'unchanged' | 'discarded' | null>(null);
+  const [savedAnnotation, setSavedAnnotation] = useState<PersonalEntry | null>(null);
+  const [departure, setDeparture] = useState<AnnotationDepartureIntent | null>(null);
+  const departureTrigger = useRef<HTMLElement | null>(null);
+  const noteEditor = useRef<HTMLTextAreaElement>(null);
+  const priorityEditor = useRef<HTMLInputElement>(null);
+  const reviewTrigger = useRef<HTMLButtonElement>(null);
+  const editorRefs = { note: noteEditor, priority: priorityEditor, review: reviewTrigger };
+  const [editorFocus, setEditorFocus] = useState<AnnotationField | 'review' | null>(null);
+  useEffect(() => {
+    if (!editorFocus || confirmation) return;
+    if (editorFocus === 'review') reviewTrigger.current?.focus();
+    else focusAnnotationEditor(editorRefs, editorFocus);
+    setEditorFocus(null);
+  }, [editorFocus, confirmation]);
   const [annotationRefreshing, setAnnotationRefreshing] = useState(false);
   const [conflictRefreshed, setConflictRefreshed] = useState(false);
   const annotationBusy = useRef(false);
@@ -204,6 +232,12 @@ function PrivateEntryReview({
         retired.current = true;
         generation.current++;
         setPrivateAuthorityRetired(true);
+        setDraft(null);
+        setReview(null);
+        setConfirmation(null);
+        setAnnotationCommand(null);
+        setSavedAnnotation(null);
+        setDeparture(null);
       }
     });
     return () => {
@@ -225,6 +259,20 @@ function PrivateEntryReview({
     setSourceSavedBody(null);
     setSourceSavedObservation(null);
     setSourceConflictRevision(null);
+    if (!annotationCommand || !entryGuard) generation.current++;
+    if (!entryGuard) {
+      setAnnotationCommand(null);
+      setAnnotationNotice(null);
+    }
+    const incarnationChanged = review && review.guard.incarnationId !== entryGuard?.incarnationId;
+    if (!entryGuard || (incarnationChanged && annotationNotice !== 'conflict' && !annotationCommand)) {
+      setDraft(null);
+      setReview(null);
+    }
+    setConfirmation(null);
+    setDeparture(null);
+    setLocalOutcome(null);
+    setSavedAnnotation(null);
     setPrivateAuthorityRetired(true);
     setRetirementKind('entry');
     void query.refetch().then((fresh) => {
@@ -257,6 +305,10 @@ function PrivateEntryReview({
     setSourceConflictRevision(null);
     setDraft(null);
     setReview(null);
+    setConfirmation(null);
+    setDeparture(null);
+    setLocalOutcome(null);
+    setSavedAnnotation(null);
     setAnnotationCommand(null);
     setAnnotationNotice(null);
     setRetirementKind('exposure');
@@ -293,6 +345,10 @@ function PrivateEntryReview({
     setSourceConflictRevision(null);
     setDraft(null);
     setReview(null);
+    setConfirmation(null);
+    setDeparture(null);
+    setLocalOutcome(null);
+    setSavedAnnotation(null);
     setAnnotationCommand(null);
     setAnnotationNotice(null);
     setPrivateAuthorityRetired(true);
@@ -312,13 +368,17 @@ function PrivateEntryReview({
   }, [writeAllowed]);
 
   const workingDraft = draft ?? (entry ? draftOf(entry) : { note: '', priority: '' });
-  const write = entry ? annotationWrite(review?.entry ?? entry, workingDraft, review?.guard ?? entryGuard) : null;
   const staleReview = !!(
     entry &&
     review &&
     reviewVersion(review.entry, review.guard) !== reviewVersion(entry, entryGuard)
   );
   const conflictWaiting = annotationNotice === 'conflict' || staleReview;
+  const issues = annotationIssues(workingDraft);
+  const unsentDraft = !!draft && !!entry && annotationDraftChanged(review?.entry ?? entry, draft);
+  const diaryHref = '/library/history?returnTo=' + encodeURIComponent(returnTo);
+  const annotationEditable = !!entryGuard && writeAllowed && !annotationCommand && !sourceCommand;
+
   const reviewAvailable =
     !!entryGuard &&
     !query.isFetching &&
@@ -338,6 +398,9 @@ function PrivateEntryReview({
     )
       return;
     if (!review) setReview({ entry, guard: entryGuard });
+    setConfirmation(null);
+    setLocalOutcome(null);
+    setSavedAnnotation(null);
     setDraft(next);
   }
 
@@ -365,12 +428,16 @@ function PrivateEntryReview({
       acceptEntry(outcome.entry);
       setDraft(null);
       setReview(null);
+      setConfirmation(null);
+      setSavedAnnotation(outcome.entry);
+      setLocalOutcome(null);
       setAnnotationCommand(null);
       setAnnotationNotice(null);
       return;
     }
     if (outcome.kind === 'conflict') {
       setAnnotationCommand(null);
+      setConfirmation(null);
       setAnnotationNotice('conflict');
       setConflictRefreshed(false);
       setAnnotationRefreshing(true);
@@ -394,46 +461,139 @@ function PrivateEntryReview({
       setRetirementKind(outcome.kind === 'retired' ? 'entry' : 'account');
       queryClient.removeQueries({ queryKey });
       setDraft(null);
+      setReview(null);
+      setConfirmation(null);
+      setDeparture(null);
+      setSavedAnnotation(null);
       setSourceEditor(null);
       return;
     }
     setAnnotationNotice(outcome.kind === 'denied' ? 'denied' : 'missing');
   }
 
-  function submitAnnotation(event: FormEvent) {
-    event.preventDefault();
+  function openAnnotationReview() {
     if (
       !currentResult() ||
       !entry ||
-      !write ||
-      !validDraft(workingDraft) ||
+      !entryGuard ||
+      !annotationEditable ||
+      sourceBusy.current ||
+      annotationBusy.current ||
+      conflictWaiting ||
+      result?.kind !== 'ready' ||
+      departure
+    )
+      return;
+    if (issues.note || issues.priority) {
+      focusAnnotationEditor(editorRefs, issues.note ? 'note' : 'priority');
+      return;
+    }
+    const baseline = review?.entry ?? entry;
+    const guard = review?.guard ?? entryGuard;
+    const next = annotationConfirmation(baseline, workingDraft, guard, result);
+    if (!next) {
+      setLocalOutcome('unchanged');
+      setConfirmation(null);
+      return;
+    }
+    setLocalOutcome(null);
+    setSavedAnnotation(null);
+    setReview({ entry: baseline, guard });
+    setConfirmation(next);
+  }
+
+  function returnToAnnotation(field: AnnotationField | 'review') {
+    if (!currentResult() || annotationCommand || annotationBusy.current) return;
+    setConfirmation(null);
+    setEditorFocus(field);
+  }
+
+  function submitAnnotation() {
+    const captured = confirmationRef.current;
+    if (
+      !currentResult() ||
+      !captured ||
+      !entry ||
+      !entryGuard ||
       !writeAllowed ||
       annotationCommand ||
       sourceCommand ||
       sourceBusy.current ||
       annotationBusy.current ||
       conflictWaiting ||
-      result?.kind !== 'ready'
+      result?.kind !== 'ready' ||
+      departure ||
+      captured.viewer !== viewer ||
+      reviewVersion(captured.entry, captured.body.entryGuard) !== reviewVersion(entry, entryGuard) ||
+      captured.draft.note !== workingDraft.note ||
+      captured.draft.priority !== workingDraft.priority
     )
       return;
     void sendAnnotation({
       subjectId: subject.id,
-      viewer: result.viewer,
-      csrfToken: result.csrfToken,
-      credential: result.credential,
+      viewer: captured.viewer,
+      csrfToken: captured.csrfToken,
+      credential: captured.credential,
       key: crypto.randomUUID(),
-      body: write,
+      body: captured.body,
     });
+  }
+
+  function askDiscard(trigger: HTMLButtonElement) {
+    if (!currentResult() || annotationCommand || annotationBusy.current || !unsentDraft) return;
+    departureTrigger.current = trigger;
+    setDeparture('discard');
+  }
+
+  function stayWithAnnotation() {
+    setDeparture(null);
+    departureTrigger.current?.focus();
+  }
+
+  function discardAnnotation(leave: boolean) {
+    if (
+      !currentResult() ||
+      annotationCommand ||
+      annotationBusy.current ||
+      (leave && (sourceEditor || sourceCommand || sourceBusy.current))
+    )
+      return;
+    setConfirmation(null);
+    setDraft(null);
+    setReview(null);
+    setAnnotationNotice(null);
+    setConflictRefreshed(false);
+    setLocalOutcome('discarded');
+    setSavedAnnotation(null);
+    setDeparture(null);
+    if (leave) {
+      // The canonical anchor navigates. Retire this visit before any late callback can publish.
+      retired.current = true;
+      generation.current++;
+    } else {
+      setEditorFocus('review');
+    }
+  }
+
+  function followDiary(event: MouseEvent<HTMLAnchorElement>) {
+    if (!currentResult()) {
+      event.preventDefault();
+      return;
+    }
+    if (unsentDraft || annotationCommand || annotationBusy.current || sourceEditor || sourceCommand) {
+      event.preventDefault();
+      departureTrigger.current = event.currentTarget;
+      setDeparture('diary');
+    }
   }
 
   function reviewLatest() {
     if (!currentResult() || !entry || !entryGuard || !reviewAvailable) return;
     // An unchanged operand stays unchanged even if the latest private note or rank has changed.
-    setDraft({
-      note: write?.note.op === 'unchanged' ? (entry.note ?? '') : workingDraft.note,
-      priority: write?.priority.op === 'unchanged' ? draftOf(entry).priority : workingDraft.priority,
-    });
+    setDraft(renewAnnotationDraft(review?.entry ?? entry, entry, workingDraft, review?.guard ?? entryGuard));
     setReview({ entry, guard: entryGuard });
+    setConfirmation(null);
+    setEditorFocus('review');
     setAnnotationNotice(null);
     setConflictRefreshed(false);
   }
@@ -539,6 +699,9 @@ function PrivateEntryReview({
       queryClient.removeQueries({ queryKey });
       setDraft(null);
       setReview(null);
+      setConfirmation(null);
+      setDeparture(null);
+      setSavedAnnotation(null);
       clearSourceFlow();
       return;
     }
@@ -616,7 +779,8 @@ function PrivateEntryReview({
       </p>
     );
   }
-  if (!origin.isCurrent()) {
+  if (!origin.isCurrent() || retired.current) {
+    retired.current = true;
     return (
       <p role="status" className="mt-4 text-sm text-muted-foreground">
         {m.library_rich_entry_source_retired()}
@@ -664,85 +828,49 @@ function PrivateEntryReview({
         </div>
         <a
           className="inline-flex min-h-11 items-center rounded-md border px-3 text-sm"
-          href={'/library/history?returnTo=' + encodeURIComponent(returnTo)}
+          href={diaryHref}
+          onClick={followDiary}
         >
           {m.library_rich_entry_diary_link()}
         </a>
       </div>
 
-      <form className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(12rem,1fr)]" onSubmit={submitAnnotation}>
-        <div className="space-y-2">
-          <label htmlFor={'private-note-' + subject.id} className="block text-sm font-medium">
-            {m.library_rich_entry_note()}
-          </label>
-          <textarea
-            id={'private-note-' + subject.id}
-            className="min-h-28 w-full rounded-md border bg-background p-3"
-            value={workingDraft.note}
-            maxLength={PRIVATE_NOTE_BYTES}
-            readOnly={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
-            onChange={(event) => editDraft({ ...workingDraft, note: event.currentTarget.value })}
-          />
-          <p className="text-sm text-muted-foreground">
-            {m.library_rich_entry_note_bytes({ count: new TextEncoder().encode(workingDraft.note).byteLength })}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="min-h-11 rounded-md border px-3"
-              disabled={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
-              onClick={() => editDraft({ ...workingDraft, note: '' })}
-            >
-              {m.library_rich_entry_clear_note()}
-            </button>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <label htmlFor={'private-priority-' + subject.id} className="block text-sm font-medium">
-            {m.library_rich_entry_priority()}
-          </label>
-          <input
-            id={'private-priority-' + subject.id}
-            className="min-h-11 w-full rounded-md border bg-background px-3"
-            type="number"
-            min={1}
-            max={100}
-            inputMode="numeric"
-            value={workingDraft.priority}
-            readOnly={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
-            onChange={(event) => editDraft({ ...workingDraft, priority: event.currentTarget.value })}
-          />
-          <p className="text-sm text-muted-foreground">
-            {entry.priority === null
-              ? m.library_rich_entry_unranked()
-              : m.library_rich_entry_priority_value({ value: entry.priority })}
-          </p>
-          <button
-            type="button"
-            className="min-h-11 rounded-md border px-3"
-            disabled={!writeAllowed || !entryGuard || annotationCommand !== null || sourceCommand !== null}
-            onClick={() => editDraft({ ...workingDraft, priority: '' })}
-          >
-            {m.library_rich_entry_clear_priority()}
-          </button>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 md:col-span-2">
-          <button
-            type="submit"
-            className="min-h-11 rounded-md bg-primary px-4 text-primary-foreground disabled:opacity-50"
-            disabled={
-              !writeAllowed ||
-              !write ||
-              !validDraft(workingDraft) ||
-              annotationCommand !== null ||
-              conflictWaiting ||
-              !entryGuard ||
-              sourceCommand !== null
-            }
-          >
-            {m.library_rich_entry_save()}
-          </button>
-          {annotationCommand && annotationNotice === 'uncertain' ? (
+      <div hidden={confirmation !== null}>
+        <AnnotationEditor
+          draft={workingDraft}
+          issues={issues}
+          disabled={!annotationEditable}
+          reviewDisabled={conflictWaiting}
+          canDiscard={unsentDraft}
+          refs={editorRefs}
+          onChange={editDraft}
+          onReview={openAnnotationReview}
+          onDiscard={askDiscard}
+        />
+      </div>
+      {confirmation ? (
+        <AnnotationReview
+          subject={subject}
+          confirmation={confirmation}
+          submitted={annotationCommand !== null}
+          blocked={!annotationEditable || conflictWaiting}
+          onEdit={returnToAnnotation}
+          onSave={submitAnnotation}
+          onClose={() => returnToAnnotation('review')}
+          onDiscard={askDiscard}
+        />
+      ) : null}
+      {savedAnnotation ? <AnnotationSaved entry={savedAnnotation} /> : null}
+      {localOutcome ? (
+        <p role="status" className="rounded-md border p-3 text-sm">
+          {localOutcome === 'unchanged' ? m.library_annotation_no_change() : m.library_annotation_discarded()}
+        </p>
+      ) : null}
+      {annotationCommand ? (
+        <div className="space-y-2 rounded-md border p-3" role="status" aria-live="polite">
+          <p>{annotationNotice === 'uncertain' ? m.library_rich_entry_uncertain() : m.library_annotation_saving()}</p>
+          <p className="text-sm text-muted-foreground">{m.library_annotation_pending_help()}</p>
+          {annotationNotice === 'uncertain' ? (
             <button
               type="button"
               className="min-h-11 rounded-md border px-3"
@@ -751,15 +879,19 @@ function PrivateEntryReview({
               {m.library_rich_entry_retry()}
             </button>
           ) : null}
-          {annotationNotice === 'uncertain' ? (
-            <p role="status" aria-live="polite">
-              {m.library_rich_entry_uncertain()}
-            </p>
-          ) : null}
-          {annotationNotice === 'denied' ? <p role="status">{m.library_rich_entry_denied()}</p> : null}
-          {annotationNotice === 'missing' ? <p role="status">{m.library_rich_entry_missing()}</p> : null}
         </div>
-      </form>
+      ) : null}
+      {annotationNotice === 'denied' ? <p role="status">{m.library_rich_entry_denied()}</p> : null}
+      {annotationNotice === 'missing' ? <p role="status">{m.library_rich_entry_missing()}</p> : null}
+      <AnnotationDeparture
+        intent={departure}
+        unresolved={annotationCommand !== null || sourceCommand !== null}
+        sourceOpen={sourceEditor !== null}
+        diaryHref={diaryHref}
+        onStay={stayWithAnnotation}
+        onDiscard={discardAnnotation}
+        returnFocus={departureTrigger.current}
+      />
 
       {conflictWaiting ? (
         <div
