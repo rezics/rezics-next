@@ -118,6 +118,23 @@ export async function assertRealmOwnerMayLeave(client: AccessClient, input: Inpu
   if (!row.remaining) throw new RealmLastOwnerError();
 }
 
+export type RealmOwnerLeaveObservation =
+  Readonly<{ owner: boolean; remaining: boolean; source: string | null }>;
+
+/** Read-only advice after the caller admits this exact resource read at the same T.
+ * This reuses the exact native holder predicate without acquiring a command lock or
+ * authorizing a later removal. target_source is the current explicit owner grant's
+ * transaction identity; callers retain it with the membership and authority witnesses
+ * across prepare/current/finish.
+ */
+export async function readRealmOwnerLeaveObservation(
+  client: AccessClient,
+  input: Input,
+): Promise<RealmOwnerLeaveObservation> {
+  const row = await holders.run(client, parameters(input));
+  return { owner: row.target, remaining: row.remaining, source: row.target_source };
+}
+
 export type RealmErasureSuccessionInput = Readonly<{ resource: Resource; accountId: string }>;
 export type RealmErasureSuccessionQualification = 'owner-or-replay' | 'not-owner';
 export type RealmErasureSuccessionSource = Readonly<{

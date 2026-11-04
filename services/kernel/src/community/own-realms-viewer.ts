@@ -1,5 +1,9 @@
 import { deadlineClient } from '../access/authenticate.ts';
-import { readRealmOwnershipRoles, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
+import {
+  readRealmOwnerLeaveObservation,
+  readRealmOwnershipRoles,
+  REALM_OWNER_ROLE,
+} from '../access/realm-ownership.ts';
 import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -119,6 +123,16 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
                 })
               : [];
           const owner = roles.some((role) => role.role === REALM_OWNER_ROLE);
+          const ownership =
+            mayLeave && owner && actor.kind === 'account'
+              ? await readRealmOwnerLeaveObservation(client, {
+                  resource,
+                  accountId: actor.accountId,
+                  at: time,
+                })
+              : null;
+          if (ownership && !ownership.owner) throw retry();
+          if (ownership && !ownership.source) throw retry();
           const hostReadable = mayManage && (await discloseHost(client, time));
           await client.query('COMMIT');
           return {
@@ -133,6 +147,7 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
               contextId: source.context_id,
               node: home.node,
               epoch: home.epoch,
+              owner: ownership ? { roles, source: ownership.source } : null,
             },
             membership,
             actions: {
@@ -150,10 +165,10 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
                     ? prohibited('not_member')
                     : !mayLeave
                       ? prohibited('not_authorized')
-                      : owner
+                      : owner && !ownership?.remaining
                         ? {
                             state: 'unavailable' as const,
-                            reason: 'owner_invariant_observation_unavailable' as const,
+                            reason: 'last_explicit_holder' as const,
                           }
                         : command('DELETE', `/v1/realms/${realmId}/membership`, 202),
             },
@@ -199,6 +214,7 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
     // exposed observation into becoming the original source witness.
     const expectedSource = { ...current.source };
     const expectedMembership = current.membership ? { ...current.membership } : null;
+    const expectedOwnerSource = JSON.stringify(current.source.owner);
     const expectedParticipation = current.viewer.participation;
     const expectedActions = JSON.stringify(current.actions);
     return {
@@ -224,6 +240,7 @@ export function createRealmViewerObservation(deps: Pick<OwnRealmsDependencies, '
           a.contextId !== b.contextId ||
           a.node !== b.node ||
           a.epoch !== b.epoch ||
+          expectedOwnerSource !== JSON.stringify(b.owner) ||
           !sameOwnRealmMembership(expectedMembership, final.membership) ||
           expectedParticipation !== final.viewer.participation ||
           expectedActions !== JSON.stringify(final.actions)

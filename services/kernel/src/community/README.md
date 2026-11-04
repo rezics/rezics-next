@@ -315,7 +315,9 @@ Search dependency.
   binding. The viewer performs its initial Realm read and two separated native rounds (observation and finish).
   Each round prepares four Realm/Space Access checks outside a released REPEATABLE READ transaction, then reads
   partition metadata, one exact Realm settings head and container binding, and at most one selected membership;
-  owner-role keys are read only for a permitted member leave. Participation is checked after each round on a released
+  owner-role keys are read only for a permitted member leave. An explicit owner with leave authority also gets one
+  holder observation in each round, including initial and finish, at the same T; its exact transaction ID stays private.
+  Participation is checked after each round on a released
   connection. Board selection freshly prepares Realm read, then dispatches BEGIN/SET LOCAL, partition metadata,
   Realm decision, one raw seek of at most21 board identities and COMMIT (or rollback). Initial and final board
   hydration each prepare the ordinary board/Realm decision bundle outside their snapshots, then dispatch BEGIN,
@@ -348,6 +350,9 @@ Search dependency.
   that predicate remains an independent source term until physical-prefix plans are reached. The viewer performs
   at most one exact `(route,realm_id,account_id)` membership lookup per round and reads owner-role keys only after
   leave permission succeeds; its envelope contains at most one membership episode and three native action entries.
+  An owner home adds at most two holder statements, one per round; each target uses the current exact-role point key,
+  and the remaining-owner probe uses `realm_owner_continuity` with `valid @> T` and `upper_inf(valid)`. Each emits one
+  row and a 36-byte source transaction ID, so the source check is physically indexed as well as result-bounded.
   Publication uses its
   existing raw `(route,realm_id,published_at,subject_id)` and exact head keys. A page's selected keys do not bound
   examined membership/ban, label languages, selected compact statement histories or expanded adoption/candidates.
@@ -367,7 +372,8 @@ Search dependency.
   native batches but does not claim constant examined work from small emitted output.
 - **Growth check:** Focused mounted scenarios cover the initial empty/populated envelope, twenty-board and
   twelve-publication limits, independent ordinary cursor continuation, unknown count, anonymous sign-in, empty
-  nonmember and current member advice, owner leave unavailability, exact join retry around native readback with one
+  nonmember and current member advice, last-holder and permitted owner leave advice, exact owner-source replacement
+  with unchanged advice, exact join retry around native readback with one
   stored effect, leave/rejoin, role revocation, Realm and containing-Space change during summary hydration, exact
   publication replacement and dependency retry. `apps/web/tests/realm-home-native-visit.test.tsx` covers the current
   DTO projection, independent cursors and retained anonymous/member/concealed/unavailable flow across source,
@@ -1122,11 +1128,7 @@ writer's actual `realm:join` action on the exact Realm and selected current memb
 ownership data only selects the command invariant; it never supplies permission. No presentation join
 literal, Account role prefix, follow or Collection authority is consumed.
 
-Decision: offer native leave for permitted non-owner members; owner leave stays explicitly
-`owner_invariant_observation_unavailable` because the installed holder assertion requires a live
-SERIALIZABLE command lock and forbids read preflight. The owner must supply a read observation of
-that predicate before advice can distinguish a last holder from an owner who may leave. Commands
-retain their native last-holder refusal and authorize every attempt before receipts.
+Decision: report `unavailable: last_explicit_holder` for a sole current owner; retain DELETE advice for a permitted owner and the SERIALIZABLE command guard.
 
 Protocol examples (IDs stand for exact native returned IDs): a member has available enter and DELETE
 membership advice, prohibited manage, and its reservation/publication pair; an authorized owner member
@@ -1136,9 +1138,8 @@ remain failed requests, never an empty inventory. Revocation returns the native 
 failure or conceals the entry; readable source or episode change returns the retry problem and retains
 the caller's original cursor. Optional image unavailability remains independent of supported actions.
 
-The independent Realm-home assembler has not installed this factory. The current Web inventory formatter
-still admits only realmId/name, and its shared phone/desktop view has no action or recovery control for
-this advice; installed backend advice alone does not close that experience gap.
+Realm Home installs this factory through its existing reader. Publisher445 receives the closed mounted schema and
+source handoff for the existing Web receiver; official installed output remains a separate prerequisite.
 
 ### Cost
 
@@ -1151,7 +1152,9 @@ this advice; installed backend advice alone does not close that experience gap.
   independently timed participation checks per initially readable selected item. Each source round prepares/evaluates ordinary
   Realm read, plain manage, plain join (leave), and carrying Space read on native resources, with one
   released REPEATABLE READ transaction, authoritative time, partition read, Realm head, exact lifecycle
-  binding, exact membership episode and, when leave is authorized, five native direct-role key probes.
+  binding, exact membership episode and, when leave is authorized, five native direct-role key probes. For an
+  explicit owner with leave authority, the initial and final rounds also run the one-row holder observation at that
+  same T and retain the current owner's transaction ID as its exact source witness.
   A denied manage skips host evaluation; a non-member skips ownership probes. Preparation is outside
   the source checkout, including every native Access actor/account/client/delegator/consent dependency. Each home composes
   one native presentation batch: two Realm/Space/membership/ban/Access snapshots, two native count reads per
@@ -1164,8 +1167,12 @@ this advice; installed backend advice alone does not close that experience gap.
   100 released snapshots, 100 partition reads, 100 full-key membership/head statements and 200 controls; each
   statement addresses at most one open interval, head and exact revision. Each of R+S confirmations
   contributes four statements, including its two transaction controls, up to 400 in total. Failed attempts repeat these terms,
-  never increase F to fill disclosure. Presentation and Access retain their native admitted bounds; this is not
-  a fitted ceiling on their physical work. Realm producers admit 1024 title and 4096 summary code points: at most
+  never increase F to fill disclosure. Viewer hydration adds at most 40 owner holder statements for S <= 20,
+  one initial and one final statement per selected owner with leave authority. Each target is a current exact-key
+  lookup through `resource_role_grant_point_lookup`; the other-holder probe uses the current-only
+  `realm_owner_continuity` GiST predicate (`valid @> T` and `upper_inf(valid)`), not a LIMIT-only claim. Each
+  result materializes one row and a 36-byte source transaction ID. Presentation and Access retain their native
+  admitted bounds; this is not a fitted ceiling on their physical work. Realm producers admit 1024 title and 4096 summary code points: at most
   4096/16384 UTF-8 source bytes, 6144/24576 JSON string-content bytes with JSON.stringify escaping, and 4096/16384
   bytes of UTF-16 character storage, before object overhead and each retained copy. Twenty items therefore admit
   409600 source bytes or 614400 JSON text bytes for these two fields alone. UUIDs add 36 ASCII bytes per occurrence;
@@ -1178,10 +1185,13 @@ this advice; installed backend advice alone does not close that experience gap.
   retained-memory, executor/control/fence, warm/cold release and runner terms remain unproved; do not substitute the
   output size or a LIMIT for those bounds. Viewer hydration adds at most 40 source transactions and 80 BEGIN/COMMIT controls,
   40 time reads, 40 partition reads, 40 Realm head reads, 40 Realm/Space bindings, 40 membership statements
-  and 200 direct-role probes. Each source binding materializes at most one Realm, one Space and no
-  publication (subject is null); role probes materialize at most five rows per round. Two source records,
+  and 200 direct-role probes, plus at most 40 owner holder statements. Each source binding materializes at most one Realm, one Space and no
+  publication (subject is null); role probes materialize at most five rows per round and each owner holder result
+  carries one exact source transaction ID. Two source records,
   two membership records, two bounded advice records and one private source/episode copy are retained
-  per handle, in addition to the native presentation's materialized and retained bytes. Source references
+  per handle, in addition to the native presentation's materialized and retained bytes. The owner source ID is
+  retained in the initial and final private records and in one serialized source comparison, but never enters the
+  mounted DTO. Source references
   contain only fixed UUIDs, integer placement and decimal lifecycle versions; advice paths are bounded
   by one UUID and fixed operation text. Each item serializes three advice variants and one selected
   reservation/publication pair. Permission preparation/evaluation retains the native producer's physical

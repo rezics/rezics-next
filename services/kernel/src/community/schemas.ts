@@ -122,7 +122,7 @@ export const realmViewerActionSchema = t.Union([
   t.Object(
     {
       state: t.Literal('unavailable'),
-      reason: t.Literal('owner_invariant_observation_unavailable'),
+      reason: t.Literal('last_explicit_holder'),
     },
     closed,
   ),
