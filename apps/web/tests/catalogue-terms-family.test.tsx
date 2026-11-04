@@ -204,7 +204,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
     await replace(nameA, m.catalogue_create_label(), 'First draft');
     expect(document.getElementById(errorId)).toBeNull();
     expect(control(nameA, m.catalogue_create_label()).id).toBe(nameId);
-    expect(control(nameB, m.catalogue_create_label()).value).toBe('Original film');
+    expect(control(nameB, m.catalogue_create_label()).value).toBe('Draft during access outage');
     // Adding a language and switching back preserves that form's drafts and alias order.
     await replace(a, m.catalogue_terms_new_language(), 'it');
     await click(a, m.catalogue_create_add_language());
