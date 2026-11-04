@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { BatchCommand, Source } from '@rezics/definitions/bulk';
-import type { SourceRecord, SourceVocabularyBindings } from '@rezics/conversion';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import type { SourceRecord, SourceVocabularyBindings } from '../../../../packages/conversion/src/index.ts';
+import { converter_revision as entityRevision } from '../../../../packages/conversion/src/cross-media-entities.ts';
 import { crossMediaAliases } from '../../../importer/src/cross-media-seed.ts';
 import { runBangumiCharacterFidelity } from '../../../importer/src/bangumi-character-fidelity.ts';
 import { createSourceRegistration } from '../../../importer/src/source-registry.ts';
@@ -22,7 +22,7 @@ const authoredSource = (key: string): Source => ({
 
 test('authored Bangumi character kinds and qualified appearances are adopted as current native facts', async () => {
   // All Bangumi records below are authored fixture data, not observed public dump evidence.
-  const runtime = await openApiRuntime({ batchRecords: 16, maxFields: 64, maxRecordBytes: 65536 });
+  const runtime = await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
   try {
     const editor = await openApiObserver(runtime);
     const grant = await editor.http('/v1/grants', {
@@ -92,8 +92,10 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
     }
     for (const [number, id] of [[1, kindOne], [2, kindTwo]] as const)
       propose(id, `kind-${number}-scheme`, 'skos:inScheme', kindSchemeId);
-    const facts = await runtime.importTransport.batch({ commands: authoredFacts });
-    expect(facts.results.every((row) => row.status === 201)).toBe(true);
+    for (let offset = 0; offset < authoredFacts.length; offset += 8) {
+      const facts = await runtime.importTransport.batch({ commands: authoredFacts.slice(offset, offset + 8) });
+      expect(facts.results.every((row) => row.status === 201)).toBe(true);
+    }
     for (const [id, uri] of [
       [kindSchemeId, 'https://rezics.com/schemes/bangumi/character-kinds'],
       [appearanceSchemeId, 'https://rezics.com/schemes/bangumi/appearance-roles'],
@@ -250,8 +252,14 @@ test('authored Bangumi character kinds and qualified appearances are adopted as 
     });
     await editor.adoptSubject(characterId.subject, 'schema:keywords', kindOne, globalContext);
     await editor.adoptSubject(workId.subject, 'schema:character', characterId.subject, globalContext);
-    expect((await runtime.importTransport.readReviewedSubject(workId.subject)).subject?.statements['schema:character']?.[0]?.value.content).toBe(characterId.subject);
-    expect((await runtime.importTransport.readReviewedSubject(characterId.subject)).subject?.statements['schema:keywords']?.[0]?.value.content).toBe(kindOne);
+    const adoptedWorkValue = (await runtime.importTransport.readReviewedSubject(workId.subject)).subject?.statements[
+      'schema:character'
+    ]?.[0]?.value;
+    const adoptedCharacterValue = (await runtime.importTransport.readReviewedSubject(characterId.subject)).subject?.statements[
+      'schema:keywords'
+    ]?.[0]?.value;
+    expect(adoptedWorkValue?.type === 'value' ? adoptedWorkValue.content : undefined).toBe(characterId.subject);
+    expect(adoptedCharacterValue?.type === 'value' ? adoptedCharacterValue.content : undefined).toBe(kindOne);
 
     const originalCandidateIds = workView.proposals
       .filter((item) => item.statement?.property.id === 'schema:character')
