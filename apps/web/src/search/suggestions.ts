@@ -39,9 +39,7 @@ function admittedConditionTargets(filter: string): string[] {
     return invalidEntityRead();
   }
   const clauses =
-    record(document) && Object.keys(document).length === 1 && Array.isArray(document.and)
-      ? document.and
-      : [document];
+    record(document) && Object.keys(document).length === 1 && Array.isArray(document.and) ? document.and : [document];
   const typeClauses = clauses.filter((clause) => record(clause) && Object.hasOwn(clause, 'type'));
   if (typeClauses.length !== 1) return invalidEntityRead();
   const typeClause = typeClauses[0]!;
@@ -209,18 +207,19 @@ export async function readConditionEntityLabel(id: string, request: Request): Pr
   request.signal.throwIfAborted();
   if (!release) throw dependencyUnavailable();
   const expectedRelease = releases[0]!;
-  if (release.digest !== expectedRelease)
-    throw problem(409, 'search_restart_required', 'Search definitions changed');
+  if (release.digest !== expectedRelease) throw problem(409, 'search_restart_required', 'Search definitions changed');
   if (targets.some((target) => !Object.hasOwn(release.types, target)))
     throw problem(409, 'search_restart_required', 'Search definitions changed');
 
   request.signal.throwIfAborted();
   const credential = viewerCredential(request);
-  const result = await kernelClient(locale).subjects({ id }).get({
-    query: { language: locale },
-    headers: credential ? { authorization: credential } : {},
-    fetch: { signal: request.signal, redirect: 'manual' },
-  });
+  const result = await kernelClient(locale)
+    .subjects({ id })
+    .get({
+      query: { language: locale },
+      headers: credential ? { authorization: credential } : {},
+      fetch: { signal: request.signal, redirect: 'manual' },
+    });
   request.signal.throwIfAborted();
   if (result.status === 404 || result.status === 308) return { state: 'withheld', id };
   if (result.error || result.status !== 200) {
@@ -236,8 +235,7 @@ export async function readConditionEntityLabel(id: string, request: Request): Pr
   }
   const subject = result.data?.subject;
   if (!subject || subject.id.toLowerCase() !== id.toLowerCase()) return { state: 'withheld', id };
-  if (!targets.some((target) => typeMatchesTarget(release, subject.type, target)))
-    return { state: 'withheld', id };
+  if (!targets.some((target) => typeMatchesTarget(release, subject.type, target))) return { state: 'withheld', id };
   return {
     state: 'ready',
     id,
@@ -274,7 +272,9 @@ export async function suggestionResponse(
     if (entityIds.length) {
       if (entityIds.length !== 1 || searchParams.has('q'))
         throw problem(400, 'invalid_request', 'Use one suggestion or entity read');
-      return Response.json(await readEntity(entityIds[0]!, request), { headers: { 'cache-control': 'private, no-store' } });
+      return Response.json(await readEntity(entityIds[0]!, request), {
+        headers: { 'cache-control': 'private, no-store' },
+      });
     }
     const query = searchParams.get('q') ?? '';
     return Response.json(await read(query, request), { headers: { 'cache-control': 'private, no-store' } });

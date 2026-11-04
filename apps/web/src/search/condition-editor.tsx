@@ -412,8 +412,7 @@ function reconcileQualifierKeys(
   values: readonly FilterQualifier[],
   nextKey: () => string,
 ): QualifierDraftIdentity {
-  if (!previous || previous.draftKey !== draftKey)
-    return { draftKey, values, keys: values.map(() => nextKey()) };
+  if (!previous || previous.draftKey !== draftKey) return { draftKey, values, keys: values.map(() => nextKey()) };
   const used = new Set<number>();
   const keys = values.map((value, index) => {
     const sameOccurrence = previous.values.findIndex((candidate, at) => candidate === value && !used.has(at));
@@ -991,10 +990,9 @@ function ConditionEntityValues({
   const requestIdentity = conditionEntityRequestIdentity(occurrence, property, targets, lookup);
   const requestContext = useMemo(() => lookup, [requestIdentity]);
   const targetTypes = useMemo(() => targets, [targetsKey]);
-  const identifiers = [...new Set(values.filter(isConditionEntityIdentifier).map((value) => value.toLowerCase()))].slice(
-    0,
-    FILTER_LIMITS.in,
-  );
+  const identifiers = [
+    ...new Set(values.filter(isConditionEntityIdentifier).map((value) => value.toLowerCase())),
+  ].slice(0, FILTER_LIMITS.in);
   const [resolved, setResolved] = useState<Record<string, { label: string; type: string }>>({});
   const [resolveFailure, setResolveFailure] = useState<ConditionEntityFailure>();
   const [suggestionFailure, setSuggestionFailure] = useState<ConditionEntityFailure>();
@@ -1077,7 +1075,9 @@ function ConditionEntityValues({
     onChange(next.length ? next : ['']);
     context.announce(
       m.condition_removed({}, options),
-      requestContext.available && targetTypes.length > 0 ? chooserPointer : pointer.replace(/\/(type|statement).*$/, ''),
+      requestContext.available && targetTypes.length > 0
+        ? chooserPointer
+        : pointer.replace(/\/(type|statement).*$/, ''),
     );
   };
   const unresolved = identifiers.filter((id) => !resolved[id]);
@@ -1136,10 +1136,7 @@ function ConditionEntityValues({
               type="button"
               variant="ghost"
               size="sm"
-              aria-label={m.refinement_remove(
-                { value: m.condition_value({ number: index + 1 }, options) },
-                options,
-              )}
+              aria-label={m.refinement_remove({ value: m.condition_value({ number: index + 1 }, options) }, options)}
               onClick={() => removeValue(index)}
             >
               {m.condition_remove({}, options)}
@@ -1149,22 +1146,13 @@ function ConditionEntityValues({
       })}
       {values.length === 0 ? (
         <div className="flex items-end gap-1">
-          <EditorField
-            context={context}
-            pointer={`${pointer}/0`}
-            label={m.condition_value({ number: 1 }, options)}
-          >
+          <EditorField context={context} pointer={`${pointer}/0`} label={m.condition_value({ number: 1 }, options)}>
             {(props) => <Input {...props} readOnly value="" placeholder={m.condition_choose_value({}, options)} />}
           </EditorField>
         </div>
       ) : null}
       {requestContext.available && targetTypes.length > 0 ? (
-        <Field
-          className="min-w-0"
-          data-condition-pointer={chooserPointer}
-          data-condition-node={nodeKey}
-          tabIndex={-1}
-        >
+        <Field className="min-w-0" data-condition-pointer={chooserPointer} data-condition-node={nodeKey} tabIndex={-1}>
           <FieldLabel>{m.condition_value({ number: pickerNumber }, options)}</FieldLabel>
           <EntityPicker
             key={`${occurrence}:${valuesKey}`}

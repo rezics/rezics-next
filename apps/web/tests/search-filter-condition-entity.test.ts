@@ -14,7 +14,13 @@ const first = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
 const second = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
 const target = 'ex:Work';
 const scope = { kind: 'realm' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000010' };
-const context: ConditionEntityContext = { locale: 'ja', reader: 'reader-a', release: 'release-a', resourceScope: scope, available: true };
+const context: ConditionEntityContext = {
+  locale: 'ja',
+  reader: 'reader-a',
+  release: 'release-a',
+  resourceScope: scope,
+  available: true,
+};
 const page: SuggestionResult = {
   as_of: '2026-11-04T00:00:00.000Z',
   types: { [target]: { ja: '作品', 'zh-Hant': '作品' } },
@@ -44,9 +50,7 @@ test('native candidates retain localized labels and distinct identities; only se
   expect(candidates[0]!.title).toContain(first);
   expect(candidates[1]!.title).toContain(second);
   expect(candidates[0]!.typeLabel).toBe('作品');
-  expect(calls[0]!.url.searchParams.get('filter')).toBe(
-    conditionEntityFilter([target], scope),
-  );
+  expect(calls[0]!.url.searchParams.get('filter')).toBe(conditionEntityFilter([target], scope));
   expect(calls[0]!.url.searchParams.get('release')).toBe('release-a');
   expect(calls[0]!.init).toMatchObject({ credentials: 'same-origin', cache: 'no-store', signal });
   expect(appendConditionEntity([''], first)).toEqual([first]);
@@ -57,9 +61,9 @@ test('native candidates retain localized labels and distinct identities; only se
     refusedReads++;
     return Response.json(page);
   }) as typeof fetch;
-  await expect(
-    searchConditionEntities('同', [target], { ...context, available: false }, signal),
-  ).rejects.toThrow(ConditionEntityLookupError);
+  await expect(searchConditionEntities('同', [target], { ...context, available: false }, signal)).rejects.toThrow(
+    ConditionEntityLookupError,
+  );
   expect(refusedReads).toBe(0);
 });
 
@@ -117,10 +121,15 @@ test('a retired label read cannot publish after its signal is aborted and operan
   let reads = 0;
   globalThis.fetch = (async (input) => {
     reads++;
-    const id = new URL(input instanceof Request ? input.url : String(input), 'https://rezics.test').searchParams.get('id')!;
+    const id = new URL(input instanceof Request ? input.url : String(input), 'https://rezics.test').searchParams.get(
+      'id',
+    )!;
     return Response.json({ state: 'withheld', id });
   }) as typeof fetch;
-  const many = Array.from({ length: 80 }, (_, index) => `0192f3a0-6c1e-7b2a-9d4e-${String(index + 20).padStart(12, '0')}`);
+  const many = Array.from(
+    { length: 80 },
+    (_, index) => `0192f3a0-6c1e-7b2a-9d4e-${String(index + 20).padStart(12, '0')}`,
+  );
   const result = await resolveConditionEntityLabels(many, [target], context, new AbortController().signal);
   expect(reads).toBe(64);
   expect(result.withheld).toHaveLength(64);

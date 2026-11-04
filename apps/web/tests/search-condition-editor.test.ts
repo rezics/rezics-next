@@ -180,7 +180,10 @@ test('item operands show stable native identities through entity controls while 
   const itemId = '0192f3a0-6c1e-7b2a-9d4e-000000000021';
   const qualifierId = '0192f3a0-6c1e-7b2a-9d4e-000000000022';
   const definitions: ConditionMetadata = {
-    types: { 'ex:Work': { labels: { en: 'Work' }, facets: ['ex:related'] }, 'ex:Language': { labels: { en: 'Language' } } },
+    types: {
+      'ex:Work': { labels: { en: 'Work' }, facets: ['ex:related'] },
+      'ex:Language': { labels: { en: 'Language' } },
+    },
     properties: {
       'ex:related': {
         labels: { en: 'Related work' },
