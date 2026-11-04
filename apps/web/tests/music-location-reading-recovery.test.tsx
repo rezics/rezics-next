@@ -57,6 +57,7 @@ async function mount() {
     MouseEvent: window.MouseEvent,
     MutationObserver: window.MutationObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
+    scrollTo: window.scrollTo.bind(window),
     IS_REACT_ACT_ENVIRONMENT: true,
   };
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));

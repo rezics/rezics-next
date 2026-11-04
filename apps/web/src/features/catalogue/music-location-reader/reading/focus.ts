@@ -4,7 +4,8 @@ import type { Accepted } from './navigation';
 const lifetime = 30_000;
 type Origin = {
   anchor: HTMLAnchorElement;
-  accepted: Accepted;
+  token: object;
+  activated: number;
   occurrence: string;
   expires: number;
   leftWindow: boolean;
@@ -16,15 +17,24 @@ export function useEndpointReturn(input: {
   current: () => boolean;
   heading: () => void;
 }) {
-  const latest = useRef(input);
-  latest.current = input;
+  const binding = useRef({ accepted: input.accepted, token: {} });
+  if (binding.current.accepted !== input.accepted) binding.current = { accepted: input.accepted, token: {} };
+  const latest = useRef({ ...input, token: binding.current.token });
+  latest.current = { ...input, token: binding.current.token };
   const origin = useRef<Origin | undefined>(undefined);
+  const expiry = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const clear = () => {
+    origin.current = undefined;
+    clearTimeout(expiry.current);
+    expiry.current = undefined;
+  };
   useEffect(() => {
-    const clear = () => {
-      origin.current = undefined;
-    };
     const blur = () => {
-      if (origin.current) origin.current.leftWindow = true;
+      const bookmark = origin.current;
+      if (!bookmark) return;
+      // A later unrelated window switch is not the endpoint activation.
+      if (Date.now() - bookmark.activated > 1_000) clear();
+      else bookmark.leftWindow = true;
     };
     const focusin = (event: FocusEvent) => {
       const bookmark = origin.current;
@@ -39,7 +49,7 @@ export function useEndpointReturn(input: {
         !bookmark.leftWindow ||
         bookmark.expires < Date.now() ||
         !state.current() ||
-        state.accepted !== bookmark.accepted
+        state.token !== bookmark.token
       )
         return;
       const active = document.activeElement;
@@ -64,9 +74,9 @@ export function useEndpointReturn(input: {
     };
   }, []);
   // Do not let an accepted-address change keep even a detached anchor alive.
-  if (origin.current && origin.current.accepted !== input.accepted) origin.current = undefined;
+  if (origin.current && origin.current.token !== binding.current.token) clear();
   return (event: MouseEvent<HTMLAnchorElement>) => {
-    origin.current = undefined;
+    clear();
     if (
       event.detail !== 0 ||
       event.metaKey ||
@@ -81,9 +91,11 @@ export function useEndpointReturn(input: {
     origin.current = {
       anchor: event.currentTarget,
       occurrence: event.currentTarget.dataset.occurrence ?? '',
-      accepted: input.accepted,
+      token: binding.current.token,
+      activated: Date.now(),
       expires: Date.now() + lifetime,
       leftWindow: false,
     };
+    expiry.current = setTimeout(clear, lifetime);
   };
 }

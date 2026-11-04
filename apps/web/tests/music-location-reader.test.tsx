@@ -280,3 +280,56 @@ test('bounded native reads preserve withheld forward rows, original occurrence i
   ).toEqual({ ok: false, reason: 'invalid' });
   expect(calls).toHaveLength(before);
 });
+
+test('time qualifiers retain signed native evidence for supported, unsupported, unknown and no-value presentations', async () => {
+  const fixture = musicLocationExample('admitted-place');
+  const initial = await fixture.read({ ...fixture.address, stream: 'in:schema:location' });
+  if (!initial.ok || !initial.rows[0]?.statement) throw new Error('expected a readable native assertion');
+  const qualifier = initial.rows[0].statement.qualifiers[0]!;
+  const values = [
+    {
+      type: 'value',
+      content: {
+        time: '-0044-03-15T00:00:00Z',
+        precision: 11,
+        calendarmodel: 'http://www.wikidata.org/entity/Q1985786',
+      },
+    },
+    {
+      type: 'value',
+      content: {
+        time: '+2024-00-00T00:00:00Z',
+        precision: 9,
+        calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        before: 1,
+        after: 2,
+      },
+    },
+    { type: 'somevalue' },
+    { type: 'novalue' },
+  ] as const;
+  initial.rows[0].statement.qualifiers = values.map((value) => ({ ...qualifier, value }));
+  const mounted = await ui();
+  try {
+    await mounted.render({
+      subject: fixture.public,
+      context: fixture.address.context,
+      source: fixture.source,
+      reader: null,
+      locale: 'en',
+      transport: fixture.read,
+      initial,
+    });
+    expect(
+      [...mounted.host.querySelectorAll('[data-time-state]')].map((node) => node.getAttribute('data-time-state')),
+    ).toEqual(['supported', 'unsupported', 'somevalue', 'novalue']);
+    expect(mounted.host.textContent).toContain('-0044-03-15');
+    expect(mounted.host.textContent).toContain('Q1985786');
+    expect(mounted.host.textContent).toContain('"precision": 9');
+    expect(mounted.host.textContent).toContain('"before": 1');
+    expect(mounted.host.textContent).toContain('"after": 2');
+    expect(mounted.host.querySelector('a[target="_blank"]')).not.toBeNull();
+  } finally {
+    await mounted.close();
+  }
+});
