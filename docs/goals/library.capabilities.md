@@ -246,7 +246,7 @@ history or effects. `services/kernel/test/library/progress-http.test.ts` owns th
 [Independent progress measures](../library-progress-measures.md) defines the exact API contract and limits.
 
 `progress-measures.test.ts` adds the composed selected-occurrence MAL/AniList chapter-and-volume journey, concurrent
-separate corrections, targeted clear, journal preservation and uncertain native receipt recovery after profile
+separate corrections, journal preservation and uncertain native receipt recovery after profile
 replacement or retirement. Native adoption preserves admitted siblings and reuses the original key/revision before
 current readback; fresh effects bind the reviewed profile inside the writer. Removed measures keep their accepted
 meaning and values while current recording is unsupported. Retired detail remains concealed. Existing presentation

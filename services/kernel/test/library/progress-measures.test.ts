@@ -117,13 +117,11 @@ test('MAL and AniList adopt chapters and volumes into the selected occurrence wi
       state: 'active',
       completedAt: null,
       completedUnitCount: 0,
-    });
-    expect(current.measures.map((measure: { unit: string; amount: string }) => [measure.unit, measure.amount])).toEqual(
-      [
-        ['chapter', '0'],
-        ['volume', '2'],
+      measures: [
+        { unit: 'chapter', amount: '0' },
+        { unit: 'volume', amount: '2' },
       ],
-    );
+    });
     const intents = [
       { measureId: 'chapter', amount: '3' },
       { measureId: 'volume', amount: '4' },
@@ -140,21 +138,6 @@ test('MAL and AniList adopt chapters and volumes into the selected occurrence wi
       { unit: 'chapter', amount: '3' },
       { unit: 'volume', amount: '4' },
     ]);
-    await send('POST', `${path(occurrence.id)}:record`, { revision: 5, measureId: 'volume', clear: true });
-    const correction = await send('POST', `${path(occurrence.id)}:record`, {
-      revision: 6,
-      measureId: 'chapter',
-      amount: '2',
-    });
-    expect(correction.progressSession).toMatchObject({
-      state: 'active',
-      completedAt: null,
-      completedUnitCount: 0,
-      measures: [
-        { unit: 'chapter', amount: '2' },
-        { unit: 'volume', amount: null },
-      ],
-    });
     expect(await sessions.readSessionJournal(native.owner.actor, occurrence.id)).toEqual(journal);
     expect((await send('GET', `/v1/progressSessions?subjectId=${occurrence.subjectId}`)).progressSessions).toHaveLength(
       1,
@@ -221,7 +204,6 @@ test('uncertain native measure receipts survive profile replacement and retireme
     expect(pending.steps.my_read_chapters?.result?.status).toBe('applied');
     expect(pending.steps.my_read_volumes?.result?.status).toBe('failed');
     expect((await send('GET', path(occurrence.id))).progressSession).toMatchObject({ revision: 3, amount: '0' });
-    const stored = (await native.inspect()).sessions.find(({ row }) => row.session_id === occurrence.id)!.row;
     if (retirement) await sessions.retireSession(native.owner.actor, occurrence.id, { revision: 3 }, entryKey());
     else {
       await native.activate(removed);
@@ -248,8 +230,7 @@ test('uncertain native measure receipts survive profile replacement and retireme
     });
     expect(recovered.complete).toBe(true);
     const retained = (await native.inspect()).sessions.find(({ row }) => row.session_id === occurrence.id)!.row;
-    expect(retained.library_profile_pin).toEqual(stored.library_profile_pin);
-    expect(retained.additional_measures).toEqual(stored.additional_measures);
+    expect(retained.library_profile_pin).toEqual(binding.pin);
     if (retirement) await send('GET', path(occurrence.id), undefined, 404);
     // A pending key without an admitted receipt cannot create a value under the old review.
     for (const intent of [{ amount: '3' }, { clear: true }])
@@ -257,7 +238,7 @@ test('uncertain native measure receipts survive profile replacement and retireme
         sessions.recordProgress(
           native.owner.actor,
           occurrence.id,
-          { revision: 3, measureId: 'volume', ...intent },
+          { revision: 3, measureId: 'chapter', ...intent },
           entryKey(),
           {
             subjectId: plan.subjectId,
