@@ -54,7 +54,7 @@ export function WorkbenchPage({
   }, [client, page, search, navigation]);
   const version = useSyncExternalStore(owner?.subscribe ?? (() => () => {}), owner?.snapshot ?? (() => 0), () => 0);
   useEffect(() => () => owner?.retire(), [owner]);
-  const retired = Boolean(owner && !owner.healthy()) && version >= 0;
+  const retired = Boolean(owner && (!owner.healthy() || (search.history && !owner.available()))) && version >= 0;
   useEffect(() => () => recovery.current?.cancel(), [owner]);
   const view = retired
     ? {
@@ -72,6 +72,7 @@ export function WorkbenchPage({
         realmsNext: null,
         boardsNext: null,
         directory: undefined,
+        history: undefined,
       }
     : { ...data, search };
   const isCurrent = () => !retired && (!owner || owner.isCurrent());
@@ -147,6 +148,7 @@ export function WorkbenchPage({
             selectedAppeal: null,
             selectedTarget: null,
             next: null,
+            history: undefined,
           },
         });
     } finally {

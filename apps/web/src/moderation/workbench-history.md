@@ -1,15 +1,41 @@
 # Board decision history
 
-The workbench exposes a board-only history entry beside its existing report and appeal queues. Opening it keeps the
-selected board and the current queue's return position. Returning marks the active queue control as the next keyboard
-focus target. The history cursor has its own opaque search parameter and does not replace or decode the queue cursor.
+The workbench history visit reads one native Board history page and at most one selected exact decision, without
+report, appeal or pending-queue scans. The mounted producer is `GET /v1/boards/{id}/moderation-history`;
+`GET /v1/moderation-decisions/{id}` remains the selected receipt authority. The server binds both calls to its single
+prepared session and carries private/no-store on each read. Missing source tokens or missing native viewer/action
+projection produce unavailable, not empty. The local `MountedHistoryClient` seam in `workbench-history/read.ts`
+describes these mounted public response operands until the shared complete-input publisher installs declarations;
+it imports no private producer types and does not run or replace that publisher.
 
-Content owns the private history page method, decision row meaning, ordering, cursor and current disclosure. The
-delivered Web client currently has board report and appeal lists plus a point decision reader, but no private board
-decision-history page method. The history view therefore reports unavailable, offers retry and returns to the same
-queue. It does not invent an endpoint, render illustrative rows or rebuild history from report or appeal scans.
+Decision: Board history uses independent `historyTargetKind` and `historyDecision` operands, renders a moderator-only
+receipt, and keeps target advice unavailable until the exact reader supplies current context.
 
-The native list, decision detail, current target reading, permitted case/appeal destinations, sparse continuation,
-and stale/denied recovery remain pending the Content binding. When that binding is delivered, each page must retain
-its opaque cursor, recheck disclosure, keep historical metadata when a current target is hidden, and retire private
-results on board or session replacement. See [the Web Goal](../../../../docs/goals/web.md#ownership).
+The queue filter, order and opaque cursor remain the return snapshot; `historyCursor` and `historyTargetKind` never
+replace them. Selecting or closing an exact receipt preserves the history cursor. Changing the history target kind
+or explicitly restarting clears only history continuation and selection. Returning clears the history visit and
+restores focus to the same queue control through the existing guarded private-reader lifetime. The URL contains
+only references and opaque cursors, never reasons or actor labels.
+
+Rows follow the native order and decision time. Retained empty reasons and retired statements have separate
+presentation. Native decider presentation is withheld or retired; no account lookup rehydrates it. Only explicit
+native receipt advice creates an inspect control. The selected renderer keeps the original decision target ID and
+shows only exact-reader current target navigation. It never offers an affected-author appeal form, appellant or
+deadline. Current unavailable/concealed context does not replace an already admitted receipt's retained reason.
+Older decisions without original command receipts have unavailable receipt advice.
+
+Raw empty-with-next pages offer continuation without refill. Stale cursors offer explicit restart. Dependency
+retry repeats the same search operands. The receiver retains one list page and one exact receipt, and the existing
+workbench owner clears both on session, account, navigation, source or parent replacement. A failed selected read
+cannot substitute a different target from a newer summary. Unknown browser admission withholds private results.
+
+### Cost: history receiver
+
+- Touches: one session preparation, one mounted native page GET and optionally one exact GET for the selected
+  permitted row. The producer owns all authorization and disclosure; client fields grant nothing.
+- Bound: one page of at most 20 rows and one exact receipt; no target body, reporter evidence or account name
+  enrichment. One SHA-256 source fingerprint retains no session token. Source-native work remains additive to the
+  producer's Content Cost declaration. Navigation replaces rather than appends pages.
+- Growth check: receiver tests pin actual transport operands, independent cursors, sparse pages, same-input retry,
+  missing advice/source and exact-identity replacement. Native independent population/physical growth and rendered
+  browser acceptance remain controller checks; fixed output size alone establishes no native physical bound.

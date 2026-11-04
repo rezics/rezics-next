@@ -879,9 +879,13 @@ that experience gap.
 
 ## Board moderation decision history
 
-`GET /v1/boards/{id}/moderation-history` returns `{ entries, nextCursor }`, newest first, with `limit` 1–100
-(default 20) and optional `targetKind=all|board|thread|post`. Each entry is the existing exact decision response, so Web
-opens it with `GET /v1/moderation-decisions/{decisionId}`. The signed cursor binds the board, target-kind selection,
+`GET /v1/boards/{id}/moderation-history` returns `{ entries, nextCursor, viewer }`, newest first, with `limit` 1–100
+(default 20) and optional `targetKind=all|board|thread|post`. Decision: the existing `moderation-routes.ts` mount owns the closed history projection and final original-request admission; the consumer hooks its existing queue read, scope, page and view. The closed viewer has `kind: "board-moderator"`.
+Each entry retains its existing decision fields and adds a closed `history` projection: `reasonState` is
+`retained|retired`, `decider` is `withheld|retired`, `receipt` is `permitted|unavailable`, and `target` is
+`unavailable`. A permitted receipt opens with `GET /v1/moderation-decisions/{decisionId}`. That exact reader alone
+owns current target context; a history moderation grant does not admit ordinary target navigation. No actor label
+is fetched or reconstructed. A null original command transaction makes receipt advice unavailable. The signed cursor binds the board, target-kind selection,
 limit, current account/client authority and board partition epoch.
 
 Decision: board decisions are inspectable only with current explicit moderation authority; boards have no
@@ -903,8 +907,8 @@ Exact reads preserve the existing affected-author branch independently of target
 a current available target, and history always checks current target/parent availability.
 No descendant, partition, report, grant or account scan discovers a page.
 
-At a fixed page limit L, a page uses at most `3 + 3L` anchored snapshots: board authority before and after, one
-board-index seek, and up to three bounded target/source/authority snapshots per selected candidate. The index seek
+At a fixed page limit L, a page uses at most `3 + 4L` anchored snapshots: board authority before and after, one
+board-index seek, and up to four bounded target/source/authority/retention snapshots per selected candidate. The index seek
 reads at most L + 1 rows; each target check and exact decision read is a point access with existing finite Access
 evidence. A duplicate event keeps one candidate. Erased decider identity is never indexed or returned; existing
 account-erasure processing retains the statement under its 183-day rule and blanks it at the existing expiry.
@@ -979,7 +983,7 @@ Responses are private/no-store and the history is not a public feed or search so
 ### Cost: scoped history page
 
 - Touches: `listModerationHistory` prepares board Access once, checks it before/after, reads one board-bound index
-  range, and hydrates each admitted raw key through current target Access, `moderation-history-target.sql` and the exact reader.
+  range, and hydrates each admitted raw key through current target Access, `moderation-history-target.sql`, the exact reader and one final `moderation-history-retention.sql` point. The mounted reader reauthenticates the original request before its final Board observation; a replaced Authorization header retires the response.
 - Bound: let L be the requested limit (1–100), B=L+1 (at most 101 raw keys), and H≤L the selected raw candidates.
   There are at most `3+3H` anchored snapshots, `12+12H` Content statements including `6+6H` controls, and
   `5+B+17H` relation keys: partition rows `3+3H`, B index rows, at most `2H` current placement rows,
@@ -1001,6 +1005,7 @@ Responses are private/no-store and the history is not a public feed or search so
   caller work, additional to these engine terms. Memory is O(B+D_total), with at most four concurrent role reads.
   Both all-kind and exact-kind seeks include their complete board/selection/order prefix; no filter can scan
   unrelated kinds, no request refills a sparse page, and cursor progress follows raw keys rather than returned rows.
+- Bound (retention projection addition): each hydrated row adds one BEGIN, partition PK, exact decision PK, current target Access evaluation and COMMIT. It materializes one reason of at most 1,024 Unicode characters and three booleans, never an account label or target body. The mounted final authenticator adds its actual nested Auth/Access/Accounts/assignment work on their configured pools; it is not a zero-cost identity comparison. Count both source observations, retention bytes, copies and response serialization in addition to the existing exact reader and Access terms.
 - Growth check: dataset construction renews credentials through native Auth between batches, outside measurement;
   the same native journey records and projects 256/1024/4096 thread decisions through native commands
   and original events, growing receipts and discovery ledgers with retained history rather than isolating synthetic

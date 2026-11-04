@@ -3,7 +3,13 @@ import { workbenchScope, workbenchSearch, type WorkbenchSearch } from '../workbe
 /** Open the board-only history view while keeping the queue's return position intact. */
 export function openWorkbenchHistory(search: WorkbenchSearch): WorkbenchSearch {
   if (workbenchScope(search).kind !== 'board') return search;
-  return workbenchSearch({ ...search, history: true, historyCursor: undefined, historyReturn: undefined });
+  return workbenchSearch({
+    ...search,
+    history: true,
+    historyCursor: undefined,
+    historyDecision: undefined,
+    historyReturn: undefined,
+  });
 }
 
 /** Return to the same queue page and announce where keyboard focus should land. */

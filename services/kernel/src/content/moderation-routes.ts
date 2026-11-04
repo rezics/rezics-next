@@ -187,10 +187,10 @@ export function moderationRoutes(
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ params: { id }, query, actor, admission, job, session, set }) => {
+      async ({ params: { id }, query, actor, request, admission, job, session, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () => {
-          const result = await listModerationHistory(deps, id, { actor, deadline: job.deadline }, query);
+          const result = await listModerationHistory(deps, id, { actor, request, deadline: job.deadline }, query);
           session.record(result.anchor);
           return result.value;
         });
