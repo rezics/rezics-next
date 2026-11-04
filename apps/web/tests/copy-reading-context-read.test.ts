@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createKernelClient } from '@rezics/client';
+import { createKernelClient, type KernelClient } from '@rezics/client';
 import { loadCopiesPage } from '../src/library/copies-read';
 import { presentCopyListContext, copyListContextFromNativeRow } from '../src/library/copy-reading-context/read';
 
@@ -7,6 +7,8 @@ const id = (tail: string) => `019a1b2c-3d4e-7f00-8a00-${tail.padStart(12, '0')}`
 const subjectId = id('90');
 const workId = id('91');
 const authorId = id('92');
+type CopyListResponse = NonNullable<Awaited<ReturnType<KernelClient['copies']['get']>>['data']>;
+
 const facts = {
   'schema:author': [{ kind: 'item', id: authorId, labels: { en: 'A. Writer' } }],
   'schema:datePublished': [{ kind: 'time', year: 1986, month: 4 }],
@@ -27,12 +29,13 @@ const nativeCopy = (number: number, context: object) => ({
     type: 'schema:Book',
     types: ['schema:Book'],
     label: { value: 'A book', language: 'en' },
+    creativeWork: true,
     cover: null,
   },
   context,
 });
 
-test('FULL page context stays per copy, preserves qualified facts, and performs no Subject hydration', async () => {
+test('FULL rows retain Copy identity without Subject hydration while installed context delivery is incomplete', async () => {
   const calls: URL[] = [];
   const body = {
     copies: [
@@ -40,8 +43,7 @@ test('FULL page context stays per copy, preserves qualified facts, and performs 
       nativeCopy(2, { state: 'unsupported', facts }),
     ],
     next: null,
-    filterOptions: { kinds: [], statuses: [] },
-  };
+  } satisfies CopyListResponse;
   const client = createKernelClient('https://kernel.test', {
     fetch: async (input) => {
       calls.push(new URL(input instanceof Request ? input.url : String(input)));
@@ -62,16 +64,31 @@ test('FULL page context stays per copy, preserves qualified facts, and performs 
   ]);
   expect(new Set(page.copies.map((copy) => copy.idempotencyKey)).size).toBe(2);
 
+  expect(page.copies.map(({ location, source, note }) => [location, source, note])).toEqual([
+    ['Shelf 1', 'Bookshop', 'Note 1'],
+    ['Shelf 2', 'Bookshop', 'Note 2'],
+  ]);
+  expect(page.copies.map((copy) => copy.nativeReadingContext)).toEqual([
+    { state: 'unavailable' },
+    { state: 'unavailable' },
+  ]);
+});
+
+test('per-row presentation retains different contexts and qualified facts for repeated Subjects', () => {
+  const contexts = [
+    { state: 'available', work: [{ id: workId, labels: { en: 'Shared work' } }], facts },
+    { state: 'unsupported', facts },
+  ] satisfies import('../src/library/copy-reading-context/types').NativeCopyListContext[];
   const release = {
     properties: {
       'schema:author': { datatype: 'wikibase-item', labels: { en: 'Author' }, relation: { group: 'credit' } },
       'schema:datePublished': { datatype: 'time', labels: { en: 'Publication date' } },
     },
   };
-  const contexts = page.copies.map((copy) => presentCopyListContext(copy.nativeReadingContext!, release, 'en'));
-  expect(contexts[0]).toMatchObject({ state: 'available', work: [{ id: workId, label: 'Shared work' }] });
-  expect(contexts[1]).toMatchObject({ state: 'unsupported' });
-  expect(contexts[1]?.state === 'unsupported' && contexts[1].facts).toContainEqual(
+  const presented = contexts.map((context) => presentCopyListContext(context, release, 'en'));
+  expect(presented[0]).toMatchObject({ state: 'available', work: [{ id: workId, label: 'Shared work' }] });
+  expect(presented[1]).toMatchObject({ state: 'unsupported' });
+  expect(presented[1]?.state === 'unsupported' && presented[1].facts).toContainEqual(
     expect.objectContaining({
       property: 'schema:author',
       label: 'Author',
@@ -79,14 +96,15 @@ test('FULL page context stays per copy, preserves qualified facts, and performs 
       subject: expect.objectContaining({ id: authorId }),
     }),
   );
-  expect(contexts[1]?.state === 'unsupported' && contexts[1].facts).toContainEqual(
+  expect(presented[1]?.state === 'unsupported' && presented[1].facts).toContainEqual(
     expect.objectContaining({ property: 'schema:datePublished', label: 'Publication date', text: 'April 1986' }),
   );
 });
 
-test('hidden native states with extra nested data fail closed without retaining IDs', () => {
-  expect(copyListContextFromNativeRow({ context: { state: 'withheld', work: [{ id: workId }] } })).toEqual({
+test('undeclared hidden payloads and absent context remain unavailable and ID-free', () => {
+  expect(copyListContextFromNativeRow(nativeCopy(1, { state: 'withheld', work: [{ id: workId }] }))).toEqual({
     state: 'unavailable',
   });
-  expect(copyListContextFromNativeRow({})).toEqual({ state: 'unavailable' });
+  const { context: _context, ...copy } = nativeCopy(2, { state: 'missing' });
+  expect(copyListContextFromNativeRow(copy)).toEqual({ state: 'unavailable' });
 });
