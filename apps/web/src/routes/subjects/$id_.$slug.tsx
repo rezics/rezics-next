@@ -10,6 +10,7 @@ import { useQuery, useSuspenseQuery, useSuspenseQueries, useQueryClient } from '
 import { createServerFn } from '@tanstack/react-start';
 import { isView } from '@rezics/composition';
 import { SubjectPage, pageRelationProperties, subjectPageTitle, subjectPageType } from '../../features/pages/subject';
+import { catalogueFileSourceId } from '../../features/catalogue/catalogue-file-reader/navigation';
 import { subjectHead } from '../../features/pages/subject-head';
 import { SubjectLink, subjectPageMessages, viewTabLabels } from '../../features/pages/route-support';
 import { subjectTabs } from '../../features/pages/views';
@@ -204,6 +205,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   ): {
     realm?: string | undefined;
     via?: string | undefined;
+    fileSource?: string | undefined;
     slot?: 'collections';
     slotResult?: string;
     ratingFailure?: true;
@@ -215,6 +217,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug')({
   } => ({
     realm: validatePageRealm(search.realm),
     via: subjectVisitReturn(search.via, getLocale()),
+    ...(catalogueFileSourceId(search.fileSource) ? { fileSource: catalogueFileSourceId(search.fileSource) } : {}),
     ...(search.slot === 'collections' ? { slot: 'collections' as const } : {}),
     ...(typeof search.slotResult === 'string' ? { slotResult: search.slotResult } : {}),
     ...(search.ratingFailure === '1' ? { ratingFailure: true as const } : {}),
@@ -467,6 +470,7 @@ export function SubjectOverview({
               <SubjectPage
                 page={page}
                 returnTo={search.via}
+                fileSource={search.fileSource}
                 verification={verification}
                 connections={
                   currentReader ? (

@@ -110,16 +110,33 @@ test('file visit work stays page-bounded at 32, 256 and 2048 related files', asy
   expect(new Set(firstPages)).toEqual(new Set([RELEASE_ASSOCIATION_LIMIT]));
 });
 
-test('file companion entry is discoverable and eight locales keep the possession disclaimer', () => {
+test('file companion entry needs current type admission and eight locales keep the possession disclaimer', async () => {
+  const admitted = await catalogueFileProfileFixture('ready').read();
+  if (!admitted.ok) throw new Error('Expected current file definitions');
   const html = renderToStaticMarkup(
     createElement(CatalogueFileProfileEntry, {
       id: catalogueFile,
       type: 'schema:MediaObject',
       label: 'Episode 1 file A',
       locale: 'en',
+      release: admitted.release,
+      returnSourceId: catalogueFile,
     }),
   );
   expect(html).toContain('/file');
+  expect(html).toContain(`fileSource=${catalogueFile}`);
+  expect(renderToStaticMarkup(createElement(CatalogueFileProfileEntry, {
+    id: catalogueFile,
+    type: 'schema:MediaObject',
+    locale: 'en',
+  }))).toBe('');
+  expect(catalogueEntries.catalogueFile({ id: catalogueFile, type: 'schema:MediaObject', locale: 'en' })).toBeUndefined();
+  expect(catalogueEntries.catalogueFile({
+    id: catalogueFile,
+    type: 'schema:MediaObject',
+    locale: 'en',
+    release: admitted.release,
+  })?.href).toContain('/file');
   expect(catalogueEntries.catalogueFile({ id: catalogueFile, type: 'bf:Instance', locale: 'en' })).toBeUndefined();
   expect(catalogueGroup).toContain('a204');
   expect(catalogueFileTwo).toContain('a202');

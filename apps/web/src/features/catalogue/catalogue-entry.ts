@@ -1,6 +1,9 @@
 import { m } from '../../paraglide/messages.js';
 import { subjectHref } from '../../subject/subject-href';
 import { gameTypes } from './game-profile';
+import type { Release } from '@rezics/definitions';
+import { isFileOrGroupType } from './catalogue-file-profile/model';
+import { catalogueFileCorrectionHref } from './catalogue-file-reader/navigation';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -168,19 +171,29 @@ export const catalogueEntries = {
     type,
     label = '',
     locale,
-  }: Locale & { id?: string | undefined; type?: string | undefined; label?: string | undefined }):
+    release,
+    returnSourceId,
+  }: Locale & {
+    id?: string | undefined;
+    type?: string | undefined;
+    label?: string | undefined;
+    release?: Pick<Release, 'types' | 'properties'> | undefined;
+    returnSourceId?: string | undefined;
+  }):
     | CatalogueEntry
     | undefined => {
-    const fileTypes = ['schema:MediaObject', 'rezics:CatalogueFile', 'rezics:ReleaseGroup', 'wd:Q82753', 'wd:Q55327'];
     if (id) {
-      if (!fileTypes.includes(type ?? '')) return;
+      if (!type || !release || !isFileOrGroupType(release, type)) return;
+      const base = `${subject({ id, label, locale })}/file`;
+      const href = returnSourceId ? catalogueFileCorrectionHref(base, returnSourceId, locale) : base;
+      if (!href) return;
       return {
         group: 'edit',
         label: m.catalogue_file_title({}, options(locale)),
-        href: `${subject({ id, label, locale })}/file`,
+        href,
       };
     }
-    if (type && !fileTypes.includes(type)) return;
+    if (type && (!release || !isFileOrGroupType(release, type))) return;
     return {
       group: 'create',
       label: m.catalogue_file_create_title({}, options(locale)),
