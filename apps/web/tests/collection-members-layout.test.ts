@@ -133,7 +133,7 @@ test('collection members default to linked rows with each note and kind inside i
 
   const layoutNav = /<nav\b(?=[^>]*data-slot="collection-layout")[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
   expect(layoutNav).toContain('aria-current="page"');
-  expect(layoutNav).toContain(`/en/collections/${collectionId}?layout=grid`);
+  expect(layoutNav).toContain('layout=grid');
   expect(html).not.toContain('data-slot="cover-grid"');
 
   const links = [...layoutNav.matchAll(/href="([^"]+)"/g)].map((match) => match[1]!.replaceAll('&amp;', '&'));

@@ -2510,7 +2510,7 @@ export function CollectionReadMembers<Member extends CollectionReadMember>({
     // Render-only keys keep unidentified rows separate without creating an occurrence identity for actions.
     const key = member.id ? `occurrence:${member.id}` : `display-only:${index}`;
     const noteKey = member.id ? `occurrence:${member.id}` : `display-only:${index}`;
-    const titleValue = subject ? pageText(libraryTitleValue(subject.label), locale) : undefined;
+    const titleValue = subject?.label ? pageText(libraryTitleValue(subject.label), locale) : undefined;
     const title = titleValue?.text || (subject ? m.subject_value_unlabelled() : m.library_subject_unavailable());
     const actionHref = viewerActionHref?.(member);
     const details = (
