@@ -105,8 +105,14 @@ test('the mounted private view separates inaccessible targets, uncertain removal
       if (fail) throw new Error('offline');
       return response;
     },
-    stop: async () =>
-      writes++ === 0 ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } } : { kind: 'removed' },
+    stop: async () => {
+      writes++;
+      return writes === 1
+        ? { kind: 'uncertain', problem: { status: 503, code: 'deadline_exceeded' } }
+        : writes === 2
+          ? { kind: 'denied', problem: { status: 403, code: 'forbidden' } }
+          : { kind: 'removed' };
+    },
   };
   const click = async (text: string) => {
     const button = [...host.querySelectorAll('button')].find((item) => item.textContent === text);
@@ -139,6 +145,33 @@ test('the mounted private view separates inaccessible targets, uncertain removal
     fail = false;
     response = { kind: 'page', page: { ...envelope, actions: { remove: 'denied' }, watches: [], next: null } };
     await click(m.settings_retry());
+    expect(host.textContent).toContain(m.settings_watches_remove_denied());
+    expect(retryButton().disabled).toBe(true);
+    response = {
+      kind: 'page',
+      page: {
+        ...envelope,
+        watches: [
+          row({
+            subscriptionId: 'hidden-owner-id',
+            kind: 'thread',
+            revision: 10,
+            createdAt: '2026-11-05T10:00:00.000Z',
+            target: { title: 'Current thread', href: '/threads/current' },
+          }),
+        ],
+        next: null,
+      },
+    };
+    await click(m.settings_watches_refresh());
+    expect(retryButton().disabled).toBe(false);
+    await click(m.settings_watches_retry_original());
+    expect(host.textContent).toContain(m.settings_watches_uncertain_text());
+    expect(host.textContent).toContain(m.settings_watches_denied());
+    expect(host.querySelector('a[href="/threads/current"]')).toBeNull();
+    response = { kind: 'page', page: { ...envelope, actions: { remove: 'denied' }, watches: [], next: null } };
+    await click(m.settings_retry());
+    expect(host.textContent).toContain(m.settings_watches_uncertain_text());
     expect(host.textContent).toContain(m.settings_watches_remove_denied());
     expect(retryButton().disabled).toBe(true);
     response = {
