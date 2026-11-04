@@ -1,5 +1,6 @@
-import { requireDenseArray } from './growth-numeric.ts';
+import { mergeGrowthCaptures } from './growth-capture-merge.ts';
 import type { Capture } from './growth-cost.ts';
+import { requireDenseArray } from './growth-numeric.ts';
 
 function requireParallel(
   values: readonly unknown[] | undefined,
@@ -192,4 +193,89 @@ export function validateCaptureEvidence(capture: Capture): void {
     'backgroundStatementBackends',
     'backgroundPlanBackends',
   );
+}
+
+function sameArray(left: readonly unknown[], right: readonly unknown[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) if (!sameValue(left[index], right[index])) return false;
+  return true;
+}
+
+function sameValue(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null) return false;
+  if (Array.isArray(left) || Array.isArray(right))
+    return Array.isArray(left) && Array.isArray(right) && sameArray(left, right);
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const keys = Object.keys(leftRecord);
+  if (keys.length !== Object.keys(rightRecord).length) return false;
+  for (const key of keys) {
+    if (!Object.hasOwn(rightRecord, key) || !sameValue(leftRecord[key], rightRecord[key])) return false;
+  }
+  return true;
+}
+
+function captureWork(capture: Capture): Record<string, unknown> {
+  return {
+    statements: capture.statements,
+    requestBytes: capture.requestBytes,
+    responseBytes: capture.responseBytes,
+    plans: capture.plans,
+    planStatements: capture.planStatements,
+    statementErrors: capture.statementErrors,
+    statementErrorMessages: capture.statementErrorMessages,
+    statementBackends: capture.statementBackends,
+    planBackends: capture.planBackends,
+    planDatabases: capture.planDatabases,
+    backgroundStatements: capture.backgroundStatements,
+    backgroundRequestBytes: capture.backgroundRequestBytes,
+    backgroundResponseBytes: capture.backgroundResponseBytes,
+    backgroundPlans: capture.backgroundPlans,
+    backgroundPlanStatements: capture.backgroundPlanStatements,
+    backgroundStatementErrors: capture.backgroundStatementErrors,
+    backgroundStatementErrorMessages: capture.backgroundStatementErrorMessages,
+    backgroundStatementBackends: capture.backgroundStatementBackends,
+    backgroundPlanBackends: capture.backgroundPlanBackends,
+    backgroundPlanDatabases: capture.backgroundPlanDatabases,
+  };
+}
+
+function sameCaptureWork(left: Capture, right: Capture): boolean {
+  return sameValue(captureWork(left), captureWork(right));
+}
+
+function listedLabel(database: { readonly name: string; readonly capture: Capture }): string {
+  const { capture } = database;
+  const backgroundStatements = capture.backgroundStatements?.length ?? 0;
+  const backgroundPlans = capture.backgroundPlans?.length ?? 0;
+  return `${database.name}=${capture.statements.length}/${capture.plans.length}/${backgroundStatements}/${backgroundPlans}`;
+}
+
+/**
+ * Derive the costed aggregate from listed native captures. Optional legacy fields stay omitted when every listed
+ * capture omitted them. Refuse dropped or replaced statements, plans, bytes or attribution, including the primary.
+ */
+export function admitAggregatedCaptures(
+  name: string,
+  merged: Capture,
+  databases: readonly { readonly name: string; readonly capture: Capture }[],
+  primary: Capture,
+): Capture {
+  validateCaptureEvidence(merged);
+  validateCaptureEvidence(primary);
+  const listed = databases.map((database) => {
+    validateCaptureEvidence(database.capture);
+    return database.capture;
+  });
+  if (!listed.some((capture) => sameCaptureWork(capture, primary)))
+    throw new Error(`${name}: aggregateCaptures omitted the primary capture`);
+  const admitted = mergeGrowthCaptures(listed);
+  if (!sameCaptureWork(merged, admitted)) {
+    const listedCaptures = databases.map(listedLabel).join(', ');
+    throw new Error(
+      `${name}: aggregateCaptures omitted native statements, plans or background work (merged evidence does not match listed captures: ${listedCaptures})`,
+    );
+  }
+  return admitted;
 }

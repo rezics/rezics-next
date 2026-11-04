@@ -498,8 +498,11 @@ harness's own `SET` statements are not counted. Foreground and background statem
 Capture validation decision: optional legacy metadata may be omitted; any supplied parallel arrays must be dense and
 length-aligned, undefined plan owners remain unowned, and backend IDs are compared only when both sides are known.
 `aggregateCaptures` must return every participating database capture; `mergeGrowthCaptures` concatenates optional
-parallel evidence, including `planDatabases`, and rebases plan owners. The harness rejects a merge whose statement,
-plan or background counts differ from those listed databases.
+parallel evidence, including `planDatabases`, and rebases plan owners. Decision: the harness derives the costed
+aggregate from those listed native captures through `mergeGrowthCaptures` and refuses a caller-built merge that drops
+or replaces their statements, plans, bytes or attribution. Optional legacy fields stay omitted when every listed
+capture omitted them. Database names are labels. The measured primary capture must remain among the listed captures;
+unlisted secondary work is not discovered.
 Growth checks support `step` and `series` rules. `series` is the default; `check.rule` selects an explicit rule, and
 `GROWTH_RULE=series` also runs checks on the step baseline under series. Any other set value of `GROWTH_RULE` is a
 configuration error. The only checks that use step by default are in `test/support/growth-baseline.ts`; each entry must

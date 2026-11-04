@@ -192,6 +192,35 @@ test.serial(
         },
       }),
     ).rejects.toThrow(/omitted auth capture: aggregateCaptures omitted native statements, plans or background work/);
+
+    await expect(
+      checkGrowth(primary, {
+        name: 'stripped aggregate evidence',
+        scales: [1, 8, 64],
+        repetitions: 1,
+        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+        aggregateCaptures(primaryCapture, value) {
+          const aggregated = aggregateBoth(primaryCapture, value);
+          return {
+            capture: {
+              statements: aggregated.capture.statements,
+              plans: aggregated.capture.plans,
+              requestBytes: aggregated.capture.statements.map(() => 0),
+              responseBytes: aggregated.capture.statements.map(() => 0),
+              backgroundStatements: aggregated.capture.backgroundStatements,
+            },
+            databases: aggregated.databases,
+          };
+        },
+        async grow() {},
+        async operation(_database, _scale, repetition) {
+          const authCapture = await triggerWrite(30_000 + repetition);
+          return { status: 200, authCapture };
+        },
+      }),
+    ).rejects.toThrow(
+      /stripped aggregate evidence: aggregateCaptures omitted native statements, plans or background work/,
+    );
   },
   120_000,
 );
