@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { types as utilTypes } from 'node:util';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import type { Release } from '@rezics/definitions';
 import {
   BATCH_LIMIT,
   checkBatchWrite,
@@ -32,6 +34,8 @@ export const vndbReleaseNameLimits = Object.freeze({
 });
 const gregorianCalendar = 'http://www.wikidata.org/entity/Q1985727';
 const durationSecond = 'http://www.wikidata.org/entity/Q11574';
+const centimeter = 'http://www.wikidata.org/entity/Q174728';
+const kilogram = 'http://www.wikidata.org/entity/Q11570';
 const episodeOrdinalPattern = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/u;
 /** Finite admitted staff aliases per person; overflow is rejected, never truncated. */
 export const vndbStaffNameLimit = 64;
@@ -41,6 +45,8 @@ export const vndbStaffNameLimits = Object.freeze({
   recordBytes: vndbLimits.recordBytes,
   maxCommands: vndbStaffNameLimit + 1,
 });
+const copySmallint = /^(?:0|[1-9][0-9]{0,4})$/u;
+const smallintMax = '32767';
 
 export type SourceMapping = {
   status: 'existing' | 'proposed' | 'omitted';
@@ -371,6 +377,30 @@ export function episodeDuration(
     return { amount: `+${seconds}`, unit: durationSecond };
   }
   return 'unknown';
+}
+
+/** COPY smallint cells only. `\N`/null and exact `0` are unknown, not a measured zero. */
+export function vndbCharacterQuantity(
+  value: unknown,
+  property: 'schema:height' | 'schema:weight',
+  release: Pick<Release, 'types' | 'properties'> = bundledRelease,
+): { amount: string; unit: string } | 'unknown' | 'invalid' | 'unadmitted' {
+  if (value === undefined || value === null) return 'unknown';
+  if (typeof value !== 'string' || !value.isWellFormed() || Buffer.byteLength(value, 'utf8') > 5) return 'invalid';
+  if (!copySmallint.test(value) || (value.length === 5 && value > smallintMax)) return 'invalid';
+  if (value === '0') return 'unknown';
+  const unit = property === 'schema:height' ? centimeter : kilogram;
+  const definition = release.properties[property];
+  const holder = release.types['wd:Q95074'];
+  if (
+    definition?.datatype !== 'quantity' ||
+    !holder?.properties.includes(property) ||
+    !definition.units?.includes(unit)
+  )
+    return 'unadmitted';
+  if (definition.minimum !== undefined && Number(value) < definition.minimum) return 'invalid';
+  if (definition.maximum !== undefined && Number(value) > definition.maximum) return 'invalid';
+  return { amount: `+${value}`, unit };
 }
 
 const profiles: Record<EntityKind, { type: string; identifier: string; sourceKind: 'bangumi' | 'vndb' }> = {
@@ -723,6 +753,12 @@ function project(kind: EntityKind, input: ConversionInput): Projected {
     const released = own(raw, 'released', '/released');
     if (released !== undefined) normalized.released = released;
   }
+  if (kind === 'vndb-character') {
+    for (const field of ['height', 'weight'] as const) {
+      const value = own(raw, field, `/${field}`);
+      if (value !== undefined) normalized[field] = value;
+    }
+  }
   if (kind === 'bangumi-episode') {
     const sort = own(raw, 'sort', '/sort');
     if (sort !== undefined) normalized.sort = sort;
@@ -844,6 +880,23 @@ function convert(
       } catch {
         fail('/description', 'invalid_record_summary_document_limit');
       }
+    }
+  }
+  if (kind === 'vndb-character') {
+    for (const [field, property] of [
+      ['height', 'schema:height'],
+      ['weight', 'schema:weight'],
+    ] as const) {
+      const result = vndbCharacterQuantity(projected.normalized[field], property);
+      if (result === 'unknown') continue;
+      if (result === 'invalid' || result === 'unadmitted') {
+        diagnostics.push({
+          pointer: `/${field}`,
+          code: result === 'unadmitted' ? 'unadmitted_quantity' : 'invalid_source_value',
+        });
+        continue;
+      }
+      facts.push(fact(property, result));
     }
   }
   const proposals: BatchCommand[] = [];

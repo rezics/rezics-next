@@ -626,6 +626,15 @@ not additional check requests.
   withholds the association as a false-positive rather than publishing a trait or writing VNDB classification
   (`ODbL-1.0` remains unadmitted); `chars_vns.rid` withholds the appearance rather than asserting an unqualified
   work-level fact; `chars.main` stays a referenced endpoint.
+- `production operator imports authored VNDB character measurements through ordinary accept and current reads`:
+  `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-character-measurements.test.ts`.
+  Frozen scenario names:
+  `production caller publishes exact COPY height and weight and keeps unknown measurements absent`;
+  `operator plans authored COPY character measurements and imports exact supported facts through the seed caller`;
+  `production operator imports authored VNDB character measurements through ordinary accept and current reads`.
+  Conversion and importer production-caller tests are local evidence. The kernel native file is registered and not
+  executed in this attempt; no native pass is claimed. Fixtures are marked authored. Decision: COPY `\N` and exact `0`
+  are unknown measurement sentinels, not measured zero; height stays centimetres and weight kilograms.
 - `production operator imports authored VNDB release dates, states and work completeness through ordinary accept and current reads`:
   `bun scripts/worker-check.ts -- bun run --cwd services/kernel check test/imports/vndb-release-fidelity.test.ts`.
   Frozen scenario names:
