@@ -345,7 +345,7 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     await flush();
     expect(host.textContent).toContain('This cast window has changed since you left.');
     expect(host.querySelector('[data-slot="restart-group"]')).not.toBeNull();
-    await router.navigate({ href: previous.href });
+    await router.navigate({ href: previous.getAttribute('href')! });
     await flush();
     expect(host.querySelector('[data-slot="previous-group"]')).toBeNull();
     expect(host.textContent).not.toContain('This cast window has changed since you left.');
