@@ -26,10 +26,11 @@ export type BangumiNameExtraction = Readonly<{
   names: readonly BangumiSubjectName[];
   diagnostics: readonly BangumiNameDiagnostic[];
 }>;
-export type BangumiTVAnimeEvidenceExtraction = BangumiNameExtraction & Readonly<{
-  workEvidence: readonly BangumiWorkEvidence[];
-  televisionRun: TelevisionRunMapping;
-}>;
+export type BangumiTVAnimeEvidenceExtraction = BangumiNameExtraction &
+  Readonly<{
+    workEvidence: readonly BangumiWorkEvidence[];
+    televisionRun: TelevisionRunMapping;
+  }>;
 
 const nameLimit = 24;
 const fieldLimit = 64;
@@ -278,7 +279,8 @@ export function extractBangumiTVAnimeEvidence(
       } else if (
         !(tvAnime && bangumiTelevisionRunKeys.has(key)) &&
         !(tvAnime && isBangumiTVAnimeWorkEvidenceField(key))
-      ) omit(pointer, 'unsupported_infobox_key');
+      )
+        omit(pointer, 'unsupported_infobox_key');
       continue;
     }
     if (!active) {

@@ -51,7 +51,11 @@ test('ordinary Bangumi registration converts named 3/6 records and keeps identit
   expect(convert(JSON.parse(JSON.stringify(returned.normalized)))).toEqual(returned);
   for (const proposal of returned.proposals) {
     expect(proposal.op).toBe('propose');
-    expect(proposal.source).toMatchObject({ source: 'bangumi', external_id: '71001', converter_revision: 'bangumi@10' });
+    expect(proposal.source).toMatchObject({
+      source: 'bangumi',
+      external_id: '71001',
+      converter_revision: 'bangumi@10',
+    });
   }
 });
 

@@ -118,118 +118,126 @@ function nameCommands(commands: readonly BatchCommand[]) {
     });
 }
 
-test('selected-family Bangumi TVAnime imports bounded names through the registered source converter', async () => {
-  const sourceDir = await mkdtemp(join(roots, '.temp/bangumi-subject-names-'));
-  const stateDir = await mkdtemp(join(tmpdir(), 'bangumi-subject-names-state-'));
-  const state = join(stateDir, 'state.sqlite');
-  const sent: BatchCommand[] = [];
-  const identities = new Map<string, string>();
-  const created: string[] = [];
-  const api = port(sent, identities, created);
-  const run = (input: Awaited<ReturnType<typeof plan>>) =>
-    seedCrossMedia(input, state, api, undefined, { providers: ['bangumi'], mediaDeadlineMs: 0 });
-  try {
-    const selected = await plan(sourceDir, target());
-    expect(selected.records.bangumi.map((row) => row.key)).toEqual([
-      String(targetId),
-      ...supportSubjects.map((row) => String(row.id)),
-    ]);
-    expect(selected.records.bangumi.some((row) => row.key === String(neighbor.id))).toBe(false);
-
-    const first = await run(selected);
-    expect(first.runs.bangumi?.status).toBe('committed');
-    const firstNames = nameCommands(sent);
-    expect(
-      firstNames.map((command) => ({
-        property: command.op === 'propose' ? command.statement.property.id : '',
-        value:
-          command.op === 'propose' && command.statement.value.type === 'value' ? command.statement.value.content : null,
-      })),
-    ).toEqual([
-      { property: 'schema:alternateName', value: { language: 'und', text: 'Alternate title' } },
-      { property: 'schema:alternateName', value: { language: 'und', text: 'CLANNAD After Story' } },
-      { property: 'schema:alternateName', value: { language: 'und', text: 'クラナド' } },
-      { property: 'schema:name', value: { language: 'und', text: 'CLANNAD' } },
-      { property: 'schema:name', value: { language: 'zh', text: '中文题名' } },
-    ]);
-    for (const command of firstNames) {
-      if (command.op !== 'propose') continue;
-      expect(command.source).toMatchObject({
-        source: crossMediaAliases.bangumi,
-        external_id: String(targetId),
-        record_revision: 'unversioned',
-        converter_revision: crossMediaBangumiRevision,
-      });
-      expect(command.statement.references).toEqual([
-        {
-          parts: [
-            {
-              property: { id: 'schema:url' },
-              value: { type: 'value', content: `https://bgm.tv/subject/${targetId}` },
-            },
-          ],
-        },
+test(
+  'selected-family Bangumi TVAnime imports bounded names through the registered source converter',
+  async () => {
+    const sourceDir = await mkdtemp(join(roots, '.temp/bangumi-subject-names-'));
+    const stateDir = await mkdtemp(join(tmpdir(), 'bangumi-subject-names-state-'));
+    const state = join(stateDir, 'state.sqlite');
+    const sent: BatchCommand[] = [];
+    const identities = new Map<string, string>();
+    const created: string[] = [];
+    const api = port(sent, identities, created);
+    const run = (input: Awaited<ReturnType<typeof plan>>) =>
+      seedCrossMedia(input, state, api, undefined, { providers: ['bangumi'], mediaDeadlineMs: 0 });
+    try {
+      const selected = await plan(sourceDir, target());
+      expect(selected.records.bangumi.map((row) => row.key)).toEqual([
+        String(targetId),
+        ...supportSubjects.map((row) => String(row.id)),
       ]);
+      expect(selected.records.bangumi.some((row) => row.key === String(neighbor.id))).toBe(false);
+
+      const first = await run(selected);
+      expect(first.runs.bangumi?.status).toBe('committed');
+      const firstNames = nameCommands(sent);
+      expect(
+        firstNames.map((command) => ({
+          property: command.op === 'propose' ? command.statement.property.id : '',
+          value:
+            command.op === 'propose' && command.statement.value.type === 'value'
+              ? command.statement.value.content
+              : null,
+        })),
+      ).toEqual([
+        { property: 'schema:alternateName', value: { language: 'und', text: 'Alternate title' } },
+        { property: 'schema:alternateName', value: { language: 'und', text: 'CLANNAD After Story' } },
+        { property: 'schema:alternateName', value: { language: 'und', text: 'クラナド' } },
+        { property: 'schema:name', value: { language: 'und', text: 'CLANNAD' } },
+        { property: 'schema:name', value: { language: 'zh', text: '中文题名' } },
+      ]);
+      for (const command of firstNames) {
+        if (command.op !== 'propose') continue;
+        expect(command.source).toMatchObject({
+          source: crossMediaAliases.bangumi,
+          external_id: String(targetId),
+          record_revision: 'unversioned',
+          converter_revision: crossMediaBangumiRevision,
+        });
+        expect(command.statement.references).toEqual([
+          {
+            parts: [
+              {
+                property: { id: 'schema:url' },
+                value: { type: 'value', content: `https://bgm.tv/subject/${targetId}` },
+              },
+            ],
+          },
+        ]);
+      }
+      expect(
+        firstNames.some(
+          (command) =>
+            command.op === 'propose' &&
+            command.statement.value.type === 'value' &&
+            ['Mixed scalar alias', 'Mixed list alias'].includes(
+              (command.statement.value.content as { text?: string }).text ?? '',
+            ),
+        ),
+      ).toBe(false);
+      expect(sent.some((command) => command.source.external_id === String(neighbor.id))).toBe(false);
+      const acknowledgedSubject = identities.get(String(targetId));
+
+      const unchangedStart = sent.length;
+      const unchanged = await run(selected);
+      expect(unchanged.runs.bangumi?.counts.unchanged).toBeGreaterThan(0);
+      expect(sent.slice(unchangedStart)).toEqual([]);
+
+      const changedStart = sent.length;
+      const changed = await run(await plan(sourceDir, target(true)));
+      expect(changed.runs.bangumi?.counts.changed).toBe(1);
+      expect(identities.get(String(targetId))).toBe(acknowledgedSubject);
+      expect(created).toEqual(selected.records.bangumi.map((row) => row.key));
+      const refreshedNames = nameCommands(sent.slice(changedStart));
+      expect(refreshedNames.every((command) => !firstNames.some((previous) => previous.key === command.key))).toBe(
+        true,
+      );
+      expect(
+        refreshedNames.some(
+          (command) =>
+            command.op === 'propose' &&
+            command.statement.value.type === 'value' &&
+            (command.statement.value.content as { text?: string }).text === 'Updated title',
+        ),
+      ).toBe(true);
+      expect(
+        refreshedNames.some(
+          (command) =>
+            command.op === 'propose' &&
+            command.statement.value.type === 'value' &&
+            (command.statement.value.content as { text?: string }).text === 'Recovered title',
+        ),
+      ).toBe(true);
+
+      const registration = createSourceRegistration('bangumi', {
+        source: crossMediaAliases.bangumi,
+        converterRevision: entityRevision,
+      });
+      const conversion = registration.convert(
+        { external_id: String(targetId), record_revision: null, record: target() },
+        { source: crossMediaAliases.bangumi, subjectId: identities.get(String(targetId))! },
+      );
+      expect(conversion.diagnostics?.map((diagnostic) => diagnostic.code)).toContain('unsupported_infobox_key');
+      expect(conversion.diagnostics).toContainEqual({
+        pointer: '/infobox/fields/2',
+        code: 'unsupported_infobox_name_form',
+      });
+      expect(JSON.stringify(conversion.diagnostics)).not.toContain('PRIVATE_MARKER');
+      expect(conversion.diagnostics!.length).toBeLessThanOrEqual(16);
+    } finally {
+      await rm(sourceDir, { recursive: true, force: true });
+      await rm(stateDir, { recursive: true, force: true });
     }
-    expect(
-      firstNames.some(
-        (command) =>
-          command.op === 'propose' &&
-          command.statement.value.type === 'value' &&
-          ['Mixed scalar alias', 'Mixed list alias'].includes(
-            (command.statement.value.content as { text?: string }).text ?? '',
-          ),
-      ),
-    ).toBe(false);
-    expect(sent.some((command) => command.source.external_id === String(neighbor.id))).toBe(false);
-    const acknowledgedSubject = identities.get(String(targetId));
-
-    const unchangedStart = sent.length;
-    const unchanged = await run(selected);
-    expect(unchanged.runs.bangumi?.counts.unchanged).toBeGreaterThan(0);
-    expect(sent.slice(unchangedStart)).toEqual([]);
-
-    const changedStart = sent.length;
-    const changed = await run(await plan(sourceDir, target(true)));
-    expect(changed.runs.bangumi?.counts.changed).toBe(1);
-    expect(identities.get(String(targetId))).toBe(acknowledgedSubject);
-    expect(created).toEqual(selected.records.bangumi.map((row) => row.key));
-    const refreshedNames = nameCommands(sent.slice(changedStart));
-    expect(refreshedNames.every((command) => !firstNames.some((previous) => previous.key === command.key))).toBe(true);
-    expect(
-      refreshedNames.some(
-        (command) =>
-          command.op === 'propose' &&
-          command.statement.value.type === 'value' &&
-          (command.statement.value.content as { text?: string }).text === 'Updated title',
-      ),
-    ).toBe(true);
-    expect(
-      refreshedNames.some(
-        (command) =>
-          command.op === 'propose' &&
-          command.statement.value.type === 'value' &&
-          (command.statement.value.content as { text?: string }).text === 'Recovered title',
-      ),
-    ).toBe(true);
-
-    const registration = createSourceRegistration('bangumi', {
-      source: crossMediaAliases.bangumi,
-      converterRevision: entityRevision,
-    });
-    const conversion = registration.convert(
-      { external_id: String(targetId), record_revision: null, record: target() },
-      { source: crossMediaAliases.bangumi, subjectId: identities.get(String(targetId))! },
-    );
-    expect(conversion.diagnostics?.map((diagnostic) => diagnostic.code)).toContain('unsupported_infobox_key');
-    expect(conversion.diagnostics).toContainEqual({
-      pointer: '/infobox/fields/2',
-      code: 'unsupported_infobox_name_form',
-    });
-    expect(JSON.stringify(conversion.diagnostics)).not.toContain('PRIVATE_MARKER');
-    expect(conversion.diagnostics!.length).toBeLessThanOrEqual(16);
-  } finally {
-    await rm(sourceDir, { recursive: true, force: true });
-    await rm(stateDir, { recursive: true, force: true });
-  }
-}, { timeout: 15_000 });
+  },
+  { timeout: 15_000 },
+);

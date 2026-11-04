@@ -1466,6 +1466,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   and common-publication scenario is
   `services/kernel/test/imports/bangumi-character-names.test.ts`; broader native
   acceptance remains controller-owned.
+
 ## Bangumi TVAnime work evidence
 
 Decision: see [Bangumi TVAnime work evidence](../../packages/conversion/README.md#bangumi-tv-anime-work-evidence).

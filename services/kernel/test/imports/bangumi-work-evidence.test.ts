@@ -33,9 +33,7 @@ type ProviderCli = Awaited<ReturnType<typeof openProviderCli>>;
 type CliResult = Awaited<ReturnType<ProviderCli['invoke']>>;
 
 function commands(result: CliResult) {
-  return result.writes.flatMap((exchange) =>
-    (JSON.parse(exchange.bytes!) as { commands: BatchCommand[] }).commands,
-  );
+  return result.writes.flatMap((exchange) => (JSON.parse(exchange.bytes!) as { commands: BatchCommand[] }).commands);
 }
 
 function evidenceCommands(commandList: readonly BatchCommand[]) {
@@ -89,9 +87,11 @@ test('ordinary Bangumi import reviews and adopts cited TVAnime work evidence wit
     expect(notices).toHaveLength(1);
     expect(content(links[0]!)).toBe(workUrl);
     expect(content(notices[0]!)).toBe(notice);
-    expect(evidenceCommands(commands(first)).map((command) => command.statement.property.id).sort()).toEqual(
-      ['schema:copyrightNotice', 'wdt:P973'],
-    );
+    expect(
+      evidenceCommands(commands(first))
+        .map((command) => command.statement.property.id)
+        .sort(),
+    ).toEqual(['schema:copyrightNotice', 'wdt:P973']);
     for (const candidate of [links[0]!, notices[0]!]) {
       expect(candidate.source).toMatchObject({
         source: 'bangumi',
@@ -124,9 +124,12 @@ test('ordinary Bangumi import reviews and adopts cited TVAnime work evidence wit
       cover: { role: 'cover', creditLine: '(c) rights holder via Bangumi', takedownEligible: true },
     });
     expect(conversion.mediaImportIntents).toEqual([]);
-    expect(conversion.proposals.some((command) =>
-      command.op === 'propose' && ['schema:abstract', 'schema:image'].includes(command.statement.property.id),
-    )).toBe(false);
+    expect(
+      conversion.proposals.some(
+        (command) =>
+          command.op === 'propose' && ['schema:abstract', 'schema:image'].includes(command.statement.property.id),
+      ),
+    ).toBe(false);
 
     await acceptAndAdopt(cli, id, 'wdt:P973', links);
     await acceptAndAdopt(cli, id, 'schema:copyrightNotice', notices);
@@ -150,10 +153,14 @@ test('ordinary Bangumi import reviews and adopts cited TVAnime work evidence wit
     const changed = await cli.invoke(feed(subject(1)));
     expect(changed.code, JSON.stringify(changed)).toBe(0);
     const changedEvidence = evidenceCommands(commands(changed));
-    expect(changedEvidence.map((command) => ({
-      property: command.statement.property.id,
-      value: command.statement.value.type === 'value' ? command.statement.value.content : null,
-    })).sort((left, right) => `${left.property}:${left.value}`.localeCompare(`${right.property}:${right.value}`))).toEqual([
+    expect(
+      changedEvidence
+        .map((command) => ({
+          property: command.statement.property.id,
+          value: command.statement.value.type === 'value' ? command.statement.value.content : null,
+        }))
+        .sort((left, right) => `${left.property}:${left.value}`.localeCompare(`${right.property}:${right.value}`)),
+    ).toEqual([
       { property: 'schema:copyrightNotice', value: changedNotice },
       { property: 'wdt:P973', value: changedUrl },
       { property: 'wdt:P973', value: repairedUrl },

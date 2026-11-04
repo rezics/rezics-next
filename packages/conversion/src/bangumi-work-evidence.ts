@@ -1,7 +1,4 @@
-import {
-  bangumiTVAnimeWorkEvidenceFields,
-  type BangumiTVAnimeWorkEvidenceField,
-} from './bangumi-subject-profile.ts';
+import { bangumiTVAnimeWorkEvidenceFields, type BangumiTVAnimeWorkEvidenceField } from './bangumi-subject-profile.ts';
 
 export type BangumiWorkEvidence = Readonly<{
   property: 'wdt:P973' | 'schema:copyrightNotice';
@@ -23,7 +20,7 @@ export type BangumiWorkEvidenceFieldState = {
   overflow: boolean;
   readonly listValues: string[];
   plainValue?: string;
-}
+};
 
 export type BangumiWorkEvidenceDiagnostic = Readonly<{ pointer: string; code: string }>;
 export type BangumiWorkEvidenceOmit = (pointer: string, code: string) => void;

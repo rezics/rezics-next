@@ -113,7 +113,9 @@ function evidenceValues(commands: readonly BatchCommand[]) {
       property: command.statement.property.id,
       value: command.statement.value.type === 'value' ? command.statement.value.content : null,
     }))
-    .sort((left, right) => `${left.property}\u0000${left.value}`.localeCompare(`${right.property}\u0000${right.value}`));
+    .sort((left, right) =>
+      `${left.property}\u0000${left.value}`.localeCompare(`${right.property}\u0000${right.value}`),
+    );
 }
 
 test('selected-family Bangumi import proposes only cited TVAnime work evidence and refreshes its source-owned values', async () => {
@@ -142,10 +144,12 @@ test('selected-family Bangumi import proposes only cited TVAnime work evidence a
       { property: 'schema:copyrightNotice', value: notice },
       { property: 'wdt:P973', value: descriptiveUrl },
     ]);
-    expect(direct.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:url'))
-      .toBe(false);
-    expect(direct.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:sameAs'))
-      .toBe(false);
+    expect(
+      direct.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:url'),
+    ).toBe(false);
+    expect(
+      direct.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:sameAs'),
+    ).toBe(false);
     expect(direct.diagnostics).toContainEqual({ pointer: '/infobox/fields/3', code: 'invalid_descriptive_link' });
     expect(JSON.stringify(direct.diagnostics)).not.toContain(badLink);
     expect(direct.sourceMetadata).toEqual({
@@ -155,8 +159,12 @@ test('selected-family Bangumi import proposes only cited TVAnime work evidence a
     });
     expect(direct.coverAssets).toEqual([]);
     expect(direct.mediaImportIntents).toEqual([]);
-    expect(direct.proposals.some((command) => command.op === 'propose' && ['schema:abstract', 'schema:image'].includes(command.statement.property.id)))
-      .toBe(false);
+    expect(
+      direct.proposals.some(
+        (command) =>
+          command.op === 'propose' && ['schema:abstract', 'schema:image'].includes(command.statement.property.id),
+      ),
+    ).toBe(false);
 
     const first = await run(selected);
     expect(first.runs.bangumi?.status).toBe('committed');

@@ -34,11 +34,14 @@ export type TelevisionRunMapping = {
 };
 
 /** Type-2 TVAnime original-run start/end and exact episode total only. */
-export function bangumiTelevisionRun(record: {
-  readonly type: number;
-  readonly infobox?: string;
-  readonly date?: string;
-}, scannedFields?: readonly BangumiTelevisionRunInfoboxField[]): TelevisionRunMapping {
+export function bangumiTelevisionRun(
+  record: {
+    readonly type: number;
+    readonly infobox?: string;
+    readonly date?: string;
+  },
+  scannedFields?: readonly BangumiTelevisionRunInfoboxField[],
+): TelevisionRunMapping {
   if (record.type !== 2 || !isBangumiTvAnimeInfobox(record.infobox))
     return { handledInfobox: false, facts: [], diagnostics: [] };
   const fields = scannedFields ?? parseInfoboxScalars(record.infobox!);
@@ -143,7 +146,10 @@ function parseInfoboxScalars(infobox: string): BangumiTelevisionRunInfoboxField[
   return fields;
 }
 
-function first(fields: readonly BangumiTelevisionRunInfoboxField[], key: string): BangumiTelevisionRunInfoboxField | undefined {
+function first(
+  fields: readonly BangumiTelevisionRunInfoboxField[],
+  key: string,
+): BangumiTelevisionRunInfoboxField | undefined {
   return fields.find((field) => field.key === key);
 }
 

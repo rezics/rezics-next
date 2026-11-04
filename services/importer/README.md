@@ -2275,6 +2275,7 @@ candidate review, adoption and current-read flow. No additional seed publisher o
 identity lookup is involved. The importer keeps the exact Bangumi subject alias
 and key, unversioned record state where no provider revision exists, normalized
 digest and acknowledged native UUID.
+
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
 - Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
@@ -2550,6 +2551,7 @@ candidate review, adoption and current-read flow. No additional seed publisher o
 identity lookup is involved. The importer keeps the exact Bangumi subject alias
 and key, unversioned record state where no provider revision exists, normalized
 digest and acknowledged native UUID.
+
 - Touches: one selected source record, at most 24 name statements and 16 bounded
   omission diagnostics; each name carries its exact Bangumi subject citation.
 - Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
