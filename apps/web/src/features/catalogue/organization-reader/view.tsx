@@ -1,74 +1,31 @@
 import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { ReadingDisclosureScope } from '@rezics/ui/cover';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
-import { CandidateValue } from '../../pages/data';
-import { ExternalValue, PlainLink, type Snak, type LinkProps, type PageLink } from '../../pages/shared';
-import { connectionReturnHref, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
-import { useSubjectCommunityReading } from '../../pages/subject-community-lifetime';
+import { defaultReader, type Reader } from '../../../subject/reader';
+import { ExternalValue, PlainLink, spoilerLevel, type LinkProps, type PageLink } from '../../pages/shared';
+import { SpoilerGate } from '../../pages/values';
+import { connectionReturnHref, subjectVisitReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { catalogueEntries } from '../catalogue-entry';
 import { ProfileSourceList } from '../music-reader-view';
 import { profileSourceRecords } from '../music-reader';
 import { organizationHistory, type OrganizationCurrent, type OrganizationFact } from './index';
+import { useOrganizationEpisode, type OrganizationEpisode } from './reading/episode';
+import { OrganizationValue, organizationControl as control } from './reading/value';
 
-const control =
-  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 text-left underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring [overflow-wrap:anywhere]';
+type Selection = {
+  episode: OrganizationEpisode;
+  id: string;
+  property: string;
+  opener: HTMLButtonElement;
+  keyboard: boolean;
+};
+type Presentation = { read: OrganizationCurrent; locale: string; documents?: unknown; link: PageLink };
 
-/** A missing related summary cannot authorize a destination; the original identity never follows a redirect. */
-function EvidenceValue({
-  part,
-  read,
-  locale,
-  link,
-}: {
-  part: Snak & { id?: string };
-  read: OrganizationCurrent;
-  locale: string;
-  link: PageLink;
-}) {
-  const o = { locale: locale as never };
-  const definition = read.release.properties[part.property.id];
-  if (!definition || definition.datatype !== part.property.data_type)
-    return <span>{m.candidate_value_unavailable({}, o)}</span>;
-  if (part.value.type === 'value' && part.property.data_type === 'wikibase-item') {
-    const id = part.value.content;
-    const related = read.public.related;
-    if (typeof id !== 'string' || !Object.hasOwn(related, id) || !related[id])
-      return <span>{m.people_biography_unreadable({}, o)}</span>;
-    const target = pickText(related[id].labels, locale);
-    const Link = link;
-    return (
-      <Link
-        href={subjectHref({ id, label: target.text }, locale).href}
-        lang={target.lang ?? undefined}
-        className={control}
-      >
-        {target.text || m.subject_value_unlabelled({}, o)}
-      </Link>
-    );
-  }
-  return (
-    <CandidateValue
-      snak={part}
-      related={read.public.related}
-      subject={read.public.subject.id}
-      locale={locale}
-      link={link}
-    />
-  );
-}
-
-function Evidence({
-  fact,
-  read,
-  locale,
-  link,
-}: {
-  fact: OrganizationFact;
-  read: OrganizationCurrent;
-  locale: string;
-  link: PageLink;
-}) {
+/** Evidence is always attached to the inspected original assertion, never a similarly titled row. */
+function Evidence({ fact, presentation }: { fact: OrganizationFact; presentation: Presentation }) {
+  const { read, locale } = presentation;
   const o = { locale: locale as never };
   const label = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale);
   return (
@@ -82,20 +39,23 @@ function Evidence({
             : m.changes_rank_deprecated({}, o)}
       </p>
       {!!fact.qualifiers.length && (
-        <dl className="space-y-2">
-          {fact.qualifiers.map((part, index) => (
-            <div key={index}>
-              <dt lang={label(part.property.id).lang ?? undefined} className="text-sm text-muted-foreground">
-                {label(part.property.id).text || m.candidate_value_unavailable({}, o)}
-              </dt>
-              <dd>
-                <EvidenceValue part={part} read={read} locale={locale} link={link} />
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <section className="space-y-2" aria-label={m.correction_qualifiers({}, o)}>
+          <h5 className="font-semibold">{m.correction_qualifiers({}, o)}</h5>
+          <dl className="space-y-2">
+            {fact.qualifiers.map((part, index) => (
+              <div key={index}>
+                <dt lang={label(part.property.id).lang ?? undefined} className="text-sm text-muted-foreground">
+                  {label(part.property.id).text || m.candidate_value_unavailable({}, o)}
+                </dt>
+                <dd>
+                  <OrganizationValue part={part} {...presentation} />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
       )}
-      <h4 className="font-semibold">{m.correction_references({}, o)}</h4>
+      <h5 className="font-semibold">{m.correction_references({}, o)}</h5>
       {!fact.references.length && <p>{m.organization_reader_no_citation({}, o)}</p>}
       <ol className="space-y-3">
         {fact.references.map((reference, index) => (
@@ -107,7 +67,7 @@ function Evidence({
                     {label(part.property.id).text || m.candidate_value_unavailable({}, o)}
                   </dt>
                   <dd>
-                    <EvidenceValue part={part} read={read} locale={locale} link={link} />
+                    <OrganizationValue part={part} {...presentation} />
                   </dd>
                 </div>
               ))}
@@ -118,7 +78,7 @@ function Evidence({
       <details>
         <summary className={control}>{m.organization_reader_identity({}, o)}</summary>
         <code className="block break-all">{fact.id}</code>
-        <code className="block break-all">{JSON.stringify(fact.rezics)}</code>
+        <p>{m.changes_revision({ revision: fact.rezics.revision }, o)}</p>
       </details>
     </div>
   );
@@ -131,6 +91,10 @@ export function OrganizationReader({
   reader = null,
   link = PlainLink,
   realm,
+  documents,
+  preferences = defaultReader,
+  currentHref,
+  returnTo,
 }: {
   read: OrganizationCurrent;
   locale: string;
@@ -138,52 +102,155 @@ export function OrganizationReader({
   reader?: string | null;
   link?: PageLink;
   realm?: string | undefined;
+  documents?: unknown;
+  preferences?: Reader;
+  currentHref?: string | undefined;
+  returnTo?: string | undefined;
 }) {
-  const observationSource = useMemo(() => ({ source, read }), [source, read]);
-  const observation = useSubjectCommunityReading({
-    source: observationSource,
-    descriptor: JSON.stringify([read.public.subject.id, locale, realm]),
+  const observationSource = useMemo(() => ({ source, read, documents }), [source, read, documents]);
+  const { episode, available } = useOrganizationEpisode(
+    observationSource,
+    JSON.stringify([
+      read.public.subject.id,
+      read.public.subject.context,
+      locale,
+      realm,
+      preferences.spoilerLevel,
+      preferences.suitability,
+    ]),
     reader,
-  });
+  );
+  const [selected, setSelected] = useState<Selection>();
+  const [changed, setChanged] = useState(false);
+  if (selected && (selected.episode !== episode || !available)) {
+    setSelected(undefined);
+    setChanged(true);
+  }
   const heading = useRef<HTMLHeadingElement>(null);
-  const region = useRef<HTMLElement>(null);
-  const focused = useRef(false);
-  const previous = useRef(observation.key);
+  const recovery = useRef<HTMLButtonElement>(null);
+  const focused = useRef<HTMLElement | undefined>(undefined);
   useLayoutEffect(() => {
-    if ((!observation.available || previous.current !== observation.key) && focused.current) {
-      heading.current?.focus();
-      focused.current = false;
+    if (focused.current && !focused.current.isConnected && document.activeElement === document.body) {
+      (changed && available ? recovery.current : heading.current)?.focus();
+      focused.current = undefined;
     }
-    previous.current = observation.key;
-  }, [observation.available, observation.key]);
+  });
+  const o = { locale: locale as never };
+  const title = pickText(read.public.subject.labels, locale);
+  const href = currentHref ?? subjectHref({ id: read.public.subject.id, label: title.text }, locale).href;
   return (
     <section
-      ref={region}
       data-slot="organization-reader"
       className="min-w-0 space-y-5 [overflow-wrap:anywhere] [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center"
-      onFocusCapture={() => {
-        focused.current = true;
+      onFocusCapture={(event) => {
+        focused.current = event.target as HTMLElement;
       }}
       onBlurCapture={(event) => {
-        focused.current = !!event.relatedTarget && !!region.current?.contains(event.relatedTarget);
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) focused.current = undefined;
       }}
     >
-      <h2 ref={heading} tabIndex={-1} className="text-xl font-semibold">
-        {m.organization_reader_title({}, { locale: locale as never })}
+      <h2
+        ref={heading}
+        tabIndex={-1}
+        className="text-xl font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        {m.organization_reader_title({}, o)}
       </h2>
-      {observation.available ? (
-        <OrganizationFacts
-          key={observation.key}
-          read={read}
-          locale={locale}
-          link={link}
-          realm={realm}
-          current={observation.isCurrent}
-        />
+      {available ? (
+        <ReadingDisclosureScope.Provider value={`organization:${episode.key}`}>
+          {changed && (
+            <div className="space-y-2" role="status">
+              <p>{m.organization_reader_changed({}, o)}</p>
+              <button
+                ref={recovery}
+                type="button"
+                className={control}
+                onClick={() => {
+                  if (!episode.current()) return;
+                  setChanged(false);
+                  heading.current?.focus();
+                }}
+              >
+                {m.organization_reader_return({}, o)}
+              </button>
+            </div>
+          )}
+          <OrganizationFacts
+            key={episode.key}
+            read={read}
+            documents={documents}
+            locale={locale}
+            link={link}
+            realm={realm}
+            episode={episode}
+            preferences={preferences}
+            selected={selected}
+            select={(value) => {
+              if (episode.current()) {
+                setSelected(value);
+                setChanged(false);
+              }
+            }}
+            close={() => {
+              if (!episode.current()) return;
+              const opener = selected?.opener;
+              setSelected(undefined);
+              (opener?.isConnected ? opener : heading.current)?.focus();
+            }}
+            currentHref={href}
+            returnTo={returnTo}
+          />
+        </ReadingDisclosureScope.Provider>
       ) : (
-        <p role="status">{m.organization_reader_unavailable({}, { locale: locale as never })}</p>
+        <div className="space-y-2">
+          <p role="status">{m.organization_reader_unavailable({}, o)}</p>
+          <a href={href} className={control}>
+            {m.organization_reader_refresh({}, o)}
+          </a>
+        </div>
       )}
     </section>
+  );
+}
+
+function Inspection({
+  fact,
+  selected,
+  presentation,
+  correction,
+  close,
+  current,
+}: {
+  fact: OrganizationFact;
+  selected: Selection;
+  presentation: Presentation;
+  correction: string;
+  close: () => void;
+  current: () => boolean;
+}) {
+  const region = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (selected.keyboard && current()) region.current?.focus();
+  }, [selected]);
+  const o = { locale: presentation.locale as never };
+  const Link = presentation.link;
+  return (
+    <div
+      ref={region}
+      tabIndex={-1}
+      role="region"
+      aria-label={m.organization_reader_inspect({}, o)}
+      className="min-w-0 space-y-3 rounded border p-4 focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <Evidence fact={fact} presentation={presentation} />
+      <p className="text-sm text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
+      <Link href={correction} className={control}>
+        {m.facts_title({}, o)}
+      </Link>
+      <button type="button" className={control} onClick={close}>
+        {m.organization_reader_return({}, o)}
+      </button>
+    </div>
   );
 }
 
@@ -192,56 +259,62 @@ function OrganizationFacts({
   locale,
   link: Link,
   realm,
-  current,
+  episode,
+  documents,
+  preferences,
+  selected,
+  select,
+  close,
+  currentHref,
+  returnTo,
 }: {
   read: OrganizationCurrent;
   locale: string;
   link: PageLink;
   realm?: string | undefined;
-  current: () => boolean;
+  episode: OrganizationEpisode;
+  documents?: unknown;
+  preferences: Reader;
+  selected: Selection | undefined;
+  select: (selection: Selection) => void;
+  close: () => void;
+  currentHref: string;
+  returnTo?: string | undefined;
 }) {
   const o = { locale: locale as never };
-  const model = organizationHistory(read, locale);
+  const model = useMemo(() => organizationHistory(read, locale), [read, locale]);
   const subject = read.public.subject;
   const title = pickText(subject.labels, locale);
-  const origin = connectionReturnHref(subject.id, title.text, locale, realm);
-  const href = subjectHref({ id: subject.id, label: title.text }, locale).href;
-  const [selected, setSelected] = useState<{ fact: OrganizationFact; opener: HTMLButtonElement }>();
-  const detail = useRef<HTMLDivElement>(null);
-  const keyboard = useRef(false);
-  useLayoutEffect(() => {
-    if (selected && keyboard.current && current()) detail.current?.focus();
-  }, [selected]);
+  // The installed consumer only understands connections here. Do not invent a statement query/hash.
+  const origin = subjectVisitReturn(returnTo, locale) ?? connectionReturnHref(subject.id, title.text, locale, realm);
   const CurrentLink = useMemo(
     () =>
       function CurrentLink(props: LinkProps) {
         return (
           <span
             onClickCapture={(event) => {
-              if (!current()) event.preventDefault();
+              if (!episode.current()) event.preventDefault();
             }}
           >
             <Link {...props} href={withSubjectVisitReturn(props.href, origin, locale)} />
           </span>
         );
       },
-    [Link, origin, locale, current],
+    [Link, episode, origin, locale],
   );
+  const presentation = { read, documents, locale, link: CurrentLink };
   if (!model) return <p role="status">{m.organization_reader_unavailable({}, o)}</p>;
   const open = (fact: OrganizationFact, event: MouseEvent<HTMLButtonElement>) => {
-    if (!current()) return;
-    keyboard.current = event.detail === 0;
-    setSelected({ fact, opener: event.currentTarget });
+    if (episode.current())
+      select({
+        episode,
+        id: fact.id,
+        property: fact.property.id,
+        opener: event.currentTarget,
+        keyboard: event.detail === 0,
+      });
   };
-  const close = () => {
-    if (!current()) return;
-    const opener = selected?.opener;
-    setSelected(undefined);
-    if (opener?.isConnected) opener.focus();
-  };
-  const correction = selected
-    ? `${href}/edit?${new URLSearchParams({ property: selected.fact.property.id, statement: selected.fact.id })}`
-    : catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href;
+  const sources = profileSourceRecords(subject);
   return (
     <>
       <p lang={model.grain.lang ?? undefined} className="font-medium">
@@ -286,45 +359,61 @@ function OrganizationFacts({
             <p className="text-sm text-muted-foreground">{m.organization_reader_direction({}, o)}</p>
           )}
           {!field.facts.length && (
-            <p>{field.unavailable ? m.candidate_value_unavailable({}, o) : m.people_biography_absent({}, o)}</p>
+            <p>
+              {field.unavailable
+                ? m.candidate_value_unavailable({}, o)
+                : subject.resolution[field.id] === 'suppressed'
+                  ? m.people_facts_suppressed({}, o)
+                  : subject.resolution[field.id] === 'unresolved'
+                    ? m.people_facts_unresolved({}, o)
+                    : m.people_biography_absent({}, o)}
+            </p>
           )}
           <ul className="space-y-3">
-            {field.facts.map((fact) => (
-              <li key={fact.id} className="min-w-0 space-y-1">
-                <EvidenceValue part={fact} read={read} locale={locale} link={CurrentLink} />
-                <button
-                  type="button"
-                  className={control + ' block text-sm'}
-                  onClick={(event) => open(fact, event)}
-                  aria-expanded={selected?.fact === fact}
-                >
-                  {m.organization_reader_inspect({}, o)}
-                </button>
-              </li>
-            ))}
+            {field.facts.map((fact) => {
+              const inspecting =
+                selected?.episode === episode && selected.id === fact.id && selected.property === field.id;
+              const content = (
+                <div className="min-w-0 space-y-2">
+                  <OrganizationValue part={fact} {...presentation} />
+                  <button
+                    type="button"
+                    className={control + ' block text-sm'}
+                    onClick={(event) => open(fact, event)}
+                    aria-expanded={inspecting}
+                  >
+                    {m.organization_reader_inspect({}, o)}
+                  </button>
+                  {inspecting && (
+                    <Inspection
+                      fact={fact}
+                      selected={selected}
+                      presentation={presentation}
+                      correction={`${catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}?${new URLSearchParams({ property: fact.property.id, statement: fact.id })}`}
+                      close={close}
+                      current={episode.current}
+                    />
+                  )}
+                </div>
+              );
+              return (
+                <li key={fact.id} className="min-w-0 space-y-1">
+                  {spoilerLevel(fact) > preferences.spoilerLevel ? (
+                    <SpoilerGate label={m.subject_spoiler_show({}, o)} hideLabel={m.subject_spoiler_hide({}, o)}>
+                      {content}
+                    </SpoilerGate>
+                  ) : (
+                    content
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ))}
       {!model.fields.length && <p>{m.organization_reader_no_fields({}, o)}</p>}
       {model.limited && <p role="status">{m.organization_reader_bounded({}, o)}</p>}
-      {selected && (
-        <div
-          ref={detail}
-          tabIndex={-1}
-          role="region"
-          aria-label={m.organization_reader_inspect({}, o)}
-          className="min-w-0 space-y-3 rounded border p-4"
-        >
-          <EvidenceValue part={selected.fact} read={read} locale={locale} link={CurrentLink} />
-          <Evidence fact={selected.fact} read={read} locale={locale} link={CurrentLink} />
-          <CurrentLink href={correction} className={control}>
-            {m.facts_title({}, o)}
-          </CurrentLink>
-          <button type="button" className={control} onClick={close}>
-            {m.organization_reader_return({}, o)}
-          </button>
-        </div>
-      )}
+      <p className="text-sm text-muted-foreground">{m.organization_reader_navigation({}, o)}</p>
       <nav className="flex flex-wrap gap-4" aria-label={m.facts_title({}, o)}>
         <CurrentLink
           href={catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}
@@ -332,15 +421,21 @@ function OrganizationFacts({
         >
           {m.facts_title({}, o)}
         </CurrentLink>
-        <CurrentLink href={`${href}/relations`} className={control}>
+        <CurrentLink
+          href={`${currentHref.split('?')[0]}/relations${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
+          className={control}
+        >
           {m.subject_relations({}, o)}
         </CurrentLink>
-        <CurrentLink href={`${href}/works`} className={control}>
+        <CurrentLink
+          href={`${currentHref.split('?')[0]}/works${realm ? `?${new URLSearchParams({ realm })}` : ''}`}
+          className={control}
+        >
           {m.subject_works({}, o)}
         </CurrentLink>
       </nav>
-      <ProfileSourceList sources={profileSourceRecords(subject)} locale={locale} />
-      {profileSourceRecords(subject)
+      <ProfileSourceList sources={sources} locale={locale} />
+      {sources
         .filter((record) => record.licence)
         .map((record) => (
           <p key={`${record.name}:${record.url}`} className="text-sm">

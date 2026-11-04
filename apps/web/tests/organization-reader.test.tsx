@@ -151,7 +151,8 @@ test('history inspection follows the exact disclosed identity, returns focus, an
     await settle(() => opener.click());
     await settle(() => client.setQueryData(['exposure', 'viewer'], { revision: 2 }));
     expect(host.textContent).toContain(m.organization_reader_unavailable());
-    expect(host.querySelectorAll('a,button')).toHaveLength(0);
+    expect(host.querySelectorAll('button')).toHaveLength(0);
+    expect([...host.querySelectorAll('a')].map((link) => link.textContent)).toEqual([m.organization_reader_refresh()]);
     expect(correction.isConnected).toBe(false);
     source = {};
     await show();
@@ -162,7 +163,8 @@ test('history inspection follows the exact disclosed identity, returns focus, an
     expect(host.textContent).toContain(m.people_biography_unreadable());
     expect([...host.querySelectorAll('a')].some((link) => link.href.includes(target))).toBe(false);
     await settle(() => client.setQueryData(['session'], { state: 'signed-out', csrfToken: null }));
-    expect(host.querySelectorAll('a,button')).toHaveLength(0);
+    expect(host.querySelectorAll('button')).toHaveLength(0);
+    expect([...host.querySelectorAll('a')].map((link) => link.textContent)).toEqual([m.organization_reader_refresh()]);
   } finally {
     await act(async () => root.unmount());
     client.clear();
@@ -237,4 +239,55 @@ test('delayed profile reads cannot cross a source, locale, authority or page lif
       else Reflect.deleteProperty(globalThis, key);
     }
   }
+});
+
+test('authorized historical documents follow exact statement, identity, digest, language and current selected-document policy', async () => {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const { personReaderExample } = await import('../src/features/catalogue/person-reader/examples');
+  const { read } = fixture();
+  const example = personReaderExample();
+  const statement = example.read.subject.statements['schema:abstract']![0]!;
+  read.public.subject.statements['schema:abstract'] = [statement];
+  const documents = structuredClone(example.documents) as Record<string, Record<string, unknown>>;
+  documents[statement.id]!.subjectId = read.public.subject.id;
+  const render = (authorized: unknown = documents) =>
+    renderToStaticMarkup(<OrganizationReader read={read} locale="en" documents={authorized} />);
+  expect(render()).toContain('Mira directs independent films.');
+  expect(render()).toContain('lang="en"');
+  for (const [key, value] of Object.entries({
+    subjectId: target,
+    candidateId: target,
+    id: target,
+    digest: 'b'.repeat(64),
+    language: 'ja',
+    availability: 'unavailable',
+  })) {
+    const mismatch = structuredClone(documents);
+    mismatch[statement.id]![key] = value;
+    expect(render(mismatch)).not.toContain('Mira directs independent films.');
+  }
+  expect(render({})).not.toContain('Mira directs independent films.');
+  const alternative = { ...statement, id: target, rank: 'preferred' as const };
+  read.public.subject.statements['schema:abstract'] = [alternative, statement];
+  expect(render()).not.toContain('Mira directs independent films.');
+  delete read.public.related['00000000-0000-4000-8000-00000000d301'];
+  expect(render()).not.toContain('00000000-0000-4000-8000-00000000d301');
+  statement.qualifiers = [
+    {
+      property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+      value: { type: 'value', content: { amount: '+2', unit: '1' } },
+    },
+  ];
+  read.public.subject.statements['schema:abstract'] = [statement];
+  expect(render()).not.toContain('Mira directs independent films.');
+  expect(
+    renderToStaticMarkup(
+      <OrganizationReader
+        read={read}
+        locale="en"
+        documents={documents}
+        preferences={{ spoilerLevel: 2, suitability: 'blur' }}
+      />,
+    ),
+  ).toContain('Mira directs independent films.');
 });

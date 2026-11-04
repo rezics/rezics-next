@@ -1021,6 +1021,12 @@ export function SubjectPage({
                 reader={page.requestedReader ?? null}
                 realm={realm}
                 link={ContextLink}
+                public={composedSubjectRead(read)}
+                release={page.catalogue?.state === 'released' ? page.catalogue.definitions : undefined}
+                documents={read.documents}
+                preferences={reader ?? defaultReader}
+                currentHref={workReturn}
+                returnTo={visitReturn}
               />
             ) : null}
             <SubjectCommunityRefreshContext.Provider value={refreshCommunityAdvice}>
