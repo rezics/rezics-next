@@ -71,6 +71,8 @@ Admit heavy checks through shared resource controls. Slice admission counts inac
 reclaim them once through `memory.reclaim` before treating a host as full; a missing or unwritable reclaim file keeps
 the previous probe and does not fail the run. A check waiting for a slot is queued; let it run. Park workers until completion or meaningful output instead of
 waking the model for “still running”. Worker admission and heavy-check admission are separate controls.
+Remote-check stderr splits Git snapshot staging, GitHub fetch and rsync; overlay rsync after a successful fetch is
+the expected upload. Remaining command-time cost is `bun install` and the admitted command.
 Diagnostic reruns remain visible. A load-sensitive diagnostic rerun may address an actual load signal in a mixed
 failure; cleanup failures are not eligible. Do not scale security TTLs, explicit deadlines or work budgets to hide
 failures. A proposed test deadline multiplier is not evidence of deployment. Distinguish a reproducible

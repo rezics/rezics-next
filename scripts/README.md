@@ -429,8 +429,11 @@ Admission retries races against other callers. The default probe interval is fiv
    `HEAD` and `dev` to their merge base. It does not transfer `.git`, the mutable index, configuration, remotes,
    credentials, hooks, reflogs or object alternates. A
    reusable immutable pack is accepted only when its object format, `HEAD`, `dev` base, shallow boundary, index tree
-   and manifest/pack integrity match. Snapshot staging reports artifact bytes and the rsync upload reports its
-   duration and bytes sent; the per-run local staging directory is removed after transfer, including on failure.
+   and manifest/pack integrity match. Snapshot staging reports local duration; GitHub fetch is a separate host line;
+   rsync reports duration, bytes sent, file count and mode (`overlay after GitHub fetch`, `checksum copy-dest`, or
+   `full tree`). The per-run local staging directory is removed after transfer, including on failure.
+   Host fetch serializes only GitHub fetch and ref verify on the shared store lock; `checkout-index` is per-run, and
+   daily store gc takes a second short lock. Overlay rsync then sends only working edits and untracked inputs.
    GitHub publication retries the same candidate/ref once after 250 ms within one absolute preparation deadline
    (the configured 900-second default). Each failed push reports its exit/signal status and credential-redacted stderr;
    final failure retains full snapshot upload. Local authentication never enters a manifest or host checkout.
@@ -627,12 +630,16 @@ containers with that attempt label. Remote runs do not receive worker identity a
 A worker check reruns once under the same admission when every reported test failure is HTTP 503 `deadline_exceeded` or
 `overloaded`, retrying only attributed failing files or the whole command when attribution is unavailable.
 
-Stderr reports `remote-check: slot wait`, `rsync`, `bun install` and `command`, each with seconds and host name.
+Stderr reports `remote-check: slot wait`, `Git snapshot staging`, `GitHub fetch`, `rsync`, `bun install` and `command`, each with seconds and host name.
 Set `REMOTE_CHECK_PRIORITY=landing` for a landing check to wait ahead of multi-slot and ordinary runs, while gates keep first priority.
 `.temp/goal/task-priority` is the control plane's per-worktree priority file (`critical` or `normal`), read at every worker check; the per-run record makes any other use visible.
-The `rsync` line also includes the bytes sent from rsync statistics. If zstd is unavailable, the run reports that it
-uses rsync's default compression. Returned outputs add `rsync back`. Slot wait measures admission after upload; the
-`rsync` line measures upload separately.
+The `rsync` line also includes the bytes sent from rsync statistics, the uploaded file count and the transfer mode.
+If zstd is unavailable, the run reports that it uses rsync's default compression. Returned outputs add `rsync back`.
+Slot wait measures admission after upload; Git snapshot staging is local publication; GitHub fetch is the host store
+fetch; the `rsync` line measures the file transfer. Overlay rsync after a successful fetch is the expected path and is
+a few seconds; remaining check time is `bun install` and the admitted command (typecheck owner).
+Decision: after cache-aware admission, keep old and new upload populations separate; do not treat source integration
+as remote deployment. Hosts have no reclaim timer; admission reclaim stays one-shot per wait.
 Rsync exit code 24 is accepted for uploads and returned outputs, with the number of vanished files logged.
 
 Uploads and returned-output copies have a 120-second no-progress limit by default, configured with

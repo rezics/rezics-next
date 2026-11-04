@@ -5403,9 +5403,12 @@ function reportVanishedFiles(direction: 'to' | 'from', host: string, count: numb
   console.error(`remote-check: rsync ${direction} ${host}: ${count} files vanished during transfer`);
 }
 
-function reportDuration(phase: string, started: number, host: string, bytesSent?: number): void {
+function reportDuration(phase: string, started: number, host: string, bytesSent?: number, detail?: string): void {
   const bytes = bytesSent === undefined ? '' : `, ${bytesSent} bytes sent`;
-  console.error(`remote-check: ${phase} ${((performance.now() - started) / 1000).toFixed(3)} s on ${host}${bytes}`);
+  const extra = detail ? `, ${detail}` : '';
+  console.error(
+    `remote-check: ${phase} ${((performance.now() - started) / 1000).toFixed(3)} s on ${host}${bytes}${extra}`,
+  );
 }
 
 function reportCancelledSlotWait(started: number): void {
@@ -5860,9 +5863,11 @@ async function uploadRun(
           throw error;
         }
       }
+      reportDuration('Git snapshot staging', gitStageStarted, host.name);
       let manifestPath = transfer.stage.manifest;
       const publication = JSON.parse(readFileSync(manifestPath, 'utf8')) as Partial<CheckGitPublication>;
       if (publication.remote) {
+        const fetchStarted = performance.now();
         try {
           const result = await boundedSsh(
             host,
@@ -5899,6 +5904,8 @@ async function uploadRun(
             transferLimit,
           );
           if (cleared.code !== 0) throw new RemoteTransportError(host.name, 'Git fallback cleanup', cleared.code);
+        } finally {
+          reportDuration('GitHub fetch', fetchStarted, host.name);
         }
       }
       if (!fetchedGit) {
@@ -5914,7 +5921,6 @@ async function uploadRun(
         const artifactBytes = statSync(manifestPath).size + statSync(packPath).size;
         console.error(`remote-check: staged native Git snapshot ${artifactBytes} bytes on ${host.name}`);
       }
-      reportDuration('Git snapshot staging', gitStageStarted, host.name);
     }
     const useZstd = base.zstd && localRsyncSupportsZstd();
     if (!useZstd) console.error(`remote-check: rsync zstd unavailable on ${host.name}; using default compression`);
@@ -5946,7 +5952,12 @@ async function uploadRun(
       bytesSent,
       vanishedFiles,
     } = await finishedRsync(sync, signal, host, 'workspace upload', transferLimit);
-    reportDuration('rsync', rsyncStarted, host.name, bytesSent);
+    const rsyncMode = fetchedGit
+      ? 'overlay after GitHub fetch'
+      : base.base
+        ? 'checksum copy-dest'
+        : 'full tree';
+    reportDuration('rsync', rsyncStarted, host.name, bytesSent, `${uploadFiles.length} files, ${rsyncMode}`);
     if (signal.aborted) throw new Aborted();
     if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
     if (synced === 24) reportVanishedFiles('to', host.name, vanishedFiles);

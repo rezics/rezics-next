@@ -3178,6 +3178,7 @@ test('the workspace upload compresses with zstd and sends only what differs from
   expect(args).toContain('--stats');
   expect(result.stderr).toContain('remote-check: rsync 0.');
   expect(result.stderr).toContain('1234 bytes sent');
+  expect(result.stderr).toContain('checksum copy-dest');
 });
 
 test('a fetched staged tree needs only working edits and untracked inputs, with deleted paths removed', () => {
@@ -3233,6 +3234,10 @@ test.each([
       } else expect(files.some((file) => file.endsWith('/snapshot.pack'))).toBe(true);
     }
     expect(result.stderr.match(/check-git: Writing objects: 100%/g)).toHaveLength(1);
+    expect(result.stderr).toMatch(/remote-check: Git snapshot staging \d+\.\d+ s on a/);
+    expect(result.stderr).toMatch(/remote-check: GitHub fetch \d+\.\d+ s on a/);
+    if (gitFetchExit === 0) expect(result.stderr).toContain('overlay after GitHub fetch');
+    else expect(result.stderr).toContain('full tree');
     const remaining = git('--git-dir', origin, 'for-each-ref', '--format=%(refname)', 'refs/checks/').stdout.trim();
     expect(remaining.length > 0).toBe(rejectDelete);
     if (rejectDelete) expect(result.stderr).toContain('cleanup refused');
@@ -3263,6 +3268,7 @@ test("a run whose upload finds no base on the host uploads the whole workspace a
   expect(args).not.toContain('--checksum');
   expect(args.some((argument) => argument.startsWith('--copy-dest='))).toBe(false);
   expect((upload.files as string[]).sort()).toEqual(expected);
+  expect(result.stderr).toContain('full tree');
   expect(seen.find((event) => event.kind === 'run')!.script).toContain('"$bun" install --frozen-lockfile');
   expect(seen.find((event) => event.kind === 'run')!.script).toContain('REMOTE_CHECK_BASE_REFRESH');
 });

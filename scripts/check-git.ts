@@ -46,7 +46,7 @@ function shell(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-/** The store lock covers fetch, checkout and age pruning, including live runs' alternate objects. */
+/** Fetch and ref verify take the store lock; checkout is per-run; daily gc takes a second short lock. */
 export function fetchCheckGitScript(
   publication: CheckGitPublication,
   checkout: string,
@@ -62,17 +62,39 @@ export function fetchCheckGitScript(
     throw new Error('check-git: invalid published snapshot');
   const run = basename(checkout);
   if (!/^[a-zA-Z0-9-]+$/.test(run)) throw new Error('check-git: invalid run identity');
-  const body = `set -eu
+  const storePath = resolve(store);
+  const rootPath = resolve(checkout);
+  const lock = `${storePath}.lock`;
+  const fetchBody = `set -eu
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
-store=${shell(resolve(store))}
-root=${shell(resolve(checkout))}
+store=${shell(storePath)}
 if [ ! -d "$store" ]; then git init --bare --quiet --template= --object-format=${objectFormat} "$store"; fi
 git --git-dir="$store" -c gc.auto=0 fetch --no-tags --no-write-fetch-head ${shell(origin)} ${shell(`+${remote.ref}:refs/check-runs/${run}`)}
 test "$(git --git-dir="$store" rev-parse ${shell(`refs/check-runs/${run}`)})" = ${shell(remote.commit)}
 test "$(git --git-dir="$store" rev-parse ${shell(`${remote.commit}^{tree}`)})" = ${shell(indexTree)}
 git --git-dir="$store" cat-file -e ${shell(`${head}^{commit}`)}
 ${dev ? `git --git-dir="$store" cat-file -e ${shell(`${dev}^{commit}`)}` : ''}
-mkdir -p "$(dirname "$root")"
+`;
+  const gcBody = `set -eu
+store=${shell(storePath)}
+root=${shell(rootPath)}
+if [ ! -f "$store/gc.timestamp" ] || [ "$(date +%s)" -gt "$(($(stat -c %Y "$store/gc.timestamp" 2>/dev/null || echo 0) + 86400))" ]; then
+ (
+  git --git-dir="$store" for-each-ref --format='%(refname)' refs/check-runs/ | while read -r ref; do
+    if [ ! -d "$(dirname "$root")/\${ref##*/}" ]; then git --git-dir="$store" update-ref -d "$ref"; fi
+  done
+  git --git-dir="$store" gc --quiet --prune=7.days.ago
+  touch "$store/gc.timestamp"
+ )
+fi
+`;
+  return `# REMOTE_CHECK_GITHUB_FETCH
+set -eu
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_TERMINAL_PROMPT=0
+store=${shell(storePath)}
+root=${shell(rootPath)}
+mkdir -p ${shell(dirname(storePath))} "$(dirname "$root")"
+flock -x ${shell(lock)} sh -c ${shell(fetchBody)}
 stage=$(mktemp -d "$root.fetch-XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 git init --quiet --template= --object-format=${objectFormat} "$stage"
@@ -91,18 +113,9 @@ ${dev ? `test "$(git -C "$stage" merge-base HEAD dev)" = ${shell(shallow)}` : ''
 mkdir -p "$stage/.git/info"
 printf '%s\\n' '/.alive' '/.bun-install-complete' '/.remote-check-slot-count' '/bun-runtime-transpiler-cache/' '/command-phases.tsv' '/command-started' '/exit-status' >> "$stage/.git/info/exclude"
 mv -T -- "$stage" "$root"
-# Completed runs lose their pins; a seven-day grace period retains reusable objects between runs.
-if [ ! -f "$store/gc.timestamp" ] || [ "$(date +%s)" -gt "$(($(stat -c %Y "$store/gc.timestamp" 2>/dev/null || echo 0) + 86400))" ]; then
- (
-  git --git-dir="$store" for-each-ref --format='%(refname)' refs/check-runs/ | while read -r ref; do
-    if [ ! -d "$(dirname "$root")/\${ref##*/}" ]; then git --git-dir="$store" update-ref -d "$ref"; fi
-  done
-  git --git-dir="$store" gc --quiet --prune=7.days.ago
-  touch "$store/gc.timestamp"
- ) || echo 'check-git: store age pruning deferred' >&2
-fi
+trap - EXIT
+flock -x ${shell(lock)} sh -c ${shell(gcBody)} || echo 'check-git: store age pruning deferred' >&2
 `;
-  return `# REMOTE_CHECK_GITHUB_FETCH\nmkdir -p ${shell(dirname(resolve(store)))}\nflock -x ${shell(`${resolve(store)}.lock`)} sh -c ${shell(body)}`;
 }
 
 const CHECK_REF = /^refs\/checks\/[a-zA-Z0-9-]+$/;

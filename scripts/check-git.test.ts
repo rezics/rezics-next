@@ -161,6 +161,65 @@ function fetchPublication(publication: CheckGitPublication, checkout: string, st
   });
 }
 
+test('GitHub fetch serializes only fetch and ref verify on the store lock', () => {
+  const publication: CheckGitPublication = {
+    format: 'rezics-native-git-snapshot-v2',
+    objectFormat: 'sha1',
+    head: 'a'.repeat(40),
+    indexTree: 'b'.repeat(40),
+    dev: 'c'.repeat(40),
+    shallow: 'd'.repeat(40),
+    remote: { ref: 'refs/checks/lock-scope', commit: 'e'.repeat(40) },
+  };
+  const script = fetchCheckGitScript(publication, '/tmp/lock-scope', '/tmp/check-git.git');
+  const lock = "flock -x '/tmp/check-git.git.lock'";
+  const first = script.indexOf(lock);
+  const second = script.indexOf(lock, first + 1);
+  const fetch = script.indexOf('fetch --no-tags --no-write-fetch-head');
+  const checkout = script.indexOf('checkout-index --all --force');
+  const gc = script.indexOf('gc --quiet --prune=7.days.ago');
+  expect(first).toBeGreaterThan(-1);
+  expect(second).toBeGreaterThan(first);
+  expect(script.indexOf(lock, second + 1)).toBe(-1);
+  expect(fetch).toBeGreaterThan(first);
+  expect(fetch).toBeLessThan(checkout);
+  expect(checkout).toBeGreaterThan(first);
+  expect(checkout).toBeLessThan(second);
+  expect(gc).toBeGreaterThan(second);
+});
+
+test('concurrent fetches of one store checkout independently after the shared fetch lock', async () => {
+  const root = sandbox();
+  const { source } = repository(root);
+  writeFileSync(join(source, 'staged.txt'), 'staged candidate\n');
+  git(source, 'add', 'staged.txt');
+  const indexTree = git(source, 'write-tree');
+  const origin = publicOrigin(root, source);
+  const manifestPath = await stageCheckGit(source, join(root, 'publication'), { ref: 'refs/checks/shared-store' });
+  const publication = JSON.parse(readFileSync(manifestPath, 'utf8')) as CheckGitPublication;
+  const store = join(root, 'check-git.git');
+  const checkouts = [join(root, 'runs', 'one'), join(root, 'runs', 'two')];
+  const procs = checkouts.map((checkout) =>
+    Bun.spawn(['sh', '-c', fetchCheckGitScript(publication, checkout, store, origin)], {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    }),
+  );
+  const results = await Promise.all(
+    procs.map(async (proc) => ({
+      exitCode: await proc.exited,
+      stderr: await new Response(proc.stderr).text(),
+    })),
+  );
+  for (const result of results) expect(result.exitCode, result.stderr).toBe(0);
+  for (const checkout of checkouts) {
+    expect(git(checkout, 'write-tree')).toBe(indexTree);
+    expect(readFileSync(join(checkout, 'staged.txt'), 'utf8')).toBe('staged candidate\n');
+  }
+  writeFileSync(join(checkouts[0]!, 'tracked.txt'), 'only run one\n');
+  expect(readFileSync(join(checkouts[1]!, 'tracked.txt'), 'utf8')).toBe('committed\n');
+}, 30000);
+
 test('a check-only publication sends only new objects and both hosts restore the exact native identities', async () => {
   const root = sandbox();
   const { source, base } = repository(root);
