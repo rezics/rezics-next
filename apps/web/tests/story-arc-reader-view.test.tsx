@@ -166,7 +166,76 @@ test('replacement exposure retires accepted controls and an in-flight continuati
     expect(mounted.host.textContent).toContain('Later title');
     await mounted.render({ ...recovered, locale: 'ja' });
     expect(mounted.host.querySelectorAll('a')).toHaveLength(1);
-    expect(mounted.host.querySelector('a')?.textContent).toContain(m.arc_reader_fresh_subject());
+    expect(mounted.host.querySelector('a')?.textContent).toContain(m.arc_reader_fresh_subject({}, { locale: 'ja' }));
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('exact directed assertion inspection preserves native order and conceals assertionless rows; empty continuation is not completion', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = arcExample();
+    const read = await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' });
+    if (!read.ok) throw new Error('Expected native member page');
+    const withheld = {
+      ...read.rows[0]!,
+      statementId: '00000000-0000-4000-8000-000000000999',
+      summary: { ...read.rows[0]!.summary!, label: { value: 'Unqualified secret work', language: 'en' } },
+    };
+    delete withheld.statement;
+    const props = {
+      ...arcAddress,
+      locale: 'en',
+      source: {},
+      reader: null,
+      transport: fixture.read,
+      initial: { ...read, rows: [...read.rows, withheld] },
+    };
+    await mounted.render(props);
+    expect(mounted.host.textContent).not.toContain('Unqualified secret work');
+    expect(mounted.host.textContent).not.toContain(withheld.statementId);
+    await mounted.click(m.arc_reader_inspect());
+    const inspection = mounted.host.querySelector('section[aria-label="' + m.arc_reader_inspect() + '"]')!;
+    expect(inspection.textContent).toContain(read.rows[0]!.holder);
+    expect(inspection.textContent).toContain(read.rows[0]!.statementId);
+    expect(inspection.textContent).toContain('rezics:storyArc');
+    expect(inspection.textContent).toContain(m.character_relationships_direction_inverse());
+    expect(inspection.textContent).toContain('原典の範囲');
+    expect(inspection.textContent).toContain('03a');
+    await mounted.click(m.subject_spoiler_show());
+    const rows = mounted.host.querySelectorAll('[data-slot=story-arc-row]');
+    expect(rows[0]!.textContent).toContain('Later title');
+    expect(rows[1]!.textContent).toContain('Earlier title');
+    expect(mounted.host.textContent).toContain(m.work_parts_at_least());
+    await mounted.render({ ...props, source: {}, initial: { ...read, rows: [], caughtUp: false } });
+    expect(mounted.host.textContent).toContain(m.work_parts_empty());
+    expect(mounted.host.textContent).toContain(m.work_parts_pending());
+    expect(mounted.host.textContent).not.toContain(m.arc_reader_complete());
+    expect(mounted.host.querySelectorAll('[data-slot=story-arc-row]')).toHaveLength(0);
+    expect(
+      Array.from(mounted.host.querySelectorAll('button')).some((node) => node.textContent === m.work_parts_more()),
+    ).toBe(true);
+  } finally {
+    await mounted.close();
+  }
+});
+
+test('missing released appearance filtering stays unsupported without any unqualified character request', async () => {
+  const mounted = await ui();
+  try {
+    const fixture = arcExample();
+    const initial = await fixture.read({ ...arcAddress, stream: 'inverse:rezics:storyArc' });
+    fixture.release.properties['schema:character']!.relation!.filter = [];
+    await mounted.render({ ...arcAddress, locale: 'en', source: {}, reader: null, initial, transport: fixture.read });
+    await mounted.click(m.arc_reader_characters());
+    const child = mounted.host.querySelector('[data-slot=arc-appearance-window]')!;
+    expect(child.textContent).toContain(m.arc_reader_unsupported());
+    expect(child.textContent).not.toContain(m.work_parts_empty());
+    expect(child.querySelectorAll('a')).toHaveLength(1); // Current disclosed work's Details only.
+    expect(fixture.calls.some((url) => url.searchParams.get('property') === 'schema:character')).toBe(false);
+    await mounted.click(m.arc_reader_back());
+    expect(mounted.host.textContent).toContain('Later title');
   } finally {
     await mounted.close();
   }

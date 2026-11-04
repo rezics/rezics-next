@@ -36,6 +36,18 @@ export function StoryArcReader(props: Props) {
   const headingId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const focused = useRef<EventTarget | null>(null);
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const moved = (event: Event) => {
+      if (event.target instanceof Node && !section.current?.contains(event.target)) focused.current = null;
+    };
+    document.addEventListener('focusin', moved);
+    document.addEventListener('pointerdown', moved);
+    return () => {
+      document.removeEventListener('focusin', moved);
+      document.removeEventListener('pointerdown', moved);
+    };
+  }, []);
   const settings = props.settings ?? defaultReader;
   const reading = useArcLifetime({
     source: props.source,
@@ -56,6 +68,7 @@ export function StoryArcReader(props: Props) {
   const o = { locale: props.locale as never };
   return (
     <section
+      ref={section}
       data-slot="story-arc-reader"
       aria-labelledby={headingId}
       className="min-w-0 space-y-4"
