@@ -190,7 +190,11 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       if (!this.live() || !this.canWrite() || generation !== this.generation) return;
       if (!answer.ok) {
         if (this.state.receipt) {
-          this.update({ phase: 'readback', failure: answer.reason, nativeFailure: answer.failure });
+          this.update({
+            phase: 'readback',
+            failure: answer.reason === 'conflict' ? undefined : answer.reason,
+            nativeFailure: answer.failure,
+          });
           return;
         }
         this.update(
@@ -234,13 +238,14 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       const read = await this.io.read(attempt.collectionId);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
-        const refused = isCollectionPrivacyReadRefusal(read.reason);
+        const readRefusal = isCollectionPrivacyReadRefusal(read.reason) ? read.reason : null;
+        const refused = readRefusal !== null;
         this.update({
           ...(refused ? { current: null } : {}),
           phase: 'readback',
           failure: read.reason,
           nativeFailure: read.failure,
-          readRefusal: refused ? read.reason : this.state.readRefusal,
+          readRefusal: readRefusal ?? this.state.readRefusal,
         });
         return;
       }
@@ -288,7 +293,8 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
       const read = await this.io.read(collectionId);
       if (!this.live() || generation !== this.generation) return;
       if (!read.ok) {
-        const refused = isCollectionPrivacyReadRefusal(read.reason);
+        const readRefusal = isCollectionPrivacyReadRefusal(read.reason) ? read.reason : null;
+        const refused = readRefusal !== null;
         this.update({
           ...(refused ? { current: null, ...(attempt ? {} : { desired: 'private' as const }) } : {}),
           phase: refused
@@ -300,7 +306,7 @@ export class CollectionPrivacyEditor extends Observable<EditorState> {
             : previous,
           failure: read.reason,
           nativeFailure: read.failure,
-          readRefusal: refused ? read.reason : this.state.readRefusal,
+          readRefusal: readRefusal ?? this.state.readRefusal,
         });
         return;
       }
