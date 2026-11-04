@@ -4,4 +4,9 @@ The current composition and its released definitions supply the ordinary reading
 
 Organization fact disclosure mounts revealed content only for the current episode and removes it immediately on Hide, including any selected inspection; passive source replacement does not move keyboard focus.
 
-The installed Subject visit seam has no Organization statement/region locator. Outbound links retain its supported return address and any existing nested return, with an explicit explanation that inspection is not restored; local Close restores only the current opener. Receipts and reveals end with the mounted observation. A future shared locator belongs to the Subject visit owner, with `OrganizationFacts` in `../view.tsx` as its consuming call site.
+The existing Subject visit address carries a bounded Organization locator with holder, Context, locale, Realm, field,
+candidate, revision, release and focus intent. It contains no assertion text or authorized reading. Return resolves that
+locator against the one current page read, reopening only an exact disclosed match; otherwise the reader explains the
+change and focuses the current field. Target and correction destinations keep the selected Context and Realm, and do
+not build nested return chains. Local Close and Hide retire the locator with the inspection. `OrganizationFacts` in
+`../view.tsx` owns this consumer; the Subject visit module validates the public address.

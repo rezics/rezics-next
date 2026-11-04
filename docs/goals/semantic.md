@@ -26,7 +26,10 @@ implemented, exposed, tested and promoted are separate states; a passing local c
 
 Includes definitions, semantic editing and identity, Contexts, launch catalogue profiles, Zones and shared filter
 semantics. [Public scope](../scope.md) owns inclusion and deferral. User-saved personal dynamic queries are deferred.
-Library facts and common Collection storage remain with commerce; rendering remains with web.
+Library facts and common Collection storage remain with Commerce; rendering remains with Web. Missing released meanings
+extend existing bounded page composition and consumers under current grants; music personal profiles remain
+Commerce-owned. The [audit gap journey plan](../research/semantic-gap-journeys-plan.md) maps the three source audits to
+retained work and remaining native catalogue admission journeys; it does not reopen delivered UI.
 
 ## Ownership
 
@@ -35,15 +38,22 @@ Owns `packages/definitions/**`, `packages/filter/**`, `services/kernel/{src,db,t
 [semantic](../../services/kernel/src/semantic/README.md), [definitions](../../packages/definitions/README.md),
 [filter](../../packages/filter/README.md), [Zones](../zones.md), [membership](../zone-membership.md),
 [Collection sources](../collection-source.md), [dynamic Collections](../dynamic-collections.md) and
-[deletion](../deletion.md). Search owns admitted index plans and presentation composition; commerce owns library
+[deletion](../deletion.md). Search owns admitted index plans and presentation composition; Commerce owns library
 profile consumers and personal facts. Product contract corrections belong in these owners before dependent briefs.
+Web solely owns the connected provider-review route, UI, Context-choice adapter, messages, stories and caller closure.
+The [feature contract](../../apps/web/src/features/import-review/README.md) owns that Web surface; no parallel Semantic
+UI task or broader importer/catalogue expansion is included. The connected outcome joins named current Context
+selection to exact Subject/proposal comparison, bounded selection, explicit consent and immutable uncertain-decision
+readback; a UUID input or isolated chooser does not deliver it. The Web rating owner updates its own Goal document.
 
 ## Dependencies
 
 Requires native Access, parent creation grants and kernel identity/storage primitives. Supplies complete public
-facet projections and disclosure dependencies to search, release-pinned profiles to commerce, and definitions and
-Zone starters to presentation and web. Search and commerce supply their own admitted list plans; performance owns
+facet projections and disclosure dependencies to search, release-pinned profiles to Commerce, and definitions and
+Zone starters to presentation and Web. Search and Commerce supply their own admitted list plans; performance owns
 budget evidence. Native identity and creation-authority questions require their owner research before commitment.
+Native Context read/accept checks, independent Subject disclosure and importer registrations retain their existing
+authority.
 
 ## Acceptance
 
@@ -53,27 +63,12 @@ and definition/filter package checks. Exercise anonymous, editor, Context accept
 cases through native Auth/Access. Use the cross-surface scenarios in
 [feature design](../development/feature-design.md), with filter preparation, sparse results and withheld facts.
 Run focused native commands through the kernel check runner; the applicable package manifests and
-[verification](../development/verification.md) own typecheck, growth and promotion requirements.
+[verification](../development/verification.md) own typecheck, growth and promotion requirements. Authored connected
+provider-review assertions remain pending integration acceptance; typing alone is not native, browser, growth or
+private-SSR proof. The audit journey plan does not certify acceptance. Journey sizes of 2,000–3,000 lines are
+implementation estimates, not acceptance evidence.
 
 ## External conditions
 
 Source licensing and external vocabulary availability constrain imported definitions. Functional tests use pinned
 fixtures; production source availability and deployment configuration are external conditions.
-
-## Provider review
-
-The first-scope audit assigns Web sole ownership of the complete provider-review route, UI, Context-choice adapter,
-messages, stories and caller closure. The missing outcome was named current Context selection connected to exact
-Subject/proposal comparison, bounded selection, explicit consent and immutable uncertain-decision readback; a raw
-UUID input or a chooser in isolation does not deliver it. The [feature contract](../../apps/web/src/features/import-review/README.md)
-owns this connected Web surface. Native Context read/accept checks, independent Subject disclosure and importer
-registrations retain their existing authority. No parallel Semantic UI task or broader importer/catalogue expansion
-is included. Authored connected assertions remain UNRUN pending integration acceptance; typing alone is not native,
-browser, growth or private-SSR proof. The Web rating owner alone updates its Goal document.
-
-## Audit gap journeys
-
-The [audit gap journey plan](../research/semantic-gap-journeys-plan.md) maps the three source audits to retained
-work and the remaining native catalogue admission journeys; it does not certify acceptance or reopen delivered UI.
-Decision: journey sizes of 2,000–3,000 lines are implementation estimates, and missing released meanings extend the
-existing bounded page composition and consumers under current grants; music personal profiles remain Commerce-owned.

@@ -60,6 +60,68 @@ export type WorkTagReturn = {
   focus: 'browse' | 'evidence';
 };
 
+export type OrganizationHistoryVisitReturn = {
+  holder: string;
+  context: string;
+  locale: string;
+  realm?: string;
+  property: string;
+  candidate: string;
+  revision: number;
+  release: string;
+  focus: 'keyboard' | 'pointer';
+};
+
+/** A current Organization assertion locator; it carries no retained reading or disclosure authority. */
+export function organizationHistoryVisitReturn(fragment: string): OrganizationHistoryVisitReturn | undefined {
+  if (!fragment.startsWith('#organization-history?') || fragment.length > 2048) return;
+  const params = new URLSearchParams(fragment.slice('#organization-history?'.length));
+  const keys = [...params.keys()];
+  if (
+    (keys.length !== 8 && keys.length !== 9) ||
+    new Set(keys).size !== keys.length ||
+    keys.some((key) => !['holder', 'context', 'locale', 'realm', 'property', 'candidate', 'revision', 'release', 'focus'].includes(key))
+  )
+    return;
+  const holder = params.get('holder');
+  const context = params.get('context');
+  const locale = params.get('locale');
+  const realm = params.get('realm');
+  const property = params.get('property');
+  const candidate = params.get('candidate');
+  const revision = params.get('revision');
+  const release = params.get('release');
+  const focus = params.get('focus');
+  if (
+    !holder || !new RegExp(`^${uuid}$`, 'i').test(holder) ||
+    !context || !new RegExp(`^${uuid}$`, 'i').test(context) ||
+    !locale || !/^(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)$/u.test(locale) ||
+    (realm !== null && !new RegExp(`^${uuid}$`, 'i').test(realm)) ||
+    !property || !/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/u.test(property) ||
+    !candidate || !new RegExp(`^${uuid}$`, 'i').test(candidate) ||
+    !revision || !/^[1-9][0-9]{0,8}$/u.test(revision) || !Number.isSafeInteger(Number(revision)) ||
+    !release || !/^[A-Za-z0-9:_./-]{1,128}$/u.test(release) ||
+    (focus !== 'keyboard' && focus !== 'pointer')
+  )
+    return;
+  return { holder, context, locale, ...(realm ? { realm } : {}), property, candidate, revision: Number(revision), release, focus };
+}
+
+export function organizationHistoryVisitReturnFragment(value: OrganizationHistoryVisitReturn): string {
+  const fragment = `#organization-history?${new URLSearchParams({
+    holder: value.holder,
+    context: value.context,
+    locale: value.locale,
+    ...(value.realm ? { realm: value.realm } : {}),
+    property: value.property,
+    candidate: value.candidate,
+    revision: String(value.revision),
+    release: value.release,
+    focus: value.focus,
+  })}`;
+  return organizationHistoryVisitReturn(fragment) ? fragment : '#connections';
+}
+
 /** A focus locator for one admitted assertion, never a label, weight, grant or disclosure override. */
 export function workTagReturn(hash: string): WorkTagReturn | undefined {
   if (!hash.startsWith('#work-tags?') || hash.length > 1024) return;
@@ -662,9 +724,20 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     )
       return;
     const fragment = url.hash === '' ? '#connections' : url.hash;
+    const organizationReturn = organizationHistoryVisitReturn(fragment);
+    if (
+      organizationReturn &&
+      (!subject ||
+        subject[2] !== undefined ||
+        organizationReturn.locale !== subject[1] ||
+        organizationReturn.context !== selectedContext ||
+        organizationReturn.realm !== (selectedRealm ?? undefined))
+    )
+      return;
     if (
       fragment !== '#literary-reader' &&
       !(subject && !subject[2] && (fragment === '#work-franchise' || workFranchiseReturn(fragment))) &&
+      !(subject && !subject[2] && organizationHistoryVisitReturn(fragment)) &&
       fragment !== '#connections' &&
       !(subject && !subject[2] && fragment === '#supplied-names') &&
       !(subject && connectionReturnWindow(fragment)) &&
