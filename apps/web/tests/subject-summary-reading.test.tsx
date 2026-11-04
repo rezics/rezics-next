@@ -67,7 +67,7 @@ test('mounted About chooses exact supplied language and candidate, shows selecte
   const specifications = [
     ['00000000-0000-4000-8000-000000000101', 'en', 'English first synopsis.', 'https://evidence.test/first'],
     ['00000000-0000-4000-8000-000000000102', 'en', `${'Second candidate paragraph. '.repeat(24)}`, 'https://evidence.test/second'],
-    ['00000000-0000-4000-8000-000000000103', 'ja', '日本語のあらすじ。', 'https://evidence.test/japanese'],
+    ['00000000-0000-4000-8000-000000000103', 'ja', '日本語のあらすじ。'.repeat(60), 'https://evidence.test/japanese'],
   ] as const;
   const candidates = specifications.map(([id, language, text, evidence]) => {
     const statement = structuredClone(base);
