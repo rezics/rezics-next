@@ -1,9 +1,11 @@
 import { bundledDigest } from '@rezics/definitions/bundled';
 import type { SourceRecord } from '@rezics/conversion';
 import type { NativeIdentity, SourceVocabularyBindings, SourceVocabularyRequest } from '@rezics/conversion';
-import { converter_revision as entityRevision } from '@rezics/conversion/cross-media-entities';
+import { converter_revision as entityRevision, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import type { Owner } from './record-bindings.ts';
+import { type GraphEdgeDraft } from './cross-media-bindings.ts';
 import {
+  crossMediaAliases,
   seedCrossMedia,
   type CrossMediaGap,
   type CrossMediaMember,
@@ -321,6 +323,21 @@ export async function planVndbReleaseFidelity(input: CrossMediaTables): Promise<
     facts.releases.set(id, { released: row.released, links: releaseLinks });
     plan.entities.vndb.push({ source: 'vndb', key: id, revision: null, payload });
     plan.members.push({ source: 'vndb', key: id, kind: 'release', membership: 'referenced' });
+    for (const link of releaseLinks) {
+      const edge: GraphEdgeDraft = {
+        source: 'vndb',
+        alias: crossMediaAliases.vndb,
+        table: 'releases_vn',
+        holder: id,
+        target: link.vid,
+        property: 'schema:exampleOfWork',
+        url: vndbRecordUrl(id),
+        membership: 'referenced',
+        record: { id, vid: link.vid, rtype: link.completeness },
+        fields: ['releases_vn.id', 'releases_vn.rtype', 'releases_vn.vid'],
+      };
+      plan.edges.push(edge);
+    }
   }
   plan.records.vndb.sort((a, b) => a.key.localeCompare(b.key));
   plan.entities.vndb.sort((a, b) => a.key.localeCompare(b.key));
@@ -340,18 +357,10 @@ export async function importVndbReleaseFidelity(input: {
   destination?: { origin: string };
 }): Promise<VndbReleaseFidelityResult> {
   const plan = await planVndbReleaseFidelity(input.tables);
-  const identities = new Map<string, NativeIdentity>();
-  const admission = vndbReleaseVocabularyAdmission(input.bindings, plan.facts, identities);
-  const extras = { vocabularyAdmission: admission, recordConcurrency: 1 as const };
-  // Application pages by record key (r* before v*). Bind works first so release-work rows carry native work identities.
-  await seedCrossMedia(
-    { ...plan, entities: { bangumi: [], vndb: [] } },
-    input.path,
-    input.port,
-    input.destination,
-    extras,
-  );
-  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, extras);
+  const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
+    vocabularyAdmission: vndbReleaseVocabularyAdmission(input.bindings, plan.facts),
+    recordConcurrency: 1,
+  });
   return { ...result, converterRevision: entityRevision };
 }
 

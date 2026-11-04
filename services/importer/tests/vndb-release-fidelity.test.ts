@@ -124,7 +124,7 @@ test('operator plans authored VNDB COPY releases without mixing work and release
     expect(plan.members.some((row) => row.key === 'v1' && row.kind === 'work')).toBe(true);
     expect(plan.members.filter((row) => row.kind === 'release')).toHaveLength(7);
     expect(plan.gaps.some((gap) => gap.reason.includes('supersession'))).toBe(true);
-    expect(plan.edges).toEqual([]);
+    expect(plan.edges.every((edge) => edge.property === 'schema:exampleOfWork')).toBe(true);
     expect(decodeVndbReleased('20200229')).toBe('2020-02-29');
     expect(decodeVndbReleased('20200300')).toBe('2020-03');
     expect(decodeVndbReleased('20200000')).toBe('2020');
