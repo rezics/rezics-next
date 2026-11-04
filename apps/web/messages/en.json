@@ -1,4 +1,5 @@
 {
+  "credit_refresh_window": "Refresh this exact credit window",
   "credit_inspect": "Inspect credit",
   "credit_original": "The original assertion on this work. Disclosed targets open in another tab so this credit window stays available.",
   "credit_inverse": "Direction: the work credits this Person.",
