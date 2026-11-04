@@ -32,7 +32,7 @@ acceptance:
   command:
     - bun
     - run
-    - "--cwd"
+    - '--cwd'
     - services/kernel
     - check
     - test/semantic/identity-rating-currentness.test.ts
@@ -40,7 +40,7 @@ acceptance:
     - test/semantic/identity-rating-progress.test.ts
     - test/semantic/identity-epoch-home-isolation.test.ts
   tests:
-    - "Native rating visibility callers commit bounded repair and durable checkpoints, recover interruptions through every cleanup stage, reclaim final-reference payload and preserve truthful replay and owner ABA safety without runtime pricing prerequisites."
+    - 'Native rating visibility callers commit bounded repair and durable checkpoints, recover interruptions through every cleanup stage, reclaim final-reference payload and preserve truthful replay and owner ABA safety without runtime pricing prerequisites.'
   failing: true
 estimate:
   lines: 1100

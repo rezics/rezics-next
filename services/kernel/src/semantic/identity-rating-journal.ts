@@ -1,9 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-  currentCommand,
-  registerCommandCallback,
-  type CommandTransaction,
-} from '../command/command.ts';
+import { currentCommand, registerCommandCallback, type CommandTransaction } from '../command/command.ts';
 import { bindIdentityRatingPage, snapshotIdentityRatingScope } from './identity-rating-adapter.ts';
 import { snapshotIdentityRatingCheckpoint } from './identity-rating-consumer.ts';
 import type {
@@ -69,34 +65,38 @@ function scopeIdentity(input: IdentityRatingRepairScope) {
 function same(left: unknown, right: unknown): boolean {
   // All compared values were constructed in fixed field order by the adapter.
   // Database JSONB key order is immaterial.
-  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object')
-    return left === right;
-  const a = Object.keys(left), b = Object.keys(right);
-  return a.length === b.length && a.every(key =>
-    Object.hasOwn(right, key) && same(Reflect.get(left, key), Reflect.get(right, key)));
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') return left === right;
+  const a = Object.keys(left),
+    b = Object.keys(right);
+  return (
+    a.length === b.length &&
+    a.every((key) => Object.hasOwn(right, key) && same(Reflect.get(left, key), Reflect.get(right, key)))
+  );
 }
 
 async function owner(tx: CommandTransaction): Promise<Owner> {
   const partition = currentCommand(tx).partition;
-  const row = (await tx.query<Owner>(
-    `SELECT node,epoch,position::text FROM core.partition
-     WHERE partition_no=$1 AND write_state='active' FOR UPDATE`, [partition],
-  )).rows[0];
+  const row = (
+    await tx.query<Owner>(
+      `SELECT node,epoch,position::text FROM core.partition
+     WHERE partition_no=$1 AND write_state='active' FOR UPDATE`,
+      [partition],
+    )
+  ).rows[0];
   if (!row) throw stale();
   return row;
 }
-async function journal(
-  tx: CommandTransaction,
-  input: IdentityRatingRepairScope,
-  lock: boolean,
-) {
+async function journal(tx: CommandTransaction, input: IdentityRatingRepairScope, lock: boolean) {
   const identity = scopeIdentity(input);
   const partition = currentCommand(tx).partition;
-  const row = (await tx.query<Journal>(
-    `SELECT scope,owner_node,owner_epoch,checkpoint,reclaimed
+  const row = (
+    await tx.query<Journal>(
+      `SELECT scope,owner_node,owner_epoch,checkpoint,reclaimed
      FROM semantic.identity_rating_repair_journal
-     WHERE partition_no=$1 AND scope_key=$2${lock ? ' FOR UPDATE' : ''}`, [partition, identity.key],
-  )).rows[0];
+     WHERE partition_no=$1 AND scope_key=$2${lock ? ' FOR UPDATE' : ''}`,
+      [partition, identity.key],
+    )
+  ).rows[0];
   if (row && !same(row.scope, identity.scope)) throw stale();
   return { ...identity, partition, row };
 }
@@ -104,10 +104,13 @@ function current(row: Journal, native: Owner) {
   return row.owner_node === native.node && row.owner_epoch === native.epoch;
 }
 async function pageRow(tx: CommandTransaction, partition: number, key: string, digest: string) {
-  return (await tx.query<Page>(
-    `SELECT selected_page,binding,receipt,acknowledged FROM semantic.identity_rating_repair_page
-     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=$3`, [partition, key, digest],
-  )).rows[0];
+  return (
+    await tx.query<Page>(
+      `SELECT selected_page,binding,receipt,acknowledged FROM semantic.identity_rating_repair_page
+     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=$3`,
+      [partition, key, digest],
+    )
+  ).rows[0];
 }
 
 /** Called inside the original command, after its wrapper's single admission/lock
@@ -182,19 +185,27 @@ export async function acknowledgeIdentityRatingJournalPage(
   const retained = await pageRow(tx, partition, key, binding.digest);
   if (!retained || !same(retained.binding, binding) || !same(retained.receipt, receipt)) return false;
   if (retained.acknowledged) return true;
-  if (row.checkpoint ? row.checkpoint.phase !== 'repair' || binding.after !== row.checkpoint.binding.next : binding.after !== null)
+  if (
+    row.checkpoint
+      ? row.checkpoint.phase !== 'repair' || binding.after !== row.checkpoint.binding.next
+      : binding.after !== null
+  )
     return false;
   const checkpoint: IdentityRatingRepairCheckpoint = {
-    scope, binding: { ...binding, native: binding.native }, receipt,
+    scope,
+    binding: { ...binding, native: binding.native },
+    receipt,
     phase: binding.terminal ? 'reclamation' : 'repair',
   };
   await tx.query(
     `UPDATE semantic.identity_rating_repair_page SET acknowledged=true
-     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=$3`, [partition, key, binding.digest],
+     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=$3`,
+    [partition, key, binding.digest],
   );
   await tx.query(
     `UPDATE semantic.identity_rating_repair_journal SET checkpoint=$3::jsonb
-     WHERE partition_no=$1 AND scope_key=$2`, [partition, key, JSON.stringify(checkpoint)],
+     WHERE partition_no=$1 AND scope_key=$2`,
+    [partition, key, JSON.stringify(checkpoint)],
   );
   mutation(tx);
   return true;
@@ -233,9 +244,13 @@ export async function verifyIdentityRatingJournalReclaimed(
   if (!current(row, native)) return 'stale';
   const saved = row.checkpoint;
   const candidate = snapshotIdentityRatingCheckpoint(scope, checkpoint);
-  return row.reclaimed && saved && candidate &&
-    same(saved.binding, candidate.binding) && same(saved.receipt, candidate.receipt)
-    ? 'current' : 'pending';
+  return row.reclaimed &&
+    saved &&
+    candidate &&
+    same(saved.binding, candidate.binding) &&
+    same(saved.receipt, candidate.receipt)
+    ? 'current'
+    : 'pending';
 }
 
 /** Only the producer may prove that its final REAL reference disappeared and its
@@ -245,9 +260,7 @@ export async function verifyIdentityRatingJournalReclaimed(
 export async function reclaimIdentityRatingJournalPages(
   tx: CommandTransaction,
   input: IdentityRatingRepairScope,
-  assertFinalReferenceRemoved: (
-    tx: CommandTransaction, checkpoint: IdentityRatingRepairCheckpoint,
-  ) => Promise<boolean>,
+  assertFinalReferenceRemoved: (tx: CommandTransaction, checkpoint: IdentityRatingRepairCheckpoint) => Promise<boolean>,
 ): Promise<'stale' | 'still-referenced' | 'continuing' | 'reclaimed' | 'already-reclaimed'> {
   const native = await owner(tx);
   const { partition, key, row } = await journal(tx, input, true);
@@ -258,21 +271,27 @@ export async function reclaimIdentityRatingJournalPages(
   if (!(await assertFinalReferenceRemoved(tx, checkpoint))) return 'still-referenced';
   // Keep the exact terminal page available until the same transaction installs
   // the compact tombstone. The primary key supports the whole seek and ordering.
-  const pages = (await tx.query<{ selection_digest: string }>(
-    `SELECT selection_digest FROM semantic.identity_rating_repair_page
+  const pages = (
+    await tx.query<{ selection_digest: string }>(
+      `SELECT selection_digest FROM semantic.identity_rating_repair_page
      WHERE partition_no=$1 AND scope_key=$2 AND selection_digest<>$3
-     ORDER BY selection_digest LIMIT 65`, [partition, key, checkpoint.binding.digest],
-  )).rows;
-  const batch = pages.slice(0, 64).map(page => page.selection_digest);
-  if (batch.length) await tx.query(
-    `DELETE FROM semantic.identity_rating_repair_page
-     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=ANY($3::text[])`, [partition, key, batch],
-  );
+     ORDER BY selection_digest LIMIT 65`,
+      [partition, key, checkpoint.binding.digest],
+    )
+  ).rows;
+  const batch = pages.slice(0, 64).map((page) => page.selection_digest);
+  if (batch.length)
+    await tx.query(
+      `DELETE FROM semantic.identity_rating_repair_page
+     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=ANY($3::text[])`,
+      [partition, key, batch],
+    );
   mutation(tx);
   if (pages.length > 64) return 'continuing';
   await tx.query(
     `DELETE FROM semantic.identity_rating_repair_page
-     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=$3`, [partition, key, checkpoint.binding.digest],
+     WHERE partition_no=$1 AND scope_key=$2 AND selection_digest=$3`,
+    [partition, key, checkpoint.binding.digest],
   );
   await tx.query(
     `UPDATE semantic.identity_rating_repair_journal SET reclaimed=true,checkpoint=$3::jsonb
