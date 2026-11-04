@@ -255,7 +255,7 @@ test('Subject discussion and review summaries keep native read destinations and 
           expect(actions.className).toContain('[&_a:focus-visible]:outline-2');
           expect(row.querySelector('time')?.getAttribute('datetime')).toBe(threads[index]!.createdAt);
         }
-        const first = rows()[0]!;
+        let first = rows()[0]!;
         const preview = first.querySelector('[data-content-item-slot="preview"]')!;
         expect(preview.textContent).toBe(longSummary);
         expect(preview.className).toContain('[overflow-wrap:anywhere]');
@@ -282,6 +282,7 @@ test('Subject discussion and review summaries keep native read destinations and 
           expect(rows()[0]!.textContent).toContain(m.subject_reactions_unavailable({}, options));
           expect(rows()[0]!.querySelector('[data-slot="community-reaction-summary"]')).toBeNull();
           await show(kind, paged);
+          first = rows()[0]!;
           expect(rows()[1]!.querySelector('[data-slot="review-citation"]')?.getAttribute('data-state')).toBe(
             'unscored',
           );
@@ -312,7 +313,7 @@ test('Subject discussion and review summaries keep native read destinations and 
         links[0]!.focus();
         for (const [index, link] of links.entries()) {
           if (index) await act(async () => user.tab());
-          expect(window.document.activeElement).toBe(link);
+          expect(window.document.activeElement === link).toBe(true);
           const count = navigations.length;
           await act(async () => user.keyboard('{Enter}'));
           expect(navigations.slice(count)).toEqual([link.getAttribute('href')!]);
