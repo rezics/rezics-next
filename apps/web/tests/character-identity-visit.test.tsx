@@ -1,29 +1,21 @@
 import { expect, mock, test } from 'bun:test';
 import { act, createElement } from 'react';
 import { dirname } from 'node:path';
-import { createKernelClient } from '@rezics/client';
-import { planReads, platformRegistry, type CompositionDocument, type SelectedContext } from '@rezics/composition';
-import definitions from '../../../packages/definitions/release/rezics.json';
-import { qualifiedRelationsPage } from '../src/kernel/fake/qualified-relations';
+import type { CompositionDocument, SelectedContext } from '@rezics/composition';
 import type { GuideRelease } from '../src/features/catalogue/definition-guide';
-import { identityProperty } from '../src/features/catalogue/character-relationships/reading';
 import type { OverviewValue } from '../src/features/pages/overview';
-import {
-  connectionStreams,
-  readConnectionVisit,
-  type ConnectionAddress,
-  type ConnectionStream,
-  type ConnectionVisit,
-  type ConnectionWork,
-} from '../src/features/pages/subject-connections';
+import type { ConnectionAddress, ConnectionStream, ConnectionVisit, ConnectionWork } from '../src/features/pages/subject-connections';
 import type { ConnectionRead } from '../src/features/pages/subject-connections-window';
-import {
-  connectionReturnWindow,
-  subjectVisitReturn,
-} from '../src/features/pages/subject-visit-navigation';
 import type { SubjectPageData } from '../src/features/pages/subject';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+const { createKernelClient } = await import('@rezics/client');
+const { planReads, platformRegistry } = await import('@rezics/composition');
+const definitions = (await import('../../../packages/definitions/release/rezics.json')).default;
+const { qualifiedRelationsPage } = await import('../src/kernel/fake/qualified-relations');
+const { identityProperty } = await import('../src/features/catalogue/character-relationships/reading');
+const { connectionStreams, readConnectionVisit } = await import('../src/features/pages/subject-connections');
+const { connectionReturnWindow, subjectVisitReturn } = await import('../src/features/pages/subject-visit-navigation');
 const { OverviewContext } = await import('../src/features/pages/overview');
 const { SubjectConnections } = await import('../src/features/pages/subject-connections-view');
 const { subjectBody } = await import('../src/features/pages/subject');
