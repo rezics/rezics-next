@@ -42,9 +42,22 @@ export function selectBangumiProfile(input: {
 
 function infoboxTemplate(infobox: string | undefined): 'realMovie' | 'TV' | undefined {
   if (infobox === undefined) return;
-  const head = infobox.slice(0, 256).split('\n', 1)[0] ?? '';
+  const head = infoboxHead(infobox);
   if (/realMovie/u.test(head)) return 'realMovie';
   if (/(?:\{\{Infobox(?:\s+|\/)|\/)TV\b/u.test(head)) return 'TV';
+}
+
+function infoboxHead(infobox: string): string {
+  return infobox.slice(0, 256).split('\n', 1)[0] ?? '';
+}
+
+/** Pinned `{{Infobox animanga/TVAnime` grammar only; OVA/Movie/custom templates stay unmapped. */
+export function isBangumiTvAnimeInfobox(infobox: string | undefined): boolean {
+  if (infobox === undefined) return false;
+  for (const line of infobox.split('\n')) {
+    if (line.trim()) return isBangumiTVAnimeTemplateHead(line);
+  }
+  return false;
 }
 
 export type PublicationTime = {
@@ -69,8 +82,23 @@ export function bangumiPublicationTime(value: string): PublicationTime | undefin
   };
 }
 
-function gregorianDay(year: number, month: number, day: number): boolean {
+/** ISO dates plus explicit TVAnime 年月日 spellings; extra schedule text is not a date. */
+export function bangumiSourceTime(value: string): PublicationTime | undefined {
+  const iso = bangumiPublicationTime(value);
+  if (iso) return iso;
+  const chinese = /^(\d{4})年(?:(\d{1,2})月(?:(\d{1,2})日)?)?$/u.exec(value);
+  if (!chinese || chinese[0] !== value) return;
+  const year = chinese[1]!;
+  const month = chinese[2] === undefined ? undefined : chinese[2].padStart(2, '0');
+  const day = chinese[3] === undefined ? undefined : chinese[3].padStart(2, '0');
+  return bangumiPublicationTime([year, month, day].filter((part): part is string => part !== undefined).join('-'));
+}
+
+export function gregorianMonthDays(year: number, month: number): number {
   const february = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
-  const days = [31, february, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return day >= 1 && day <= days[month - 1]!;
+  return [31, february, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!;
+}
+
+function gregorianDay(year: number, month: number, day: number): boolean {
+  return day >= 1 && day <= gregorianMonthDays(year, month);
 }

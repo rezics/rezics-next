@@ -213,6 +213,12 @@ export function sourceDigest(normalizedProjection: unknown): string {
   return hash(text);
 }
 
+/** Exact nonnegative unitless integer; the decimal spelling is kept, never a float. */
+export function exactUnitlessIntegerQuantity(value: string): { amount: string; unit: '1' } | undefined {
+  if (!/^(?:0|[1-9][0-9]{0,15})$/u.test(value)) return;
+  return { amount: `+${value}`, unit: '1' };
+}
+
 /** Decode the two bounded VNDB representations without coercing absent or malformed data. */
 export function projectVndbReleaseMinimumAge(
   value: unknown,

@@ -1,4 +1,5 @@
 import { isBangumiTVAnimeTemplateHead } from './bangumi-subject-profile.ts';
+import { bangumiTelevisionRunKeys } from './bangumi-television-run.ts';
 
 export type BangumiSubjectName = Readonly<{
   property: 'schema:name' | 'schema:alternateName';
@@ -202,7 +203,7 @@ export function extractBangumiSubjectNames(record: {
           active.form = 'scalar';
           active.values.push(value);
         }
-      } else omit(pointer, 'unsupported_infobox_key');
+      } else if (!bangumiTelevisionRunKeys.has(key)) omit(pointer, 'unsupported_infobox_key');
       continue;
     }
     if (!active) {

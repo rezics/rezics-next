@@ -82,7 +82,7 @@ test('Bangumi CLI sends separately licensed summary and cover through its ordina
           source: 'bangumi',
           external_id: String(raw.id),
           field_group: 'cover',
-          converter_revision: 'bangumi@5',
+          converter_revision: 'bangumi@8',
           record_revision: 'unversioned',
         });
         const key = request.headers.get('idempotency-key')!;

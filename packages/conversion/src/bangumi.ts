@@ -10,6 +10,7 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
 import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
 import { extractBangumiSubjectNames } from './bangumi-subject-names.ts';
+import { bangumiTelevisionRun } from './bangumi-television-run.ts';
 import {
   checkCoverIntent,
   bangumiPublicTagScheme,
@@ -22,12 +23,12 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@7';
+export const converter_revision = 'bangumi@8';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Twelve projected top-level fields; at most eight commands, one cover intent,
+// Twelve projected top-level fields; at most nine commands, one cover intent,
 // and one citation envelope per statement with at most two URL parts.
 type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
@@ -158,6 +159,7 @@ function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
 function retainedFieldDiagnostics(
   record: NormalizedRecord,
   nameDiagnostics: readonly { pointer: string; code: string }[],
+  handledInfobox = false,
 ): { pointer: string; code: string }[] {
   const citedDate =
     (record.type === 3 || record.type === 6) && !!record.date?.trim() && !!bangumiPublicationTime(record.date.trim());
@@ -165,6 +167,7 @@ function retainedFieldDiagnostics(
     .filter((field) => record[field] !== undefined)
     .filter((field) => field !== 'infobox' || record.type !== 2)
     .filter((field) => field !== 'date' || !citedDate)
+    .filter((field) => field !== 'infobox' || !handledInfobox)
     .map((field) => ({
       pointer: `/${field}`,
       code:
@@ -303,6 +306,7 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       invalid('/summary', 'invalid_record_summary_document_limit');
     }
   }
+  const television = bangumiTelevisionRun(record);
   const proposals: BatchCommand[] = [];
   const propose = (
     statement: BatchStatement,
@@ -342,6 +346,8 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       const published = record.date?.trim() ? bangumiPublicationTime(record.date.trim()) : undefined;
       if (published) proposals.push(propose(fact('schema:datePublished', published), 'facts', 'date'));
     }
+    for (const item of television.facts)
+      proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
     if (document) {
       proposals.push({
         ...propose(fact('schema:abstract', { language: 'und', document }), 'summary', 'summary'),
@@ -398,7 +404,10 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     normalizedRecord: record,
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
-    diagnostics: retainedFieldDiagnostics(record, extractedNames.diagnostics),
+    diagnostics: [
+      ...retainedFieldDiagnostics(record, extractedNames.diagnostics, television.handledInfobox),
+      ...television.diagnostics,
+    ],
     coverAssets,
     mediaImportIntents,
     sourceMetadata,

@@ -222,7 +222,7 @@ export async function runJourney() {
       for (const member of observed.members) {
         expect(member.row.baseline?.state).toBe('present');
         expect(member.row.acknowledged).toEqual(member.row.baseline);
-        expect(member.row.baseline?.converter_revision).toBe('bangumi@5');
+        expect(member.row.baseline?.converter_revision).toBe('bangumi@8');
         expect(member.row.baseline?.recordRevision).toBe('unversioned');
       }
       sourceRows.push(observed);
@@ -409,7 +409,7 @@ export async function runJourney() {
         source: 'bangumi',
         external_id: target,
         record_revision: 'unversioned',
-        converter_revision: 'bangumi@5',
+        converter_revision: 'bangumi@8',
         digest: returnedState.members[0]!.row.baseline!.digest,
         field_group: 'facts',
       });
