@@ -4,7 +4,24 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg from 'pg';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createWorkClient } from '../../src/work/client.ts';
+import { composeSelectedRuntime } from '../../src/work/selected-runtime.ts';
+import { newId } from '../../src/route/route.ts';
 import type { SelectedIdentity } from '../../src/work/selected-runtime.ts';
+
+type Deferred<T> = ReturnType<typeof Promise.withResolvers<T>>;
+type LifecycleScenario = {
+  mode: 'body-error' | 'cancel' | 'deadline';
+  operationStarted: Deferred<void>;
+  releaseBody: Deferred<void>;
+  unblockQuery: Deferred<void>;
+  closeStarted: Deferred<void>;
+  releaseDone: Deferred<void>;
+  dispatches: Array<'issue' | 'release'>;
+  blockHold: boolean;
+  releaseQueries: number;
+  duplicateReleaseRefused: boolean;
+  issueAfterCloseRefused: boolean;
+};
 
 // UNRUN. Execute only in the controller's migrated native acceptance campaign.
 // A subprocess isolates the SDK's process-global executor from the ordinary fixtures.
@@ -36,6 +53,123 @@ async function nativeScenario() {
     systemDatabasePool: db.pool,
     systemDatabaseSchemaName: 'dbos',
   });
+  let currentScenario: LifecycleScenario | undefined;
+  let escapedUsefulCall: (() => Promise<unknown>) | undefined;
+  let releaseQueries = 0;
+  const originalRegister = sdk.registerSelectedStep;
+  sdk.registerSelectedStep = ((body, config, lifecycle) => {
+    const trustedLifecycle = lifecycle as {
+      open(): Promise<{
+        deadline: number;
+        reserve(dispatch: 'issue' | 'release'): Promise<void>;
+        close(): Promise<void>;
+        run<T>(body: () => Promise<T>): Promise<T>;
+      }>;
+    };
+    return originalRegister.call(sdk, body, config, {
+      async open() {
+        const admission = await trustedLifecycle.open();
+        const scenario = currentScenario;
+        if (!scenario) throw new Error('Missing selected lifecycle test scenario');
+        return {
+          deadline: admission.deadline,
+          run: <T>(run: () => Promise<T>) => admission.run(run),
+          async reserve(dispatch) {
+            scenario.dispatches.push(dispatch);
+            await admission.reserve(dispatch);
+            if (dispatch === 'release') {
+              try {
+                await admission.reserve('release');
+              } catch {
+                scenario.duplicateReleaseRefused = true;
+              }
+              try {
+                await admission.reserve('issue');
+              } catch {
+                scenario.issueAfterCloseRefused = true;
+              }
+            }
+          },
+          async close() {
+            scenario.closeStarted.resolve();
+            await admission.close();
+          },
+        };
+      },
+    });
+  }) as typeof sdk.registerSelectedStep;
+  let selectedStep: ReturnType<ReturnType<typeof composeSelectedRuntime>['registerMembersStep']>;
+  try {
+    selectedStep = composeSelectedRuntime(db.pool, work).registerMembersStep(
+      async (invocation, locator) => {
+        escapedUsefulCall = () => invocation.select(locator);
+        const scenario = currentScenario;
+        if (!scenario) throw new Error('Missing selected lifecycle test scenario');
+        const operation = invocation.select(locator);
+        void operation.catch(() => undefined);
+        await scenario.operationStarted.promise;
+        if (scenario.mode === 'body-error') throw new Error('selected-native-primary-body-error');
+        await scenario.releaseBody.promise;
+        if (scenario.mode === 'deadline') return await operation;
+        return 'incomplete';
+      },
+      { native: [] },
+    );
+  } finally {
+    sdk.registerSelectedStep = originalRegister;
+  }
+  const selectedWorkflow = DBOS.registerWorkflow(
+    async (locator: Parameters<typeof selectedStep>[0]) => selectedStep(locator),
+    { name: 'library.membersPreparation' },
+  );
+  const instrumented = new WeakSet<pg.PoolClient>();
+  db.pool.on('acquire', (raw: pg.PoolClient) => {
+    if (instrumented.has(raw)) return;
+    instrumented.add(raw);
+    const query = raw.query.bind(raw);
+    raw.query = ((...args: unknown[]) => {
+      const input = args[0];
+      const sql =
+        typeof input === 'string'
+          ? input
+          : typeof input === 'object' && input !== null && 'text' in input && typeof input.text === 'string'
+            ? input.text
+            : '';
+      const scenario = currentScenario;
+      if (scenario?.blockHold && sql.includes('hold_selected_execution')) {
+        scenario.blockHold = false;
+        scenario.operationStarted.resolve();
+        return scenario.unblockQuery.promise.then(() => Reflect.apply(query, raw, args as never[]));
+      }
+      return Reflect.apply(query, raw, args as never[]);
+    }) as typeof raw.query;
+  });
+  const poolQuery = db.pool.query.bind(db.pool);
+  db.pool.query = ((...args: unknown[]) => {
+    const input = args[0];
+    const sql =
+      typeof input === 'string'
+        ? input
+        : typeof input === 'object' && input !== null && 'text' in input && typeof input.text === 'string'
+          ? input.text
+          : '';
+    const result = Reflect.apply(poolQuery, db.pool, args as never[]);
+    if (sql.includes('release_selected_execution') && currentScenario) {
+      return Promise.resolve(result as Promise<unknown>).then(
+        (value) => {
+          currentScenario!.releaseQueries++;
+          releaseQueries++;
+          currentScenario!.releaseDone.resolve();
+          return value;
+        },
+        (error) => {
+          currentScenario!.releaseDone.reject(error);
+          throw error;
+        },
+      );
+    }
+    return result;
+  }) as typeof db.pool.query;
   const step = sdk.registerSelectedStep(
     async (mode) => {
       bodies++;
@@ -147,6 +281,91 @@ async function nativeScenario() {
     },
   );
   const workflow = DBOS.registerWorkflow(async (mode: string) => step(mode), { name: 'fixture.selected.workflow' });
+  async function verifyProductionLifecycle(mode: LifecycleScenario['mode']) {
+    const scenario: LifecycleScenario = {
+      mode,
+      operationStarted: Promise.withResolvers<void>(),
+      releaseBody: Promise.withResolvers<void>(),
+      unblockQuery: Promise.withResolvers<void>(),
+      closeStarted: Promise.withResolvers<void>(),
+      releaseDone: Promise.withResolvers<void>(),
+      dispatches: [],
+      blockHold: true,
+      releaseQueries: 0,
+      duplicateReleaseRefused: false,
+      issueAfterCloseRefused: false,
+    };
+    currentScenario = scenario;
+    releaseQueries = 0;
+    const workflowID = `selected-production:${mode}:${crypto.randomUUID()}`;
+    const route = 0;
+    const locator = {
+      route,
+      ownerAccountId: newId(route),
+      collectionId: newId(route),
+      episodeId: newId(route),
+    };
+    const handle = await DBOS.startWorkflow(selectedWorkflow, { workflowID })(locator);
+    let restoreClock: (() => void) | undefined;
+    try {
+      await scenario.operationStarted.promise;
+      const before = await db.admin.query<{ live: boolean; admission_spent: boolean; deadline: string }>(
+        'SELECT live,admission_spent,deadline FROM dbos.selected_step_executions WHERE workflow_uuid=$1',
+        [workflowID],
+      );
+      assert.equal(before.rowCount, 1);
+      assert.deepEqual(
+        { live: before.rows[0]!.live, admission_spent: before.rows[0]!.admission_spent },
+        { live: true, admission_spent: true },
+      );
+      if (mode === 'body-error') {
+        await scenario.closeStarted.promise;
+      } else if (mode === 'cancel') {
+        await DBOS.cancelWorkflow(workflowID);
+        scenario.releaseBody.resolve();
+        await scenario.closeStarted.promise;
+      } else {
+        const originalNow = Date.now;
+        Date.now = () => Number(before.rows[0]!.deadline) + 1;
+        restoreClock = () => {
+          Date.now = originalNow;
+        };
+        scenario.releaseBody.resolve();
+      }
+      const beforeRelease = await db.admin.query<{ live: boolean }>(
+        'SELECT live FROM dbos.selected_step_executions WHERE workflow_uuid=$1',
+        [workflowID],
+      );
+      assert.equal(beforeRelease.rows[0]!.live, true);
+      scenario.unblockQuery.resolve();
+      await scenario.releaseDone.promise;
+      restoreClock?.();
+      restoreClock = undefined;
+      const afterRelease = await db.admin.query<{ live: boolean; admission_spent: boolean }>(
+        'SELECT live,admission_spent FROM dbos.selected_step_executions WHERE workflow_uuid=$1',
+        [workflowID],
+      );
+      assert.deepEqual(afterRelease.rows, [{ live: false, admission_spent: true }]);
+      assert.deepEqual(scenario.dispatches, ['issue', 'release']);
+      assert.equal(scenario.releaseQueries, 1);
+      assert.equal(releaseQueries, 1);
+      assert.equal(scenario.duplicateReleaseRefused, true);
+      assert.equal(scenario.issueAfterCloseRefused, true);
+      let workflowError: unknown;
+      try {
+        await handle.getResult({ pollingIntervalMs: 10 });
+      } catch (error) {
+        workflowError = error;
+      }
+      assert.ok(workflowError);
+      if (mode === 'body-error') assert.match(String(workflowError), /selected-native-primary-body-error/);
+      await assert.rejects(escapedUsefulCall!());
+    } finally {
+      restoreClock?.();
+      scenario.unblockQuery.resolve();
+      currentScenario = undefined;
+    }
+  }
   try {
     await DBOS.launch();
     for (const mode of ['replay', 'attempt', 'restore', 'interrupted']) {
@@ -174,6 +393,9 @@ async function nativeScenario() {
     assert.equal(opened, 5);
     assert.equal(closed, 5);
     assert.equal(bodies, 5);
+    await verifyProductionLifecycle('body-error');
+    await verifyProductionLifecycle('cancel');
+    await verifyProductionLifecycle('deadline');
     // Native retired-owner refusal remains independent of selected-execution lifetime.
     const id = nativeIds[0]!;
     await work.retireWorkflow(id);

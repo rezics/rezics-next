@@ -104,6 +104,8 @@ type Original = {
   phase: 'new' | 'selecting' | 'selected' | 'source' | 'read' | 'applied' | 'failed';
   busy: boolean;
   operations: Set<Promise<unknown>>;
+  nativeLifecycle: 'open' | 'issued' | 'closing' | 'closed' | 'released';
+  closeDrain?: Promise<void>;
   localQuery?: string | undefined;
   continuation?: string;
   locator?: SelectedLocator;
@@ -334,6 +336,7 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
             deadline: Date.now() + 5000,
             children: declarations,
             counts: new Map(),
+            nativeLifecycle: 'open',
             revoked: false,
             phase: 'new',
             busy: false,
@@ -347,15 +350,38 @@ export function composeSelectedRuntime(pool: Pool, work: WorkClient): SelectedRu
             run<T>(run: () => Promise<T>) {
               return active.run(state, run);
             },
+            // New useful work is live-bound; only this issued, closed lifecycle can authorize terminal release.
             async reserve(dispatch) {
-              live(state);
               if (dispatch !== 'issue' && dispatch !== 'release') refuse('selected-runtime-unpriced-sdk-dispatch');
-              if (state.counts.has(`sdk-${dispatch}`)) refuse('selected-runtime-repeated-sdk-dispatch');
-              state.counts.set(`sdk-${dispatch}`, 1);
+              if (dispatch === 'issue') {
+                if (state.nativeLifecycle !== 'open') {
+                  refuse(
+                    state.nativeLifecycle === 'issued'
+                      ? 'selected-runtime-repeated-sdk-dispatch'
+                      : 'selected-runtime-issue-after-close',
+                  );
+                }
+                live(state);
+                state.nativeLifecycle = 'issued';
+                state.counts.set('sdk-issue', 1);
+                return;
+              }
+              if (state.nativeLifecycle === 'released') refuse('selected-runtime-repeated-sdk-dispatch');
+              if (state.nativeLifecycle !== 'closed' || !state.counts.has('sdk-issue'))
+                refuse('selected-runtime-release-before-close');
+              // The SDK's private finally owns the exact identity/owner pair for its one release query.
+              state.nativeLifecycle = 'released';
+              state.counts.set('sdk-release', 1);
             },
             async close() {
+              if (state.nativeLifecycle === 'released') refuse('selected-runtime-close-after-release');
+              if (state.closeDrain) return state.closeDrain;
+              state.nativeLifecycle = 'closing';
               state.revoked = true;
-              await Promise.allSettled([...state.operations]);
+              state.closeDrain = Promise.allSettled([...state.operations]).then(() => {
+                state.nativeLifecycle = 'closed';
+              });
+              return state.closeDrain;
             },
           };
         },

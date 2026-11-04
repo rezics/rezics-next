@@ -281,7 +281,7 @@ test('runtime reservation registers History without a NativeCollectionWork paren
   expect(await native.rows(fixture.owner)).toHaveLength(1);
 });
 
-test('the actual default consumer rejects an unassociated locator through selected native provenance', async () => {
+test('the actual Members workflow fails closed before undeclared Source and releases its admitted identity', async () => {
   const fixture = await native.fixture();
   const locator = native.locator(fixture.owner, fixture.collectionId);
   const workflowID = `library:members-preparation:${locator.route}:${locator.ownerAccountId}:${locator.episodeId}`;
@@ -304,6 +304,48 @@ test('the actual default consumer rejects an unassociated locator through select
       [locator.route >> 4, workflowID],
     );
     expect(selections.rows).toEqual([]);
+
+    const admitted = await runMembersPreparationRequest(
+      { pool: native.db.pool, workClient: native.workClient, preparation: fixture.store },
+      { actor: fixture.actor, collectionId: fixture.collectionId, definition: definition() },
+      async (request) => request.episode,
+      async (outcome) => expect(outcome.ok).toBe(true),
+    );
+    const episode = admitted.value;
+    // Production registration omits a complete Source declaration, so the callback stays closed and the
+    // existing selected failure transaction records the honest dependency outcome.
+    const result = await native.workClient
+      .retrieveWorkflow<{ episodes: Array<{ kind: string; version: string }> }>(episode.workflowId)
+      .getResult({ pollingIntervalMs: 10 });
+    expect(result).toMatchObject({ episodes: [{ kind: 'failure' }] });
+    expect((await native.rows(fixture.owner))[0]).toMatchObject({
+      state: 'live',
+      complete: false,
+      failure_code: 'dependency_unavailable',
+    });
+    const selected = await native.db.admin.query<{
+      step_name: string;
+      live: boolean;
+      admission_spent: boolean;
+      owner_xid: string;
+    }>(
+      `SELECT step_name,live,admission_spent,owner_xid
+       FROM dbos.selected_step_executions WHERE workflow_uuid=$1`,
+      [episode.workflowId],
+    );
+    expect(selected.rows).toHaveLength(1);
+    expect(selected.rows[0]).toMatchObject({
+      step_name: 'library.membersPreparation.step',
+      live: false,
+      admission_spent: true,
+    });
+    expect(selected.rows[0]!.owner_xid).toBeTruthy();
+    const outcome = await native.db.admin.query<{ result: { kind: string } }>(
+      'SELECT result FROM core.operational_work_selection WHERE partition_no=$1 AND workflow_id=$2',
+      [episode.locator.route >> 4, episode.workflowId],
+    );
+    expect(outcome.rows[0]!.result).toEqual(result.episodes[0]);
+    expect(outcome.rows[0]!.result).toMatchObject({ kind: 'failure' });
   } finally {
     await worker.close();
   }

@@ -372,10 +372,12 @@ native update, subject/exhaustion checks, failure and continuation SQL. No synth
 as final authority by this producer. A selected episode is opaque and private to its original invocation. Replay
 exposes only its committed `result` data. It cannot restart Source or apply.
 
-The intended sequence is `select` (native first transaction), `source` (after that transaction releases), `apply`
-(second native transaction). A reached failed apply may use `failure` in a third transaction on the same balance
-and deadline. The complete Source child must be declared before registration and must use its own authentic Source
-port with this absolute deadline. `SelectedChildren.native` enumerates exact literal SQL, finite invocation-wide
+The useful-work sequence is `select` (native first transaction), `source` (after that transaction releases), `apply`
+(second native transaction). A reached failed apply may use `failure` in a third transaction on the same deadline.
+Terminal SDK release follows lifecycle close and drains useful operations first; it retains the original native
+identity and owner binding and remains available after useful-work expiry. The complete Source child must be
+declared before registration and must use its own authentic Source port with this absolute deadline.
+`SelectedChildren.native` enumerates exact literal SQL, finite invocation-wide
 multiplicity (1..64), and complete nine-field child costs; up to 64 distinct statements are supported. `source`
 is a complete child cost including its reached cleanup. These declarations describe dispatch; they grant no
 Source or user authority. Unknown SQL, unknown Source cost and repeated phases refuse before dispatch. Native SQL
@@ -395,8 +397,10 @@ constructs/live-registers the transaction. No other-home checkout happens while 
 
 The append-only SDK migration is `20261102110241_selected_step_execution`, after all existing migration positions.
 It adds `selected_step_executions`, `select_step_execution`, `hold_selected_execution`,
-`consume_selected_execution`, `release_selected_execution`, and ALWAYS admission-preservation guards. Issuance
-locks restore domain SHARE, actual workflow status SHARE, permanent writer fence UPDATE, then completed output/input
+`consume_selected_execution`, `release_selected_execution`, and ALWAYS admission-preservation guards. The lifecycle
+sequence is issue, useful work, close and drain, then one terminal release for that issued identity. It refuses issue
+after close and duplicate release. Useful selection, Source, apply, failure, and escaped handles remain revoked or
+deadline-bound. Issuance locks restore domain SHARE, actual workflow status SHARE, permanent writer fence UPDATE, then completed output/input
 and the selected attempt. Held validation uses domain SHARE -> status SHARE -> permanent fence UPDATE -> attempt
 SHARE -> committed input SHARE, and compares the locked current records and registration/input bytes. Queue recovery/replacement changes `owner_xid` by updating status;
 that update conflicts with SHARE until the operational COMMIT. Retirement's unchanged status-before-fence ordering
@@ -439,10 +443,10 @@ prices, and not a prepaid remaining balance.
 (controls + two held checks + original + two tuple verifications + association + result) + cleanup.
 Its full axes in the order candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/bytes/
 emptySeeks/engineRequests are **0/195/0/204/0/187/63505792/204/0**. Disjoint cleanup is release + three two-rollback
-partitions: **0/2/0/2/0/8/4480/2/0**. Three phases is an absolute bound, not three new grants. Foreign
-declarations are summed with checked safe-integer arithmetic at registration, never inferred from an example or a
-measured parent. Missing foreign declarations close their dispatch. Dispatch uses those documented ceilings; it
-does not debit a remaining ledger.
+partitions: **0/2/0/2/0/8/4480/2/0**. Three phases is an absolute bound, not three new grants. Child declarations
+are copied and validated at registration. Dispatch checks exact SQL and finite multiplicity; foreign cost fields and
+local sums remain descriptive ceilings and never become remaining dispatch authority. Missing foreign declarations
+close their dispatch. Dispatch uses the documented static ceilings; it does not debit a ledger.
 
 Rows/points include full-key probes, negative seeks, insert/conflict/update index operations and FK checks.
 Statements count outer function calls and nested SQL, both transaction BEGINs, time/settings, partition/account

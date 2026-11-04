@@ -24,7 +24,7 @@ export function sumSelectedCost(...parts: readonly SelectedCost[]): SelectedCost
   return Object.freeze(total) as SelectedCost;
 }
 const times = (n: number, part: SelectedCost) => sumSelectedCost(...Array.from({ length: n }, () => part));
-/** Literal complete LOCAL dispatch partitions. Child native SQL/Source prices are additional.
+/** Literal complete LOCAL dispatch partitions, including the separate terminal release ceiling.
  * These are documented static bounds. Dispatch admits declared SQL and multiplicity, not a remaining ledger. */
 export const SELECTED_COST = Object.freeze({
   // Outer select + domain/status/fence/operation/input probes + attempt upsert + native return.
@@ -52,6 +52,7 @@ export const SELECTED_COST = Object.freeze({
   // Conditional pending->result UPDATE, exact result read/reconciliation, bounded JSON input/output.
   result: selectedCost(2, 4, 2, 49152),
 });
+/** One owner-bound release after close has drained useful operations, plus bounded rollback paths. */
 export const SELECTED_CLEANUP_DECLARATION = sumSelectedCost(SELECTED_COST.release, times(3, SELECTED_COST.rollback));
 /** One select, one apply and at most one reached failure; no transaction or SDK retry refills it. */
 export const SELECTED_LOCAL_DECLARATION = sumSelectedCost(

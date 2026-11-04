@@ -60,6 +60,13 @@ bounds. `NativeCollectionWork` remains the Library SQL observer for identity, ca
 and publication. Native acceptance of this journey is still unmeasured; compiler and focused
 source tests do not certify native product outcomes.
 
+Selected execution has a terminal cleanup sequence separate from useful-work admission: close
+revokes useful calls and drains in-process native operations, then the same issued SDK identity
+may be released once with its original attempt generation, Pool and owner token. Release remains
+available after useful-work expiry and cannot reopen selection, Source, apply, failure or escaped
+handles. Static cost totals document finite outcomes; their remaining amounts do not authorize
+dispatch.
+
 **Evidence (pre-consolidation source).** `services/kernel/src/library/collection-source-work.ts`
 defines `NativeCollectionWork`, eight axes, balances, held amounts, reservations, dispatch and
 settlement. `services/kernel/src/history/operational-work-budget.ts` previously repeated cost
