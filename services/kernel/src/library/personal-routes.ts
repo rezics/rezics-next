@@ -196,43 +196,39 @@ const copyFields = {
   ),
 };
 const copyConditionValueSchema = t.Union(COPY_CONDITION_CHOICES.map(({ id: value }) => t.Literal(value)));
-const copyConditionDisplaySchema = t.Union(
-  [
-    t.Object({ state: t.Literal('not_recorded') }, closed),
-    t.Object({ state: t.Literal('unavailable') }, closed),
-    t.Object({ state: t.Literal('cleared') }, closed),
-    t.Object({ state: t.Literal('recorded'), id: copyConditionValueSchema, label: t.String() }, closed),
-  ],
-);
+const copyConditionDisplaySchema = t.Union([
+  t.Object({ state: t.Literal('not_recorded') }, closed),
+  t.Object({ state: t.Literal('unavailable') }, closed),
+  t.Object({ state: t.Literal('cleared') }, closed),
+  t.Object({ state: t.Literal('recorded'), id: copyConditionValueSchema, label: t.String() }, closed),
+]);
 const copyConditionChoiceSchema = t.Object(
   { id: copyConditionValueSchema, label: t.String(), description: t.String() },
   closed,
 );
-const copyConditionEditingSchema = t.Union(
-  [
-    t.Object(
-      {
-        state: t.Literal('supported'),
-        currentness: t.Literal('current'),
-        choices: t.Array(copyConditionChoiceSchema, { minItems: COPY_CONDITION_CHOICES.length }),
-      },
-      closed,
-    ),
-    t.Object(
-      {
-        state: t.Literal('unavailable'),
-        currentness: t.Union([t.Literal('current'), t.Literal('retired'), t.Literal('unavailable')]),
-        reason: t.Union([
-          t.Literal('unsupported'),
-          t.Literal('unrecognized_vocabulary'),
-          t.Literal('retired'),
-          t.Literal('current_source_unavailable'),
-        ]),
-      },
-      closed,
-    ),
-  ],
-);
+const copyConditionEditingSchema = t.Union([
+  t.Object(
+    {
+      state: t.Literal('supported'),
+      currentness: t.Literal('current'),
+      choices: t.Array(copyConditionChoiceSchema, { minItems: COPY_CONDITION_CHOICES.length }),
+    },
+    closed,
+  ),
+  t.Object(
+    {
+      state: t.Literal('unavailable'),
+      currentness: t.Union([t.Literal('current'), t.Literal('retired'), t.Literal('unavailable')]),
+      reason: t.Union([
+        t.Literal('unsupported'),
+        t.Literal('unrecognized_vocabulary'),
+        t.Literal('retired'),
+        t.Literal('current_source_unavailable'),
+      ]),
+    },
+    closed,
+  ),
+]);
 const copySchema = t.Object(
   {
     id,
@@ -727,18 +723,7 @@ function shelfEntryView(entry: ShelfEntry) {
           },
   };
 }
-function copyView({
-  id,
-  subjectId,
-  kind,
-  status,
-  revision,
-  location,
-  source,
-  acquiredOn,
-  disposedOn,
-  note,
-}: Copy) {
+function copyView({ id, subjectId, kind, status, revision, location, source, acquiredOn, disposedOn, note }: Copy) {
   return {
     id,
     subjectId,

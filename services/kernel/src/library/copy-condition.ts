@@ -52,7 +52,10 @@ function decodeObservation(value: unknown): CopyConditionObservation | undefined
 }
 
 /** Decode only the private row representation; absent observations remain absent. */
-export function decodeCopyConditionFacts(mediaCondition: unknown, packagingCondition: unknown): CopyConditionFacts | undefined {
+export function decodeCopyConditionFacts(
+  mediaCondition: unknown,
+  packagingCondition: unknown,
+): CopyConditionFacts | undefined {
   const media = decodeObservation(mediaCondition);
   const packaging = decodeObservation(packagingCondition);
   if (!media && !packaging) return undefined;
