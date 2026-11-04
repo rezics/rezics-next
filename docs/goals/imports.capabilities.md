@@ -1120,13 +1120,15 @@ integration; no capability promotion is claimed.
 
 ## Bangumi creator and voice credits
 
-The explicit local real-dump showcase invocation now derives only selected type-2 anime staff roles from the finite
-reviewed Bangumi inventory. The adapter writes source Concepts through ordinary acknowledged commands, then delegates
-independent acceptance/adoption and current public reads to the common showcase publisher. Staff credit candidates
-preserve the exact work/person IDs, selected-work citation, mapped main property and role Concept in `wdt:P3831`.
-Voice candidates preserve the exact work/performer pair and the character on `wdt:P453`. Current work, person and
-character reads must match their released native types and Bangumi identifier statements before the dependent facts are
-sent. Missing endpoints produce bounded source gaps; same-name and cross-provider endpoints do not resolve credits.
+The explicit local real-dump showcase invocation derives finite staff roles from selected type-2 anime and type-4 Game
+`subject-persons` rows. It writes source Concepts through ordinary acknowledged commands, then delegates independent
+acceptance/adoption and current public reads to the common showcase publisher. Staff credit candidates preserve exact
+work/person IDs, selected-work citation, mapped property and role Concept in `wdt:P3831`. Voice candidates remain
+type-2-only and preserve the exact work/performer pair and character on `wdt:P453`. Current work and creator reads must
+match their released native types and Bangumi identifier statements before dependent facts are sent. Unsupported source
+types, wrong-scheme roles and unresolved endpoints withhold only their affected credits; same-name and cross-provider
+endpoints do not resolve credits. Game `subject-characters` and `person-characters` remain with the separate
+Game-character journey.
 
 Decision: staff-role Concepts cite the pinned Bangumi `subject_staffs.yml` definition; each staff or voice credit cites
 its selected Bangumi work row.
@@ -1139,23 +1141,26 @@ evidence.
 Staff `position` remains a role code, never `schema:position`. Credited spelling is emitted only when an association
 actually supplies it; `person-characters.summary` remains association commentary. Music and live-action staff, unprofiled
 type-3/type-6 roles, and retracted or wrong-scheme vocabulary bindings stay withheld. The exported role-binding helper
-accepts type 1 or 4 for the future book caller; book selection and author assignment remain with that worker. Ordinary
+accepts type 1 for the future book caller; book selection and author assignment remain with that worker. Ordinary
 imports stay proposal-only unless local showcase state is explicitly provided. The work-credit consumer requires
 public projections for `schema:author`, `schema:director`, the other mapped staff properties, and `wdt:P725` with
 `wdt:P453`/`wdt:P3831`; any missing projection field remains Semantic's producer contract and is not manufactured by
 this importer.
 
-- Touches: at most 64 staff and 64 voice association rows per work, a bounded finite role set, and exact current reads
-  for the associated work/person/character subjects.
-- Bound: vocabulary candidates require the exact common-manifest create and candidate acknowledgements, pinned source
-  citation, native type, current `schema:sameAs`, and `skos:inScheme`. Credit candidates require the exact staff-position
-  or performer-character citation fragment under the selected work URL. Read caching is local to the import operation
-  and is cleared after publication; no label scan or generic import auto-publication is used.
-- Growth check: `services/importer/tests/showcase-bangumi-credits.test.ts` covers the real-format adapter, current role
-  binding and one unresolved association. `services/kernel/test/imports/showcase-bangumi-credits.test.ts` covers
-  independent native acceptance/adoption, exact public work/person/character reads, role and citation meaning,
-  retracted binding withholding, and identity reuse on refresh. Native execution remains controller-owned. The actual
-  dump walkthrough remains M1 proof.
+- Touches: at most 64 `subject-persons` associations per selected Game and 64 voice associations per selected anime;
+  at most 64 distinct staff-role requirements per bounded operation; exact current reads for each selected work and
+  creator endpoint.
+- Bound: the existing family, 8,192-association, command and journal caps remain in force. Vocabulary candidates
+  require exact common-manifest acknowledgements, the pinned source citation, native type, current `schema:sameAs`,
+  and `skos:inScheme`. Credit candidates require the exact staff-position or performer-character citation under the
+  selected work URL. Requirements beyond the 64-role bound surface as `missing_concept` gaps. Read caching is local to
+  the import operation and clears after publication; there is no label scan or generic import auto-publication.
+- Growth check: `services/importer/tests/showcase-bangumi-credits.test.ts` retains the anime role and voice adapter.
+  `services/importer/tests/showcase-bangumi-game-creators.test.ts` covers selected Game planning and excludes Game
+  character/voice rows. `services/kernel/test/imports/showcase-bangumi-game-creators.test.ts` covers separate
+  acceptance/adoption, current work and creator reads, exact roles and citations, wrong-scheme and unresolved
+  withholding, and UUID reuse on an unchanged-source refresh. Frozen controller acceptance and a real-dump walkthrough
+  remain deferred.
 
 Existing focused scenarios retained:
 

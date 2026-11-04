@@ -39,6 +39,7 @@ const alias = 'bangumi_cross_media';
 const roleVocabularyRevision = `${bangumiVocabularyRevision}:staff-role@1`;
 const schemeSourceKey = 'bangumi.staff';
 const roleSourceKey = (code: string) => `bangumi.staff:${code}`;
+const roleRequirementLimit = 64;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 export type BangumiStaffWorkType = 1 | 2 | 4;
@@ -147,7 +148,7 @@ function needsFor(input: {
   }
   return [...required.values()]
     .sort((left, right) => left.code.localeCompare(right.code))
-    .slice(0, showcaseLimits.vocabulary - 1);
+    .slice(0, Math.min(roleRequirementLimit, showcaseLimits.vocabulary - 1));
 }
 
 function requirementsFor(roles: readonly RequiredRole[], schemeSource: Source): ShowcaseVocabularyRequirement[] {

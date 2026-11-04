@@ -590,7 +590,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@10` preserves the current Bangumi physical profile, VNDB character names and staff aliases, release titles, minimum age and GTIN while adding Bangumi character names and verified VNDB blood types.
+Combined revision decision: `cross-media-entities@11` preserves every projection released in `@10`, including the Bangumi physical profile and character names, VNDB character names, staff aliases and blood types, release titles, minimum age and GTIN. It advances selected-family Bangumi Game creator credits so unchanged source rows can offer the newly supported staff facts.
 
 ### VNDB native alternate-name contract
 

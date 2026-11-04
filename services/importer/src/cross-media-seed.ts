@@ -42,6 +42,8 @@ import {
 } from './showcase-work-links.ts';
 import {
   deliverBangumiCreatorCredits,
+  bangumiStaffDraft,
+  type BangumiStaffAssociation,
   type BangumiCreatorCreditDraft,
   type BangumiCreatorCreditGap,
 } from './bangumi-creator-credits.ts';
@@ -675,6 +677,11 @@ export async function planCrossMediaSeed(
       .filter((record) => record.payload && typeof record.payload === 'object' && record.payload.type === 2)
       .map((record) => record.key),
   );
+  const selectedGameWorks = new Set(
+    [...plan.records.bangumi, ...plan.entities.bangumi]
+      .filter((record) => record.payload && typeof record.payload === 'object' && record.payload.type === 4)
+      .map((record) => record.key),
+  );
   const admittedAppearanceIndices = new Set<number>();
   const appearanceCounts = new Map<number, number>();
   const admittedStaffIndices = new Set<number>();
@@ -690,7 +697,12 @@ export async function planCrossMediaSeed(
     const sourceIndex = selectionIndex++;
     const subjectId = number(row, 'subject_id');
     const characterId = number(row, 'character_id');
-    if (familyWorks.has(subjectId) && !selectedAnimeWorks.has(String(subjectId))) characters.add(characterId);
+    if (
+      familyWorks.has(subjectId) &&
+      !selectedAnimeWorks.has(String(subjectId)) &&
+      !selectedGameWorks.has(String(subjectId))
+    )
+      characters.add(characterId);
     if (!selectedAnimeWorks.has(String(subjectId))) continue;
     const count = (appearanceCounts.get(subjectId) ?? 0) + 1;
     appearanceCounts.set(subjectId, count);
@@ -741,7 +753,7 @@ export async function planCrossMediaSeed(
   for await (const row of input.rows('bangumi', 'person-characters')) {
     const sourceIndex = voiceIndex++;
     const subjectId = number(row, 'subject_id');
-    if (!familyWorks.has(subjectId)) continue;
+    if (!selectedAnimeWorks.has(String(subjectId))) continue;
     const count = (voiceCounts.get(subjectId) ?? 0) + 1;
     voiceCounts.set(subjectId, count);
     if (count > CREDIT_ASSOCIATIONS_PER_WORK || admittedVoiceIndices.size >= CREDIT_ASSOCIATIONS) {
@@ -829,22 +841,13 @@ export async function planCrossMediaSeed(
       );
     }
     if (!importedWorks.has(work)) continue;
-    plan.credits.push({
-      kind: 'staff',
-      work,
-      workType: workType ?? 0,
-      person,
-      roleCode: row.position as number,
-      ...(row.creditedAs === undefined ? {} : { creditedAs: row.creditedAs as string }),
-      path: `/subject-persons/${work}/${personId}/position`,
-      record: row,
-    });
+    plan.credits.push(bangumiStaffDraft(row as BangumiStaffAssociation, workType ?? 0));
   }
   let currentVoiceIndex = 0;
   for await (const row of input.rows('bangumi', 'person-characters')) {
     const sourceIndex = currentVoiceIndex++;
     if (!admittedVoiceIndices.has(sourceIndex)) continue;
-    if (!familyWorks.has(number(row, 'subject_id'))) continue;
+    if (!selectedAnimeWorks.has(String(number(row, 'subject_id')))) continue;
     const work = String(number(row, 'subject_id'));
     const personId = number(row, 'person_id');
     const characterId = number(row, 'character_id');
@@ -2697,7 +2700,7 @@ export async function runCrossMediaSeedCli(
                   review: importPort,
                   publicClient,
                   ...(priorShowcase ? { prior: priorShowcase } : {}),
-                  subjectTypes: [2],
+                  subjectTypes: [2, 4],
                   read,
                 });
                 creditResolution = prepared;
@@ -2792,7 +2795,7 @@ export async function runCrossMediaSeedCli(
                     review: importPort,
                     publicClient,
                     ...(priorShowcase ? { prior: priorShowcase } : {}),
-                    subjectTypes: [2],
+                    subjectTypes: [2, 4],
                     read,
                   });
                   creditResolution = prepared;

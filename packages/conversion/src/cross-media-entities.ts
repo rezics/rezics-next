@@ -727,8 +727,12 @@ const profiles: Record<EntityKind, { type: string; identifier: string; sourceKin
 function personType(record: object): string {
   const type = own(record, 'type', '/type');
   const mapping = mapSourceEnumeration('bangumi', 'person.type', type as number);
-  if (mapping?.status === 'omitted') fail('/type', 'unsupported_type');
-  return mapping?.term === 'schema:Organization' ? 'schema:Organization' : 'schema:Person';
+  if (
+    mapping?.status !== 'existing' ||
+    (mapping.term !== 'schema:Person' && mapping.term !== 'schema:Organization')
+  )
+    fail('/type', 'unsupported_type');
+  return mapping.term;
 }
 
 function producerType(record: object): string {

@@ -1458,17 +1458,19 @@ bounds belong to the linked owners; conversion itself has no purge work.
 
 ### Bangumi creator and voice credits
 
-- Touches: one current-authority fence read per elected work, one claim/type read
-  per work/person/character endpoint, one vocabulary map of at most 64 association
-  rows, and ordinary bulk propose pages for the resulting credit commands.
-- Bound: O(W + A) for W elected works and A admitted association rows on those
-  works, plus existing import of the selected records. No catalogue scan, vote
-  write or fabricated staff order.
-- Growth check: `services/importer/tests/bangumi-creator-credits.test.ts` and
-  `packages/conversion/tests/bangumi-creator-credits.test.ts` pin the operator
-  and mapper. Native API adoption remains
-  `services/kernel/test/imports/bangumi-creator-credits.test.ts`; it is not
-  claimed passed in this delivery.
+- Touches: at most 64 `subject-persons` rows for each selected Game, exact current
+  reads for its VideoGame and creator endpoints, and the existing type-2
+  staff/voice paths.
+- Bound: at most 64 distinct staff-role requirements per operation and the
+  existing 8,192-association, family, command and journal caps. Type-4 Game
+  character and voice rows remain with the Game-character journey; there is no
+  catalogue scan, name matching or inferred staff order.
+- Growth check: `services/importer/tests/showcase-bangumi-game-creators.test.ts`
+  pins selected-Game planning and excludes Game character/voice rows.
+  `services/kernel/test/imports/showcase-bangumi-game-creators.test.ts` covers
+  current role bindings, separate acceptance/adoption, exact citations,
+  endpoint withholding and unchanged-source UUID reuse. Controller acceptance
+  and a real-data walkthrough remain deferred.
 
 ### Bangumi subject relations
 
@@ -2312,7 +2314,7 @@ date is not completion or access authority.
 Ordinary Bangumi JSON-lines registration converts pinned Game infobox
 `游玩人数` on type 4 through current `bangumi@10`, retaining original-run and
 work-evidence mappings. Selected-family seed uses that same converter under its
-existing combined `cross-media-entities@10+bangumi@10` registration; this journey adds no
+existing combined `cross-media-entities@11+bangumi@10` registration; this journey adds no
 publisher. Native read is the acknowledged VideoGame. A mode, platform, edition
 or condition qualification withholds the whole occurrence. Names, dates,
 platforms, developer/voice credits and websites retain their owners.
@@ -2334,15 +2336,16 @@ positive integer or inclusive range; a lone count invents no minimum.
 
 ### Bangumi creator and voice credits
 
-The real local showcase seed derives only the finite staff roles used by
-selected type-2 anime `subject-persons` rows. It uses the reviewed mappings in
+The real local showcase seed derives finite staff roles from selected type-2
+anime and type-4 Game `subject-persons` rows. It uses the reviewed mappings in
 `bangumi-vocabulary.ts`, creates source Concepts only through acknowledged
 ordinary import commands, and sends them through the common showcase manifest,
-independent acceptance/adoption and tokenless current reads. The selected
-work's native source ID, the person's Bangumi ID and the character's Bangumi ID
-must each match their current native subject type and identity statement before
-a dependent credit is sent. Exact UUIDs carry through the mapper; names and
-cross-provider title matches never resolve endpoints.
+independent acceptance/adoption and tokenless current reads. Game creators must
+resolve through their Bangumi person key to the current Person or Organization
+profile and exact identity statement. Game `subject-characters` and
+`person-characters` remain with the separate Game-character journey. Exact
+UUIDs carry through the mapper; names and cross-provider title matches never
+resolve endpoints.
 
 Decision: staff-role Concepts cite the pinned Bangumi `subject_staffs.yml`
 definition; each staff or voice credit cites its selected Bangumi work row.
@@ -2359,28 +2362,33 @@ association supplies it; `person-characters.summary` remains commentary and
 does not become `wdt:P1932`. Voice credits keep the bound character on
 `wdt:P453` for that performer and work. Music and live-action staff, unprofiled
 type-3/type-6 roles, and stale or wrong-scheme role bindings remain exact gaps.
-The same exported role-binding helper accepts type 1 or 4 for a future book
-caller; book selection and author assignment remain that worker's ownership.
+The same exported role-binding helper accepts type 1 for the future book caller;
+book selection and author assignment remain that worker's ownership.
 Ordinary imports without explicit showcase state remain proposal-only.
 
 - Touches: at most 64 staff and 64 voice association rows per Bangumi work;
-  only selected source types 1, 2 and 4 use the finite staff inventory, and the
-  default showcase adapter derives role Concepts from type 2 anime rows.
+  selected type-2 anime and type-4 Game staff use the finite staff inventory,
+  while voice associations remain type-2-only. At most 64 distinct staff-role
+  requirements are derived per bounded operation.
 - Bound: each selected role is checked against its exact common-manifest
   create/candidate acknowledgements, pinned vocabulary citation, current
   native type, current `schema:sameAs`, and `skos:inScheme`. Credit citations
   must be the exact staff-position or performer-character row under the
-  selected work URL. Work/person/character reads are operation-local and
-  invalidated after publication. No catalogue-wide label scan or generic
-  import auto-publication is added.
+  selected work URL. Game creator endpoint types come from the admitted
+  `person.type` mapping; unsupported source types and unresolved endpoints
+  withhold only their associations. Work/person reads are operation-local and
+  invalidated after publication. Role requirements beyond the 64-role bound
+  remain visible as `missing_concept` gaps. No catalogue-wide label scan or
+  generic import auto-publication is added.
 - Growth check: `services/importer/tests/showcase-bangumi-credits.test.ts`
-  follows real-format staff/cast rows through the default adapter and an exact
-  unresolved endpoint gap. The native test
-  `services/kernel/test/imports/showcase-bangumi-credits.test.ts` covers
-  separate acceptance/adoption, exact work/person/character reads, role and
-  citation meaning, stale binding withholding, and identity reuse on refresh;
-  its execution remains controller-owned. A real dump walkthrough remains M1
-  proof.
+  retains the type-2 anime staff/cast case. The new
+  `services/importer/tests/showcase-bangumi-game-creators.test.ts` follows
+  selected Game staff through planning and excludes Game character/voice rows.
+  `services/kernel/test/imports/showcase-bangumi-game-creators.test.ts` covers
+  current role bindings, separate acceptance/adoption, exact work/creator
+  reads, role and citation meaning, wrong-scheme and unresolved withholding,
+  and identity reuse on an unchanged refresh. Controller acceptance and a real
+  dump walkthrough remain deferred.
 
 ### Bangumi character identity and appearance mapping
 
@@ -2541,28 +2549,6 @@ Decision: keep only explicitly unit-bearing released quantities, preserve source
 - Bound: 65,536 UTF-8 infobox bytes, template depth 2, 64 fields, 128 retained scalar code units, 64 quantity characters, 2 emitted quantity facts and 16 diagnostics. Explicit centimetres/metres and kilograms/grams retain their source units; missing units are never guessed. The existing source journal, publication manifest and command ceiling still apply.
 - Growth check: `packages/conversion/tests/bangumi-character-measurements.test.ts` covers exact unit meaning, unknown and unsupported values, independent removal and the parser bounds. `services/kernel/test/imports/bangumi-character-measurements.test.ts` covers default selected identity, exact citation, proposal versus public adoption, reopen and changed-source suppression under a current facts fence. Kernel execution remains controller-owned and is deferred to integration.
 
-### Bangumi TVAnime subject names
-
-Ordinary Bangumi registration and selected-family type 2 rows reach
-`convertBangumi`; the ordinary caller uses `bangumi@10` and the selected-family
-registration uses `cross-media-entities@10+bangumi@10`. Both share the pure TVAnime
-field extraction and existing journal, source metadata admission, citations,
-candidate review, adoption and current-read flow. No additional seed publisher or
-identity lookup is involved. The importer keeps the exact Bangumi subject alias
-and key, unversioned record state where no provider revision exists, normalized
-digest and acknowledged native UUID.
-
-- Touches: one selected source record, at most 24 name statements and 16 bounded
-  omission diagnostics; each name carries its exact Bangumi subject citation.
-- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
-  and the current source journal and batch limits; raw source values never enter
-  diagnostics.
-- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
-  selected-family JSONL planning, stable identity, unchanged and changed input,
-  exact citations and omissions. The connected ordinary caller is
-  `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
-  remains controller-owned.
-
 ### Bangumi character source names
 
 The default cross-media selection follows selected anime `subject-characters`
@@ -2602,7 +2588,7 @@ aliases use `und`. A malformed field is withheld as a whole while independent
 source names and summary proposals remain available.
 
 The ordinary importer remains proposal-only. The default selected-family path
-uses its existing `cross-media-entities@10+bangumi@10` registration, record bindings,
+uses its existing `cross-media-entities@11+bangumi@10` registration, record bindings,
 finite showcase manifest and publication journal. Local review accepts and
 adopts current candidates through separate native commands; corrected source
 names create new proposals on the acknowledged Book UUID, and ordinary refresh
