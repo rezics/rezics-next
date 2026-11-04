@@ -7,20 +7,13 @@ import { RELEASE_LIMITS, validateRelease } from '@rezics/definitions';
 import { fromPlainText } from '@rezics/document';
 import { createKernel } from '../../src/http/kernel.ts';
 import { bootstrapProfile } from '../../src/presentation/profiles.ts';
-import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
-import { itemFacts } from '../../src/semantic/item.ts';
-import {
-  checkGrowth,
-  openGrowthDatabase,
-  seed,
-  type GrowthDatabase,
-  type Population,
-  type Row,
-} from '../support/growth.ts';
+import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createRealAccess } from './real-access.ts';
+import { seedSemanticPopulation, unrelatedSemanticPopulation } from './planner-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -147,45 +140,8 @@ afterAll(async () => {
   if (db) await db.close();
 });
 
-function unrelated(): Population {
-  return {
-    name: 'cited-quotation-unrelated',
-    hotPartition: 0,
-    hotShare: 1,
-    rows: ({ ordinal }) => {
-      const route = 0xfff1;
-      const id = newId(route);
-      const tx = randomUUID();
-      const facts = itemFacts(id, { labels: { en: `Unrelated ${ordinal}` } });
-      const rows: Record<string, Row[]> = {
-        'semantic.subject': [
-          {
-            route,
-            subject_id: id,
-            type: 'schema:Book',
-            recorded_transaction_id: tx,
-            current_facts: 1,
-            current_release: bundledDigest,
-          },
-        ],
-        'semantic.revision': [
-          { route, subject_id: id, revision: 1, kind: 'create', release: bundledDigest, recorded_transaction_id: tx },
-        ],
-        'semantic.fact': facts.map((fact) => ({
-          ...fact,
-          route,
-          subject_id: id,
-          recorded_transaction_id: tx,
-          release: null,
-          relation: false,
-        })),
-      };
-      return rows;
-    },
-  };
-}
-
 test('fixed quotation page work stays bounded as unrelated facts grow', async () => {
+  const population = unrelatedSemanticPopulation('cited-quotation-unrelated', 4094).population;
   const report = await checkGrowth(db, {
     name: 'cited quotation page',
     scales,
@@ -193,7 +149,7 @@ test('fixed quotation page work stays bounded as unrelated facts grow', async ()
     repetitions: 3,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (database, scale, previous) => {
-      await seed({ pool: database.pool, admin: database.admin }, unrelated(), { from: previous, to: scale });
+      await seedSemanticPopulation(database, population, { from: previous, to: scale });
     },
     operation: async () => {
       const response = await app.handle(
