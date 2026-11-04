@@ -2,7 +2,7 @@ import { expect, mock, test } from 'bun:test';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
 import { renderToString } from 'react-dom/server';
-import { act, createElement, useState, StrictMode, type ReactNode } from 'react';
+import { act, useState, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { dirname } from 'node:path';
 
@@ -19,14 +19,6 @@ const reportCalls: {
 mock.module('../src/report/actions', () => ({
   sendReport: ({ data, headers }: { data: ReportDraft; headers: HeadersInit }) =>
     new Promise<ReportResult>((resolve, reject) => reportCalls.push({ data, headers: new Headers(headers), resolve, reject })),
-}));
-mock.module('../src/report/turnstile', () => ({
-  Verification: ({ onToken, onStart }: { onToken(token: string): void; onStart(): void }) =>
-    createElement(
-      'button',
-      { type: 'button', onClick: () => { onStart(); onToken('original-verification-token'); } },
-      'Verify test challenge',
-    ),
 }));
 
 const importDom = await installDom();
@@ -856,6 +848,28 @@ test('PostActions retains the original report body, sender, key and credential f
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(details!.value).toBe('the original report body');
+    const scripts = [...document.querySelectorAll<HTMLScriptElement>('script[src]')];
+    expect(scripts).toHaveLength(1);
+    const verification = {
+      render: (
+        container: HTMLElement,
+        options: { callback(token: string): void; 'expired-callback'(): void; 'error-callback'(): void },
+      ) => {
+        const verify = document.createElement('button');
+        verify.type = 'button';
+        verify.textContent = 'Verify test challenge';
+        verify.addEventListener('click', () => options.callback('original-verification-token'));
+        container.append(verify);
+        return 'report-test-widget';
+      },
+      reset: () => {},
+      remove: () => {},
+    };
+    Object.defineProperty(dom.window, 'turnstile', { configurable: true, writable: true, value: verification });
+    await act(async () => {
+      for (const script of scripts) script.dispatchEvent(new dom.window.Event('load'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     await clickButton(node, 'Verify test challenge');
     const submit = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
       (candidate) => candidate.textContent?.trim() === m.report_submit(),
@@ -896,6 +910,7 @@ test('PostActions retains the original report body, sender, key and credential f
     await act(async () => root.unmount());
     client.clear();
     node.remove();
+    delete (dom.window as Window & { turnstile?: unknown }).turnstile;
     await dom.close();
   }
 });
