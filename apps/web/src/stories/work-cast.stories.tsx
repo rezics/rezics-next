@@ -13,7 +13,7 @@ function performance(statement: string, character: string, name: string, gated =
   const label = character === '4' ? 'The quiet traveller from the northern islands' : `Character ${character}`;
   return {
     id: performer,
-    label: { text: 'A. Performer' },
+    label: { text: 'A. Performer', lang: undefined },
     summary: {
       id: performer,
       type: 'schema:Person',
