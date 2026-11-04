@@ -2376,9 +2376,7 @@ async function readExactPublishedRulesInternal(
             resourceType: `content.${kind}`,
             ids: chunk.map((row) => row.id),
             eligibility: async () =>
-              Object.fromEntries(
-                chunk.map((row) => [row.id, contentFloor(row, includeAuthoring, includeAuthoring)]),
-              ),
+              Object.fromEntries(chunk.map((row) => [row.id, contentFloor(row, includeAuthoring, includeAuthoring)])),
           });
           for (const row of chunk) {
             permitted.set(
@@ -2401,8 +2399,7 @@ async function readExactPublishedRulesInternal(
             action: 'post:revise',
             resourceType: 'content.post',
             ids: chunk.map((row) => row.id),
-            eligibility: async () =>
-              Object.fromEntries(chunk.map((row) => [row.id, contentFloor(row, false, false)])),
+            eligibility: async () => Object.fromEntries(chunk.map((row) => [row.id, contentFloor(row, false, false)])),
           });
           for (const row of chunk)
             revisionAllowed.set(
@@ -2454,39 +2451,39 @@ async function readExactPublishedRulesInternal(
         }
         const exactRelation = Boolean(
           selected &&
-            selected.visibility === 'published' &&
-            revision &&
-            thread &&
-            board &&
-            revision.parent_id === selected.id &&
-            revision.thread_id === thread.id &&
-            revision.board_id === board.id &&
-            route(ref.revisionId) === route(selected.id) &&
-            board.realm_id === ref.realmId &&
-            parent.boards.get(board.id) &&
-            parent.realms.get(ref.realmId),
+          selected.visibility === 'published' &&
+          revision &&
+          thread &&
+          board &&
+          revision.parent_id === selected.id &&
+          revision.thread_id === thread.id &&
+          revision.board_id === board.id &&
+          route(ref.revisionId) === route(selected.id) &&
+          board.realm_id === ref.realmId &&
+          parent.boards.get(board.id) &&
+          parent.realms.get(ref.realmId),
         );
         if (includeAuthoring) {
           const readableTombstone = Boolean(
             exactRelation &&
-              thread &&
-              tombstonePermitted.get(thread.id) &&
-              completeChain &&
-              currentChain.every((post) => tombstonePermitted.get(post.id)),
+            thread &&
+            tombstonePermitted.get(thread.id) &&
+            completeChain &&
+            currentChain.every((post) => tombstonePermitted.get(post.id)),
           );
           const erased = Boolean(
             readableTombstone &&
-              (thread?.availability === 'erased' ||
-                revision?.availability === 'erased' ||
-                currentChain.some((post) => post.availability === 'erased')),
+            (thread?.availability === 'erased' ||
+              revision?.availability === 'erased' ||
+              currentChain.some((post) => post.availability === 'erased')),
           );
           const available = Boolean(
             exactRelation &&
-              thread &&
-              revision?.availability === 'available' &&
-              permitted.get(thread.id) &&
-              completeChain &&
-              currentChain.every((post) => permitted.get(post.id)),
+            thread &&
+            revision?.availability === 'available' &&
+            permitted.get(thread.id) &&
+            completeChain &&
+            currentChain.every((post) => permitted.get(post.id)),
           );
           if (erased || available) {
             const realm = realms.find((row) => row.realm_id === ref.realmId)!;

@@ -205,27 +205,30 @@ test.serial('Realm management does not grant Content publication or follow a hid
   expect(nonManager.text).not.toContain(realm.pin.revisionId);
 });
 
-test.serial('Rules preparation holds page, exact-source and response bounds as independent populations grow', async () => {
-  const realm = await fixture.select();
-  const attached = await fixture.patch(realm, { presentation: realm.presentation });
-  expect(attached.response.status, attached.text).toBe(200);
+test.serial(
+  'Rules preparation holds page, exact-source and response bounds as independent populations grow',
+  async () => {
+    const realm = await fixture.select();
+    const attached = await fixture.patch(realm, { presentation: realm.presentation });
+    expect(attached.response.status, attached.text).toBe(200);
 
-  for (const axis of axes) {
-    const report = await fixture.measure(`authoring-preparation`, realm, axis, async () => {
-      const result = await fixture.call('GET', `/v1/realms/${realm.realmId}/rulesAuthoring`);
-      expect(result.response.status, result.text).toBe(200);
-      expect(result.value.current.reference).toEqual(realm.pin);
-      expect(result.value.destinations.items.length).toBeLessThanOrEqual(20);
-      expect(Buffer.byteLength(serializeDocument(result.value.current.body))).toBe(65_536);
-    });
-    expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
-    for (const sample of report.samples)
-      for (const cost of sample.repetitions) {
-        expect(cost.relations['content.revision']?.rows ?? 0).toBeLessThanOrEqual(6);
-        expect(cost.relations['content.post']?.rows ?? 0).toBeLessThanOrEqual(66);
-      }
-  }
-});
+    for (const axis of axes) {
+      const report = await fixture.measure(`authoring-preparation`, realm, axis, async () => {
+        const result = await fixture.call('GET', `/v1/realms/${realm.realmId}/rulesAuthoring`);
+        expect(result.response.status, result.text).toBe(200);
+        expect(result.value.current.reference).toEqual(realm.pin);
+        expect(result.value.destinations.items.length).toBeLessThanOrEqual(20);
+        expect(Buffer.byteLength(serializeDocument(result.value.current.body))).toBe(65_536);
+      });
+      expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+      for (const sample of report.samples)
+        for (const cost of sample.repetitions) {
+          expect(cost.relations['content.revision']?.rows ?? 0).toBeLessThanOrEqual(6);
+          expect(cost.relations['content.post']?.rows ?? 0).toBeLessThanOrEqual(66);
+        }
+    }
+  },
+);
 
 const authoringGrowthAxes: readonly SettingsAxis[] = [
   'unrelated-realms',
@@ -235,61 +238,65 @@ const authoringGrowthAxes: readonly SettingsAxis[] = [
   'authority-history',
 ];
 
-test.serial('Rules authoring composes fixed native work under independent Content, media, reference and authority growth', async () => {
-  const growth = await settingsPageGrowthFixture();
-  try {
-    for (const axis of authoringGrowthAxes) {
-      const realm = await growth.select({ images: true });
-      const attached = await growth.patch(realm, { presentation: realm.presentation });
-      expect(attached.response.status, attached.text).toBe(200);
-      const population = await growth.population(realm, axis);
-      const report = await checkGrowth(growth.db, {
-        name: `Realm rules authoring ${axis}`,
-        scales: [256, 1024, 4096],
-        bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
-        byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
-        includeBackends: true,
-        aggregateCaptures(primary, value) {
-          if (axis === 'selected-media-history' || axis === 'authority-history') {
-            assertSettingsSourcePrefixes(primary, 'unrelated-realms');
-            assertSettingsSourcePrefixes(primary, 'rules-revisions');
-          } else assertSettingsSourcePrefixes(primary, axis);
-          return aggregateBanReviewPageCapture(primary, value);
-        },
-        counted: {
-          bounds: {
-            applicationRequestBytes: 'constant',
-            applicationResponseBytes: 'constant',
-            jwksRequestBytes: 'constant',
-            jwksResponseBytes: 'constant',
+test.serial(
+  'Rules authoring composes fixed native work under independent Content, media, reference and authority growth',
+  async () => {
+    const growth = await settingsPageGrowthFixture();
+    try {
+      for (const axis of authoringGrowthAxes) {
+        const realm = await growth.select({ images: true });
+        const attached = await growth.patch(realm, { presentation: realm.presentation });
+        expect(attached.response.status, attached.text).toBe(200);
+        const population = await growth.population(realm, axis);
+        const report = await checkGrowth(growth.db, {
+          name: `Realm rules authoring ${axis}`,
+          scales: [256, 1024, 4096],
+          bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+          byteBounds: { requestBytes: 'constant', responseBytes: 'constant' },
+          includeBackends: true,
+          aggregateCaptures(primary, value) {
+            if (axis === 'selected-media-history' || axis === 'authority-history') {
+              assertSettingsSourcePrefixes(primary, 'unrelated-realms');
+              assertSettingsSourcePrefixes(primary, 'rules-revisions');
+            } else assertSettingsSourcePrefixes(primary, axis);
+            return aggregateBanReviewPageCapture(primary, value);
           },
-          read: banReviewPageWireCounts,
-        },
-        async grow(db, scale, previous) {
-          await seed(db, population, { from: previous, to: scale });
-          if (axis === 'selected-media-history' || axis === 'authority-history')
-            expect(await growth.historyCount(realm, axis)).toBe(scale);
-        },
-        async operation() {
-          const before = await growth.snapshot(realm);
-          const result = await growth.readAuthoring(realm);
-          expect(await growth.snapshot(realm)).toEqual(before);
-          return result;
-        },
-      });
-      const relations =
-        axis === 'unrelated-realms'
-          ? ['community.realm']
-          : axis === 'realm-revisions'
-            ? ['community.realm_revision']
-            : axis === 'rules-revisions'
-              ? ['content.revision']
-              : axis === 'selected-media-history'
-                ? ['content.media', 'content.media_variant']
-                : ['access.resource_grant'];
-      assertGrowthAccessPaths(`Realm rules authoring ${axis}`, report.samples, relations);
+          counted: {
+            bounds: {
+              applicationRequestBytes: 'constant',
+              applicationResponseBytes: 'constant',
+              jwksRequestBytes: 'constant',
+              jwksResponseBytes: 'constant',
+            },
+            read: banReviewPageWireCounts,
+          },
+          async grow(db, scale, previous) {
+            await seed(db, population, { from: previous, to: scale });
+            if (axis === 'selected-media-history' || axis === 'authority-history')
+              expect(await growth.historyCount(realm, axis)).toBe(scale);
+          },
+          async operation() {
+            const before = await growth.snapshot(realm);
+            const result = await growth.readAuthoring(realm);
+            expect(await growth.snapshot(realm)).toEqual(before);
+            return result;
+          },
+        });
+        const relations =
+          axis === 'unrelated-realms'
+            ? ['community.realm']
+            : axis === 'realm-revisions'
+              ? ['community.realm_revision']
+              : axis === 'rules-revisions'
+                ? ['content.revision']
+                : axis === 'selected-media-history'
+                  ? ['content.media', 'content.media_variant']
+                  : ['access.resource_grant'];
+        assertGrowthAccessPaths(`Realm rules authoring ${axis}`, report.samples, relations);
+      }
+    } finally {
+      await growth.close();
     }
-  } finally {
-    await growth.close();
-  }
-}, 600_000);
+  },
+  600_000,
+);

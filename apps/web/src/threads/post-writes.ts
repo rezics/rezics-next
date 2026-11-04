@@ -64,7 +64,8 @@ export async function startThreadRequest(
   refusal: Refusal,
 ): Promise<{ ok: true; thread: StartedThread } | WriteFailure> {
   if (input.kind === 'review' && 'subjectIds' in input) throw new Error('Invalid review draft');
-  const subjectIds = input.kind === 'review' ? [input.subjectId] : input.kind === 'rules' ? [] : discussionSubjectIds(input);
+  const subjectIds =
+    input.kind === 'review' ? [input.subjectId] : input.kind === 'rules' ? [] : discussionSubjectIds(input);
   await prepareSession(request, sessionEnv);
   const authorization = viewerCredential(request);
   if (!authorization) throw new Error('A signed-in session is required to post.');

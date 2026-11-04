@@ -55,9 +55,12 @@ function nativeMessage(key: string, fallback: string): string {
   const candidate = (catalog as unknown as Record<string, unknown>)[key];
   if (typeof candidate !== 'function') return fallback;
   try {
-    return (candidate as (args: Record<string, never>, options: { locale: never }) => string)({}, {
-      locale: getLocale() as never,
-    });
+    return (candidate as (args: Record<string, never>, options: { locale: never }) => string)(
+      {},
+      {
+        locale: getLocale() as never,
+      },
+    );
   } catch {
     return fallback;
   }
@@ -70,9 +73,15 @@ function rulesReadLabel(read: RulesAuthoringRead): string {
     case 'none':
       return m.realm_appearance_no_rules();
     case 'erased':
-      return nativeMessage('realm_rules_authoring_current_erased', 'The pinned rules revision was erased. Its historical body is hidden.');
+      return nativeMessage(
+        'realm_rules_authoring_current_erased',
+        'The pinned rules revision was erased. Its historical body is hidden.',
+      );
     case 'concealed':
-      return nativeMessage('realm_rules_authoring_current_concealed', 'The pinned rules revision is concealed from this account. Its body is hidden.');
+      return nativeMessage(
+        'realm_rules_authoring_current_concealed',
+        'The pinned rules revision is concealed from this account. Its body is hidden.',
+      );
     case 'unavailable':
       return m.realm_appearance_rules_unavailable();
     case 'available':
@@ -84,7 +93,9 @@ function CurrentRules({ current }: { current: RulesAuthoringResponse['current'] 
   if (current.state !== 'available') return null;
   return (
     <div className="space-y-3 rounded-xl bg-muted p-4" data-current-rules>
-      <h4 className="font-medium">{current.title ?? nativeMessage('realm_rules_authoring_title_unknown', 'Title unavailable')}</h4>
+      <h4 className="font-medium">
+        {current.title ?? nativeMessage('realm_rules_authoring_title_unknown', 'Title unavailable')}
+      </h4>
       <dl className="grid gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
         <dt>{nativeMessage('realm_rules_authoring_board', 'Board')}</dt>
         <dd className="break-words">{current.boardTitle ?? current.boardId}</dd>
@@ -101,10 +112,15 @@ function CurrentRules({ current }: { current: RulesAuthoringResponse['current'] 
         <DocumentBody
           document={current.body}
           locale={getLocale()}
-          renderImage={() => <span>{nativeMessage('realm_rules_authoring_image_unavailable', 'Image unavailable in this preview')}</span>}
+          renderImage={() => (
+            <span>{nativeMessage('realm_rules_authoring_image_unavailable', 'Image unavailable in this preview')}</span>
+          )}
         />
       </div>
-      <a className="text-sm text-primary underline" href={exactHref(current.reference.postId, current.reference.revisionId)}>
+      <a
+        className="text-sm text-primary underline"
+        href={exactHref(current.reference.postId, current.reference.revisionId)}
+      >
         {m.realm_appearance_open_revision()}
       </a>
     </div>
@@ -176,7 +192,8 @@ export function RealmRulesAuthoringPanel({
       setPrepared(next);
       if (next.kind === 'ready' && next.value.destinations.state === 'available') {
         setBoardId((selected) =>
-          next.value.destinations.state === 'available' && next.value.destinations.items.some((item) => item.boardId === selected)
+          next.value.destinations.state === 'available' &&
+          next.value.destinations.items.some((item) => item.boardId === selected)
             ? selected
             : '',
         );
@@ -296,14 +313,17 @@ export function RealmRulesAuthoringPanel({
   }
 
   if (!snapshot.canManage || (lifetime && !lifetime.current())) return null;
-  const noPostAdvice = prepared?.kind === 'ready' &&
+  const noPostAdvice =
+    prepared?.kind === 'ready' &&
     prepared.value.destinations.state === 'available' &&
     prepared.value.destinations.items.length > 0 &&
     prepared.value.destinations.items.every((item) => item.create.state === 'denied');
 
   return (
     <section className="space-y-3 rounded-xl border p-4" aria-labelledby={`${ids}-heading`} data-rules-authoring>
-      <h3 id={`${ids}-heading`} className="font-medium">{nativeMessage('realm_rules_authoring_open', 'Write or revise rules')}</h3>
+      <h3 id={`${ids}-heading`} className="font-medium">
+        {nativeMessage('realm_rules_authoring_open', 'Write or revise rules')}
+      </h3>
       {prepared === null ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
       {prepared?.kind === 'denied' ? <p role="alert">{m.community_management_denied()}</p> : null}
       {prepared?.kind === 'unavailable' ? <p role="status">{m.realm_appearance_unavailable()}</p> : null}
@@ -313,27 +333,52 @@ export function RealmRulesAuthoringPanel({
           {prepared.value.current.state !== 'available' ? <p role="status">{rulesReadLabel(prepared)}</p> : null}
           {noPostAdvice ? <p role="status">{m.thread_write_forbidden()}</p> : null}
           {destinationPage?.state === 'available' && destinations.length === 0 ? (
-            <p role="status">{nativeMessage('realm_rules_authoring_no_destinations', 'No permitted discussion board is available. Select an existing revision or ask an authorized board manager.')}</p>
+            <p role="status">
+              {nativeMessage(
+                'realm_rules_authoring_no_destinations',
+                'No permitted discussion board is available. Select an existing revision or ask an authorized board manager.',
+              )}
+            </p>
           ) : null}
           {destinationPage?.state === 'denied' ? <p role="alert">{m.thread_write_forbidden()}</p> : null}
           {destinationPage?.state === 'unavailable' ? <p role="status">{m.realm_boards_unavailable()}</p> : null}
           {destinationPage?.state === 'available' && destinationPage.next ? (
-            <Button type="button" variant="outline" disabled={mode !== 'closed'} onClick={() => setCursor(destinationPage.next ?? undefined)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={mode !== 'closed'}
+              onClick={() => setCursor(destinationPage.next ?? undefined)}
+            >
               {m.realm_boards_more()}
             </Button>
           ) : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={mode !== 'closed' || prepared.value.actions.create.state !== 'allowed'} onClick={beginCreate}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={mode !== 'closed' || prepared.value.actions.create.state !== 'allowed'}
+              onClick={beginCreate}
+            >
               {m.board_start_thread()}
             </Button>
             {prepared.value.current.state === 'available' ? (
-              <Button type="button" variant="outline" disabled={mode !== 'closed' || editAdvice !== 'allowed'} onClick={beginEdit}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={mode !== 'closed' || editAdvice !== 'allowed'}
+                onClick={beginEdit}
+              >
                 {m.thread_content_edit()}
               </Button>
             ) : null}
           </div>
           {editAdvice === 'stale' ? (
-            <p role="status">{nativeMessage('realm_rules_authoring_stale', 'This pinned revision is no longer current. Review the current post or select its current revision.')}</p>
+            <p role="status">
+              {nativeMessage(
+                'realm_rules_authoring_stale',
+                'This pinned revision is no longer current. Review the current post or select its current revision.',
+              )}
+            </p>
           ) : null}
           {prepared.value.current.state === 'available' && editAdvice === 'denied' ? (
             <p role="status">{m.thread_edit_forbidden()}</p>
@@ -346,22 +391,29 @@ export function RealmRulesAuthoringPanel({
 
       {mode === 'create' ? (
         <div className="space-y-3 rounded-xl border p-4">
-          <label htmlFor={`${ids}-board`} className="block font-medium">{nativeMessage('realm_rules_authoring_destination', 'Publication destination')}</label>
+          <label htmlFor={`${ids}-board`} className="block font-medium">
+            {nativeMessage('realm_rules_authoring_destination', 'Publication destination')}
+          </label>
           <select
             id={`${ids}-board`}
             className="min-h-11 w-full rounded-md border bg-background px-3"
             value={boardId}
             onChange={(event) => setBoardId(event.currentTarget.value)}
           >
-            <option value="">{nativeMessage('realm_rules_authoring_choose_destination', 'Choose a discussion board')}</option>
+            <option value="">
+              {nativeMessage('realm_rules_authoring_choose_destination', 'Choose a discussion board')}
+            </option>
             {destinations.map((item) => (
               <option key={item.boardId} value={item.boardId}>
-                {item.title ?? item.boardId}{item.create.state === 'allowed' ? '' : ` (${m.thread_write_forbidden()})`}
+                {item.title ?? item.boardId}
+                {item.create.state === 'allowed' ? '' : ` (${m.thread_write_forbidden()})`}
               </option>
             ))}
           </select>
           {chosenDestination && !canCreate ? <p role="status">{m.thread_write_forbidden()}</p> : null}
-          <label htmlFor={`${ids}-licence`} className="block font-medium">{m.thread_history_licence()}</label>
+          <label htmlFor={`${ids}-licence`} className="block font-medium">
+            {m.thread_history_licence()}
+          </label>
           <select
             id={`${ids}-licence`}
             className="min-h-11 w-full rounded-md border bg-background px-3"
@@ -378,7 +430,10 @@ export function RealmRulesAuthoringPanel({
               checked={attribution}
               onChange={(event) => setAttribution(event.currentTarget.checked)}
             />
-            {nativeMessage('realm_rules_authoring_attribution', 'I will publish with the author attribution of my signed-in Content account.')}
+            {nativeMessage(
+              'realm_rules_authoring_attribution',
+              'I will publish with the author attribution of my signed-in Content account.',
+            )}
           </label>
           <p role="status">{m.realm_appearance_rules_help()}</p>
           <PostComposer<PublishedRulesRevision, { boardId: string; licence: typeof nativeRuleLicence }>
@@ -386,7 +441,9 @@ export function RealmRulesAuthoringPanel({
             initialKey={createKey}
             titleRequired
             localDraft={false}
-            canSubmit={Boolean(canCreate && boardId && licence === nativeRuleLicence && attribution && lifetime?.current())}
+            canSubmit={Boolean(
+              canCreate && boardId && licence === nativeRuleLicence && attribution && lifetime?.current(),
+            )}
             boardId={boardId}
             submissionContext={{ boardId, licence: nativeRuleLicence }}
             onSubmit={async ({ title, body, idempotencyKey, mediaIds, submissionContext }) => {
@@ -431,7 +488,9 @@ export function RealmRulesAuthoringPanel({
               setMode('review');
             }}
           />
-          <Button type="button" variant="outline" onClick={leaveEditor}>{m.thread_edit_cancel()}</Button>
+          <Button type="button" variant="outline" onClick={leaveEditor}>
+            {m.thread_edit_cancel()}
+          </Button>
         </div>
       ) : null}
 
@@ -468,7 +527,8 @@ export function RealmRulesAuthoringPanel({
               setReload((value) => value + 1);
             }}
             onSuccess={(post) => {
-              if (!lifetime?.current() || post.availability !== 'available' || !('revisionId' in post) || !post.body) return;
+              if (!lifetime?.current() || post.availability !== 'available' || !('revisionId' in post) || !post.body)
+                return;
               setPublished({
                 postId: post.id,
                 revisionId: post.revisionId,
@@ -488,35 +548,81 @@ export function RealmRulesAuthoringPanel({
       ) : null}
 
       {confirmExit ? (
-        <div role="alertdialog" aria-labelledby={`${ids}-exit-title`} aria-describedby={`${ids}-exit-copy`} className="space-y-3 rounded-xl border p-4">
-          <h4 id={`${ids}-exit-title`} className="font-medium">{m.thread_authoring_discard_title()}</h4>
-          <p id={`${ids}-exit-copy`}>{nativeMessage('realm_rules_authoring_exit', 'Leaving this editor discards this visit’s unsaved draft. A request already sent may still finish.')}</p>
+        <div
+          role="alertdialog"
+          aria-labelledby={`${ids}-exit-title`}
+          aria-describedby={`${ids}-exit-copy`}
+          className="space-y-3 rounded-xl border p-4"
+        >
+          <h4 id={`${ids}-exit-title`} className="font-medium">
+            {m.thread_authoring_discard_title()}
+          </h4>
+          <p id={`${ids}-exit-copy`}>
+            {nativeMessage(
+              'realm_rules_authoring_exit',
+              'Leaving this editor discards this visit’s unsaved draft. A request already sent may still finish.',
+            )}
+          </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => { setConfirmExit(false); setMode('closed'); }}>{m.thread_authoring_discard()}</Button>
-            <Button type="button" variant="outline" onClick={() => setConfirmExit(false)}>{m.thread_authoring_stay()}</Button>
+            <Button
+              type="button"
+              onClick={() => {
+                setConfirmExit(false);
+                setMode('closed');
+              }}
+            >
+              {m.thread_authoring_discard()}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setConfirmExit(false)}>
+              {m.thread_authoring_stay()}
+            </Button>
           </div>
         </div>
       ) : null}
 
       {mode === 'review' && published ? (
         <section className="space-y-3 rounded-xl border p-4" aria-labelledby={`${ids}-review-title`}>
-          <h4 ref={reviewHeading} id={`${ids}-review-title`} tabIndex={-1} className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <h4
+            ref={reviewHeading}
+            id={`${ids}-review-title`}
+            tabIndex={-1}
+            className="font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             {nativeMessage('realm_rules_authoring_review', 'Exact published revision')}
           </h4>
-          <p role="status">{nativeMessage('realm_rules_authoring_published', 'Content revision published. Realm settings have not changed.')}</p>
-          <h5 className="text-lg font-semibold">{published.title ?? nativeMessage('realm_rules_authoring_title_unknown', 'Title unavailable')}</h5>
+          <p role="status">
+            {nativeMessage(
+              'realm_rules_authoring_published',
+              'Content revision published. Realm settings have not changed.',
+            )}
+          </p>
+          <h5 className="text-lg font-semibold">
+            {published.title ?? nativeMessage('realm_rules_authoring_title_unknown', 'Title unavailable')}
+          </h5>
           <dl className="grid gap-x-3 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
-            <dt>{nativeMessage('realm_rules_authoring_board', 'Board')}</dt><dd className="break-words">{published.boardTitle ?? published.boardId}</dd>
-            <dt>{nativeMessage('realm_rules_authoring_author', 'Author account')}</dt><dd className="break-all">{published.authorId}</dd>
-            <dt>{nativeMessage('realm_rules_authoring_revision', 'Revision')}</dt><dd className="break-all">{published.revisionId}</dd>
-            <dt>{m.thread_history_licence()}</dt><dd className="break-words">{published.licence}</dd>
-            <dt>{nativeMessage('realm_rules_authoring_language', 'Document language')}</dt><dd>{published.language ?? nativeMessage('realm_rules_authoring_language_unknown', 'Not specified')}</dd>
+            <dt>{nativeMessage('realm_rules_authoring_board', 'Board')}</dt>
+            <dd className="break-words">{published.boardTitle ?? published.boardId}</dd>
+            <dt>{nativeMessage('realm_rules_authoring_author', 'Author account')}</dt>
+            <dd className="break-all">{published.authorId}</dd>
+            <dt>{nativeMessage('realm_rules_authoring_revision', 'Revision')}</dt>
+            <dd className="break-all">{published.revisionId}</dd>
+            <dt>{m.thread_history_licence()}</dt>
+            <dd className="break-words">{published.licence}</dd>
+            <dt>{nativeMessage('realm_rules_authoring_language', 'Document language')}</dt>
+            <dd>{published.language ?? nativeMessage('realm_rules_authoring_language_unknown', 'Not specified')}</dd>
           </dl>
-          <div lang={published.language ?? undefined} className="max-h-96 overflow-auto rounded-lg border bg-background p-3">
+          <div
+            lang={published.language ?? undefined}
+            className="max-h-96 overflow-auto rounded-lg border bg-background p-3"
+          >
             <DocumentBody
               document={published.body}
               locale={getLocale()}
-              renderImage={() => <span>{nativeMessage('realm_rules_authoring_image_unavailable', 'Image unavailable in this preview')}</span>}
+              renderImage={() => (
+                <span>
+                  {nativeMessage('realm_rules_authoring_image_unavailable', 'Image unavailable in this preview')}
+                </span>
+              )}
             />
           </div>
           <a className="text-sm text-primary underline" href={exactHref(published.postId, published.revisionId)}>
@@ -524,11 +630,20 @@ export function RealmRulesAuthoringPanel({
           </a>
           {attachOutcome === 'conflict' ? (
             <div role="alert" className="space-y-2">
-              <p>{nativeMessage('realm_rules_authoring_attach_conflict', 'This revision was published, but Realm settings changed. Inspect current settings before deliberately attaching this exact revision.')}</p>
+              <p>
+                {nativeMessage(
+                  'realm_rules_authoring_attach_conflict',
+                  'This revision was published, but Realm settings changed. Inspect current settings before deliberately attaching this exact revision.',
+                )}
+              </p>
               {state.read.kind === 'ready' ? (
                 <details>
                   <summary>{m.realm_appearance_current()}</summary>
-                  <p>{state.read.snapshot.rules.state === 'available' ? state.read.snapshot.rules.value.title : m.realm_appearance_rules_unavailable()}</p>
+                  <p>
+                    {state.read.snapshot.rules.state === 'available'
+                      ? state.read.snapshot.rules.value.title
+                      : m.realm_appearance_rules_unavailable()}
+                  </p>
                   <p className="break-all">{JSON.stringify(state.read.snapshot.presentation.rules)}</p>
                 </details>
               ) : null}
@@ -536,7 +651,11 @@ export function RealmRulesAuthoringPanel({
                 {m.realm_appearance_refresh()}
               </Button>
               {state.reviewed && canAttach ? (
-                <Button type="button" disabled={attaching || control.getSnapshot().phase === 'conflict'} onClick={() => void attachExactRevision()}>
+                <Button
+                  type="button"
+                  disabled={attaching || control.getSnapshot().phase === 'conflict'}
+                  onClick={() => void attachExactRevision()}
+                >
                   {nativeMessage('realm_rules_authoring_attach', 'Attach this exact revision')}
                 </Button>
               ) : null}
@@ -545,7 +664,9 @@ export function RealmRulesAuthoringPanel({
           {attachOutcome === 'uncertain' ? (
             <div role="alert" className="space-y-2">
               <p>{m.realm_appearance_uncertain()}</p>
-              <Button type="button" disabled={attaching} onClick={() => void retryOriginalAttach()}>{m.realm_appearance_retry()}</Button>
+              <Button type="button" disabled={attaching} onClick={() => void retryOriginalAttach()}>
+                {m.realm_appearance_retry()}
+              </Button>
             </div>
           ) : null}
           {attachOutcome === 'denied' ? <p role="alert">{m.community_management_denied()}</p> : null}
@@ -558,24 +679,46 @@ export function RealmRulesAuthoringPanel({
           ) : null}
           {attachOutcome === 'saved' ? <p role="status">{m.realm_appearance_saved()}</p> : null}
           {attachOutcome === 'none' ? (
-            <Button type="button" disabled={attaching || !canAttach || Boolean(lifetime && !lifetime.current()) || control.getSnapshot().phase === 'conflict'} onClick={() => void attachExactRevision()}>
-              {attaching ? m.realm_appearance_saving() : nativeMessage('realm_rules_authoring_attach', 'Attach this exact revision')}
+            <Button
+              type="button"
+              disabled={
+                attaching ||
+                !canAttach ||
+                Boolean(lifetime && !lifetime.current()) ||
+                control.getSnapshot().phase === 'conflict'
+              }
+              onClick={() => void attachExactRevision()}
+            >
+              {attaching
+                ? m.realm_appearance_saving()
+                : nativeMessage('realm_rules_authoring_attach', 'Attach this exact revision')}
             </Button>
           ) : null}
-          <Button type="button" variant="outline" onClick={() => setMode('closed')}>{m.editor_cancel()}</Button>
+          <Button type="button" variant="outline" onClick={() => setMode('closed')}>
+            {m.editor_cancel()}
+          </Button>
         </section>
       ) : null}
 
       {mode === 'closed' && published ? (
-        <div className="flex flex-wrap items-center gap-3" role={attachOutcome === 'uncertain' || attachOutcome === 'conflict' ? 'alert' : 'status'}>
+        <div
+          className="flex flex-wrap items-center gap-3"
+          role={attachOutcome === 'uncertain' || attachOutcome === 'conflict' ? 'alert' : 'status'}
+        >
           <p>
             {attachOutcome === 'saved'
               ? m.realm_appearance_saved()
               : attachOutcome === 'conflict'
-                ? nativeMessage('realm_rules_authoring_attach_conflict', 'This revision was published, but Realm settings changed. Inspect current settings before deliberately attaching this exact revision.')
+                ? nativeMessage(
+                    'realm_rules_authoring_attach_conflict',
+                    'This revision was published, but Realm settings changed. Inspect current settings before deliberately attaching this exact revision.',
+                  )
                 : attachOutcome === 'uncertain'
                   ? m.realm_appearance_uncertain()
-                  : nativeMessage('realm_rules_authoring_published', 'Content revision published. Realm settings have not changed.')}
+                  : nativeMessage(
+                      'realm_rules_authoring_published',
+                      'Content revision published. Realm settings have not changed.',
+                    )}
           </p>
           <Button type="button" variant="outline" onClick={() => setMode('review')}>
             {nativeMessage('realm_rules_authoring_review', 'Exact published revision')}
@@ -584,7 +727,9 @@ export function RealmRulesAuthoringPanel({
       ) : null}
 
       {mode !== 'closed' && mode !== 'review' && !confirmExit ? (
-        <Button type="button" variant="outline" onClick={leaveEditor}>{m.thread_edit_cancel()}</Button>
+        <Button type="button" variant="outline" onClick={leaveEditor}>
+          {m.thread_edit_cancel()}
+        </Button>
       ) : null}
       {prepared?.kind === 'ready' && current?.state === 'available' && mode === 'closed' ? (
         <div className="sr-only" aria-live="polite">

@@ -36,9 +36,17 @@ export const rulesAuthoringResponseSchema = v.strictObject({
   realm: v.strictObject({ realmId: id, head: id }),
   current,
   destinations: v.variant('state', [
-    v.strictObject({ state: v.literal('available'), items: v.pipe(v.array(destination), v.maxLength(20)), next: v.nullable(v.pipe(v.string(), v.maxLength(4096))) }),
+    v.strictObject({
+      state: v.literal('available'),
+      items: v.pipe(v.array(destination), v.maxLength(20)),
+      next: v.nullable(v.pipe(v.string(), v.maxLength(4096))),
+    }),
     v.strictObject({ state: v.literal('denied'), items: v.pipe(v.array(v.never()), v.maxLength(0)), next: v.null() }),
-    v.strictObject({ state: v.literal('unavailable'), items: v.pipe(v.array(v.never()), v.maxLength(0)), next: v.null() }),
+    v.strictObject({
+      state: v.literal('unavailable'),
+      items: v.pipe(v.array(v.never()), v.maxLength(0)),
+      next: v.null(),
+    }),
   ]),
   actions: v.strictObject({ attach: action, create: action, edit: action }),
 });
@@ -46,7 +54,21 @@ export const rulesAuthoringResponseSchema = v.strictObject({
 export type RulesAuthoringResponse = Omit<v.InferOutput<typeof rulesAuthoringResponseSchema>, 'current'> & {
   current:
     | { state: 'none'; reference: null }
-    | { state: 'available'; reference: { postId: string; revisionId: string }; title: string | null; authorId: string; threadId: string; boardId: string; boardTitle: string | null; mediaIds: readonly string[]; body: DocumentSnapshot; language: string | null; licence: string; sha256: string; currentRevision: boolean }
+    | {
+        state: 'available';
+        reference: { postId: string; revisionId: string };
+        title: string | null;
+        authorId: string;
+        threadId: string;
+        boardId: string;
+        boardTitle: string | null;
+        mediaIds: readonly string[];
+        body: DocumentSnapshot;
+        language: string | null;
+        licence: string;
+        sha256: string;
+        currentRevision: boolean;
+      }
     | { state: 'erased' | 'concealed'; reference: { postId: string; revisionId: string } }
     | { state: 'unavailable'; reference: { postId: string; revisionId: string } | null };
 };

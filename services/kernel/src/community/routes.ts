@@ -104,11 +104,7 @@ import { CommunityPresentationSchema, communityPresentationResponse } from '../c
 import { readCommunityPresentations } from '../content/community-presentation.ts';
 import { readRealmHomePresentation } from './realm-home-presentation.ts';
 import { readRealmSettingsPage, RealmSettingsPageSchema } from './settings-page.ts';
-import {
-  readRealmRulesAuthoringPage,
-  RulesAuthoringPageSchema,
-  RulesAuthoringQuerySchema,
-} from './rules-authoring.ts';
+import { readRealmRulesAuthoringPage, RulesAuthoringPageSchema, RulesAuthoringQuerySchema } from './rules-authoring.ts';
 import {
   createRealmHomePublicationReader,
   RealmHomePublicationPageSchema,

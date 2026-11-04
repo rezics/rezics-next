@@ -131,7 +131,10 @@ export const VisitLocalDraftExit: Story = {
     const view = within(canvasElement);
     await userEvent.click(view.getByRole('button', { name: m.board_start_thread() }));
     await userEvent.type(view.getByLabelText(m.thread_title_label()), 'A multilingual rules update');
-    await userEvent.type(view.getByRole('textbox', { name: m.thread_new_body_label() }), '請照顧每位讀者。 Respect every reader.');
+    await userEvent.type(
+      view.getByRole('textbox', { name: m.thread_new_body_label() }),
+      '請照顧每位讀者。 Respect every reader.',
+    );
     await userEvent.keyboard('{Tab}');
     await userEvent.click(view.getByRole('button', { name: m.thread_edit_cancel() }));
     const dialog = await view.findByRole('alertdialog');
