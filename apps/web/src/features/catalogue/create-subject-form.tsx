@@ -318,7 +318,7 @@ function CreateSubjectFormLive({
     setFailure(result);
   }
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<Created>(() =>
+  const [created, setCreated] = useState<Created | undefined>(() =>
     restoredAcknowledgementId
       ? { ok: true, id: restoredAcknowledgementId, reader: { state: 'unavailable' } }
       : undefined,
