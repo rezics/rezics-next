@@ -264,7 +264,7 @@ test('turn and wall-clock limits replace the session without waking the superman
   }
 });
 
-test('A manager whose wall-clock renewal fails is reported to the supermanager as a blocker carrying the failure's error line, not as an ordinary round-limit pause.', async () => {
+test("A manager whose wall-clock renewal fails is reported to the supermanager as a blocker carrying the failure's error line, not as an ordinary round-limit pause.", async () => {
   const s = await setup();
   try {
     const spec = { ...s.spec, limits: { turns: 10, turnsWithoutDecision: 10, wallMs: 3_600_000 } };
