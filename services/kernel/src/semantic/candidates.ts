@@ -14,6 +14,7 @@ import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
 import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -85,6 +86,21 @@ import readSubjectRevision from './candidates-read-subject-revision.sql';
 import readCandidateVisibility from './candidates-read-visibility.sql';
 import readCandidateOwners from './candidates-read-owners.sql';
 import updateSubjectRelease from './update-subject-release.sql';
+
+registerCommandHistoryKind('subject.propose', 3022);
+registerCommandHistoryKind('subject.decide', 3023);
+registerCommandHistoryKind('subject.adopt', 3024);
+
+async function declareEditorialHistory(
+  tx: CommandTransaction,
+  kind: 'subject.propose' | 'subject.decide' | 'subject.adopt',
+  events: readonly { type: string }[],
+) {
+  await declareCommandHistory(tx, kind, {
+    response: { artifactType: 'command-receipt/v1', accounts: [] },
+    events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+  });
+}
 
 export class SubjectNotFoundError extends Error {}
 export class EditorialConflictError extends Error {}
@@ -194,7 +210,9 @@ export async function proposeStatement(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeProposal(tx, transactionId, { ...options, statement });
+      const result = await writeProposal(tx, transactionId, { ...options, statement });
+      await declareEditorialHistory(tx, 'subject.propose', result.events);
+      return result;
     },
   );
   return {
@@ -594,6 +612,21 @@ export async function decideCandidate(
             });
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
+        const events = [
+          ...linkEvents,
+          {
+            type: SUBJECT_REVISED,
+            subject: options.subject,
+            data: { id: options.subject, revision, kind: options.decision },
+          },
+          {
+            type:
+              options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
+            subject: options.subject,
+            data: { candidate: options.candidate, context: options.context, revision, head },
+          },
+        ];
+        await declareEditorialHistory(tx, 'subject.decide', events);
         return {
           value: {
             acceptance: {
@@ -604,20 +637,7 @@ export async function decideCandidate(
             },
             revision,
           },
-          events: [
-            ...linkEvents,
-            {
-              type: SUBJECT_REVISED,
-              subject: options.subject,
-              data: { id: options.subject, revision, kind: options.decision },
-            },
-            {
-              type:
-                options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
-              subject: options.subject,
-              data: { candidate: options.candidate, context: options.context, revision, head },
-            },
-          ],
+          events,
         };
       } catch (error) {
         retryEditorialUniqueness(error);
@@ -927,6 +947,7 @@ export async function adoptCandidates(
           }
         }
         await sealSemanticRecordSourceSet(tx, sourceSet);
+        await declareEditorialHistory(tx, 'subject.adopt', events);
         return {
           value: {
             adoption: {
