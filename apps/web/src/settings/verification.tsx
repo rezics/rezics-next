@@ -30,6 +30,7 @@ import {
 import {
   VerificationRecovery,
   canRequestVerification,
+  canRetryVerification,
   canWithdrawVerification,
   verificationQueryKey,
   verificationWithdrawalObservation,
@@ -311,12 +312,20 @@ export function VerificationCard({
   const [acknowledged, setAcknowledged] = useState<Omit<VerificationInput, 'idempotencyKey'> | null>(null);
   const isCurrent = useSettingsReadCurrent(csrfToken, true);
   const pending = state.phase === 'sending' || state.phase === 'reading';
-  const waiting = usePreferenceRetry(state.failure, state.retryAt);
+  const commandWaiting = usePreferenceRetry(state.failure, state.commandRetryAt);
+  const readWaiting = usePreferenceRetry(state.failure, state.readRetryAt);
   const verification = state.current?.verificationRequest ?? null;
   const subjectTitle = state.current?.subjectTitle ?? null;
   const observation = verificationWithdrawalObservation(state.current);
-  const canRequest = canRequestVerification(state.current) && !state.attempt && !pending && !!csrfToken;
-  const canWithdraw = canWithdrawVerification(state.current) && !state.attempt && !pending && !!csrfToken;
+  const canRequest =
+    canRequestVerification(state.current) && !state.attempt && !pending && !commandWaiting && !!csrfToken;
+  const canWithdraw =
+    canWithdrawVerification(state.current) &&
+    !!verification &&
+    !state.attempt &&
+    !pending &&
+    !commandWaiting &&
+    !!csrfToken;
   const hasDraft = !!selected || !!statement || links.some((link) => link.label || link.url);
 
   // Wholly empty optional rows remain editable placeholders, as before. Every populated byte stays in order.
@@ -429,7 +438,7 @@ export function VerificationCard({
             ) : null}
           </div>
         ) : null}
-        {canRequest || hasDraft || state.attempt?.kind === 'request' ? (
+        {canRequest || hasDraft ? (
           <form
             ref={form}
             noValidate
@@ -594,16 +603,19 @@ export function VerificationCard({
                   <p className="break-all">{state.attempt.requestId}</p>
                 </details>
               ) : null}
-              <Button
-                type="button"
-                className={verificationActionClassName}
-                disabled={pending || waiting || !csrfToken}
-                onClick={() => void recover(() => controller.retry())}
-              >
-                {state.attempt.kind === 'request'
-                  ? m.settings_verification_retry_original()
-                  : m.settings_verification_retry_withdraw()}
-              </Button>
+              {commandWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+              {!state.attempt.receipt ? (
+                <Button
+                  type="button"
+                  className={verificationActionClassName}
+                  disabled={!canRetryVerification(state.attempt, state.current) || commandWaiting || !csrfToken}
+                  onClick={() => void recover(() => controller.retry())}
+                >
+                  {state.attempt.kind === 'request'
+                    ? m.settings_verification_retry_original()
+                    : m.settings_verification_retry_withdraw()}
+                </Button>
+              ) : null}
             </AlertDescription>
           </Alert>
         ) : null}
@@ -628,12 +640,13 @@ export function VerificationCard({
         ) : null}
         {state.phase === 'review' ? <p role="status">{m.settings_verification_draft_preserved()}</p> : null}
         {state.failure && state.readStatus !== 'error' ? <CommandDetails failure={state.failure} /> : null}
-        {waiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
+        {commandWaiting && !state.attempt ? <p role="status">{m.settings_retry_wait()}</p> : null}
+        {readWaiting ? <p role="status">{m.settings_retry_wait()}</p> : null}
         <Button
           type="button"
           variant="outline"
           className={verificationActionClassName}
-          disabled={pending || waiting}
+          disabled={pending || readWaiting}
           onClick={() => void recover(() => controller.reload())}
         >
           {m.settings_verification_read_current()}
