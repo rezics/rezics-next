@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState, type ReactNode } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import recording from '../kernel/recorded/library-copies.json';
 import { CopiesPage } from '../library/copies-page';
 import type { CopyItem, CopiesPageData } from '../library/copies-read';
-import type { CopyReadingContext, CopyReadingContexts } from '../library/copy-reading-context/types';
+import type { CopyReadingContext } from '../library/copy-reading-context/types';
 import { copyInventoryReturnHref } from '../library/copy-reading-context/navigation';
 import { subjectOf } from '../library/reads';
 import { getLocale } from '../paraglide/runtime.js';
@@ -28,20 +28,32 @@ type Story = StoryObj<typeof meta>;
 
 const original = recording.copies[0]!;
 const baseSubject = subjectOf(original.subject)!;
-const uuid = (number: number) => `019a1b2c-3d4-e7f0-8a00-${String(number).padStart(12, '0')}`;
+const uuid = (number: number) => `019a1b2c-3d4e-7f00-8a00-${String(number).padStart(12, '0')}`;
 const work = { id: uuid(101), label: 'A shared creative work', labelLanguage: 'en' };
-const releaseOne = { ...baseSubject, id: uuid(102), label: { value: 'The Same Title', language: 'en' } };
-const releaseTwo = { ...baseSubject, id: uuid(103), label: { value: 'The Same Title', language: 'en' } };
 const author = { id: uuid(104), label: 'A. Writer', labelLanguage: 'en' };
-const releaseContext = (id: string, date: string): CopyReadingContext => ({
-  association: 'available',
+const available: CopyReadingContext = {
+  state: 'available',
   work: [work],
-  edition: { id, label: 'The Same Title', labelLanguage: 'en' },
   facts: [
-    { label: 'Author', subject: author },
-    { label: 'Publication date', value: date },
+    { property: 'schema:author', label: 'Author', text: author.label, subject: author },
+    { property: 'schema:datePublished', label: 'Publication date', text: 'April 2022' },
   ],
-});
+};
+const unsupported: CopyReadingContext = {
+  state: 'unsupported',
+  facts: [
+    { property: 'schema:author', label: 'Author', text: author.label, subject: author },
+    { property: 'schema:datePublished', label: 'Publication date', text: 'April 2022' },
+  ],
+};
+const contexts: CopyReadingContext[] = [
+  available,
+  unsupported,
+  { state: 'scope' },
+  { state: 'withheld' },
+  { state: 'missing' },
+  { state: 'unavailable' },
+];
 const copy = (number: number, subject: CopyItem['subject'], changes: Partial<CopyItem> = {}): CopyItem => ({
   ...original,
   id: uuid(number),
@@ -57,12 +69,11 @@ const copy = (number: number, subject: CopyItem['subject'], changes: Partial<Cop
   ...changes,
 });
 const returnTo = () => copyInventoryReturnHref({ subjectId: uuid(201), cursor: 'copy-window-next' }, getLocale());
-const page = (copies: CopyItem[], readingContexts: CopyReadingContexts = {}): CopiesPageData => ({
+const page = (copies: CopyItem[]): CopiesPageData => ({
   signedIn: true,
   subjectId: null,
   requestedCursor: 'copy-window-next',
   copies,
-  readingContexts,
   next: null,
   addKey: uuid(202),
 });
@@ -75,64 +86,53 @@ function StoryPage({ children }: { children: ReactNode }) {
   );
 }
 
-export const RepeatedCopiesAndSameTitleReleases: Story = {
-  name: 'Repeated copies and same-title releases',
+export const NativeContextStates: Story = {
+  name: 'Native context states and repeated copies',
   render: () => (
     <StoryPage>
       <CopiesPage
-        page={page([copy(1, releaseOne), copy(2, releaseOne), copy(3, releaseTwo)], {
-          [releaseOne.id]: releaseContext(releaseOne.id, '2022'),
-          [releaseTwo.id]: releaseContext(releaseTwo.id, '2025'),
-        })}
+        page={page([
+          copy(1, baseSubject, { readingContext: available }),
+          copy(2, baseSubject, { readingContext: available }),
+          ...contexts.slice(1).map((context, index) => copy(index + 3, baseSubject, { readingContext: context })),
+        ])}
       />
     </StoryPage>
   ),
   async play({ canvasElement }) {
     await within(canvasElement).findByRole('heading', { level: 1, name: m.library_copy_heading() });
     const contexts = [...canvasElement.querySelectorAll<HTMLElement>('[data-slot="copy-reading-context"]')];
-    const editionLinks = contexts.flatMap((context) =>
-      [...context.querySelectorAll<HTMLAnchorElement>('a')].filter((link) => link.textContent === 'The Same Title'),
-    );
-    expect(editionLinks).toHaveLength(3);
-    const ids = editionLinks.map((link) => new URL(link.href).pathname.split('/')[3]);
-    expect(ids).toEqual([releaseOne.id, releaseOne.id, releaseTwo.id]);
-    for (const link of editionLinks) {
-      const destination = new URL(link.href);
-      expect(destination.searchParams.get('via')).toBe(returnTo());
-      expect(destination.searchParams.get('via')).not.toContain('Private');
-    }
-    expect(canvasElement.textContent).toContain('Private note 1');
-  },
-};
+    expect(contexts).toHaveLength(7);
+    expect(contexts[0]?.textContent).toContain(m.library_copy_reading_context_available());
+    expect(contexts[1]?.textContent).toContain(m.library_copy_reading_context_available());
+    expect(contexts[2]?.textContent).toContain(m.library_copy_reading_context_unsupported());
+    expect(contexts[2]?.textContent).toContain('Publication date');
+    expect(contexts[2]?.textContent).toContain('April 2022');
+    expect(contexts[2]?.textContent).not.toContain('A shared creative work');
+    expect(contexts.slice(3).map((context) => context.textContent)).toEqual([
+      m.library_copy_reading_context_scope(),
+      m.library_copy_reading_context_withheld(),
+      m.library_copy_reading_context_missing(),
+      m.library_copy_reading_context_unavailable(),
+    ]);
+    expect(within(canvasElement).getAllByRole('button', { name: m.library_copy_more_actions() })).toHaveLength(7);
 
-export const MissingOrWithheldAssociation: Story = {
-  name: 'Missing or withheld association',
-  render: () => {
-    const visibleSubject = { ...baseSubject, id: uuid(301) };
-    return (
-      <StoryPage>
-        <CopiesPage
-          page={page([copy(4, visibleSubject), copy(5, null)], {
-            [visibleSubject.id]: { association: 'unavailable', work: [], facts: [] },
-          })}
-        />
-      </StoryPage>
-    );
-  },
-  async play({ canvasElement }) {
-    await within(canvasElement).findAllByText(m.library_copy_reading_context_unavailable());
-    expect(within(canvasElement).getAllByRole('button', { name: m.library_copy_more_actions() })).toHaveLength(2);
+    const returnAddress = returnTo();
+    const workLink = contexts[0]?.querySelector<HTMLAnchorElement>('a');
+    expect(workLink?.textContent).toBe(work.label);
+    const via = new URL(new URL(workLink!.href).searchParams.get('via')!, 'https://rezics.test');
+    expect(via.pathname).toBe('/en/library/copies');
+    expect([...via.searchParams.keys()]).toEqual(['subjectId', 'cursor']);
+    expect(via.searchParams.get('subjectId')).toBe(uuid(201));
+    expect(via.searchParams.get('cursor')).toBe('copy-window-next');
+    expect(returnAddress).toContain('cursor=copy-window-next');
   },
 };
 
 function ReaderReplacementPage() {
   const [reader, setReader] = useState<'Alice' | 'Bob'>('Alice');
-  const aliceCopy = copy(6, releaseOne, { note: 'Alice private note' });
-  const bobCopy = copy(7, null, { note: 'Bob private note' });
-  const visiblePage =
-    reader === 'Alice'
-      ? page([aliceCopy], { [releaseOne.id]: releaseContext(releaseOne.id, '2022') })
-      : page([bobCopy]);
+  const aliceCopy = copy(10, baseSubject, { note: 'Alice private note', readingContext: available });
+  const bobCopy = copy(11, null, { note: 'Bob private note', readingContext: { state: 'unavailable' } });
   return (
     <StoryPage>
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -141,20 +141,22 @@ function ReaderReplacementPage() {
           Replace reader
         </button>
       </div>
-      <CopiesPage page={visiblePage} />
+      <CopiesPage page={page(reader === 'Alice' ? [aliceCopy] : [bobCopy])} />
     </StoryPage>
   );
 }
 
 export const ReaderReplacement: Story = {
-  name: 'Reader replacement retires old copy context',
+  name: 'Reader replacement retires nested context',
   render: () => <ReaderReplacementPage />,
   async play({ canvasElement }) {
     await within(canvasElement).findByText('Alice private note');
+    expect(canvasElement.textContent).toContain('A. Writer');
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Replace reader' }));
     await within(canvasElement).findByText('Bob private note');
-    await waitFor(() => expect(canvasElement.textContent).not.toContain('Alice private note'));
+    expect(canvasElement.textContent).not.toContain('Alice private note');
     expect(canvasElement.textContent).not.toContain('A. Writer');
+    expect(canvasElement.textContent).not.toContain(work.label);
     expect(within(canvasElement).getByRole('button', { name: m.library_copy_more_actions() })).toBeInTheDocument();
   },
 };

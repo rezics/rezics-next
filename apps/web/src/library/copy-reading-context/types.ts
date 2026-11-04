@@ -1,3 +1,11 @@
+import type { Fact } from '../../search/results';
+
+export type NativeCopyContextIdentity = { id: string; labels: Record<string, string> };
+export type NativeCopyListContext =
+  | { state: 'available'; work: NativeCopyContextIdentity[]; facts: Record<string, Fact[]> }
+  | { state: 'unsupported'; facts: Record<string, Fact[]> }
+  | { state: 'scope' | 'withheld' | 'missing' | 'unavailable' };
+
 export type CopyReadingIdentity = {
   id: string;
   label: string;
@@ -5,17 +13,15 @@ export type CopyReadingIdentity = {
 };
 
 export type CopyReadingFact = {
+  property: string;
   label: string;
-  value?: string;
+  text: string;
+  language?: string;
   subject?: CopyReadingIdentity;
 };
 
-/** A page projection of admitted catalogue meaning, separate from every copy's private fields and revision. */
-export type CopyReadingContext = {
-  association: 'available' | 'unavailable';
-  work: CopyReadingIdentity[];
-  edition?: CopyReadingIdentity;
-  facts: CopyReadingFact[];
-};
-
-export type CopyReadingContexts = Record<string, CopyReadingContext>;
+/** A bounded presentation of the native context attached to one physical copy row. */
+export type CopyReadingContext =
+  | { state: 'available'; work: CopyReadingIdentity[]; facts: CopyReadingFact[] }
+  | { state: 'unsupported'; facts: CopyReadingFact[] }
+  | { state: 'scope' | 'withheld' | 'missing' | 'unavailable' };
