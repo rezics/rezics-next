@@ -780,7 +780,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       const read = await open(principal, request, context);
       return readAdmittedDiscoveryPage(read, async (page) => {
         try {
-          const reviews = await prepareSearchReviewContexts(config, page, context);
+          const reviews = await prepareSearchReviewContexts({ ...config, tokens: config.keys }, page, context);
           const enriched = await enrichDiscoveryPage(config, principal, page, {
             ...context,
             descriptions: request.descriptions === true,

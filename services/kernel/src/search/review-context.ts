@@ -50,6 +50,9 @@ export type SearchReviewContext =
 
 type Dependencies = ContentReadDependencies & { routeKey: Uint8Array };
 type ReviewHit = Extract<DiscoveryPage['hits'][number], { summary: { kind: 'review' } }>;
+function isReview(hit: DiscoveryPage['hits'][number]): hit is ReviewHit {
+  return hit.summary.kind === 'review';
+}
 type NativeRow = Awaited<ReturnType<ReviewDiscoverySource['hydrate']>>['reviews'][number];
 const restart = () => new ProblemError('search_restart_required');
 
@@ -143,7 +146,7 @@ export async function prepareSearchReviewContexts(
   page: DiscoveryPage,
   context: DiscoveryReadContext,
 ): Promise<Readonly<{ finish(page: DiscoveryPage): Promise<DiscoveryPage> }>> {
-  const reviews = page.hits.filter((hit): hit is ReviewHit => hit.summary.kind === 'review');
+  const reviews = page.hits.filter(isReview);
   if (reviews.length > REVIEW_CONTEXT_LIMITS.selected) throw new RangeError('At most 100 selected Search reviews');
   if (!reviews.length) return { finish: async (current) => current };
   const publicContext: ReadContext = { actor: { kind: 'anonymous' }, deadline: context.deadline };
@@ -270,7 +273,7 @@ export async function prepareSearchReviewContexts(
       return {
         ...currentPage,
         hits: currentPage.hits.map((hit) =>
-          hit.summary.kind === 'review'
+          isReview(hit)
             ? { ...hit, summary: { kind: 'review' as const, value: values.get(hit.key.id)! } }
             : hit,
         ),

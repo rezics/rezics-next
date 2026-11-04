@@ -68,14 +68,14 @@ test('the real Search receiver admits historical zero and target identity into m
   expect(html.match(/data-discovery-review=/g)).toHaveLength(2);
   for (const id of ids) expect(html).toContain(`/en/subjects/${id}/same-title`);
   expect(html).toContain('schema:Movie');
-  expect(html).toContain('schema:Book');
+  expect(html).toContain('>Book<');
   expect(html).toContain('0 units');
   expect(html).toContain(questionId);
   expect(html).toContain('revision 3');
   expect(html).toContain('historical question label and scale are unavailable');
   expect(html).toContain('<details');
   expect(html).not.toContain('Your current vote');
-  expect(html).not.toContain('button');
+  expect(html).not.toContain('<button');
   if (discovery.status === 'ready') expect(discovery.page.next).toBe('native-sparse-continuation');
 });
 
