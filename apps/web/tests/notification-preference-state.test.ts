@@ -309,8 +309,14 @@ test('a definite notification refusal guards row autosave, Restore and Reload un
       expect(transport.calls[3]!.headers.get('idempotency-key')).not.toBe(
         transport.calls[0]!.headers.get('idempotency-key'),
       );
-      expect(await transport.calls[3]!.json()).toEqual({ expectedVersion: 8, notifications: { reply: false } });
-      expect(editor.snapshot()).toMatchObject({ phase: 'saved', draft: { ...optional, reply: false } });
+      expect(await transport.calls[3]!.json()).toEqual({
+        expectedVersion: 8,
+        notifications: { reply: false, thread_watch: false },
+      });
+      expect(editor.snapshot()).toMatchObject({
+        phase: 'saved',
+        draft: { ...optional, reply: false, thread_watch: false },
+      });
     } finally {
       clock.mockRestore();
     }
