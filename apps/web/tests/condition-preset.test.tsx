@@ -80,9 +80,8 @@ const button = (host: HTMLElement, text: string) =>
 
 test('choose a native released name, inspect, combine, deliberately apply and reopen the authored reference', async () => {
   await mounted(async (host, render, change) => {
-    setLocale('ja', { reload: false });
     const locale = 'ja';
-    expect(getLocale()).toBe(locale);
+    expect(getLocale()).toBe('en'); // The explicit surface locale may differ from the ambient route.
     const options = { locale };
     const metadata = conditionMetadata(bundledRelease);
     const ordinary: FilterDocument = { statement: { property: 'schema:datePublished', range: { gte: 1980 } } };
@@ -219,7 +218,10 @@ test('equivalent rerenders retain inspection and focus; reader, request, locale,
             value,
             requestIdentity,
             locale,
-            onChange() {},
+            onChange(next) {
+              value = next!;
+              void draw();
+            },
           }),
         ),
       );
@@ -275,6 +277,14 @@ test('equivalent rerenders retain inspection and focus; reader, request, locale,
       const picker = host.querySelector('[data-condition-saved-filter]')!;
       await change(picker.querySelector('select')!, 'anime/before-2000');
       expect(value).toEqual({ and: [{ saved: 'anime/all' }] });
+      const replace = button(picker as HTMLElement, m.condition_preset_replace());
+      replace.focus();
+      await click(replace);
+      expect(value).toEqual({ and: [{ saved: 'anime/before-2000' }] });
+      await act(async () => {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      });
+      expect(host.contains(host.ownerDocument.activeElement)).toBe(true);
     } finally {
       await act(async () => {
         await client.cancelQueries();
