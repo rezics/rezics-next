@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCreationHost } from './creation-host/use-creation-host';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { pickText } from '@rezics/composition';
-import type { Release } from '@rezics/definitions';
 import { Button } from '@rezics/ui/shadcn/button';
 import {
   AlertDialog,
@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from '@rezics/ui/shadcn/alert-dialog';
 import { PageHeading } from '../../shell/page-heading';
-import { candidateSession, useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
@@ -50,9 +50,7 @@ import {
   type CreatedClassificationIdentity,
 } from './classification-create-return';
 
-type ReadyRead = Extract<ConceptCreateRead, { ok: true }>;
 type Created = Extract<CreateResult, { ok: true }>;
-type Metadata = { ready: boolean; pending: boolean; failure: ReactNode; types: CreateType[] };
 type Session = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
 const factsId = 'concept-initial-facts';
 const formClass =
@@ -73,33 +71,25 @@ function ConceptCreateSessionLive({
   initial: ConceptCreateRead;
   token?: string;
 }) {
-  const work = useCatalogueLifetime('concept-create');
   const { state, csrfToken, subject } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
   );
-  const [reading, setReading] = useState<ConceptCreateRead>(initial);
-  const lastGood = useRef<ReadyRead | undefined>(initial.ok ? initial : undefined);
-  const [pending, setPending] = useState(false);
-  const [termDrafts, setTermDrafts] = useState<Record<string, boolean>>({});
-  const [factsByType, setFactsByType] = useState<Record<string, ConceptCreateFact[]>>({});
-  const [archived, setArchived] = useState<CreateType[]>([]);
   const [handoff, setHandoff] = useState<ClassificationCreateHandoff>();
   const [confirmLeave, setConfirmLeave] = useState(false);
   const returning = useRef(false);
   const selectedBases = useRef<string[]>([]);
   const titleId = useId();
-  const refreshing = useRef(false);
-  const prepared = useRef<
-    | {
-        release: Release;
-        digest: string;
-        holders: ReturnType<typeof conceptCreateHolders>;
-      }
-    | undefined
-  >(undefined);
   const o = { locale: locale as never };
+  const host = useCreationHost<ConceptCreateFact, ReturnType<typeof conceptCreateHolders>>({
+    initial, locale, scope: 'concept-create', types: conceptCreateTypes,
+    load: () => loadConceptCreate({ data: true }), failure: <p>{m.concept_create_unavailable({}, { locale: locale as never })}</p>,
+    admit: (entry) => !handoff || classificationTargetAdmitted(entry.id, entry.bases ?? [], handoff.targets),
+  });
+  const { work, reading, currentRead, release, pending, factsByType, setFactsByType,
+    prepared, retainedTypes, activeTypes, types, metadata, metadataRevision, activeTypeIds,
+    refreshMetadata } = host;
 
   useEffect(() => {
     if (!token) {
@@ -118,69 +108,6 @@ function ConceptCreateSessionLive({
       if (!returning.current) discardClassificationCreateHandoff(token);
     };
   }, [token, work]);
-
-  const retainedTypes = new Set([
-    ...Object.entries(termDrafts)
-      .filter(([, retained]) => retained)
-      .map(([type]) => type),
-    ...Object.entries(factsByType)
-      .filter(([, rows]) => rows.length > 0)
-      .map(([type]) => type),
-  ]);
-  const currentRead = reading.ok ? reading : lastGood.current;
-  const release = currentRead?.release;
-  const activeTypes = reading.ok
-    ? conceptCreateTypes(reading.release, locale).filter((entry) =>
-        handoff ? classificationTargetAdmitted(entry.id, entry.bases ?? [], handoff.targets) : true,
-      )
-    : [];
-  const currentIds = new Set(activeTypes.map((entry) => entry.id));
-  const archivedTypes = archived.filter((entry) => retainedTypes.has(entry.id) && !currentIds.has(entry.id));
-  const types = reading.ok
-    ? [...activeTypes, ...archivedTypes]
-    : currentRead
-      ? conceptCreateTypes(currentRead.release, locale)
-      : [];
-  const metadata: Metadata = {
-    ready: reading.ok,
-    pending,
-    failure: <p>{m.concept_create_unavailable({}, o)}</p>,
-    types,
-  };
-  const metadataRevision = reading.ok ? reading.digest : (currentRead?.digest ?? 'unavailable');
-  const activeTypeIds = new Set(activeTypes.map((entry) => entry.id));
-
-  async function refreshMetadata() {
-    if (!work.active() || refreshing.current) return;
-    refreshing.current = true;
-    setPending(true);
-    try {
-      const result = await loadConceptCreate({ data: true });
-      if (!work.active()) return;
-      if (result.ok) {
-        const previous = lastGood.current;
-        if (previous) {
-          const admitted = new Set(conceptCreateTypes(result.release, locale).map((entry) => entry.id));
-          const previousTypes = conceptCreateTypes(previous.release, locale).filter(
-            (entry) => retainedTypes.has(entry.id) && !admitted.has(entry.id),
-          );
-          setArchived((current) => {
-            const combined = new Map(current.map((entry) => [entry.id, entry]));
-            for (const entry of previousTypes) combined.set(entry.id, entry);
-            return [...combined.values()];
-          });
-        }
-        lastGood.current = result;
-      }
-      setReading(result);
-    } catch {
-      if (!work.active()) return;
-      setReading({ ok: false });
-    } finally {
-      refreshing.current = false;
-      if (work.active()) setPending(false);
-    }
-  }
 
   function recordCreated(result: Created) {
     const current = handoff;
@@ -289,28 +216,9 @@ function ConceptCreateSessionLive({
             identitySearch: true,
             releaseDigest: reading.ok ? reading.digest : currentRead?.digest,
             initialLanguage: '',
-            reviewRevision: metadataRevision,
-            onTypeDraftChange: (type: string, hasTerms: boolean) => {
-              if (!type) return;
-              setTermDrafts((current) => {
-                const next = { ...current };
-                if (hasTerms) next[type] = true;
-                else delete next[type];
-                return next;
-              });
-            },
-            onDiscardType: (type: string) => {
-              setTermDrafts((current) => {
-                const next = { ...current };
-                delete next[type];
-                return next;
-              });
-              setFactsByType((current) => {
-                const next = { ...current };
-                delete next[type];
-                return next;
-              });
-            },
+            reviewRevision: host.reviewRevision,
+            onTypeDraftChange: host.onTypeDraftChange,
+            onDiscardType: host.onDiscardType,
             canEditType: (type: string) =>
               reading.ok && activeTypeIds.has(type) && conceptGrain(reading.release, type) !== undefined,
             canCreateType: (type: string) => reading.ok && activeTypeIds.has(type),
@@ -352,19 +260,7 @@ function ConceptCreateSessionLive({
                   locale={locale}
                   stale={state.stale || !metadata.ready || snapshot.digest !== metadataRevision}
                   factsId={factsId}
-                  onJump={(id) => {
-                    const target = document.getElementById(id);
-                    if (!target) return;
-                    for (let parent = target.parentElement; parent; parent = parent.parentElement)
-                      if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
-                    const control = target.matches('input, select, textarea, button')
-                      ? target
-                      : target.querySelector<HTMLElement>(
-                          'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
-                        );
-                    (control ?? target).focus();
-                    target.scrollIntoView({ block: 'center' });
-                  }}
+                  onJump={host.jumpToField}
                 />
               );
             },

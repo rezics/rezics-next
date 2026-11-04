@@ -1,16 +1,16 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCreationHost } from './creation-host/use-creation-host';
+import { useCallback, useMemo } from 'react';
 import { pickText } from '@rezics/composition';
-import type { Release } from '@rezics/definitions';
 import { Button } from '@rezics/ui/shadcn/button';
 import { PageHeading } from '../../shell/page-heading';
-import { candidateSession, useCatalogueLifetime } from '../../subject/candidate-lifetime';
+import { candidateSession } from '../../subject/candidate-lifetime';
 import { useSession } from '../../session/query';
 import { csrfHeaders } from '../../threads/composer';
 import { m } from '../../paraglide/messages.js';
 import { editorRequest } from './editor-request';
 import { CreateSubjectForm } from './create-subject-form';
 import { readCreatedCatalogueSubject } from './create-subject-actions';
-import type { CreateType, InitialSubject } from './create-subject';
+import type { InitialSubject } from './create-subject';
 import { relationTargetSearch } from './relation-editor-search';
 import { createCatalogueMusicContext, loadMusicContextCreate } from './music-context-create-actions';
 import {
@@ -29,93 +29,23 @@ import { musicContextKind } from './music-context-profile';
 import { MusicContextCreateFields } from './music-context-create-fields';
 import { MusicContextCreateReview } from './music-context-create-review';
 
-type ReadyRead = Extract<MusicContextCreateRead, { ok: true }>;
-type Metadata = { ready: boolean; pending: boolean; failure: ReactNode; types: CreateType[] };
 const factsId = 'music-context-initial-facts';
 const formClass =
   'inline-flex min-h-11 min-w-11 items-center justify-center whitespace-normal rounded-md border px-4 py-2';
 
 function MusicContextCreateSessionLive({ locale, initial }: { locale: string; initial: MusicContextCreateRead }) {
-  const work = useCatalogueLifetime('music-context-create');
   const { state } = useSession();
   const search = useCallback(
     (text: string, signal: AbortSignal) => relationTargetSearch(text, signal, locale),
     [locale],
   );
-  const [reading, setReading] = useState<MusicContextCreateRead>(initial);
-  const lastGood = useRef<ReadyRead | undefined>(initial.ok ? initial : undefined);
-  const [pending, setPending] = useState(false);
-  const [termDrafts, setTermDrafts] = useState<Record<string, boolean>>({});
-  const [factsByType, setFactsByType] = useState<Record<string, MusicContextCreateFact[]>>({});
-  const [archived, setArchived] = useState<CreateType[]>([]);
-  const refreshing = useRef(false);
-  const prepared = useRef<
-    | {
-        release: Release;
-        digest: string;
-        holders: ReturnType<typeof musicContextCreateHolders>;
-      }
-    | undefined
-  >(undefined);
-
-  const retainedTypes = new Set([
-    ...Object.entries(termDrafts)
-      .filter(([, retained]) => retained)
-      .map(([type]) => type),
-    ...Object.entries(factsByType)
-      .filter(([, rows]) => rows.length > 0)
-      .map(([type]) => type),
-  ]);
-  const currentRead = reading.ok ? reading : lastGood.current;
-  const release = currentRead?.release;
-  const activeTypes = reading.ok ? musicContextCreateTypes(reading.release, locale) : [];
-  const currentIds = new Set(activeTypes.map((entry) => entry.id));
-  const archivedTypes = archived.filter((entry) => retainedTypes.has(entry.id) && !currentIds.has(entry.id));
-  const types = reading.ok
-    ? [...activeTypes, ...archivedTypes]
-    : currentRead
-      ? musicContextCreateTypes(currentRead.release, locale)
-      : [];
-  const metadata: Metadata = {
-    ready: reading.ok,
-    pending,
-    failure: <p>{m.music_context_create_unavailable({}, { locale: locale as never })}</p>,
-    types,
-  };
-  const metadataRevision = reading.ok ? reading.digest : (currentRead?.digest ?? 'unavailable');
-  const activeTypeIds = new Set(activeTypes.map((entry) => entry.id));
-
-  async function refreshMetadata() {
-    if (!work.active() || refreshing.current) return;
-    refreshing.current = true;
-    setPending(true);
-    try {
-      const result = await loadMusicContextCreate({ data: true });
-      if (!work.active()) return;
-      if (result.ok) {
-        const previous = lastGood.current;
-        if (previous) {
-          const admitted = new Set(musicContextCreateTypes(result.release, locale).map((entry) => entry.id));
-          const previousTypes = musicContextCreateTypes(previous.release, locale).filter(
-            (entry) => retainedTypes.has(entry.id) && !admitted.has(entry.id),
-          );
-          setArchived((current) => {
-            const combined = new Map(current.map((entry) => [entry.id, entry]));
-            for (const entry of previousTypes) combined.set(entry.id, entry);
-            return [...combined.values()];
-          });
-        }
-        lastGood.current = result;
-      }
-      setReading(result);
-    } catch {
-      if (!work.active()) return;
-      setReading({ ok: false });
-    } finally {
-      refreshing.current = false;
-      if (work.active()) setPending(false);
-    }
-  }
+  const host = useCreationHost<MusicContextCreateFact, ReturnType<typeof musicContextCreateHolders>>({
+    initial, locale, scope: 'music-context-create', types: musicContextCreateTypes,
+    load: () => loadMusicContextCreate({ data: true }), failure: <p>{m.music_context_create_unavailable({}, { locale: locale as never })}</p>,
+  });
+  const { work, reading, currentRead, release, pending, factsByType, setFactsByType,
+    prepared, retainedTypes, activeTypes, types, metadata, metadataRevision, activeTypeIds,
+    refreshMetadata } = host;
 
   const transport = useMemo(
     () => ({
@@ -172,28 +102,9 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
             refreshMetadata,
             retainTypeDrafts: true,
             initialLanguage: '',
-            reviewRevision: metadataRevision,
-            onTypeDraftChange: (type: string, hasTerms: boolean) => {
-              if (!type) return;
-              setTermDrafts((current) => {
-                const next = { ...current };
-                if (hasTerms) next[type] = true;
-                else delete next[type];
-                return next;
-              });
-            },
-            onDiscardType: (type: string) => {
-              setTermDrafts((current) => {
-                const next = { ...current };
-                delete next[type];
-                return next;
-              });
-              setFactsByType((current) => {
-                const next = { ...current };
-                delete next[type];
-                return next;
-              });
-            },
+            reviewRevision: host.reviewRevision,
+            onTypeDraftChange: host.onTypeDraftChange,
+            onDiscardType: host.onDiscardType,
             canEditType: (type: string) =>
               reading.ok && activeTypeIds.has(type) && musicContextKind(reading.release, type) !== 'unsupported',
             canCreateType: (type: string) => reading.ok && activeTypeIds.has(type),
@@ -235,19 +146,7 @@ function MusicContextCreateSessionLive({ locale, initial }: { locale: string; in
                   locale={locale}
                   stale={state.stale || !metadata.ready || snapshot.digest !== metadataRevision}
                   factsId={factsId}
-                  onJump={(id) => {
-                    const target = document.getElementById(id);
-                    if (!target) return;
-                    for (let parent = target.parentElement; parent; parent = parent.parentElement)
-                      if (parent.tagName === 'DETAILS') (parent as HTMLDetailsElement).open = true;
-                    const control = target.matches('input, select, textarea, button')
-                      ? target
-                      : target.querySelector<HTMLElement>(
-                          'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])',
-                        );
-                    (control ?? target).focus();
-                    target.scrollIntoView({ block: 'center' });
-                  }}
+                  onJump={host.jumpToField}
                 />
               );
             },

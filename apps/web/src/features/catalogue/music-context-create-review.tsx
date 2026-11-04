@@ -3,8 +3,8 @@ import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import { pageText } from '../pages/data';
-import { PartValue, type StatementFieldsRead } from './statement-editor-view';
-import type { SnakInput, StatementInput } from './statement-editor';
+import { type StatementFieldsRead } from './statement-editor-view';
+import { StatementSummary } from './statement-summary';
 import {
   musicContextCreateHolder,
   musicContextCreateUnsupported,
@@ -16,89 +16,7 @@ import type { Release } from '@rezics/definitions';
 const actionClass =
   'h-auto min-h-8 min-w-8 max-w-full whitespace-normal break-words py-2 [@media(max-width:639px)_and_(pointer:coarse)]:min-h-11 [@media(max-width:639px)_and_(pointer:coarse)]:min-w-11';
 
-function partLabel(part: SnakInput, release: Pick<Release, 'properties'>, locale: string) {
-  const definition = release.properties[part.property.id];
-  return {
-    text: pickText(definition?.labels ?? {}, locale).text || part.property.id,
-    language: pickText(definition?.labels ?? {}, locale).lang,
-  };
-}
-
-export function MusicContextStatementSummary({
-  statement,
-  read,
-  locale,
-}: {
-  statement: StatementInput;
-  read: StatementFieldsRead;
-  locale: string;
-}) {
-  const o = { locale: locale as never };
-  const property = partLabel(statement, read.release, locale);
-  return (
-    <div className="min-w-0 space-y-3 text-sm">
-      <dl className="min-w-0 space-y-2">
-        <div>
-          <dt lang={property.language ?? undefined} className="text-muted-foreground">
-            {property.text}
-          </dt>
-          <dd>
-            <code className="break-all">{statement.property.id}</code>
-            <PartValue part={statement} read={read} locale={locale} />
-          </dd>
-        </div>
-        {(statement.qualifiers ?? []).map((part, index) => {
-          const label = partLabel(part, read.release, locale);
-          return (
-            <div key={index}>
-              <dt lang={label.language ?? undefined} className="text-muted-foreground">
-                {m.correction_qualifiers({}, o)} {index + 1}: {label.text}
-              </dt>
-              <dd>
-                <code className="break-all">{part.property.id}</code>
-                <PartValue part={part} read={read} locale={locale} />
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
-      <ol className="min-w-0 space-y-3">
-        {statement.references.map((group, groupIndex) => (
-          <li key={groupIndex} className="min-w-0 space-y-1 border-s-2 border-border ps-3">
-            <p className="text-muted-foreground">
-              {m.correction_references({}, o)} {groupIndex + 1}
-            </p>
-            {group.parts.length ? (
-              <ul className="min-w-0 space-y-1">
-                {group.parts.map((part, partIndex) => {
-                  const label = partLabel(part, read.release, locale);
-                  return (
-                    <li key={partIndex} className="min-w-0">
-                      <span lang={label.language ?? undefined}>{label.text}: </span>
-                      <code className="break-all">{part.property.id}</code>
-                      <PartValue part={part} read={read} locale={locale} />
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">{m.facts_reuse_empty({}, o)}</p>
-            )}
-          </li>
-        ))}
-      </ol>
-      <p>
-        {m.candidate_rank_normal({}, o)}
-        {statement.rank !== 'normal' && (
-          <>
-            {' '}
-            · <code>{statement.rank}</code>
-          </>
-        )}
-      </p>
-    </div>
-  );
-}
+export { StatementSummary as MusicContextStatementSummary } from './statement-summary';
 
 export function MusicContextCreateReview({
   item,
@@ -245,7 +163,7 @@ export function MusicContextCreateReview({
                 const target = holder ? musicContextCreateHolder(holder.key) : factsId;
                 return (
                   <div key={holder?.key ?? index} className="min-w-0 space-y-2">
-                    <MusicContextStatementSummary statement={statement} read={read} locale={locale} />
+                    <StatementSummary statement={statement} read={read} locale={locale} />
                     <Button type="button" variant="outline" className={actionClass} onClick={() => onJump(target)}>
                       {m.music_context_create_review_open({}, o)}
                     </Button>
