@@ -2,8 +2,7 @@
 
 This document owns how agent instructions are organized and how documents stay small and authoritative. Agents act on
 what they receive at session start, so every instruction has one authority and every layer has a size budget.
-Long, append-only documents dilute the current rules. They also become hot files that every task edits, which causes
-landing conflicts.
+Long, append-only documents dilute the current rules.
 
 ## Instruction layers
 
