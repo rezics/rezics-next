@@ -46,6 +46,7 @@ const globalValues = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const previousGlobals = new Map(
@@ -211,7 +212,7 @@ test('the shared shell keeps one document nonce and measured phone clearance thr
     await retryWork;
   });
   expect(host.textContent).toContain('Private document ready');
-  for (const style of host.querySelectorAll('style[nonce]')) expect(style.nonce).toBe(nonce);
+  for (const style of host.querySelectorAll('style[nonce]')) expect(style.getAttribute('nonce')).toBe(nonce);
   expect(host.querySelectorAll('style:not([nonce])')).toHaveLength(0);
 
   await act(async () => root.unmount());
