@@ -435,10 +435,10 @@ export function extractBangumiNamesForTemplate(
     const property = field.key === '中文名' ? 'schema:name' : (template.aliasProperty ?? 'schema:alternateName');
     const language = field.key === '中文名' ? 'zh' : 'und';
     const additions = field.values
-      .map((text) => [
-        `${property}\u0000${language}\u0000${text}`,
-        { property, language, text, pointer: field.pointer },
-      ] as const)
+      .map(
+        (text) =>
+          [`${property}\u0000${language}\u0000${text}`, { property, language, text, pointer: field.pointer }] as const,
+      )
       .filter(([tuple]) => !seen.has(tuple));
     if (names.length + additions.length > nameLimit) {
       omit(field.pointer, 'infobox_name_limit');
