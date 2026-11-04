@@ -13,6 +13,8 @@ import {
 } from './journey';
 import type { ReporterHistoryEntry, ReporterHistoryPage, ReporterHistoryQuery } from './model';
 import { reporterHistoryStatusHref } from './navigation';
+import type { ReporterHistoryFocus } from './focus';
+import { browserObservation } from '../../session/observation';
 
 const idleSubscribe = () => () => {};
 const browserReady = () => true;
@@ -60,6 +62,7 @@ export function ReporterHistoryCurrent(props: {
   initial: ReporterHistoryVisit;
   navigation?: ReporterHistoryNavigation;
   read?: ReporterHistoryReader;
+  focus?: ReporterHistoryFocus;
 }) {
   const access = useReporterHistoryAccess();
   const locale = getLocale();
@@ -90,6 +93,7 @@ export function ReporterHistoryCurrent(props: {
       initial={props.initial}
       {...(props.navigation ? { navigation: props.navigation } : {})}
       read={props.read ?? readCurrent}
+      {...(props.focus ? { focus: props.focus } : {})}
       registerRetire={registerRetire}
     />
   );
@@ -101,11 +105,13 @@ function ReporterHistoryVisit({
   navigation,
   read,
   registerRetire,
+  focus,
 }: {
   visitKey: string;
   initial: ReporterHistoryVisit;
   navigation?: ReporterHistoryNavigation;
   read: ReporterHistoryReader;
+  focus?: ReporterHistoryFocus;
   registerRetire: (key: string, retire: () => void) => void;
 }) {
   const cache = useQueryClient();
@@ -126,15 +132,35 @@ function ReporterHistoryVisit({
     return () => journey.retire();
   }, [journey, registerRetire, visitKey]);
   const result = useSyncExternalStore(journey.subscribe, journey.snapshot, journey.serverSnapshot);
+  const boundary = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (result.state !== 'loading' && result.state !== 'retired' && boundary.current)
+      focus?.arrive(boundary.current, journey.operands(), journey.isConnected);
+  }, [focus, journey, result]);
   return (
     <div
+      ref={boundary}
       onClickCapture={(event) => {
+        const source = (event.target as Element).closest<HTMLButtonElement>('button');
+        if (source && event.detail === 0 && journey.isConnected()) {
+          const observation = browserObservation(cache).getSnapshot();
+          focus?.activate(source, () => {
+            const next = browserObservation(cache).getSnapshot();
+            return (
+              getLocale() === initial.locale &&
+              observation.state === 'signed-in' &&
+              next.state === 'signed-in' &&
+              next.observation === observation.observation
+            );
+          });
+        }
         if ((event.target as Element).closest('a') && !journey.isCurrent()) event.preventDefault();
       }}
     >
       <ReporterHistoryPage
         result={result}
         query={journey.operands()}
+        onRefresh={() => journey.refresh()}
         onRetry={() => journey.retry()}
         onContinue={() => journey.next()}
         onSelect={(reportId) => journey.select(reportId)}
@@ -153,6 +179,7 @@ export function ReporterHistoryPage({
   onContinue = () => undefined,
   onSelect = () => undefined,
   onRestart = () => undefined,
+  onRefresh,
 }: {
   result: ReporterHistoryState;
   query: ReporterHistoryQuery;
@@ -160,6 +187,7 @@ export function ReporterHistoryPage({
   onContinue?: Retry;
   onSelect?: (reportId: string) => void | Promise<void>;
   onRestart?: Retry;
+  onRefresh?: Retry;
 }) {
   return (
     <section
@@ -168,13 +196,22 @@ export function ReporterHistoryPage({
       aria-busy={result.state === 'loading'}
     >
       <header className="space-y-2">
-        <h1 id="reporter-history-heading" className="text-2xl font-semibold tracking-tight">
+        <h1 id="reporter-history-heading" tabIndex={-1} className="text-2xl font-semibold tracking-tight">
           {m.reporter_history_heading()}
         </h1>
         <p className="text-sm text-muted-foreground">{m.reporter_history_intro()}</p>
+        {onRefresh && result.state === 'loaded' ? (
+          <button
+            type="button"
+            className="min-h-11 rounded-md border px-4 font-medium"
+            onClick={() => void onRefresh()}
+          >
+            {m.reporter_status_refresh()}
+          </button>
+        ) : null}
       </header>
       {result.state === 'loading' ? <p role="status">{m.reporter_history_loading()}</p> : null}
-      {result.state === 'denied' ? <p role="alert">{m.reporter_history_denied()}</p> : null}
+      {result.state === 'denied' ? <HistoryFailure message={m.reporter_history_denied()} retry={onRetry} /> : null}
       {result.state === 'unavailable' ? (
         <HistoryFailure
           message={
@@ -240,6 +277,7 @@ function ReporterHistoryResults({
     page.state === 'ready' && query.reportId !== undefined && page.selectedReportId !== query.reportId;
   return (
     <div className="space-y-5">
+      {page.state === 'ready' && page.entries.length > 0 ? <p role="status">{m.reporter_history_ready()}</p> : null}
       {page.state === 'preparing' ? <p role="status">{m.reporter_history_preparing()}</p> : null}
       {selectedUnavailable ? <p role="alert">{m.reporter_history_selected_unavailable()}</p> : null}
       {page.entries.length > 0 ? (
@@ -254,8 +292,10 @@ function ReporterHistoryResults({
             />
           ))}
         </ol>
-      ) : page.state === 'ready' && !selectedUnavailable ? (
+      ) : page.state === 'ready' && !selectedUnavailable && page.nextCursor === null ? (
         <p role="status">{m.reporter_history_empty()}</p>
+      ) : page.state === 'ready' && page.entries.length === 0 && !selectedUnavailable ? (
+        <p role="status">{m.reporter_history_sparse()}</p>
       ) : null}
       {page.state === 'ready' && page.nextCursor !== null ? (
         <button type="button" className="min-h-11 rounded-md border px-4 font-medium" onClick={() => void onContinue()}>
@@ -303,7 +343,15 @@ function HistoryEntry({
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <div>
             <dt className="font-medium text-muted-foreground">{m.moderation_reason_label()}</dt>
-            <dd className="break-words">{entry.reason}</dd>
+            <dd className="break-words">
+              {{
+                off_topic: m.report_off_topic,
+                inappropriate: m.report_inappropriate,
+                spam: m.report_spam,
+                illegal: m.report_illegal,
+                other: m.report_other,
+              }[entry.reason]?.() ?? entry.reason}
+            </dd>
           </div>
           <div>
             <dt className="font-medium text-muted-foreground">{m.reporter_history_outcome()}</dt>
@@ -324,6 +372,7 @@ function HistoryEntry({
           <button
             type="button"
             className="min-h-11 rounded-md border px-4 font-medium"
+            data-report-id={entry.id}
             aria-pressed={selected}
             onClick={() => void onSelect(entry.id)}
           >

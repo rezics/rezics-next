@@ -11,12 +11,12 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { setStoryRequestContext } from '../.storybook/react-start';
 
 const submission: ReporterStatus = {
-  id: 'report-1',
-  target: { kind: 'post', id: 'post-1' },
-  revisionId: 'revision-1',
+  id: '11111111-1111-8111-8111-123411111111',
+  target: { kind: 'post', id: '22222222-2222-8222-8222-123422222222' },
+  revisionId: '33333333-3333-8333-8333-123433333333',
   reason: 'spam',
   evidence: 'The original evidence I submitted.',
-  reporterId: 'reporter-1',
+  reporterId: '44444444-4444-8444-8444-123444444444',
   createdAt: '2026-10-30T10:00:00.000Z',
   resolvedAt: null,
   outcome: null,
@@ -105,8 +105,8 @@ test('the served receipt explains its actioned disposition and separates submitt
   expect(html).toContain('dateTime="2026-10-31T10:00:00.000Z"');
   expect(html).toContain('<details');
   expect(html).toContain(submission.id);
-  expect(html).toContain('post post-1');
-  expect(html).toContain('revision-1');
+  expect(html).toContain(`post ${submission.target.id}`);
+  expect(html).toContain(submission.revisionId!);
   expect(html.match(/href=/g)).toHaveLength(1);
   expect(html).toMatch(/href="(?:\/en)?\/inbox"/);
   for (const hidden of [
@@ -287,7 +287,7 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
                     : 'dependency_unavailable',
               detail: 'Private infrastructure diagnostics',
             },
-        { status: responseStatus },
+        { status: responseStatus, headers: { 'rezics-session-token': 'native-status-session' } },
       );
     }) as typeof fetch,
   });
@@ -497,4 +497,35 @@ test('the default private reporter-status journey refreshes outcomes, retries fa
       else Reflect.deleteProperty(globalThis, key);
     }
   }
+});
+
+test('all native own target kinds preserve exact identity and disposition with translated labels and no target links', () => {
+  for (const kind of ['board', 'thread', 'post', 'subject', 'space', 'realm'] as const) {
+    for (const outcome of [null, 'actioned', 'dismissed'] as const) {
+      const own = {
+        ...submission,
+        target: { kind, id: submission.target.id },
+        outcome,
+        resolvedAt: outcome ? '2026-10-31T10:00:00.000Z' : null,
+      };
+      expect(reporterStatusResponse({ report: own })).toEqual(own);
+      const html = renderToStaticMarkup(createElement(ReporterStatusView, { report: own }));
+      expect(html).toContain(`${kind} ${own.target.id}`);
+      expect(html).not.toContain('href=');
+      expect(() => reporterStatusResponse({ report: own, inspection: {} })).toThrow();
+    }
+  }
+  for (const invalid of [
+    { target: { kind: 'account', id: submission.target.id } },
+    { target: { kind: 'realm', id: '' } },
+    { id: '' },
+    { reporterId: '' },
+    { revisionId: 'not-an-id' },
+    { createdAt: 'not-a-date' },
+    { resolvedAt: 'not-a-date' },
+    { outcome: 'reversed' },
+    { reason: 'invented' },
+    { evidence: 1 },
+  ])
+    expect(() => reporterStatusResponse({ report: { ...submission, ...invalid } })).toThrow();
 });

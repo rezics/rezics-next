@@ -68,12 +68,14 @@ function ReporterStatusVisit({
   returnHref?: string;
 }) {
   const cache = useQueryClient();
-  const [original] = useState({ cache, initial, navigation });
+  const locale = getLocale();
+  const [original] = useState({ cache, initial, navigation, locale });
   const journey = useMemo(
     () => createReporterStatusJourney(original.cache, original.initial, readCurrent, original.navigation),
     [original],
   );
   if (
+    locale !== original.locale ||
     cache !== original.cache ||
     navigation !== original.navigation ||
     initial.id !== original.initial.id ||
@@ -214,7 +216,11 @@ export function ReporterStatusResultPage({
 export function ReporterStatusReadState({ state }: { state: 'loading' | 'concealed' | 'closed' }) {
   return (
     <section className="space-y-6" aria-labelledby="reporter-status-heading">
-      <h1 id="reporter-status-heading" className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+      <h1
+        id="reporter-status-heading"
+        tabIndex={-1}
+        className="font-display text-3xl font-semibold tracking-tight sm:text-4xl"
+      >
         {m.reporter_status_heading()}
       </h1>
       <p role="status" className="leading-7 text-muted-foreground">
@@ -257,6 +263,9 @@ export function ReporterStatusView({
     board: m.reporter_status_board,
     thread: m.reporter_status_thread,
     post: m.reporter_status_post,
+    subject: m.reporter_status_subject,
+    space: m.reporter_status_space,
+    realm: m.reporter_status_realm,
   }[report.target.kind]();
   return (
     <article className="space-y-8 break-words" aria-labelledby="reporter-status-heading">

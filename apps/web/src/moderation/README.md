@@ -166,3 +166,5 @@ Decision: an own-history visit retains one replacement page and exact selection;
 Decision: My reports opens at `/moderation/reports`; its status return uses a fixed local destination carrying the exact cursor and selected report ID.
 
 `reporter-history/journey.ts` owns prepared browser admission and page replacement through the shared private-reader lifetime; the localized Reports route mounts it through `view.tsx`.
+
+Decision: served history next/select/restart commit closed route operands; retry/refresh reload the same address. The loader alone publishes each new private visit, and sparse frontiers retain continuation without claiming completed emptiness. Invalid status return operands recover to My reports.

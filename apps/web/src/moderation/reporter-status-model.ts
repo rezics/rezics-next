@@ -1,34 +1,45 @@
-/** The adopted own-submission wire DTO; no target content or moderation inspection fields. */
-export type ReporterStatus = {
-  id: string;
-  target: { kind: 'board' | 'thread' | 'post'; id: string };
-  revisionId: string | null;
-  reason: 'off_topic' | 'inappropriate' | 'spam' | 'illegal' | 'other';
-  evidence: string | null;
+import type { Kernel } from '@rezics/client';
+
+type NativeReport = Kernel['~Routes']['v1']['reports'][':id']['get']['response'][200]['report'];
+/** Narrow the installed reporter branch; inspection is a different native response. */
+export type ReporterStatus = Extract<NativeReport, { targetAvailability: 'available' | 'unavailable' }> & {
   reporterId: string;
-  createdAt: string;
-  resolvedAt: string | null;
-  outcome: 'actioned' | 'dismissed' | null;
-  targetAvailability: 'available' | 'unavailable';
+  reason: 'off_topic' | 'inappropriate' | 'spam' | 'illegal' | 'other';
 };
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const identity = (value: unknown): value is string => typeof value === 'string' && uuid.test(value);
 
 /** Project only the reporter response. A moderator response cannot stand in for it. */
 export function reporterStatusResponse(input: unknown): ReporterStatus {
-  if (!input || typeof input !== 'object' || !('report' in input) || !input.report || typeof input.report !== 'object')
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    'inspection' in input ||
+    !('report' in input) ||
+    !input.report ||
+    typeof input.report !== 'object'
+  )
     throw new Error('Invalid report status response');
   const record = input.report;
   if (
+    'partition' in record ||
+    'transactionId' in record ||
     !('id' in record) ||
-    typeof record.id !== 'string' ||
+    !identity(record.id) ||
     !('target' in record) ||
     !record.target ||
     typeof record.target !== 'object' ||
     !('kind' in record.target) ||
-    (record.target.kind !== 'board' && record.target.kind !== 'thread' && record.target.kind !== 'post') ||
+    (record.target.kind !== 'board' &&
+      record.target.kind !== 'thread' &&
+      record.target.kind !== 'post' &&
+      record.target.kind !== 'subject' &&
+      record.target.kind !== 'space' &&
+      record.target.kind !== 'realm') ||
     !('id' in record.target) ||
-    typeof record.target.id !== 'string' ||
+    !identity(record.target.id) ||
     !('revisionId' in record) ||
-    (record.revisionId !== null && typeof record.revisionId !== 'string') ||
+    (record.revisionId !== null && !identity(record.revisionId)) ||
     !('reason' in record) ||
     (record.reason !== 'off_topic' &&
       record.reason !== 'inappropriate' &&
@@ -36,9 +47,9 @@ export function reporterStatusResponse(input: unknown): ReporterStatus {
       record.reason !== 'illegal' &&
       record.reason !== 'other') ||
     !('evidence' in record) ||
-    (record.evidence !== null && typeof record.evidence !== 'string') ||
+    (record.evidence !== null && (typeof record.evidence !== 'string' || record.evidence.length > 4096)) ||
     !('reporterId' in record) ||
-    typeof record.reporterId !== 'string' ||
+    !identity(record.reporterId) ||
     !('createdAt' in record) ||
     typeof record.createdAt !== 'string' ||
     !Number.isFinite(Date.parse(record.createdAt)) ||

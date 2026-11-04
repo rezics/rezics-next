@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { browserObservation, type BrowserReader } from '../../session/observation';
 import {
   createPrivateReaderLifetime,
   preparePrivateReaderRead,
@@ -14,8 +15,12 @@ export type ReporterHistoryVisit = ReporterHistoryRead & {
   query: ReporterHistoryQuery;
   locale: string;
   generation: string;
+  browserReader?: BrowserReader;
 };
-export type ReporterHistoryNavigation = PrivateReaderNavigation;
+export type ReporterHistoryNavigation = PrivateReaderNavigation & {
+  /** Served routes commit operands and prepare a new visit. They never invoke this visit's local reader. */
+  request?: (query: ReporterHistoryQuery) => Promise<void>;
+};
 export type ReporterHistoryState = ReporterHistoryResult | { state: 'loading' | 'retired' };
 const unavailable = { state: 'unavailable' } as const;
 const retired = { state: 'retired' } as const;
@@ -30,6 +35,7 @@ export async function prepareReporterHistoryVisit(
   read: ReporterHistoryReader,
   signal?: AbortSignal,
 ): Promise<ReporterHistoryVisit> {
+  const browser = browserObservation(cache).getSnapshot();
   const query = Object.freeze(reporterHistoryQuery(operands));
   const response = await preparePrivateReaderRead(
     cache,
@@ -43,7 +49,13 @@ export async function prepareReporterHistoryVisit(
     },
     signal,
   );
-  return { ...response, query, locale, generation: crypto.randomUUID() };
+  return {
+    ...response,
+    query,
+    locale,
+    generation: crypto.randomUUID(),
+    ...(typeof window !== 'undefined' && browser.state === 'signed-in' ? { browserReader: browser.observation } : {}),
+  };
 }
 
 /** One visit, one replacement page and one exact selection. No polling, prefetch or accumulated history. */
@@ -52,7 +64,7 @@ export function createReporterHistoryJourney(
   initial: ReporterHistoryVisit,
   read: ReporterHistoryReader,
   currentLocale: () => string,
-  navigation?: PrivateReaderNavigation,
+  navigation?: ReporterHistoryNavigation,
 ) {
   const { locale, query: originalQuery, readerOrigin, readerBinding } = initial;
   const owner = createPrivateReaderLifetime(
@@ -69,13 +81,22 @@ export function createReporterHistoryJourney(
   let busy = false;
   let generation = 0;
   const listeners = new Set<() => void>();
+  const browser = browserObservation(cache);
+  let reader = initial.browserReader;
+  const browserCurrent = () => {
+    const next = browser.getSnapshot();
+    return (
+      !reader ||
+      (next.state === 'signed-in' && next.observation.id === reader.id && next.observation.subject === reader.subject)
+    );
+  };
   const publish = (next: ReporterHistoryState) => {
     serverResult = next;
     result = next;
     for (const listener of listeners) listener();
   };
   const healthy = () => {
-    if (currentLocale() !== locale) owner.retire();
+    if (currentLocale() !== locale || !browserCurrent()) owner.retire();
     return owner.healthy();
   };
   const snapshot = (): ReporterHistoryState => {
@@ -97,6 +118,12 @@ export function createReporterHistoryJourney(
     const ticket = owner.ticket();
     // Drop the old page before any asynchronous work, including failed continuations.
     publish({ state: 'loading' });
+    if (navigation?.request) {
+      // The route loader is the sole publisher. Retire before handing off, even for same-address reloads.
+      owner.retire();
+      await navigation.request(pending);
+      return;
+    }
     try {
       const next = await read(pending);
       if (!current() || !owner.owns(ticket) || attempt !== generation) return;
@@ -125,9 +152,15 @@ export function createReporterHistoryJourney(
       publish(retired);
       source = null;
     },
+    isConnected: current,
     isCurrent: () => current() && owner.available() && snapshot().state === 'loaded',
     subscribe(listener: () => void) {
       listeners.add(listener);
+      const stopBrowser = browser.subscribeCache(() => {
+        if (!browserCurrent()) owner.retire();
+      });
+      const observed = browser.getSnapshot();
+      if (!reader && observed.state === 'signed-in') reader = observed.observation;
       const stop = owner.subscribe(() => {
         if (!owner.healthy()) {
           source = null;
@@ -138,9 +171,10 @@ export function createReporterHistoryJourney(
         listeners.delete(listener);
         generation++;
         stop();
+        stopBrowser();
       };
     },
-    retry: () => (snapshot().state === 'unavailable' ? request(pending) : Promise.resolve()),
+    retry: () => (['unavailable', 'denied'].includes(snapshot().state) ? request(pending) : Promise.resolve()),
     refresh: () => (snapshot().state === 'loaded' ? request(query) : Promise.resolve()),
     next: () => {
       const value = snapshot();

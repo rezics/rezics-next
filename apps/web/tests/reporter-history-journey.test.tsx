@@ -144,3 +144,17 @@ test('navigation replacement retires the visit and its selected private state', 
   expect(s.calls).toHaveLength(1);
   s.stop();
 });
+
+test('fetching and invalidation retire the shared browser incarnation even if the same successful session returns', async () => {
+  for (const change of ['fetch', 'invalidate'] as const) {
+    const s = await setup();
+    const query = s.cache.getQueryCache().find({ queryKey: ['session'] })!;
+    if (change === 'fetch') query.setState({ fetchStatus: 'fetching' });
+    else query.invalidate();
+    query.setState({ fetchStatus: 'idle', isInvalidated: false });
+    expect(s.journey.snapshot()).toEqual({ state: 'retired' });
+    await s.journey.next();
+    expect(s.calls).toHaveLength(1);
+    s.stop();
+  }
+});
