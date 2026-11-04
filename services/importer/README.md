@@ -1675,8 +1675,8 @@ actual source-statistic API effects; neither local table success nor pure conver
 
 ### Publish selected-family VNDB release dates and states
 
-- Touches: the ordinary selected-family plan, already selected `releases` / `releases_vn` / `vn.devstatus` rows, current native scheme/concept point reads for required development-status and released-state codes, the existing seed/importer caller, and ordinary public batch/fence/candidate commands. The standalone first-64 archive planner is not invoked.
-- Bound: one date or released-state row per selected release and one development-status row per selected work, inside the existing per-record vocabulary (64 rows), candidate (≤300) and journal budgets. Completeness stays a `wdt:P31` qualifier gap. TBA/unknown stay mapper `property_not_admitted` on `schema:keywords` because the current Release profile omits that property; a newly available development-status binding publishes work keywords. Decision: selected-family `schema:exampleOfWork` stays on the existing graph edge; the mapper still records the completeness gap without a second association. Decision: do not remap TBA/unknown onto `schema:creativeWorkStatus`.
+- Touches: the ordinary selected-family plan, already selected `releases` / `releases_vn` / `vn.devstatus` rows, finite reviewed-catalogue development-status subject IDs already published by `task seed:dev`, current native scheme/concept point reads for those codes, an optional UUID binding file, the existing seed/importer caller, and ordinary public batch/fence/candidate commands. Dates, TBA/unknown distinctions and development-status keywords are proposed on those native work/release identities. The standalone first-64 archive planner is not invoked.
+- Bound: one date or released-state row per selected release and one development-status row per selected work, inside the existing per-record vocabulary (64 rows), candidate (≤300) and journal budgets. Completeness stays a `wdt:P31` qualifier gap. TBA/unknown stay mapper `property_not_admitted` on `schema:keywords` because the current Release profile omits that property and the reviewed inventory has no released-state Concepts; a current development-status binding publishes work keywords. Decision: selected-family `schema:exampleOfWork` stays on the existing graph edge; the mapper still records the completeness gap without a second association. Decision: do not remap TBA/unknown onto `schema:creativeWorkStatus`. Decision: default seed rereads reviewed-catalogue development-status identities; a UUID file is an optional override validated by those same current reads.
 - Growth check: existing importer reconciliation and native sourced-write suites retain their units. Local proof: `bun test services/importer/tests/showcase-vndb-releases.test.ts`. Native outcome `services/kernel/test/imports/showcase-vndb-releases.test.ts` is registered and not executed as a worker check in this attempt.
 
 ### Import authored VNDB release titles
@@ -2165,21 +2165,27 @@ operator now supplies `release-date`, `development-status` and `release-work` ro
 from authored COPY `releases.released`, `vn.devstatus` and `releases_vn.rtype`.
 The default selected-family seed uses the same coordinator through
 [`showcase-vndb-releases.ts`](src/showcase-vndb-releases.ts): it collects facts
-only for already selected works and releases, verifies current bindings, and
-composes that admission with any sibling adapter. The ordinary CLI runs that
-adapter, then the existing public-tag importer and the common showcase publisher,
-and writes release facts, publicTags and publication results into the seed result.
-TBA, unknown and absent release dates remain distinct outcomes; date precision is
-never guessed. Completeness
+only for already selected works and releases, maps needed development-status
+codes onto current reviewed-catalogue subject IDs, rereads exact URI/type/inScheme,
+and composes those bindings with any sibling adapter without overwriting prior
+rows. Optional `--vndb-release-state-bindings` is a UUID hint file validated
+against that same current read; it is not required for `task seed:dev`. The
+ordinary CLI runs that adapter, then the existing public-tag importer and the
+common showcase publisher, and writes release facts, publicTags and publication
+results into the seed result. Work and release proposal acknowledgements stay on
+the existing manifest. TBA, unknown and absent release dates remain distinct
+outcomes; date precision is never guessed. Completeness
 stays a `wdt:P31` qualifier gap on the release-to-work fact. These proposals do
 not contain VNDB votes, personal lists or score-derived facts. Decision: COPY
 integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA and 00/99 omitted
 components to year or month precision. Decision: default `schema:exampleOfWork`
 stays on the existing graph edge; the mapper records the completeness gap without
 a second association. TBA/unknown stay mapper `property_not_admitted` on
-`schema:keywords` because the current Release profile omits that property; a
-newly available development-status binding publishes work keywords. Decision: do
-not remap TBA/unknown onto `schema:creativeWorkStatus`.
+`schema:keywords` because the current Release profile omits that property and the
+reviewed inventory has no released-state Concepts; a current development-status
+binding publishes work keywords. Decision: do not remap TBA/unknown onto
+`schema:creativeWorkStatus`. Decision: default seed rereads reviewed-catalogue
+development-status identities rather than inventing a second state publisher.
 
 Selected-family `chars` rows already reach `convertCrossMediaEntity`. Revision
 `cross-media-entities@4` publishes admitted height and weight from those COPY

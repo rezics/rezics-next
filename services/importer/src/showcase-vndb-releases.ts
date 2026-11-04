@@ -32,16 +32,23 @@ import {
 
 type Row = Record<string, unknown>;
 type Admission = NonNullable<ImporterOptions['vocabularyAdmission']>;
+type ReviewedSeed = { key: string; schemeURI: string; literalMember: string; type: string };
+const REVIEWED_SEEDS = reviewedVocabulary as ReviewedSeed[];
 const REVIEWED_DEVELOPMENT_STATUS = new Set(
-  (reviewedVocabulary as { schemeURI: string; literalMember: string }[])
-    .filter((row) => row.schemeURI === developmentStatusSchemeUri && row.literalMember !== '')
-    .map((row) => row.literalMember),
+  REVIEWED_SEEDS.filter((row) => row.schemeURI === developmentStatusSchemeUri && row.literalMember !== '').map(
+    (row) => row.literalMember,
+  ),
 );
 const REVIEWED_RELEASED_STATE = new Set(
-  (reviewedVocabulary as { schemeURI: string; literalMember: string }[])
-    .filter((row) => row.schemeURI === releasedStateSchemeUri && row.literalMember !== '')
-    .map((row) => row.literalMember),
+  REVIEWED_SEEDS.filter((row) => row.schemeURI === releasedStateSchemeUri && row.literalMember !== '').map(
+    (row) => row.literalMember,
+  ),
 );
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+function ensure(value: unknown, message: string): asserts value {
+  if (!value) throw new TypeError(message);
+}
 
 export type ShowcaseVndbReleaseRequirement = {
   taxonomy: string;
@@ -215,7 +222,7 @@ function withoutDuplicateReleaseWork(rows: SourceVocabularyRequest['rows']): Sou
   });
 }
 
-/** Sibling adapters keep their rows; this hook only adds selected-family release facts. */
+/** Sibling adapters keep prior bindings and rows; this hook only adds selected-family date/state facts. */
 export function composeShowcaseVndbReleaseAdmission(
   next: Admission | undefined,
   bindings: SourceVocabularyBindings,
@@ -230,11 +237,117 @@ export function composeShowcaseVndbReleaseAdmission(
       if (!rows?.length) return theirs;
       if (!theirs) return { ...ours!, rows };
       return {
-        bindings: mergeBindings(ours!.bindings, theirs.bindings),
+        bindings: mergeBindings(theirs.bindings, ours!.bindings),
         rows: [...theirs.rows, ...rows],
       };
     },
   };
+}
+
+function overlayBindingGroups(layers: readonly (readonly VndbReleaseBindingGroup[])[]): VndbReleaseBindingGroup[] {
+  const groups = new Map<string, VndbReleaseBindingGroup>();
+  for (const layer of layers)
+    for (const group of layer) {
+      if (!group || typeof group.taxonomy !== 'string' || typeof group.uri !== 'string') continue;
+      groups.set(`${group.taxonomy}\u0000${group.uri}`, group);
+    }
+  return [...groups.values()];
+}
+
+/** Reviewed-catalogue subject IDs for the finite development-status and released-state codes actually selected. */
+export function catalogueVndbReleaseGroups(
+  subjects: Readonly<Record<string, string>> | undefined,
+  requirements: readonly ShowcaseVndbReleaseRequirement[],
+): VndbReleaseBindingGroup[] {
+  if (!subjects) return [];
+  const groups: VndbReleaseBindingGroup[] = [];
+  for (const requirement of requirements) {
+    const scheme = REVIEWED_SEEDS.find(
+      (row) => row.schemeURI === requirement.uri && row.type === 'skos:ConceptScheme' && row.literalMember === '',
+    );
+    const schemeId = scheme ? subjects[scheme.key] : undefined;
+    if (typeof schemeId !== 'string' || !UUID.test(schemeId)) continue;
+    const concepts = requirement.codes.flatMap((code) => {
+      const seed = REVIEWED_SEEDS.find(
+        (row) => row.schemeURI === requirement.uri && row.type === 'skos:Concept' && row.literalMember === code,
+      );
+      const id = seed ? subjects[seed.key] : undefined;
+      return typeof id === 'string' && UUID.test(id) ? [{ code, id }] : [];
+    });
+    if (!concepts.length) continue;
+    groups.push({ taxonomy: requirement.taxonomy, uri: requirement.uri, schemeId, concepts });
+  }
+  return groups;
+}
+
+export function groupsFromVndbReleaseBindings(
+  bindings: SourceVocabularyBindings | undefined,
+): VndbReleaseBindingGroup[] {
+  if (!bindings?.schemes.length) return [];
+  return bindings.schemes.flatMap((scheme) => {
+    if (
+      !scheme ||
+      typeof scheme.taxonomy !== 'string' ||
+      typeof scheme.uri !== 'string' ||
+      typeof scheme.id !== 'string'
+    )
+      return [];
+    return [
+      {
+        taxonomy: scheme.taxonomy,
+        uri: scheme.uri,
+        schemeId: scheme.id,
+        concepts: bindings.concepts
+          .filter((concept) => concept && concept.taxonomy === scheme.taxonomy && concept.schemeId === scheme.id)
+          .map((concept) => ({ code: concept.code, id: concept.id })),
+      },
+    ];
+  });
+}
+
+/** Optional UUID file: binding groups or current native scheme/concept hints. */
+export function parseVndbReleaseStateBindings(value: unknown): {
+  groups: VndbReleaseBindingGroup[];
+  bindings?: SourceVocabularyBindings;
+} {
+  if (Array.isArray(value)) {
+    ensure(value.length <= 8, 'VNDB release-state bindings exceed the scheme cap');
+    const groups: VndbReleaseBindingGroup[] = [];
+    for (const item of value) {
+      ensure(item !== null && typeof item === 'object' && !Array.isArray(item), 'Invalid VNDB release-state binding');
+      const taxonomy = Reflect.get(item, 'taxonomy');
+      const uri = Reflect.get(item, 'uri');
+      const schemeId = Reflect.get(item, 'schemeId');
+      const conceptsValue = Reflect.get(item, 'concepts');
+      ensure(
+        typeof taxonomy === 'string' &&
+          typeof uri === 'string' &&
+          typeof schemeId === 'string' &&
+          UUID.test(schemeId) &&
+          Array.isArray(conceptsValue) &&
+          conceptsValue.length <= 64,
+        'Invalid VNDB release-state binding group',
+      );
+      const concepts = conceptsValue.map((concept) => {
+        ensure(
+          concept !== null && typeof concept === 'object' && !Array.isArray(concept),
+          'Invalid VNDB release-state concept binding',
+        );
+        const code = Reflect.get(concept, 'code');
+        const id = Reflect.get(concept, 'id');
+        ensure(typeof code === 'string' && typeof id === 'string' && UUID.test(id), 'Invalid VNDB release-state concept');
+        return { code, id };
+      });
+      groups.push({ taxonomy, uri, schemeId, concepts });
+    }
+    return { groups };
+  }
+  ensure(value !== null && typeof value === 'object', 'Invalid VNDB release-state bindings');
+  const schemes = Reflect.get(value, 'schemes');
+  const concepts = Reflect.get(value, 'concepts');
+  ensure(Array.isArray(schemes) && Array.isArray(concepts), 'Invalid VNDB release-state bindings');
+  const bindings = value as SourceVocabularyBindings;
+  return { groups: groupsFromVndbReleaseBindings(bindings), bindings };
 }
 
 function neededBindingCodes(facts: VndbReleaseFacts): Map<string, Set<string>> {
@@ -279,16 +392,23 @@ export async function prepareShowcaseVndbReleases(input: {
   port?: Pick<CrossMediaPort, 'readReviewedSubject'>;
   bindings?: SourceVocabularyBindings;
   groups?: readonly VndbReleaseBindingGroup[];
+  catalogueSubjects?: Readonly<Record<string, string>>;
 }): Promise<ShowcaseVndbReleasePreparation> {
   const collected = await collectSelectedVndbReleaseFacts(input.tables, input.plan);
   const needed = showcaseVndbReleaseRequirements(collected.facts);
   const gaps = [...collected.gaps, ...needed.gaps];
-  const groups = bindingGroups(collected.facts, input.groups);
+  const groups = bindingGroups(
+    collected.facts,
+    overlayBindingGroups([
+      catalogueVndbReleaseGroups(input.catalogueSubjects, needed.requirements),
+      input.groups ?? [],
+      groupsFromVndbReleaseBindings(input.bindings),
+    ]),
+  );
   const bindings =
-    input.bindings ??
-    (input.port && groups.length
+    input.port && groups.length
       ? await readVndbReleaseBindings(input.port, groups)
-      : emptyShowcaseVndbReleaseBindings());
+      : emptyShowcaseVndbReleaseBindings();
   input.plan.releaseFacts = collected.facts;
   input.plan.gaps.push(...gaps);
   return {
@@ -328,6 +448,7 @@ export async function seedShowcaseVndbReleases(input: {
   port: CrossMediaPort;
   bindings?: SourceVocabularyBindings;
   groups?: readonly VndbReleaseBindingGroup[];
+  catalogueSubjects?: Readonly<Record<string, string>>;
   destination?: { origin: string };
   extras?: CrossMediaSeedExtras;
   characterBindings?: SourceVocabularyBindings;
@@ -340,6 +461,7 @@ export async function seedShowcaseVndbReleases(input: {
     port: input.port,
     ...(input.bindings === undefined ? {} : { bindings: input.bindings }),
     ...(input.groups === undefined ? {} : { groups: input.groups }),
+    catalogueSubjects: input.catalogueSubjects ?? input.extras?.episodeCatalogueSubjects,
   });
   const vocabularyGaps: SourceVocabularyGap[] = [];
   const extras: CrossMediaSeedExtras = {

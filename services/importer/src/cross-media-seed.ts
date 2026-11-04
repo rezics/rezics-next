@@ -2650,6 +2650,7 @@ export async function runCrossMediaSeedCli(
     '--vndb-credit-bindings',
     '--vndb-character-vocabulary',
     '--vndb-character-profile-bindings',
+    '--vndb-release-state-bindings',
   ];
   const requiredFlags = [
     '--bangumi',
@@ -2667,7 +2668,7 @@ export async function runCrossMediaSeedCli(
     process.stdout.write(
       'Usage: bun scripts/datasets/cross-media-seed.ts ' +
         requiredFlags.map((flag) => flag + ' <value>').join(' ') +
-        ' [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>]\n',
+        ' [--bangumi-character-bindings <json>] [--vndb-public-tag-bindings <json>] [--showcase-state <sqlite>] [--vndb-credit-bindings <json>] [--vndb-character-vocabulary <json>] [--vndb-character-profile-bindings <json>] [--vndb-release-state-bindings <json>]\n',
     );
     return;
   }
@@ -2692,7 +2693,7 @@ export async function runCrossMediaSeedCli(
   let plan = await planCrossMediaSeed(input, { deferVndbCharacterAppearances: true });
   const characterVocabulary = await planShowcaseCharacterVocabulary(input, plan);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
-  const { seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
+  const { parseVndbReleaseStateBindings, seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
   const tokenProvider = await createAccountTokenProvider({
     accountKeyPath: values.get('--account-key')!,
     account: values.get('--account')!,
@@ -2728,12 +2729,20 @@ export async function runCrossMediaSeedCli(
   const defaultProfileBindingsPath = resolve('.temp/cross-media-seed/vndb-character-profile-bindings.json');
   const profileBindingsPath =
     explicitProfileBindingsPath ?? (existsSync(defaultProfileBindingsPath) ? defaultProfileBindingsPath : undefined);
+  const explicitReleaseStateBindingsPath = values.has('--vndb-release-state-bindings')
+    ? resolve(values.get('--vndb-release-state-bindings')!)
+    : undefined;
+  const defaultReleaseStateBindingsPath = resolve('.temp/cross-media-seed/vndb-release-state-bindings.json');
+  const releaseStateBindingsPath =
+    explicitReleaseStateBindingsPath ??
+    (existsSync(defaultReleaseStateBindingsPath) ? defaultReleaseStateBindingsPath : undefined);
   const seedFiles = [
     characterBindingsPath,
     tagBindingsPath,
     creditBindingsPath,
     vocabularyPath,
     profileBindingsPath,
+    releaseStateBindingsPath,
   ].filter((path): path is string => path !== undefined);
   const showcaseConflictPaths = [statePath, resultPath, ...seedFiles].flatMap((path) => [
     path,
@@ -2770,6 +2779,12 @@ export async function runCrossMediaSeedCli(
     ensure(bytes.byteLength <= 256 * 1024, 'VNDB character profile bindings exceed the configuration limit');
     vndbCharacterProfileReferences = parseVndbCharacterProfileReferences(JSON.parse(bytes.toString('utf8')));
   }
+  let vndbReleaseStateBindings: ReturnType<typeof parseVndbReleaseStateBindings> | undefined;
+  if (releaseStateBindingsPath) {
+    const bytes = await readFile(releaseStateBindingsPath);
+    ensure(bytes.byteLength <= 256 * 1024, 'VNDB release-state bindings exceed the configuration limit');
+    vndbReleaseStateBindings = parseVndbReleaseStateBindings(JSON.parse(bytes.toString('utf8')));
+  }
   ensure(
     resultPath !== statePath && ![statePath + '-wal', statePath + '-shm'].includes(resultPath),
     'Result must not overwrite importer state',
@@ -2791,6 +2806,7 @@ export async function runCrossMediaSeedCli(
       path: statePath,
       port,
       destination: { origin: api },
+      ...(vndbReleaseStateBindings?.groups.length ? { groups: vndbReleaseStateBindings.groups } : {}),
       extras: {
         ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
         vndbCharacterProfileBindings: characterProfileBindings,
@@ -2950,6 +2966,7 @@ export async function runCrossMediaSeedCli(
         port,
         bindings: result.bindings,
         destination: { origin: api },
+        ...(vndbReleaseStateBindings?.groups.length ? { groups: vndbReleaseStateBindings.groups } : {}),
         extras: {
           ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
           ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
