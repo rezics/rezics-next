@@ -85,8 +85,8 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
       async function prepare() {
         commandKey = crypto.randomUUID();
         if (step.endsWith('-remove')) {
-          const kind = step.split('-')[0];
-          hidden = (await f.call(owner, 'GET', `/v1/accounts/${owner}/watches?kind=${kind}&limit=2`)).value.items[1];
+          const watchId = step === 'board-remove' ? missingBoardWatchIds[0]! : missingThreadWatchIds[0]!;
+          hidden = { id: watchId, revision: 1 };
         }
         if (step === 'opening' || step === 'sparse-opening') {
           const thread = await f.thread();

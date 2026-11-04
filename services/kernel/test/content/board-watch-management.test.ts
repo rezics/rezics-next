@@ -217,77 +217,91 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
 });
 
 test('board stop and restart rotate the private episode identity and reject stale CAS revisions', async () => {
-  const reader = f.accounts.actor;
-  const route = routeOf(reader)!;
-  await f.db.admin.query('DELETE FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
-  expect((await f.call(reader, 'GET', path())).value).toEqual({ watching: false, revision: 0 });
-  expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 0 })).value).toEqual({
-    watching: true,
-    revision: 1,
-  });
-  const first = (
-    await f.db.admin.query('SELECT watch_id FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [
-      route,
-      reader,
-    ])
-  ).rows[0]!.watch_id as string;
-  expect((await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 1 })).value).toEqual({
-    watching: false,
-    revision: 2,
-  });
-  expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 1 })).status).toBe(409);
-  expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 2 })).value).toEqual({
-    watching: true,
-    revision: 3,
-  });
-  const second = (
-    await f.db.admin.query('SELECT watch_id FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [
-      route,
-      reader,
-    ])
-  ).rows[0]!.watch_id as string;
-  expect(second).not.toBe(first);
-  expect((await f.call(reader, 'PUT', path(), { watching: false, expectedRevision: 2 })).status).toBe(409);
-  expect((await f.call(reader, 'GET', management(reader, 'board'))).value.items).toMatchObject([
-    { id: second, state: 'available', resourceId: f.boardId, revision: 3 },
-  ]);
-  await f.db.admin.query('DELETE FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
+  const f = await replyNoticeFixture();
+  try {
+    const reader = f.accounts.actor;
+    const route = routeOf(reader)!;
+    const boardPath = `/v1/boards/${f.boardId}/watch`;
+    await f.db.admin.query('DELETE FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
+    expect((await f.call(reader, 'GET', boardPath)).value).toEqual({ watching: false, revision: 0 });
+    expect((await f.call(reader, 'PUT', boardPath, { watching: true, expectedRevision: 0 })).value).toEqual({
+      watching: true,
+      revision: 1,
+    });
+    const first = (
+      await f.db.admin.query('SELECT watch_id FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [
+        route,
+        reader,
+      ])
+    ).rows[0]!.watch_id as string;
+    expect((await f.call(reader, 'PUT', boardPath, { watching: false, expectedRevision: 1 })).value).toEqual({
+      watching: false,
+      revision: 2,
+    });
+    expect((await f.call(reader, 'PUT', boardPath, { watching: true, expectedRevision: 1 })).status).toBe(409);
+    expect((await f.call(reader, 'PUT', boardPath, { watching: true, expectedRevision: 2 })).value).toEqual({
+      watching: true,
+      revision: 3,
+    });
+    const second = (
+      await f.db.admin.query('SELECT watch_id FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [
+        route,
+        reader,
+      ])
+    ).rows[0]!.watch_id as string;
+    expect(second).not.toBe(first);
+    expect((await f.call(reader, 'PUT', boardPath, { watching: false, expectedRevision: 2 })).status).toBe(409);
+    expect((await f.call(reader, 'GET', management(reader, 'board'))).value.items).toMatchObject([
+      { id: second, state: 'available', resourceId: f.boardId, revision: 3 },
+    ]);
+    await f.db.admin.query('DELETE FROM content.board_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
+  } finally {
+    await f.close();
+  }
 });
 
 test('empty inventory is terminal and a full sparse raw page returns no refill before same-cursor continuation', async () => {
-  const reader = f.accounts.actor;
-  const route = routeOf(reader)!;
-  await f.db.admin.query('DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2', [route, reader]);
-  expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value).toEqual({ items: [], next: null });
+  const f = await replyNoticeFixture();
+  try {
+    const reader = f.accounts.actor;
+    const route = routeOf(reader)!;
+    await f.db.admin.query('DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2', [
+      route,
+      reader,
+    ]);
+    expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value).toEqual({ items: [], next: null });
 
-  const first = await f.thread();
-  const watchIds = Array.from({ length: 100 }, () => newId(route));
-  const targets = [first.id, ...Array.from({ length: 99 }, () => newId(route))];
-  await f.db.admin.query(
-    `INSERT INTO content.thread_watch(route,watch_id,thread_id,watcher_account_id,created_at)
+    const first = await f.thread();
+    const watchIds = Array.from({ length: 100 }, () => newId(route));
+    const targets = [first.id, ...Array.from({ length: 99 }, () => newId(route))];
+    await f.db.admin.query(
+      `INSERT INTO content.thread_watch(route,watch_id,thread_id,watcher_account_id,created_at)
      SELECT $1,watch,thread,$2,'2026-11-01T00:00:00Z'::timestamptz + ordinal * interval '1 second'
      FROM unnest($3::uuid[],$4::uuid[]) WITH ORDINALITY n(watch,thread,ordinal)`,
-    [route, reader, watchIds, targets],
-  );
-  const gate = interceptThreadSnapshot(f.db.pool, first.id, 'pause');
-  try {
-    const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
-    await gate.reached;
-    await f.db.admin.query('DELETE FROM content.thread_watch WHERE watch_id=ANY($1::uuid[])', [watchIds]);
-    gate.release();
-    const sparse = await pending;
-    expect(sparse.status).toBe(200);
-    expect(sparse.value.items).toEqual([]);
-    expect(sparse.value.next).toBeString();
-    const continued = await f.call(
-      reader,
-      'GET',
-      `${management(reader, 'thread', 20)}&cursor=${encodeURIComponent(sparse.value.next)}`,
+      [route, reader, watchIds, targets],
     );
-    expect(continued).toMatchObject({ status: 200, value: { items: [], next: null } });
+    const gate = interceptThreadSnapshot(f.db.pool, first.id, 'pause');
+    try {
+      const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
+      await gate.reached;
+      await f.db.admin.query('DELETE FROM content.thread_watch WHERE watch_id=ANY($1::uuid[])', [watchIds]);
+      gate.release();
+      const sparse = await pending;
+      expect(sparse.status).toBe(200);
+      expect(sparse.value.items).toEqual([]);
+      expect(sparse.value.next).toBeString();
+      const continued = await f.call(
+        reader,
+        'GET',
+        `${management(reader, 'thread', 20)}&cursor=${encodeURIComponent(sparse.value.next)}`,
+      );
+      expect(continued).toMatchObject({ status: 200, value: { items: [], next: null } });
+    } finally {
+      gate.restore();
+      await f.db.admin.query('DELETE FROM content.thread_watch WHERE watch_id=ANY($1::uuid[])', [watchIds]);
+    }
   } finally {
-    gate.restore();
-    await f.db.admin.query('DELETE FROM content.thread_watch WHERE watch_id=ANY($1::uuid[])', [watchIds]);
+    await f.close();
   }
 });
 
@@ -359,36 +373,26 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   const spaceRevision = newId(route);
   const realmRevision = newId(route);
   const context = newId(route);
-  const community = await f.db.admin.connect();
-  try {
-    await community.query('BEGIN');
-    await community.query(
-      `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
-       VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
-      [route, space, spaceRevision, f.accounts.recipient],
-    );
-    await community.query(
-      `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
-       VALUES($1,$2,$3,'Watch space','',clock_timestamp(),$4)`,
-      [route, space, spaceRevision, f.accounts.recipient],
-    );
-    await community.query(
-      `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
-       VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
-      [route, realm, space, context, realmRevision, f.accounts.recipient],
-    );
-    await community.query(
-      `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
-       VALUES($1,$2,$3,'Watch realm','','public',$4,clock_timestamp(),$5)`,
-      [route, realm, realmRevision, context, f.accounts.recipient],
-    );
-    await community.query('COMMIT');
-  } catch (error) {
-    await community.query('ROLLBACK');
-    throw error;
-  } finally {
-    community.release();
-  }
+  await f.db.admin.query(
+    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+     VALUES($1,$2,'active',$3,clock_timestamp(),$4)`,
+    [route, space, spaceRevision, f.accounts.recipient],
+  );
+  await f.db.admin.query(
+    `INSERT INTO community.space_revision(route,space_id,revision_id,title,summary,created_at,author)
+     VALUES($1,$2,$3,'Watch space','',clock_timestamp(),$4)`,
+    [route, space, spaceRevision, f.accounts.recipient],
+  );
+  await f.db.admin.query(
+    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+     VALUES($1,$2,$3,'active','public',$4,$5,clock_timestamp(),$6)`,
+    [route, realm, space, context, realmRevision, f.accounts.recipient],
+  );
+  await f.db.admin.query(
+    `INSERT INTO community.realm_revision(route,realm_id,revision_id,title,summary,visibility,context_id,created_at,author)
+     VALUES($1,$2,$3,'Watch realm','','public',$4,clock_timestamp(),$5)`,
+    [route, realm, realmRevision, context, f.accounts.recipient],
+  );
   await f.db.admin.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,realm_id,visibility,security_revision,recorded_transaction_id)
      VALUES($1,$2,$3,'Realm watch board',$4,'published',1,$5)`,
