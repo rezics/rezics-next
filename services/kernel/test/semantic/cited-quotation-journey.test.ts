@@ -102,7 +102,6 @@ test('a sourced quotation keeps exact text, work, speaker and Access-derived cor
     'schema:text': [sourced('schema:text', text)],
     'schema:spokenByCharacter': [sourced('schema:spokenByCharacter', speaker.id)],
     'schema:about': [sourced('schema:about', work.id)],
-    'schema:creator': [sourced('schema:creator', credited.id)],
     'schema:actor': [sourced('schema:actor', voice.id)],
   });
   const wrong = await call('editor', 'POST', `/v1/subjects/${quotation.id}/candidates`, {
@@ -110,6 +109,27 @@ test('a sourced quotation keeps exact text, work, speaker and Access-derived cor
   });
   expect(wrong.status).toBe(400);
   expect(wrong.body.errors).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'out_of_range' })]));
+  const proposed = await call('editor', 'POST', `/v1/subjects/${quotation.id}/candidates`, {
+    statement: sourced('schema:creator', credited.id),
+  });
+  expect(proposed.status).toBe(201);
+  const pending = await readPage('editor', quotation.id);
+  expect(pageSubject(pending.body).related).not.toHaveProperty(credited.id);
+  const accepted = await call(
+    'acceptor',
+    'POST',
+    `/v1/subjects/${quotation.id}/candidates/${proposed.body.candidate}:accept`,
+    { context: GLOBAL_CONTEXT, expected_head: null },
+  );
+  expect(accepted.status).toBe(200);
+  const adopted = await call('acceptor', 'POST', `/v1/subjects/${quotation.id}:adopt`, {
+    context: GLOBAL_CONTEXT,
+    property: 'schema:creator',
+    mode: 'replace',
+    selection: [{ candidate: proposed.body.candidate, rank: 'normal' }],
+    expected_head: null,
+  });
+  expect(adopted.status).toBe(200);
 
   const editorPage = await readPage('editor', quotation.id);
   expect(editorPage.status).toBe(200);

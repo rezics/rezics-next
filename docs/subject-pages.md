@@ -1846,6 +1846,8 @@ The ordinary subject `POST /v1/pages:read` carries current viewer state and Acce
 type. Historical pins without the type keep unsupported reading. Quotation class, text, about, creator and actor live
 in `works.yaml` with `schema:spokenByCharacter`, so labels stay in the eight works presentation files. Work-context is
 `schema:about`, not episode `schema:isPartOf`. Credited creator and performing voice use association, not credit.
+Decision: the ordinary overview includes admitted `schema:text` in the existing document composition; `Summary` still
+hydrates only `schema:abstract`.
 
 The `/quotations` companion follows only relation targets whose released type extends `schema:Quotation`. A quote's
 text comes from the first released `schema:text` or `schema:abstract` property on that type and one unambiguous

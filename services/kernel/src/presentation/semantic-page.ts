@@ -1,4 +1,10 @@
-import { definedViews, resolveView, type PresentationProfile, type View } from '@rezics/composition';
+import {
+  definedViews,
+  resolveView,
+  type PageDocumentRead,
+  type PresentationProfile,
+  type View,
+} from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -32,6 +38,36 @@ export function quotationTypeAdmitted(
 ): boolean {
   if (!type || !release?.types?.['schema:Quotation']) return false;
   return type === 'schema:Quotation' || (release.types[type]?.bases ?? []).includes('schema:Quotation');
+}
+
+const quotationTextProperties = ['schema:text', 'schema:abstract'] as const;
+
+/** Ordinary overview Summary hydrates schema:abstract; admitted quotation text still needs the document composition. */
+export function quotationPageDocuments(
+  base: PageDocumentRead | null,
+  release:
+    | {
+        types?: Record<string, { bases?: readonly string[] }>;
+        properties?: Record<string, { datatype?: string }>;
+      }
+    | undefined,
+  type: string | null | undefined,
+  subject: string | null,
+  available: readonly string[],
+  context?: string,
+): PageDocumentRead | null {
+  if (subject === null || !quotationTypeAdmitted(release, type)) return base;
+  const extra = quotationTextProperties.filter(
+    (id) => available.includes(id) && release?.properties?.[id]?.datatype === 'document',
+  );
+  if (!extra.length) return base;
+  const properties = [...new Set([...(base?.properties ?? []), ...extra])].sort();
+  return {
+    kind: 'documents',
+    id: subject,
+    ...(context ? { context } : {}),
+    properties,
+  };
 }
 
 /** Derive quotation correction actions with native Access under the actual caller. */

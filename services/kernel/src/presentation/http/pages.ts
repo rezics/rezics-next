@@ -40,7 +40,12 @@ import { validateHitOptions } from '../../search/hits.ts';
 import { decodeSession, encodeSession, mergeSession, type SessionComponent } from '../../tokens/session.ts';
 import type { KeyRing } from '../../tokens/seal.ts';
 import { activeProfile } from '../profiles.ts';
-import { quotationTypeAdmitted, readQuotationPageAuthority, semanticPageView } from '../semantic-page.ts';
+import {
+  quotationPageDocuments,
+  quotationTypeAdmitted,
+  readQuotationPageAuthority,
+  semanticPageView,
+} from '../semantic-page.ts';
 import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
@@ -598,7 +603,14 @@ async function pageAnswer(input: {
   const subjectBody = observation?.status === 200 && isRecord(observation.body) ? observation.body.subject : undefined;
   const properties =
     isRecord(subjectBody) && isRecord(subjectBody.statements) ? Object.keys(subjectBody.statements) : [];
-  const documents = documentRead(input.resolved.document, input.subject, properties, input.context?.id);
+  const documents = quotationPageDocuments(
+    documentRead(input.resolved.document, input.subject, properties, input.context?.id),
+    input.release,
+    input.subjectType,
+    input.subject,
+    properties,
+    input.context?.id,
+  );
   const incoming = new Request(input.request.url, { headers: input.request.headers, signal: input.request.signal });
   const forwarded = mergedSession(
     input.session.ring,
