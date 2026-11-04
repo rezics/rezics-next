@@ -6,7 +6,11 @@ import type { BatchStatement } from '@rezics/definitions/bulk';
 import { createPublicBulkClient } from '../../../importer/src/public-bulk-client.ts';
 import { emptyCrossMediaPlan, crossMediaAliases, seedCrossMedia } from '../../../importer/src/cross-media-seed.ts';
 import { seedReviewedCatalogue, type ReviewedCataloguePort } from '../../../importer/src/reviewed-catalogue.ts';
-import { captureShowcaseCommands, publishShowcase, ShowcaseJournal } from '../../../importer/src/showcase-publication.ts';
+import {
+  captureShowcaseCommands,
+  publishShowcase,
+  ShowcaseJournal,
+} from '../../../importer/src/showcase-publication.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createReleasedDiscoveryFixture, type ReleasedDiscoveryFixture } from '../support/released-discovery.ts';
 
@@ -118,11 +122,14 @@ test('default seed publishes the reviewed source Concept publicly and retracts o
   const removed = await run({ ...payload, meta_tags: [] });
   expect(removed.result.bangumiGenrePublication!.candidateIds).toEqual([]);
   expect(
-    removed.publication.manifest.records.flatMap((record) => record.assertions).some((assertion) =>
-      assertion.property === 'schema:keywords' &&
-      assertion.statement.value.type === 'value' &&
-      assertion.statement.value.content === sourceConcept,
-    ),
+    removed.publication.manifest.records
+      .flatMap((record) => record.assertions)
+      .some(
+        (assertion) =>
+          assertion.property === 'schema:keywords' &&
+          assertion.statement.value.type === 'value' &&
+          assertion.statement.value.content === sourceConcept,
+      ),
   ).toBe(false);
   const after = (await publicClient.readSubject(workId)).subject as { statements: Record<string, BatchStatement[]> };
   expect(after.statements['schema:keywords']?.map((statement) => statement.value.content) ?? []).not.toContain(

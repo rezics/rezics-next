@@ -670,7 +670,8 @@ export async function publishShowcase(input: {
         !!sourceUri &&
         assertion.citations.includes(sourceUri),
     );
-    const reviewedSourceAssertion = record.provenance === 'reviewed-catalogue' &&
+    const reviewedSourceAssertion =
+      record.provenance === 'reviewed-catalogue' &&
       (record.nativeType === 'skos:ConceptScheme'
         ? record.assertions.some(
             (assertion) =>
@@ -682,7 +683,9 @@ export async function publishShowcase(input: {
     if (
       (!sourceAssertion && !reviewedSourceAssertion) ||
       (record.nativeType === 'skos:Concept' &&
-        (!record.schemeId || !vocabularyById.has(record.schemeId) || record.schemeId === record.subjectId ||
+        (!record.schemeId ||
+          !vocabularyById.has(record.schemeId) ||
+          record.schemeId === record.subjectId ||
           !record.assertions.some(
             (assertion) =>
               assertion.property === 'skos:inScheme' &&

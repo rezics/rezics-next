@@ -474,17 +474,14 @@ export async function inspectReviewedBangumiBinding(
         let entry = vocabulary.get(seed.key);
         if (!entry) {
           const sourceUri = seed.metadata.url;
-          if (typeof sourceUri !== 'string' || !sourceUri.startsWith('https://'))
-            return { state: 'withdrawn' };
-          const nativeType: ReviewedBangumiBindingEvidence['vocabulary'][number]['nativeType'] | null = seed.type === 'skos:Concept'
-            ? seed.type
-            : seed.type === 'skos:ConceptScheme'
-              ? seed.type
-              : null;
+          if (typeof sourceUri !== 'string' || !sourceUri.startsWith('https://')) return { state: 'withdrawn' };
+          const nativeType: ReviewedBangumiBindingEvidence['vocabulary'][number]['nativeType'] | null =
+            seed.type === 'skos:Concept' ? seed.type : seed.type === 'skos:ConceptScheme' ? seed.type : null;
           if (!nativeType) return { state: 'withdrawn' };
-          const schemeKey = seed.type === 'skos:Concept'
-            ? seeds.find((row) => row.type === 'skos:ConceptScheme' && row.schemeURI === seed.schemeURI)?.key
-            : undefined;
+          const schemeKey =
+            seed.type === 'skos:Concept'
+              ? seeds.find((row) => row.type === 'skos:ConceptScheme' && row.schemeURI === seed.schemeURI)?.key
+              : undefined;
           const created: {
             key: string;
             owner: Owner;

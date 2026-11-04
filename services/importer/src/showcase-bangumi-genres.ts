@@ -205,10 +205,12 @@ export async function prepareShowcaseBangumiGenres(input: {
       if (!exact.length) continue;
       let page: ReviewedCandidatePage;
       try {
-        page = await input.port.reviewedCandidates(
-          claim.subject,
-          { property: 'schema:keywords', target: current.evidence.binding.sourceConcept, context: globalContext, limit: 100 },
-        );
+        page = await input.port.reviewedCandidates(claim.subject, {
+          property: 'schema:keywords',
+          target: current.evidence.binding.sourceConcept,
+          context: globalContext,
+          limit: 100,
+        });
       } catch (error) {
         if (error instanceof ImportTransportError || error instanceof TypeError) {
           diagnostics.set(row.key, { sourceKey: row.key, code: 'reviewed-binding-unavailable' });

@@ -25,7 +25,10 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
   const subjects = new Map<string, Subject>();
   const owners = new Map<string, string>();
   const candidates = new Map<string, Candidate>();
-  const adoptions = new Map<string, { mode: 'replace'; head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }>();
+  const adoptions = new Map<
+    string,
+    { mode: 'replace'; head: number; selection: { candidate: string; rank: 'normal' | 'preferred' }[] }
+  >();
   const key = (source: string, externalId: string) => `${source}\0${externalId}`;
   const adoptionKey = (id: string, property: string) => `${id}\0${property}`;
   const page = (id: string, property: string, target?: string) => {
@@ -65,7 +68,7 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
               owners.set(ownerKey, id);
               subjects.set(id, { id, type: command.subject.type, labels: command.subject.labels, statements: {} });
             }
-            return { key: command.key, status: created ? 201 as const : 200 as const, value: { id, revision: 1 } };
+            return { key: command.key, status: created ? (201 as const) : (200 as const), value: { id, revision: 1 } };
           }
           if (command.op === 'propose') {
             const id = randomUUID();
@@ -114,9 +117,15 @@ function fakePort(): ReviewedCataloguePort & Parameters<typeof seedCrossMedia>[2
       const row = candidates.get(candidate)!;
       row.decision = 'accepted';
       row.head = (row.head ?? 0) + 1;
-      return { acceptance: { context: body.context, candidate, decision: 'accept', head: row.head }, revision: row.head } as never;
+      return {
+        acceptance: { context: body.context, candidate, decision: 'accept', head: row.head },
+        revision: row.head,
+      } as never;
     },
-    async adoptReviewedCandidates(id: string, body: { context: string; property: string; selection: Candidate['rank'][] }) {
+    async adoptReviewedCandidates(
+      id: string,
+      body: { context: string; property: string; selection: Candidate['rank'][] },
+    ) {
       const selection = body.selection as unknown as { candidate: string; rank: 'normal' | 'preferred' }[];
       const k = adoptionKey(id, body.property);
       const current = adoptions.get(k);
@@ -166,13 +175,14 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
   plan.members.push({ source: 'bangumi', key: '884', kind: 'work', membership: 'family', franchise: 'steins-gate' });
   try {
     const reviewed = await seedReviewedCatalogue({ path: statePath, port: reviewedPort });
-    const seed = () => seedCrossMedia(
-      plan,
-      statePath,
-      port,
-      { origin: 'https://fixture.test' },
-      { providers: ['bangumi'], bangumiGenrePort: reviewedPort },
-    );
+    const seed = () =>
+      seedCrossMedia(
+        plan,
+        statePath,
+        port,
+        { origin: 'https://fixture.test' },
+        { providers: ['bangumi'], bangumiGenrePort: reviewedPort },
+      );
     const first = await seed();
     const firstKeyword = first.bangumiGenrePublication!.acknowledgements.find(
       (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:keywords',
@@ -188,14 +198,12 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
     const firstSession = new ImportSession(statePath);
     let titleId: string | undefined;
     try {
-      const title = firstSession.bindings.candidates(
-        { source: 'bangumi_cross_media', external_id: '884' },
-        'facts',
-        { limit: 100 },
-      ).find((candidate) => {
-        const command = (JSON.parse(candidate.bytes) as { commands: BatchCommand[] }).commands[0];
-        return command?.op === 'propose' && command.statement.property.id === 'schema:name';
-      });
+      const title = firstSession.bindings
+        .candidates({ source: 'bangumi_cross_media', external_id: '884' }, 'facts', { limit: 100 })
+        .find((candidate) => {
+          const command = (JSON.parse(candidate.bytes) as { commands: BatchCommand[] }).commands[0];
+          return command?.op === 'propose' && command.statement.property.id === 'schema:name';
+        });
       if (!title) throw new Error('Independent title candidate is missing');
       titleId = title.candidate;
     } finally {
@@ -226,9 +234,11 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
     const recovered = await seed();
     expect(recovered.bangumiGenrePublication!.candidateIds).toContain(firstCandidate);
     expect(
-      recovered.bangumiGenrePublication!.acknowledgements.filter(
-        (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:keywords',
-      ).map((entry) => entry.candidateId),
+      recovered
+        .bangumiGenrePublication!.acknowledgements.filter(
+          (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:keywords',
+        )
+        .map((entry) => entry.candidateId),
     ).toEqual([firstCandidate]);
   } finally {
     await rm(directory, { recursive: true, force: true });

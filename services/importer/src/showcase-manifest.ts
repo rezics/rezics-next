@@ -437,7 +437,9 @@ export function buildShowcaseManifest(input: {
       !record.schemeUri?.startsWith('https://') ||
       (scheme && (record.schemeId !== null || !assertions.length)) ||
       (!scheme &&
-        (!record.schemeId || record.schemeId === record.subjectId || !schemeRecord ||
+        (!record.schemeId ||
+          record.schemeId === record.subjectId ||
+          !schemeRecord ||
           schemeRecord.schemeUri !== record.schemeUri))
     ) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
