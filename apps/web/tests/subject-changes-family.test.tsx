@@ -693,7 +693,7 @@ test('the complete Subject history family keeps independent headings, bounded su
       });
       await show({ page: { ...list.page, revisions: supplied }, selected: undefined });
       expect(revisions(histories()[0]!).querySelectorAll('li')).toHaveLength(size);
-      expect(revisions(histories()[0]!).querySelectorAll('[data-overlay]')).toHaveLength(size);
+      expect(revisions(histories()[0]!).querySelectorAll('li button')).toHaveLength(size);
       expect(visited).toBe(size);
       expect(first.calls.length + second.calls.length).toBe(readCount);
     }
