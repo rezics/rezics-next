@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { Button } from '@rezics/ui/shadcn/button';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { useEffect, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
@@ -312,9 +312,9 @@ export function OwnMediaInventoryWorkspace({
             </Button>
           ) : null}
           {status === 'invalid-cursor' ? (
-            <Button asChild variant="outline">
-              <Link to="/library/media">{m.own_media_restart_action()}</Link>
-            </Button>
+            <Link to="/library/media" className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11`}>
+              {m.own_media_restart_action()}
+            </Link>
           ) : null}
         </section>
       ) : page ? (
@@ -479,11 +479,13 @@ export function OwnMediaInventoryWorkspace({
 
           {page.nextCursor !== null ? (
             <div className="flex flex-wrap items-center gap-3">
-              <Button asChild variant="outline">
-                <Link to="/library/media" search={{ cursor: page.nextCursor }}>
-                  {m.own_media_continue()}
-                </Link>
-              </Button>
+              <Link
+                to="/library/media"
+                search={{ cursor: page.nextCursor }}
+                className={`${buttonVariants({ variant: 'outline', size: 'lg' })} min-h-11`}
+              >
+                {m.own_media_continue()}
+              </Link>
               <span className="text-sm text-muted-foreground">{m.own_media_sparse_continue_note()}</span>
             </div>
           ) : null}

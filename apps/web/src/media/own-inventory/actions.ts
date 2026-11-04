@@ -2,7 +2,7 @@ import { createKernelClient, SESSION_HEADER } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { Value } from 'typebox/value';
-import { t } from 'typebox';
+import t from 'typebox';
 import { requestLocale } from '../../kernel/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../../session/request';
 import type { SessionEnv } from '../../session/client';
@@ -84,7 +84,7 @@ async function readPage(address: { cursor: string | null; invalid: boolean }): P
     const result = await client.media.get(address.cursor === null ? {} : { query: { cursor: address.cursor } });
     if (result.error) {
       if (result.error.status === 401) return emptyRead('signed-out', null, address.cursor, locale);
-      if (result.error.status === 403 || result.error.status === 404) return emptyRead('denied', subject, address.cursor, locale);
+      if (result.error.status === 404) return emptyRead('denied', subject, address.cursor, locale);
       if (result.error.status === 400) return emptyRead('invalid-cursor', subject, address.cursor, locale);
       return emptyRead('unavailable', subject, address.cursor, locale);
     }
