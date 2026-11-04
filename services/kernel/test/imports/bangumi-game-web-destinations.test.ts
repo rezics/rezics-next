@@ -44,8 +44,14 @@ function idOf(reading: { subject: unknown }) {
   return value.subject?.id ?? value.id;
 }
 
-function statementValue(statement: BatchStatement) {
+function statementValue(statement: Pick<BatchStatement, 'value'>) {
   return statement.value.type === 'value' ? statement.value.content : undefined;
+}
+
+function isGameSource(source: unknown): boolean {
+  return source !== null && typeof source === 'object' &&
+    'external_id' in source && source.external_id === gameExternalId &&
+    'source' in source && source.source === crossMediaAliases.bangumi;
 }
 
 function publicValues(reading: unknown, property: string) {
@@ -129,7 +135,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
     });
     const websiteCandidate = websitePage.candidates.filter((candidate) => 'statement' in candidate).find(
       (candidate) =>
-        candidate.source?.external_id === gameExternalId &&
+        isGameSource(candidate.source) &&
         candidate.statement.property.id === 'schema:url' &&
         statementValue(candidate.statement) === website,
     );
@@ -144,7 +150,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
       context: globalContext,
       limit: 100,
     });
-    expect(malformedPage.candidates.some((candidate) => 'source' in candidate && candidate.source?.external_id === gameExternalId)).toBe(false);
+    expect(malformedPage.candidates.some((candidate) => 'source' in candidate && isGameSource(candidate.source))).toBe(false);
 
     await publish(first);
     expect(publicValues(await publicClient.readSubject(subjectId), 'schema:url')).toContain(website);
@@ -162,7 +168,7 @@ test('selected Bangumi Game destinations survive independent review, correction 
     });
     const descriptiveCandidate = descriptivePage.candidates.filter((candidate) => 'statement' in candidate).find(
       (candidate) =>
-        candidate.source?.external_id === gameExternalId &&
+        isGameSource(candidate.source) &&
         candidate.statement.property.id === 'wdt:P973' &&
         statementValue(candidate.statement) === descriptive,
     );
