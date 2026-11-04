@@ -28,13 +28,14 @@ export const entryKey = () => randomUUID();
 const additionalUnits = ['volume', 'page', 'minute', 'episode', 'percent', 'plot-key.v2', 'edition.v1'] as const;
 const clientId = 'archive-progress-growth';
 const own = { anonymous: false, authority: 'own-account' as const };
-const actions: ActionCatalogue = new Map();
-actions.set('subject:read', { anonymous: true });
-actions.set('copy:list', own);
-actions.set('progress_session:list', own);
-actions.set('progress_session:read', own);
-actions.set('progress_session:create', own);
-actions.set('progress_session:update', own);
+const actions: ActionCatalogue = new Map([
+  ['subject:read', { anonymous: true }],
+  ['copy:list', own],
+  ['progress_session:list', own],
+  ['progress_session:read', own],
+  ['progress_session:create', own],
+  ['progress_session:update', own],
+]);
 const scopes = [...actions.keys()];
 const v2Omissions = {
   trash: 'excluded; current live facts and retained session history only',
