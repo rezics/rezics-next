@@ -190,7 +190,7 @@ export async function readWorkbench(
     return { ...identity, state: 'ready', ...idle, directory: moderationDirectoryPage(page) };
   }
   if (scope.kind === 'catalogue' && search.queue === 'appeals') {
-    return { ...identity, state: 'ready', ...idle };
+    return { ...identity, state: 'unavailable', ...idle };
   }
   // Content owns the private board history reader. It is not exposed by the
   // delivered client yet, so never synthesize a page from report or appeal lists.

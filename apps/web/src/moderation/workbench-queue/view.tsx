@@ -29,7 +29,14 @@ export type WorkbenchViewProps = {
     Partial<
       Pick<
         WorkbenchRead,
-        'readKey' | 'generation' | 'reports' | 'appeals' | 'selectedTarget' | 'selectedAppeal' | 'nativeSession' | 'directory'
+        | 'readKey'
+        | 'generation'
+        | 'reports'
+        | 'appeals'
+        | 'selectedTarget'
+        | 'selectedAppeal'
+        | 'nativeSession'
+        | 'directory'
       >
     >;
   onSearch: (search: WorkbenchSearch) => void;
@@ -121,6 +128,11 @@ export function WorkbenchView({
           {status}
         </p>
       ) : null}
+      {scope.kind === 'catalogue' && search.queue === 'appeals' ? (
+        <p role="status" className="text-muted-foreground">
+          {m.moderation_workbench_catalogue_appeals()}
+        </p>
+      ) : null}
       {page.state === 'unavailable' && onRetry ? (
         <Button data-workbench-retry type="button" className={control} onClick={onRetry}>
           {m.moderation_queue_retry()}
@@ -132,42 +144,56 @@ export function WorkbenchView({
         </Button>
       ) : null}
       {scope.kind !== 'none' ? (
-        <Button type="button" variant="outline" className={control} onClick={() => {
-          if (!isCurrent || isCurrent()) onSearch(workbenchSearch({}));
-        }}>{m.moderation_directory_heading()}</Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={control}
+          onClick={() => {
+            if (!isCurrent || isCurrent()) onSearch(workbenchSearch({}));
+          }}
+        >
+          {m.moderation_directory_heading()}
+        </Button>
       ) : null}
       {page.state === 'ready' && (scope.kind === 'none' || scope.kind === 'realm') ? (
-        <ModerationDirectory page={page.directory} search={search} onSearch={onSearch}
-          {...(onRetry ? { onRetry } : {})} {...(isCurrent ? { isCurrent } : {})} />
+        <ModerationDirectory
+          page={page.directory}
+          search={search}
+          onSearch={onSearch}
+          {...(onRetry ? { onRetry } : {})}
+          {...(isCurrent ? { isCurrent } : {})}
+        />
       ) : null}
       {page.state === 'ready' && queueScope ? (
         <section className="space-y-4" aria-label={m.moderation_workbench_heading()}>
           <nav aria-label={m.moderation_tabs_label()} className="flex min-w-0 flex-wrap gap-2 border-b pb-2">
-            {(['reports', 'appeals', 'resolved'] as const).filter((queue) => scope.kind !== 'catalogue' || queue !== 'appeals').map((queue) => (
-              <Button
-                key={queue}
-                type="button"
-                variant="ghost"
-                id={`workbench-queue-${queue}`}
-                aria-current={!search.history && search.queue === queue ? 'page' : undefined}
-                className={`${control} rounded-none border-b-2 ${search.queue === queue ? 'border-primary font-semibold' : 'border-transparent'}`}
-                onClick={() =>
-                  onSearch(
-                    workbenchSearch({
-                      ...workbenchWithoutContinuation(search),
-                      queue,
-                      status: queue === 'resolved' ? 'resolved' : 'pending',
-                    }),
-                  )
-                }
-              >
-                {queue === 'appeals'
-                  ? m.moderation_workbench_queue_appeals()
-                  : queue === 'resolved'
-                    ? m.moderation_workbench_queue_resolved()
-                    : m.moderation_workbench_queue_reports()}
-              </Button>
-            ))}
+            {(['reports', 'appeals', 'resolved'] as const)
+              .filter((queue) => scope.kind !== 'catalogue' || queue !== 'appeals')
+              .map((queue) => (
+                <Button
+                  key={queue}
+                  type="button"
+                  variant="ghost"
+                  id={`workbench-queue-${queue}`}
+                  aria-current={!search.history && search.queue === queue ? 'page' : undefined}
+                  className={`${control} rounded-none border-b-2 ${search.queue === queue ? 'border-primary font-semibold' : 'border-transparent'}`}
+                  onClick={() =>
+                    onSearch(
+                      workbenchSearch({
+                        ...workbenchWithoutContinuation(search),
+                        queue,
+                        status: queue === 'resolved' ? 'resolved' : 'pending',
+                      }),
+                    )
+                  }
+                >
+                  {queue === 'appeals'
+                    ? m.moderation_workbench_queue_appeals()
+                    : queue === 'resolved'
+                      ? m.moderation_workbench_queue_resolved()
+                      : m.moderation_workbench_queue_reports()}
+                </Button>
+              ))}
             {scope.kind === 'board' ? (
               <Button
                 type="button"
@@ -180,11 +206,6 @@ export function WorkbenchView({
               </Button>
             ) : null}
           </nav>
-          {scope.kind === 'catalogue' && search.queue === 'appeals' ? (
-            <p role="status" className="text-muted-foreground">
-              {m.moderation_workbench_catalogue_appeals()}
-            </p>
-          ) : null}
           {!search.history && queueScope.kind === 'board' && search.queue !== 'appeals' ? (
             <fieldset className="flex min-w-0 flex-wrap items-end gap-3">
               <legend className="sr-only">{m.moderation_filter_kind()}</legend>

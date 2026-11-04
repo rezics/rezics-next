@@ -189,14 +189,17 @@ export function WorkbenchPage({
         <WorkbenchView
           key={identity}
           page={view}
-          onSearch={(next) => { if (isCurrent()) onSearch(next); }}
+          onSearch={(next) => {
+            if (isCurrent()) onSearch(next);
+          }}
           selection={controller}
           onAction={submit}
           isCurrent={isCurrent}
           onUnresolvedAppealChange={unresolvedChanged}
           refreshBlocked={refreshBlocked}
           onRestart={() => onSearch(workbenchWithoutContinuation(search))}
-          {...(!reading && ((search.queue === 'appeals' && search.case) ||
+          {...(!reading &&
+          ((search.queue === 'appeals' && search.case) ||
             (view.directory && view.directory.state !== 'ready' && view.directory.state !== 'stale'))
             ? { onRetry: (event?: MouseEvent<HTMLButtonElement>) => void retryInspection(event) }
             : !reading && onRetry
