@@ -882,9 +882,7 @@ export async function readReportTargetInspection(
             ? 'available'
             : post?.availability === 'erased'
               ? 'erased'
-              : post?.availability === 'withheld'
-                ? 'withheld'
-                : 'unavailable',
+              : 'unavailable',
         value: post?.availability === 'available' ? post : null,
         destination: null,
       };
@@ -903,7 +901,6 @@ export async function readReportTargetInspection(
         destination: { boardId: board.id, ...(board.realmId ? { realmId: board.realmId } : {}) },
       };
     } else if (board?.availability === 'erased') current = { ...notAvailable, state: 'erased' };
-    else if (board?.availability === 'withheld') current = { ...notAvailable, state: 'withheld' };
     else if (board?.visibility === 'taken_down') current = { ...notAvailable, state: 'taken-down' };
   } else if (target.kind === 'thread' || target.kind === 'post') {
     const threadId = facts.value.threadId;
@@ -918,15 +915,11 @@ export async function readReportTargetInspection(
       const status =
         selected?.availability === 'erased'
           ? 'erased'
-          : selected?.availability === 'withheld'
-            ? 'withheld'
-            : board?.value?.availability === 'withheld'
-              ? 'withheld'
-              : thread.value?.visibility === 'taken_down' || board?.value?.visibility === 'taken_down'
-                ? 'taken-down'
-                : selected?.availability === 'available' && board?.value?.availability === 'available'
-                  ? 'available'
-                  : 'unavailable';
+          : thread.value?.visibility === 'taken_down' || board?.value?.visibility === 'taken_down'
+            ? 'taken-down'
+            : selected?.availability === 'available' && board?.value?.availability === 'available'
+              ? 'available'
+              : 'unavailable';
       if (status === 'available' && thread.value && board?.value) {
         current = {
           state: 'available',
