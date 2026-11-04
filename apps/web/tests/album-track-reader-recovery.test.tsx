@@ -70,8 +70,9 @@ test('Previous retains only eight exact prior addresses; Start and Retry perform
   const mounted = await ui();
   try {
     const fixture = albumTrackExample();
-    const initial = await fixture.read();
-    if (!initial.ok || !initial.stream) throw new Error('Expected admitted album contents');
+    const admitted = await fixture.read();
+    if (!admitted.ok || !admitted.stream) throw new Error('Expected admitted album contents');
+    const initial = { ...admitted, next: 'cursor-1' };
     const addresses: { id: string; context: string; stream?: string; cursor?: string }[] = [];
     const transport: AlbumTrackTransport = (address) => {
       addresses.push({ ...address });
@@ -103,8 +104,9 @@ test('failed continuation retries its exact address and retired viewer work cann
   const mounted = await ui();
   try {
     const fixture = albumTrackExample();
-    const initial = await fixture.read();
-    if (!initial.ok || !initial.stream) throw new Error('Expected admitted album contents');
+    const admitted = await fixture.read();
+    if (!admitted.ok || !admitted.stream) throw new Error('Expected admitted album contents');
+    const initial = { ...admitted, next: 'retry-cursor' };
     const addresses: { id: string; context: string; stream?: string; cursor?: string }[] = [];
     let recover = false;
     let finish!: (result: AlbumTrackRead) => void;
