@@ -184,23 +184,23 @@ test('operator imports authored VNDB parent and subsidiary rows through ordinary
     const current = await editor.http(`/v1/subjects/${childId}?context=${globalContext}`);
     expect(current.status).toBe(200);
     expect(
-      (current.body as { subject: { type: string; statements: Record<string, { value: { content: unknown } }[]> } })
-        .subject.statements['wdt:P749']
-        ?.map((item) => item.value.content),
+      (
+        current.body as { subject: { type: string; statements: Record<string, { value: { content: unknown } }[]> } }
+      ).subject.statements['wdt:P749']?.map((item) => item.value.content),
     ).toEqual([parentId]);
     const inverse = await editor.http(
       `/v1/subjects/${parentId}/links?${new URLSearchParams({ property: 'wdt:P749', limit: '20' })}`,
     );
     expect(inverse.status).toBe(200);
-    expect(
-      (inverse.body as { links: { subject: string }[] }).links.some((row) => row.subject === childId),
-    ).toBe(true);
+    expect((inverse.body as { links: { subject: string }[] }).links.some((row) => row.subject === childId)).toBe(true);
     const personRead = await editor.http(`/v1/subjects/${subjectId(person!)}?context=${globalContext}`);
     expect((personRead.body as { subject: { type: string } }).subject.type).toBe('schema:Person');
     const again = await seedCrossMedia(await planCrossMediaSeed(tables), path, runtime.importTransport, {
       origin: 'https://kernel.import.test',
     });
-    expect(again.readings.map((row) => row.externalId).sort()).toEqual(first.readings.map((row) => row.externalId).sort());
+    expect(again.readings.map((row) => row.externalId).sort()).toEqual(
+      first.readings.map((row) => row.externalId).sort(),
+    );
     const changed = await authoredDump(join(directory, 'changed'), 'p1\tp3\tpar');
     await seedCrossMedia(await planCrossMediaSeed(changed), path, runtime.importTransport, {
       origin: 'https://kernel.import.test',
@@ -260,9 +260,10 @@ test('operator imports authored VNDB parent and subsidiary rows through ordinary
       runtime.importTransport,
       { origin: 'https://kernel.import.test' },
     );
-    expect(fenced.unresolved.some((row) => row.reason === 'fenced_relation_holder') || fenced.status === 'imported-with-gaps').toBe(
-      true,
-    );
+    expect(
+      fenced.unresolved.some((row) => row.reason === 'fenced_relation_holder') ||
+        fenced.status === 'imported-with-gaps',
+    ).toBe(true);
   } finally {
     await runtime.close();
     await rm(directory, { recursive: true, force: true });

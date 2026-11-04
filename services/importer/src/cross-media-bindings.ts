@@ -403,16 +403,13 @@ export class CrossMediaGraph {
             : command.subject === endpointClaim.subject
               ? draft.producerParent.sourceEndpoint
               : undefined;
-        if (!childExternalId)
-          throw new TypeError('VNDB producer-parent mapper returned an unbound holder');
+        if (!childExternalId) throw new TypeError('VNDB producer-parent mapper returned an unbound holder');
         const parentExternalId =
           childExternalId === draft.producerParent.sourceSubject
             ? draft.producerParent.sourceEndpoint
             : draft.producerParent.sourceSubject;
-        const actualHolder =
-          childExternalId === draft.producerParent.sourceSubject ? sourceClaim : endpointClaim;
-        const actualTarget =
-          parentExternalId === draft.producerParent.sourceSubject ? sourceClaim : endpointClaim;
+        const actualHolder = childExternalId === draft.producerParent.sourceSubject ? sourceClaim : endpointClaim;
+        const actualTarget = parentExternalId === draft.producerParent.sourceSubject ? sourceClaim : endpointClaim;
         if (
           actualHolder.state !== 'bound' ||
           actualTarget.state !== 'bound' ||
@@ -485,60 +482,62 @@ export class CrossMediaGraph {
     ];
     for (const group of groups) {
       for (let offset = 0; offset < group.length; offset += BATCH_LIMIT) {
-      const page = group.slice(offset, offset + BATCH_LIMIT);
-      if (checkBatchWrite({ commands: page.map((entry) => entry.command) }).length)
-        throw new TypeError('Cross-media relation proposals failed portable validation');
-      const result = await input.batch({ commands: page.map((entry) => entry.command) });
-      for (const [index, entry] of page.entries()) {
-        const receipt = result.results[index];
-        const status = receipt?.status;
-        const journaled = !!(entry.draft.relation || entry.draft.producerParent);
-        if (status === 200) {
-          unchanged++;
-          if (journaled && (!receipt || !('value' in receipt) || !('candidate' in receipt.value)))
-            throw new TypeError('Cross-media relation replay omitted its native candidate receipt');
+        const page = group.slice(offset, offset + BATCH_LIMIT);
+        if (checkBatchWrite({ commands: page.map((entry) => entry.command) }).length)
+          throw new TypeError('Cross-media relation proposals failed portable validation');
+        const result = await input.batch({ commands: page.map((entry) => entry.command) });
+        for (const [index, entry] of page.entries()) {
+          const receipt = result.results[index];
+          const status = receipt?.status;
+          const journaled = !!(entry.draft.relation || entry.draft.producerParent);
+          if (status === 200) {
+            unchanged++;
+            if (journaled && (!receipt || !('value' in receipt) || !('candidate' in receipt.value)))
+              throw new TypeError('Cross-media relation replay omitted its native candidate receipt');
+            this.database
+              .transaction(() => {
+                if (journaled && receipt && 'value' in receipt) input.journal?.acknowledge(entry.command, receipt);
+                if (journaled && receipt && 'value' in receipt && 'candidate' in receipt.value)
+                  this.database
+                    .prepare(
+                      'UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?',
+                    )
+                    .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
+                else mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
+              })
+              .immediate();
+            continue;
+          }
+          if (status !== 201) {
+            if (entry.draft.producerParent && receipt === undefined) {
+              mark.run('unresolved', entry.command.key, graphEdgeKey(entry.draft));
+              unresolved.push({ ...entry.draft, reason: 'unknown_delivery' });
+              continue;
+            }
+            throw new TypeError(`Cross-media relation write failed: ${status}`);
+          }
+          if (!receipt || !('value' in receipt))
+            throw new TypeError('Cross-media relation write omitted its native receipt');
+          if (journaled && !('candidate' in receipt.value))
+            throw new TypeError('Cross-media relation proposal returned no candidate');
           this.database
             .transaction(() => {
-              if (journaled && receipt && 'value' in receipt) input.journal?.acknowledge(entry.command, receipt);
-              if (journaled && receipt && 'value' in receipt && 'candidate' in receipt.value)
+              if (journaled) input.journal?.acknowledge(entry.command, receipt);
+              if (journaled && 'candidate' in receipt.value)
                 this.database
                   .prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
                   .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
               else mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
             })
             .immediate();
-          continue;
+          proposed.push({
+            key: graphEdgeKey(entry.draft),
+            holder: entry.sourceHolder,
+            target: entry.sourceTarget,
+            property: entry.draft.property,
+            subject: entry.subject,
+          });
         }
-        if (status !== 201) {
-          if (entry.draft.producerParent && receipt === undefined) {
-            mark.run('unresolved', entry.command.key, graphEdgeKey(entry.draft));
-            unresolved.push({ ...entry.draft, reason: 'unknown_delivery' });
-            continue;
-          }
-          throw new TypeError(`Cross-media relation write failed: ${status}`);
-        }
-        if (!receipt || !('value' in receipt))
-          throw new TypeError('Cross-media relation write omitted its native receipt');
-        if (journaled && !('candidate' in receipt.value))
-          throw new TypeError('Cross-media relation proposal returned no candidate');
-        this.database
-          .transaction(() => {
-            if (journaled) input.journal?.acknowledge(entry.command, receipt);
-            if (journaled && 'candidate' in receipt.value)
-              this.database
-                .prepare('UPDATE cross_media_graph SET status=?, command_key=?, native_candidate=? WHERE edge_key=?')
-                .run('proposed', entry.command.key, receipt.value.candidate, graphEdgeKey(entry.draft));
-            else mark.run('proposed', entry.command.key, graphEdgeKey(entry.draft));
-          })
-          .immediate();
-        proposed.push({
-          key: graphEdgeKey(entry.draft),
-          holder: entry.sourceHolder,
-          target: entry.sourceTarget,
-          property: entry.draft.property,
-          subject: entry.subject,
-        });
-      }
       }
     }
     if (input.relationSnapshot) {

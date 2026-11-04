@@ -978,7 +978,8 @@ enumerations:
         term: 'wdt:P749',
         mapping: 'wdt:P355',
         status: existing,
-        meaning: The selected producer is a subsidiary of the current producer. Dictionary P355 is not admitted; this is stored losslessly as pid → current id under released wdt:P749, without fabricating a reciprocal source row.,
+        meaning: The selected producer is a subsidiary of the current producer. Dictionary P355 is not admitted; this is stored losslessly as pid → current id under released wdt:P749,
+        without fabricating a reciprocal source row.,
         citations: ['https://www.wikidata.org/wiki/Property:P355', 'https://www.wikidata.org/wiki/Property:P749'],
       }
     - {

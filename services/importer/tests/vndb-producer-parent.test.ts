@@ -64,10 +64,7 @@ function families(extra: Record<string, Record<string, unknown>[]> = {}): CrossM
 
 const vndbSeed = { providers: ['vndb'] as const, mediaDeadlineMs: 0 };
 
-function port(
-  commands: BatchCommand[],
-  options: { omitParent?: boolean; fence?: string } = {},
-): CrossMediaPort {
+function port(commands: BatchCommand[], options: { omitParent?: boolean; fence?: string } = {}): CrossMediaPort {
   const metadata = sourceRecordMetadataFixture();
   let omitted = false;
   return {
@@ -112,12 +109,12 @@ function port(
 
 test('selected family follows par and sub, keeps Person and omitted codes as source loss', async () => {
   const plan = await planCrossMediaSeed(families());
-  expect(plan.entities.vndb.map((row) => row.key).filter((key) => key.startsWith('p')).sort()).toEqual([
-    'p1',
-    'p2',
-    'p3',
-    'p4',
-  ]);
+  expect(
+    plan.entities.vndb
+      .map((row) => row.key)
+      .filter((key) => key.startsWith('p'))
+      .sort(),
+  ).toEqual(['p1', 'p2', 'p3', 'p4']);
   expect(plan.members.some((row) => row.key === 'p4' && row.kind === 'person')).toBe(true);
   const parents = plan.edges.filter((edge) => edge.table === 'producers_relations');
   expect(parents).toEqual(
@@ -167,9 +164,9 @@ test('authored COPY headers feed the production dump reader and sealed parent re
       'episode',
       'person',
       'character',
-    'subject-persons',
+      'subject-persons',
       'person-relations',
-  ])
+    ])
       await writeFile(join(bangumi, `${name}.jsonlines`), '');
     const files: Record<string, [string, string]> = {
       vn: ['id\tolang\talias', 'v1\tja\t\\N\nv2\tja\t\\N\nv3\tja\t\\N'],
@@ -184,10 +181,7 @@ test('authored COPY headers feed the production dump reader and sealed parent re
       releases: ['id', 'r1'],
       releases_vn: ['id\tvid', 'r1\tv1'],
       releases_producers: ['id\tpid\tdeveloper\tpublisher', 'r1\tp1\tt\tf'],
-      producers: [
-        'id\ttype\tname',
-        'p1\tco\tAuthored studio\np2\tco\tAuthored parent\np3\tng\tAuthored subsidiary',
-      ],
+      producers: ['id\ttype\tname', 'p1\tco\tAuthored studio\np2\tco\tAuthored parent\np3\tng\tAuthored subsidiary'],
       producers_relations: ['id\tpid\trelation', 'p1\tp2\tpar\np1\tp3\tsub'],
     };
     const needed = [
@@ -211,7 +205,9 @@ test('authored COPY headers feed the production dump reader and sealed parent re
       await writeFile(join(vndb, `${name}.header`), `${header}\n`);
       await writeFile(join(vndb, name), body ? `${body}\n` : '');
     }
-    await expect(Array.fromAsync(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')).rows('vndb', 'producers_relations'))).resolves.toEqual([
+    await expect(
+      Array.fromAsync(new CrossMediaDumpFiles(bangumi, join(directory, 'vndb')).rows('vndb', 'producers_relations')),
+    ).resolves.toEqual([
       { id: 'p1', pid: 'p2', relation: 'par' },
       { id: 'p1', pid: 'p3', relation: 'sub' },
     ]);
@@ -224,9 +220,11 @@ test('authored COPY headers feed the production dump reader and sealed parent re
     const keys = proposed.map((command) => command.key);
     const count = commands.length;
     await seedCrossMedia(plan, join(directory, 'state.sqlite'), port(commands), undefined, vndbSeed);
-    expect(commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P749').map((command) => command.key)).toEqual(
-      expect.arrayContaining(keys),
-    );
+    expect(
+      commands
+        .filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P749')
+        .map((command) => command.key),
+    ).toEqual(expect.arrayContaining(keys));
     expect(commands.length).toBeGreaterThanOrEqual(count);
     expect(first.status === 'imported' || first.status === 'imported-with-gaps').toBe(true);
   } finally {
@@ -248,7 +246,9 @@ test('unknown parent send, later endpoint and tuple fence keep one sealed envelo
       undefined,
       vndbSeed,
     );
-    const parent = commands.filter((command) => command.op === 'propose' && command.statement.property.id === 'wdt:P749');
+    const parent = commands.filter(
+      (command) => command.op === 'propose' && command.statement.property.id === 'wdt:P749',
+    );
     expect(parent).toHaveLength(1);
     expect(first.unresolved.some((row) => row.reason === 'unknown_delivery')).toBe(true);
     await seedCrossMedia(

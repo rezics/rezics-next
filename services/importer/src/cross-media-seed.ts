@@ -1364,8 +1364,7 @@ export async function seedCrossMedia(
     graph.remember(plan.edges);
     const delivered = await graph.deliver({
       claim: (owner) => importer.session.bindings.claim(owner),
-      nativeType: (externalId, alias) =>
-        nativeTypes.get(`${alias ?? crossMediaAliases.bangumi}\u0000${externalId}`),
+      nativeType: (externalId, alias) => nativeTypes.get(`${alias ?? crossMediaAliases.bangumi}\u0000${externalId}`),
       fence: (input) => port.fence(input),
       batch: (request) => port.batch(request),
       journal: {
