@@ -3,6 +3,7 @@ import { act, createElement as h, useState } from 'react';
 import type { OverviewValue, Section } from '../src/features/pages/overview';
 import type { RelationGroupRequest } from '../src/features/pages/relation-stream-query';
 import { qualifiedStatement } from '../src/kernel/fake/qualified-relations';
+import { workCastVisitReturn } from '../src/features/pages/subject-visit-navigation';
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const snak = (property: string, data_type: string, content: unknown) => ({
@@ -26,7 +27,7 @@ const summary = (subject: string, label: string, type: string) => ({
   cover: type === 'schema:Person' || type === 'wd:Q95074' ? portrait : null,
 });
 
-function castPage(work: string, cursor: string | null, performerName = 'A. Performer'): Section {
+function castPage(work: string, cursor: string | null, performerName = 'A. Performer', omitStatement?: string): Section {
   const performer = id(10);
   const unlabelledPerformer = id(18);
   const first = id(11);
@@ -85,7 +86,7 @@ function castPage(work: string, cursor: string | null, performerName = 'A. Perfo
   return {
     ok: true,
     read: { kind: 'relations', id: work, context: id(50), property: 'wdt:P725', limit: 12 } as never,
-    body: { relations: rows, next: cursor },
+    body: { relations: rows.filter((entry) => entry.statement.id !== omitStatement), next: cursor },
   };
 }
 
@@ -172,13 +173,22 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     subject: 'reader',
   });
   let replace: (value: typeof initial) => void = () => {};
+  let omitFocusedRow: (omit: boolean) => void = () => {};
   const rootRoute = routing.createRootRoute({
     component: () => {
       const [page, setPage] = useState(initial);
+      const [omitRow, setOmitRow] = useState(false);
+      const routeHref = routing.useRouterState({ select: (state) => state.location.href });
       replace = setPage;
+      omitFocusedRow = setOmitRow;
+      const cursor = new URL(routeHref, 'https://rezics.test').searchParams.get('cursor');
+      const section =
+        page.value.subject === work && cursor === 'opaque-window-2'
+          ? castPage(work, 'cursor-3', 'A. Performer', omitRow ? id(11) : undefined)
+          : page.section;
       return h(RelationStream, {
         value: { ...page.value, reader: defaultReader },
-        section: page.section,
+        section,
         node: 'cast',
         view: 'credits',
         title: 'Voice credits',
@@ -246,6 +256,29 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
     const via = new URL(characterLink.getAttribute('href')!, 'https://rezics.test').searchParams.get('via');
     expect(via).toContain(`/subjects/${work}/`);
     expect(new URL(via!, 'https://rezics.test').searchParams.get('realm')).toBe(realm);
+    const characterReturn = new URL(via!, 'https://rezics.test');
+    expect(characterReturn.searchParams.get('node')).toBe('cast');
+    expect(workCastVisitReturn(characterReturn.hash)).toMatchObject({
+      context,
+      node: 'cast',
+      presentation: 'character',
+      statement: id(11),
+      character: id(30),
+      history: [],
+    });
+    const inspection = [...host.querySelectorAll('a')].find((link) => link.textContent === 'Inspect original credit')!;
+    expect(inspection.target).toBe('_blank');
+    const inspectionAddress = new URL(inspection.href);
+    expect(inspectionAddress.pathname).toContain(`/subjects/${work}/`);
+    expect(inspectionAddress.searchParams.get('property')).toBe('wdt:P725');
+    expect(inspectionAddress.searchParams.get('statement')).toBe(id(11));
+    expect(inspectionAddress.searchParams.get('context')).toBe(context);
+    const inspectionReturn = new URL(inspectionAddress.searchParams.get('via')!, 'https://rezics.test');
+    expect(workCastVisitReturn(inspectionReturn.hash)).toMatchObject({
+      statement: id(11),
+      character: id(30),
+      presentation: 'character',
+    });
     expect([...host.querySelectorAll('a')].some((link) => link.href.includes(id(18)))).toBe(false);
     expect(host.textContent).not.toContain(id(18));
     const more = host.querySelector('[data-slot="continue-group"]') as HTMLAnchorElement;
@@ -276,8 +309,41 @@ test('mounted P725 cast stays on its current window, preserves assertion identit
         'cursor',
       ),
     ).toBe('cursor-3');
+    const previous = host.querySelector('[data-slot="previous-group"]') as HTMLAnchorElement;
+    expect(previous).not.toBeNull();
+    const previousAddress = new URL(previous.href);
+    expect(previousAddress.searchParams.get('cursor')).toBeNull();
+    expect(workCastVisitReturn(previousAddress.hash)).toMatchObject({
+      context,
+      node: 'cast',
+      presentation: 'credit-order',
+      history: [],
+    });
+    const returnedPerformer = [...host.querySelectorAll('a')].find((link) => link.textContent === 'A. Performer')!;
+    const returnedVia = new URL(returnedPerformer.href).searchParams.get('via')!;
+    const exactReturn = new URL(returnedVia, 'https://rezics.test');
+    expect(exactReturn.searchParams.get('cursor')).toBe('opaque-window-2');
+    expect(workCastVisitReturn(exactReturn.hash)).toMatchObject({
+      context,
+      statement: id(11),
+      presentation: 'credit-order',
+      history: [null],
+    });
+    await router.navigate({ href: returnedVia });
+    await flush();
+    const focusedReturn = host.querySelector(`li[data-statement="${id(11)}"]`);
+    expect(window.document.activeElement).toBe(focusedReturn);
+    expect(host.querySelector('[data-presentation="credit-order"]')).not.toBeNull();
+    await act(async () => omitFocusedRow(true));
+    await flush();
+    expect(host.textContent).toContain('This cast window has changed since you left.');
+    expect(host.querySelector('[data-slot="restart-group"]')).not.toBeNull();
+    await router.navigate({ href: previous.href });
+    await flush();
+    expect(host.querySelector('[data-slot="previous-group"]')).toBeNull();
+    expect(host.textContent).not.toContain('This cast window has changed since you left.');
     await click(host.querySelector('[data-slot="continue-group"]') as HTMLAnchorElement);
-    expect(held[2]!.request.cursor).toBe('cursor-3');
+    expect(held[2]!.request.cursor).toBe('opaque-window-2');
 
     const nextValue = castValue(replacement, realm, context);
     await act(async () => replace({ value: nextValue, section: castPage(replacement, null, 'New performer') }));

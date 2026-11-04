@@ -492,6 +492,16 @@ export function statementItems(
     const items = rows.slice(0, limit).flatMap((row): Item[] => {
       if (typeof row.target !== 'string' || !isRecord(row.statement) || !isRecord(row.summary)) return [];
       const statement = row.statement;
+      const originalCredit =
+        property === WORK_VOICE_PROPERTY && value.subject
+          ? creditAssertion({
+              subject: value.subject,
+              property,
+              statement: statement.id,
+              assertion: statement,
+              related: row.related,
+            })
+          : undefined;
 
       return [
         {
@@ -501,6 +511,7 @@ export function statementItems(
           statement: typeof statement.id === 'string' ? statement.id : undefined,
           ...(isRecord(row.summary) ? { summary: row.summary as unknown as SubjectSummary } : {}),
           notes: [],
+          ...(originalCredit ? { credit: originalCredit } : {}),
           qualified: qualifiedNotes(statement as unknown as Stmt, row.related, value.locale),
           gated: spoilerLevel(statement as unknown as Stmt) > value.reader.spoilerLevel,
         },
@@ -701,6 +712,7 @@ function LinkSection(
           value={value}
           label={text.text || title}
           creditVisit={currentCreditVisit}
+          navigation={{ node: id }}
         />
       ) : (
         <CoverList
