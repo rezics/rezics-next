@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
-import { act, createElement as h, type ReactNode } from 'react';
+import { act, createContext, createElement as h, type ReactNode } from 'react';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import type { ConceptCreateFact } from '../src/features/catalogue/concept-create';
 import type { CreateResult, CreatedReader, InitialSubject } from '../src/features/catalogue/create-subject';
@@ -12,7 +12,6 @@ import {
   type CreateAuthority,
 } from '../src/features/catalogue/identity-intake';
 import { candidateContext } from '../src/subject/candidates';
-import { conceptAdmitCreatedReader } from '../src/features/catalogue/concept-create';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -37,8 +36,20 @@ let submitImpl: (command: { item: InitialSubject; key: string }) => Promise<Crea
   reason: 'unavailable',
 });
 let readImpl: (id: string) => Promise<CreatedReader> = async () => ({ state: 'unavailable' });
+let admitCreated: (
+  reader: CreatedReader,
+  id: string,
+  release: typeof bundledRelease,
+  type: string,
+) => CreatedReader = (reader) => reader;
 
-mock.module('../src/session/query', () => ({ useSession: () => viewer }));
+mock.module('../src/session/query', () => ({
+  useSession: () => viewer,
+  sessionCsrfToken: () => viewer.csrfToken,
+  sessionQuery: { queryKey: ['session'] },
+  exposureQuery: { queryKey: ['exposure', 'viewer'] },
+  AnonymousSessionContext: createContext(false),
+}));
 mock.module('../src/features/catalogue/create-subject-actions', () => ({
   readCatalogueCreateEligibility: () => observe(),
   readCreatedCatalogueSubject: async ({ data }: { data: string }) => readImpl(data),
@@ -49,11 +60,14 @@ mock.module('../src/features/catalogue/concept-create-actions', () => ({
     commands.push({ item: data.item, key: data.key });
     const result = await submitImpl(data);
     return result.ok
-      ? { ...result, reader: conceptAdmitCreatedReader(result.reader, result.id, bundledRelease, data.item.type) }
+      ? { ...result, reader: admitCreated(result.reader, result.id, bundledRelease, data.item.type) }
       : result;
   },
 }));
 mock.module('../src/features/catalogue/relation-editor-search', () => ({ relationTargetSearch: async () => [] }));
+
+const { conceptAdmitCreatedReader } = await import('../src/features/catalogue/concept-create');
+admitCreated = conceptAdmitCreatedReader;
 
 async function mounted(run: (page: { host: HTMLElement }) => Promise<void>) {
   const require = createRequire(import.meta.url);
@@ -230,6 +244,7 @@ async function conceptCreateSession(options?: {
   const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const previousFetch = globalThis.fetch;
   window.fetch = (async (input) => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.includes('/api/catalogue/identity-intake')) return new Response('not found', { status: 404 });
@@ -250,6 +265,7 @@ async function conceptCreateSession(options?: {
       results: [],
     });
   }) as typeof fetch;
+  globalThis.fetch = window.fetch;
   const { createRoot } = await import('react-dom/client');
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const storybook = dirname(Bun.resolveSync('storybook/test', import.meta.dir));
@@ -291,6 +307,7 @@ async function conceptCreateSession(options?: {
     },
     async close() {
       await act(async () => root.unmount());
+      globalThis.fetch = previousFetch;
       for (const [key, descriptor] of previous)
         if (descriptor) Object.defineProperty(globalThis, key, descriptor);
         else Reflect.deleteProperty(globalThis, key);
@@ -569,6 +586,7 @@ test('classification return records the admitted identity; expired handoff keeps
   try {
     expect(token).toBeTruthy();
     await page.waitFor(() => expect(page.host.textContent).toContain(page.m.identity_intake_authority_allowed()));
+    await page.waitFor(() => expect(page.host.textContent).toContain(page.m.classification_create_source()));
     await chooseTypeAndName(page, concept, 'Night');
     await confirmIdentity(page);
     await act(async () => page.user.click(submitButton(page)));

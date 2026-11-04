@@ -1303,6 +1303,9 @@ observation is not an authorization bypass: fresh submission re-reads current el
 command remains final. Identity search, definitions and authority stay independent; a matching title is not identity
 and confers no create grant. An expired or mismatched classification handoff cannot authorize a return or a write, and
 it does not discard a known create result.
+Decision: a classification-create handoff stays in viewer-bound sessionStorage across editor-generation remount and is
+re-read in creating or ready phase; discard only expired, wrong-phase or mismatched-reader handoffs, and keep a known
+create UUID without another write.
 
 Decision: Concept creation observes current Global Context `subject.create` eligibility through the shared private BFF;
 definitions, identity search and authority stay independent.
