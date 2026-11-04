@@ -140,6 +140,13 @@ async function renderedReader(
     return value;
   };
   const change = async (element: HTMLInputElement | HTMLSelectElement, value: string | boolean) => {
+    if (element.tagName === 'INPUT' && (element as HTMLInputElement).type === 'checkbox') {
+      await act(async () => {
+        if ((element as HTMLInputElement).checked !== value) element.click();
+        await pause();
+      });
+      return;
+    }
     const property = typeof value === 'boolean' ? 'checked' : 'value';
     const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), property)?.set;
     setter?.call(element, value);
@@ -280,6 +287,7 @@ test('review and recovery retry the exact command, then require re-review after 
     expect(reader.host.textContent).toContain('2004-02-29T23:59:01.123+08:00');
     expect(reader.button(reader.m.library_rich_entry_save_source_correction()).disabled).toBe(true);
     await reader.change(reader.host.querySelector('input[type="checkbox"]') as HTMLInputElement, true);
+    expect(reader.button(reader.m.library_rich_entry_save_source_correction()).disabled).toBe(false);
     await reader.click(reader.m.library_rich_entry_save_source_correction());
 
     expect(reader.writes).toHaveLength(1);
