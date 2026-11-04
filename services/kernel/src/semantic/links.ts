@@ -1302,10 +1302,14 @@ export async function listSubjectLinks(
     const rawKey = slotKey ? current.qualifiers.find((snak) => snak.property.id === slotKey) : undefined;
     const key = slotKey ? assertion.qualifiers.find((snak) => snak.property.id === slotKey) : undefined;
     // An omitted key may be concealed. Do not turn it into the unqualified slot.
-    const creditSlot = credit && (!rawKey || (key?.value.type === 'value' && typeof key.value.content === 'string'))
-      ? { property: link.property, target: options.subject,
-          ...(key?.value.type === 'value' && typeof key.value.content === 'string' ? { key: key.value.content } : {}) }
-      : undefined;
+    const creditSlot =
+      credit && (!rawKey || (key?.value.type === 'value' && typeof key.value.content === 'string'))
+        ? {
+            property: link.property,
+            target: options.subject,
+            ...(key?.value.type === 'value' && typeof key.value.content === 'string' ? { key: key.value.content } : {}),
+          }
+        : undefined;
     return [
       {
         ...link,

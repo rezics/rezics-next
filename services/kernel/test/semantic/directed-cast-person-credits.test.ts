@@ -157,12 +157,13 @@ test('released inverse descriptors keep the original cast property and pin quali
   );
 });
 
-
 test('qualified and plain credits retain separate original assertions, citations, revision and exact slot', async () => {
   const actor = await create('schema:Person', 'Inspection actor');
   const character = await create('wd:Q95074', 'Inspection character');
-  const cited = { ...statement('wdt:P725', actor.id, [statement('wdt:P453', character.id)]),
-    references: [{ parts: [statement('schema:url', 'https://example.org/original-credit')] }] };
+  const cited = {
+    ...statement('wdt:P725', actor.id, [statement('wdt:P453', character.id)]),
+    references: [{ parts: [statement('schema:url', 'https://example.org/original-credit')] }],
+  };
   const work = await create('schema:Movie', 'Two original credits', {
     'wdt:P725': [cited, statement('wdt:P725', actor.id)],
   });
@@ -174,17 +175,27 @@ test('qualified and plain credits retain separate original assertions, citations
   for (const row of page.body.links) {
     const original = work.statements['wdt:P725']!.find((entry) => entry.id === row.statement)!;
     expect(row.assertion).toEqual(original);
-    expect(row.creditSlot).toEqual({ property: 'wdt:P725', target: actor.id,
-      ...(original.qualifiers.length ? { key: character.id } : {}) });
+    expect(row.creditSlot).toEqual({
+      property: 'wdt:P725',
+      target: actor.id,
+      ...(original.qualifiers.length ? { key: character.id } : {}),
+    });
     const detail = await call('GET', `/v1/subjects/${work.id}/revisions/${original.rezics.revision}`);
     expect(detail.response.status).toBe(200);
     expect(detail.body.subject).toBe(work.id);
     expect(detail.body.revision.revision).toBe(original.rezics.revision);
   }
   const assertion = page.body.links.find((row: any) => row.assertion.references.length)!.assertion;
-  const concealed = { ...assertion, references: [{ parts: [
-    { property: { id: 'wdt:P248', data_type: 'wikibase-item' }, value: { type: 'value', content: character.id } },
-  ] }] };
+  const concealed = {
+    ...assertion,
+    references: [
+      {
+        parts: [
+          { property: { id: 'wdt:P248', data_type: 'wikibase-item' }, value: { type: 'value', content: character.id } },
+        ],
+      },
+    ],
+  };
   const disclosed = disclosedRelationStatement(concealed, new Map([[actor.id, page.body.links[0].related[actor.id]]]));
   expect(disclosed?.references).toEqual([]);
 });

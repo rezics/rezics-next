@@ -1740,14 +1740,22 @@ function RelationEditorLive({
                                 </div>
                                 <Button
                                   variant="outline"
-                                  disabled={!!composition && (!composition.qualifiersEditable || snak.property.id === field.slotKey)}
+                                  disabled={
+                                    !!composition &&
+                                    (!composition.qualifiersEditable || snak.property.id === field.slotKey)
+                                  }
                                   ref={(node) => {
                                     if (node) qualifierRemoveButtons.current.set(identity, node);
                                     else qualifierRemoveButtons.current.delete(identity);
                                   }}
                                   aria-label={`${m.relation_remove({}, options)}: ${name(snak.property.id)}`}
                                   onClick={(event) => {
-                                    if (!editable() || (composition && (!composition.qualifiersEditable || snak.property.id === field.slotKey))) return;
+                                    if (
+                                      !editable() ||
+                                      (composition &&
+                                        (!composition.qualifiersEditable || snak.property.id === field.slotKey))
+                                    )
+                                      return;
                                     if (populatedValue(snak.value))
                                       requestDraftDecision(
                                         { kind: 'remove-qualifier', qualifierId: identity, qualifier: snak },
