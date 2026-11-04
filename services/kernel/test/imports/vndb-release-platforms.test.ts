@@ -179,7 +179,13 @@ test('production operator imports release platforms and media through independen
     expect(changed.runs.vndb?.counts.changed).toBeGreaterThan(0);
     const currentBindings = await readVndbReleaseBindings(runtime.importTransport, groups);
     expect(currentBindings.concepts.some((item) => item.id === mac.id)).toBe(false);
-    expect(JSON.stringify(changed.gaps)).toContain('lin');
+    const refreshedPlatforms = await page(releaseId!, 'schema:gamePlatform');
+    expect(
+      refreshedPlatforms.candidates
+        .filter((item) => item.source && !item.retracted)
+        .map((item) => item.statement.value.content)
+        .sort(),
+    ).toEqual([groups[0]!.concepts.find((item) => item.code === 'win')!.id]);
 
     expect((await editor.http('/v1/sourceFences:takedown', {
       source: crossMediaAliases.vndb, externalId: 'r1', fieldGroup: 'facts', reason: 'Authored tuple fence',
