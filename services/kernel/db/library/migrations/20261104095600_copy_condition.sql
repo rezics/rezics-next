@@ -12,8 +12,8 @@ AS $$
   SELECT CASE
     WHEN value IS NULL THEN true
     WHEN jsonb_typeof(value) <> 'object' THEN false
-    ELSE jsonb_object_length(value) = 3
-      AND value ?& ARRAY['value', 'pin', 'kindId']
+    ELSE value ?& ARRAY['value', 'pin', 'kindId']
+      AND value - ARRAY['value', 'pin', 'kindId'] = '{}'::jsonb
       AND jsonb_typeof(value->'kindId') = 'string'
       AND value->>'kindId' ~ '^[a-z][a-z0-9_.-]{0,63}$'
       AND (
