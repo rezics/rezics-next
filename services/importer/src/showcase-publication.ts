@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { sameStatementProvenance } from './statement-provenance.ts';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, BatchStatement } from '@rezics/definitions/bulk';
 import type { ReviewedSubjectRead } from './import-client.ts';
 import { createImportTransport } from './import-client.ts';
@@ -375,25 +376,7 @@ function groupKey(subject: string, property: string): string {
 }
 
 function statementOnPublicRead(value: unknown, expected: BatchStatement): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const actual = value as Record<string, unknown>;
-  const property = actual.property;
-  const propertyId = typeof property === 'string' ? property : (property as { id?: unknown } | null)?.id;
-  if (propertyId !== expected.property.id) return false;
-  return (
-    showcaseDigest({
-      property: { id: propertyId },
-      value: actual.value,
-      qualifiers: actual.qualifiers ?? [],
-      references: actual.references ?? [],
-    }) ===
-    showcaseDigest({
-      property: expected.property,
-      value: expected.value,
-      qualifiers: expected.qualifiers ?? [],
-      references: expected.references ?? [],
-    })
-  );
+  return sameStatementProvenance(value, expected);
 }
 
 function sourceIdentity(record: ShowcaseRecord): { property: string; value: string } | null {
@@ -1066,7 +1049,7 @@ export async function publishShowcase(input: {
       !candidate ||
       !showcaseSourceMatches(candidate.source, assertion.source) ||
       !showcaseStatementMatches(candidate.statement, assertion.statement) ||
-      showcaseDigest({ source: candidate.source, statement: candidate.statement }) !== assertion.candidateDigest
+      showcaseDigest({ source: candidate.source, statement: assertion.statement }) !== assertion.candidateDigest
     ) {
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-digest-changed' });
       continue;
