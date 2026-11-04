@@ -118,8 +118,7 @@ export async function assertRealmOwnerMayLeave(client: AccessClient, input: Inpu
   if (!row.remaining) throw new RealmLastOwnerError();
 }
 
-export type RealmOwnerLeaveObservation =
-  Readonly<{ owner: boolean; remaining: boolean; source: string | null }>;
+export type RealmOwnerLeaveObservation = Readonly<{ owner: boolean; remaining: boolean; source: string | null }>;
 
 /** Read-only advice after the caller admits this exact resource read at the same T.
  * This reuses the exact native holder predicate without acquiring a command lock or
