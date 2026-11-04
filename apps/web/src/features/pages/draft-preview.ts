@@ -35,6 +35,18 @@ const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/** Share the released local target grammar with the review form without asking native admission. */
+export function isSupportedDraftPreviewTarget(value: unknown, locale: string): value is DraftPreviewTarget {
+  if (!record(value) || !(UI_LOCALES as readonly string[]).includes(locale)) return false;
+  const { view, ...address } = value;
+  if (view !== undefined && (!isView(view) || 'route' in address)) return false;
+  const account =
+    Object.keys(address).length === 1 &&
+    typeof address.account === 'string' &&
+    /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(address.account);
+  return account || !!previewInput({ target: address, locale });
+}
+
 /** Detach the whole publication candidate before session preparation or any native IO. */
 export function captureDraftPreview(value: unknown): DraftPreviewInput | null {
   if (
@@ -47,13 +59,7 @@ export function captureDraftPreview(value: unknown): DraftPreviewInput | null {
     !record(value.target)
   )
     return null;
-  const { view, ...address } = value.target;
-  if (view !== undefined && (!isView(view) || 'route' in address)) return null;
-  const account =
-    Object.keys(address).length === 1 &&
-    typeof address.account === 'string' &&
-    /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(address.account);
-  if (!account && !previewInput({ target: address, locale: value.locale })) return null;
+  if (!isSupportedDraftPreviewTarget(value.target, value.locale)) return null;
   try {
     if (validateProfile(platformRegistry, value.profile).length) return null;
     return structuredClone(value) as DraftPreviewInput;
