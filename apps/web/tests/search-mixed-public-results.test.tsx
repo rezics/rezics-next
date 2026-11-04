@@ -272,7 +272,12 @@ test('unknown kinds, owner or summary mismatches, malformed pages and missing hy
 
 test('sparse and empty pages retain native continuation and supplied kind-count evidence', async () => {
   const page = mixedPage();
-  const sparse = { ...page, hits: [page.hits[4]!], next: 'native-next-page' };
+  const sparse = {
+    ...page,
+    hits: [page.hits[4]!],
+    viewerFacts: { state: 'current' as const, rows: [] },
+    next: 'native-next-page',
+  };
   const sparseRead = await readDiscovery(request, async () => ({ status: 200, data: sparse }));
   expect(sparseRead.discovery.status).toBe('ready');
   if (sparseRead.discovery.status !== 'ready') throw new Error('Sparse Search page was unavailable');
@@ -281,7 +286,7 @@ test('sparse and empty pages retain native continuation and supplied kind-count 
     page.kinds.values.map(({ id, count }) => [id, count]),
   );
 
-  const empty = { ...page, hits: [], next: 'native-empty-continuation' };
+  const empty = { ...sparse, hits: [], next: 'native-empty-continuation' };
   const emptyRead = await readDiscovery(request, async () => ({ status: 200, data: empty }));
   expect(emptyRead.discovery.status).toBe('ready');
   if (emptyRead.discovery.status !== 'ready') throw new Error('Empty Search page was unavailable');

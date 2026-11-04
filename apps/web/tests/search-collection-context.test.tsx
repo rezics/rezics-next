@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -16,10 +16,12 @@ import {
 } from '../src/search/discovery';
 import { collectionFollowSource } from '../src/search/collection-context/schema';
 import { DiscoveryResults } from '../src/search/discovery-results';
-import { useDiscoveryPersonalResults } from '../src/search/discovery-personal-host';
 import { discoveryExposureKey } from '../src/search/discovery-personal-capabilities';
 import type { FollowWriteResult } from '../src/library/follow-records';
 import type { DiscoveryBoundPage } from '../src/search/discovery-personal-server';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const { useDiscoveryPersonalResults } = await import('../src/search/discovery-personal-host');
 
 const reader = '01a1a000-0000-7000-8000-001000000011';
 const curator = '01a1a000-0000-7000-8000-002000000012';
