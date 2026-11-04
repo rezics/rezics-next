@@ -38,7 +38,7 @@ export type SourceField = {
 export type SourcesPageData = {
   realm?: string | undefined;
   context?: import('@rezics/composition').SelectedContext | undefined;
-  viewer?: { account: SubjectRead['account']; actions: NonNullable<SubjectRead['viewerActions']> };
+  viewer?: { state: 'public' | 'signed-in'; actions: NonNullable<SubjectRead['viewerActions']> };
   id: string;
   title: ReturnType<typeof pageText>;
   typeLabel: ReturnType<typeof pageText>;
@@ -69,9 +69,12 @@ function presentable(snak: Snak, related: Related): boolean {
   return typeof content === 'string' || isRecord(content);
 }
 
-/** Only the CURRENT anonymous subject read is input. Definition labels never confer disclosure. */
+/** Only the current native subject read is input. Definition labels never confer disclosure or authority. */
 export function explainSubjectSources(
-  read: Pick<SubjectRead, 'subject' | 'related'> & { summary?: SubjectRead['summary'] | undefined },
+  read: Pick<SubjectRead, 'subject' | 'related'> & {
+    summary?: SubjectRead['summary'] | undefined;
+    viewerActions?: SubjectRead['viewerActions'];
+  },
   locale: string,
   definitions?: SourceDefinitions,
 ): SourcesPageData {
@@ -146,7 +149,15 @@ export function explainSubjectSources(
         (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
       );
     const returnTo = `${subjectViewHref(identity, locale, 'sources')}#subject-sources-heading`;
-    if (allowed && comparable && !relation && literalTypes.has(selected[0]?.property.data_type ?? ''))
+    if (
+      allowed &&
+      comparable &&
+      !relation &&
+      !['schema:name', 'schema:description', 'schema:alternateName'].includes(property) &&
+      ['string', 'external-id', 'url', 'monolingualtext', 'time', 'quantity'].includes(
+        selected[0]?.property.data_type ?? '',
+      )
+    )
       for (const fact of facts) {
         const query = new URLSearchParams({ property, statement: fact.statement!, returnTo: 'sources' });
         fact.correctionHref = `${subjectHref(identity, locale).href}/edit?${query}`;
@@ -163,7 +174,7 @@ export function explainSubjectSources(
     });
   }
   return {
-    viewer: { account: read.account, actions: read.viewerActions ?? { state: 'unavailable' } },
+    viewer: { state: 'public', actions: read.viewerActions ?? { state: 'unavailable' } },
     id: subject.id,
     title,
     typeLabel: pageText(definitions?.types[subject.type]?.labels, locale),
@@ -234,7 +245,9 @@ export async function readSubjectSources(
     }
     if (current.status !== 200 || !current.data) return failure(current.status);
     if (current.data.subject.id !== expected) return { kind: 'unavailable' };
-    return { kind: 'ready', page: explainSubjectSources(current.data, locale, await definitions) };
+    const page = explainSubjectSources(current.data, locale, await definitions);
+    if (includeViewerActions && page.viewer) page.viewer.state = 'signed-in';
+    return { kind: 'ready', page };
   } catch {
     return { kind: 'unavailable' };
   }
