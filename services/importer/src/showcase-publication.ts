@@ -13,6 +13,7 @@ import {
   type ShowcaseAssertion,
   type ShowcaseManifest,
   type ShowcaseRecord,
+  type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
 } from './showcase-manifest.ts';
 import type { PublicBulkClient } from './public-bulk-client.ts';
@@ -257,6 +258,7 @@ type CandidateRead = {
   source: BatchCommand['source'] | null;
   statement: BatchStatement;
   head: number | null;
+  decision?: 'accept' | 'reject' | 'abstain' | null;
 };
 type CandidatePage = {
   candidates: CandidateRead[];
@@ -415,6 +417,21 @@ function publicStatementCites(value: unknown, uri: string): boolean {
   });
 }
 
+function publicHasCitation(read: ReviewedSubjectRead, uri: string): boolean {
+  return Object.values((read.subject as { statements?: Record<string, unknown[]> }).statements ?? {}).some((rows) =>
+    rows.some((row) => publicStatementCites(row, uri)),
+  );
+}
+
+function publicVocabularySourceEvidence(read: ReviewedSubjectRead, record: ShowcaseVocabularyRecord): boolean {
+  if (record.provenance !== 'reviewed-catalogue')
+    return !!record.sourceUri && publicHasValue(read, 'schema:url', record.sourceUri);
+  if (!record.sourceUri) return false;
+  if (record.nativeType === 'skos:ConceptScheme')
+    return !!record.schemeUri && publicHasValue(read, 'schema:sameAs', record.schemeUri);
+  return publicHasCitation(read, record.sourceUri);
+}
+
 function publicHasSourceIdentity(read: ReviewedSubjectRead, record: ShowcaseRecord): boolean {
   const identity = sourceIdentity(record);
   if (!identity || !record.sourceUri) return false;
@@ -565,12 +582,25 @@ export async function publishShowcase(input: {
     review: input.review,
     existing: input.journal.acknowledgedCommands(),
   });
+  const genre = input.result.bangumiGenrePublication;
+  const acknowledgementByCandidate = new Map<string, ShowcaseAcknowledgement>();
+  for (const acknowledgement of [...recovered.acknowledgements, ...(genre?.acknowledgements ?? [])]) {
+    const key = acknowledgement.candidateId ?? acknowledgement.command.key;
+    acknowledgementByCandidate.set(key, acknowledgement);
+  }
   const manifest = buildShowcaseManifest({
     plan: input.plan,
     readings: input.result.readings,
-    acknowledgements: recovered.acknowledgements,
+    acknowledgements: [...acknowledgementByCandidate.values()],
     aliases: input.aliases,
     ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
+    ...(genre
+      ? {
+          reviewedVocabulary: genre.vocabulary,
+          currentBangumiGenreCandidateIds: genre.candidateIds,
+          bangumiGenreOwnerKeys: genre.ownerKeys,
+        }
+      : {}),
   });
   input.journal.sealIntent(manifest);
 
@@ -640,10 +670,25 @@ export async function publishShowcase(input: {
         !!sourceUri &&
         assertion.citations.includes(sourceUri),
     );
+    const reviewedSourceAssertion = record.provenance === 'reviewed-catalogue' &&
+      (record.nativeType === 'skos:ConceptScheme'
+        ? record.assertions.some(
+            (assertion) =>
+              assertion.property === 'schema:sameAs' &&
+              assertion.statement.value.type === 'value' &&
+              assertion.statement.value.content === record.schemeUri,
+          )
+        : record.assertions.some((assertion) => assertion.citations.includes(record.sourceUri!)));
     if (
-      !sourceAssertion ||
+      (!sourceAssertion && !reviewedSourceAssertion) ||
       (record.nativeType === 'skos:Concept' &&
-        (!record.schemeId || !vocabularyById.has(record.schemeId) || record.schemeId === record.subjectId))
+        (!record.schemeId || !vocabularyById.has(record.schemeId) || record.schemeId === record.subjectId ||
+          !record.assertions.some(
+            (assertion) =>
+              assertion.property === 'skos:inScheme' &&
+              assertion.statement.value.type === 'value' &&
+              assertion.statement.value.content === record.schemeId,
+          )))
     ) {
       blockedSubjects.add(record.subjectId);
       omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
@@ -738,6 +783,12 @@ export async function publishShowcase(input: {
     const id = record.subjectId;
     if (!id || !validated.has(assertion.candidateId) || stoppedSubjects.has(id)) continue;
     const candidate = validated.get(assertion.candidateId)!;
+    if (candidate.decision === 'accept') continue;
+    if (candidate.decision === 'reject') {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-currently-rejected' });
+      stoppedSubjects.add(id);
+      continue;
+    }
     const body = { context: GLOBAL_CONTEXT, expected_head: candidate.head ?? null };
     const key = actionKey('accept', assertion.candidateId, assertion.candidateDigest);
     const idempotencyKey = actionIdempotencyKey(body);
@@ -855,7 +906,7 @@ export async function publishShowcase(input: {
         subjectId(dependencyRead) !== dependencyId ||
         subjectType(dependencyRead) !== dependency.nativeType ||
         !dependency.sourceUri ||
-        !publicHasValue(dependencyRead, 'schema:url', dependency.sourceUri) ||
+        !publicVocabularySourceEvidence(dependencyRead, dependency) ||
         (dependency.nativeType === 'skos:Concept' &&
           (!dependency.schemeId || !publicHasValue(dependencyRead, 'skos:inScheme', dependency.schemeId)))
       ) {

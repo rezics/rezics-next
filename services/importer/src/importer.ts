@@ -102,8 +102,11 @@ export interface ImportIdentifierLookup {
     owner: Owner;
     conversion: ImportConversion;
     signal: AbortSignal;
-  }): Promise<Readonly<Record<string, string>>>;
+  }): Promise<ImportIdentifierResolution>;
 }
+export type ImportIdentifierResolution =
+  | Readonly<Record<string, string>>
+  | Readonly<{ status: 'unavailable'; preserveProperties: readonly string[] }>;
 
 type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
 export type ImportRunResult = {
@@ -1899,6 +1902,8 @@ export class Importer {
           sourceVocabulary?: ConversionContext['sourceVocabulary'];
         }
       | undefined;
+    let preserveProperties = new Set<string>();
+    let lookupUnavailable = false;
     if (row.state === 'present') {
       conversion = this.convert(registration, staged);
       observedConversion = conversion;
@@ -1914,9 +1919,15 @@ export class Importer {
       }
       if (subject) {
         omissions = await this.fences(owner, signal);
-        const resolvedReferences = this.options.identifierLookup
-          ? await this.options.identifierLookup.resolve({ owner, conversion, signal })
-          : ownReferences?.resolvedReferences;
+        let resolvedReferences = ownReferences?.resolvedReferences;
+        if (this.options.identifierLookup) {
+          const resolution = await this.options.identifierLookup.resolve({ owner, conversion, signal });
+          if ('status' in resolution && resolution.status === 'unavailable') {
+            lookupUnavailable = true;
+            preserveProperties = new Set(resolution.preserveProperties);
+            resolvedReferences = undefined;
+          } else resolvedReferences = resolution as Readonly<Record<string, string>>;
+        }
         const vocabulary = this.options.vocabularyAdmission?.request?.({ owner, conversion, subject });
         const context = {
           subjectId: subject,
@@ -1980,6 +1991,7 @@ export class Importer {
     }
     const retainedCandidates = new Map<Candidate, BatchCommand>();
     const retainedProposals = new Set<BatchCommand>();
+    const preservedCandidates = new Set<Candidate>();
     for (const candidate of candidates) {
       if (
         omissions.some((o) => o.field_group === candidate.field_group) ||
@@ -1992,6 +2004,10 @@ export class Importer {
         continue;
       const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
       if (prior.op !== 'propose') throw new Error('Owned candidate lacks its actual proposal');
+      if (lookupUnavailable && preserveProperties.has(prior.statement.property.id)) {
+        preservedCandidates.add(candidate);
+        continue;
+      }
       const unchanged = conversion?.proposals.find(
         (command) =>
           command.op === 'propose' &&
@@ -2037,6 +2053,7 @@ export class Importer {
     for (const candidate of candidates) {
       if (
         retainedCandidates.has(candidate) ||
+        preservedCandidates.has(candidate) ||
         omissions.some((o) => o.field_group === candidate.field_group) ||
         (skipCover && candidate.field_group === 'cover')
       )
@@ -2083,12 +2100,14 @@ export class Importer {
         // replacing any acknowledged semantic candidate or its immutable journal.
         store.acknowledgeStatisticRefresh(run, row.recordKey);
       } else if (
-        this.options.vocabularyAdmission &&
+        (this.options.vocabularyAdmission || this.options.identifierLookup) &&
         conversion &&
         retainedCandidates.size === candidates.length &&
         conversion.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))
       ) {
         // Binding availability was re-read; the justified proposals are unchanged.
+      } else if (lookupUnavailable && preservedCandidates.size > 0) {
+        // The source binding read was unavailable. Keep its exact acknowledged candidates for retry.
       } else throw new Error('Conversion has no justified final plan');
       this.acknowledged(row.recordKey);
       return { kind, deferredCover: false, ...(reported ? { conversion: reported } : {}) };

@@ -50,6 +50,25 @@ export type ReviewedCatalogueResult = {
   subjects: Readonly<Record<string, string>>;
   facts: readonly ReviewedCatalogueReceipt[];
 };
+export type ReviewedBangumiBindingEvidence = Readonly<{
+  binding: Readonly<{ sourceConcept: string; canonicalConcept: string }>;
+  vocabulary: readonly Readonly<{
+    key: string;
+    owner: Owner;
+    subjectId: string;
+    nativeType: 'skos:ConceptScheme' | 'skos:Concept';
+    schemeURI: string;
+    sourceUri: string;
+    schemeKey?: string;
+    facts: readonly Readonly<{
+      candidateId: string;
+      command: Extract<BatchCommand, { op: 'propose' }>;
+    }>[];
+  }>[];
+}>;
+export type ReviewedBangumiBindingStatus =
+  | Readonly<{ state: 'bound'; evidence: ReviewedBangumiBindingEvidence }>
+  | Readonly<{ state: 'withdrawn' | 'unavailable' }>;
 
 function ensure(value: unknown, message = 'Reviewed catalogue input or current binding is invalid'): asserts value {
   if (!value) throw new TypeError(message);
@@ -356,11 +375,11 @@ export async function seedReviewedCatalogue(input: {
 }
 
 /** Current native proof, using local journal IDs only as read anchors, never as editorial receipts. */
-export async function readReviewedBangumiBinding(
+export async function inspectReviewedBangumiBinding(
   bindings: Pick<RecordBindings, 'claim' | 'candidates'>,
   port: ReviewedCataloguePort,
   signal?: AbortSignal,
-): Promise<{ sourceConcept: string; canonicalConcept: string } | null> {
+): Promise<ReviewedBangumiBindingStatus> {
   try {
     const subjects: Record<string, string> = {};
     const items: Record<
@@ -369,7 +388,7 @@ export async function readReviewedBangumiBinding(
     > = {};
     for (const seed of seeds) {
       const claim = bindings.claim(owner(seed));
-      if (claim?.state !== 'bound') return null;
+      if (claim?.state !== 'bound') return { state: 'withdrawn' };
       await openFence(port, seed, signal);
       const read = await port.readReviewedSubject(claim.subject, signal);
       if (
@@ -378,12 +397,25 @@ export async function readReviewedBangumiBinding(
         read.subject.type !== seed.type ||
         read.subject.context !== globalContext
       )
-        return null;
+        return { state: 'withdrawn' };
       subjects[seed.key] = claim.subject;
       items[seed.key] = read.subject;
     }
-    if (subjects['source-harem'] === subjects['canonical-harem']) return null;
-    if ((items['source-harem']!.statements['schema:sameAs'] ?? []).length) return null;
+    if (subjects['source-harem'] === subjects['canonical-harem']) return { state: 'withdrawn' };
+    if ((items['source-harem']!.statements['schema:sameAs'] ?? []).length) return { state: 'withdrawn' };
+    const vocabulary = new Map<
+      string,
+      {
+        key: string;
+        owner: Owner;
+        subjectId: string;
+        nativeType: 'skos:ConceptScheme' | 'skos:Concept';
+        schemeURI: string;
+        sourceUri: string;
+        schemeKey?: string;
+        facts: { candidateId: string; command: Extract<BatchCommand, { op: 'propose' }> }[];
+      }
+    >();
     for (const seed of seeds)
       for (const fact of seed.facts) {
         const expected = statement(fact, subjects);
@@ -393,7 +425,9 @@ export async function readReviewedBangumiBinding(
           slot(fact.property, expected.value.content),
           signal,
         );
-        if (page.next !== null || page.adoption?.mode !== 'replace') return null;
+        if (page.next !== null) return { state: 'unavailable' };
+        if (page.adoption?.mode !== 'replace' || !Array.isArray(page.adoption.selection))
+          return { state: 'withdrawn' };
         const content = expected.value.content;
         const selected = page.candidates.filter(
           (c) =>
@@ -406,31 +440,98 @@ export async function readReviewedBangumiBinding(
             c.statement.value.type === 'value' &&
             c.statement.value.content === content,
         );
-        if (selected.length !== 1 || !items[seed.key]!.statements[fact.property]?.some((s) => s.id === selected[0]!.id))
-          return null;
+        if (
+          selected.length !== 1 ||
+          !isDeepStrictEqual(selected[0]!.statement, expected) ||
+          page.candidates.some((c) => c.id !== selected[0]!.id && c.rank !== null) ||
+          !page.adoption.selection.some(
+            (entry) => entry.candidate === selected[0]!.id && entry.rank === selected[0]!.rank,
+          ) ||
+          !items[seed.key]!.statements[fact.property]?.some((s) => s.id === selected[0]!.id)
+        )
+          return { state: 'withdrawn' };
         const local = bindings.candidates(owner(seed), 'facts', { limit: 100 });
-        if (!local.some((c) => c.candidate === selected[0]!.id && c.subject === subjects[seed.key])) return null;
+        const owned = local.find((c) => c.candidate === selected[0]!.id && c.subject === subjects[seed.key]);
+        if (!owned) return { state: 'withdrawn' };
+        let command: BatchCommand;
+        try {
+          command = (JSON.parse(owned.bytes) as BatchWriteRequest).commands[0]!;
+        } catch {
+          return { state: 'withdrawn' };
+        }
+        if (
+          command.op !== 'propose' ||
+          command.key !== owned.key ||
+          command.subject !== subjects[seed.key] ||
+          !currentSource(command.source, seed) ||
+          !isDeepStrictEqual(command.statement, expected)
+        )
+          return { state: 'withdrawn' };
+        let entry = vocabulary.get(seed.key);
+        if (!entry) {
+          const sourceUri = seed.metadata.url;
+          if (typeof sourceUri !== 'string' || !sourceUri.startsWith('https://'))
+            return { state: 'withdrawn' };
+          const schemeKey = seed.type === 'skos:Concept'
+            ? seeds.find((row) => row.type === 'skos:ConceptScheme' && row.schemeURI === seed.schemeURI)?.key
+            : undefined;
+          entry = {
+            key: seed.key,
+            owner: owner(seed),
+            subjectId: subjects[seed.key]!,
+            nativeType: seed.type,
+            schemeURI: seed.schemeURI,
+            sourceUri,
+            ...(schemeKey ? { schemeKey } : {}),
+            facts: [],
+          };
+          vocabulary.set(seed.key, entry);
+        }
+        entry.facts.push({
+          candidateId: selected[0]!.id,
+          command,
+        });
       }
-    return { sourceConcept: subjects['source-harem']!, canonicalConcept: subjects['canonical-harem']! };
+    return {
+      state: 'bound',
+      evidence: {
+        binding: { sourceConcept: subjects['source-harem']!, canonicalConcept: subjects['canonical-harem']! },
+        vocabulary: [...vocabulary.values()],
+      },
+    };
   } catch (error) {
     signal?.throwIfAborted();
     // No partial mapping or anonymous retry on undisclosed, moved, fenced or unavailable originals.
-    if (error instanceof ImportTransportError || error instanceof TypeError) return null;
+    if (error instanceof ImportTransportError || error instanceof TypeError) return { state: 'unavailable' };
     throw error;
   }
+}
+
+export async function readReviewedBangumiBinding(
+  bindings: Pick<RecordBindings, 'claim' | 'candidates'>,
+  port: ReviewedCataloguePort,
+  signal?: AbortSignal,
+): Promise<{ sourceConcept: string; canonicalConcept: string } | null> {
+  const result = await inspectReviewedBangumiBinding(bindings, port, signal);
+  return result.state === 'bound' ? result.evidence.binding : null;
 }
 
 export function createReviewedCatalogueLookup(
   bindings: Pick<RecordBindings, 'claim' | 'candidates'>,
   port: ReviewedCataloguePort,
+  options: { preserveKeywordOnUnavailable?: boolean } = {},
 ): ImportIdentifierLookup {
   return {
     async resolve({ conversion, signal }) {
       if (conversion.source !== 'bangumi' || !('normalized' in conversion)) return {};
       const record = conversion.normalized as { meta_tags?: string[] };
       if (!record.meta_tags?.includes('后宫')) return {};
-      const binding = await readReviewedBangumiBinding(bindings, port, signal);
-      return binding ? { [reviewedReferenceKey(bangumiPublicTagScheme, '后宫')]: binding.sourceConcept } : {};
+      const result = await inspectReviewedBangumiBinding(bindings, port, signal);
+      if (result.state === 'unavailable' && options.preserveKeywordOnUnavailable)
+        return { status: 'unavailable', preserveProperties: ['schema:keywords'] };
+      return result.state === 'bound'
+        ? { [reviewedReferenceKey(bangumiPublicTagScheme, '后宫')]: result.evidence.binding.sourceConcept }
+        : {};
     },
   };
 }

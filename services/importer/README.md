@@ -2292,10 +2292,34 @@ execution remains controller-owned and is not recorded as a local pass.
 
 Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.
 
+Decision: the default cross-media seed resolves only the exact Bangumi editor `meta_tags` literal `后宫` through its current reviewed source Concept; if that read is unavailable, it preserves only the exact prior keyword candidate for same-state retry and makes no genre publication claim.
+
 `task seed:dev` reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from the selected dump family, its current source reads, and those exact candidate identities. It reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
 
-The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and the final facts are checked with a tokenless Global-context reader. Source ConceptScheme and Concept records are eligible only when their source create commands are acknowledged and their current source URI and scheme association are present. No canonical equivalence is inferred. Prose stays private without admitted rights, and images are not published by this path.
+The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and the final facts are checked with a tokenless Global-context reader. Source ConceptScheme and Concept records are eligible only when their exact reviewed-catalogue candidates, current mapping and source provenance are present; source and canonical Concepts remain distinct. The cross-media seed adapts its trusted Bangumi alias to the existing lookup. Unsupported or withdrawn genre bindings produce bounded addressable diagnostics while independent source facts remain usable. Prose stays private without admitted rights, and images are not published by this path. Public visibility makes no Search-index claim.
 
-- Touches: at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, and 256 result omissions.
-- Bound: work is limited to the selected source family, source acknowledgements and required current subject/property reads. There is no catalogue-wide candidate scan or generic accept-all mode.
-- Growth check: `services/importer/tests/showcase-publication.test.ts` covers a compact dump plan, exact candidate selection and journal restart after a refusal. `services/kernel/test/imports/showcase-publication.test.ts` covers the native API publication path and anonymous read; its execution remains controller-owned and is not recorded as a local pass.
+- Touches: at most 768 selected source records, 8,192 candidate assertions, 512 vocabulary records, 128 assertions per record, 100 candidates per current page, and 256 result omissions and genre diagnostics.
+- Bound: work is limited to selected records, the four finite reviewed Bangumi vocabulary identities, exact local candidate IDs and required current subject/property reads. There is no catalogue-wide scan, unsupported-tag inference or generic accept-all mode.
+- Growth check: `services/importer/tests/showcase-publication.test.ts` retains compact plan and journal coverage. `services/importer/tests/showcase-bangumi-genres.test.ts` covers trusted alias resolution and same-state binding recovery. `services/kernel/test/imports/showcase-bangumi-genres.test.ts` covers native adoption, anonymous public read and source-tag removal; its execution remains controller-owned and is not recorded as a local pass.
+
+### Bangumi TVAnime subject names
+
+Ordinary Bangumi registration and selected-family type 2 rows already reach
+`convertBangumi`; the selected-family registration supplies its combined
+`cross-media-entities@7` revision while the ordinary caller uses `bangumi@6`.
+Both use one pure TVAnime name extractor and the existing journal, source
+metadata admission, citations, candidate acceptance and adoption flow. No
+additional seed publisher or identity lookup is involved. The importer keeps the
+exact Bangumi subject alias and key, unversioned record state where no provider
+revision exists, the normalized digest and the acknowledged native UUID.
+
+- Touches: one selected source record, at most 24 name statements and 16 bounded
+  omission diagnostics; each name carries its exact Bangumi subject citation.
+- Bound: the existing 65,536-character infobox cap, 64 parsed field occurrences,
+  and the current source journal and batch limits; raw source values never enter
+  diagnostics.
+- Growth check: `services/importer/tests/bangumi-subject-names.test.ts` covers
+  selected-family JSONL planning, stable identity, unchanged and changed input,
+  exact citations and omissions. The connected ordinary caller is
+  `services/kernel/test/imports/bangumi-subject-names.test.ts`; native execution
+  remains controller-owned.

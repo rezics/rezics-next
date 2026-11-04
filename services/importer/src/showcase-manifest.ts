@@ -69,6 +69,8 @@ export type ShowcaseVocabularyRecord = Readonly<{
   subjectId: string;
   nativeType: 'skos:ConceptScheme' | 'skos:Concept';
   schemeId: string | null;
+  schemeUri?: string;
+  provenance?: 'reviewed-catalogue';
   assertions: readonly ShowcaseAssertion[];
 }>;
 
@@ -240,6 +242,9 @@ export function buildShowcaseManifest(input: {
   acknowledgements: readonly ShowcaseAcknowledgement[];
   aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
   vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
+  reviewedVocabulary?: readonly ShowcaseVocabularyRecord[];
+  currentBangumiGenreCandidateIds?: readonly string[];
+  bangumiGenreOwnerKeys?: readonly string[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
   const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
@@ -250,6 +255,8 @@ export function buildShowcaseManifest(input: {
   const selectedKeys = new Set(selected.map((row) => `${row.source}\0${row.key}`));
   const omissions: ShowcaseOmission[] = [];
   const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
+  const currentBangumiGenreCandidateIds = new Set(input.currentBangumiGenreCandidateIds ?? []);
+  const bangumiGenreOwnerKeys = new Set(input.bangumiGenreOwnerKeys ?? []);
   for (const requirement of input.vocabularyRequirements ?? []) {
     if (vocabularyRequirements.length >= showcaseLimits.vocabulary) {
       omissions.push({
@@ -300,6 +307,14 @@ export function buildShowcaseManifest(input: {
         source.external_id !== row.key ||
         !allowedSources.has(envelopeKey(source)) ||
         (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
+      )
+        continue;
+      if (
+        provider === 'bangumi' &&
+        bangumiGenreOwnerKeys.has(row.key) &&
+        ack.command.op === 'propose' &&
+        ack.command.statement.property.id === 'schema:keywords' &&
+        !currentBangumiGenreCandidateIds.has(ack.candidateId ?? '')
       )
         continue;
       const assertion = candidateAssertion(ack);
@@ -388,6 +403,49 @@ export function buildShowcaseManifest(input: {
     });
   }
 
+  for (const record of input.reviewedVocabulary ?? []) {
+    if (vocabulary.length >= showcaseLimits.vocabulary) {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-limit' });
+      continue;
+    }
+    const assertions: ShowcaseAssertion[] = [];
+    let incomplete = false;
+    for (const expected of record.assertions) {
+      const acknowledgement = acknowledgements.find((entry) => entry.candidateId === expected.candidateId);
+      const actual = acknowledgement ? candidateAssertion(acknowledgement) : null;
+      if (
+        !actual ||
+        actual.commandKey !== expected.commandKey ||
+        actual.candidateDigest !== expected.candidateDigest ||
+        !showcaseSourceMatches(actual.source, expected.source) ||
+        !showcaseStatementMatches(actual.statement, expected.statement)
+      ) {
+        incomplete = true;
+        break;
+      }
+      assertions.push(actual);
+    }
+    const scheme = record.nativeType === 'skos:ConceptScheme';
+    const schemeRecord = (input.reviewedVocabulary ?? []).find(
+      (candidate) => candidate.nativeType === 'skos:ConceptScheme' && candidate.subjectId === record.schemeId,
+    );
+    if (
+      incomplete ||
+      record.provenance !== 'reviewed-catalogue' ||
+      !record.sourceUri?.startsWith('https://') ||
+      !nativeUuid.test(record.subjectId) ||
+      !record.schemeUri?.startsWith('https://') ||
+      (scheme && (record.schemeId !== null || !assertions.length)) ||
+      (!scheme &&
+        (!record.schemeId || record.schemeId === record.subjectId || !schemeRecord ||
+          schemeRecord.schemeUri !== record.schemeUri))
+    ) {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
+      continue;
+    }
+    vocabulary.push({ ...record, assertions });
+  }
+
   for (const row of records) {
     if (!row.subjectId)
       omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'source-read-missing' });
@@ -413,6 +471,8 @@ export function buildShowcaseManifest(input: {
       subjectId: record.subjectId,
       nativeType: record.nativeType,
       schemeId: record.schemeId,
+      schemeUri: record.schemeUri ?? null,
+      provenance: record.provenance ?? null,
       assertions: record.assertions.map(({ candidateId, candidateDigest }) => ({ candidateId, candidateDigest })),
     })),
   });

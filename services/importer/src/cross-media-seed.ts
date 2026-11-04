@@ -60,6 +60,9 @@ import {
   showcaseEpisodeVocabularyAdmission,
   type ShowcaseEpisodeDiagnostic,
 } from './showcase-bangumi-episodes.ts';
+import { createShowcaseBangumiGenreLookup, prepareShowcaseBangumiGenres } from './showcase-bangumi-genres.ts';
+import type { BangumiGenrePublication } from './showcase-bangumi-genres.ts';
+import type { ReviewedCataloguePort } from './reviewed-catalogue.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -1669,6 +1672,7 @@ export type CrossMediaSeedResult = {
   characterDiagnostics: SourceVocabularyGap[];
   episodeDiagnostics: ShowcaseEpisodeDiagnostic[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
+  bangumiGenrePublication?: BangumiGenrePublication;
 };
 
 function subjectRoute(read: ReviewedSubjectRead): string {
@@ -1701,6 +1705,8 @@ export type CrossMediaSeedExtras = {
   providers?: readonly Provider[];
   mediaDeadlineMs?: ImporterOptions['mediaDeadlineMs'];
   onConversionOutput?: ImporterOptions['onConversionOutput'];
+  /** The ordinary CLI supplies its existing authenticated read port. */
+  bangumiGenrePort?: ReviewedCataloguePort;
 };
 
 export async function seedCrossMedia(
@@ -1737,9 +1743,24 @@ export async function seedCrossMedia(
     ...(extras?.vocabularyAdmissions ?? []),
     ...(episodeBindings ? [showcaseEpisodeVocabularyAdmission(episodeBindings)] : []),
   );
-  const importer = createImporter({
+  let importer!: ReturnType<typeof createImporter>;
+  let genreAdapter: ReturnType<typeof createShowcaseBangumiGenreLookup> | undefined;
+  const identifierLookup = extras?.bangumiGenrePort
+    ? {
+        async resolve(input: Parameters<NonNullable<ImporterOptions['identifierLookup']>['resolve']>[0]) {
+          genreAdapter ??= createShowcaseBangumiGenreLookup(
+            crossMediaAliases.bangumi,
+            importer.session.bindings,
+            extras.bangumiGenrePort!,
+          );
+          return genreAdapter.lookup.resolve(input);
+        },
+      }
+    : undefined;
+  importer = createImporter({
     path,
     ...(destination ? { destination } : {}),
+    ...(identifierLookup ? { identifierLookup } : {}),
     ...(vocabularyAdmission ? { vocabularyAdmission } : {}),
     ...(vndbCredits
       ? { recordConcurrency: 1 }
@@ -1899,6 +1920,16 @@ export async function seedCrossMedia(
         });
     }
     const workLinks = resolveShowcaseWorkLinkHandoffs(plan.workLinks, currentReads);
+    const bangumiGenrePublication =
+      genreAdapter && providers.includes('bangumi')
+        ? await prepareShowcaseBangumiGenres({
+            sourceAlias: crossMediaAliases.bangumi,
+            records: plan.records.bangumi,
+            bindings: importer.session.bindings,
+            port: extras!.bangumiGenrePort!,
+            lookupDiagnostics: genreAdapter.diagnostics(),
+          })
+        : undefined;
     const unresolved = delivered.unresolved.map((edge) => ({
       holder: edge.holder,
       target: edge.target,
@@ -1941,6 +1972,7 @@ export async function seedCrossMedia(
       characterDiagnostics: fidelity?.gaps ?? [],
       episodeDiagnostics,
       unresolved,
+      ...(bangumiGenrePublication ? { bangumiGenrePublication } : {}),
     };
   } finally {
     await importer.close();
@@ -2070,6 +2102,7 @@ export async function runCrossMediaSeedCli(
       extras: {
         ...(vndbCreditReferences ? { vndbCreditReferences } : {}),
         ...(options.episodeCatalogueSubjects ? { episodeCatalogueSubjects: options.episodeCatalogueSubjects } : {}),
+        bangumiGenrePort: importPort,
       },
       ...(characterBindings === undefined ? {} : { characterBindings }),
     });
@@ -2101,16 +2134,18 @@ export async function runCrossMediaSeedCli(
           publicClient: createPublicBulkClient({ origin: api }),
         })
       : undefined;
+    const { bangumiGenrePublication, ...publicResult } = result;
     await mkdir(dirname(resultPath), { recursive: true });
     await writeFile(
       resultPath,
       `${JSON.stringify(
         {
-          ...result,
+          ...publicResult,
           facts: {
             works: Object.fromEntries(result.facts.works),
             releases: Object.fromEntries(result.facts.releases),
           },
+          ...(bangumiGenrePublication ? { bangumiGenreDiagnostics: bangumiGenrePublication.diagnostics } : {}),
           ...(showcase ? { showcase } : {}),
           publicTags: {
             admitted: publicTags.admitted,
