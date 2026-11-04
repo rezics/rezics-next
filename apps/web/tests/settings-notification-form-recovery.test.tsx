@@ -8,7 +8,12 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
-function settingsPage(notifications: NotificationPreferences, version: number, writable = true): PreferencePage {
+function settingsPage(
+  notifications: NotificationPreferences,
+  version: number,
+  writable = true,
+  extras: PreferencePage['kinds'] = [],
+): PreferencePage {
   return {
     version,
     kinds: [
@@ -18,6 +23,7 @@ function settingsPage(notifications: NotificationPreferences, version: number, w
         default: true,
         enabled,
       })),
+      ...extras,
       { kind: 'moderation_decision', optional: false, default: true, enabled: true },
     ],
     actions: writable
@@ -164,12 +170,11 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Reload');
     expect(host.textContent).toContain('current account access does not allow changes');
     expect(host.textContent).toContain('Current account access does not allow this retained operation');
-    expect(
-      [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].some(
-        (button) => button.textContent === 'Save reviewed choices',
-      ),
-    ).toBe(false);
-    expect(host.textContent).toContain('Current account access does not allow this retained operation');
+    const blockedSave = [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].find(
+      (button) => button.textContent === 'Save reviewed choices',
+    );
+    expect(blockedSave).toBeDefined();
+    expect(blockedSave!.disabled).toBe(true);
     expect(calls).toHaveLength(1);
     currentReadPage = currentPage;
     await click('Reload');
@@ -227,7 +232,7 @@ test('native kind forms own each field once; hydration retains choices and recov
       [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].find(
         (button) => button.textContent === 'Restore defaults',
       );
-    expect(reviewedRestore()).toBeUndefined();
+    expect(reviewedRestore().disabled).toBe(true);
     expect(calls).toHaveLength(8);
     currentReadPage = currentPage;
     await click('Reload');
@@ -235,6 +240,135 @@ test('native kind forms own each field once; hydration retains choices and recov
     await click('Restore defaults');
     expect(calls).toHaveLength(9);
     expect(calls[8]!.notifications).toBeNull();
+  } finally {
+    if (root) await act(async () => root!.unmount());
+    for (const [key, descriptor] of previous)
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    await window.happyDOM.close();
+    mock.restore();
+  }
+});
+
+test('a later edit survives historical receipt and current read until the whole remaining patch is admitted', async () => {
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
+  const window = new Window({ url: 'https://site.test/en/settings' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    ...Object.fromEntries(
+      [
+        'HTMLElement',
+        'HTMLInputElement',
+        'HTMLButtonElement',
+        'Element',
+        'Node',
+        'Document',
+        'DocumentFragment',
+        'MutationObserver',
+        'ResizeObserver',
+        'FormData',
+      ].map((key) => [key, (window as any)[key]]),
+    ),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { hydrateRoot } = await import('react-dom/client');
+  const { renderToString } = await import('react-dom/server');
+  const { NotificationsCard } = await import('../src/settings/notifications');
+  const extra = [{ kind: 'legacy_digest', optional: true, default: false, enabled: true }] as PreferencePage['kinds'];
+  const initial = { reply: true, mention: true, legacy_digest: true };
+  const receipt = { reply: false, mention: true };
+  const current = { reply: false, mention: true };
+  const initialPage = settingsPage(initial, 7, true, extra);
+  const receiptPage = settingsPage(receipt, 9);
+  const currentPage = settingsPage(current, 10);
+  const calls: NotificationChange[] = [];
+  let refuseCurrentRead = true;
+  const io = {
+    save: async (input: NotificationChange) => {
+      calls.push(input);
+      if (calls.length === 1) throw new Error('response lost');
+      return { ok: true as const, version: 9, notifications: receipt, page: receiptPage };
+    },
+    read: async () =>
+      refuseCurrentRead
+        ? {
+            signedIn: true as const,
+            state: 'unavailable' as const,
+            failure: { status: 403, code: 'forbidden', retryable: false, requestId: 'current-read' },
+            securityHref: null,
+          }
+        : {
+            signedIn: true as const,
+            preferences: { spoilerLevel: 1 as const, suitability: 'blur' as const, version: 10 },
+            notifications: current,
+            page: currentPage,
+            securityHref: null,
+          },
+  };
+  const card = (
+    <NotificationsCard
+      initial={initialPage}
+      version={7}
+      csrfToken="token"
+      action="/en/settings"
+      io={io}
+      onVersionChange={() => {}}
+    />
+  );
+  const host = window.document.createElement('main');
+  window.document.body.append(host);
+  host.innerHTML = renderToString(card);
+  host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked = false;
+  let root: ReturnType<typeof hydrateRoot> | undefined;
+  const click = async (text: string) =>
+    act(async () =>
+      [...host.querySelectorAll('button')]
+        .find((button) => button.textContent === text && !button.closest('[hidden]'))!
+        .click(),
+    );
+  const switchNamed = (name: string) =>
+    [...host.querySelectorAll<HTMLElement>('[role="switch"]')].find((control) => control.getAttribute('aria-label') === name)!;
+  try {
+    await act(async () => {
+      root = hydrateRoot(host as unknown as HTMLElement, card);
+    });
+    expect(calls[0]!.notifications).toEqual({ reply: false });
+    const original = calls[0]!;
+    await act(async () => {
+      switchNamed('Mentions of you').click();
+      switchNamed('legacy_digest').click();
+    });
+    await click('Retry original save');
+    expect(calls[1]).toBe(original);
+    expect(host.textContent).toContain('The original save was confirmed');
+    expect(host.querySelector('[data-response-status="403"]')).not.toBeNull();
+    refuseCurrentRead = false;
+    await click('Reload');
+    expect(host.textContent).toContain('Always sent');
+    expect(host.textContent).toContain('Moderation, report and appeal outcomes');
+    expect(host.textContent).toContain('legacy_digest');
+    expect(switchNamed('Mentions of you').getAttribute('aria-checked')).toBe('false');
+    expect(
+      [...host.querySelectorAll('[role="switch"]')].some((control) => control.getAttribute('aria-label') === 'legacy_digest'),
+    ).toBe(false);
+    const reviewedSave = () =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role="alert"] button')].find(
+        (button) => button.textContent === 'Save reviewed choices',
+      )!;
+    expect(reviewedSave().disabled).toBe(true);
+    expect(calls).toHaveLength(2);
+    await click('Discard this choice');
+    expect(reviewedSave().disabled).toBe(false);
+    await click('Save reviewed choices');
+    expect(calls[2]).toMatchObject({ expectedVersion: 10, notifications: { mention: false } });
   } finally {
     if (root) await act(async () => root!.unmount());
     for (const [key, descriptor] of previous)

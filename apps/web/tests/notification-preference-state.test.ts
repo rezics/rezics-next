@@ -676,3 +676,84 @@ test('reviewed reset stays unavailable on edit-only advice until a deliberate cu
   expect(writes).toHaveLength(2);
   expect(writes[1]).toMatchObject({ expectedVersion: 8, notifications: null });
 });
+
+test('mixed supported and removed deliberate kinds survive refresh until discard or restored advice admits the whole patch', async () => {
+  for (const recovery of ['discard', 'advice'] as const) {
+    const extra: PreferencePage = {
+      version: 7,
+      kinds: [...page.kinds, { kind: 'legacy_digest', optional: true, default: false, enabled: true }],
+      actions: page.actions,
+    };
+    const narrowed: PreferencePage = {
+      version: 8,
+      kinds: extra.kinds.filter((entry) => entry.kind !== 'legacy_digest'),
+      actions: extra.actions,
+    };
+    const restored: PreferencePage = { ...extra, version: 8 };
+    const writes: NotificationChange[] = [];
+    let current = extra;
+    const editor = new NotificationEditor(
+      extra,
+      {
+        save: async (input) => {
+          writes.push(input);
+          const next = { ...current, version: current.version + 1 };
+          current = next;
+          return {
+            ok: true,
+            notifications: optionalNotifications(next),
+            version: next.version,
+            page: next,
+          };
+        },
+        read: async () => ({
+          signedIn: true,
+          preferences: { spoilerLevel: 1, suitability: 'blur', version: current.version },
+          notifications: optionalNotifications(current),
+          page: current,
+          securityHref: null,
+        }),
+      },
+      true,
+    );
+    await editor.edit('reply', false, 7);
+    await editor.edit('legacy_digest', false, 7);
+    expect(writes).toHaveLength(0);
+    current = narrowed;
+    await editor.reload();
+    expect(writes).toHaveLength(0);
+    expect(editor.snapshot()).toMatchObject({
+      phase: 'review',
+      intent: { reply: false, legacy_digest: false },
+      draft: { ...optional, reply: false },
+    });
+    expect(editor.snapshot().draft.legacy_digest).toBeUndefined();
+    expect(
+      editor.snapshot().currentAdvice?.kinds.some((entry) => entry.kind === 'moderation_decision' && !entry.optional),
+    ).toBe(true);
+    expect(notificationIntentAllowed(editor.snapshot().intent, narrowed)).toBe(false);
+    await editor.submit(8);
+    expect(writes).toHaveLength(0);
+    if (recovery === 'discard') {
+      editor.discardKind('legacy_digest');
+      expect(editor.snapshot().intent).toEqual({ reply: false });
+      expect(notificationIntentAllowed(editor.snapshot().intent, narrowed)).toBe(true);
+      await editor.submit(8);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({ expectedVersion: 8, notifications: { reply: false } });
+    } else {
+      current = restored;
+      await editor.reload();
+      expect(writes).toHaveLength(0);
+      expect(editor.snapshot().intent).toEqual({ reply: false, legacy_digest: false });
+      expect(editor.snapshot().draft.legacy_digest).toBe(false);
+      expect(notificationIntentAllowed(editor.snapshot().intent, restored)).toBe(true);
+      await editor.submit(8);
+      expect(writes).toHaveLength(1);
+      expect(writes[0]).toMatchObject({
+        expectedVersion: 8,
+        notifications: { reply: false, legacy_digest: false },
+      });
+    }
+  }
+});
