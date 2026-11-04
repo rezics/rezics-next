@@ -4,7 +4,10 @@ import type { Pool } from 'pg';
 import type { Access, AccessFactory } from '../../request/access.ts';
 import { createSearchService } from '../service.ts';
 import { type KernelClock } from '../../clock.ts';
-export type SearchService = ReturnType<typeof createSearchService>;
+type SearchServiceImplementation = ReturnType<typeof createSearchService>;
+export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> & {
+    releaseGroups?: SearchServiceImplementation['releaseGroups'];
+};
 export declare const FactSchema: import("typebox").TUnion<[import("typebox").TObject<{
     kind: import("typebox").TLiteral<"item">;
     id: import("typebox").TString;
@@ -165,7 +168,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 post: {
                     body: {
                         prepareShare?: boolean;
-                        representation?: "discovery-v1";
+                        representation?: "discovery-v1" | "release-groups-v1";
                         kindPage?: {
                             limit: number;
                             cursor?: string;
@@ -180,6 +183,8 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         sort?: "collections" | "id" | "name" | "rating" | "relevance";
                         limit?: number;
                         cursor?: string;
+                        work?: string;
+                        childCursor?: string;
                         kindCursor?: string;
                         descriptions?: boolean;
                         languages?: string[];
@@ -236,8 +241,66 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         } | null;
                                     };
                                 };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
                                 labels?: Record<string, string>;
                                 aliases?: Record<string, string[]>;
+                                descriptions?: Record<string, string>;
+                                facts?: Record<string, ({
+                                    kind: "item";
+                                    id: string;
+                                    labels: Record<string, string>;
+                                } | {
+                                    kind: "time";
+                                    year: number;
+                                    month?: number;
+                                    day?: number;
+                                } | {
+                                    kind: "quantity";
+                                    amount: number;
+                                    unit: string;
+                                } | {
+                                    kind: "code";
+                                    value: string;
+                                })[]>;
+                                figure?: {
+                                    questionId: string;
+                                    populationId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    count: number;
+                                    state: "insufficient_data" | "ready" | "updating";
+                                    mean: number | null;
+                                    score: number | null;
+                                };
+                                listPresentation?: {
+                                    imageAspect: "landscape" | "portrait" | "square";
+                                    keyFacts: string[];
+                                };
                                 contexts?: {
                                     credits: {
                                         items: {
@@ -297,6 +360,29 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         } | null;
                                     };
                                 };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
                             } | {
                                 key: {
                                     owner: "library";
@@ -310,7 +396,112 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         id: string;
                                         title: string;
                                         description: string | null;
+                                        card: {
+                                            kind: "collection";
+                                            id: string;
+                                            destination: string;
+                                            title: string;
+                                            description: string | null;
+                                            visibility: "public";
+                                            revision: number;
+                                            presentationKind: string | null;
+                                            presentationKindSource: "mixed" | "owner";
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                            coverSource: "member" | "none" | "owner" | "pending";
+                                            membershipKind: "curated";
+                                            memberCount: number;
+                                            orderEpoch: number;
+                                            createdAt: string;
+                                            updatedAt: string;
+                                        } | {
+                                            kind: "collection";
+                                            id: string;
+                                            destination: string;
+                                            title: string;
+                                            description: string | null;
+                                            visibility: "public";
+                                            revision: number;
+                                            presentationKind: string | null;
+                                            presentationKindSource: "mixed" | "owner";
+                                            cover: {
+                                                media: string;
+                                                width: number;
+                                                height: number;
+                                                placeholder: {
+                                                    thumbhash: string;
+                                                    color: string;
+                                                };
+                                                variants: {
+                                                    format: "avif" | "webp";
+                                                    width: number;
+                                                }[];
+                                                focalPoint: {
+                                                    x: number;
+                                                    y: number;
+                                                } | null;
+                                                credit: {
+                                                    rightsHolder: string;
+                                                    via: {
+                                                        name: string;
+                                                        url: string;
+                                                    };
+                                                    license: string;
+                                                    obligations: string[];
+                                                };
+                                            } | null;
+                                            coverSource: "member" | "none" | "owner" | "pending";
+                                            membershipKind: "dynamic";
+                                            outputGeneration: string;
+                                        };
                                     };
+                                };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
                                 };
                             } | {
                                 key: {
@@ -336,6 +527,29 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         } | null;
                                     };
                                 };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
                             } | {
                                 key: {
                                     owner: "community";
@@ -355,6 +569,29 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                             title: string | null;
                                         } | null;
                                     };
+                                };
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
                                 };
                             })[];
                             kinds: {
@@ -379,6 +616,54 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             };
                             next: string | null;
                             as_of: string;
+                            viewerFacts?: {
+                                state: "unavailable";
+                                reason: "currentness" | "identity" | "response_limit";
+                                retryable: boolean;
+                            } | {
+                                state: "current";
+                                question: {
+                                    id: string;
+                                    revision: number;
+                                    grain: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    meaning: string;
+                                } | null;
+                                rows: {
+                                    rowKey: string;
+                                    subjectId: string;
+                                    entry: {
+                                        state: "present";
+                                        incarnationId: string | null;
+                                        entryState: string | null;
+                                        revision: number;
+                                    } | {
+                                        state: "absent";
+                                    } | {
+                                        state: "unavailable";
+                                        reason: "scope";
+                                    };
+                                    vote: {
+                                        state: "present";
+                                        questionId: string;
+                                        questionRevision: number;
+                                        units: number;
+                                        revision: number;
+                                    } | {
+                                        state: "absent";
+                                        questionId: string;
+                                        questionRevision: number;
+                                    } | {
+                                        state: "unavailable";
+                                        reason: "question" | "scope";
+                                    };
+                                    resolvedSubjectId?: string;
+                                }[];
+                            } | null;
                         } | {
                             subjects: {
                                 id: string;
@@ -470,6 +755,29 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                                         };
                                     } | null;
                                 } | null;
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
                                 descriptions?: Record<string, string>;
                                 facts?: Record<string, ({
                                     kind: "item";
@@ -519,7 +827,604 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             };
                             next: string | null;
                             as_of: string;
-                        } | import("../query-share.ts").QueryShare;
+                        } | import("../query-share.ts").QueryShare | {
+                            status: "preparing" | "ready";
+                            groups: ({
+                                kind: "work";
+                                id: string;
+                                work: {
+                                    id: string;
+                                    type: string;
+                                    kind: string;
+                                    base: {
+                                        id: string;
+                                        kind: string;
+                                        kindLabel: {
+                                            value: string;
+                                            language: string;
+                                        };
+                                        title: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        image: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                            aspect: {
+                                                width: number;
+                                                height: number;
+                                            };
+                                        } | null;
+                                        url: {
+                                            id: string;
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        };
+                                    };
+                                    labels: Record<string, string>;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                    matchEvidence: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
+                                    };
+                                    descriptions?: Record<string, string>;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
+                                    figure: {
+                                        questionId: string;
+                                        populationId: string;
+                                        scale: {
+                                            min: number;
+                                            max: number;
+                                            displayStep: number;
+                                        };
+                                        count: number;
+                                        state: "insufficient_data" | "ready" | "updating";
+                                        mean: number | null;
+                                        score: number | null;
+                                    };
+                                };
+                                releases: {
+                                    id: string;
+                                    type: string;
+                                    kind: string;
+                                    base: {
+                                        id: string;
+                                        kind: string;
+                                        kindLabel: {
+                                            value: string;
+                                            language: string;
+                                        };
+                                        title: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        image: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                            aspect: {
+                                                width: number;
+                                                height: number;
+                                            };
+                                        } | null;
+                                        url: {
+                                            id: string;
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        };
+                                    };
+                                    labels: Record<string, string>;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                    matchEvidence: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
+                                    };
+                                    descriptions?: Record<string, string>;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
+                                    figure: {
+                                        questionId: string;
+                                        populationId: string;
+                                        scale: {
+                                            min: number;
+                                            max: number;
+                                            displayStep: number;
+                                        };
+                                        count: number;
+                                        state: "insufficient_data" | "ready" | "updating";
+                                        mean: number | null;
+                                        score: number | null;
+                                    };
+                                }[];
+                                next: string | null;
+                            } | {
+                                kind: "release";
+                                id: string;
+                                release: {
+                                    id: string;
+                                    type: string;
+                                    kind: string;
+                                    base: {
+                                        id: string;
+                                        kind: string;
+                                        kindLabel: {
+                                            value: string;
+                                            language: string;
+                                        };
+                                        title: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        image: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                            aspect: {
+                                                width: number;
+                                                height: number;
+                                            };
+                                        } | null;
+                                        url: {
+                                            id: string;
+                                            label: {
+                                                value: string;
+                                                language: string;
+                                            } | null;
+                                        };
+                                    };
+                                    labels: Record<string, string>;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                    matchEvidence: {
+                                        state: "absent";
+                                    } | {
+                                        state: "unsupported";
+                                    } | {
+                                        state: "unavailable";
+                                    } | {
+                                        state: "current";
+                                        source: {
+                                            id: string;
+                                            revision: number;
+                                        };
+                                        query: string;
+                                        reasons: {
+                                            field: "alias" | "description" | "title";
+                                            language: string;
+                                            text: string;
+                                            spans: {
+                                                start: number;
+                                                end: number;
+                                            }[];
+                                        }[];
+                                    };
+                                    descriptions?: Record<string, string>;
+                                    facts?: Record<string, ({
+                                        kind: "item";
+                                        id: string;
+                                        labels: Record<string, string>;
+                                    } | {
+                                        kind: "time";
+                                        year: number;
+                                        month?: number;
+                                        day?: number;
+                                    } | {
+                                        kind: "quantity";
+                                        amount: number;
+                                        unit: string;
+                                    } | {
+                                        kind: "code";
+                                        value: string;
+                                    })[]>;
+                                    figure: {
+                                        questionId: string;
+                                        populationId: string;
+                                        scale: {
+                                            min: number;
+                                            max: number;
+                                            displayStep: number;
+                                        };
+                                        count: number;
+                                        state: "insufficient_data" | "ready" | "updating";
+                                        mean: number | null;
+                                        score: number | null;
+                                    };
+                                };
+                                workLink: "conflicting" | "missing" | "unavailable" | "unknown" | "unproven";
+                            })[];
+                            next: string | null;
+                            as_of: string;
+                        } | {
+                            status: "preparing" | "ready";
+                            children: {
+                                id: string;
+                                type: string;
+                                kind: string;
+                                base: {
+                                    id: string;
+                                    kind: string;
+                                    kindLabel: {
+                                        value: string;
+                                        language: string;
+                                    };
+                                    title: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    image: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                        aspect: {
+                                            width: number;
+                                            height: number;
+                                        };
+                                    } | null;
+                                    url: {
+                                        id: string;
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                    };
+                                };
+                                labels: Record<string, string>;
+                                summary: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
+                                matchEvidence: {
+                                    state: "absent";
+                                } | {
+                                    state: "unsupported";
+                                } | {
+                                    state: "unavailable";
+                                } | {
+                                    state: "current";
+                                    source: {
+                                        id: string;
+                                        revision: number;
+                                    };
+                                    query: string;
+                                    reasons: {
+                                        field: "alias" | "description" | "title";
+                                        language: string;
+                                        text: string;
+                                        spans: {
+                                            start: number;
+                                            end: number;
+                                        }[];
+                                    }[];
+                                };
+                                descriptions?: Record<string, string>;
+                                facts?: Record<string, ({
+                                    kind: "item";
+                                    id: string;
+                                    labels: Record<string, string>;
+                                } | {
+                                    kind: "time";
+                                    year: number;
+                                    month?: number;
+                                    day?: number;
+                                } | {
+                                    kind: "quantity";
+                                    amount: number;
+                                    unit: string;
+                                } | {
+                                    kind: "code";
+                                    value: string;
+                                })[]>;
+                                figure: {
+                                    questionId: string;
+                                    populationId: string;
+                                    scale: {
+                                        min: number;
+                                        max: number;
+                                        displayStep: number;
+                                    };
+                                    count: number;
+                                    state: "insufficient_data" | "ready" | "updating";
+                                    mean: number | null;
+                                    score: number | null;
+                                };
+                            }[];
+                            next: string | null;
+                            as_of: string;
+                        };
                         400: Response | {
                             type: unknown;
                             title: unknown;
@@ -586,6 +1491,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             detail: unknown;
                             errors: unknown;
                         };
+                        default: {} | undefined;
                     };
                     error: never;
                 };
@@ -783,7 +1689,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -797,7 +1703,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -811,7 +1717,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -825,7 +1731,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -839,7 +1745,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -853,7 +1759,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
     };
@@ -1178,7 +2084,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             401: import("typebox").TObject<{
@@ -1192,7 +2098,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             403: import("typebox").TObject<{
@@ -1206,7 +2112,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             409: import("typebox").TObject<{
@@ -1220,7 +2126,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             422: import("typebox").TObject<{
@@ -1234,7 +2140,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
             503: import("typebox").TObject<{
@@ -1248,7 +2154,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                 detail?: import("typebox").TOptional<import("typebox").TString>;
                 errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
-                    code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                    code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
                 }>>>;
             }>;
         };
@@ -1430,7 +2336,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         401: import("typebox").TObject<{
@@ -1444,7 +2350,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         403: import("typebox").TObject<{
@@ -1458,7 +2364,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         409: import("typebox").TObject<{
@@ -1472,7 +2378,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         422: import("typebox").TObject<{
@@ -1486,7 +2392,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
         503: import("typebox").TObject<{
@@ -1500,7 +2406,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
             detail?: import("typebox").TOptional<import("typebox").TString>;
             errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
-                code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
+                code: import("typebox").TUnion<import("typebox").TLiteral<"invalid_format" | "invalid_type" | "out_of_range" | "required" | "unknown_field" | "unsupported">[]>;
             }>>>;
         }>;
     };
@@ -1516,3 +2422,4 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
         })[];
     };
 }> & App;
+export {};

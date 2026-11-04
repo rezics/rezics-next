@@ -8116,5 +8116,11 @@
   "discovery_collection_truncated": "Vista previa de esta colección. Ábrela para ver más.",
   "discovery_collection_empty": "Esta colección está vacía.",
   "discovery_collection_withheld": "No se pueden mostrar elementos.",
-  "discovery_collection_preview_unavailable": "Vista previa no disponible."
+  "discovery_collection_preview_unavailable": "Vista previa no disponible.",
+  "search_match_title": "Coincidencia en el título",
+  "search_match_alias": "Coincidencia en el título alternativo",
+  "search_match_description": "Coincidencia en la descripción",
+  "search_match_explanation": "Más detalles de la coincidencia",
+  "search_match_unavailable": "Los detalles de la coincidencia no están disponibles.",
+  "search_match_unsupported": "Este resultado no admite detalles de coincidencia."
 }

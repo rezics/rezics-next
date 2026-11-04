@@ -12,6 +12,7 @@ import type { RealmSubjectCapabilities } from './realm-scope.ts';
 import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
 import type { ScopeBasis } from './scope-source.ts';
 import type { SubjectSource } from './source.ts';
+import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
 import { type DefaultPublicFilterRuntime } from './public-runtime.ts';
 import type { PublicFilterConsumerJob } from './public-filter-consumer-contract.ts';
 import type { PublicSearchHit } from './public-figures.ts';
@@ -33,6 +34,10 @@ export type SearchRequest = {
     descriptions?: boolean;
     languages?: string[];
     properties?: string[];
+};
+export type GroupedReleaseSearchRequest = SearchRequest & {
+    work?: string;
+    childCursor?: string;
 };
 export type PublicSearchPage = {
     subjects: PublicSearchHit[];
@@ -62,7 +67,9 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     pool: Pool;
     client: OpenSearch;
     prefix: string;
-    source: SubjectSource;
+    source: SubjectSource & Partial<{
+        canonicalNames: SubjectCanonicalNames;
+    }>;
     ratings?: PublicRatingSource;
     realmSubjects?: RealmSubjectSource;
     realmRatings?: RealmRatingSource;
@@ -78,6 +85,11 @@ export declare function createSearchService({ pool, client, prefix, source, rati
     /** Trusted native owner composition. Missing native ports fail closed. */
     facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
 }): {
+    releaseGroups: (principal: 'anonymous' | `account:${string}`, submitted: GroupedReleaseSearchRequest, now?: number, active?: {
+        digest: string;
+        head?: number;
+        release: FilterRelease;
+    } | null, readContext?: PublicSearchReadContext) => Promise<any>;
     search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now?: number, active?: {
         digest: string;
         head?: number;

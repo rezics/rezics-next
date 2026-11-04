@@ -8116,5 +8116,11 @@
   "discovery_collection_truncated": "컬렉션의 일부입니다. 열어서 더 확인하세요.",
   "discovery_collection_empty": "이 컬렉션은 비어 있습니다.",
   "discovery_collection_withheld": "표시할 수 있는 항목이 없습니다.",
-  "discovery_collection_preview_unavailable": "내용 미리 보기를 사용할 수 없습니다."
+  "discovery_collection_preview_unavailable": "내용 미리 보기를 사용할 수 없습니다.",
+  "search_match_title": "제목 일치",
+  "search_match_alias": "대체 제목 일치",
+  "search_match_description": "설명 일치",
+  "search_match_explanation": "일치 세부 정보 더 보기",
+  "search_match_unavailable": "일치 정보를 사용할 수 없습니다.",
+  "search_match_unsupported": "이 검색 결과는 일치 정보를 지원하지 않습니다."
 }

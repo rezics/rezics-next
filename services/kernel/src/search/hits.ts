@@ -3,8 +3,14 @@ import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
 import { chooseLabel } from '../semantic/language.ts';
 import { codeFacet, discloseFacetValues } from './facets.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
+import type { MatchEvidence } from './match-evidence.ts';
 
-export type HitOptions = { descriptions: boolean; languages?: readonly string[]; properties?: readonly string[] };
+export type HitOptions = {
+  descriptions: boolean;
+  languages?: readonly string[];
+  properties?: readonly string[];
+  matchEvidence?: MatchEvidence;
+};
 export type Fact =
   | { kind: 'item'; id: string; labels: Record<string, string> }
   | ({ kind: 'time' } & CalendarDate)
@@ -16,6 +22,7 @@ export type SearchHit = {
   labels: Record<string, string>;
   descriptions?: Record<string, string>;
   facts?: Record<string, Fact[]>;
+  matchEvidence?: MatchEvidence;
 };
 
 const LANGUAGE = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
@@ -115,13 +122,14 @@ function originalLanguage(subject: IndexedSubject): string | undefined {
   return subject.statements.find(({ property }) => property === 'schema:inLanguage')?.value;
 }
 
-export function projectHit(subject: IndexedSubject, { descriptions, languages }: HitOptions): SearchHit {
+export function projectHit(subject: IndexedSubject, { descriptions, languages, matchEvidence }: HitOptions): SearchHit {
   const original = originalLanguage(subject);
   return {
     id: subject.id,
     type: subject.type,
     labels: chooseTexts(subject.labels, languages, original),
     ...(descriptions ? { descriptions: chooseTexts(subject.descriptions, languages, original, cut) } : {}),
+    ...(matchEvidence === undefined ? {} : { matchEvidence }),
   };
 }
 

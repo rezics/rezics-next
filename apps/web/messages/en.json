@@ -8208,5 +8208,11 @@
   "discovery_collection_truncated": "A preview of this Collection. Open it for more.",
   "discovery_collection_empty": "This Collection is empty.",
   "discovery_collection_withheld": "No members can be shown.",
-  "discovery_collection_preview_unavailable": "Contents preview unavailable."
+  "discovery_collection_preview_unavailable": "Contents preview unavailable.",
+  "search_match_title": "Matched title",
+  "search_match_alias": "Matched alternate title",
+  "search_match_description": "Matched description",
+  "search_match_explanation": "More match details",
+  "search_match_unavailable": "Match details are unavailable.",
+  "search_match_unsupported": "Match details are not supported for this result."
 }

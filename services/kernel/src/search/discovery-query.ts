@@ -9,6 +9,12 @@ import { SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import type { SearchSortValue } from './cursor.ts';
 import { MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT, MIXED_DISCOVERY_DOCUMENT_FORMAT } from './discovery.ts';
 import { HANDLE_LOOKUP_PATTERN } from '../access/handle-policy.ts';
+import {
+  MATCH_EVIDENCE_LIMITS,
+  readEngineMatchEvidence,
+  type EngineMatchEvidence,
+  type MatchEvidenceQuery,
+} from './match-evidence.ts';
 
 export type DiscoveryOrder = 'id' | 'name' | 'relevance';
 export type DiscoveryCandidate = {
@@ -17,6 +23,7 @@ export type DiscoveryCandidate = {
   index: string;
   sort: SearchSortValue[];
   matched?: readonly string[];
+  engineEvidence?: EngineMatchEvidence;
 };
 export type DiscoveryQueryPlan = {
   sort: DiscoveryOrder;
@@ -26,6 +33,7 @@ export type DiscoveryQueryPlan = {
   boost?: string;
   filter: Record<string, unknown>;
   after?: readonly SearchSortValue[];
+  matchEvidence?: MatchEvidenceQuery;
 };
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -82,8 +90,22 @@ export function readDiscoveryCandidates(
   if (!record(body) || !record(body.hits) || !Array.isArray(body.hits.hits) || body.hits.hits.length > plan.size)
     malformed();
   const seen = new Set<string>();
+  const engineEvidence = plan.matchEvidence
+    ? body.hits.hits.map((hit: unknown) =>
+        readEngineMatchEvidence(
+          record(hit) ? (hit.matched_queries ?? []) : [],
+          record(hit) ? hit.highlight : undefined,
+          plan.matchEvidence!,
+        ),
+      )
+    : undefined;
+  const evidenceBytes = engineEvidence?.reduce(
+    (total, evidence) => total + Buffer.byteLength(JSON.stringify(evidence), 'utf8'),
+    0,
+  );
+  const evidencePageOver = evidenceBytes !== undefined && evidenceBytes > MATCH_EVIDENCE_LIMITS.enginePageBytes;
   let previous = plan.after;
-  return body.hits.hits.map((hit: unknown) => {
+  return body.hits.hits.map((hit: unknown, index: number) => {
     const key = parseDiscoveryHitIdentity(registry, hit);
     const document = validateDiscoveryDocumentFormat(registry, record(hit) ? hit._source : undefined);
     if (
@@ -117,6 +139,13 @@ export function readDiscoveryCandidates(
       document,
       sort: hit.sort,
       ...(hit.matched_queries === undefined ? {} : { matched: hit.matched_queries }),
+      ...(engineEvidence === undefined
+        ? {}
+        : {
+            engineEvidence: evidencePageOver
+              ? { matched: Array.isArray(hit.matched_queries) ? hit.matched_queries : [], malformed: true }
+              : engineEvidence[index],
+          }),
     };
   });
 }
@@ -179,6 +208,7 @@ export async function queryDiscoveryCandidates(
       track_total_hits: false,
       pit: { id: pit, keep_alive: '1m' },
       query: discoveryNativeQuery(plan),
+      ...(plan.matchEvidence ? { highlight: plan.matchEvidence.highlight } : {}),
       sort,
       ...(plan.after ? { search_after: plan.after } : {}),
     },
@@ -201,7 +231,7 @@ export function readDiscoveryEngineResult(
 ): DiscoveryEngineResult {
   const candidates = readDiscoveryCandidates(body, registry, physicalTarget, plan);
   return {
-    hits: candidates.map(({ key, document, index, sort, matched }) => {
+    hits: candidates.map(({ key, document, index, sort, matched, engineEvidence }) => {
       if (
         (document.document_format !== MIXED_DISCOVERY_DOCUMENT_FORMAT &&
           document.document_format !== MIXED_CALENDAR_DISCOVERY_DOCUMENT_FORMAT) ||
@@ -220,6 +250,7 @@ export function readDiscoveryEngineResult(
             : String(document.security_revision),
         ...(ownerDocument ? { sourceVersion: document.source_version } : {}),
         matched: matched ?? [],
+        ...(engineEvidence === undefined ? {} : { engineEvidence }),
         sort,
       };
     }),

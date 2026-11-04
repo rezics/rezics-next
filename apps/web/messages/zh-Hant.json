@@ -8116,5 +8116,11 @@
   "discovery_collection_truncated": "這是合集的一部分，開啟合集查看更多。",
   "discovery_collection_empty": "此合集為空。",
   "discovery_collection_withheld": "沒有可顯示的成員。",
-  "discovery_collection_preview_unavailable": "內容預覽無法使用。"
+  "discovery_collection_preview_unavailable": "內容預覽無法使用。",
+  "search_match_title": "符合的標題",
+  "search_match_alias": "符合的別名",
+  "search_match_description": "符合的描述",
+  "search_match_explanation": "更多符合詳細資料",
+  "search_match_unavailable": "符合詳細資料目前無法使用。",
+  "search_match_unsupported": "此結果不支援符合詳細資料。"
 }

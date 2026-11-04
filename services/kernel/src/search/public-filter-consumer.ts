@@ -1360,6 +1360,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         '/_search',
         {
           query: compiled.query,
+          ...(compiled.matchEvidence ? { highlight: compiled.matchEvidence.highlight } : {}),
           pit: { id: q.snapshot.pit },
           size,
           sort,
@@ -1385,6 +1386,7 @@ export const createPublicFilterConsumerOperations: PublicFilterConsumerOperation
         size,
         filter: {},
         ...(after === undefined ? {} : { after }),
+        ...(compiled.matchEvidence ? { matchEvidence: compiled.matchEvidence } : {}),
       }).hits;
       m.cost.engineIteratorSteps += iteratorSteps(body);
       return { queried: current, raw, exhausted: raw.length < size, total: undefined };

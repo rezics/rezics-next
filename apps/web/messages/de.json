@@ -8116,5 +8116,11 @@
   "discovery_collection_truncated": "Eine Vorschau dieser Sammlung. Für mehr öffnen.",
   "discovery_collection_empty": "Diese Sammlung ist leer.",
   "discovery_collection_withheld": "Keine Einträge können angezeigt werden.",
-  "discovery_collection_preview_unavailable": "Inhaltsvorschau nicht verfügbar."
+  "discovery_collection_preview_unavailable": "Inhaltsvorschau nicht verfügbar.",
+  "search_match_title": "Passender Titel",
+  "search_match_alias": "Passender Alternativtitel",
+  "search_match_description": "Passende Beschreibung",
+  "search_match_explanation": "Weitere Treffergründe",
+  "search_match_unavailable": "Treffergründe sind nicht verfügbar.",
+  "search_match_unsupported": "Treffergründe werden für dieses Ergebnis nicht unterstützt."
 }

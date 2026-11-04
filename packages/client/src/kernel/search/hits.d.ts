@@ -1,9 +1,11 @@
 import type { CalendarDate, FilterRelease } from '@rezics/filter';
 import type { IndexedSubject, SubjectSource } from './source.ts';
+import type { MatchEvidence } from './match-evidence.ts';
 export type HitOptions = {
     descriptions: boolean;
     languages?: readonly string[];
     properties?: readonly string[];
+    matchEvidence?: MatchEvidence;
 };
 export type Fact = {
     kind: 'item';
@@ -25,6 +27,7 @@ export type SearchHit = {
     labels: Record<string, string>;
     descriptions?: Record<string, string>;
     facts?: Record<string, Fact[]>;
+    matchEvidence?: MatchEvidence;
 };
 /** Shared result-slot admission for the legacy and opt-in discovery representations. */
 export declare function validateSearchLimit(value: unknown): number;
@@ -40,7 +43,7 @@ export declare function admitProperties(properties: readonly string[], release: 
 export declare function chooseTexts(list: IndexedSubject['labels'], languages: readonly string[] | undefined, original: string | undefined, map?: (value: string) => string): {
     [k: string]: string;
 };
-export declare function projectHit(subject: IndexedSubject, { descriptions, languages }: HitOptions): SearchHit;
+export declare function projectHit(subject: IndexedSubject, { descriptions, languages, matchEvidence }: HitOptions): SearchHit;
 type Pending = Exclude<Fact, {
     kind: 'item';
 }> | {

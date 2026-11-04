@@ -8116,5 +8116,11 @@
   "discovery_collection_truncated": "Aperçu de cette collection. Ouvrez-la pour en voir plus.",
   "discovery_collection_empty": "Cette collection est vide.",
   "discovery_collection_withheld": "Aucun élément ne peut être affiché.",
-  "discovery_collection_preview_unavailable": "Aperçu indisponible."
+  "discovery_collection_preview_unavailable": "Aperçu indisponible.",
+  "search_match_title": "Correspondance dans le titre",
+  "search_match_alias": "Correspondance dans le titre secondaire",
+  "search_match_description": "Correspondance dans la description",
+  "search_match_explanation": "Autres détails de correspondance",
+  "search_match_unavailable": "Les détails de correspondance ne sont pas disponibles.",
+  "search_match_unsupported": "Les détails de correspondance ne sont pas pris en charge pour ce résultat."
 }

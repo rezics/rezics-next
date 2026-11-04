@@ -8116,5 +8116,11 @@
   "discovery_collection_truncated": "このコレクションの一部です。開くと続きを確認できます。",
   "discovery_collection_empty": "このコレクションは空です。",
   "discovery_collection_withheld": "表示できる項目はありません。",
-  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。"
+  "discovery_collection_preview_unavailable": "内容のプレビューは利用できません。",
+  "search_match_title": "タイトルの一致",
+  "search_match_alias": "別名の一致",
+  "search_match_description": "説明の一致",
+  "search_match_explanation": "一致の詳細",
+  "search_match_unavailable": "一致の詳細を利用できません。",
+  "search_match_unsupported": "この検索結果では一致の詳細を表示できません。"
 }
