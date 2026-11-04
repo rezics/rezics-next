@@ -74,8 +74,10 @@ function SignedInBoardWatchControl({
       : view.page.actions.watch
     : 'not-applicable';
   const canAct = visit.canBegin();
-  const canInspect = ['read-failed', 'unknown', 'conflict', 'unavailable', 'denied'].includes(view.phase) ||
-    view.command === 'unknown' || (view.phase === 'current' && advice === 'denied');
+  const canInspect =
+    ['read-failed', 'unknown', 'conflict', 'unavailable', 'denied'].includes(view.phase) ||
+    view.command === 'unknown' ||
+    (view.phase === 'current' && advice === 'denied');
 
   useEffect(() => visit.connect(), [visit]);
   useEffect(() => {
@@ -99,13 +101,15 @@ function SignedInBoardWatchControl({
         if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node)) hadFocus.current = false;
       }}
     >
-      <p role="status" aria-live="polite" aria-atomic="true">{phaseMessage(view)}</p>
+      <p role="status" aria-live="polite" aria-atomic="true">
+        {phaseMessage(view)}
+      </p>
       {view.command === 'acknowledged' ? (
-        <p role="status" aria-live="polite">{m.board_watch_command_acknowledged()}</p>
+        <p role="status" aria-live="polite">
+          {m.board_watch_command_acknowledged()}
+        </p>
       ) : null}
-      {view.phase === 'current' && advice === 'denied' ? (
-        <p role="status">{m.board_watch_read_only()}</p>
-      ) : null}
+      {view.phase === 'current' && advice === 'denied' ? <p role="status">{m.board_watch_read_only()}</p> : null}
       {canAct ? (
         <Button type="button" size="sm" className={actionClass} onClick={visit.begin}>
           {view.page?.viewer.watching ? m.board_watch_stop() : m.board_watch_start()}

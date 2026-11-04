@@ -45,7 +45,10 @@ function watchPage(watching: boolean, advice: 'available' | 'denied' = 'availabl
     boardId,
     accountId,
     viewer: Object.freeze({ state: 'current' as const, watching, revision: watching ? 4 : 3 }),
-    actions: Object.freeze({ watch: watching ? 'not-applicable' as const : advice, unwatch: watching ? advice : 'not-applicable' as const }),
+    actions: Object.freeze({
+      watch: watching ? ('not-applicable' as const) : advice,
+      unwatch: watching ? advice : ('not-applicable' as const),
+    }),
     source: Object.freeze({ epoch: 1, position: '38' }),
   });
 }

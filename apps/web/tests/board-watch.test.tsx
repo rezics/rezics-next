@@ -5,7 +5,12 @@ import { Window } from 'happy-dom';
 import { m } from '../src/paraglide/messages.js';
 import { setLocale } from '../src/paraglide/runtime.js';
 import { BoardWatchControl, type BoardWatchControlProps } from '../src/threads/board-watch/control';
-import type { BoardWatchCommand, BoardWatchNative, BoardWatchPage, BoardWatchReadRequest } from '../src/threads/board-watch/contract';
+import type {
+  BoardWatchCommand,
+  BoardWatchNative,
+  BoardWatchPage,
+  BoardWatchReadRequest,
+} from '../src/threads/board-watch/contract';
 
 const browser = new Window({ url: 'https://site.test/en/boards/board-a?sort=new' });
 const originalGlobals = new Map<string, PropertyDescriptor | undefined>();
@@ -23,7 +28,12 @@ for (const [key, value] of Object.entries({
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
 }
 
-const page = (boardId: string, watching: boolean, revision: number, advice: 'available' | 'denied' = 'available'): BoardWatchPage => ({
+const page = (
+  boardId: string,
+  watching: boolean,
+  revision: number,
+  advice: 'available' | 'denied' = 'available',
+): BoardWatchPage => ({
   boardId,
   accountId: 'reader-a',
   viewer: { state: 'current', watching, revision },
@@ -196,9 +206,7 @@ test('signed-out readers get a safe Board return and make no private request', a
   await settle();
   expect(reads).toBe(0);
   const link = [...host.querySelectorAll('a')].find((item) => item.textContent === m.board_watch_sign_in());
-  expect(link?.getAttribute('href')).toBe(
-    `/auth/sign-in?return_to=${encodeURIComponent(baseline.returnTo)}`,
-  );
+  expect(link?.getAttribute('href')).toBe(`/auth/sign-in?return_to=${encodeURIComponent(baseline.returnTo)}`);
 });
 
 test('retiring a Board page visit rejects its late watch receipt and keeps the replacement authority', async () => {

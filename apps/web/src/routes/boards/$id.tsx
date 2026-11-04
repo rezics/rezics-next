@@ -100,14 +100,7 @@ function BoardPage() {
           reactionOrigin={reactionOrigin}
           {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
           participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
-          watch={
-            <BoardWatchControl
-              boardId={id}
-              returnTo={returnTo}
-              session={session}
-              authority={reactionOrigin}
-            />
-          }
+          watch={<BoardWatchControl boardId={id} returnTo={returnTo} session={session} authority={reactionOrigin} />}
           start={(page) => (
             <BoardStartThread board={page.board} advice={page.actions.createThread} returnTo={returnTo} />
           )}

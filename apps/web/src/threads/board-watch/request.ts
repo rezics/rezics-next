@@ -8,10 +8,7 @@ type NativeWriteOptions = NativeOptions & { headers: { authorization: string; 'i
 type NativeResponse = Promise<{ status: number; data?: unknown; error?: unknown }>;
 type NativeBoardWatch = {
   page: { get(options: NativeOptions): NativeResponse };
-  put(
-    body: { watching: boolean; expectedRevision: number },
-    options: NativeWriteOptions,
-  ): NativeResponse;
+  put(body: { watching: boolean; expectedRevision: number }, options: NativeWriteOptions): NativeResponse;
 };
 
 export type BoardWatchReadInput = Readonly<{ boardId: string; accountId: string }>;

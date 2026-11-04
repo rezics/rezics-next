@@ -91,11 +91,7 @@ export class BoardWatchVisit {
     const owner = this.owner;
     if (this.retired || !this.connected || !owner) return false;
     const live = this.latest().value;
-    if (
-      !sameVisit(this.original, live) ||
-      !owner.isCurrent?.() ||
-      !live.isCurrent()
-    ) {
+    if (!sameVisit(this.original, live) || !owner.isCurrent?.() || !live.isCurrent()) {
       this.retire();
       return false;
     }
@@ -156,7 +152,11 @@ export class BoardWatchVisit {
     const ticket = {};
     this.active = ticket;
     const command = this.view.command;
-    this.publish({ phase: 'checking', command, ...(this.view.acknowledgement ? { acknowledgement: this.view.acknowledgement } : {}) });
+    this.publish({
+      phase: 'checking',
+      command,
+      ...(this.view.acknowledgement ? { acknowledgement: this.view.acknowledgement } : {}),
+    });
     const owner = this.owner!;
     const request: BoardWatchReadRequest = Object.freeze({ ...owner });
     try {
@@ -223,8 +223,7 @@ export class BoardWatchVisit {
       if (!this.current() || this.active !== ticket) return;
       inspectAfter = this.acceptCommand(result);
     } catch {
-      if (this.current() && this.active === ticket)
-        this.publish({ phase: 'unknown', command: 'unknown' });
+      if (this.current() && this.active === ticket) this.publish({ phase: 'unknown', command: 'unknown' });
     } finally {
       if (this.active === ticket) this.active = undefined;
       if (inspectAfter) void this.read();

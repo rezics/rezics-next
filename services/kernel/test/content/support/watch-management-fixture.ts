@@ -112,12 +112,7 @@ export function interceptThreadSnapshot(pool: Pool, threadId: string, mode: Inte
 }
 
 /** Pause or fail one exact native Board read inside a mounted private watch-page request. */
-export function interceptBoardSnapshot(
-  pool: Pool,
-  boardId: string,
-  occurrence: number,
-  mode: InterceptMode,
-) {
+export function interceptBoardSnapshot(pool: Pool, boardId: string, occurrence: number, mode: InterceptMode) {
   const mutable = pool as unknown as { connect: (...args: unknown[]) => unknown };
   const original = mutable.connect.bind(pool);
   let entered!: () => void;
