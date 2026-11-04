@@ -81,10 +81,6 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
       }
       const access = createContentWorkAccess(() => new Date(), f.db.pool);
       let source: CloudEvent;
-      if (step === 'opening') {
-        const thread = await f.thread();
-        source = (await f.envelope(thread.firstPost.id)).events.find(Boolean)!;
-      }
       const commandKey = crypto.randomUUID();
       const removeKeys = { board: crypto.randomUUID(), thread: crypto.randomUUID() };
       const hidden: Partial<Record<'board' | 'thread', { id: string; revision: number }>> = {};
@@ -383,6 +379,10 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
                FROM unnest($5::uuid[]) WITH ORDINALITY history(transaction_id,ordinal)`,
               [grantRoute, resourceId, subject, action, transactions, previous],
             );
+          }
+          if (step === 'opening' && previous === 0) {
+            const thread = await f.thread();
+            source = (await f.envelope(thread.firstPost.id)).events.find(Boolean)!;
           }
         },
         prepare,
