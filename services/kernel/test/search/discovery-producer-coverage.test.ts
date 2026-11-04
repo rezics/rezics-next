@@ -31,7 +31,10 @@ test('bundled discovery definitions have native producers for every discoverable
   });
   const registrations: DiscoveryProducerRegistration[] = [
     ...registry.entries.map(({ kind, owner }) => ({ kind, owner })),
-    ...SECOND_SCOPE_PUBLIC_METADATA_KINDS.map((kind) => ({ kind, owner: owners[kind].adapter.owner })),
+    ...SECOND_SCOPE_PUBLIC_METADATA_KINDS.flatMap((kind) => {
+      const slot = owners[kind];
+      return slot.readiness === 'ready' ? [{ kind, owner: slot.adapter.owner }] : [];
+    }),
   ];
   const definitionKinds = Object.keys(bundledRelease.types);
   const producerKinds = ['account', 'subject', ...Object.keys(owners.metadataProducers)];
