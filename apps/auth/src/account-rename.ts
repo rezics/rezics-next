@@ -36,7 +36,8 @@ export type RenameRead =
   | { kind: 'ready'; target: RenameTarget }
   | { kind: 'refused'; target?: RenameTarget }
   | { kind: 'management-auth-required'; accountId: string }
-  | { kind: 'signed-out' | 'unavailable' };
+  | { kind: 'signed-out' }
+  | { kind: 'unavailable'; target?: RenameTarget };
 /** The page owner supplies only the authenticated bounded projection, never a handle lookup. */
 export type RenamePageReader = (accountId: string) => Promise<unknown>;
 
