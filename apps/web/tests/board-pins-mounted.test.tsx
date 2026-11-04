@@ -295,6 +295,7 @@ test('unknown retry keeps its original command and missing rows move focus to th
   toggles[0]!.focus();
   await act(async () => toggles[0]!.click());
   await settle(() => toggles[0]?.getAttribute('aria-expanded') === 'true');
+  console.log('PIN DIALOG DEBUG', document.body.innerHTML.slice(-5000));
   const dialog = () => document.querySelector<HTMLElement>('[role="alertdialog"]');
   await settle(() => !!dialog());
   const confirmation = dialog();
