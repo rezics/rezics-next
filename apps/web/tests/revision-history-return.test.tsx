@@ -123,11 +123,17 @@ async function click(control: HTMLElement) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
+async function settle(router: ReturnType<typeof createRouter>) {
+  await act(async () => {
+    await router.load();
+  });
+}
 async function openExactFromLaterSlice(view: Awaited<ReturnType<typeof mount>>) {
   await click(button(view.host, m.thread_history_show()));
   await click(button(view.host, m.thread_history_more()));
   await click(button(view.host, m.revision_history_inspect({ number: '2' })));
   await click(button(view.host, m.revision_return_open_here()));
+  await settle(view.router);
 }
 
 async function mount(initialUrl: string) {
@@ -230,6 +236,7 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor]);
     await click(button(view.host, m.revision_history_inspect({ number: '2' })));
     await click(button(view.host, m.revision_return_open_here()));
+    await settle(view.router);
 
     expect(exactReads).toHaveLength(1);
     expect(exactReads[0]).toMatchObject({ postId: selected.id, revisionId: targetRevision.revisionId });
@@ -244,6 +251,7 @@ test('a later admitted slice opens a fresh exact read and returns through re-adm
         (link) => link.textContent?.trim() === m.revision_return_to_history(),
       )!,
     );
+    await settle(view.router);
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
     expect(view.host.textContent).toContain(m.revision_return_restored());
     const focusedHeading = view.host.querySelector<HTMLElement>('[data-history-focus-boundary][tabindex="-1"]');
@@ -269,6 +277,7 @@ test('a failed return retries the same admitted cursor and does not re-arm focus
         (link) => link.textContent?.trim() === m.revision_return_to_history(),
       )!,
     );
+    await settle(view.router);
     expect(view.host.textContent).toContain(m.revision_return_failed());
     expect(historyReads.map(({ cursor: value }) => value)).toEqual([undefined, cursor, cursor]);
     button(view.host, m.thread_history_hide()).focus();
