@@ -1469,9 +1469,6 @@ function RelationEditorLive({
             current.authority.disclosure === 'unavailable' ? (
               <div role="status" className="space-y-2">
                 <p>{m.relation_actions_unavailable({}, options)}</p>
-                <Button variant="outline" disabled={frozen} onClick={(event) => reload(event)}>
-                  {m.candidate_reload({}, options)}
-                </Button>
               </div>
             ) : current.authority.disclosure === 'unreadable' ? (
               <p role="status">{m.relation_participants_unreadable({}, options)}</p>
@@ -1922,6 +1919,9 @@ function RelationEditorLive({
                             <ContentItemHeading level={3} className="text-base font-semibold">
                               {pinnedName(item.statement.property.id, item.release)}
                             </ContentItemHeading>
+                            <p className="break-all text-sm">
+                              {m.work_parts_candidate({ candidate: item.id }, options)}
+                            </p>
                             <Statement
                               statement={item.statement}
                               publicRead={current.public}
