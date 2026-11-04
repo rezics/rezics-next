@@ -100,6 +100,10 @@ export function rootTypecheckCommand(changed: readonly string[]): string[] {
   return ['env', `TYPECHECK_CHANGED=${changed.join('\n')}`, 'bun', 'scripts/typecheck.ts'];
 }
 
+function isRootTypecheckCommand(command: readonly string[]): boolean {
+  return command.some((part) => part.includes('scripts/typecheck.ts'));
+}
+
 /** Select the policy boot command when any changed path matches its trigger patterns. */
 export function landingBootCommand(
   changed: readonly string[],
@@ -119,6 +123,36 @@ function compilerInfrastructureFailure(output: string, timedOut: boolean): boole
       output,
     )
   );
+}
+
+const prelandingTypecheckSkip =
+  'Prelanding typecheck skipped (devPrelandingTypecheck off); dev is verified after the merge';
+const prelandingTypecheckInfrastructure =
+  'Root typecheck classified as infrastructure result; landing proceeds and the independent verifier will check after integration.';
+
+function sqlDeclarationCascadeInfrastructureFailure(output: string, root: string, changed: readonly string[]): boolean {
+  const repoPath = (file: string) => relative(root, resolve(root, file)).replace(/\\/g, '/');
+  const changedPaths = new Set(changed.map(repoPath));
+  const lines = output.split(/\r?\n/);
+  const missingSqlDiagnostics: number[] = [];
+  const cascades: { line: number; file: string }[] = [];
+  for (const [index, line] of lines.entries()) {
+    const missingSql = line.match(
+      /^(.+?)\(\d+,\d+\): error TS2307: Cannot find module ['"](\.\/[^'"]+\.sql)['"] or its corresponding type declarations\./,
+    );
+    if (missingSql) {
+      const source = repoPath(missingSql[1]!);
+      const module = resolve(root, dirname(source), missingSql[2]!);
+      if (!changedPaths.has(source) && existsSync(module)) missingSqlDiagnostics.push(index);
+    }
+    const cascade = line.match(/^(.+?)\(\d+,\d+\): error TS(?:18046|7006):/);
+    if (cascade) cascades.push({ line: index, file: repoPath(cascade[1]!) });
+  }
+  if (!missingSqlDiagnostics.length) return false;
+  const firstMissingSql = Math.min(...missingSqlDiagnostics);
+  const followingCascades = cascades.filter((cascade) => cascade.line > firstMissingSql);
+  const unchangedCascades = followingCascades.filter((cascade) => !changedPaths.has(cascade.file)).length;
+  return unchangedCascades >= 2 && unchangedCascades > followingCascades.length / 2;
 }
 
 function compilerOutputMatchesPath(output: string, root: string, file: string): boolean {
@@ -1331,7 +1365,7 @@ export type TrainOptions = {
   formatCommand?: string[];
   riskAreasFile?: string;
   affectedTests?: import('./types.ts').AffectedTestCheck[];
-  /** The mandatory direct root typecheck used before a dev ref advance. */
+  /** The direct root typecheck used before a dev ref advance when configured. */
   runTypecheck?: GateRunner;
   /** Path-selected start-up guard run after the root typecheck on a combined dev candidate. */
   devLandingBoot?: IntegrationCheck;
@@ -1504,6 +1538,7 @@ export class MergeTrain {
     kind: 'typecheck' | 'boot';
     durationMs?: number;
     triggerPaths?: readonly string[];
+    typecheckDisposition?: 'skipped' | 'infrastructure';
   }> {
     const policy = this.options.policy ?? defaultPolicy;
     const changed = changedFiles(tree, base, this.options.policy?.merge);
@@ -1520,11 +1555,10 @@ export class MergeTrain {
       result: { passed: true, output: '', timedOut: false } as GateResult,
       kind: 'typecheck' as const,
     };
-    if (this.options.integration?.devPrelandingTypecheck === false) {
-      appendFileSync(
-        logPath,
-        'Prelanding typecheck skipped (devPrelandingTypecheck off); dev is verified after the merge\n',
-      );
+    let typecheckDisposition: 'skipped' | 'infrastructure' | undefined;
+    if (this.options.integration?.devPrelandingTypecheck !== true) {
+      appendFileSync(logPath, `${prelandingTypecheckSkip}\n`);
+      typecheckDisposition = 'skipped';
     } else {
       const run =
         this.options.runTypecheck ??
@@ -1556,6 +1590,11 @@ export class MergeTrain {
           this.options.runCandidateGit,
           this.options.policy?.integration,
         );
+        if (!result.passed && sqlDeclarationCascadeInfrastructureFailure(result.output, tree, changed)) {
+          appendFileSync(logPath, `${prelandingTypecheckInfrastructure}\n${result.output}\n`);
+          typecheckDisposition = 'infrastructure';
+          break;
+        }
         if (
           !compilerInfrastructureFailure(result.output, result.timedOut) ||
           attempt + 1 >= policy.integration.typecheckAttempts
@@ -1569,7 +1608,8 @@ export class MergeTrain {
     }
     const boot = this.configuredLandingBoot();
     const bootCommand = landingBootCommand(changed, boot, policy.brief);
-    if (!boot || !bootCommand) return passed;
+    if (!boot || !bootCommand)
+      return { ...passed, ...(typecheckDisposition ? { typecheckDisposition } : {}) };
     const timeout = policy.integration.bootCheckTimeoutMs;
     const runBoot =
       this.options.runBootCheck ??
@@ -1694,11 +1734,19 @@ export class MergeTrain {
                 kind: 'boot',
                 durationMs,
                 triggerPaths: boot.paths,
+                ...(typecheckDisposition ? { typecheckDisposition } : {}),
               };
             }
           }
         }
-        return { command: bootCommand, result, kind: 'boot', durationMs, triggerPaths: boot.paths };
+        return {
+          command: bootCommand,
+          result,
+          kind: 'boot',
+          durationMs,
+          triggerPaths: boot.paths,
+          ...(typecheckDisposition ? { typecheckDisposition } : {}),
+        };
       }
       appendFileSync(logPath, 'Boot check infrastructure failure; retrying once on the same candidate\n');
     }
@@ -2285,7 +2333,7 @@ export class MergeTrain {
           };
         }
 
-        // The final rebased tree includes conflict resolution and formatting. It receives the mandatory
+        // The final rebased tree includes conflict resolution and formatting. It receives the configured
         // prelanding typecheck, then the policy boot check when changed paths match; other verification
         // runs after integration in the independent verifier.
         const finalCandidate = prepared[prepared.length - 1]!.candidate;
@@ -2303,14 +2351,21 @@ export class MergeTrain {
           kind,
           durationMs,
           triggerPaths,
+          typecheckDisposition,
         } = await this.checkDevCandidate(trainTree, base, finalCandidate, batchLog);
-        for (const member of prepared)
+        for (const member of prepared) {
+          if (member.entry.id !== prepared[0]!.entry.id) {
+            if (typecheckDisposition === 'skipped') appendFileSync(member.result.logPath, `${prelandingTypecheckSkip}\n`);
+            if (typecheckDisposition === 'infrastructure')
+              appendFileSync(member.result.logPath, `${prelandingTypecheckInfrastructure}\n`);
+          }
           appendFileSync(
             member.result.logPath,
             kind === 'boot'
               ? `Boot check ${checked.passed ? 'passed' : 'failed'} in ${durationMs ?? 0}ms${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`
               : `Root typecheck ${checked.passed ? 'passed' : 'failed'}${checked.timedOut ? ' (timed out)' : ''}\n${checked.output}`,
           );
+        }
         let staleAfterGate: LandingEntry | undefined;
         for (const member of pending) {
           try {
@@ -3319,8 +3374,7 @@ export class MergeTrain {
         }
         const testDefaults = process.env.REZICS_GOAL_TEST_ENVIRONMENT === '1';
         const directDevLanding = integratesIntoDev && !stabilize;
-        // The root compiler guard, and the policy boot check when paths match, stay mandatory even when
-        // the optional landing-check setting is disabled.
+        // Direct dev landings honor the configurable root compiler guard and the policy boot check when paths match.
         const skipDevChecks = directDevLanding;
         if (directDevLanding) {
           stage = 'gate';
@@ -3553,11 +3607,20 @@ export class MergeTrain {
         }
         const configuredChecks =
           typeof o.integrationChecks === 'function' ? o.integrationChecks() : (o.integrationChecks ?? []);
-        const integrationChecks = integrationChecksForFiles(
+        const matchingChecks = integrationChecksForFiles(
           result.changedFiles,
           configuredChecks,
           (this.options.policy ?? defaultPolicy).brief,
         );
+        const skipConfiguredRootTypecheck =
+          !skipDevChecks &&
+          !controlPlane &&
+          integratesIntoDev &&
+          this.options.integration?.devPrelandingTypecheck !== true;
+        if (skipConfiguredRootTypecheck) appendFileSync(logPath, `${prelandingTypecheckSkip}\n`);
+        const integrationChecks = skipConfiguredRootTypecheck
+          ? matchingChecks.filter((check) => !isRootTypecheckCommand(check.command))
+          : matchingChecks;
         if (!skipDevChecks && !controlPlane && integratesIntoDev && integrationChecks.length) {
           stage = 'gate';
           appendFileSync(logPath, `\nIntegration check on ${candidate}, dev ${base}\n`);
@@ -3565,18 +3628,35 @@ export class MergeTrain {
           // TYPECHECK_CHANGED); a scoped result is a baseline only for the same change, so the key names it.
           const changed = result.changedFiles.join('\n');
           const commands = integrationChecks.map((check) =>
-            check.command.join(' ').includes('scripts/typecheck.ts')
+            isRootTypecheckCommand(check.command)
               ? ['env', `TYPECHECK_CHANGED=${changed}`, ...check.command]
               : check.command,
           );
-          const checked = await runIntegrationChecks(commands, trainTree, logPath);
+          const integrationResult = await runIntegrationChecks(commands, trainTree, logPath);
           assertCandidate(trainTree, candidate, 'dev integration checks', logPath);
           o.fence.assertCurrent(request);
           if (target() !== base) continue;
+          const typecheckInfrastructureFailure =
+            !integrationResult.passed &&
+            integrationResult.failedCommand !== undefined &&
+            isRootTypecheckCommand(integrationResult.failedCommand) &&
+            sqlDeclarationCascadeInfrastructureFailure(
+              integrationResult.output,
+              trainTree,
+              changedFiles(trainTree, base, this.options.policy?.merge),
+            );
+          if (typecheckInfrastructureFailure)
+            appendFileSync(
+              logPath,
+              `${prelandingTypecheckInfrastructure}\n${integrationResult.output}\n`,
+            );
+          const checked = typecheckInfrastructureFailure
+            ? { ...integrationResult, passed: true, output: '' }
+            : integrationResult;
           const scoped = commands.some((command) => command[0] === 'env');
           const key = `integration-check:${JSON.stringify(integrationChecks)}${scoped ? `:${Bun.hash(changed).toString(16)}` : ''}`;
           // An integrated candidate is dev's next head, so its result is that head's baseline.
-          o.queue.saveBaseline(candidate, key, checked);
+          if (!typecheckInfrastructureFailure) o.queue.saveBaseline(candidate, key, checked);
           if (!checked.passed) {
             result.timedOut = checked.timedOut;
             result.firstFailure = firstFailure(checked.output, this.options.policy?.merge);

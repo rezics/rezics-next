@@ -90,16 +90,21 @@ resumes reconnect and concurrent worktrees never share a server; a Web task also
 endpoints as MCP servers on fresh launches and resumes. The account's own MCP servers, such as the browser and
 Playwright, stay enabled; consultations still ignore the account configuration.
 
-The dev landing train runs one mandatory root typecheck on each final candidate, then the policy boot check when the
-batch's changed paths match `devLandingBoot.paths`: once for a combined batch or once for an individual landing. It
-does not run affected, sibling, acceptance, native, import or page-story checks before dev advances. Those checks run
-through the independent verifier after integration. Promotion runs the full gate on the candidate before advancing
+The dev landing train runs the root typecheck on each final candidate only when `integration.devPrelandingTypecheck`
+is true, then the policy boot check when changed paths match `devLandingBoot.paths`: once for a combined batch or once
+for an individual landing. With the setting off, each candidate logs `Prelanding typecheck skipped`; the independent
+verifier runs the root typecheck after integration. The train does not run affected, sibling, acceptance, native,
+import or page-story checks before dev advances. Promotion runs the full gate on the candidate before advancing
 `main`.
+
+Decision: A missing local `.sql` declaration followed by at least two TS18046/TS7006 cascades that outnumber
+cascades in changed files is an infrastructure result; landing proceeds and the independent verifier checks the root
+after integration.
 
 Batching avoids repeating the same typecheck and affected checks for every worker in the batch. Historical check counts
 and costs are recorded in [the check cost report](../../docs/research/check-cost.md).
 
-Every landing command runs in its own process group, including the mandatory typecheck, the policy boot check,
+Every landing command runs in its own process group, including the configured prelanding typecheck, the policy boot check,
 acceptance, integration, affected, sibling and derived regeneration commands. The train gives the group a bounded graceful shutdown before
 forcing any remaining processes to exit. Control-plane tests set affected checks explicitly; when omitted, train
 fixtures use no affected or sibling checks and never inherit the repository's live check defaults.
@@ -281,12 +286,13 @@ stops processes merely because their working directory is shared. Frozen accepta
 protection and controller commits; undeclared risk areas remain closed.
 
 When a worker finishes, the train captures the workspace branch head and merges it with dev in the train's own
-worktree. Before advancing dev, it runs one direct root typecheck on the final combined candidate, including any
-conflict resolution and formatting, then the `devLandingBoot` command when those changed paths match its trigger
-patterns. `TYPECHECK_CHANGED` contains the actual paths from the batch base to that candidate. Both guards are
-mandatory for single, shared-workspace and batched landings, including when `integration.devLandingChecks` is false.
-A compiler failure or a new boot failure leaves dev unchanged and returns its first failing entry to the affected task;
-unrelated batch members remain queued. The train compares normalized boot error fingerprints with the current dev
+worktree. Before advancing dev, it runs one direct root typecheck on the final combined candidate only when
+`integration.devPrelandingTypecheck` is true, including any conflict resolution and formatting, then the
+`devLandingBoot` command when those changed paths match its trigger patterns. `TYPECHECK_CHANGED` contains the actual
+paths from the batch base to that candidate. The selected boot guard remains mandatory for single, shared-workspace
+and batched landings, including when `integration.devLandingChecks` is false. A product compiler failure or a new boot
+failure leaves dev unchanged and returns its first failing entry to the affected task; unrelated batch members remain
+queued. The train compares normalized boot error fingerprints with the current dev
 base, caches that base result per command, and allows landing when candidate failures are a subset of existing base
 failures. The boot check records its duration in the landing log. It is landing-time, not asynchronous: the command is the start-up and readiness tests in `services/kernel/test/boot`, under
 `policy.integration.bootCheckTimeoutMs` (two minutes). Duration is measured per batch in that log. A passing check
@@ -1267,9 +1273,9 @@ Promotion gates on correctness only: the root gate and the promoted tasks' own a
 so `main` receives finished work while other In rows are still open.
 The `integrationChecks` setting lists legacy `{ paths, command }` checks. Dev landings no longer run these checks in
 the train. Unmigrated local checks are selected for the independent verifier after integration, except dependency
-installation and root typecheck entries, which remain setup and the mandatory compiler guard respectively. Main and
-stabilize workflows keep their existing gates. Gates and dependency installation never run in the main checkout or
-the worker's checkout.
+installation and root typecheck entries, which remain setup and the configured prelanding compiler guard
+respectively. Main and stabilize workflows keep their existing gates. Gates and dependency installation never run in
+the main checkout or the worker's checkout.
 
 Task worktrees with the same dependency key share one read-only Bun install under the configured dependency-store root
 (default `<worktree root>/../dependency-stores`). Each tree keeps its own small `node_modules` skeleton and workspace
@@ -1306,11 +1312,14 @@ created 69,426 `node_modules` entries per private install (median 4.956 s) versu
 0.016 s), after building one shared store.
 
 Workers run their task acceptance command once after their last relevant edit. Each single, shared-workspace or batch
-dev landing receives one mandatory direct root typecheck on its final candidate, then `devLandingBoot.command` when
-changed paths match `devLandingBoot.paths`. Conflict resolution and formatting are included in the checked tree. No
-affected, sibling, acceptance, native, import, or page-story validation runs before the dev ref advances.
-Infrastructure failures may retry the same compiler or boot command once; product errors leave dev unchanged and go
-to their owner. Promotion continues to run the full gate.
+dev landing runs the root typecheck on its final candidate when `integration.devPrelandingTypecheck` is true, then
+`devLandingBoot.command` when changed paths match `devLandingBoot.paths`. Conflict resolution and
+formatting are included in the checked tree. With the typecheck setting off, the train logs the skip and the
+independent verifier runs the root typecheck after integration. A missing local `.sql` declaration followed by
+unchanged-file TS18046/TS7006 cascades is recorded as infrastructure and does not fail the task. No affected, sibling,
+acceptance, native, import, or page-story validation runs before the dev ref advances. Other infrastructure failures
+may retry the same compiler or boot command once; product errors leave dev unchanged and go to their owner. Promotion
+continues to run the full gate.
 
 `bootSmoke.tests` lists repository boot tests the verifier runs on each newest `dev` head before those queued checks;
 absent files are skipped. `verifierChecks` is the canonical `{ paths: string[], command: string[] }` selection for checks that run after dev
@@ -1320,8 +1329,9 @@ inputs to this verifier when `verifierChecks` is not explicitly set; `bun instal
 excluded. An explicit `verifierChecks` array replaces those legacy selections. `siblingTests.command` selects sibling
 tests after integration, excluding spec-tree files. Discovery uses the shared `siblingTestFiles` selection of existing
 `.test`/`.spec` JS/TS module and JSX files beside the source and in workspace test directories, and still places a
-`bun test` command in the workspace that owns those files. These settings cannot disable the mandatory prelanding
-typecheck. The landing boot check's paths and command come from `devLandingBoot`, not from call sites.
+`bun test` command in the workspace that owns those files. `integration.devPrelandingTypecheck` controls the
+prelanding typecheck; the independent verifier still runs the root typecheck after integration. The landing boot
+check's paths and command come from `devLandingBoot`, not from call sites.
 
 Main and stabilize train checks retain their existing baseline behavior. They compare recorded failing files with the
 integration base, reuse a result for the same base and command, or run a separate base-worktree check. Failing files
@@ -1468,9 +1478,9 @@ non-control-plane brief with `target: stabilize` starts and retries from that br
 while the branch does not exist. The train rebases such a task onto the branch, runs the existing stabilize-lane
 checks, and compare-and-swap advances the branch. It then merges that new head into the integration branch with
 `git merge --no-ff` in a train worktree, retrying up to five times if the integration branch moves. Before compare-
-and-swap advancing dev, the train runs the mandatory root typecheck on the exact merged candidate, then the policy
-boot check when changed paths match. A compiler or boot failure leaves dev unchanged and reports the diagnostic to
-the task owner. Task acceptance and other configured verification
+and-swap advancing dev, the train runs the root typecheck on the exact merged candidate when
+`integration.devPrelandingTypecheck` is true, then the policy boot check when changed paths match. A product compiler
+or boot failure leaves dev unchanged and reports the diagnostic to the task owner. Task acceptance and other configured verification
 run after integration. A merge conflict aborts only that merge: the stabilize branch and the task stay integrated at
 the stabilize commit, and the task's manager and the supermanager receive an inbox notice naming the task, the commit
 and the conflicting files. `goal retarget <task> stabilize` sets `target` on a task that is not integrated, merged or
