@@ -456,7 +456,9 @@ test('add-on creation uses current parent eligibility and keeps a suggested work
     await input(host.querySelector('input[id="create-label-0"]')!, 'Eligible expansion');
     await act(async () => user.click(submit()));
     await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
-    expect(host.querySelector('[data-addon-create-review]')!.textContent).toContain(m.addon_create_review_base_omitted());
+    expect(host.querySelector('[data-addon-create-review]')!.textContent).toContain(
+      m.addon_create_review_base_omitted(),
+    );
     observe = async () => ({ state: 'refused', reason: 'permission' });
     await act(async () => user.click(submit()));
     await waitFor(() =>
@@ -474,11 +476,11 @@ test('add-on creation uses current parent eligibility and keeps a suggested work
     };
     await render(creator(read, fixture.transport));
     await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_reading()));
-    await render(
-      creator(read, fixture.transport),
-      false,
-      { state: 'signed-in', subject: 'bob', csrfToken: 'csrf-bob' },
-    );
+    await render(creator(read, fixture.transport), false, {
+      state: 'signed-in',
+      subject: 'bob',
+      csrfToken: 'csrf-bob',
+    });
     await waitFor(() =>
       expect(canvas().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
     );
