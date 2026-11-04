@@ -10,17 +10,17 @@ or retract a previous candidate.
 
 The [package exports](package.json) are only these entry points:
 
-| Import                                    | Named exports                                                                                                                              |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@rezics/conversion`                      | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError`, `projectSourceClassification` |
-| `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                                                |
-| `@rezics/conversion/bangumi-vocabulary`   | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                                                  |
-| `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                                                         |
-| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision` and VNDB row types                                                                           |
-| `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                      |
-| `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                        |
-| `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                            |
-| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `vndbStaffNameLimit`, `vndbCharacterNameLimits`, `CrossMediaEntityConversion`                |
+| Import                                    | Named exports                                                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@rezics/conversion`                      | `SourceId`, `SourceRecord`, `ConversionInput`, `ConversionDiagnostic`, `ConvertedRecord`, `ConversionError`, `projectSourceClassification`             |
+| `@rezics/conversion/bangumi`              | `convertBangumi`, `converter_revision`, `BangumiConversion`                                                                                            |
+| `@rezics/conversion/bangumi-vocabulary`   | `mapBangumiVocabulary`, `bangumiVocabularyRevision` and Bangumi row types                                                                              |
+| `@rezics/conversion/vndb`                 | `convertVndb`, `converter_revision`, `vndbLimits`, `VndbConversion`, `VndbOptions`                                                                     |
+| `@rezics/conversion/vndb-vocabulary`      | `mapVndbVocabulary`, `vndbVocabularyRevision` and VNDB row types                                                                                       |
+| `@rezics/conversion/source-vocabulary`    | Released binding, identity, row, gap and result types                                                                                                  |
+| `@rezics/conversion/open-library`         | `convertOpenLibrary`, `converter_revision`, `OpenLibraryConversion`                                                                                    |
+| `@rezics/conversion/wikidata`             | `convertWikidata`, `converter_revision`, `wikidataLimits`, `WikidataConversion`                                                                        |
+| `@rezics/conversion/cross-media-entities` | `convertCrossMediaEntity`, `converter_revision`, `mapSourceEnumeration`, `vndbStaffNameLimit`, `vndbCharacterNameLimits`, `CrossMediaEntityConversion` |
 
 Each converter takes an input, an optional context, and optional registered
 converter options. The option is `converterRevision`; import the matching
@@ -415,7 +415,6 @@ bootstrap label and order remaining distinct names by codepoint.
 Focused pure controls live in `tests/vndb-staff-names.test.ts`. Exact credited roles and
 credited-as spelling remain the staff-credit coordinator.
 
-
 ### VNDB release minimum age
 
 `cross-media-entities@6` preserves bounded `releases.minage` values in the
@@ -449,7 +448,6 @@ stable language-then-text order, without claiming a source preference. Per
 character limits are 64 localized rows, 64 aliases, 4,096 bytes and 1,500
 codepoints per text, 64 KiB normalized input and 257 proposals. Overflow is
 rejected rather than truncated.
-
 
 ### VNDB native alternate-name contract
 

@@ -1112,13 +1112,9 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   if (withheldCredits.size) plan.edges = plan.edges.filter((draft) => !withheldCredits.has(draft));
   const characterNameRows = await collectSelectedVndbCharacterNameRows(input, selectedVndbCharacterIds);
   for (const [id, issue] of characterNameRows.overflow)
-    gap(
-      'vndb',
-      issue.table,
-      issue.row,
-      `Selected character name payload rejected: ${issue.reason}`,
-      { code: issue.reason },
-    );
+    gap('vndb', issue.table, issue.row, `Selected character name payload rejected: ${issue.reason}`, {
+      code: issue.reason,
+    });
   for await (const row of input.rows('vndb', 'chars')) {
     const id = text(row, 'id');
     if (!chars.has(id)) continue;

@@ -353,8 +353,7 @@ function array(value: unknown, pointer: string): unknown[] {
 function nameText(value: unknown, pointer: string): string {
   if (typeof value !== 'string' || !value.isWellFormed() || !value.trim()) fail(pointer);
   const result = value as string;
-  if ([...result].length > vndbCharacterNameLimits.maxCodepoints)
-    fail(pointer, 'invalid_record');
+  if ([...result].length > vndbCharacterNameLimits.maxCodepoints) fail(pointer, 'invalid_record');
   if (Buffer.byteLength(result, 'utf8') > vndbCharacterNameLimits.stringBytes) fail(pointer, 'invalid_record');
   return result;
 }
@@ -392,7 +391,10 @@ type CharacterAlias = { id: string; spoil: number | string | null; name: string;
 type LanguageText = { language: string; text: string };
 type QualifiedCharacterAlias = LanguageText & { spoilerLevel: number };
 
-function projectCharacterNames(raw: object, expected: string): {
+function projectCharacterNames(
+  raw: object,
+  expected: string,
+): {
   names: CharacterName[];
   aliases: CharacterAlias[];
   nameFacts: LanguageText[];
@@ -417,8 +419,7 @@ function projectCharacterNames(raw: object, expected: string): {
     const latin = latinCell(own(entry, 'latin', `${pointer}/latin`), `${pointer}/latin`);
     const candidate = { id, lang: language, name, latin };
     const previous = namesByLanguage.get(language);
-    if (previous && JSON.stringify(previous) !== JSON.stringify(candidate))
-      fail(`${pointer}/lang`, 'conflicting_key');
+    if (previous && JSON.stringify(previous) !== JSON.stringify(candidate)) fail(`${pointer}/lang`, 'conflicting_key');
     namesByLanguage.set(language, candidate);
   }
   const names = [...namesByLanguage.values()].sort(
@@ -457,7 +458,9 @@ function projectCharacterNames(raw: object, expected: string): {
     const normalizedSpoil: CharacterAlias['spoil'] =
       spoil !== undefined
         ? spoil
-        : rawSpoil === null || typeof rawSpoil === 'string' || (typeof rawSpoil === 'number' && Number.isSafeInteger(rawSpoil))
+        : rawSpoil === null ||
+            typeof rawSpoil === 'string' ||
+            (typeof rawSpoil === 'number' && Number.isSafeInteger(rawSpoil))
           ? rawSpoil
           : 'unrepresentable';
     const alias = { id, spoil: normalizedSpoil, name, latin };
@@ -466,10 +469,10 @@ function projectCharacterNames(raw: object, expected: string): {
       withheld.push({ pointer: `${pointer}/spoil`, code: 'unrepresentable_qualifier' });
       continue;
     }
-    for (const [language, text] of [
-      ['und', name],
-      ...(latin && latin !== '' ? [['und-Latn', latin]] : []),
-    ] as [string, string][]) {
+    for (const [language, text] of [['und', name], ...(latin && latin !== '' ? [['und-Latn', latin]] : [])] as [
+      string,
+      string,
+    ][]) {
       const tuple = { language, text, spoilerLevel: spoil };
       qualifiedByTuple.set(JSON.stringify([language, text, spoil]), tuple);
     }
@@ -1242,7 +1245,6 @@ function convert(
         },
       ],
     })),
-
   ];
   const diagnostics: ConversionDiagnostic[] = [...(projected.diagnostics ?? [])];
   const extlinks = projected.normalized.extlinks;

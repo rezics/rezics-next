@@ -28,9 +28,9 @@ test('selected COPY character-name rows keep their table owner, language and spo
     expect(selected.overflow.size).toBe(0);
 
     await writeFile(join(db, 'chars_alias.header'), 'id\tname\tspoil\tlatin\n');
-    await expect(Array.fromAsync(new CrossMediaDumpFiles(directory, directory).rows('vndb', 'chars_alias'))).rejects.toThrow(
-      'Invalid VNDB chars_alias header',
-    );
+    await expect(
+      Array.fromAsync(new CrossMediaDumpFiles(directory, directory).rows('vndb', 'chars_alias')),
+    ).rejects.toThrow('Invalid VNDB chars_alias header');
     await writeFile(join(db, 'chars_alias.header'), 'id\tspoil\tname\tlatin\n');
     await writeFile(
       join(db, 'chars_alias'),

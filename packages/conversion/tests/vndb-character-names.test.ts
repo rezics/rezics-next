@@ -5,11 +5,7 @@ import { convertCrossMediaEntity } from '../src/cross-media-entities.ts';
 const subjectId = '00000000-0000-4000-8000-000000000004';
 const otherSubjectId = '00000000-0000-4000-8000-000000000005';
 
-function record(
-  id: string,
-  names: Record<string, unknown>[],
-  aliases: Record<string, unknown>[],
-) {
+function record(id: string, names: Record<string, unknown>[], aliases: Record<string, unknown>[]) {
   return {
     external_id: id,
     record_revision: null,
@@ -72,17 +68,20 @@ test('VNDB character names retain language and romanization while aliases remain
     { language: 'und', text: 'Other Name' },
     { language: 'und-Latn', text: 'Alias Romanized' },
   ]);
-  expect(facts(bound, 'schema:alternateName').slice(1).map((statement) => statement.qualifiers)).toEqual([
+  expect(
+    facts(bound, 'schema:alternateName')
+      .slice(1)
+      .map((statement) => statement.qualifiers),
+  ).toEqual([
     [{ property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: 2 } }],
     [{ property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: 2 } }],
   ]);
   expect(facts(bound, 'schema:alternateName')[0]?.qualifiers).toBeUndefined();
   expect(bound.diagnostics).toEqual([]);
 
-  const nullLatin = convertCrossMediaEntity(
-    record('c1', [names[0]!, { ...names[1]!, latin: null }], aliases),
-    { subjectId },
-  );
+  const nullLatin = convertCrossMediaEntity(record('c1', [names[0]!, { ...names[1]!, latin: null }], aliases), {
+    subjectId,
+  });
   expect(nullLatin.digest).not.toBe(bound.digest);
   expect(facts(nullLatin, 'schema:alternateName').map((statement) => statement.value.content)).toEqual(
     facts(bound, 'schema:alternateName').map((statement) => statement.value.content),
@@ -93,18 +92,16 @@ test('changed names and spoiler levels change identity-bound proposal keys; matc
   const names = [{ id: 'c1', lang: 'ja', name: '美咲', latin: 'Misaki' }];
   const aliases = [{ id: 'c1', spoil: '1', name: 'Shared alias', latin: null }];
   const original = convertCrossMediaEntity(record('c1', names, aliases), { subjectId });
-  const changedName = convertCrossMediaEntity(
-    record('c1', [{ ...names[0]!, name: '美咲・改' }], aliases),
-    { subjectId },
-  );
-  const changedSpoiler = convertCrossMediaEntity(
-    record('c1', names, [{ ...aliases[0]!, spoil: '2' }]),
-    { subjectId },
-  );
+  const changedName = convertCrossMediaEntity(record('c1', [{ ...names[0]!, name: '美咲・改' }], aliases), {
+    subjectId,
+  });
+  const changedSpoiler = convertCrossMediaEntity(record('c1', names, [{ ...aliases[0]!, spoil: '2' }]), { subjectId });
   const otherOwner = convertCrossMediaEntity(
-    record('c2', [{ id: 'c2', lang: 'ja', name: '美咲', latin: null }], [
-      { id: 'c2', spoil: '2', name: 'Shared alias', latin: null },
-    ]),
+    record(
+      'c2',
+      [{ id: 'c2', lang: 'ja', name: '美咲', latin: null }],
+      [{ id: 'c2', spoil: '2', name: 'Shared alias', latin: null }],
+    ),
     { subjectId: otherSubjectId },
   );
   expect(changedName.digest).not.toBe(original.digest);
@@ -112,9 +109,9 @@ test('changed names and spoiler levels change identity-bound proposal keys; matc
   expect(changedName.proposals[1]?.key).not.toBe(original.proposals[1]?.key);
   expect(changedSpoiler.proposals.at(-1)?.key).not.toBe(original.proposals.at(-1)?.key);
   expect(otherOwner.proposals[0]?.key).not.toBe(original.proposals[0]?.key);
-  expect(
-    otherOwner.proposals.some((command) => command.op === 'propose' && command.subject === otherSubjectId),
-  ).toBe(true);
+  expect(otherOwner.proposals.some((command) => command.op === 'propose' && command.subject === otherSubjectId)).toBe(
+    true,
+  );
   expect(facts(otherOwner, 'schema:alternateName').at(-1)?.qualifiers).toEqual([
     { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: 2 } },
   ]);
@@ -139,10 +136,7 @@ test('unrepresentable spoiler levels withhold the complete alias without leaking
 });
 
 test('malformed owner, language and oversized alias rows keep exact source diagnostics', () => {
-  expectInvalid(
-    record('c1', [{ id: 'c2', lang: 'ja', name: 'Wrong owner', latin: null }], []),
-    '/chars_names/0/id',
-  );
+  expectInvalid(record('c1', [{ id: 'c2', lang: 'ja', name: 'Wrong owner', latin: null }], []), '/chars_names/0/id');
   expectInvalid(
     record('c1', [{ id: 'c1', lang: 'not a language', name: 'Bad language', latin: null }], []),
     '/chars_names/0/lang',
