@@ -602,7 +602,7 @@ owns pin controls and restart UI; its existing deduplicating pin-author hydratio
 Decision: selected pin inspection rejects every duplicate reference, including identical repeats, and withholds
 an entire selection with the ordinary exact-read 404 when any selected source is missing, concealed or erased.
 
-`POST /v1/boards/{id}/pin-advice` is an authenticated, private `no-store` read. Its closed input is
+`POST /v1/boards/{id}/pin-advice` is an authenticated, private `no-store` read. Decision: it keeps `board:read`, so OpenAPI security matches other board reads; the handler still requires an account. Its closed input is
 `{ selected: [{ threadId, placeId, sourceRevisionId }], pinRevision? }`: at most twenty-five unique references
 from the displayed ordinary/pinned cohort. Place must equal the route Board; source revision must belong to the
 thread's native route, which may differ from the Board home. All shape/size/duplicate checks precede native work.
