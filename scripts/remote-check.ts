@@ -5952,11 +5952,7 @@ async function uploadRun(
       bytesSent,
       vanishedFiles,
     } = await finishedRsync(sync, signal, host, 'workspace upload', transferLimit);
-    const rsyncMode = fetchedGit
-      ? 'overlay after GitHub fetch'
-      : base.base
-        ? 'checksum copy-dest'
-        : 'full tree';
+    const rsyncMode = fetchedGit ? 'overlay after GitHub fetch' : base.base ? 'checksum copy-dest' : 'full tree';
     reportDuration('rsync', rsyncStarted, host.name, bytesSent, `${uploadFiles.length} files, ${rsyncMode}`);
     if (signal.aborted) throw new Aborted();
     if ([10, 12, 30, 35, 255].includes(synced)) throw new RemoteTransportError(host.name, 'workspace upload', synced);
