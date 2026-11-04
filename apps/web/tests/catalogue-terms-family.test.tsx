@@ -623,6 +623,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       history: createMemoryHistory({ initialEntries: ['/inbox', '/terms'] }),
     });
     await router.load();
+    await router.navigate({ to: '/terms' });
     client.clear();
     await act(async () =>
       root.render(
