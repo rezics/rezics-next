@@ -793,7 +793,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         }>;
                     }>, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
-                workContext?: import("typebox").TOptional<SuggestionWorkContextSchema>;
+                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
             }>>;
             as_of: import("typebox").TString;
         }>;
@@ -1191,7 +1191,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                             }>;
                         }>, import("typebox").TNull]>;
                     }>, import("typebox").TNull]>;
-                workContext?: import("typebox").TOptional<SuggestionWorkContextSchema>;
+                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
                 }>>;
                 as_of: import("typebox").TString;
             }>;
@@ -1445,7 +1445,7 @@ export declare function searchRoutes<App>(app: App, { pool, routeKey, search, di
                         }>;
                     }>, import("typebox").TNull]>;
                 }>, import("typebox").TNull]>;
-                workContext?: import("typebox").TOptional<SuggestionWorkContextSchema>;
+                workContext: import("typebox").TOptional<SuggestionWorkContextSchema>;
             }>>;
             as_of: import("typebox").TString;
         }>;
