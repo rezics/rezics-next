@@ -50,7 +50,6 @@ export type InboxItem = Readonly<{
   unread: boolean;
 }>;
 
-<<<<<<< HEAD
 export type InboxNoticeDetail = Readonly<{
   viewer: Readonly<{ state: 'current' }>;
   notice: InboxItem;
@@ -150,7 +149,6 @@ function unreadSql(): string {
            (n.created_at,n.notice_id) > (s.seen_created_at,s.seen_notice_id))`;
 }
 
-<<<<<<< HEAD
 function inboxSelection(value: InboxSelection | undefined): InboxSelection {
   if (value === undefined) return DEFAULT_INBOX_SELECTION;
   if (value === 'all' || value === 'unread') return value;
