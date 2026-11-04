@@ -46,7 +46,7 @@ test('Read correction operations once for the exact Subject and Global Context a
   const denied = await readCorrectionActions(client, 'Bearer fixture', id);
   expect(requests).toHaveLength(1);
   expect(requests[0]).toEqual({
-    path: '/v1/viewer-actions',
+    path: '/v1/viewerActions',
     body: {
       resources: [
         { type: 'semantic.subject', id },
