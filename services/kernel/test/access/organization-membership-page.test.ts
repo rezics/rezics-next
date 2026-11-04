@@ -33,7 +33,12 @@ async function context(human: Awaited<ReturnType<typeof person>>) {
   const deadline = Date.now() + 10000;
   return { actor: await f.access.authenticate(human.bearer, { pool, deadline }), deadline };
 }
-async function add(owner: Awaited<ReturnType<typeof person>>, member: Awaited<ReturnType<typeof person>>, organizationId: string, role: 'owner' | 'member') {
+async function add(
+  owner: Awaited<ReturnType<typeof person>>,
+  member: Awaited<ReturnType<typeof person>>,
+  organizationId: string,
+  role: 'owner' | 'member',
+) {
   const held = await f.bindings.internalLifecycle.reserveCoordination({
     accountId: member.accountId,
     relatedAccountId: organizationId,
@@ -106,7 +111,9 @@ test('serves a bounded viewer-bound roster, observes current actions and keeps c
   expect(JSON.stringify(first)).not.toContain('reservationId');
   expect(JSON.stringify(first)).not.toContain('email');
   expect(first.members.items.some((row: any) => row.account?.handle?.startsWith('membership_page_'))).toBe(true);
-  expect(first.members.items.every((row: any) => row.actions.changeRole === 'allowed' && row.actions.remove === 'allowed')).toBe(true);
+  expect(
+    first.members.items.every((row: any) => row.actions.changeRole === 'allowed' && row.actions.remove === 'allowed'),
+  ).toBe(true);
 
   const secondResponse = await page(owner, organizationId, first.members.next);
   expect(secondResponse.status).toBe(200);
