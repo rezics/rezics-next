@@ -113,6 +113,9 @@ Decision: anonymous native author pages issue a signed exact-cohort selection bo
 original cursor and native source observation; the private overlay consumes that selection without rereading
 the author frontier. This requires an additive `actionSelection` in `author-item-reads.ts` and its public schemas.
 
+Decision: source partition identity and epoch are checked across one private assembly; positions may advance
+between its reads but cannot move backwards.
+
 Anonymous `GET /v1/accounts/{accountId}/posts` and `/threads` issue the optional public `actionSelection`
 only for a nonempty admitted page. Its `references` are the exact native thread/post, board, opening revision
 and authored revision; `proof` binds their order, author, public view, original cursor, author partition epoch
@@ -143,26 +146,32 @@ publisher installs the real method/DTO. It must consume this route, without impo
   Distinct thread observations share their round's native read. Each selected reply additionally performs the
   existing native exact post/ancestor disclosure and one native read per distinct immediate parent in each
   round. Parent digests, source partition identity/epoch and nondecreasing positions are compared across assembly.
-  Auth, Board/Realm/Subject/Access preparation and evaluations,
-  both native batch authority rounds, owner lookups, transaction controls and all pools/runners remain charged.
+  Auth, both authority rounds, nested batches, Board/Realm/Subject/Access preparation and evaluation, owner lookups,
+  transaction controls, registered phases/default runners, every participating pool and end-of-finish Auth
+  reauthentication remain charged.
 - Bound: `S<=20`, distinct threads/boards `<=S`. Token and cursor are each at most 4 KiB; the closed request
-  bounds selected keys before enrichment; distinct immediate parents `<=S`. No history, membership, reaction or watch enumeration is added.
+  bounds selected keys before enrichment; distinct immediate parents `<=S`; each private source round observes at
+  most two selected partition tuples per row. No history, membership, reaction or watch enumeration is added.
   The original source bodies retain native 2 MiB-per-body and ancestry limits; hashing serializes each admitted
-  body and retains only a 64-character digest after its round. Charge these raw bodies, comparison copies and
-  serialization separately from the shared batch's own finite retention/envelope bounds. Its internal identity,
-  aggregate, watch and authority work is included, not treated as a free nested call.
-- Growth check: native tests exercise the real page/route, anonymous and signed-in readers, exact-cohort
-  tampering and asynchronous publication withdrawal. Independent 256/1024/4096 authored-row, history, membership,
-  reaction, watch and authority growth, examined rows/blocks, all runners and retained/serialized byte measurement
-  remain controller acceptance; no measured physical-growth pass is claimed by this implementation.
+  body and retains only a 64-character digest after its round. Charge raw bodies, comparison copies, materialized
+  results, retained state and serialized UTF-8 bytes separately from the shared batch's finite retention/envelope
+  bounds. Same-input retries repeat dispatched work and retain the original admitted frontier.
+- Growth check: native and physical acceptance independently grows authored rows, history, membership, reactions,
+  watches and both authorities to 256/1024/4096 while preserving fixed keys, homes, page limits, raw input, output
+  and byte budgets. Capture shared catalog classification, async-context background attribution and invisible-MVCC
+  exclusion; Auth, both authority rounds, nested batches, all pools/homes/registered phases/runners, SQL/control/
+  preparation/evaluation, examined prefixes/rows/blocks, raw/copy/materialized/retained/serialized bytes, cold reads,
+  same-input retries and discarded work. The controller owns these measurements; no physical pass is claimed here.
 
 The native action journey uses independently created review subjects so each fixture respects the existing
 author/subject live-review slot. AuthHost and fixture cleanup share one physical Auth pool close, including
 construction failure; setup errors are reported before any journey outcome is counted. The prepared journey
-covers Posts/Discussion/Reviews, anonymous and signed advice, unavailable aggregates, original-key reaction
-recovery, exact report/reply receipt recovery, containing-thread watch, credential replacement/revocation,
-exact-source and immediate-parent replacement, source epoch changes, concealed ancestry and publication withdrawal.
-The remaining command/effect, finish-time identity/credential, sparse-frontier and physical-growth outcomes remain open.
+covers Posts/Discussion/Reviews, anonymous and signed advice, unavailable aggregates, original-key thread/post
+reaction recovery, registered reaction freshness, watch/unwatch readback, exact report/reply receipt recovery,
+finish-time account blocking and credential replacement/revocation, exact-source and immediate-parent replacement,
+source partition identity/epoch/position witnesses, sparse pages, same-input retries, concealed ancestry and
+publication withdrawal. The controller owns native journey execution and independent 256/1024/4096 physical-growth
+acceptance; no acceptance result is claimed here.
 Selection issuance and private admission use the same configured native clock for the existing cursor lifetime.
 
 Decision: immediate parent observations fence one private assembly; they do not extend the public selection or its frontier.

@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { readPublicViews } from '../access/public-views.ts';
+import { CommandUnavailableError } from '../command/command.ts';
 import { withConnection, discardConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import type { Actor } from '../request/access.ts';
+import { actorOf, AuthenticationError, type Actor } from '../request/access.ts';
 import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { AuthorContextReference } from './author-item-context.ts';
@@ -26,6 +27,14 @@ type View = AuthorContributionActionsInput['view'];
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const changed = () =>
   new ProblemError('dependency_unavailable', { detail: 'The selected author contribution changed' });
+async function observeSource<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof CommandUnavailableError && error.reason === 'moved') throw changed();
+    throw error;
+  }
+}
 const publicItem = (item: { availability: string; visibility?: string }) =>
   item.availability === 'available' && (item.visibility === 'published' || item.visibility === 'protected');
 const sourceRevision = (item: { availability: string; revisionId?: string }) => {
@@ -176,7 +185,7 @@ async function sources(
     const threadId = reference.type === 'content.post' ? reference.threadId : reference.id;
     let read = threads.get(threadId);
     if (!read) {
-      read = await readThread(dependencies, threadId, context);
+      read = await observeSource(() => readThread(dependencies, threadId, context));
       threads.set(threadId, read);
       anchors.push(read.anchor);
     }
@@ -198,7 +207,7 @@ async function sources(
         (thread.firstPost.availability !== 'erased' && !publicItem(thread.firstPost))
       )
         throw changed();
-      const post = await readPost(dependencies, threadId, reference.id, context);
+      const post = await observeSource(() => readPost(dependencies, threadId, reference.id, context));
       anchors.push(post.anchor);
       if (
         !post.value ||
@@ -213,7 +222,7 @@ async function sources(
       // replacement during private assembly cannot silently pass that fence.
       const parentId = post.value.parentId;
       if (parentId && !parents.has(parentId)) {
-        const parent = await readPost(dependencies, threadId, parentId, context);
+        const parent = await observeSource(() => readPost(dependencies, threadId, parentId, context));
         anchors.push(parent.anchor);
         if (!parent.value) throw changed();
         parents.set(parentId, hash(parent.value));
@@ -221,7 +230,11 @@ async function sources(
     }
   }
   if (JSON.stringify(referencesOf(selected)) !== JSON.stringify(references)) throw changed();
-  return { witness: observation(selected), parents: hash([...parents]), anchors };
+  return {
+    witness: observation(selected),
+    parents: hash([...parents]),
+    anchors,
+  };
 }
 
 function confirmSources(initial: Awaited<ReturnType<typeof sources>>, final: Awaited<ReturnType<typeof sources>>) {
@@ -234,11 +247,24 @@ function confirmSources(initial: Awaited<ReturnType<typeof sources>>, final: Awa
       before.partition.partitionNo !== after.partition.partitionNo ||
       before.partition.node !== after.partition.node ||
       before.epoch !== after.epoch ||
+      before.partition.writeState === 'moved' ||
       after.partition.writeState === 'moved' ||
       after.position < before.position
     )
       throw changed();
   }
+}
+
+function confirmPublication(before: AnchoredPosition, after: AnchoredPosition) {
+  if (
+    before.partition.partitionNo !== after.partition.partitionNo ||
+    before.partition.node !== after.partition.node ||
+    before.epoch !== after.epoch ||
+    before.partition.writeState === 'moved' ||
+    after.partition.writeState === 'moved' ||
+    after.position < before.position
+  )
+    throw changed();
 }
 
 /** One admitted page, one retained native batch, and complete public disclosure on both sides of assembly. */
@@ -247,6 +273,7 @@ export async function readAuthorContributionActions(
   accountId: string,
   input: AuthorContributionActionsInput,
   actor: Actor,
+  request: Request,
   deadline: number,
 ) {
   const selected = admission(dependencies.tokens, accountId, input, (dependencies.clock?.() ?? new Date()).getTime());
@@ -265,6 +292,9 @@ export async function readAuthorContributionActions(
     if (error instanceof ProblemError && error.code === 'not_found') throw changed();
     throw error;
   }
+  confirmPublication(firstPublication, lastPublication);
+  const currentActor = await actorOf(dependencies.access, request, { pool: dependencies.pool, deadline });
+  if (JSON.stringify(currentActor) !== JSON.stringify(actor)) throw new AuthenticationError(401, 'Bearer');
   return {
     value: {
       viewer: result.viewer,

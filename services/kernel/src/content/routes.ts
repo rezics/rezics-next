@@ -1614,12 +1614,19 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           security: readSecurity,
         },
       },
-      async ({ params: { accountId }, body, actor, admission, job, session, set }) => {
+      async ({ params: { accountId }, body, actor, request, admission, job, session, set }) => {
         existingId(accountId);
         set.headers['cache-control'] = 'private, no-store';
         return contentOperation(() =>
           admission.run('normal', job, async () => {
-            const result = await readAuthorContributionActions(dependencies, accountId, body, actor, job.deadline);
+            const result = await readAuthorContributionActions(
+              dependencies,
+              accountId,
+              body,
+              actor,
+              request,
+              job.deadline,
+            );
             for (const anchor of result.anchors) session.record(sessionComponent(anchor));
             return result.value;
           }),
