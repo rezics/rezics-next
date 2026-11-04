@@ -27,11 +27,11 @@ estimate:
   files: 10
 acceptance:
   tests:
-    - "The curator History section switches metadata and structure streams, preserves selected signed addresses through refresh/back, compares deltas, and returns to the exact current occurrence editor."
-    - "Repeated Subject occurrences stay separate; loading, empty, incomplete, unavailable, keyboard, phone and late-response states work; stale responses retire after viewer, curator or Collection changes."
-    - "Public readers and cached receiving state never expose private history notes, labels or withheld Subject identity."
-    - "Native cases cover filtered bulk removal, current account retirement and actual pruning while preserving archive recovery, stale-address, hidden-Subject, deletion, minimization and visibility coverage."
-    - "Independent 64/512/4096 growth cases account for live member, retained delta and foreign Subject populations, raw rows/lookahead, bytes, authority checks, negative observations, retries, append/prune and lifecycle cleanup."
+    - 'The curator History section switches metadata and structure streams, preserves selected signed addresses through refresh/back, compares deltas, and returns to the exact current occurrence editor.'
+    - 'Repeated Subject occurrences stay separate; loading, empty, incomplete, unavailable, keyboard, phone and late-response states work; stale responses retire after viewer, curator or Collection changes.'
+    - 'Public readers and cached receiving state never expose private history notes, labels or withheld Subject identity.'
+    - 'Native cases cover filtered bulk removal, current account retirement and actual pruning while preserving archive recovery, stale-address, hidden-Subject, deletion, minimization and visibility coverage.'
+    - 'Independent 64/512/4096 growth cases account for live member, retained delta and foreign Subject populations, raw rows/lookahead, bytes, authority checks, negative observations, retries, append/prune and lifecycle cleanup.'
   failing: true
   workerOwned: true
 ---

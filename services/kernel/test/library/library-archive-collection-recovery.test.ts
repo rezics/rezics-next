@@ -198,7 +198,8 @@ test('Collection archive recovery journals each duplicate occurrence with withhe
   const additions = history.changes.filter((change: { operation: string }) => change.operation === 'added');
   expect(additions).toHaveLength(2);
   expect(new Set(additions.map((change: { occurrenceId: string }) => change.occurrenceId)).size).toBe(2);
-  expect(additions.every((change: { subjectContext: { state: string } }) => change.subjectContext.state === 'withheld'))
-    .toBe(true);
+  expect(
+    additions.every((change: { subjectContext: { state: string } }) => change.subjectContext.state === 'withheld'),
+  ).toBe(true);
   await json(owner, 'DELETE', `/v1/collections/${recovered.collectionId}`);
 }, 120000);
