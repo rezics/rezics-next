@@ -129,9 +129,7 @@ test('reader keeps book, volume and author identities after accept, adopt and on
       journal,
       review: runtime.importTransport,
       publicClient,
-      ...(first.creditVocabularyRequirements
-        ? { vocabularyRequirements: first.creditVocabularyRequirements }
-        : {}),
+      ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
     });
     expect(published.published.some((row) => row.sourceKey === '499' && row.nativeType === 'schema:BookSeries')).toBe(
       true,

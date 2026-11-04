@@ -263,9 +263,7 @@ export async function planShowcaseBooks(input: {
     if (row.type !== 1) {
       rejectedAuthors.add(`person:${id}`);
       authorIds.delete(id);
-      gaps.push(
-        gap('person', row, 'Author identity is not an individual person', { property: 'schema:author' }),
-      );
+      gaps.push(gap('person', row, 'Author identity is not an individual person', { property: 'schema:author' }));
       continue;
     }
     people.push({ source: 'bangumi', key: `person:${id}`, revision: null, payload: row });
@@ -435,7 +433,8 @@ async function rereadBookAuthorBindings(input: {
     creditGaps,
     creditRoles: current.roles,
     creditVocabularyRequirements: current.requirements,
-    status: creditGaps.length || input.seeded.status === 'imported-with-gaps' ? 'imported-with-gaps' : input.seeded.status,
+    status:
+      creditGaps.length || input.seeded.status === 'imported-with-gaps' ? 'imported-with-gaps' : input.seeded.status,
   };
 }
 

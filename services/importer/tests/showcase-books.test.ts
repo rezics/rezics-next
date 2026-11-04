@@ -79,12 +79,14 @@ const illustrator = { id: 7001, name: '竹岡美穗', type: 1, career: ['artist'
 const translator = { id: 7002, name: '他人译', type: 1, career: ['translator'] };
 const company = { id: 8001, name: 'エンターブレイン', type: 2 };
 
-function tables(extra: {
-  relations?: Record<string, unknown>[];
-  credits?: Record<string, unknown>[];
-  people?: Record<string, unknown>[];
-  complete?: boolean;
-} = {}): CrossMediaTables {
+function tables(
+  extra: {
+    relations?: Record<string, unknown>[];
+    credits?: Record<string, unknown>[];
+    people?: Record<string, unknown>[];
+    complete?: boolean;
+  } = {},
+): CrossMediaTables {
   const rows: Record<string, Record<string, unknown>[]> = {
     'bangumi/subject': [series, volume, second, unrelated, manga],
     'bangumi/subject-relations': [
@@ -137,7 +139,13 @@ function reviewWorld(journal: ShowcaseJournal) {
     if (!subject) throw new Error('Missing fixture subject');
     const identity = /^(?:(person|character):)?([0-9]+)$/u.exec(subject.sourceExternalId);
     const property =
-      identity?.[1] === 'person' ? 'wdt:P6298' : identity?.[1] === 'character' ? 'wdt:P6296' : identity ? 'wdt:P5732' : undefined;
+      identity?.[1] === 'person'
+        ? 'wdt:P6298'
+        : identity?.[1] === 'character'
+          ? 'wdt:P6296'
+          : identity
+            ? 'wdt:P5732'
+            : undefined;
     const statements = property
       ? {
           ...subject.statements,
@@ -321,14 +329,10 @@ test('fresh Book Girl seed publishes current authors and keeps grain, membership
     expect(first.identities['person:6023']?.id).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u,
     );
-    expect(first.creditRoles).toEqual([
-      expect.objectContaining({ code: '2001', property: 'schema:author' }),
-    ]);
-    expect(
-      first.creditGaps.some(
-        (item) => 'path' in item && item.path === '/subject-persons/26/6023/position',
-      ),
-    ).toBe(false);
+    expect(first.creditRoles).toEqual([expect.objectContaining({ code: '2001', property: 'schema:author' })]);
+    expect(first.creditGaps.some((item) => 'path' in item && item.path === '/subject-persons/26/6023/position')).toBe(
+      false,
+    );
     const published = await publishShowcase({
       plan: showcaseBooksToCrossMediaPlan(first.planned),
       result: first,
@@ -336,9 +340,7 @@ test('fresh Book Girl seed publishes current authors and keeps grain, membership
       journal,
       review: world.review,
       publicClient: world.publicClient,
-      ...(first.creditVocabularyRequirements
-        ? { vocabularyRequirements: first.creditVocabularyRequirements }
-        : {}),
+      ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
     });
     const seriesRead = (await world.publicClient.readSubject(first.identities['499']!.id)).subject as {
       type: string;
@@ -373,10 +375,12 @@ test('fresh Book Girl seed publishes current authors and keeps grain, membership
         return command.subject === first.identities['26']?.id || command.subject === first.identities['27']?.id;
       }),
     ).toBe(true);
-    const authors = [...world.receipts.values()].map((row) => JSON.parse(row.body) as BatchCommand).filter(
-      (command): command is Extract<BatchCommand, { op: 'propose' }> =>
-        command.op === 'propose' && command.statement.property.id === 'schema:author',
-    );
+    const authors = [...world.receipts.values()]
+      .map((row) => JSON.parse(row.body) as BatchCommand)
+      .filter(
+        (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+          command.op === 'propose' && command.statement.property.id === 'schema:author',
+      );
     expect(authors.some((command) => command.subject === first.identities['26']?.id)).toBe(true);
     expect(authors.some((command) => command.subject === first.identities['499']?.id)).toBe(false);
     expect(
@@ -428,8 +432,7 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
   expect(planned.selected.editions).toEqual([]);
   expect(
     planned.credits.every(
-      (draft) =>
-        draft.roleCode === 2001 && (draft.person === 'person:6023' || draft.person === 'person:9009'),
+      (draft) => draft.roleCode === 2001 && (draft.person === 'person:6023' || draft.person === 'person:9009'),
     ),
   ).toBe(true);
   expect(planned.gaps).toContainEqual(
@@ -458,9 +461,7 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
       journal,
       review: world.review,
       publicClient: world.publicClient,
-      ...(first.creditVocabularyRequirements
-        ? { vocabularyRequirements: first.creditVocabularyRequirements }
-        : {}),
+      ...(first.creditVocabularyRequirements ? { vocabularyRequirements: first.creditVocabularyRequirements } : {}),
     });
     const role = first.creditRoles![0]!;
     const concept = world.subjects.get(role.conceptId)!;
@@ -483,9 +484,7 @@ test('wrong, missing or retracted author evidence withholds only that claim and 
     expect(retracted.identities['26']?.id).toBe(first.identities['26']?.id);
     expect(retracted.identities['person:6023']?.id).toBe(first.identities['person:6023']?.id);
     expect(retracted.creditRoles ?? []).toEqual([]);
-    expect(retracted.creditGaps).toContainEqual(
-      expect.objectContaining({ reason: 'missing_concept', code: '2001' }),
-    );
+    expect(retracted.creditGaps).toContainEqual(expect.objectContaining({ reason: 'missing_concept', code: '2001' }));
     expect(retracted.status).toBe('imported-with-gaps');
     const volumeRead = (await world.publicClient.readSubject(retracted.identities['26']!.id)).subject as {
       type: string;
