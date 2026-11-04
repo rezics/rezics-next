@@ -101,9 +101,14 @@ test('public Realm destinations and the native discussion reader preserve their 
       });
     });
     expect(boardRead.page.threads.threads.some((candidate) => candidate.id === threadPage.thread.id)).toBe(true);
-    const boardHtml = await render(createElement(BoardCommunity, { page: boardRead.page, sort: 'new' }), `/en/boards/${boardId}`);
+    const boardHtml = await render(
+      createElement(BoardCommunity, { page: boardRead.page, sort: 'new' }),
+      `/en/boards/${boardId}`,
+    );
     expect(boardHtml).toContain(boardRead.page.board.title);
-    expect(boardHtml).toContain(`href="${threadLocation('en', { id: threadPage.thread.id, title: threadPage.thread.title })}"`);
+    expect(boardHtml).toContain(
+      `href="${threadLocation('en', { id: threadPage.thread.id, title: threadPage.thread.title })}"`,
+    );
 
     const openingId = threadPage.thread.firstPost.id;
     const replies = threadPage.posts.posts.filter((post) => post.parentId === openingId);
@@ -124,9 +129,7 @@ test('public Realm destinations and the native discussion reader preserve their 
     expect(returnSource).not.toBeNull();
     const returnHref = boardReadingHref(returnSource!);
     expect(parseBoardReadingReturn(returnSource)).toEqual(returnSource);
-    expect(returnHref).toBe(
-      `/en/boards/${encodeURIComponent(boardId)}?sort=new#board-thread-${threadPage.thread.id}`,
-    );
+    expect(returnHref).toBe(`/en/boards/${encodeURIComponent(boardId)}?sort=new#board-thread-${threadPage.thread.id}`);
 
     setLocale('en', { reload: false });
     const reading = await render(
