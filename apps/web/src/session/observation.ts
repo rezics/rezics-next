@@ -39,8 +39,7 @@ class BrowserObservation {
   getServerSnapshot = (): BrowserObservationSnapshot => closedObservation;
 
   subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener);
-    if (this.listeners.size === 1) {
+    if (this.listeners.size === 0) {
       this.stopQueryCache = this.client.getQueryCache().subscribe((event) => {
         if (isSessionKey(event.query.queryKey)) this.reconcile();
         for (const notify of [...this.cacheListeners]) notify();
@@ -48,6 +47,7 @@ class BrowserObservation {
       // A remount is a new incarnation even when the session cache still contains the same reader.
       this.reconcile(true);
     }
+    this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
       if (this.listeners.size === 0) this.retireMountedIncarnation();
