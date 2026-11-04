@@ -137,8 +137,18 @@ test('operator plans authored VNDB COPY releases without mixing work and release
     expect(plan.entities.vndb.map((row) => row.key)).toEqual(['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7']);
     expect(plan.members.some((row) => row.key === 'v1' && row.kind === 'work')).toBe(true);
     expect(plan.members.filter((row) => row.kind === 'release')).toHaveLength(7);
-    expect(plan.gaps.some((gap) => gap.reason.includes('supersession'))).toBe(true);
-    expect(plan.edges.every((edge) => edge.property === 'schema:exampleOfWork')).toBe(true);
+    expect(plan.gaps.some((gap) => gap.reason.includes('supersession'))).toBe(false);
+    expect(plan.edges.filter((edge) => edge.table === 'releases_vn')).toHaveLength(7);
+    expect(plan.edges.filter((edge) => edge.table === 'releases_vn').every((edge) => edge.property === 'schema:exampleOfWork')).toBe(true);
+    expect(plan.edges.filter((edge) => edge.table === 'releases_supersedes')).toMatchObject([
+      {
+        holder: 'r1',
+        target: 'r2',
+        property: 'rezics:releaseSupersedes',
+        record: { id: 'r1', rid: 'r2' },
+        fields: ['releases_supersedes.id', 'releases_supersedes.rid'],
+      },
+    ]);
     expect(decodeVndbReleased('20200229')).toBe('2020-02-29');
     expect(decodeVndbReleased('20200300')).toBe('2020-03');
     expect(decodeVndbReleased('20200000')).toBe('2020');

@@ -30,6 +30,8 @@ async function authoredCopy(
     entry_meta: ['id\trevision\tlastmod', 'v1\t1\t2026-10-25 00:00:00+00'],
     releases: ['id\treleased', 'r1\t20200229\nr2\t20200300'],
     releases_titles: ['id\tlang\tmtl\ttitle\tlatin', titles.join('\n')],
+    releases_media: ['id\tmedium\tqty', ''],
+    releases_platforms: ['id\tplatform', ''],
     releases_vn: ['id\tvid\trtype', 'r1\tv1\tcomplete\nr2\tv1\tcomplete'],
     releases_supersedes: ['id\trid', supersessions.map(({ id, rid }) => `${id}\t${rid}`).join('\n')],
   };
