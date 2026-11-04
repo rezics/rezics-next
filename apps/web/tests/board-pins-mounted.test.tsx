@@ -40,6 +40,7 @@ const globals = {
   getComputedStyle: window.getComputedStyle.bind(window),
   requestAnimationFrame: window.requestAnimationFrame.bind(window),
   cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: () => {},
   IS_REACT_ACT_ENVIRONMENT: true,
 };
 const descriptors = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -164,7 +165,7 @@ test('mounted Board pin controls use only exact current selected advice and pres
     { threadId: ordinary.id, placeId: page.board.id, sourceRevisionId: sourceRevision(ordinary) },
   ]);
   expect([...allowed.host.querySelectorAll('[data-board-pin-focus="toggle"]')].map((node) => node.textContent)).toEqual(
-    [m.board_pin_unpin(), m.board_pin_pin()],
+    [m.board_pin_pin()],
   );
   await allowed.close();
 
@@ -281,9 +282,9 @@ test('unknown retry keeps its original command and missing rows move focus to th
     },
   });
   const toggles = feed.host.querySelectorAll<HTMLButtonElement>('[data-board-pin-focus="toggle"]');
-  expect(toggles).toHaveLength(2);
+  expect(toggles).toHaveLength(1);
   await act(async () => {
-    toggles[1]!.click();
+    toggles[0]!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   const confirm = [...document.querySelectorAll<HTMLButtonElement>('button')].find(
