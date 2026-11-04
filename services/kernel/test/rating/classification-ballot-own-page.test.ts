@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import type { PoolClient, QueryConfig } from 'pg';
 import { createRealAccess, type RealAccessFixture } from '../semantic/real-access.ts';
 import { openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
@@ -31,10 +32,29 @@ const receiptKeys: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32)
 let database: GrowthDatabase;
 let realAccess: RealAccessFixture<Persona>;
 let app: ReturnType<typeof createKernel>;
+let loseClearCommit = false;
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
   database.pool.options.max = 1;
+  database.pool.on('connect', (client) => {
+    const original = client.query.bind(client) as (...args: unknown[]) => unknown;
+    let ballotWritten = false;
+    client.query = ((query: string | QueryConfig, ...args: unknown[]) => {
+      const text = typeof query === 'string' ? query : query.text;
+      if (/^BEGIN/i.test(text)) ballotWritten = false;
+      if (/\b(?:INSERT INTO|UPDATE|DELETE FROM) rating\.classification_ballot\b/i.test(text)) ballotWritten = true;
+      const result = original(query, ...args);
+      if (!result || typeof (result as Promise<unknown>).then !== 'function') return result;
+      return (result as Promise<unknown>).then((result) => {
+        if (/^COMMIT/i.test(text) && ballotWritten && loseClearCommit) {
+          loseClearCommit = false;
+          throw new Error('injected lost classification clear response');
+        }
+        return result;
+      });
+    }) as PoolClient['query'];
+  });
   await bootstrapRelease(database.pool, bundledRelease);
   realAccess = await createRealAccess(database.admin, accounts, actions, {
     credentialClock: () => new Date(Date.now() - 1_000),
@@ -97,6 +117,15 @@ async function hideSubject(subjectId: string): Promise<void> {
   const result = await database.admin.query(
     `UPDATE semantic.subject SET visibility = 'hidden', security_revision = security_revision + 1
      WHERE route = $1 AND subject_id = $2 AND visibility = 'visible'`,
+    [routeOf(subjectId), subjectId],
+  );
+  expect(result.rowCount).toBe(1);
+}
+
+async function showSubject(subjectId: string): Promise<void> {
+  const result = await database.admin.query(
+    `UPDATE semantic.subject SET visibility = 'visible', security_revision = security_revision + 1
+     WHERE route = $1 AND subject_id = $2 AND visibility = 'hidden'`,
     [routeOf(subjectId), subjectId],
   );
   expect(result.rowCount).toBe(1);
@@ -306,6 +335,17 @@ test('a retained ballot after association loss has no restored label and only of
   });
   expect(JSON.stringify(page)).not.toContain('Hidden work label');
   expect(JSON.stringify(page)).not.toContain('Hidden concept label');
+  await showSubject(subject.id);
+  const restored = await responseJson(await request('owner', 'GET', '/v1/me/classification-assessments'));
+  expect(restored.items[0]).toMatchObject({
+    state: 'withheld',
+    subject: null,
+    target: null,
+    association: null,
+    aggregate: null,
+    actions: { state: 'withheld', readback: null, set: null, clear: null },
+  });
+  await hideSubject(subject.id);
   const clearPath = page.items[0].actions.clear as string;
   const clearKey = randomUUID();
   await request('owner', 'DELETE', clearPath, undefined, clearKey);
@@ -380,7 +420,7 @@ test('the page continues from raw keys and promotes an exact selected slot once'
     { ...actor, clientId: 'desktop' },
     { ...actor, requestedBy: `urn:rezics:request:${accounts.other}:${randomUUID()}` },
     { ...actor, authnEpoch: 2 },
-    { ...actor, scopes: [...actor.scopes, 'classification_ballot:read-aggregate'] },
+    { ...actor, scopes: actor.scopes.filter((scope) => scope !== 'classification_ballot:read-aggregate') },
   ])
     await expect(reader.page(changed, { cursor: first.next as string }, Date.now() + 30_000)).rejects.toThrow();
   const delegated = await delegatedBearer(`urn:rezics:request:${accounts.other}:${randomUUID()}`);
@@ -435,3 +475,72 @@ test('the page continues from raw keys and promotes an exact selected slot once'
     ).status,
   ).toBe(400);
 }, 240_000);
+
+test('concealed sparse windows keep the examined raw frontier and allow an exact cursor retry', async () => {
+  const targets: TestSubject[] = [];
+  for (let index = 0; index < 22; index++)
+    targets.push(await createSubject({ type: 'skos:Concept', labels: { en: `Sparse concept ${index}` } }));
+  const subject = await createSubject({
+    type: 'schema:Book',
+    labels: { en: 'Sparse classification subject' },
+    statements: {
+      'schema:keywords': targets.map((target) => ({
+        property: { id: 'schema:keywords' },
+        value: { type: 'value', content: target.id },
+        qualifiers: [],
+      })),
+    },
+  });
+  const associationIds = subject.statements['schema:keywords']!.map((statement) => statement.id);
+  for (const associationId of associationIds) await setBallot(subject.id, associationId, 'support', false);
+  const selectedAssociationId = associationIds[20]!;
+  await hideSubject(subject.id);
+
+  const savedActions = [...actions];
+  actions.splice(0, actions.length, ...savedActions.filter((action) => action !== 'classification_ballot:set'));
+  await realAccess.renew('owner');
+  try {
+    const selection = `selectedSubjectId=${subject.id}&selectedAssociationId=${selectedAssociationId}`;
+    const first = await responseJson(
+      await request('owner', 'GET', `/v1/me/classification-assessments?${selection}`),
+    );
+    expect(first.items).toEqual([]);
+    expect(first.traversal).toBe('more');
+    expect(first.next).toEqual(expect.any(String));
+
+    const continuation = `/v1/me/classification-assessments?${selection}&cursor=${encodeURIComponent(first.next)}`;
+    const second = await responseJson(await request('owner', 'GET', continuation));
+    const retry = await responseJson(await request('owner', 'GET', continuation));
+    expect(second).toMatchObject({ items: [], traversal: 'complete', next: null });
+    expect(retry).toEqual(second);
+  } finally {
+    actions.splice(0, actions.length, ...savedActions);
+    await realAccess.renew('owner');
+  }
+}, 240_000);
+
+test('a lost clear response replays the original expected revision before page readback', async () => {
+  const target = await createSubject({ type: 'skos:Concept', labels: { en: 'Uncertain clear concept' } });
+  const subject = await createSubject({
+    type: 'schema:Book',
+    labels: { en: 'Uncertain clear subject' },
+    statements: {
+      'schema:keywords': [
+        { property: { id: 'schema:keywords' }, value: { type: 'value', content: target.id }, qualifiers: [] },
+      ],
+    },
+  });
+  const associationId = subject.statements['schema:keywords']![0]!.id;
+  await setBallot(subject.id, associationId, 'support', false);
+  const page = await responseJson(await request('owner', 'GET', '/v1/me/classification-assessments'));
+  const clear = page.items[0].actions.clear as string;
+  expect(clear).toContain('expectedRevision=1');
+
+  const key = randomUUID();
+  loseClearCommit = true;
+  const uncertain = await request('owner', 'DELETE', clear, undefined, key);
+  expect(uncertain.status).toBe(503);
+  expect(loseClearCommit).toBe(false);
+  expect((await request('owner', 'DELETE', clear, undefined, key)).status).toBe(204);
+  expect((await responseJson(await request('owner', 'GET', '/v1/me/classification-assessments'))).items).toEqual([]);
+}, 180_000);
