@@ -10,8 +10,12 @@ export const loadNamesAdvice: NamesAdviceLoader = async (reader) => {
 };
 
 /** Advice can fail independently of the public projection. Only its failed section is retried, once. */
-export function useNamesAdvice(observation: BrowserObservationSnapshot, current: () => boolean,
-  loader: NamesAdviceLoader, initial?: TermsPageAuthority) {
+export function useNamesAdvice(
+  observation: BrowserObservationSnapshot,
+  current: () => boolean,
+  loader: NamesAdviceLoader,
+  initial?: TermsPageAuthority,
+) {
   const [advice, setAdvice] = useState<NamesAdvice>(initial ? peopleNamesAdvice(initial) : 'unavailable');
   const [attempt, setAttempt] = useState(0);
   const inFlight = useRef(false);
@@ -22,15 +26,35 @@ export function useNamesAdvice(observation: BrowserObservationSnapshot, current:
     let active = true;
     inFlight.current = true;
     setAdvice('pending');
-    void loader(observation.observation.subject).then(
-      result => { if (active && latest.current()) setAdvice(peopleNamesAdvice(result)); },
-      () => { if (active && latest.current()) setAdvice('unavailable'); },
-    ).finally(() => { if (active) inFlight.current = false; });
-    return () => { active = false; inFlight.current = false; };
+    void loader(observation.observation.subject)
+      .then(
+        (result) => {
+          if (active && latest.current()) setAdvice(peopleNamesAdvice(result));
+        },
+        () => {
+          if (active && latest.current()) setAdvice('unavailable');
+        },
+      )
+      .finally(() => {
+        if (active) inFlight.current = false;
+      });
+    return () => {
+      active = false;
+      inFlight.current = false;
+    };
   }, [observation, loader, initial, attempt]);
   return {
-    advice: observation.state === 'signed-out' ? 'signed-out' as const : observation.state !== 'signed-in' ? 'unavailable' as const : advice,
-    retryAdvice: observation.state === 'signed-in' && attempt === 0 && advice === 'unavailable'
-      ? () => { if (!inFlight.current && latest.current()) setAttempt(1); } : undefined,
+    advice:
+      observation.state === 'signed-out'
+        ? ('signed-out' as const)
+        : observation.state !== 'signed-in'
+          ? ('unavailable' as const)
+          : advice,
+    retryAdvice:
+      observation.state === 'signed-in' && attempt === 0 && advice === 'unavailable'
+        ? () => {
+            if (!inFlight.current && latest.current()) setAttempt(1);
+          }
+        : undefined,
   };
 }

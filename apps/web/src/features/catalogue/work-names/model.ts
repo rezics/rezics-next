@@ -21,7 +21,11 @@ export type WorkNames =
 
 /** One projection of the admitted Subject terms. Spelling and roles survive exact duplicate grouping. */
 export function workNames(subject: Subject, locale: string): WorkNames {
-  try { return projectWorkNames(subject, locale); } catch { return { state: 'unavailable', bytes: 0 }; }
+  try {
+    return projectWorkNames(subject, locale);
+  } catch {
+    return { state: 'unavailable', bytes: 0 };
+  }
 }
 
 function projectWorkNames(subject: Subject, locale: string): WorkNames {
