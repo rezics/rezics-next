@@ -432,7 +432,11 @@ test('Album recovery retires every current surface and retains private drafts an
     await type(text(m.relation_citation(), scalar), 'https://private.test/citation');
     const contributor = await addFact('schema:contributor');
     await type(within(contributor).getByRole('combobox', { name: 'Private contributor field' }), 'Private');
-    await settle();
+    await waitFor(() =>
+      expect(
+        within(window.document.body as unknown as HTMLElement).getByRole('option', { name: /Private artist/ }),
+      ).toBeDefined(),
+    );
     await act(async () =>
       user.click(
         within(window.document.body as unknown as HTMLElement).getByRole('option', { name: /Private artist/ }),
