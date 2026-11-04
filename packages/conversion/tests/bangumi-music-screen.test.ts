@@ -89,7 +89,7 @@ test('identity-only ignored 3/6 projections remain ignored and a named payload c
   }
 });
 
-test('types 1/2/4 keep prior class bindings and do not emit dates', () => {
+test('types 1/2/4 keep prior class bindings; only admitted book dates publish', () => {
   for (const [type, expected] of [
     [1, 'schema:Book'],
     [2, 'schema:TVSeries'],
@@ -98,12 +98,16 @@ test('types 1/2/4 keep prior class bindings and do not emit dates', () => {
     const bootstrap = convertBangumi(input(subject(type, { platform: 'movie' })));
     expect(bootstrap.proposals[0]).toMatchObject({ subject: { type: expected } });
     const resolved = convertBangumi(input(subject(type, { date: '2024-04-01' })), bound);
-    expect(
-      resolved.proposals.some(
-        (command) => command.op === 'propose' && command.statement.property.id === 'schema:datePublished',
-      ),
-    ).toBe(false);
-    expect(resolved.diagnostics).toContainEqual({ pointer: '/date', code: 'unsupported_date_mapping' });
+    const dated = resolved.proposals.some(
+      (command) => command.op === 'propose' && command.statement.property.id === 'schema:datePublished',
+    );
+    if (type === 1) {
+      expect(dated).toBe(true);
+      expect(resolved.diagnostics).not.toContainEqual({ pointer: '/date', code: 'unsupported_date_mapping' });
+    } else {
+      expect(dated).toBe(false);
+      expect(resolved.diagnostics).toContainEqual({ pointer: '/date', code: 'unsupported_date_mapping' });
+    }
   }
 });
 

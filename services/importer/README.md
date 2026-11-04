@@ -1715,6 +1715,12 @@ actual source-statistic API effects; neither local table success nor pure conver
 - Bound: O(file bytes) stream plus O((W+T+A+P) log R) importer work for selected works W, closed dictionary T≤512, associations A≤256 and parent edges P≤1024, with one explicit weight-contract gap for the journey. Unrelated VN/tag rows are not materialized. No catalogue scan or vote aggregate.
 - Growth check: `tests/showcase-tags.test.ts` covers selected versus unrelated rows, unsupported/qualified associations, taxonomy-closure gaps and refresh identity. The connected native file `services/kernel/test/imports/showcase-tags.test.ts` is registered and not executed in this attempt.
 
+### Default Bangumi novel/book showcase seed
+
+- Touches: streamed `subject`, `subject-relations`, `subject-persons` and `person` rows for the documented Book Girl seeds (499, 26) and their 1002/1003 novel members, ordinary `convertBangumi` grain, the existing creator-credit helper and graph delivery. Titles do not select. Manga, adaptations and same-title extras stay excluded. P2635 counts do not create volumes.
+- Bound: O(file bytes) stream plus at most 32 volumes, 16 authors and the existing relation/credit/journal budgets. Missing source volumes and missing staff-role bindings stay explicit gaps. ISBN, publisher and pages stay off Book/BookSeries.
+- Growth check: `tests/showcase-books.test.ts` covers selection completeness, Book/BookSeries grain, membership direction and refresh identity. The connected native file `services/kernel/test/imports/showcase-books.test.ts` is registered and not executed in this attempt.
+
 ### Import authored VNDB producer parent and subsidiary rows
 
 - Touches: one bounded authored family plus `producers`/`producers_relations` COPY tables with the dump header `id pid relation`, referenced parent and subsidiary endpoints reachable under the existing family cap, the production cross-media dump reader and seed caller, and ordinary public batch/fence/candidate commands. Descriptions, language preferences, aliases, predecessor/successor and imprint codes stay omitted.
@@ -2229,6 +2235,20 @@ unresolved codes and duplicate `(vid,tag)` rows stay review gaps. User ids,
 notes and vote values never appear in diagnostics. Native classification
 ballots are not written.
 
+The default real-dump seed also runs
+[`showcase-books.ts`](src/showcase-books.ts) after the selected-family import.
+That adapter keeps the documented Book Girl novel family (series 499, first
+volume 26) from the pinned dump relation check, walks only 1002/1003 novel
+members, and delivers authors through the existing creator-credit helper.
+Steins;Gate remains the required VN/anime showcase; this book family is a
+separate actual source family. Decision: type 1 Book/BookSeries dispatch uses
+the current `bangumi@9` converter, preserving TVAnime names, original-run and
+Game player-count rather than advancing to `@10`. Decision: one Bangumi subject stays one
+identity, so ISBN on a volume does not create a `bf:Instance`. Decision:
+selected Book Girl records join the common showcase manifest; book review
+gaps stay in the seed books section so they do not fail Steins;Gate
+publication.
+
 The default real-dump seed now acquires `tags`, `tags_parents` and `tags_vn`
 from the same checksum-verified current VNDB archive and runs
 [`showcase-tags.ts`](src/showcase-tags.ts) after the selected-family import.
@@ -2249,7 +2269,6 @@ for these source Concepts.
 
 Ordinary Bangumi registration and selected-family type 2 rows already reach
 `convertBangumi`; the selected-family registration supplies its combined
-`cross-media-entities@9` revision while the ordinary caller uses `bangumi@9`.
 `cross-media-entities@10` revision while the ordinary caller uses `bangumi@9`.
 Both use one pure TVAnime name extractor and the existing journal, source
 metadata admission, citations, candidate acceptance and adoption flow. No
