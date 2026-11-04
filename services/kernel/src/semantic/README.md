@@ -1406,6 +1406,8 @@ This is not a second selection engine: `search_project_fact` / `search_project_a
 heads, and `search_rebuild_one` remains the cold-fold owner. Exact row derivation is
 [search-source-cost.md](search-source-cost.md). Decision: unreadied head coverage throws
 `CommandUnavailableError('contention')` after one rebuild outside the snapshot; ready-empty stays an empty list.
+A ready Subject whose active seek returns the overflow lookahead is the same unavailable signal without rebuild.
+Expanded Global heads keep the stored `search_selected` body and adoption rank.
 
 - Touches: the existing `B ≤ 256` id batch, partition position, subject/readiness points, current term heads,
   `search_selected_page` active nonrelation heads with per-Subject `LIMIT S·C+1`, then the existing disclosure,

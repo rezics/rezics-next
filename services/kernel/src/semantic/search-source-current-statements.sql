@@ -4,6 +4,8 @@ WITH input AS NOT MATERIALIZED (
 requested AS MATERIALIZED (
   SELECT ids.route, ids.subject_id
   FROM unnest(:routes::integer[], :subject_ids::uuid[]) AS ids(route, subject_id)
+  CROSS JOIN input
+  WHERE ids.route / 16 = input.partition_no
 )
 SELECT 'compact'::text AS entry_kind,
        selected.route,
@@ -19,23 +21,13 @@ SELECT 'compact'::text AS entry_kind,
        selected.release,
        selected.rank
 FROM requested
-CROSS JOIN input
-JOIN semantic.search_selection_state state
-  ON state.route = requested.route AND state.subject_id = requested.subject_id
-  AND state.ready
-  AND state.route >= input.partition_no * 16
-  AND state.route < (input.partition_no + 1) * 16
-JOIN LATERAL (
+CROSS JOIN LATERAL (
   SELECT s.route, s.subject_id, s.slot_id, s.candidate_id, s.property, s.ordinal, s.body, s.release, s.rank
   FROM semantic.search_selected s
   CROSS JOIN input
   WHERE s.route = requested.route AND s.subject_id = requested.subject_id
-    AND s.route >= input.partition_no * 16
-    AND s.route < (input.partition_no + 1) * 16
-    AND s.active
-    AND NOT s.relation
-  ORDER BY s.property, s.slot_id, s.candidate_id
+    AND s.route >= input.partition_no * 16 AND s.route < (input.partition_no + 1) * 16
+    AND s.active AND NOT s.relation
+  ORDER BY s.property COLLATE "C", s.slot_id, s.candidate_id
   LIMIT :subject_limit::integer
-) selected ON true
-WHERE requested.route >= input.partition_no * 16
-  AND requested.route < (input.partition_no + 1) * 16;
+) selected;

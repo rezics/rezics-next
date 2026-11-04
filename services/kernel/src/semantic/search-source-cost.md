@@ -8,8 +8,9 @@ successful Search page acceptance.
 
 Decision: unreadied `search_selection_state` is `CommandUnavailableError('contention')`
 after one `search_rebuild_one` outside the read-only snapshot. Ready-empty remains an
-empty statement list. Expanded Global heads are the `search_selected` rows, not a
-second fold of `semantic.adoption` history.
+empty statement list. An overflow lookahead on a ready Subject is the same unavailable
+signal without rebuilding. Expanded Global heads use the stored `search_selected`
+body, rank and release, not a second fold of `semantic.adoption` or `semantic.candidate`.
 
 ## Units
 
