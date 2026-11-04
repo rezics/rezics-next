@@ -33,7 +33,7 @@ export function CurrentViewerOwnVotesPage({
   invalidAddress?: boolean;
   responseVersion?: number;
 }) {
-  const historyKey = useRouterState({ select: (state) => state.location.state.key });
+  const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
   const locale = getLocale();
   const receipt = useOwnVotesReturnReceipt(historyKey, cursor, locale);
   const origin = useOwnVotesCurrentOrigin(initial, cursor, invalidAddress, !!receipt, responseVersion);
