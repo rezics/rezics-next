@@ -1,31 +1,21 @@
 ---
 {
-  "goal": "content",
-  "manager": "content",
-  "kind": "claim",
-  "paths": [
-    "services/kernel/src/content/author-item-context.ts",
-    "services/kernel/src/content/author-item-reads.ts",
-    "services/kernel/test/content/author-item-context-growth.test.ts",
-    "services/kernel/test/content/support/author-contribution-context-growth*.ts"
-  ],
-  "riskAreas": [
-    "authorization",
-    "disclosure",
-    "rights",
-    "deletion",
-    "account"
-  ],
-  "criticalPath": false,
-  "waiting": [],
-  "after": [],
-  "estimate": {
-    "lines": 700,
-    "files": 4
-  },
-  "acceptance": {
-    "failing": true
-  }
+  'goal': 'content',
+  'manager': 'content',
+  'kind': 'claim',
+  'paths':
+    [
+      'services/kernel/src/content/author-item-context.ts',
+      'services/kernel/src/content/author-item-reads.ts',
+      'services/kernel/test/content/author-item-context-growth.test.ts',
+      'services/kernel/test/content/support/author-contribution-context-growth*.ts',
+    ],
+  'riskAreas': ['authorization', 'disclosure', 'rights', 'deletion', 'account'],
+  'criticalPath': false,
+  'waiting': [],
+  'after': [],
+  'estimate': { 'lines': 700, 'files': 4 },
+  'acceptance': { 'failing': true },
 }
 ---
 

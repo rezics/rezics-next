@@ -123,10 +123,9 @@ export async function prepareAuthorItemContext(
       subjectIds.add(thread.subjectIds[0]!);
   }
   const subjects = subjectIds.size
-    ? await readSubjectSummaryObservation(
-        { ...dependencies, actor: context.actor, deadline: context.deadline },
-        [...subjectIds],
-      )
+    ? await readSubjectSummaryObservation({ ...dependencies, actor: context.actor, deadline: context.deadline }, [
+        ...subjectIds,
+      ])
     : undefined;
   for (const { thread, post } of references) {
     if (!post || post.threadId !== thread.id) {

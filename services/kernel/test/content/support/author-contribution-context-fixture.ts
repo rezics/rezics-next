@@ -19,7 +19,8 @@ export async function createContextReview(
     bearer: fixture.author.bearer,
     body: { units: 0 },
   });
-  if (vote.response.status !== 200) throw new Error(`Could not publish review vote: ${vote.response.status} ${vote.text}`);
+  if (vote.response.status !== 200)
+    throw new Error(`Could not publish review vote: ${vote.response.status} ${vote.text}`);
   const citation = {
     questionId: STANDARD_QUESTION_ID,
     units: vote.value.units as number,

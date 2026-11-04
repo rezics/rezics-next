@@ -86,7 +86,12 @@ test('mounted public author pages retain exact review citations and anonymous im
     expect(JSON.stringify(reply.parentContext)).not.toContain('private annotation');
 
     const protectedParent = await createContextReply(f, review.threadId, 'Concealed parent', undefined, 'protected');
-    const protectedChild = await createContextReply(f, review.threadId, 'Child with concealed parent', protectedParent.id);
+    const protectedChild = await createContextReply(
+      f,
+      review.threadId,
+      'Child with concealed parent',
+      protectedParent.id,
+    );
     const dependencies = {
       pool: f.system.database.pool,
       access: f.system.access,
@@ -103,7 +108,11 @@ test('mounted public author pages retain exact review citations and anonymous im
     ]);
     if (!thread.value || !post.value || post.value.availability !== 'available')
       throw new Error('Expected private source');
-    const prepared = await prepareAuthorItemContext(dependencies, [{ thread: thread.value, post: post.value }], context);
+    const prepared = await prepareAuthorItemContext(
+      dependencies,
+      [{ thread: thread.value, post: post.value }],
+      context,
+    );
     const concealed = (await prepared.finish()).get(protectedChild.id);
     await prepared.confirm();
     expect(concealed?.parentContext).toEqual({ kind: 'reply', parent: { state: 'withheld' } });
@@ -111,9 +120,13 @@ test('mounted public author pages retain exact review citations and anonymous im
     await setAuthorViews(f, { posts: false, reviews: false });
     expect((await f.call('GET', reviewPath(f.author.accountId))).value.threads).toEqual([]);
     expect((await f.call('GET', reviewPath(f.author.accountId), { bearer: f.other.bearer })).value.threads).toEqual([]);
-    expect((await f.call('GET', reviewPath(f.author.accountId), { bearer: f.author.bearer })).value.threads).toHaveLength(1);
+    expect(
+      (await f.call('GET', reviewPath(f.author.accountId), { bearer: f.author.bearer })).value.threads,
+    ).toHaveLength(1);
     await grantAuthorEditor(f, f.other.accountId);
-    expect((await f.call('GET', reviewPath(f.author.accountId), { bearer: f.other.bearer })).value.threads).toHaveLength(1);
+    expect(
+      (await f.call('GET', reviewPath(f.author.accountId), { bearer: f.other.bearer })).value.threads,
+    ).toHaveLength(1);
   } finally {
     await f.close();
   }
@@ -174,9 +187,10 @@ test('a moved source withholds the selected page and permits the same request af
         [sourcePartition],
       )
     ).rows[0];
-    await f.admin.query("UPDATE core.partition SET write_state='moved',moved_to='author-context-test' WHERE partition_no=$1", [
-      sourcePartition,
-    ]);
+    await f.admin.query(
+      "UPDATE core.partition SET write_state='moved',moved_to='author-context-test' WHERE partition_no=$1",
+      [sourcePartition],
+    );
     gate.release();
     const moved = await pending;
     expect(moved.response.status).toBe(503);
