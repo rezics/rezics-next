@@ -39,7 +39,8 @@ const { createMemoryHistory, createRootRoute, createRouter, RouterContextProvide
 const { DynamicCollectionPage } = await import('../src/library/dynamic-collection-page');
 const { libraryNavigationQuery } = await import('../src/library/pins-read');
 const { sessionQuery, exposureQuery } = await import('../src/session/query');
-const { setLocale } = await import('../src/paraglide/runtime.js');
+const { setLocale, getLocale, overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const originalGetLocale = getLocale;
 setLocale('en', { reload: false });
 afterAll(async () => {
   setLocale('en', { reload: false });
@@ -74,7 +75,8 @@ function page(change: Partial<Page> = {}): Page {
 }
 type Search = Record<string, string | string[]>;
 async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
-  window.history.replaceState(null, '', `/${locale}/collections/original`);
+  // This standalone mount has no locale router middleware; bind the public runtime locale explicitly.
+  overwriteGetLocale(() => locale);
   setLocale(locale, { reload: false });
   const host = document.createElement('div');
   document.body.append(host);
@@ -111,7 +113,7 @@ async function mount(locale: Parameters<typeof setLocale>[0] = 'en') {
       await act(async () => root.unmount());
       client.clear();
       host.remove();
-      window.history.replaceState(null, '', '/en/collections/original');
+      overwriteGetLocale(originalGetLocale);
       setLocale('en', { reload: false });
     },
   };
@@ -322,7 +324,7 @@ test('All eight locale variants supply named recovery and page-local absence', a
         expect(messages[key].trim().length).toBeGreaterThan(0);
       expect(messages.library_dynamic_page_reader_empty.trim().length).toBeGreaterThan(0);
       expect(messages.library_dynamic_page_reader_first_page.trim().length).toBeGreaterThan(0);
-      window.history.replaceState(null, '', `/${locale}/collections/original`);
+      overwriteGetLocale(() => locale);
       setLocale(locale, { reload: false });
       await h.render(page({ cursor, next }));
       expect(h.host.textContent).toContain(messages.library_dynamic_page_reader_empty);
