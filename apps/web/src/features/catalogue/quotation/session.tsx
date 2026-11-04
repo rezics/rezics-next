@@ -33,7 +33,7 @@ export const QuotationSession = candidateSession(function QuotationSessionLive({
               id,
               locale,
               expectedReader,
-              quote: next.quote ?? quote,
+              quote: next.quote,
               cursor: next.cursor,
               session: next.session,
             },

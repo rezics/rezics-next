@@ -9,7 +9,14 @@ export const Route = createFileRoute('/subjects/$id_/$slug/quotations')({
     const quote = search.quote;
     const returnTo = search.returnTo;
     if (quote !== undefined && (typeof quote !== 'string' || !/^[0-9a-f-]{36}$/i.test(quote))) throw notFound();
-    if (returnTo !== undefined && (typeof returnTo !== 'string' || returnTo.length > 2048 || !returnTo.startsWith('/')))
+    if (
+      returnTo !== undefined &&
+      (typeof returnTo !== 'string' ||
+        returnTo.length > 2048 ||
+        !returnTo.startsWith('/') ||
+        returnTo.startsWith('//') ||
+        returnTo.startsWith('/\\'))
+    )
       throw notFound();
     return {
       quote: typeof quote === 'string' ? quote : undefined,
