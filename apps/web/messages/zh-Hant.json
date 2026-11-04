@@ -7101,7 +7101,7 @@
   "release_fidelity_retry_current": "重新讀取此選取項目",
   "release_fidelity_restart": "從第一頁關係重新開始",
   "release_fidelity_selection_stale": "目前頁面已沒有這筆關係記錄。請選取目前的列重新查看。",
-  "release_fidelity_selection_local": "關係選取只會在這次造訪期間保留。重新載入或開啟新分頁後，請從目前的發行版重新選取關係；先前的選擇不會還原。",
+  "release_fidelity_selection_local": "返回連結會重新讀取此發行版本，再還原仍有效的陳述位置。沒有返回位址時，請從目前的關聯串流開始。",
   "release_fidelity_origin": "返回發行版",
   "release_fidelity_files_unavailable": "目前定義中沒有目錄檔案與發行組類型。",
   "release_fidelity_leave": "離開此發行版頁面？本次造訪中未送出的更正將被捨棄。",
@@ -9942,5 +9942,7 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "release_fidelity_visit_unsupported": "此目的頁面無法保留目前的 Context。請留在此頁，或選擇支援的閱讀範圍。",
+  "release_fidelity_visit_changed": "此陳述或閱讀範圍已變更。請選擇目前的項目，或重新開始瀏覽。"
 }

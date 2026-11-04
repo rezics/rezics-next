@@ -74,10 +74,18 @@ export function recordComponent(work: VisitWork, component: VisitComponent): Vis
 export const RELEASE_VISIT_COMPONENTS = 4;
 export const RELEASE_VISIT_CAPS = {
   descriptor: { rows: RELEASE_LIMITS.types, bytes: RELEASE_LIMITS.bytes },
-  subject: { rows: RELEASE_LIMITS.propertiesPerType, bytes: 'unavailable' as const },
-  association: { rows: RELEASE_ASSOCIATION_LIMIT, bytes: 'unavailable' as const },
-  detail: { rows: 1, bytes: 'unavailable' as const },
+  subject: { rows: RELEASE_LIMITS.propertiesPerType, bytes: RELEASE_LIMITS.bytes },
+  association: { rows: RELEASE_ASSOCIATION_LIMIT, bytes: RELEASE_LIMITS.bytes },
+  detail: { rows: 1, bytes: RELEASE_LIMITS.bytes },
 } as const;
+
+/** Admit the complete encoded payload before constructing facts, rows, qualifiers or references.
+ * These are Web projection ceilings; native readers may refuse a tighter response first.
+ */
+export function admitVisitComponent(id: keyof typeof RELEASE_VISIT_CAPS, payload: unknown, rows: number): boolean {
+  const cap = RELEASE_VISIT_CAPS[id];
+  return rows <= cap.rows && encodedBytes(payload) <= cap.bytes;
+}
 
 export function visitBound(caps = RELEASE_VISIT_CAPS) {
   return {

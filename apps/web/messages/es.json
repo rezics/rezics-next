@@ -7098,7 +7098,7 @@
   "release_fidelity_retry_current": "Volver a leer esta selección",
   "release_fidelity_restart": "Reiniciar desde la primera página de relaciones",
   "release_fidelity_selection_stale": "Esta relación ya no aparece en la página actual. Elige una fila actual para inspeccionarla.",
-  "release_fidelity_selection_local": "Las selecciones de relaciones solo duran durante esta visita. Tras recargar o abrir otra pestaña, empieza desde el lanzamiento actual y elige otra relación; no se restaura ninguna selección anterior.",
+  "release_fidelity_selection_local": "Los enlaces de vuelta vuelven a leer esta edición antes de restaurar una afirmación que siga vigente. Sin dirección de vuelta, empieza en la lista actual.",
   "release_fidelity_origin": "Volver al lanzamiento",
   "release_fidelity_files_unavailable": "Los tipos de archivo de catálogo y de grupo de publicación no están en las definiciones actuales.",
   "release_fidelity_leave": "¿Salir de esta página de publicación? Se descartarán las correcciones no enviadas de esta visita.",
@@ -9932,5 +9932,7 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "release_fidelity_visit_unsupported": "Este destino no puede conservar este Context. Permanece aquí o elige una lectura compatible.",
+  "release_fidelity_visit_changed": "Esta afirmación o lectura ha cambiado. Elige una fila actual o reinicia la lista."
 }

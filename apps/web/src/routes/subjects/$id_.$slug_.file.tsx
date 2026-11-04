@@ -1,3 +1,4 @@
+import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
@@ -17,7 +18,7 @@ const canonicalFile = createServerFn({ method: 'GET', strict: false })
       input.slug.length > 128 ||
       typeof input.locale !== 'string' ||
       typeof input.search !== 'string' ||
-      input.search.length > 2048
+      input.search.length > 32768
     )
       throw notFound();
     return input;
@@ -43,6 +44,7 @@ const canonicalFile = createServerFn({ method: 'GET', strict: false })
 export const Route = createFileRoute('/subjects/$id_/$slug_/file')({
   staticData: { publicCache: false },
   validateSearch: (input: Record<string, unknown>) => ({
+    via: subjectVisitReturn(input.via, getLocale()),
     fileSource: catalogueFileSourceId(input.fileSource),
     reviewProperty:
       typeof input.reviewProperty === 'string' && input.reviewProperty.length <= 256 ? input.reviewProperty : undefined,
@@ -61,13 +63,20 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/file')({
 });
 
 function FileRoute() {
-  const { reviewProperty, candidate, fileSource } = Route.useSearch();
+  const { reviewProperty, candidate, fileSource, via } = Route.useSearch();
   return (
-    <CatalogueFileProfileSession
-      id={Route.useLoaderData().id}
-      locale={getLocale()}
-      returnSourceId={fileSource}
-      initialReview={reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
-    />
+    <>
+      {via && (
+        <a className="inline-flex min-h-11 underline" href={via}>
+          {m.release_fidelity_origin()}
+        </a>
+      )}
+      <CatalogueFileProfileSession
+        id={Route.useLoaderData().id}
+        locale={getLocale()}
+        returnSourceId={fileSource}
+        initialReview={reviewProperty && candidate ? { property: reviewProperty, candidate } : undefined}
+      />
+    </>
   );
 }

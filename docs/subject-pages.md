@@ -470,6 +470,39 @@ release. Native-return links keep the work, existing publisher target selection,
 
 Decision: VNDB `releases_supersedes.id → rid` maps to the native `rezics:releaseSupersedes` relation; P155 remains chronology, and P1365/P1366 remain Organization replacement.
 
+### Current release visits
+
+The release companion accepts the public UUID `context` selector, defaulting to Global only when it is absent.
+Malformed selectors and unsupported search intent are rejected. A `realm` address is explicitly unavailable to this
+native reader; it is never treated as a Context or replaced with Global. Canonical identity reads use that selected
+Context and preserve only validated review and return intent. The mounted caller session retains its original
+admission, query key and retirement rules.
+
+Decision: explicit non-Global release visits offer other release companions in that exact Context; Work, File,
+Sources and Changes visits are unavailable until those destination owners expose a compatible Context selector.
+Their Global visits use the existing Subject `via` return facility. File and Changes routes expose that validated
+single return link without changing their reader or command controllers. A missing target label is unavailable.
+Release relations retain their released property and direction; qualified duplicate occurrences remain separate.
+Work binding and exact association inspection include their supplied qualifier and reference parts and historical
+release pin. Whole-association spoiler controls cover labels, links and evidence.
+
+One closed `#release-reading?visit=` locator identifies the original release UUID, Context, definition digest,
+subject revision, current stream/cursor, exact holder/statement/target and statement revision, and intended focus.
+Its complete address is at most 8,192 UTF-8 bytes, including escaping; it contains no evidence, credentials, native
+session token, commands, arbitrary URL or nested return chain. It is validated by the existing Subject visit API.
+An explicit return, browser history return or return from another tab performs a fresh native visit. Only an exact
+current occurrence restores inspection and row focus. A changed release revision or definition discards the old
+cursor; removed, concealed or repointed occurrences announce the change and focus the current association section.
+No later page is scanned. Destination detail failure retains the independently admitted source reading. Missing
+return intent starts a usable current stream. Restart discards the old locator and cursor history.
+
+The reader retains one current projection, eight cursor addresses and one return locator. It preserves the 20-row
+association request, native maximum of 100 and four installed visit components. Each component has a Web projection
+byte ceiling equal to the installed descriptor limit (4 MiB), subordinate to any tighter native limits. The complete
+encoded payload, including summaries, qualifiers and references, is charged before expansion. Existing descriptor,
+subject property, association and selected-detail row ceilings remain 1,024, 64, 20 and one. These ceilings describe
+Web admission, not native database work; the visit adds no database operation or per-row hydration.
+
 ## Inspect catalogue file metadata and its release group
 
 `/{locale}/subjects/{id}/{slug}/file` is the companion for an admitted catalogue file or release group. The frame

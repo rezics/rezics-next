@@ -7185,7 +7185,7 @@
   "release_fidelity_retry_current": "Retry this selection",
   "release_fidelity_restart": "Restart from the first relation page",
   "release_fidelity_selection_stale": "This relation occurrence is no longer on the current page. Choose a current row to inspect it.",
-  "release_fidelity_selection_local": "Relation selections stay local to this visit. After a reload or in a new tab, start at the current release and choose a relation again; no prior selection is restored.",
+  "release_fidelity_selection_local": "Return links reread this release before restoring an exact current occurrence. Without a return address, start with the current stream.",
   "release_fidelity_origin": "Return to release",
   "release_fidelity_files_unavailable": "Catalogue file and release-group types are not in the current definitions.",
   "release_fidelity_leave": "Leave this release page? Unsent corrections on this visit will be discarded.",
@@ -10035,5 +10035,7 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "release_fidelity_visit_unsupported": "This destination cannot preserve this Context. Stay here or choose a supported reading.",
+  "release_fidelity_visit_changed": "This assertion or reading changed. Choose a current row, or restart the stream."
 }

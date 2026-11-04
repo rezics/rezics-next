@@ -46,7 +46,10 @@ export function ReleaseSelectedDetail({
 }) {
   const read = page.read;
   const o = { locale: locale as never };
-  const summaryLabels = row?.summary?.label ? { [row.summary.label.language]: row.summary.label.value } : {};
+  const summaryLabels =
+    row?.readability === 'readable' && row.summary?.label
+      ? { [row.summary.label.language]: row.summary.label.value }
+      : {};
   const heading = pickText(detail?.subject.labels ?? summaryLabels, locale);
   const type = detail ? pickText(read.release.types[detail.subject.type]?.labels ?? {}, locale) : undefined;
   const scalar = detail ? { release: read.release, public: { related: detail.related } } : undefined;
@@ -107,11 +110,19 @@ export function ReleaseSelectedDetail({
         </p>
       </header>
 
-      {row?.statement && (
+      {row?.statement && row.readability === 'readable' && (
         <section className="min-w-0 space-y-3" data-slot="release-occurrence-evidence">
           <h4 className="font-semibold">{propertyLabel(read, occurrence.relation, locale)}</h4>
           <PropertyStatement
             property={occurrence.relation}
+            statement={row.statement}
+            read={{ release: read.release, public: { related: { ...read.public.related, ...row.related } } }}
+            locale={locale}
+          />
+          <p className="text-sm">
+            {occurrence.direction === 'inverse' ? '←' : '→'} {propertyLabel(read, occurrence.relation, locale)}
+          </p>
+          <ReleaseStatementEvidence
             statement={row.statement}
             read={{ release: read.release, public: { related: { ...read.public.related, ...row.related } } }}
             locale={locale}
@@ -223,6 +234,44 @@ export function ReleaseSelectedDetail({
         </Button>
       </div>
     </ContentItemFrame>
+  );
+}
+
+export function ReleaseStatementEvidence({
+  statement,
+  read,
+  locale,
+}: {
+  statement: NonNullable<ReleaseRow['statement']>;
+  read: Parameters<typeof PartValue>[0]['read'];
+  locale: string;
+}) {
+  const o = { locale: locale as never };
+  return (
+    <div className="min-w-0 space-y-2" data-slot="release-statement-evidence">
+      <p className="break-words text-sm text-muted-foreground">
+        {statement.property.id} · {statement.rezics.release}
+      </p>
+      {statement.qualifiers.map((part, index) => (
+        <PropertyStatement key={index} property={part.property.id} statement={part} read={read} locale={locale} />
+      ))}
+      {statement.references.map((reference, index) => (
+        <section key={index} className="min-w-0 space-y-1 rounded-md border p-3">
+          <h5 className="text-sm font-semibold">
+            {m.correction_references({}, o)} {index + 1}
+          </h5>
+          {reference.parts.map((part, partIndex) => (
+            <PropertyStatement
+              key={partIndex}
+              property={part.property.id}
+              statement={part}
+              read={read}
+              locale={locale}
+            />
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
 

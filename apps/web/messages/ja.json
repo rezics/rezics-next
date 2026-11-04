@@ -7101,7 +7101,7 @@
   "release_fidelity_retry_current": "この選択を再読み込み",
   "release_fidelity_restart": "最初の関係ページから再開",
   "release_fidelity_selection_stale": "この関係の記録は現在のページにありません。現在の行を選んで確認してください。",
-  "release_fidelity_selection_local": "関係の選択内容はこのページ訪問中だけ保持されます。再読み込み後や新しいタブでは現在のリリースから関係を選び直してください。以前の選択内容は復元されません。",
+  "release_fidelity_selection_local": "戻るリンクはリリースを再読み込みし、現在も有効な記述の位置だけを復元します。戻り先がない場合は現在の一覧から始めてください。",
   "release_fidelity_origin": "リリースに戻る",
   "release_fidelity_files_unavailable": "カタログファイルとリリースグループのタイプは現在の定義にありません。",
   "release_fidelity_leave": "このリリースのページを離れますか。この訪問で未送信の訂正は破棄されます。",
@@ -9942,5 +9942,7 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "release_fidelity_visit_unsupported": "この移動先では現在の Context を維持できません。このページに留まるか、対応する読み取り範囲を選んでください。",
+  "release_fidelity_visit_changed": "この記述または読み取り範囲は変更されました。現在の行を選ぶか、一覧を最初から読み直してください。"
 }

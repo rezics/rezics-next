@@ -1,3 +1,4 @@
+import { releaseVisit, type ReleaseVisit } from './navigation';
 import { candidateAuthorization } from '../../../subject/candidate-admission';
 import { originalReaderInput } from '../editor-reader-input';
 import { createServerFn } from '@tanstack/react-start';
@@ -16,10 +17,12 @@ export const readSubjectReleaseFidelity = createServerFn({ method: 'POST', stric
         cursor?: string | undefined;
         detail?: string | undefined;
         session?: string | undefined;
+        returning?: ReleaseVisit | undefined;
       }) => {
         if (
           !input ||
           !releaseUuid.test(input.id) ||
+          (input.returning !== undefined && !releaseVisit(input.returning)) ||
           (input.context !== undefined && !releaseUuid.test(input.context)) ||
           (input.stream !== undefined && (typeof input.stream !== 'string' || input.stream.length > 256)) ||
           (input.cursor !== undefined && (typeof input.cursor !== 'string' || input.cursor.length > 8192)) ||
@@ -34,6 +37,7 @@ export const readSubjectReleaseFidelity = createServerFn({ method: 'POST', stric
           cursor: input.cursor,
           detail: input.detail,
           session: input.session,
+          returning: input.returning,
         };
       },
     ),
@@ -50,5 +54,6 @@ export const readSubjectReleaseFidelity = createServerFn({ method: 'POST', stric
       cursor: data.cursor,
       detail: data.detail,
       session: data.session,
+      returning: data.returning,
     });
   });

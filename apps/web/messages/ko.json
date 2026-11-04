@@ -7098,7 +7098,7 @@
   "release_fidelity_retry_current": "이 선택 다시 읽기",
   "release_fidelity_restart": "첫 관계 페이지부터 다시 시작",
   "release_fidelity_selection_stale": "이 관계 항목은 현재 페이지에 없습니다. 현재 행을 선택해 다시 확인하세요.",
-  "release_fidelity_selection_local": "관계 선택은 이번 페이지 방문 중에만 유지됩니다. 새로고침하거나 새 탭을 열면 현재 릴리스에서 관계를 다시 선택하세요. 이전 선택은 복원되지 않습니다.",
+  "release_fidelity_selection_local": "돌아가기 링크는 릴리스를 다시 읽은 뒤 현재도 유효한 서술 위치만 복원합니다. 돌아갈 주소가 없으면 현재 목록에서 시작하세요.",
   "release_fidelity_origin": "릴리스로 돌아가기",
   "release_fidelity_files_unavailable": "카탈로그 파일과 릴리스 그룹 유형이 현재 정의에 없습니다.",
   "release_fidelity_leave": "이 출시판 페이지를 떠나시겠습니까? 이 방문에서 보내지 않은 수정은 버려집니다.",
@@ -9932,5 +9932,7 @@
   "character_person_retry": "Retry current read",
   "character_person_roles_unavailable": "The current release does not offer role choices for this statement.",
   "character_person_mixed_search": "Search all names in mixed Search",
-  "character_person_apply_changes": "Apply your changes to read current results."
+  "character_person_apply_changes": "Apply your changes to read current results.",
+  "release_fidelity_visit_unsupported": "이 페이지에서는 현재 Context를 유지할 수 없습니다. 여기에 머무르거나 지원되는 읽기 범위를 선택하세요.",
+  "release_fidelity_visit_changed": "이 서술 또는 읽기 범위가 변경되었습니다. 현재 행을 선택하거나 목록을 처음부터 다시 읽으세요."
 }
