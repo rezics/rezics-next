@@ -1932,3 +1932,30 @@ VNDB release supersession remains a release-to-release `wdt:P155` gap while the
 released VNDB Release profile lacks that property. TBA and absent release dates
 remain distinct outcomes; date precision is never guessed. These proposals do
 not contain VNDB votes, personal lists or score-derived facts.
+
+### Bangumi creator and voice credits
+
+The cross-media seed caller and `importBangumiCreatorCredits` resolve admitted
+`subject-persons` and `person-characters` rows after the work, person and
+character subjects are bound, then map them through `mapBangumiVocabulary`.
+Archive `position` is the role code; it is never copied into `schema:position`.
+Credited spelling is emitted only when the association actually supplies it.
+Voice credits keep `wdt:P453` on the bound character. Music and live-action
+staff codes stay the pinned omitted inventory gap.
+
+Decision: music/live-action staff is reported as that missing producer binding
+rather than a guessed mapping.
+
+### Bangumi creator credit cost
+
+- Touches: one current-authority fence read per elected work, one claim/type read
+  per work/person/character endpoint, one vocabulary map of at most 64 association
+  rows, and ordinary bulk propose pages for the resulting credit commands.
+- Bound: O(W + A) for W elected works and A admitted association rows on those
+  works, plus existing import of the selected records. No catalogue scan, vote
+  write or fabricated staff order.
+- Growth check: `services/importer/tests/bangumi-creator-credits.test.ts` and
+  `packages/conversion/tests/bangumi-creator-credits.test.ts` pin the operator
+  and mapper. Native API adoption remains
+  `services/kernel/test/imports/bangumi-creator-credits.test.ts`; it is not
+  claimed passed in this delivery.

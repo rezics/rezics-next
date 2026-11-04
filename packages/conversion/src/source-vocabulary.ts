@@ -65,7 +65,7 @@ export type BangumiVocabularyRow =
       subject: NativeIdentity;
       holder?: NativeIdentity;
       holderCode: string;
-      subjectType: 1 | 2 | 4;
+      subjectType: 1 | 2 | 3 | 4 | 6;
       roleCode: number;
       creditedAs?: string;
       order?: number;
