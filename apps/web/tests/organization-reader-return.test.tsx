@@ -6,7 +6,12 @@ import { organizationCurrent } from '../src/features/catalogue/organization-read
 import type { PeopleRead } from '../src/features/catalogue/people-profile';
 import { peopleProfileFixture } from '../src/kernel/fake/catalogue-people-profile';
 import { personReaderExample } from '../src/features/catalogue/person-reader/examples';
-import { connectionReturnHref, withSubjectVisitReturn } from '../src/features/pages/subject-visit-navigation';
+import {
+  connectionReturnHref,
+  organizationHistoryVisitReturn,
+  subjectVisitReturn,
+  withSubjectVisitReturn,
+} from '../src/features/pages/subject-visit-navigation';
 import { m } from '../src/paraglide/messages.js';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
@@ -92,7 +97,7 @@ test('composition documents stay together; exact inspection closes to its opener
   await mounted(async ({ host, window, client, render, click }) => {
     const { read, documents, fact } = reading();
     const realm = '00000000-0000-4000-8000-00000000d401';
-    const returnTo = connectionReturnHref(read.public.subject.id, 'Studio', 'en', realm, { stream: 'out:wdt:P1365' });
+    const currentHref = connectionReturnHref(read.public.subject.id, 'Studio', 'en', realm, { stream: 'out:wdt:P1365' });
     let requests = 0;
     const fallback = async () => {
       requests++;
@@ -111,7 +116,7 @@ test('composition documents stay together; exact inspection closes to its opener
           documents={documents}
           read={fallback}
           realm={realm}
-          returnTo={returnTo}
+          currentHref={currentHref}
         />,
       );
     await show({});
@@ -126,10 +131,20 @@ test('composition documents stay together; exact inspection closes to its opener
     expect(window.document.activeElement).toBe(inspection);
     const correction = inspection.querySelector<HTMLAnchorElement>('a[href*="statement="]')!;
     expect(new URL(correction.href).searchParams.get('statement')).toBe(fact.id);
-    expect(new URL(correction.href).searchParams.get('via')).toBe(returnTo);
+    const correctionAddress = new URL(correction.href);
+    expect(correctionAddress.searchParams.get('context')).toBe(read.public.subject.context);
+    expect(correctionAddress.searchParams.get('realm')).toBe(realm);
+    const via = correctionAddress.searchParams.get('via')!;
+    const returned = subjectVisitReturn(via, 'en')!;
+    expect(organizationHistoryVisitReturn(new URL(returned, 'https://site.test').hash)).toMatchObject({
+      context: read.public.subject.context,
+      property: fact.property.id,
+      candidate: fact.id,
+      focus: 'keyboard',
+    });
     expect(host.textContent).toContain(m.organization_reader_navigation());
-    const nested = withSubjectVisitReturn(correction.getAttribute('href')!, returnTo, 'en');
-    expect(new URL(nested, 'https://site.test').searchParams.getAll('via')).toEqual([returnTo]);
+    const nested = withSubjectVisitReturn(correction.getAttribute('href')!, via, 'en');
+    expect(new URL(nested, 'https://site.test').searchParams.getAll('via')).toEqual([via]);
     await click(m.organization_reader_return());
     expect(window.document.activeElement).toBe(opener);
     await click(m.organization_reader_inspect());
@@ -155,9 +170,11 @@ test('composition documents stay together; exact inspection closes to its opener
   });
 });
 
-test('failed current dependency retries once, distinguishes pending, and rejects retired locale/source work without borrowed bodies', async () => {
-  await mounted(async ({ host, window, client, render, click }) => {
+test('failed fallback offers a Context-preserving page refresh and rejects retired locale/source work', async () => {
+  await mounted(async ({ host, window, client, render }) => {
     const { read, documents } = reading();
+    const realm = '00000000-0000-4000-8000-00000000d401';
+    const currentHref = connectionReturnHref(read.public.subject.id, 'Studio', 'en', realm);
     const pending: { resolve: (read: PeopleRead) => void; reject: () => void; signal: AbortSignal }[] = [];
     const dependency = (_id: string, signal: AbortSignal) =>
       new Promise<PeopleRead>((resolve, reject) =>
@@ -174,6 +191,8 @@ test('failed current dependency retries once, distinguishes pending, and rejects
           reader={null}
           documents={documents}
           read={dependency}
+          realm={realm}
+          currentHref={currentHref}
         />,
       );
     await show();
@@ -181,24 +200,21 @@ test('failed current dependency retries once, distinguishes pending, and rejects
     expect(host.querySelectorAll('button')).toHaveLength(0);
     await act(async () => pending[0]!.reject());
     expect(host.textContent).toContain(m.organization_reader_failed());
-    await click(m.correction_retry());
-    expect(pending).toHaveLength(2);
-    expect(host.textContent).toContain(m.candidate_loading());
-    const outside = window.document.createElement('button');
-    window.document.body.append(outside);
-    outside.focus();
-    await act(async () => pending[1]!.resolve(read));
-    expect(window.document.activeElement).toBe(outside);
-    expect(host.textContent).not.toContain('Mira directs independent films.');
-    expect(host.textContent).toContain(m.candidate_value_unavailable());
+    const refresh = [...host.querySelectorAll<HTMLAnchorElement>('a')].find(
+      (link) => link.textContent?.trim() === m.organization_reader_refresh(),
+    )!;
+    expect(new URL(refresh.href).searchParams.get('context')).toBe(read.public.subject.context);
+    expect(new URL(refresh.href).searchParams.get('realm')).toBe(realm);
+    expect(pending).toHaveLength(1);
     source = {};
     await show();
+    const retired = pending[1]!;
     await show('ja');
-    expect(pending[2]!.signal.aborted).toBe(true);
-    await act(async () => pending[2]!.resolve(read));
+    expect(retired.signal.aborted).toBe(true);
+    await act(async () => retired.resolve(read));
     expect(host.textContent).not.toContain('Mira directs independent films.');
     source = {};
-    await show();
+    await show('en');
     const old = pending[3]!;
     await act(async () => client.setQueryData(['exposure', 'viewer'], { revision: 1 }));
     expect(old.signal.aborted).toBe(true);

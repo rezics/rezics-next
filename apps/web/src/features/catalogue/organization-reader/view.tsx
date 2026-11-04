@@ -1,16 +1,24 @@
-import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { ReadingDisclosureScope } from '@rezics/ui/cover';
 import { pickText } from '@rezics/composition';
 import { m } from '../../../paraglide/messages.js';
 import { subjectHref } from '../../../subject/subject-href';
 import { defaultReader, type Reader } from '../../../subject/reader';
 import { ExternalValue, PlainLink, spoilerLevel, type LinkProps, type PageLink } from '../../pages/shared';
-import { connectionReturnHref, subjectVisitReturn, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
+import {
+  organizationHistoryVisitReturn,
+  type OrganizationHistoryVisitReturn,
+} from '../../pages/subject-visit-navigation';
 import { catalogueEntries } from '../catalogue-entry';
 import { ProfileSourceList } from '../music-reader-view';
 import { profileSourceRecords } from '../music-reader';
 import { organizationHistory, type OrganizationReading, type OrganizationFact } from './index';
 import { useOrganizationEpisode, type OrganizationEpisode } from './reading/episode';
+import {
+  organizationHistoryAddress,
+  organizationHistoryDestinationHref,
+  replaceOrganizationHistoryAddress,
+} from './reading/visit';
 import { OrganizationValue, organizationControl as control } from './reading/value';
 
 type Selection = {
@@ -21,6 +29,26 @@ type Selection = {
   keyboard: boolean;
 };
 type Presentation = { read: OrganizationReading; locale: string; documents?: unknown; link: PageLink };
+
+function organizationLocator(
+  read: OrganizationReading,
+  fact: OrganizationFact,
+  keyboard: boolean,
+  locale: string,
+  realm?: string,
+): OrganizationHistoryVisitReturn {
+  return {
+    holder: read.public.subject.id,
+    context: read.public.subject.context,
+    locale,
+    ...(realm ? { realm } : {}),
+    property: fact.property.id,
+    candidate: fact.id,
+    revision: fact.rezics.revision,
+    release: fact.rezics.release,
+    focus: keyboard ? 'keyboard' : 'pointer',
+  };
+}
 
 /** Evidence is always attached to the inspected original assertion, never a similarly titled row. */
 function Evidence({ fact, presentation }: { fact: OrganizationFact; presentation: Presentation }) {
@@ -129,7 +157,62 @@ export function OrganizationReader({
   const heading = useRef<HTMLHeadingElement>(null);
   const o = { locale: locale as never };
   const title = pickText(read.public.subject.labels, locale);
-  const href = currentHref ?? subjectHref({ id: read.public.subject.id, label: title.text }, locale).href;
+  const fallbackHref = subjectHref({ id: read.public.subject.id, label: title.text }, locale).href;
+  const href = organizationHistoryAddress(
+    currentHref ?? returnTo,
+    fallbackHref,
+    locale,
+    read.public.subject.id,
+    read.public.subject.context,
+    realm,
+  );
+  const [returnHash, setReturnHash] = useState(() => (typeof window === 'undefined' ? '' : window.location.hash));
+  const [navigationRevision, setNavigationRevision] = useState(0);
+  const previousVisit = useRef({ episode: episode.key, href, navigationRevision });
+  useEffect(() => {
+    const update = () => setReturnHash(window.location.hash);
+    const navigate = () => {
+      update();
+      setNavigationRevision((value) => value + 1);
+    };
+    update();
+    window.addEventListener('hashchange', navigate);
+    window.addEventListener('popstate', navigate);
+    return () => {
+      window.removeEventListener('hashchange', navigate);
+      window.removeEventListener('popstate', navigate);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const previous = previousVisit.current;
+    const addressChanged = previous.href !== href;
+    const episodeChanged = previous.episode !== episode.key;
+    const navigated = previous.navigationRevision !== navigationRevision;
+    previousVisit.current = { episode: episode.key, href, navigationRevision };
+    if (addressChanged) {
+      setReturnHash(window.location.hash);
+      return;
+    }
+    if (episodeChanged && !navigated && organizationHistoryVisitReturn(window.location.hash)) {
+      const address = organizationHistoryAddress(href, fallbackHref, locale, read.public.subject.id, read.public.subject.context, realm);
+      const hash = replaceOrganizationHistoryAddress(address);
+      if (hash) setReturnHash(hash);
+    }
+  }, [episode.key, href, navigationRevision, fallbackHref, locale, read.public.subject.id, read.public.subject.context, realm]);
+  const persistVisit = (fact?: OrganizationFact, keyboard = false) => {
+    if (!episode.current()) return;
+    const address = organizationHistoryAddress(
+      href,
+      fallbackHref,
+      locale,
+      read.public.subject.id,
+      read.public.subject.context,
+      realm,
+      fact ? organizationLocator(read, fact, keyboard, locale, realm) : undefined,
+    );
+    const hash = replaceOrganizationHistoryAddress(address);
+    if (hash) setReturnHash(hash);
+  };
   return (
     <section
       data-slot="organization-reader"
@@ -179,11 +262,15 @@ export function OrganizationReader({
             close={() => {
               if (!episode.current()) return;
               const opener = selected?.opener;
+              persistVisit();
               setSelected(undefined);
               (opener?.isConnected ? opener : heading.current)?.focus();
             }}
             currentHref={href}
-            returnTo={returnTo}
+            returnHash={returnHash}
+            persistVisit={persistVisit}
+            focusHeader={() => heading.current?.focus()}
+            reportChanged={() => setChanged(true)}
           />
         </ReadingDisclosureScope.Provider>
       ) : (
@@ -284,7 +371,10 @@ function OrganizationFacts({
   select,
   close,
   currentHref,
-  returnTo,
+  returnHash,
+  persistVisit,
+  focusHeader,
+  reportChanged,
 }: {
   read: OrganizationReading;
   locale: string;
@@ -297,14 +387,35 @@ function OrganizationFacts({
   select: (selection: Selection | undefined) => void;
   close: () => void;
   currentHref: string;
-  returnTo?: string | undefined;
+  returnHash: string;
+  persistVisit: (fact?: OrganizationFact, keyboard?: boolean) => void;
+  focusHeader: () => void;
+  reportChanged: () => void;
 }) {
   const o = { locale: locale as never };
   const model = useMemo(() => organizationHistory(read, locale), [read, locale]);
+  const fieldHeadings = useRef(new Map<string, HTMLHeadingElement>());
+  const handledReturn = useRef('');
   const subject = read.public.subject;
   const title = pickText(subject.labels, locale);
-  // The installed consumer only understands connections here. Do not invent a statement query/hash.
-  const origin = subjectVisitReturn(returnTo, locale) ?? connectionReturnHref(subject.id, title.text, locale, realm);
+  const fallbackHref = subjectHref({ id: subject.id, label: title.text }, locale).href;
+  const selectedFact =
+    selected?.episode === episode.key
+      ? model?.fields.find((field) => field.id === selected.property)?.facts.find((fact) => fact.id === selected.id)
+      : undefined;
+  const selectedLocator =
+    selectedFact && spoilerLevel(selectedFact) <= preferences.spoilerLevel
+      ? organizationLocator(read, selectedFact, !!selected?.keyboard, locale, realm)
+      : undefined;
+  const origin = organizationHistoryAddress(
+    currentHref,
+    fallbackHref,
+    locale,
+    subject.id,
+    subject.context,
+    realm,
+    selectedLocator,
+  );
   const CurrentLink = useMemo(
     () =>
       function CurrentLink(props: LinkProps) {
@@ -314,23 +425,69 @@ function OrganizationFacts({
               if (!episode.current()) event.preventDefault();
             }}
           >
-            <Link {...props} href={withSubjectVisitReturn(props.href, origin, locale)} />
+            <Link
+              {...props}
+              href={organizationHistoryDestinationHref(props.href, subject.context, realm, origin, locale)}
+            />
           </span>
         );
       },
-    [Link, episode, origin, locale],
+    [Link, episode, origin, locale, realm, subject.context],
   );
   const presentation = { read, documents, locale, link: CurrentLink };
+  useEffect(() => {
+    if (handledReturn.current === returnHash) return;
+    const intent = organizationHistoryVisitReturn(returnHash);
+    handledReturn.current = returnHash;
+    if (!intent || selected?.episode === episode.key || !episode.current()) return;
+    const field = model?.fields.find((item) => item.id === intent.property);
+    const fact = field?.facts.find((item) => item.id === intent.candidate);
+    const exact =
+      intent.holder === subject.id &&
+      intent.context === subject.context &&
+      intent.locale === locale &&
+      intent.realm === realm &&
+      fact?.property.id === intent.property &&
+      fact.rezics.revision === intent.revision &&
+      fact.rezics.release === intent.release;
+    if (!exact || (!!fact && spoilerLevel(fact) > preferences.spoilerLevel)) {
+      reportChanged();
+      const fieldHeading = fieldHeadings.current.get(intent.property);
+      if (fieldHeading) fieldHeading.focus();
+      else focusHeader();
+      return;
+    }
+    const opener = [...document.querySelectorAll<HTMLButtonElement>('button[data-organization-property]')].find(
+      (button) => button.dataset.organizationProperty === intent.property && button.dataset.organizationCandidate === intent.candidate,
+    );
+    if (!opener) {
+      reportChanged();
+      const fieldHeading = fieldHeadings.current.get(intent.property);
+      if (fieldHeading) fieldHeading.focus();
+      else focusHeader();
+      return;
+    }
+    select({
+      episode: episode.key,
+      id: fact.id,
+      property: fact.property.id,
+      opener,
+      keyboard: intent.focus === 'keyboard',
+    });
+  }, [returnHash, selected, episode, model, subject.id, subject.context, preferences.spoilerLevel, select, reportChanged, focusHeader]);
   if (!model) return <p role="status">{m.organization_reader_unavailable({}, o)}</p>;
   const open = (fact: OrganizationFact, event: MouseEvent<HTMLButtonElement>) => {
-    if (episode.current())
+    if (episode.current()) {
+      const keyboard = event.detail === 0;
       select({
         episode: episode.key,
         id: fact.id,
         property: fact.property.id,
         opener: event.currentTarget,
-        keyboard: event.detail === 0,
+        keyboard,
       });
+      persistVisit(fact, keyboard);
+    }
   };
   const sources = profileSourceRecords(subject);
   return (
@@ -370,7 +527,15 @@ function OrganizationFacts({
       )}
       {model.fields.map((field) => (
         <section key={field.id} className="min-w-0 space-y-2">
-          <h3 lang={field.label.lang ?? undefined} className="text-lg font-semibold">
+          <h3
+            ref={(node) => {
+              if (node) fieldHeadings.current.set(field.id, node);
+              else fieldHeadings.current.delete(field.id);
+            }}
+            tabIndex={-1}
+            lang={field.label.lang ?? undefined}
+            className="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-ring"
+          >
             {field.label.text || m.candidate_value_unavailable({}, o)}
           </h3>
           {field.kind === 'relations' && (
@@ -399,6 +564,8 @@ function OrganizationFacts({
                     className={control + ' block text-sm'}
                     onClick={(event) => open(fact, event)}
                     aria-expanded={inspecting}
+                    data-organization-property={field.id}
+                    data-organization-candidate={fact.id}
                   >
                     {m.organization_reader_inspect({}, o)}
                   </button>
@@ -407,7 +574,21 @@ function OrganizationFacts({
                       fact={fact}
                       selected={selected}
                       presentation={presentation}
-                      correction={`${catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}?${new URLSearchParams({ property: fact.property.id, statement: fact.id })}`}
+                      correction={organizationHistoryDestinationHref(
+                        `${catalogueEntries.facts({ id: subject.id, label: title.text, locale }).href}?${new URLSearchParams({ property: fact.property.id, statement: fact.id })}`,
+                        subject.context,
+                        realm,
+                        organizationHistoryAddress(
+                          currentHref,
+                          fallbackHref,
+                          locale,
+                          subject.id,
+                          subject.context,
+                          realm,
+                          organizationLocator(read, fact, selected?.keyboard ?? false, locale, realm),
+                        ),
+                        locale,
+                      )}
                       close={close}
                       current={episode.current}
                     />
@@ -421,7 +602,10 @@ function OrganizationFacts({
                       locale={locale}
                       current={episode.current}
                       onHide={() => {
-                        if (inspecting) select(undefined);
+                        if (inspecting) {
+                          persistVisit();
+                          select(undefined);
+                        }
                       }}
                     >
                       {content}

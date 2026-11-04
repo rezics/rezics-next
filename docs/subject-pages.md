@@ -1211,24 +1211,34 @@ history. An admitted field with no assertions is empty; an independently conceal
 native document presentation is unavailable. No date, label, redirect or repeated credit creates an inferred edge.
 
 Each assertion can open its rank, original statement identity/revision, start/end qualifiers and grouped citations.
-Partial date precision remains with the native value. Exact disclosed destination identities use the existing public
-Subject visit return to Connections; the originating overview remains reachable without a nested return chain.
-Inspection returns focus to its surviving opener and offers the existing exact statement correction address. Facts,
-Relations and Works remain the full reading/correction routes and own their native continuation and command recovery.
-Replacing the source, locale, provider, session observation or exposure retires values, links, open inspection and its
-return controls. Delayed profile reads cannot revive them; authority retirement needs a fresh Subject observation.
+Partial date precision remains with the native value. A disclosed destination visit carries a bounded Organization
+field/assertion locator in the existing Subject visit address. The return reads the current page and restores only the
+same holder, Context, property, candidate, revision and release; a changed, concealed, removed or no-longer-admitted
+assertion reports the change and focuses its current field. The address retains no authorized reading snapshot or
+nested return chain. Browser back/forward preserves inspection intent and reacquires current reading authority.
+Inspection returns focus to its surviving opener and offers the existing exact statement correction address with the
+selected Context and Realm. Facts, Relations and Works remain the full reading/correction routes and own their native
+continuation and command recovery. Replacing the source, locale, provider, session observation or exposure retires
+values, links, open inspection and its return controls. Delayed profile reads cannot revive them; authority retirement
+needs a fresh Subject observation.
 
 Decision: the ordinary overview uses one fresh shared People profile observation, and delegates inverse relations and
 continuation to the existing Relations/Works readers rather than inferring incoming edges from outgoing facts.
+Decision: use a validated Subject fragment containing the exact Organization field assertion and Context; on return,
+reopen only an exact match from the current page read and focus the field when the assertion has changed.
 
 **Cost:** One People profile read per admitted composition observation (one Subject GET and the existing active
 definition pointer/release GETs), with one request in flight; no per-row hydration, session/exposure reads, commands,
-polling or automatic retries. Explicit retry repeats only that observation. The accepted public response is at most
+polling or automatic retries. A failed ID-only fallback offers one explicit full-page refresh of the current Context.
+The accepted public response is at most
 2 MiB of serialized UTF-8 JSON; admission temporarily serializes it once. At most 32 released fields and 20 assertions
 per field are presented, with at most 32 qualifiers, 16 reference groups and 16 parts per group per assertion. An
 oversized assertion is withheld intact and the overview explicitly directs the reader to full facts/relations.
-Only one evidence inspection and its opener are retained; no continuation history or private draft is held. Work is
-O(released fields + accepted public bytes); retained UI references share the one admitted public response and release.
+Only one evidence inspection and its opener are retained in the mounted view. The return fragment is capped at 2,048
+characters and retains at most nine fixed locator values; exact resolution examines at most the selected field's 20
+assertions. Browser history carries no assertion payload, authorized reading or nested return chain. An explicit
+refresh reloads the current page Context; it does not repeat the incapable ID-only fallback read. Work is O(released
+fields + accepted public bytes); retained UI references share the one admitted public response and release.
 JSON/string/object overhead remains additional memory. Locale strings wrap and all actions have 44px targets in the
 existing phone390/desktop1280 theme layouts. Source stories are illustrative, not native or browser verification.
 
