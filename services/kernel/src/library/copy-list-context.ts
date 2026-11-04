@@ -113,7 +113,7 @@ export async function attachCopyListContext<T extends ContextCopy>(
     const byOriginal = new Map(validOriginals.map((id, index) => [id, before![index]!]));
     const terminals = before.flatMap((mapping) => (mapping.state === 'mapped' ? [mapping.terminal] : []));
     const summaryIds = [...new Set([...validOriginals, ...terminals])];
-    const languageOptions = options.languages === undefined ? {} : { languages: options.languages };
+    const languageOptions = options.languages?.length ? { languages: options.languages } : {};
     if (!semanticUnavailable) summaries = await readSubjectSummaries(deps, summaryIds, languageOptions);
 
     // Pass every mapped raw row, duplicates included, through one existing Semantic fact batch.

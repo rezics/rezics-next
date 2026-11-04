@@ -3725,6 +3725,65 @@ CREATE TABLE library.copy_archive_upload (
 
 
 --
+-- Name: copy_loan; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.copy_loan (
+    route integer NOT NULL,
+    loan_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    copy_id uuid NOT NULL,
+    direction text NOT NULL,
+    counterparty_kind text NOT NULL,
+    counterparty_name text,
+    counterparty_person_id uuid,
+    started_on date NOT NULL,
+    due_on date,
+    returned_on date,
+    revision integer DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    transaction_id uuid NOT NULL,
+    CONSTRAINT copy_loan_direction CHECK ((direction = ANY (ARRAY['lent'::text, 'borrowed'::text]))),
+    CONSTRAINT copy_loan_due_after_start CHECK (((due_on IS NULL) OR (due_on >= started_on))),
+    CONSTRAINT copy_loan_party_kind CHECK ((counterparty_kind = ANY (ARRAY['name'::text, 'person'::text]))),
+    CONSTRAINT copy_loan_party_person_route CHECK (((counterparty_person_id IS NULL) OR (route = ((get_byte(uuid_send(counterparty_person_id), 10) * 256) + get_byte(uuid_send(counterparty_person_id), 11))))),
+    CONSTRAINT copy_loan_party_shape CHECK ((((counterparty_kind = 'name'::text) AND (counterparty_name IS NOT NULL) AND (counterparty_person_id IS NULL) AND ((char_length(counterparty_name) >= 1) AND (char_length(counterparty_name) <= 300))) OR ((counterparty_kind = 'person'::text) AND (counterparty_name IS NULL) AND (counterparty_person_id IS NOT NULL)))),
+    CONSTRAINT copy_loan_revision_positive CHECK (((revision >= 1) AND (revision <= 2147483647))),
+    CONSTRAINT copy_loan_route_account CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT copy_loan_route_copy CHECK ((route = ((get_byte(uuid_send(copy_id), 10) * 256) + get_byte(uuid_send(copy_id), 11)))),
+    CONSTRAINT copy_loan_route_id CHECK ((route = ((get_byte(uuid_send(loan_id), 10) * 256) + get_byte(uuid_send(loan_id), 11))))
+);
+
+
+--
+-- Name: TABLE copy_loan; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON TABLE library.copy_loan IS 'Private owner loan history. copy_id is intentionally not a foreign key so returned history survives copy deletion; terminal owner erasure removes loan and generation rows in bounded pages.';
+
+
+--
+-- Name: COLUMN copy_loan.counterparty_name; Type: COMMENT; Schema: library; Owner: -
+--
+
+COMMENT ON COLUMN library.copy_loan.counterparty_name IS 'Exact private name text; it is never normalized or matched to a person.';
+
+
+--
+-- Name: copy_loan_generation; Type: TABLE; Schema: library; Owner: -
+--
+
+CREATE TABLE library.copy_loan_generation (
+    route integer NOT NULL,
+    account_id uuid NOT NULL,
+    generation integer DEFAULT 1 NOT NULL,
+    CONSTRAINT copy_loan_generation_account_route CHECK ((route = ((get_byte(uuid_send(account_id), 10) * 256) + get_byte(uuid_send(account_id), 11)))),
+    CONSTRAINT copy_loan_generation_positive CHECK (((generation >= 1) AND (generation <= 2147483647)))
+);
+
+
+--
 -- Name: diary_navigation; Type: TABLE; Schema: library; Owner: -
 --
 
@@ -6626,6 +6685,22 @@ ALTER TABLE ONLY library.copy_archive_upload
 
 
 --
+-- Name: copy_loan_generation copy_loan_generation_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_loan_generation
+    ADD CONSTRAINT copy_loan_generation_pkey PRIMARY KEY (route, account_id);
+
+
+--
+-- Name: copy_loan copy_loan_pkey; Type: CONSTRAINT; Schema: library; Owner: -
+--
+
+ALTER TABLE ONLY library.copy_loan
+    ADD CONSTRAINT copy_loan_pkey PRIMARY KEY (route, loan_id);
+
+
+--
 -- Name: copy copy_pkey; Type: CONSTRAINT; Schema: library; Owner: -
 --
 
@@ -8095,6 +8170,34 @@ CREATE INDEX copy_live_raw_source ON library.copy USING btree (route, account_id
 --
 
 CREATE INDEX copy_live_subject_created ON library.copy USING btree (route, account_id, subject_id, created_at, copy_id) WHERE (deletion_id IS NULL);
+
+
+--
+-- Name: copy_loan_history_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_loan_history_seek ON library.copy_loan USING btree (route, account_id, returned_on DESC, loan_id DESC) WHERE (returned_on IS NOT NULL);
+
+
+--
+-- Name: copy_loan_one_open_per_copy; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE UNIQUE INDEX copy_loan_one_open_per_copy ON library.copy_loan USING btree (route, account_id, copy_id) WHERE (returned_on IS NULL);
+
+
+--
+-- Name: copy_loan_open_due_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_loan_open_due_seek ON library.copy_loan USING btree (route, account_id, due_on, loan_id) WHERE (returned_on IS NULL);
+
+
+--
+-- Name: copy_loan_owner_purge_seek; Type: INDEX; Schema: library; Owner: -
+--
+
+CREATE INDEX copy_loan_owner_purge_seek ON library.copy_loan USING btree (route, account_id, loan_id);
 
 
 --

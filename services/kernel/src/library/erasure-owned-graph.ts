@@ -76,6 +76,8 @@ export const OWNED_PHASES = [
   'shelf_score_head',
   'progress_discovery_generation',
   'yearly_completion_goals',
+  'copy_loan',
+  'copy_loan_generation',
 ] as const;
 const childQueries: {
   units: typeof units;

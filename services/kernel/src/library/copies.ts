@@ -234,6 +234,16 @@ async function lockOwned(tx: CommandTransaction, route: number, accountId: strin
   return current;
 }
 
+/** Copy loan creation locks the same copy row before inserting, so disposal and deletion serialize with lending. */
+async function assertNoOpenLoan(tx: CommandTransaction, route: number, accountId: string, copyId: string): Promise<void> {
+  const open = await tx.query(
+    `SELECT loan_id FROM library.copy_loan
+     WHERE route=$1 AND account_id=$2 AND copy_id=$3 AND returned_on IS NULL LIMIT 1`,
+    [route, accountId, copyId],
+  );
+  if (open.rows.length) throw new CopyConflictError();
+}
+
 /** Private copy commands. Each copy is its own row in the owner's partition. */
 export function createCopyCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
@@ -347,6 +357,8 @@ export function createCopyCommands(config: Dependencies) {
         const fact = await store.readCopyFact(tx, route, copyId);
         if (!fact || fact.copy.accountId !== owner.accountId) throw new LibraryNotFoundError();
         const changes = merged(fact.copy, patch);
+        if (changes.disposedOn !== null || changes.status === 'disposed')
+          await assertNoOpenLoan(tx, route, owner.accountId, copyId);
         if ('error' in prepared) throw prepared.error;
         const source = prepared.source;
         if (!source || source.subjectId !== fact.copy.subjectId) throw new LibraryNotFoundError();
@@ -392,6 +404,7 @@ export function createCopyCommands(config: Dependencies) {
         const current = await lockOwned(tx, route, owner.accountId, copyId);
         if (expected === undefined || current.revision !== expected || expected > 2_147_483_644)
           throw new CopyConflictError();
+        await assertNoOpenLoan(tx, route, owner.accountId, copyId);
         const deletion = await store.deleteCopy(tx, route, copyId, expected, {
           transactionId: command.transactionId,
           time: authoritativeTimeValue(command.time),
