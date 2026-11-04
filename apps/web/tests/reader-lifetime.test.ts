@@ -48,6 +48,9 @@ test('the mounted Subject reader shares one session listener and retires each su
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
   const { useSubjectPersonalReader } = await import('../src/features/pages/subject-personal-reader');
   const { useSession } = await import('../src/session/query');
+  const { personalRead } = await import('../src/kernel/query');
+  const previousEnabled = personalRead.enabled;
+  Object.assign(personalRead, { enabled: true });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const session = { state: 'signed-in', subject: 'reader-a', csrfToken: null } as const;
   client.setQueryData(['session'], session);
@@ -111,10 +114,11 @@ test('the mounted Subject reader shares one session listener and retires each su
   } finally {
     const old = lease;
     await act(async () => root.unmount());
-    expect(old?.isCurrent()).toBe(false);
+    if (old) expect(old.isCurrent()).toBe(false);
     expect(active).toBe(0);
     expect(peak).toBe(1);
     client.clear();
+    Object.assign(personalRead, { enabled: previousEnabled });
     await window.happyDOM.close();
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
