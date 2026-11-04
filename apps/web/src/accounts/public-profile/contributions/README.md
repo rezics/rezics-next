@@ -36,3 +36,15 @@ and reader lifetimes keep their current authority. No private state is added to 
 
 The examples are prepared presentation states, including unavailable context. They are not native eligibility
 evidence. Native and browser acceptance remains with integration execution.
+
+## Private selected reader
+
+Decision: the local `AuthorContributionActionsWire` defaults to unavailable until the complete-input publisher
+installs the native method and DTO; the initial receiver retains only an immutable native selection per episode.
+
+`contribution-actions/receiver.ts` validates the anonymous page's actual `actionSelection`, caps its cohort at twenty,
+retains the original author/view/cursor/proof, and coalesces refreshes. Failure keeps that exact input for retry.
+Retirement aborts the read, clears retained private state and guards late completion. It does not normalize missing
+own slots or acknowledge writes. This is the reader foundation; the page/row lifetime host, closed response adapter,
+native command owners and accessible action presentation remain to be connected. No production method or installed
+declaration head has been established, and this foundation does not add private fields to anonymous documents.
