@@ -264,14 +264,24 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
                 SELECT $1,$2,board,watch,true,1,${oldCreatedAt}
                 FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`;
               await db.admin.query(insertBoardHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
-              await db.admin.query(insertBoardHistory, [unrelatedRoute, unrelatedAccount, resources, unrelatedWatchIds]);
+              await db.admin.query(insertBoardHistory, [
+                unrelatedRoute,
+                unrelatedAccount,
+                resources,
+                unrelatedWatchIds,
+              ]);
             } else {
               const insertThreadHistory = `
                 INSERT INTO content.thread_watch(route,watcher_account_id,thread_id,watch_id,created_at)
                 SELECT $1,$2,thread,watch,${oldCreatedAt}
                 FROM unnest($3::uuid[],$4::uuid[]) n(thread,watch)`;
               await db.admin.query(insertThreadHistory, [selectedRoute, selectedAccount, resources, selectedWatchIds]);
-              await db.admin.query(insertThreadHistory, [unrelatedRoute, unrelatedAccount, resources, unrelatedWatchIds]);
+              await db.admin.query(insertThreadHistory, [
+                unrelatedRoute,
+                unrelatedAccount,
+                resources,
+                unrelatedWatchIds,
+              ]);
             }
           }
           if (step === 'opening' || step === 'sparse-opening') {
@@ -289,12 +299,7 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
               `INSERT INTO content.board_watch(route,watcher_account_id,board_id,watch_id,watching,revision,created_at)
                SELECT $1,$2,board,watch,false,2,${oldCreatedAt}
                FROM unnest($3::uuid[],$4::uuid[]) n(board,watch)`,
-              [
-                routeOf(erasing),
-                erasing,
-                resources,
-                Array.from({ length: count }, () => newId(routeOf(erasing)!)),
-              ],
+              [routeOf(erasing), erasing, resources, Array.from({ length: count }, () => newId(routeOf(erasing)!))],
             );
           const revisionPosts =
             step === 'thread-list'
@@ -321,13 +326,34 @@ test('watch management and delivery stay bounded across unrelated, selected, sou
           }
           const authority =
             step === 'board-list'
-              ? [{ resourceId: f.boardId, route: routeOf(f.boardId)!, action: 'board:read', subject: owner },
-                  { resourceId: f.boardId, route: routeOf(f.boardId)!, action: 'board:read', subject: f.accounts.recipient }]
+              ? [
+                  { resourceId: f.boardId, route: routeOf(f.boardId)!, action: 'board:read', subject: owner },
+                  {
+                    resourceId: f.boardId,
+                    route: routeOf(f.boardId)!,
+                    action: 'board:read',
+                    subject: f.accounts.recipient,
+                  },
+                ]
               : step === 'thread-list'
-                ? [{ resourceId: watched.id, route: routeOf(watched.id)!, action: 'thread:read', subject: owner },
-                    { resourceId: unrelatedSourceThreadId!, route: routeOf(unrelatedSourceThreadId!)!, action: 'thread:read', subject: f.accounts.recipient }]
+                ? [
+                    { resourceId: watched.id, route: routeOf(watched.id)!, action: 'thread:read', subject: owner },
+                    {
+                      resourceId: unrelatedSourceThreadId!,
+                      route: routeOf(unrelatedSourceThreadId!)!,
+                      action: 'thread:read',
+                      subject: f.accounts.recipient,
+                    },
+                  ]
                 : step === 'cold-thread-retry'
-                  ? [{ resourceId: retryTarget!, route: routeOf(retryTarget!)!, action: 'thread:read', subject: retryReader }]
+                  ? [
+                      {
+                        resourceId: retryTarget!,
+                        route: routeOf(retryTarget!)!,
+                        action: 'thread:read',
+                        subject: retryReader,
+                      },
+                    ]
                   : [];
           for (const { resourceId, route: grantRoute, action, subject } of authority) {
             const transactions = Array.from({ length: count }, () => newId(grantRoute));
