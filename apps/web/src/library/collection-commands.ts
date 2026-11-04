@@ -78,7 +78,7 @@ function metadataHistoryPageInput(input: unknown): CollectionMetadataHistoryPage
 function metadataHistoryChangeInput(input: unknown): CollectionMetadataHistoryChangeInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid Collection metadata history revision');
   const value = input as Record<string, unknown>;
-  if (!identifier(value.collectionId) || !revision(value.revision))
+  if (!identifier(value.collectionId) || !revision(value.revision) || value.revision < 2)
     throw new Error('Invalid Collection metadata history revision');
   return { collectionId: value.collectionId, revision: value.revision };
 }
