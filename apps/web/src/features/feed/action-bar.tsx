@@ -158,9 +158,9 @@ function subjectReactionFallback(
             variant="ghost"
             size="sm"
             className={actionClass}
-            disabled={busy || !current()}
+            disabled={busy}
             onClick={() => {
-              if (!busy && current()) onRetry();
+              if (!busy) onRetry();
             }}
           >
             {m.subject_section_retry({}, options)}
