@@ -1,3 +1,4 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
 import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
 import type { PasskeySignInResult } from '../src/passkeys';
@@ -133,4 +134,134 @@ test('successful confirmation releases a blocked departure and continues to its 
   expect(page.assign).toHaveBeenCalledTimes(1);
   expect(document.querySelector('[role=alertdialog]')).toBeNull();
   expect(page.unload()).toBe(false);
+});
+
+const { confirmStepUp, confirmStepUpWithPasskey } = await import('../src/step-up');
+const { accountOperationProfile } = await import('../src/account-operation-step-up');
+const accountId = '11111111-1111-4111-8111-111111111111';
+const organizationId = '22222222-2222-4222-8222-222222222222';
+for (const method of ['password', 'passkey'] as const)
+  for (const phase of ['authentication', 'session'] as const)
+    for (const kind of ['delete', 'organization', 'organization-delete'] as const)
+      test(`${method} ${kind} refuses changed continuations during ${phase}`, async () => {
+        const organization = kind === 'organization-delete';
+        const storageKey = organization ? 'rezics.organization-delete.step-up' : 'rezics.account-operation.step-up';
+        const query = organization
+          ? '?organization_delete=1&return_to=%2Forganizations%2Fdelete'
+          : `?account_operation=${kind}&return_to=${kind === 'delete' ? '%2Faccount%2Fdelete' : '%2Forganizations%2Fnew'}`;
+        const original = organization
+          ? {
+              version: 1,
+              operation: 'delete',
+              humanAccountId: accountId,
+              organizationId,
+              operationKey: 'a'.repeat(32),
+              returnTo: '/organizations/delete',
+            }
+          : {
+              version: 1,
+              kind,
+              accountId,
+              operationKey: 'a'.repeat(32),
+              operation: kind === 'delete' ? { kind, accountId } : { kind, handle: 'original' },
+              returnTo: kind === 'delete' ? '/account/delete' : '/organizations/new',
+            };
+        for (const replacement of [
+          null,
+          '{',
+          JSON.stringify({ ...original, operationKey: 'b'.repeat(32) }),
+          JSON.stringify({ ...original, returnTo: '/security' }),
+          JSON.stringify(
+            organization
+              ? { ...original, organizationId: '33333333-3333-4333-8333-333333333333' }
+              : {
+                  ...original,
+                  operation:
+                    kind === 'organization'
+                      ? { kind, handle: 'replacement' }
+                      : { kind: 'organization', handle: 'replacement' },
+                  kind: 'organization',
+                  returnTo: '/organizations/new',
+                },
+          ),
+        ]) {
+          window.sessionStorage.setItem(storageKey, JSON.stringify(original));
+          const authentication = Promise.withResolvers<Response>();
+          const observed = Promise.withResolvers<Response>();
+          const observing = Promise.withResolvers<void>();
+          const paths: string[] = [];
+          const request = spyOn(globalThis, 'fetch').mockImplementation((path) => {
+            paths.push(String(path));
+            if (path === '/session') {
+              observing.resolve();
+              return observed.promise;
+            }
+            return authentication.promise;
+          });
+          const passkey = Promise.withResolvers<PasskeySignInResult>();
+          const ceremony = spyOn(passkeys, 'signInWithPasskey').mockImplementation(() => passkey.promise);
+          const authenticate = () => {
+            authentication.resolve(Response.json({ success: true }));
+            passkey.resolve({ ok: true });
+          };
+          try {
+            const outcome =
+              method === 'password'
+                ? confirmStepUp('person@example.test', 'private password', query, 'https://auth.test')
+                : confirmStepUpWithPasskey(query, 'https://auth.test');
+            if (phase === 'session') {
+              authenticate();
+              await observing.promise;
+            }
+            if (replacement === null) window.sessionStorage.removeItem(storageKey);
+            else window.sessionStorage.setItem(storageKey, replacement);
+            authenticate();
+            const profile = accountOperationProfile(kind === 'organization' ? kind : 'delete');
+            observed.resolve(
+              Response.json({ account_id: accountId, client_id: profile.client_id, scope: profile.scope }),
+            );
+            expect(await outcome).toEqual({ ok: false, message: expect.stringContaining('saved request changed') });
+            expect(window.sessionStorage.getItem(storageKey)).toBe(replacement);
+            expect(paths.every((path) => path === '/signin' || path === '/session')).toBe(true);
+            if (phase === 'authentication') expect(paths).not.toContain('/session');
+          } finally {
+            request.mockRestore();
+            ceremony.mockRestore();
+          }
+        }
+      });
+
+test('step-up removes old account advice during refresh and rejects late viewer results', async () => {
+  const page = await setup();
+  const old = Promise.withResolvers<Response>();
+  const nativePage = (account: string) =>
+    Response.json(
+      recoveryPage(
+        'step-up',
+        { minPasswordLength: 8, maxPasswordLength: 128 },
+        { kind: 'signed-in', account_id: account, email: `${account}@example.test` },
+      ),
+    );
+  const request = spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(nativePage('first'))
+    .mockImplementationOnce(() => old.promise)
+    .mockResolvedValueOnce(nativePage('replacement'));
+  try {
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).toContain('first@example.test');
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).not.toContain('first@example.test');
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).toContain('replacement@example.test');
+    old.resolve(nativePage('obsolete'));
+    await flush(() => {});
+    expect(page.host.textContent).not.toContain('obsolete@example.test');
+    request.mockResolvedValueOnce(new Response('', { status: 503 }));
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).not.toContain('replacement@example.test');
+    expect(page.host.textContent).toContain('unavailable');
+    expect(page.host.querySelector<HTMLButtonElement>('[type=submit]')!.disabled).toBe(true);
+  } finally {
+    request.mockRestore();
+  }
 });

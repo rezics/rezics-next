@@ -1,3 +1,4 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
 
 const accountId = 'screenshot-account';
@@ -107,6 +108,18 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
         body,
         headers: Object.fromEntries(request.headers.entries()),
       });
+
+      if (url.pathname === '/recovery/page' && request.method === 'POST')
+        return Response.json(
+          recoveryPage(
+            JSON.parse(body).stage,
+            { minPasswordLength: 8, maxPasswordLength: 128 },
+            state.signedOut
+              ? { kind: 'signed-out' }
+              : { kind: 'signed-in', account_id: state.sessionAccountId, email: null },
+          ),
+          { headers },
+        );
 
       if (url.pathname === '/signin' && request.method === 'POST') {
         // The page's authPost and Auth's bodyOf use JSON. Native form submissions

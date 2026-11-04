@@ -24,6 +24,7 @@ import { composeSecurityPage } from './security-page.ts';
 import { readNativeAccountIdentity } from './account-identity.ts';
 import { normalizeConsentRequestedScopes, parseConsentRequestedScopes, projectConsentPage } from './consent-page.ts';
 import { signInPage, type SignInPageViewer } from './signin-page.ts';
+import { isRecoveryPageStage, observeRecoveryViewer, recoveryPage } from './recovery-page.ts';
 import {
   securityPageInput,
   securityPageQuery,
@@ -2058,10 +2059,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       const inventoryRead = request.method === 'GET' && (url.pathname === '/clients' || url.pathname === '/consents');
       const identityRead = url.pathname === '/account-identity';
       const signInPageRead = url.pathname === '/signin/page';
+      const recoveryPageRead = url.pathname === '/recovery/page';
       const securityRead = url.pathname === '/security-page';
       const respond = (data: unknown, status = 200) => {
         const response = json(data, status);
-        if (inventoryRead || identityRead || signInPageRead || securityRead)
+        if (inventoryRead || identityRead || signInPageRead || recoveryPageRead || securityRead)
           response.headers.set('cache-control', 'private, no-store');
         return response;
       };
@@ -2081,7 +2083,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           fields(await bodyOf(request), []);
           return respond(await readAccountIdentity(request.headers));
         }
-        if (signInPageRead) {
+        if (signInPageRead || recoveryPageRead) {
           if (
             request.method !== 'POST' ||
             request.headers.get('origin') !== options.issuer ||
@@ -2090,17 +2092,26 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           )
             throw new Denied(403);
           const body = await bodyOf(request);
-          fields(body, ['query']);
-          if (typeof body.query !== 'string') throw new Denied(400);
+          fields(body, recoveryPageRead ? ['stage'] : ['query']);
+          if (recoveryPageRead ? !isRecoveryPageStage(body.stage) : typeof body.query !== 'string')
+            throw new Denied(400);
+          const stage = body.stage;
+          if (recoveryPageRead && isRecoveryPageStage(stage) && stage !== 'step-up')
+            return respond(recoveryPage(stage, (await getContext()).password.config));
           let viewer: SignInPageViewer;
           try {
-            const identity = await readAccountIdentity(request.headers);
+            const identity = await (recoveryPageRead
+              ? observeRecoveryViewer(() => readAccountIdentity(request.headers))
+              : readAccountIdentity(request.headers));
             viewer = { kind: 'signed-in', account_id: identity.account_id, email: identity.email };
           } catch (error) {
             if (!(error instanceof Denied) || error.status !== 401) throw error;
             viewer = { kind: 'signed-out' };
           }
-          const page = signInPage(body.query, options.issuer, viewer);
+          const page =
+            recoveryPageRead && isRecoveryPageStage(stage)
+              ? recoveryPage(stage, (await getContext()).password.config, viewer)
+              : signInPage(body.query as string, options.issuer, viewer);
           if (!page) throw new Denied(400);
           return respond(page);
         }

@@ -199,6 +199,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
   }, [attempt, pageRetry, query]);
 
   useLayoutEffect(() => {
+    if (page.kind !== 'ready') return;
     try {
       if (window.sessionStorage.getItem(RECOVERY_COMPLETE_NOTICE_KEY) === '1') {
         window.sessionStorage.removeItem(RECOVERY_COMPLETE_NOTICE_KEY);
@@ -207,7 +208,7 @@ function LoginForm({ query, attempt }: { query: string; attempt: LoginAttempt })
     } catch {
       // The notice is optional when browser storage is unavailable.
     }
-  }, []);
+  }, [page.kind]);
 
   useEffect(() => {
     let active = true;

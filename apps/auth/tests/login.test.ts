@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { signInPage } from './security-page-fixture';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -39,6 +40,8 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
+    if (url.pathname === '/signin/page' && request.method === 'POST')
+      return Response.json(signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' }), { headers });
     if (url.pathname === '/authorize' && request.method === 'GET') {
       if (call.cookie.split(';').some((cookie) => cookie.trim() === `auth_session=${session}`))
         return new Response('Authorization resumed with the session', { headers });
@@ -135,6 +138,20 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
   try {
     const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    try {
+      await page.locator('input[name="email"]').waitFor({ state: 'visible' });
+    } catch (cause) {
+      throw new Error(
+        `Sign-in form unavailable: ${JSON.stringify({
+          locale: await page.locator('html').getAttribute('lang'),
+          hydrated: await page.locator('html').getAttribute('data-hydrated'),
+          alerts: await page.getByRole('alert').allTextContents(),
+          status: await page.getByRole('status').allTextContents(),
+        })}`,
+        { cause },
+      );
+    }
     return { page, origin, urls };
   } catch (error) {
     await context.close();
@@ -159,10 +176,9 @@ afterAll(async () => {
 async function form(page: Page) {
   const address = page.getByLabel(/email/i);
   const secret = page.locator('input[name="password"]');
-  // Assert the missing behaviour before the hydration wait, so the current heading-only page fails as a specification.
+  // Native sign-in advice has loaded before asserting the labelled form.
   expect(await address.count(), 'the login page has a labelled email field').toBe(1);
   expect(await secret.count(), 'the login page has a labelled password field').toBe(1);
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return { address, secret, submit: page.getByRole('button', { name: 'Sign in', exact: true }) };
 }
 

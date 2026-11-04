@@ -18,6 +18,8 @@ import { AuthPage } from '../frame';
 import { authPost, failureMessage, RECOVERY_COMPLETE_NOTICE_KEY } from '../api';
 import { ErrorAlert } from '../alert';
 import { RecoveryAttempt, useRecoveryAttempt } from '../recovery-attempt';
+import { definitiveRecoveryRefusal, recoveryFailure, recoverySubmission, type RecoverySubmission } from '../recovery';
+import { useRecoveryPage } from '../recovery-page';
 
 const emailId = 'recovery-email';
 const emailErrorId = 'recovery-email-error';
@@ -41,6 +43,8 @@ function RecoveryPage() {
 function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const router = useRouter();
   const [hasFragment, setHasFragment] = useState<boolean | null>(null);
+  const advice = useRecoveryPage(hasFragment === null ? null : hasFragment ? 'complete' : 'start');
+  const page = advice.state.kind === 'ready' ? advice.state.page : null;
   const [credentials, setCredentials] = useState<{ accountId: string; token: string } | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,6 +55,8 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   const [passwordFieldError, setPasswordFieldError] = useState('');
   const unsent = useRef(false);
   const unresolved = useRef(false);
+  const submission = useRef<RecoverySubmission | null>(null);
+  const [unknown, setUnknown] = useState(false);
   const retiring = useRef(false);
   const initialized = useRef(false);
   const alert = useRef<HTMLDivElement>(null);
@@ -61,6 +67,8 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     attempt.retire();
     unsent.current = false;
     unresolved.current = false;
+    submission.current = null;
+    setUnknown(false);
     setCredentials(null);
     setEmail('');
     setPassword('');
@@ -136,7 +144,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   async function submitStart(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!attempt.available) return;
+    if (!attempt.available || !page?.actions.start || !page.methods.email) return;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     if (invalidEmail) {
       setNotice('');
@@ -164,9 +172,12 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   async function submitComplete(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!attempt.available) return;
-    const passwordLength = Array.from(password).length;
-    if (passwordLength < 8 || passwordLength > 128) {
+    if (!attempt.available || !page?.actions.complete || !page.methods.password) return;
+    const passwordLength = password.length;
+    if (
+      !submission.current &&
+      (passwordLength < page.requirements.password_min_length || passwordLength > page.requirements.password_max_length)
+    ) {
       const error = password ? m.auth_recovery_password_invalid() : m.auth_form_required();
       setPasswordFieldError(error);
       setMessage(error);
@@ -179,19 +190,19 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
     }
     const finish = attempt.begin();
     if (!finish) return;
+    const original = submission.current ?? recoverySubmission(credentials.accountId, credentials.token, password);
+    submission.current = original;
     unresolved.current = true;
     setPending(true);
     setMessage('');
-    const result = await authPost('/recovery/complete', {
-      account_id: credentials.accountId,
-      token: credentials.token,
-      new_password: password,
-    });
+    const result = await authPost('/recovery/complete', original);
     if (!finish()) return;
-    unresolved.current = false;
     unsent.current = false;
     setPending(false);
     if (result.ok) {
+      unresolved.current = false;
+      submission.current = null;
+      setUnknown(false);
       retiring.current = true;
       attempt.retire();
       setPassword('');
@@ -204,10 +215,32 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
       window.location.assign('/login');
       return;
     }
-    setMessage(failureMessage(result.status, result.code, result.retryAfter));
+    // A later refusal cannot resolve an earlier unknown effect. Keep the exact
+    // submission until acknowledged success or local retirement, with no replay
+    // except the person's explicit retry.
+    if (unknown || !definitiveRecoveryRefusal(result)) {
+      setUnknown(true);
+      setMessage(m.auth_recovery_unknown());
+    } else {
+      unresolved.current = false;
+      submission.current = null;
+      setMessage(recoveryFailure(result));
+    }
   }
 
   if (hasFragment === null) return <AuthPage heading={m.auth_recovery_heading()} />;
+
+  const readAdvice =
+    advice.state.kind === 'loading' ? (
+      <p role="status">{m.auth_inventory_loading()}</p>
+    ) : advice.state.kind === 'unavailable' ? (
+      <>
+        <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
+        <Button type="button" onClick={advice.retry}>
+          {m.auth_login_retry()}
+        </Button>
+      </>
+    ) : null;
 
   if (hasFragment && !credentials) {
     return (
@@ -223,6 +256,8 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
   if (hasFragment) {
     return (
       <AuthPage heading={m.auth_recovery_heading()}>
+        {readAdvice}
+        <p>{m.auth_recovery_consequences()}</p>
         <form
           className="auth-login-form"
           method="post"
@@ -236,10 +271,11 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
               name="new_password"
               autoComplete="new-password"
               required
-              readOnly={pending}
+              readOnly={pending || unknown}
               id={passwordId}
               value={password}
               onChange={(event) => {
+                if (unknown) return;
                 const value = event.target.value;
                 unsent.current = value.length > 0;
                 setPassword(value);
@@ -260,13 +296,18 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
               {message}
             </ErrorAlert>
           ) : null}
-          {message === failureMessage(401, 'invalid_recovery', null) ? (
+          {unknown || message === failureMessage(401, 'invalid_recovery', null) ? (
             <a href="/recovery">{m.auth_recovery_new_link()}</a>
           ) : null}
-          <Button type="submit" disabled={pending} aria-busy={pending}>
-            {m.auth_recovery_complete_submit()}
+          <Button
+            type="submit"
+            disabled={pending || !page?.actions.complete || !page.methods.password}
+            aria-busy={pending}
+          >
+            {unknown ? m.auth_recovery_retry_exact() : m.auth_recovery_complete_submit()}
           </Button>
         </form>
+        <a href="/login">{m.auth_login_heading()}</a>
         <RecoveryDeparture
           shouldWarn={shouldWarn}
           leave={clearSecrets}
@@ -278,6 +319,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
 
   return (
     <AuthPage heading={m.auth_recovery_heading()}>
+      {readAdvice}
       <form className="auth-login-form" method="post" action="/recovery/start" noValidate onSubmit={submitStart}>
         <Field data-invalid={Boolean(emailError)}>
           <FieldLabel htmlFor={emailId}>{m.auth_recovery_email()}</FieldLabel>
@@ -286,6 +328,7 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
             id={emailId}
             name="email"
             type="email"
+            maxLength={page?.requirements.email_max_length}
             autoComplete="email"
             value={email}
             onChange={(event) => {
@@ -311,10 +354,11 @@ function RecoveryForm({ attempt }: { attempt: RecoveryAttempt }) {
             {message}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} aria-busy={pending}>
+        <Button type="submit" disabled={pending || !page?.actions.start || !page.methods.email} aria-busy={pending}>
           {m.auth_recovery_start_submit()}
         </Button>
       </form>
+      <a href="/login">{m.auth_login_heading()}</a>
       <RecoveryDeparture shouldWarn={shouldWarn} leave={clearSecrets} focus={() => emailInput.current?.focus()} />
     </AuthPage>
   );

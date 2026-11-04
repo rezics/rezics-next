@@ -1,3 +1,4 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { securityEnvelope, currentSecuritySession, signInPage } from './security-page-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -70,6 +71,11 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
+    if (url.pathname === '/recovery/page' && request.method === 'POST')
+      return Response.json(
+        recoveryPage(JSON.parse(call.body).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
+        { headers },
+      );
     const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
     const stepUp = () => json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
     const issueSession = (profile: { client_id?: unknown; scope?: unknown }) => {
@@ -105,6 +111,8 @@ const fake = Bun.serve({
 
     if (url.pathname === '/signin/page' && request.method === 'POST')
       return json(signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' }));
+    if (url.pathname === '/account-management/deletion-page' && request.method === 'POST')
+      return json({ kind: 'review', accountId: sessionAccountId, email, action: 'available', policy: 'personal-deletion' });
     if (url.pathname === '/security-page' && request.method === 'GET')
       return json(securityEnvelope(sessionAccountId, [currentSecuritySession()], passkeys, fresh));
     if (url.pathname === '/session' && request.method === 'GET')
@@ -528,15 +536,14 @@ test(
       expect(postBody('/passkeys/register').name).toMatch(/^(Google Chrome|Chromium) on \w+$/);
       expect(await rows.nth(2).innerText()).toContain(postBody('/passkeys/register').name);
 
-      let confirmations = 0;
-      english.on('dialog', async (dialog) => {
-        confirmations++;
-        expect(dialog.type()).toBe('confirm');
-        await dialog.accept();
-      });
       await rows.nth(1).getByRole('button', { name: 'Remove passkey Phone', exact: true }).click();
+      const review = english.getByRole('dialog', { name: 'Review passkey removal', exact: true });
+      await review.waitFor();
+      expect(await review.count()).toBe(1);
+      expect(await review.innerText()).toContain('Phone');
+      expect(authCalls('/passkeys/remove')).toHaveLength(0);
+      await review.getByRole('button', { name: 'Confirm passkey removal', exact: true }).click();
       await english.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
-      expect(confirmations).toBe(1);
       expect(postBody('/passkeys/remove')).toEqual({ id: expect.any(String) });
       expect(postBody('/passkeys/remove').id).toBe(registered.response.id);
       await english.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
@@ -574,12 +581,13 @@ test(
       calls.length = 0;
       const { page } = await open('/security', { locale });
       try {
-        page.on('dialog', (dialog) => dialog.accept());
         const row = page
           .getByRole('region', { name: locale === 'en' ? 'Passkeys' : 'Clés d’accès' })
           .getByRole('listitem');
         await row.waitFor({ state: 'visible' });
         await row.getByRole('button').click();
+        expect(authCalls('/passkeys/remove')).toHaveLength(0);
+        await page.getByRole('dialog').getByRole('button', { name: /^Confirm/ }).click();
         const alert = page.getByRole('alert').filter({ hasText: message });
         await alert.waitFor({ state: 'visible' });
         expect(await alert.innerText()).toContain(message);

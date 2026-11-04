@@ -11,6 +11,7 @@ import { m } from '../paraglide/messages.js';
 import { AuthPage } from '../frame';
 import { passkeysSupported } from '../passkeys';
 import { confirmStepUp, confirmStepUpWithPasskey } from '../step-up';
+import { useRecoveryPage } from '../recovery-page';
 import { ErrorAlert } from '../alert';
 import {
   AlertDialog,
@@ -116,6 +117,8 @@ function StepUpPage() {
 }
 
 function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
+  const advice = useRecoveryPage('step-up');
+  const page = advice.state.kind === 'ready' ? advice.state.page : null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -214,6 +217,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
   useEffect(() => setPasskeys(passkeysSupported()), []);
 
   async function submitPasskey() {
+    if (!page?.actions.authenticate || !page.methods.passkey || !passkeys) return;
     const completion = journey.begin('passkey');
     if (!completion) return;
     setPending(true);
@@ -230,6 +234,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
       return;
     }
     confirming.current = false;
+    advice.retry();
     setPending(false);
     setPasskeyPending(false);
     if (outcome.message) setMessage(outcome.message);
@@ -237,6 +242,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!page?.actions.authenticate || !page.methods.password) return;
     if (pending && !passkeyPending) return;
     const invalidEmail = !email.trim() || Boolean(emailInput.current?.validity.typeMismatch);
     const invalidPassword = !password;
@@ -261,6 +267,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
       return;
     }
     confirming.current = false;
+    advice.retry();
     setPending(false);
     setMessage(outcome.message ?? '');
   }
@@ -268,8 +275,21 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
   return (
     <AuthPage heading={m.auth_step_up_heading()}>
       <>
+        {advice.state.kind === 'loading' ? <p role="status">{m.auth_inventory_loading()}</p> : null}
+        {advice.state.kind === 'unavailable' ? (
+          <>
+            <ErrorAlert>{m.auth_failure_unavailable()}</ErrorAlert>
+            <Button type="button" onClick={advice.retry}>
+              {m.auth_login_retry()}
+            </Button>
+          </>
+        ) : null}
+        {page?.viewer.kind === 'signed-in' ? (
+          <p>{m.auth_login_current_account({ account: page.viewer.email ?? page.viewer.account_id })}</p>
+        ) : null}
         <form className="auth-login-form" method="post" action="/signin" noValidate onSubmit={submit}>
           <p>{m.auth_step_up_explanation()}</p>
+          {page?.continuation === 'authenticate-before-review' ? <p>{m.auth_step_up_review_required()}</p> : null}
           <Field data-invalid={Boolean(emailError)}>
             <FieldLabel htmlFor={emailId}>{m.auth_login_email()}</FieldLabel>
             <Input
@@ -277,6 +297,7 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
               id={emailId}
               name="email"
               type="email"
+              maxLength={page?.requirements.email_max_length}
               autoComplete="username"
               value={email}
               onChange={(event) => {
@@ -315,10 +336,14 @@ function StepUpForm({ journey }: { journey: ConfirmationJourney }) {
               {message}
             </ErrorAlert>
           ) : null}
-          <Button type="submit" disabled={pending && !passkeyPending} aria-busy={pending && !passkeyPending}>
+          <Button
+            type="submit"
+            disabled={(pending && !passkeyPending) || !page?.actions.authenticate || !page.methods.password}
+            aria-busy={pending && !passkeyPending}
+          >
             {m.auth_step_up_heading()}
           </Button>
-          {passkeys ? (
+          {passkeys && page?.methods.passkey && page.actions.authenticate ? (
             <Button
               type="button"
               variant="outline"

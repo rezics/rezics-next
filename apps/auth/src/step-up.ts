@@ -1,7 +1,15 @@
 import { authPost, failureMessage } from './api';
-import { selectOrganizationDeleteStepUp, organizationDeleteSessionMatches } from './organization-delete-step-up';
+import {
+  selectOrganizationDeleteStepUp,
+  organizationDeleteSessionMatches,
+  organizationDeletePendingMatches,
+} from './organization-delete-step-up';
 import { loadAccountSession } from './account-operations';
-import { accountOperationSessionMatches, selectAccountOperationStepUp } from './account-operation-step-up';
+import {
+  accountOperationSessionMatches,
+  selectAccountOperationStepUp,
+  pendingAccountOperationMatches,
+} from './account-operation-step-up';
 import { passkeySignInFailure, signInWithPasskey } from './passkeys';
 import { signIn, signInForAccountOperation, signInTarget, signInResult, type SignInResult } from './sign-in';
 import { m } from './paraglide/messages.js';
@@ -56,6 +64,58 @@ function selectStepUp(query: string) {
   return organization.kind === 'ordinary' ? selectAccountOperationStepUp(query) : organization;
 }
 
+type RetainedSelection = Extract<ReturnType<typeof selectStepUp>, { kind: 'operation' | 'organization-delete' }>;
+
+function retainedSelectionMatches(query: string, selection: RetainedSelection): boolean {
+  // Reuse validating readers: absent, malformed or unsupported replacement
+  // targets cannot become ordinary navigation after authentication succeeds.
+  const current = selectStepUp(query);
+  if (selection.kind === 'organization-delete') {
+    return (
+      current.kind === 'organization-delete' &&
+      current.pending.operation === selection.pending.operation &&
+      current.pending.returnTo === selection.pending.returnTo &&
+      organizationDeletePendingMatches(
+        current.pending,
+        selection.pending.humanAccountId,
+        selection.pending.organizationId,
+        selection.pending.operationKey,
+      )
+    );
+  }
+  return (
+    current.kind === 'operation' &&
+    current.pending.returnTo === selection.pending.returnTo &&
+    pendingAccountOperationMatches(
+      current.pending,
+      selection.pending.accountId,
+      selection.pending.operationKey,
+      selection.pending.operation,
+    )
+  );
+}
+
+async function retainedReturn(
+  query: string,
+  selection: RetainedSelection,
+  origin: string,
+  isCurrent: () => boolean,
+): Promise<StepUpOutcome> {
+  const failure = () => ({ ok: false as const, message: m.auth_step_up_continuation_changed() });
+  if (!isCurrent() || !retainedSelectionMatches(query, selection)) return failure();
+  const session = await loadAccountSession();
+  if (!isCurrent() || !retainedSelectionMatches(query, selection)) return failure();
+  if (session.kind === 'failure') return { ok: false, message: m.auth_failure_unavailable() };
+  if (
+    session.kind !== 'ready' ||
+    !(selection.kind === 'organization-delete'
+      ? organizationDeleteSessionMatches(session, selection.pending)
+      : accountOperationSessionMatches(session, selection.pending))
+  )
+    return { ok: false, message: m.auth_step_up_account_changed() };
+  return { ok: true, target: new URL(selection.pending.returnTo, origin).href };
+}
+
 // A null message is a dismissed passkey prompt, which stays silent.
 export type StepUpOutcome = { ok: true; target: string } | { ok: false; message: string | null };
 
@@ -104,16 +164,7 @@ export async function confirmStepUp(
   if (!isCurrent()) return { ok: false, message: null };
   if (!result.ok) return { ok: false, message: stepUpFailure(result) };
   if (selection.kind === 'operation' || selection.kind === 'organization-delete') {
-    const session = await loadAccountSession();
-    if (
-      !isCurrent() ||
-      session.kind !== 'ready' ||
-      !(selection.kind === 'organization-delete'
-        ? organizationDeleteSessionMatches(session, selection.pending)
-        : accountOperationSessionMatches(session, selection.pending))
-    )
-      return { ok: false, message: m.auth_account_operation_failure() };
-    return { ok: true, target: new URL(selection.pending.returnTo, origin).href };
+    return retainedReturn(query, selection, origin, isCurrent);
   }
   return { ok: true, target: signInTarget(query, origin) };
 }
@@ -149,16 +200,7 @@ export async function confirmStepUpWithPasskey(
   if (!isCurrent()) return { ok: false, message: null };
   if (result.ok) {
     if (selection.kind === 'operation' || selection.kind === 'organization-delete') {
-      const session = await loadAccountSession();
-      if (
-        !isCurrent() ||
-        session.kind !== 'ready' ||
-        !(selection.kind === 'organization-delete'
-          ? organizationDeleteSessionMatches(session, selection.pending)
-          : accountOperationSessionMatches(session, selection.pending))
-      )
-        return { ok: false, message: m.auth_account_operation_failure() };
-      return { ok: true, target: new URL(selection.pending.returnTo, origin).href };
+      return retainedReturn(query, selection, origin, isCurrent);
     }
     return { ok: true, target: signInTarget(query, origin) };
   }
