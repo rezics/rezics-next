@@ -276,9 +276,10 @@ export function convertWikidata(
       }
       const body = object(value, pointer);
       const copy = dictionary<unknown>();
-      const keys = datatype === 'time'
-        ? ['time', 'timezone', 'before', 'after', 'precision', 'calendarmodel']
-        : ['amount', 'unit', 'lowerBound', 'upperBound'];
+      const keys =
+        datatype === 'time'
+          ? ['time', 'timezone', 'before', 'after', 'precision', 'calendarmodel']
+          : ['amount', 'unit', 'lowerBound', 'upperBound'];
       for (const key of keys) {
         const item = read(body, key, pointer);
         if (item === undefined) continue;
