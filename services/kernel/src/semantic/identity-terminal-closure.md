@@ -56,3 +56,36 @@ The migration must state its indexed anchors and segment/page limits, then deriv
 ceiling by summing the producer bounds. Total job work may follow the finite redirect set; individual
 steps cannot scan that set, walk an unbounded chain or rediscover completed prefixes. No fixed
 numeric ceiling may prevent a structurally bounded implementation from making progress.
+
+### Selected mapping reads
+
+Decision: fence the current group, directory, registration and redirect joins with selected-key lateral seeks;
+reuse the existing primary keys rather than add another directory index. The selected directory key
+is `(partition_no, generation, original)`, with generation supplied by the exact requested
+`(partition_no, terminal)` group. A flattened join can instead read a growing home/generation prefix
+before matching originals. Each lateral `LIMIT 1` preserves that dependency; uniqueness of the full
+key, rather than a returned-row limit, establishes the bound. Registration seeks
+`(partition_no, transaction_id)` before checking its exact `xmin`. Missing groups stay missing;
+missing current-generation directory or registration rows stay null and fail the existing active
+mapping evidence checks. An old generation cannot fill an absent selected key.
+
+For an admitted batch of N <= 100 originals, let S and C be its distinct source and control homes,
+each at most N. Each of the two independently released collections takes S source snapshots and C
+control snapshots. Per collection, source observations use S owner seeks and at most 4N row seeks:
+subject, mapping, dirty revision, and latest redirect. Control observations use C owner seeks, N
+pending-group seeks, and at most 4N current group/directory/registration/terminal-redirect seeks.
+Thus the two collections examine at most `2(S + C + 9N)` visible rows through complete selected
+keys (at most 22N), including at most 2N directory entries. Repeated keys may be memoized; they cannot
+increase this ceiling. Redirect existence stops at its first indexed `(route, subject_id)` match;
+source redirect selection uses that prefix and descending sequence. No redirect chain is read.
+
+An absent subject still costs one exact subject probe; an absent group or directory entry costs one
+empty full-key probe, independent of unrelated originals, retained generations or group membership.
+Missing registration and redirect keys likewise cost empty probes. B-tree descent follows index
+height; ordinary MVCC visibility/vacuum skips are not application retries or a separate meter.
+There are `2(2S + 3C)` data statements and `2(S + C)` read transactions, each with BEGIN, timeout
+and COMMIT, excluding connection setup. Both collections return at most `2(S + C + 3N)` fixed-width
+owner/source/pending/current records: UUIDs, bounded native state tags and fixed-size numeric fields.
+Response bytes therefore follow admitted N, never directory population; no arrays of group members,
+history, or free text are returned. Double collection and all existing owner, revision, pending-job,
+registration/install/export, generation/incarnation and redirected-terminal guards remain intact.
