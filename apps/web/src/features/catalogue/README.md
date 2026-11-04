@@ -21,3 +21,12 @@ field-return controls. Album and Character still apply `creationStatement` befor
 review projects the current native rank separately so deprecated assertions remain deprecated without changing
 editable operands. Current and proposed assertions remain independent, with an explicit absent baseline.
 Review is a projection of the caller's captured draft: it neither prepares commands nor renews caller authority.
+
+Recipe creation and correction also consume `StatementSummary` unchanged for ordinary assertions. Recipe keeps
+its field meaning, exact term/row return and authored-document presentation local: the validated `DocumentBody`,
+language and licence appear once per supplied side. Only a supplied proposed originality declaration is shown;
+current readings do not infer historical originality. Local document evidence uses the same `PartValue` semantics
+and retains property identifiers, fallback languages, ordered groups (including supplied empty groups) and rank.
+Correction lists render the existing `recipeEvidenceChanges` current/next observations independently, including
+replaced and removed groups, without claiming stable citation identities. Returning to a field retires unsent
+review; explicit revised review uses sanitized evidence while an uncertain command retains its original operands.
