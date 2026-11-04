@@ -1,4 +1,4 @@
-import { parseDiscoveryFilter } from '@rezics/filter';
+import { parseDiscoveryFilter, parseFilter } from '@rezics/filter';
 import { parseText } from './text.ts';
 
 export const QUERY_SHARE_LIMITS = Object.freeze({ documentBytes: 16384, urlBytes: 8192, labels: 128, labelBytes: 256 });
@@ -48,6 +48,8 @@ export function prepareQueryShare(
   };
   visit(filter);
   if (privateContext) return unavailableQueryShare('private_context');
+  // The receiver adds an outer conjunction. Remove only redundant single-child roots for stable replay.
+  while (filter && 'and' in filter && filter.and.length === 1) filter = filter.and[0];
   const document = {
     text: request.text ?? '',
     filter: filter === undefined ? null : JSON.stringify(filter),
@@ -56,7 +58,19 @@ export function prepareQueryShare(
   };
   const params = new URLSearchParams();
   if (document.text) params.set('q', document.text);
-  if (document.filter) params.set('filter', document.filter);
+  if (filter) {
+    const children = 'and' in filter ? filter.and : [filter];
+    const kindLeaves = children.filter((node) => 'kind' in node);
+    const conditions = children.filter((node) => !('kind' in node));
+    // Split only the editor's single top-level kind selection. Nested Boolean kind predicates remain intact.
+    if (kindLeaves.length <= 1) {
+      const condition = conditions.length === 1 ? conditions[0] : conditions.length ? { and: conditions } : undefined;
+      try {
+        if (condition) params.set('condition', JSON.stringify(parseFilter(condition)));
+        for (const kind of kindLeaves.flatMap((node) => 'kind' in node ? node.kind.in : [])) params.append('kinds', kind);
+      } catch { params.delete('condition'); params.set('filter', document.filter!); }
+    } else params.set('filter', document.filter!);
+  }
   for (const language of document.languages) params.append('language', language);
   if (document.sort === 'rating') params.set('sort', document.sort);
   else if (document.sort && document.sort !== 'relevance' && document.sort !== 'name') return unavailableQueryShare('unsupported');

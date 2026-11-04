@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@rezics/ui/shadcn/button';
+import { locales } from '../paraglide/runtime.js';
 import { m } from '../paraglide/messages.js';
 import { queryShareUrl, shareUnavailable, type QueryShare } from './query-share';
 
@@ -17,7 +18,7 @@ export function QuerySharePreview({ locale, changed, prepare }: {
   useEffect(() => { alive.current = true; return () => { alive.current = false; command.current++; }; }, []);
   useEffect(() => { if (open) panel.current?.focus(); }, [open]);
   useEffect(() => { if (copy === 'refused') { link.current?.focus(); link.current?.select(); } }, [copy]);
-  const options = { locale: locale as Parameters<typeof m.search_heading>[1] extends { locale?: infer L } ? L : never };
+  const options = { locale: locales.find((entry) => entry === locale) ?? 'en' };
   const url = share && typeof window !== 'undefined' ? queryShareUrl(window.location.origin, locale, share) : null;
   const close = () => { command.current++; setOpen(false); setShare(undefined); setCopy('idle'); trigger.current?.focus(); };
   return <div className="space-y-3">
