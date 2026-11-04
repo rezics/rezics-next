@@ -7,6 +7,7 @@ import { CurrentViewerProgressIndexPage } from '../../library/progress-page';
 import { readCurrentViewerProgressIndex } from '../../library/progress-server';
 import { progressIndexReturnSelectionFromLocationState } from '../../library/progress-start-draft-navigation';
 import { subjectProgressEntryReturnFromState, subjectSlotReturnTo } from '../../library/subject-slot-return-context';
+import { displayLibraryTitle } from '../../library/title';
 import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
@@ -33,10 +34,14 @@ export const Route = createFileRoute('/library/progress/')({
     const requested = progressIndexAddress(location.search);
     const returnSelection = progressIndexReturnSelectionFromLocationState(location.state, locale);
     const subject = loader.page.selectedSubject;
+    const subjectHrefInput = subject
+      ? { id: subject.id, label: displayLibraryTitle(subject.label, locale).text }
+      : undefined;
     const candidate =
       returnSelection?.sourceReturnTo ??
-      (subject ? subjectProgressEntryReturnFromState(location.state, subject, locale) : undefined);
-    const sourceReturnTo = candidate && subject ? subjectSlotReturnTo(candidate, subject, locale) : undefined;
+      (subjectHrefInput ? subjectProgressEntryReturnFromState(location.state, subjectHrefInput, locale) : undefined);
+    const sourceReturnTo =
+      candidate && subjectHrefInput ? subjectSlotReturnTo(candidate, subjectHrefInput, locale) : undefined;
     return (
       <CurrentViewerProgressIndexPage
         loader={loader}

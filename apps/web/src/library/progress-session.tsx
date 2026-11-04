@@ -600,7 +600,11 @@ function ProgressSessionReturnControls({
       ? returnContext
       : undefined;
   const subjectReturn = session.subject
-    ? subjectSlotReturnTo(context?.sourceReturnTo, { id: session.subject.id, label: session.subject.label }, locale)
+    ? subjectSlotReturnTo(
+        context?.sourceReturnTo,
+        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, locale).text },
+        locale,
+      )
     : undefined;
   return (
     <nav className="flex flex-wrap gap-2" aria-label={m.library_progress_return_to_progress()}>
@@ -616,7 +620,7 @@ function ProgressSessionReturnControls({
       </Link>
       <Link
         to="/library/progress"
-        search={{ ...(context ? { ...context.indexSearch, cursor: undefined } : {}), subjectId: session.subjectId }}
+        search={progressRestartSearch(context, session.subjectId)}
         className={buttonClass}
       >
         {m.library_progress_restart()}
@@ -628,6 +632,12 @@ function ProgressSessionReturnControls({
       ) : null}
     </nav>
   );
+}
+
+function progressRestartSearch(context: ProgressReturnContext | undefined, subjectId: string) {
+  const search = context ? { ...context.indexSearch } : {};
+  delete search.cursor;
+  return { ...search, subjectId };
 }
 
 function SessionEditor({
@@ -1518,16 +1528,13 @@ function SessionEditor({
         <section className="space-y-3">
           <Link
             to="/library/progress"
-            search={{
-              ...(returnContext ? { ...returnContext.indexSearch, cursor: undefined } : {}),
-              subjectId: session.subjectId,
-            }}
+            search={progressRestartSearch(returnContext, session.subjectId)}
             {...(session.subject && returnContext?.sourceReturnTo
               ? {
                   state: subjectProgressEntryLocationState(
                     subjectSlotReturnTo(
                       returnContext.sourceReturnTo,
-                      { id: session.subject.id, label: session.subject.label },
+                      { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
                       getLocale(),
                     ),
                   ) as never,

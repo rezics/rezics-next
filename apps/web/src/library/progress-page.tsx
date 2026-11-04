@@ -805,7 +805,10 @@ function ProgressIndexPageContent({
             href={
               sourceReturnTo ??
               subjectHref(
-                { id: page.selectedSubject.id, label: page.selectedSubject.label },
+                {
+                  id: page.selectedSubject.id,
+                  label: displayLibraryTitle(page.selectedSubject.label, getLocale()).text,
+                },
                 getLocale(),
               ).href
             }
