@@ -664,7 +664,7 @@ test('independent publication creation, local corrections, immutable recovery an
     await replace(scope().getAllByRole('textbox', { name: m.correction_value() })[1]!, '978-0-140-44430-8');
     await add(escapedProperty);
     const escapedInput = scope().getAllByRole('textbox', { name: m.correction_value() })[2] as HTMLInputElement;
-    await replace(escapedInput, 'escaped value');
+    await replace(escapedInput, '978-0-140-44430-8');
     await create();
     await scope().findByRole('heading', { name: m.catalogue_create_invalid() });
     const fragments = [...article().querySelectorAll<HTMLAnchorElement>('a[href^="#"]')];
