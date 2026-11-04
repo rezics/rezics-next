@@ -74,7 +74,13 @@ export function ThreadActivity({
       ) : (
         <>
           <span role="status">{m.board_thread_activity_unavailable({}, options)}</span>
-          <Button variant="outline" size="sm" className="min-h-11 sm:min-h-9" disabled={!current || pending} onClick={() => void retry()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11 sm:min-h-9"
+            disabled={!current || pending}
+            onClick={() => void retry()}
+          >
             {m.thread_post_refresh({}, options)}
           </Button>
         </>
