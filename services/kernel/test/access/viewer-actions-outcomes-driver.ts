@@ -36,6 +36,7 @@ import { resolve } from 'node:path';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
 import { startConsentServer, type ConsentServer } from '../community/membership-fixture.ts';
 import { workerTestEnv } from '../support/worker-env.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import permissionRead from '../../src/access/permission-check.sql';
@@ -257,6 +258,7 @@ export async function createViewerActionsDriver(): Promise<NativeViewerActionsDr
           ),
         ),
       },
+      receiptKeys: testReceiptKeys(),
       tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(29)]]) },
     });
     kernel = createKernel({
