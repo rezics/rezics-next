@@ -37,7 +37,7 @@ import {
 } from '../../subject/candidates';
 
 export type CurationRead =
-  | { ok: true; reader: string; digest: string; head: number; profile: PresentationProfile; advice: CurationAdvice }
+  | { ok: true; reader: string; digest: string; head: number; profile: PresentationProfile; advice?: CurationAdvice }
   | { ok: false; reason: 'signed-out' }
   | CurationFailure;
 
