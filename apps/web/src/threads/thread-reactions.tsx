@@ -265,8 +265,8 @@ function ReactionCaller({
     phase: 'write' | 'read';
     data: ChangeReactionInput;
     headers: HeadersInit;
-    send: typeof changeReaction;
-    read: typeof readReaction;
+    send: NonNullable<ThreadReactionsProps['preparedTransport']>['change'];
+    read: NonNullable<ThreadReactionsProps['preparedTransport']>['read'];
   };
   const unresolved = useRef<Intent | null>(null);
   const [recovery, setRecovery] = useState<Intent | null>(null);
@@ -530,7 +530,7 @@ function ReactionCaller({
         key={generation}
         counts={resolved?.snapshot.counts ?? counts}
         disabled={disabled || discarded || recovery !== null || recovering}
-        allowedKinds={allowedKinds}
+        {...(allowedKinds ? { allowedKinds } : {})}
         {...(target.kind === 'subject'
           ? {
               kinds: subjectReactionKinds,
