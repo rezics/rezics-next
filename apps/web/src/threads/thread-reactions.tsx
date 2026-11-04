@@ -90,6 +90,9 @@ export type ThreadReactionsProps = {
   returnTo: string;
   onMutation?: (kind: ReactionKind | null) => Promise<void>;
   personalReady?: boolean;
+  allowedKinds?: readonly ReactionKind[];
+  /** Home can deliberately forget an uncertain command, then refresh its source. */
+  allowDiscard?: boolean;
   /** Native advice can withhold the signed-out entry without granting a writable viewer slot. */
   signInAllowed?: boolean;
   reactionOrigin?: { key: string; reader: string | null; isCurrent(): boolean };
@@ -195,6 +198,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
     props.reactionOrigin?.key ?? null,
     props.sourceWatermark,
     props.optimistic ?? true,
+    props.allowedKinds,
     hydrated,
   ]);
   const desiredKey = useRef(key);
@@ -240,6 +244,8 @@ function ReactionCaller({
   preparedTransport,
   sourceWatermark,
   signInAllowed,
+  allowedKinds,
+  allowDiscard,
   requireWatermark,
 }: ThreadReactionsProps & {
   admitted: boolean;
@@ -253,10 +259,19 @@ function ReactionCaller({
   requireWatermark: boolean;
 }) {
   const [failed, setFailed] = useState<string | null>(null);
-  type Intent = { kind: ReactionKind | null; commandId: string; phase: 'write' | 'read' };
+  type Intent = {
+    kind: ReactionKind | null;
+    commandId: string;
+    phase: 'write' | 'read';
+    data: ChangeReactionInput;
+    headers: HeadersInit;
+    send: typeof changeReaction;
+    read: typeof readReaction;
+  };
   const unresolved = useRef<Intent | null>(null);
   const [recovery, setRecovery] = useState<Intent | null>(null);
   const [recovering, setRecovering] = useState(false);
+  const [discarded, setDiscarded] = useState(false);
   const retrying = useRef(false);
   const epoch = useRef(0);
   const generation = epoch.current;
@@ -346,21 +361,10 @@ function ReactionCaller({
   }
 
   async function submit(intent: Intent, replay: boolean) {
-    const data = {
-      target: target.kind,
-      id: target.id,
-      kind: intent.kind,
-      ...(expectedReader ? { expectedReader } : {}),
-    };
+    const { data } = intent;
     let result: { ok: true } | ReactionFailure;
     try {
-      result =
-        intent.phase === 'read'
-          ? { ok: true }
-          : await (preparedTransport?.change ?? changeReaction)({
-              data,
-              headers: { ...headers, 'Idempotency-Key': intent.commandId },
-            });
+      result = intent.phase === 'read' ? { ok: true } : await intent.send({ data, headers: intent.headers });
     } catch {
       if (!current()) return;
       const message = m.reaction_unavailable();
@@ -383,7 +387,7 @@ function ReactionCaller({
       intent.phase = 'read';
       let snapshot: ReactionSnapshot | ReactionFailure;
       try {
-        snapshot = await (preparedTransport?.read ?? readReaction)({ data, headers });
+        snapshot = await intent.read({ data, headers });
       } catch {
         snapshot = { ok: false, reason: 'unavailable' };
       }
@@ -433,14 +437,31 @@ function ReactionCaller({
   }
 
   async function onChange(kind: ReactionKind | null) {
-    if (!current() || generation !== epoch.current || unresolved.current) return;
+    if (!current() || discarded || generation !== epoch.current || unresolved.current) return;
+    if (kind !== null && allowedKinds && !allowedKinds.includes(kind)) return;
     const commandId = crypto.randomUUID();
     const focus = keyboardFocus.current;
     if (focus?.stage === 'selection') {
       if (focus.generation === generation && focus.element === document.activeElement) focus.commandId = commandId;
       else keyboardFocus.current = null;
     }
-    await submit({ kind, commandId, phase: 'write' }, false);
+    await submit(
+      {
+        kind,
+        commandId,
+        phase: 'write',
+        data: Object.freeze({
+          target: target.kind,
+          id: target.id,
+          kind,
+          ...(expectedReader ? { expectedReader } : {}),
+        }),
+        headers: Object.freeze({ ...headers, 'Idempotency-Key': commandId }),
+        send: preparedTransport?.change ?? changeReaction,
+        read: preparedTransport?.read ?? readReaction,
+      },
+      false,
+    );
   }
 
   async function retry(intent: Intent) {
@@ -508,7 +529,8 @@ function ReactionCaller({
       <Reactions
         key={generation}
         counts={resolved?.snapshot.counts ?? counts}
-        disabled={disabled || recovery !== null || recovering}
+        disabled={disabled || discarded || recovery !== null || recovering}
+        allowedKinds={allowedKinds}
         {...(target.kind === 'subject'
           ? {
               kinds: subjectReactionKinds,
@@ -539,6 +561,25 @@ function ReactionCaller({
           >
             {m.editorial_retry()}
           </Button>
+          {allowDiscard ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={recovering}
+              onClick={() => {
+                if (retrying.current) return;
+                unresolved.current = null;
+                epoch.current++;
+                setDiscarded(true);
+                setRecovery(null);
+                setFailed(null);
+                if (current()) void onMutation?.(value);
+              }}
+            >
+              {m.reaction_discard()}
+            </Button>
+          ) : null}
         </>
       ) : null}
     </div>

@@ -1294,6 +1294,7 @@
   "reaction_react": "表态",
   "reaction_reactions": "表态",
   "reaction_sad": "难过",
+  "reaction_discard": "放弃重试",
   "reaction_unavailable": "无法保存这项表态，请稍后重试。",
   "reaction_upvote": "赞同",
   "realm_banned": "你已被这个社区封禁。你仍可阅读这里公开的内容，但无法加入或发帖。",

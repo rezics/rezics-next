@@ -202,8 +202,8 @@ test('a Home baseline retires across session, request, provider and route incarn
     });
     await fetchStarted;
   });
-  expect(host.textContent).toBe('current');
-  expect(initialOrigin.isCurrent()).toBe(true);
+  expect(host.textContent).toBe('retired');
+  expect(initialOrigin.isCurrent()).toBe(false);
   finishFetch({ state: 'signed-in', subject: 'reader', csrfToken: 'csrf' });
   await act(async () => {
     await request;
@@ -301,3 +301,88 @@ test.each([null, { epoch: 1, position: '6' }])(
     expect(host.querySelectorAll('[data-slot="vote-control"] [aria-pressed="true"]')).toHaveLength(1);
   },
 );
+
+test('native allowed kinds do not change counts or selected facts, and [] disables every kind', async () => {
+  let sends = 0;
+  const render = (allowedKinds: readonly ('upvote' | 'love')[]) => (
+    <ThreadReactions
+      target={{ kind: 'thread', id }}
+      counts={{ upvote: 8, love: 3 }}
+      value="love"
+      signedIn
+      returnTo="/en/"
+      presentation="vote"
+      allowedKinds={allowedKinds}
+      preparedTransport={{
+        change: async () => {
+          sends++;
+          return { ok: true };
+        },
+        read: async () => ({ ok: true, counts: {}, value: null }),
+      }}
+    />
+  );
+  await paint(render(['upvote']));
+  const love = host.querySelector<HTMLButtonElement>('[data-slot="reaction-chip"][aria-pressed="true"]')!;
+  expect(love.textContent).toContain('3');
+  expect(love.disabled).toBe(true);
+  const arrows = host.querySelectorAll<HTMLButtonElement>('[data-slot="vote-control"] button');
+  expect(arrows[0]!.disabled).toBe(false);
+  expect(arrows[1]!.disabled).toBe(true);
+  await click(love);
+  expect(sends).toBe(0);
+  await paint(render([]));
+  expect(host.querySelector('[data-slot="vote-control"] output')?.textContent).toBe('8');
+  expect(host.querySelectorAll('[data-slot="reactions"] button:not([disabled])')).toHaveLength(1); // read-only picker
+  expect(sends).toBe(0);
+});
+
+test('uncertain retry keeps the original sender, credential, target, body and key; discard refreshes once', async () => {
+  type Transport = NonNullable<Parameters<typeof ThreadReactions>[0]['preparedTransport']>;
+  const sent: Parameters<Transport['change']>[0][] = [];
+  let replacedSenderCalls = 0;
+  let refreshed = 0;
+  const first: Transport = {
+    change: async (request) => {
+      sent.push(request);
+      return { ok: false, reason: 'unavailable' };
+    },
+    read: async () => ({ ok: false, reason: 'unavailable' }),
+  };
+  const render = (transport: Transport) => (
+    <ThreadReactions
+      target={{ kind: 'thread', id }}
+      counts={{ upvote: 8 }}
+      value={null}
+      signedIn
+      returnTo="/en/?original=one"
+      presentation="vote"
+      allowDiscard
+      onMutation={async () => {
+        refreshed++;
+      }}
+      preparedTransport={transport}
+    />
+  );
+  await paint(render(first));
+  await click(host.querySelector<HTMLButtonElement>('[data-slot="vote-control"] button')!);
+  await paint(
+    render({
+      ...first,
+      change: async () => {
+        replacedSenderCalls++;
+        return { ok: true };
+      },
+    }),
+  );
+  await click([...host.querySelectorAll('button')].find((button) => button.textContent === m.editorial_retry())!);
+  expect(sent).toHaveLength(2);
+  expect(sent[1]).toEqual(sent[0]);
+  expect(new Headers(sent[1]!.headers).get('X-CSRF-Token')).toBe('csrf');
+  expect(sent[1]!.data).toEqual({ target: 'thread', id, kind: 'upvote', expectedReader: 'reader' });
+  expect(replacedSenderCalls).toBe(0);
+  await click([...host.querySelectorAll('button')].find((button) => button.textContent === m.reaction_discard())!);
+  expect(refreshed).toBe(1);
+  expect(host.querySelectorAll('[data-slot="vote-control"] button:not([disabled])')).toHaveLength(0);
+  expect(host.textContent).not.toContain(m.reaction_discard());
+});

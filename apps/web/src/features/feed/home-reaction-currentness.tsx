@@ -59,7 +59,9 @@ export function useHomeReactionCurrentness(
       !sessionValue.csrfToken ||
       (!awaitingBrowserObservation &&
         (browser.state !== 'signed-in' || browser.observation.subject !== sessionValue.subject)));
-  const unavailable = busy || result.state !== 'ready' || invalidSession;
+  const sessionState = client?.getQueryState(['session']);
+  const changingSession = !!client && (sessionState?.fetchStatus !== 'idle' || sessionState?.isInvalidated === true);
+  const unavailable = busy || result.state !== 'ready' || invalidSession || changingSession;
 
   const [binding, setBinding] = useState(() => {
     const alreadyAdmitted = !!page && admittedPages.has(page);
