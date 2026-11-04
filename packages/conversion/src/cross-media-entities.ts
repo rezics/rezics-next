@@ -20,7 +20,7 @@ import {
 } from './support.ts';
 import { vndbLimits } from './vndb.ts';
 
-export const converter_revision = 'cross-media-entities@3';
+export const converter_revision = 'cross-media-entities@4';
 export const vndbReleaseNameLimits = Object.freeze({
   maxTitles: vndbLimits.maxTitles,
   maxNames: vndbLimits.maxTitleCandidates,

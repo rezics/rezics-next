@@ -2003,7 +2003,7 @@ facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to T
 and 00/99 omitted components to year or month precision.
 
 The same production callers now attach admitted `releases_titles` rows to each
-selected release payload and convert them through `cross-media-entities@3`.
+selected release payload and convert them through `cross-media-entities@4`.
 Authored COPY headers are `id`, `lang`, `mtl`, `title`, `latin`. Bound names keep
 their source language; Romanized `latin` is `schema:alternateName`. Exact-empty
 latin on this table is unadmitted. Date/status/completeness remain independently
