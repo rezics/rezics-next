@@ -95,7 +95,7 @@ test('independent Terms forms retain stable associations, multilingual drafts an
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
-    expect(ready()).toBe(true);
+    expect(ready(), host.textContent ?? '').toBe(true);
   };
   const unloadBlocked = () => {
     const event = new window.Event('beforeunload', { cancelable: true });

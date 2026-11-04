@@ -24,6 +24,7 @@ test('Multilingual terms show actionable field-specific corrections without chan
     HTMLTextAreaElement: window.HTMLTextAreaElement,
     Element: window.Element,
     Node: window.Node,
+    MutationObserver: window.MutationObserver,
     getComputedStyle: window.getComputedStyle.bind(window),
     requestAnimationFrame: (callback: FrameRequestCallback) =>
       setTimeout(() => callback(performance.now()), 0) as unknown as number,
