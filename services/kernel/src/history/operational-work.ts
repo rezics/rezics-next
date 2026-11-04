@@ -10,11 +10,9 @@ import { guardHistoryAccounts } from './gates.ts';
 import { encodeLocator, validateScope, type HistoryScope } from './locator.ts';
 import { commandHistoryIdentityAccounts, unionHistoryScope } from './record.ts';
 import {
-  debitOperationalWork,
   issueOperationalWorkTransfer,
   consumeOperationalWorkTransfer,
   finishOperationalWorkTransfers,
-  OPERATIONAL_WORK_REGISTRATION,
   OperationalWorkUnavailable,
   attachOperationalWorkOriginal,
   operationalWorkDeadlineClient,
@@ -85,7 +83,7 @@ function attempt(tx: OperationalTransaction): Attempt {
   return state;
 }
 
-/** A private, prepaid, one-shot child transfer. It activates ONLY after this actual executor's
+/** A private one-shot child transfer. It activates ONLY after this actual executor's
  * successful COMMIT. Copies, failed attempts and escaped live handles cannot issue or spend it. */
 export function reserveOperationalWorkTransfer(
   tx: OperationalTransaction,
@@ -292,9 +290,6 @@ async function registerOriginal(
       throw new TypeError('Conflicting operational History registration');
     return state.registration.locator;
   }
-  // Complete literal producer body, including failure and final native commit hook, prepaid
-  // before its first read. Repeated attempts consume the same original cumulative balance.
-  debitOperationalWork(state.original, OPERATIONAL_WORK_REGISTRATION);
   const scope = identityScope(tx, binding.ownerAccountId);
   const digest = createHash('sha256').update(canonicalize({ binding, intent, scope })!).digest();
   const stored = (
@@ -685,7 +680,7 @@ async function commitOperationalRead(tx: Pick<PoolClient, 'query'>, deadline: nu
   await tx.query('COMMIT');
 }
 
-/** A separately prepaid same-home recheck. All native source fences stay held through this
+/** A one-shot same-home recheck. All native source fences stay held through this
  * commit; the result is LOCAL provenance only, not a Source-currentness or replay capability.
  * Call after releasing any receiving client, never inside a cross-home callback. */
 export async function verifyCommittedOperationalWorkOrigin(

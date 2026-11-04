@@ -1,5 +1,4 @@
 import type { WorkDimensions } from './collection-source.ts';
-import { ProblemError } from '../http/problem.ts';
 import { OPERATIONAL_WORK_REGISTRATION, OPERATIONAL_WORK_TRANSFER_COST } from '../history/operational-work.ts';
 
 /** Members-owned SQL ceilings, not funding and not a quote for Core, Access, Search or History.
@@ -323,11 +322,10 @@ export function membersPreparationCost(...parts: readonly Readonly<WorkDimension
   return total;
 }
 
-/** Branches use the same absolute horizon. Each attempted prefix stays charged on failure/rollback;
- * an empty point/duplicate pays its full statement/index ceiling, not a guessed zero-row price.
- * Body repeats add these prices again; Core/Access envelope and foreign Source prices are additional.
- * Branch components compose by name: apply plus completion or repair, then a reached failure if needed.
- * Early exits pay their dispatched prefix; unused phases are never charged as dispatched or refunded.
+/** Branches use the same absolute horizon. An empty point/duplicate pays its full statement/index
+ * ceiling. Body repeats add these prices again; Core/Access envelope and foreign Source prices are
+ * additional. Branch components compose by name: apply plus completion or repair, then a reached
+ * failure if needed. Unused phases are never part of the admitted static equation.
  */
 export const MEMBERS_PREPARATION_BRANCH_COST = Object.freeze({
   duplicate: membersPreparationCost(
@@ -392,9 +390,8 @@ export const MEMBERS_PREPARATION_BRANCH_COST = Object.freeze({
   idle: MEMBERS_PREPARATION_LOCAL_COST.idlePage,
 });
 
-/** C3 fixes the body allowance independently of constant History costs. This subset
- * is still not a funded parent: Core/Access, retries, executor and cleanup must all
- * be declared and prepaid before first I/O. Never allocate from this subtotal.
+/** Documented static sum of the Members reservation body and History original/transfer bounds.
+ * Core/Access, retries, executor and cleanup remain separate owner declarations. This is not a prepaid parent.
  */
 export const MEMBERS_PREPARATION_RESERVATION_SUBTOTAL = Object.freeze(
   membersPreparationCost(
@@ -405,10 +402,3 @@ export const MEMBERS_PREPARATION_RESERVATION_SUBTOTAL = Object.freeze(
     OPERATIONAL_WORK_TRANSFER_COST.receive,
   ),
 );
-
-export function requireMembersReservationBudget(): void {
-  throw new ProblemError('dependency_unavailable', {
-    detail:
-      'whole-members-reservation-cost-unavailable: finite C3 parent including Core/Access, executor controls, retries and cleanup is not declared',
-  });
-}

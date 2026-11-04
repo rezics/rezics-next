@@ -408,16 +408,17 @@ Before the first operational transaction, native `consume_selected_execution` co
 It never refunds on rollback, recovery or uncertain commit. Recovered execution may reconcile an actual committed
 Accounts result; a pending/missing association with a spent bit refuses. Reissuance cannot clear the bit. This
 chooses safe poisoning over a new allowance when the preceding commit outcome cannot be established. The local
-prepaid original starts at actual body execution with a fixed five-second deadline, following the existing private
-operational-original allocation convention. A selection claim identifies execution and does not fund foreign work.
-No request capability, original deadline or postcommit transfer is reused or renewed. In-process operations drain
-before SDK release, and no private live map or heap committed flag is evidence of native COMMIT.
+original starts at actual body execution with a fixed five-second deadline. Dispatch admits declared SQL and
+multiplicity against that identity; it does not debit a remaining ledger. A selection claim identifies execution
+and does not fund foreign work. No request capability, original deadline or postcommit transfer is reused or
+renewed. In-process operations drain before SDK release, and no private live map or heap committed flag is
+evidence of native COMMIT.
 
 ### Selected local declarations
 
 Every row below also has `candidateKeys=identityMetadataRows=witnessKeys=engineRequests=0` and
-`emptySeeks=nativePoints`. These are literal LOCAL bounds, not whole Members, Source, Access or physical prices.
-They are prepaid cumulatively; misses, collisions, failed prefixes, SQL exceptions and poison never refund.
+`emptySeeks=nativePoints`. These are documented static LOCAL bounds, not whole Members, Source, Access or physical
+prices, and not a prepaid remaining balance.
 
 | Local dispatch                       | nativeRows | nativePoints | statements |   bytes |
 | ------------------------------------ | ---------: | -----------: | ---------: | ------: |
@@ -438,9 +439,10 @@ They are prepaid cumulatively; misses, collisions, failed prefixes, SQL exceptio
 (controls + two held checks + original + two tuple verifications + association + result) + cleanup.
 Its full axes in the order candidateKeys/nativeRows/identityMetadataRows/nativePoints/witnessKeys/statements/bytes/
 emptySeeks/engineRequests are **0/195/0/204/0/187/63505792/204/0**. Disjoint cleanup is release + three two-rollback
-partitions: **0/2/0/2/0/8/4480/2/0**, removed from usable balance before any IO. Three phases is an absolute bound,
-not three new grants. Foreign declarations are summed with checked safe-integer arithmetic at registration, never
-inferred from an example or a measured parent. Missing foreign declarations close their dispatch.
+partitions: **0/2/0/2/0/8/4480/2/0**. Three phases is an absolute bound, not three new grants. Foreign
+declarations are summed with checked safe-integer arithmetic at registration, never inferred from an example or a
+measured parent. Missing foreign declarations close their dispatch. Dispatch uses those documented ceilings; it
+does not debit a remaining ledger.
 
 Rows/points include full-key probes, negative seeks, insert/conflict/update index operations and FK checks.
 Statements count outer function calls and nested SQL, both transaction BEGINs, time/settings, partition/account

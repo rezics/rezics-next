@@ -222,15 +222,15 @@ Current implementation evidence is narrower than the capability:
   disclosure, public/frozen input support, retained preparation/default worker integration and physical bounds still
   require combined native verification; source typing does not certify those outcomes.
 - Members preparation's private [C3 parent composition](members-preparation-contract.md#cost-and-required-native-evidence)
-  transfers the complete declared children from one caller ledger, including constant History registration and
-  receiving. `fundMembersPreparationHistory` binds those children to the native History original, Pool, WorkClient
-  and unchanged deadline. Each native phase consumes its exported price; repeated phases consume only the original
-  retry child, including failed prefixes. The legacy standalone History original retains its three-attempt limit.
-  Decision: the composed Members original uses finite declared retry capacity and the native deadline without an
-  additional attempt-count limit. This allocation seam requires explicit owner declarations; native producer/dispatch
-  integration and useful prepared pages remain required. Neither its budget nor a retained locator grants Source
-  authority. The Source declaration/receiver, final native physical verification, bounded result/frontier storage,
-  completed readback and coordinated cleanup remain integration work; the runtime stays unmounted.
+  is a documented static equation: `declareMembersPreparationParent` names every child bound, including constant
+  History registration and receiving. History opens with `openOperationalWorkOriginal` from those static ceilings;
+  callers do not buy dispatch from a NativeCollectionWork ledger on this path. The History original keeps its
+  three-attempt bound. Decision: NativeCollectionWork remains the Library SQL observer for identity, catalogue,
+  Search and publication; the Members → History → Work selected path uses documented static bounds.
+  Native producer/dispatch integration and useful prepared pages remain required. Neither the equation nor a
+  retained locator grants Source authority. The Source declaration/receiver, final native physical verification,
+  bounded result/frontier storage, completed readback and coordinated cleanup remain integration work; the runtime
+  stays unmounted.
 - `command/operational.ts` and [Core's frozen contract](../command/README.md#operational-transactions) now provide
   the Accounts-owned additive event-free fenced transaction and same-client DBOS intent in source. Library's
   consumer/preparation/native custody implementation remains required pending; this is no readiness receipt.
@@ -2757,20 +2757,21 @@ The exact producer declarations include `id | ordinal`. Native reservation, touc
 private episodes and locator-only intents. `readRetainedDefinition` recovers their exact canonical meaning and
 immutable accepted release only on the same live, fenced client; it does not establish current Source authority.
 Default `library.membersPreparation` work remains explicitly unavailable and produces no ready result or custody
-acknowledgment. Retained runtime and ordered-result bodies are installed below; useful prepared consumption and finite sparse-source completion require the full funded Source/physical binding.
+acknowledgment. Retained runtime and ordered-result bodies are installed below; useful prepared consumption and finite sparse-source completion require the full Source/physical binding.
 Native metadata reservations retain route-leading owner controls, exact-basis live uniqueness and indexed
 LRU/idle retirement. `createMembersPreparation` uses Core request admission and current `collection:read`;
-duplicate admission neither touches nor enqueues. An explicitly funded History child registers the actual
+duplicate admission neither touches nor enqueues. An explicit History original registers the actual
 reservation original and locator-only intent on the same transaction. The returned private transfers retain their
 original deadline and Pool and can be consumed only after successful COMMIT; a locator grants no transfer authority.
-Runtime admission (`runtime: true`) separately requires the complete C3 parent before first I/O. The native runtime
-association, selected apply/completion and bounded cleanup bodies are retained for that integration. Metadata-only
-reservation does not install an original association or capture current Source/physical authority.
+Runtime admission (`runtime: true`) opens that History original from documented static bounds; it does not require
+a NativeCollectionWork parent. The native runtime association, selected apply/completion and bounded cleanup bodies
+are retained for that integration. Metadata-only reservation does not install an original association or capture
+current Source/physical authority.
 
 The default `library.membersPreparation` consumer registers through `SelectedRuntime.registerMembersStep`.
 Each selected invocation obtains a fresh executor-issued original with one absolute deadline. Selection commits and
 releases its client before Source; apply and reached failure use the producer's held native association and the same
-balance/deadline. Committed replay returns its stored outcome without dispatching Source or renewing admission.
+deadline. Committed replay returns its stored outcome without dispatching Source or renewing admission.
 Actual SDK workflow/step coordinates are private indexed lookup data, never authority. Members binds those coordinates
 to the producer's exact selected native tuple inside apply/failure and retains them on its own header.
 
@@ -2803,11 +2804,12 @@ Collection note reading, Dynamic recovery, locale, mutation and uncertain-intent
   repeated attempts add it again. Core/Access, immutable releases and Source/Search work are separate producer costs.
 - Bound: existing filtered-list budgets and the stronger 100-raw-key Members bound remain authoritative. Named-field
   composition avoids Accounts/Source tuple-order differences. [Approved C3](members-preparation-contract.md#approved-c3-composition)
-  keeps 16 statements for the Members body and separately charges constant History registration (464), receiving/readback
-  (429), every transfer, Core/Access, executor controls, retries and cleanup to one finite parent before first I/O.
-  Production Source and native authority declarations remain absent; unbound runtime reservations refuse with `whole-members-reservation-cost-unavailable`
-  before native creation/registration. Metadata reservations, duplicate and actual-read touch paths remain independent. A complete whole-call
-  Source/Library quote is also required for native product acceptance.
+  keeps 16 statements for the Members body and documents constant History registration (464), receiving/readback
+  (429), every transfer, Core/Access, executor controls, retries and cleanup as a static equation.
+  Production Source and native authority declarations remain absent for useful prepared pages. Runtime admission
+  opens History from those bounds without a NativeCollectionWork parent. Metadata reservations, duplicate and
+  actual-read touch paths remain independent. A complete whole-call Source/Library declaration is also required for
+  native product acceptance.
 - Growth check: the focused reservation/concurrency/rollback, real-default-consumer, stale/terminal and mounted
   recovery cases are authored but unrun. Compiler status establishes no native budget, finite useful page or erasure
   acceptance. The controller owns those deferred checks.
@@ -2823,29 +2825,25 @@ replaces that missing operand.
 Final completion independently remains refused by the installed producer with
 `selected-runtime-final-source-physical-authority-unavailable`. Members preserves that exact operand and never
 sets a successful complete header from exhaustion. Required foreign authority must cover the actual current Source,
-SDK inventory restoration/retirement and independent physical closure, under the selected original's real funding
-and lifetime. Local association and native version progress prove none of those facts. The missing-parent runtime-admission
-refusal remains in place even though the selected interface is installed; its local subtotal is not a whole-parent
-quote or permission to dispatch the runtime.
+SDK inventory restoration/retirement and independent physical closure, under the selected original's real identity
+and lifetime. Local association and native version progress prove none of those facts. Runtime admission opens History
+from static bounds; the local subtotal is a documented equation, not a quote that buys dispatch.
 Library A5's existing participant probes and drains added results, headers (including bases/frontiers/original
 associations and selected lookup coordinates) and owner controls in child-first order. This local inventory is not shared-history minimization,
 all-copy absence or a blanket erasure/restore acknowledgement.
 
-`members-preparation-budget.ts` supplies the finite parent accounting seam: Members, History registration,
+`members-preparation-budget.ts` supplies the documented static equation: Members, History registration,
 receiving/readback, Core, Access, Source resolve/verify, executor, retry, rollback and cleanup must all have
-disjoint declarations before any child receives its allocation. The same parent refuses a second allocation
-for an exact preparation key. Each child retains its own finite balance; group completion records actual
-charges and closes every child, including cleanup. Missing declarations and insufficient funding return
-typed unavailable. Durable cross-request registration, the released Source declaration and final current
-physical Source authority remain required producer dependencies; this seam does not enable the adapters.
+disjoint declarations. Missing declarations return typed unavailable. This describes bounds; it does not
+allocate dispatch authority or transfer children from a caller ledger. Durable cross-request registration,
+the released Source declaration and final current physical Source authority remain required producer
+dependencies; this equation does not enable the adapters.
 
-Decision: execute the complete Members declaration against the caller's existing C3 parent; a local subtotal
-cannot create or authorize that parent, and missing Source declarations keep the producer unavailable.
-`runFundedMembersPreparation` validates the owner declarations and transfers every child before invoking
-the body. History's registration/readback prices come from its exports, not callback inputs. Its awaited
-cleanup uses only the original rollback/cleanup children, also on body failure or expiry, before closing
-the group. Failed work remains charged and errors expose the original parent's receipt. Native registration,
-Source authority, result production and mounted dispatch remain separate required runtime work.
+Decision: NativeCollectionWork remains the Library SQL observer for identity, catalogue, Search and publication.
+The Members → History → Work selected path uses documented static bounds and `openOperationalWorkOriginal`.
+`runMembersPreparationRequest` opens History from those bounds, commits the native episode before Source, and
+runs cleanup on success or failure. History's registration/readback prices come from its exports. Native
+registration, Source authority, result production and mounted dispatch remain separate required runtime work.
 
 Decision: mixed reservation batches preserve their exact reused episodes while evicting the least recently read
 other live headers; reuse never touches LRU time. Unbound `readWorkDefinition` returns null until Source supplies

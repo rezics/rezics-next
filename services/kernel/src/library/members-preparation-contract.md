@@ -23,8 +23,9 @@ The native reservation schema, request operations and exact step-admission bound
 Contract review and native fixture evidence precede the independent bounded producer.
 [The interface](members-preparation.ts) implements private native episode reservation, read touch and exact step
 admission. The [runtime inventory](README.md#members-costs-and-unavailable-authority) distinguishes installed owned
-bodies from missing foreign authority. Funded runtime admission currently refuses before native episode creation because
-production Source and native authority declarations remain unavailable; native metadata reservation and the explicitly funded request seam remain available. Duplicate admission, actual-read touch,
+bodies from missing foreign authority. Runtime admission (`runtime: true`) opens History from documented static
+bounds without a NativeCollectionWork parent; production Source and native authority declarations remain unavailable
+for useful prepared pages. Native metadata reservation and the request seam remain available. Duplicate admission, actual-read touch,
 selected native association, bounded repair and independently fenced result reads retain their own native bodies.
 Neither source presence nor a compiler result is native product acceptance or a freeze. Existing positive native
 outcomes remain required when the complete producer topology fits the contract.
@@ -285,4 +286,4 @@ admission and HTTP 202 behavior; shared common-page cross-resource Access compos
 logical Everything/state, Continue/Liked, publication, source eligibility, canonical identity and readiness.
 This metadata contract closes none of those followups and guesses no pending epoch vector, control partition or P.
 
-Decision: metadata-only reservation preserves its native contract; `runtime: true` requires the complete C3 parent before first I/O and does not inherit authority from a locator.
+Decision: metadata-only reservation preserves its native contract; `runtime: true` opens History from documented static bounds and does not inherit authority from a locator. NativeCollectionWork remains the Library SQL observer for identity, catalogue, Search and publication.

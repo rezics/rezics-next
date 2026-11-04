@@ -37,13 +37,14 @@ test('Owner replacement and restore lock against the native COMMIT rather than a
   );
   expect(executor).toContain("selected?.assertLive();\n              await client.query('COMMIT')");
 });
-test('One finite lifecycle spans select, released Source, apply and reached failure without transaction refills', () => {
-  expect(runtime.match(/deadline: Date.now\(\)\+5000/g)).toHaveLength(1);
-  expect(runtime.match(/remaining: balance/g)).toHaveLength(1);
-  expect(runtime).toContain("state.phase='selecting'");
-  expect(runtime).toContain('consumeSelectedExecutionAdmission(claim,state.pool)');
-  expect(runtime).toContain('debit(state, declarations.source)');
-  expect(runtime).toContain('debit(state, SELECTED_COST.rollback, true)');
+test('One finite lifecycle spans select, released Source, apply and reached failure without a remaining ledger', () => {
+  expect(runtime.match(/deadline: Date.now\(\) \+ 5000/g)).toHaveLength(1);
+  expect(runtime).not.toContain('remaining: balance');
+  expect(runtime).not.toContain('selected-runtime-admission-exhausted');
+  expect(runtime).not.toContain('function debit');
+  expect(runtime).toContain("state.phase = 'selecting'");
+  expect(runtime).toContain('consumeSelectedExecutionAdmission(claim, state.pool)');
+  expect(runtime).toContain('selected-runtime-native-multiplicity-exhausted');
   expect(runtime).toContain('state.operations.add(operation)');
   expect(runtime).toContain('await Promise.allSettled([...state.operations])');
   expect(executor).toContain('if (selected) { selected.finish(); throw error; }');

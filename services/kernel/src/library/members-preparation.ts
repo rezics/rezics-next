@@ -28,7 +28,6 @@ import {
 import { NativeCollectionWork } from './collection-source-work.ts';
 import { retainNativeOwnerFilterPopulation } from './owner-filter-native-closure.ts';
 import { createCollectionSource, type PreparedCollectionSource } from './collection-source.ts';
-import { requireMembersReservationBudget } from './members-preparation-cost.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
@@ -59,7 +58,11 @@ import {
   reserveOperationalWorkTransfer,
   type OperationalWorkRegistration,
 } from '../history/operational-work.ts';
-import type { OperationalWorkOriginal, OperationalWorkTransfer } from '../history/operational-work-budget.ts';
+import {
+  openOperationalWorkOriginal,
+  type OperationalWorkOriginal,
+  type OperationalWorkTransfer,
+} from '../history/operational-work-budget.ts';
 
 const LIVE_LIMIT = 32;
 const IDLE_MS = 24 * 60 * 60 * 1000;
@@ -377,8 +380,6 @@ export function createMembersPreparation(config: {
       )
         throw notFound();
       if (!definitions.length) return { episodes: [], intent: null };
-      // Metadata reservation remains independent of funded result production.
-      if (options.runtime) requireMembersReservationBudget();
 
       const identity = principalCommandIdentity(actor);
       if (identity.principal.kind !== 'account' || identity.principal.id !== actor.accountId) throw notFound();
@@ -401,6 +402,12 @@ export function createMembersPreparation(config: {
       });
 
       const deadline = options.deadline ?? options.history?.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+      if (options.runtime && !options.history) {
+        options = {
+          ...options,
+          history: openOperationalWorkOriginal(config.pool, deadline, config.workClient),
+        };
+      }
       const authorization = await accessCommandAuthorization(
         config.access,
         actor,

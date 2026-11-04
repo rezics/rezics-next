@@ -107,7 +107,7 @@ export async function readbackOperationalInventory(
     throw new OperationalWorkUnavailable('operational-work-original-role-union-changed');
 }
 
-/** Already prepaid by receiveCommittedOperationalWork. Never call while holding the source
+/** Already issued by receiveCommittedOperationalWork. Never call while holding the source
  * client. It registers the actual original SDK execution; it performs NO second enqueue. */
 export async function receiveOperationalWorkDestination(
   pool: Pool,

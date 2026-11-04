@@ -186,7 +186,7 @@ export async function runOperationalTransaction<T>(
   const deadline = selected?.deadline ?? options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
   const attemptLimit = options.attemptLimit ?? Number.MAX_SAFE_INTEGER;
   if (!Number.isSafeInteger(attemptLimit) || attemptLimit < 1) throw new TypeError(`Invalid attempt limit for ${kind}`);
-  // One original, Pool, absolute deadline and cumulative local balance across contention.
+  // One original, Pool and absolute deadline across contention. Attempt count is a static bound.
   const historyOriginal = options.operationalHistory
     ? claimOperationalWorkOriginal(
         options.operationalHistory === true ? openOperationalWorkOriginal(pool, deadline) : options.operationalHistory,

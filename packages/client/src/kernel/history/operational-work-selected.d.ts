@@ -1,5 +1,4 @@
 import { type OperationalTransaction } from '../command/operational.ts';
-import { type SelectedCost } from '../work/selected-runtime-cost.ts';
 import { type SelectedIdentity } from '../work/selected-runtime.ts';
 export type SelectedLocator = Readonly<{
     route: number;
@@ -18,6 +17,6 @@ export type SelectedEpisode = Readonly<{
     result: SelectedOutcome | null;
     readonly [selectedEpisode]: true;
 }>;
-export declare function associateSelectedEpisode(tx: OperationalTransaction, identity: SelectedIdentity, locator: SelectedLocator, charge: (cost: SelectedCost) => void, fresh?: boolean): Promise<SelectedEpisode>;
-export declare function finishSelectedEpisode(tx: OperationalTransaction, identity: SelectedIdentity, episode: SelectedEpisode, phase: 'apply' | 'failure', body: (tx: OperationalTransaction) => Promise<SelectedOutcome>, charge: (cost: SelectedCost) => void): Promise<SelectedOutcome>;
+export declare function associateSelectedEpisode(tx: OperationalTransaction, identity: SelectedIdentity, locator: SelectedLocator, fresh?: boolean): Promise<SelectedEpisode>;
+export declare function finishSelectedEpisode(tx: OperationalTransaction, identity: SelectedIdentity, episode: SelectedEpisode, phase: 'apply' | 'failure', body: (tx: OperationalTransaction) => Promise<SelectedOutcome>): Promise<SelectedOutcome>;
 export {};
