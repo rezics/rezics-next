@@ -30,7 +30,12 @@ export function supportedCreatorSaleDeparture(
     const target = new URL(href, origin);
     if (target.origin !== origin || target.username || target.password || target.search || target.hash) return null;
     const destinations = creatorSaleDestinations(sale, locale);
-    const supported = [destinations.offer, destinations.work, creatorSaleStatementDestination(locale)];
+    const supported = [
+      destinations.offer,
+      destinations.work,
+      creatorSaleStatementDestination(locale),
+      localizeHref('/creator/offers', { locale: locale as never }),
+    ];
     return supported.includes(target.pathname) ? target.pathname : null;
   } catch {
     return null;
