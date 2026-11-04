@@ -102,7 +102,7 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     const key = Object.keys(element).find((name) => name.startsWith('__reactProps$'))!;
     return (
       Reflect.get(element, key) as {
-        onChange: (event: { target: { value: string } }) => void;
+        onChange: (event: { target: { value: string }; currentTarget?: { value: string } }) => void;
       }
     ).onChange;
   };
@@ -183,7 +183,9 @@ test('Manga departure retains hidden and nested drafts, exact recovery, and fenc
     await createAfterReview();
     await until(() => host.textContent!.includes(m.correction_invalid()));
     const recoveredLabel = within(host).getByRole('textbox', { name: m.catalogue_create_label() });
-    await act(async () => changeHandler(recoveredLabel)({ target: { value: 'Recovered title' } }));
+    await act(async () =>
+      changeHandler(recoveredLabel)({ target: { value: 'Recovered title' }, currentTarget: recoveredLabel }),
+    );
     expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
       'Recovered title',
     );
