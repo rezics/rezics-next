@@ -1943,3 +1943,32 @@ never guessed. Completeness stays a `wdt:P31` qualifier gap on the release-to-wo
 fact. These proposals do not contain VNDB votes, personal lists or score-derived
 facts. Decision: COPY integer YYYYMMDD maps 0/00000000 to unknown, 99999999 to TBA
 and 00/99 omitted components to year or month precision.
+
+### Bangumi character identity and appearance mapping
+
+The cross-media seed operator admits Bangumi character kinds and selected
+`subject-characters` rows through the same source vocabulary mapper. It runs a
+second complete Bangumi generation after the initial source import, so changed
+role inputs and newly available bindings are re-evaluated without replacing the
+source baseline with a partial record set. The optional
+`--bangumi-character-bindings <json>` file contains a bundled `releaseDigest`,
+exact `schemes` entries (`taxonomy`, `id`, `uri`, `type`, `releaseDigest`) and
+exact `concepts` entries (`taxonomy`, `code`, `id`, `type`, `schemeId`,
+`releaseDigest`). The operator checks each configured subject through the
+current public API, including its type, source URI and Concept scheme membership.
+It never resolves a label. Missing or retracted current values remain review
+diagnostics.
+
+- Touches: at most 64 admitted appearance rows per selected work, one character
+  kind row per admitted character, current source identities, up to two
+  ConceptSchemes and seven Concepts, and the existing complete source journal.
+- Bound: appearance projection is O(64 × selected works), with current identity
+  reads sent in pages of 16 and no catalogue or label scan. The mapper emits the
+  qualified relation only when both exact identities and the role Concept are
+  current; an unsupported `schema:position` is omitted with a structured gap.
+- Growth check: `packages/conversion/tests/bangumi-character-fidelity.test.ts`
+  and `services/importer/tests/bangumi-character-fidelity.test.ts` cover exact
+  Concepts, citation paths, missing role bindings and unsupported order. The
+  connected API scenario is
+  `services/kernel/test/imports/bangumi-character-fidelity.test.ts`; it adds no
+  physical-growth claim, and its native execution remains controller-owned.

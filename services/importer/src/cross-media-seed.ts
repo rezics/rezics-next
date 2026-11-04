@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { SourceRecord } from '@rezics/conversion';
+import type { SourceVocabularyBindings, SourceVocabularyGap } from '@rezics/conversion';
 import {
   bangumiRecordUrl,
   converter_revision as entityRevision,
@@ -17,6 +18,7 @@ import { CrossMediaGraph, citedProviderBinding, type GraphEdgeDraft } from './cr
 import { createImportTransport, type ReviewedSubjectRead } from './import-client.ts';
 import { createImporter, type ImporterOptions, type ImportRunResult } from './importer.ts';
 import { createSourceRegistration } from './source-registry.ts';
+import { runBangumiCharacterFidelity } from './bangumi-character-fidelity.ts';
 
 type Provider = 'bangumi' | 'vndb';
 type Row = Record<string, unknown>;
@@ -53,12 +55,20 @@ export type CrossMediaMember = {
   membership: 'family' | 'referenced';
   franchise?: Franchise;
 };
+export type BangumiCharacterAppearance = {
+  subjectId: string;
+  characterId: number;
+  sourceIndex: number;
+  roleCode: number | string;
+  order?: number | string | null;
+};
 export type CrossMediaPlan = {
   records: Record<Provider, SourceRecord[]>;
   entities: Record<Provider, SourceRecord[]>;
   edges: GraphEdgeDraft[];
   franchises: Record<Franchise, { bangumi: string[]; vndb: string[] }>;
   members: CrossMediaMember[];
+  characterAppearances: BangumiCharacterAppearance[];
   gaps: CrossMediaGap[];
 };
 function ensure(value: unknown, message: string): asserts value {
@@ -108,6 +118,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     edges: [],
     franchises: emptyFranchises(),
     members: [],
+    characterAppearances: [],
     gaps: [],
   };
   const gap = (source: Provider, table: string, record: Row, reason: string) => {
@@ -246,8 +257,23 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const characters = new Set<number>();
   const persons = new Set<number>();
   const familyWorks = new Set(familyIds.keys());
-  for await (const row of input.rows('bangumi', 'subject-characters'))
-    if (familyWorks.has(number(row, 'subject_id'))) characters.add(number(row, 'character_id'));
+  const selectedBangumiWorks = new Set(plan.records.bangumi.map((record) => record.key));
+  const admittedAppearanceIndices = new Set<number>();
+  const appearanceCounts = new Map<number, number>();
+  let selectionIndex = 0;
+  for await (const row of input.rows('bangumi', 'subject-characters')) {
+    const sourceIndex = selectionIndex++;
+    const subjectId = number(row, 'subject_id');
+    if (!selectedBangumiWorks.has(String(subjectId))) continue;
+    const count = (appearanceCounts.get(subjectId) ?? 0) + 1;
+    appearanceCounts.set(subjectId, count);
+    if (count > 64) {
+      gap('bangumi', 'subject-characters', row, 'Per-work character appearance mapping limit exceeded');
+      continue;
+    }
+    characters.add(number(row, 'character_id'));
+    admittedAppearanceIndices.add(sourceIndex);
+  }
   for await (const row of input.rows('bangumi', 'subject-persons')) {
     if (!familyWorks.has(number(row, 'subject_id'))) continue;
     persons.add(number(row, 'person_id'));
@@ -257,11 +283,19 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     persons.add(number(row, 'person_id'));
     characters.add(number(row, 'character_id'));
   }
+  let appearanceIndex = 0;
   for await (const row of input.rows('bangumi', 'subject-characters')) {
-    if (!characters.has(number(row, 'character_id'))) continue;
-    const work = String(number(row, 'subject_id'));
-    const character = `character:${number(row, 'character_id')}`;
-    const mapping = mapSourceEnumeration('bangumi', 'subject-characters.type', row.type as number);
+    const sourceIndex = appearanceIndex++;
+    const subjectId = number(row, 'subject_id');
+    const characterId = number(row, 'character_id');
+    if (
+      !admittedAppearanceIndices.has(sourceIndex) ||
+      !selectedBangumiWorks.has(String(subjectId)) ||
+      !characters.has(characterId)
+    )
+      continue;
+    const work = String(subjectId);
+    const character = `character:${characterId}`;
     member({
       source: 'bangumi',
       key: character,
@@ -269,23 +303,24 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
       membership: familyWorks.has(number(row, 'subject_id')) ? 'family' : 'referenced',
       ...tagged(familyIds.get(number(row, 'subject_id'))),
     });
-    const qualifiers: { property: string; content: unknown }[] = [];
-    if (mapping?.concept)
-      gap('bangumi', 'subject-characters', row, 'Appearance role concept has no resolved native Concept binding');
-    else if (mapping?.status === 'omitted')
-      gap('bangumi', 'subject-characters', row, mapping.reason ?? 'Unsupported appearance role');
-    edge({
-      source: 'bangumi',
-      alias: crossMediaAliases.bangumi,
-      table: 'subject-characters',
-      holder: work,
-      target: character,
-      property: 'schema:character',
-      url: bangumiRecordUrl(work),
-      membership: 'referenced',
-      record: row,
-      fields: fieldsOf('subject-characters', row),
-      ...(qualifiers.length ? { qualifiers } : {}),
+    const roleCode = row.type;
+    if (typeof roleCode !== 'number' && typeof roleCode !== 'string') {
+      gap('bangumi', 'subject-characters', row, 'Appearance role code is not a supported scalar');
+      continue;
+    }
+    plan.characterAppearances.push({
+      subjectId: work,
+      characterId,
+      sourceIndex,
+      roleCode,
+      ...(row.order === undefined
+        ? {}
+        : {
+            order:
+              typeof row.order === 'number' || typeof row.order === 'string' || row.order === null
+                ? row.order
+                : -1,
+          }),
     });
   }
   for await (const row of input.rows('bangumi', 'subject-persons')) {
@@ -907,9 +942,10 @@ export type CrossMediaSeedResult = {
   status: 'imported' | 'imported-with-gaps';
   franchises: CrossMediaPlan['franchises'];
   members: CrossMediaMember[];
-  runs: Partial<Record<Provider, ImportRunResult>>;
+  runs: Partial<Record<Provider, ImportRunResult>> & { bangumiCharacterFidelity?: ImportRunResult };
   readings: CrossMediaReading[];
   gaps: CrossMediaGap[];
+  characterDiagnostics: SourceVocabularyGap[];
   unresolved: { holder: string; target: string; property: string; reason: string }[];
 };
 
@@ -930,6 +966,7 @@ export async function seedCrossMedia(
     vocabularyAdmission?: ImporterOptions['vocabularyAdmission'];
     recordConcurrency?: ImporterOptions['recordConcurrency'];
   },
+  characterBindings?: SourceVocabularyBindings,
 ) {
   const importer = createImporter({
     path,
@@ -962,6 +999,16 @@ export async function seedCrossMedia(
       ensure(run.status === 'committed', `Cross-media ${provider} import failed: ${run.status}`);
       runs[provider] = run;
     }
+    const fidelity = await runBangumiCharacterFidelity({
+      importer,
+      port,
+      sourceAlias: crossMediaAliases.bangumi,
+      records: [...plan.records.bangumi, ...plan.entities.bangumi],
+      appearances: plan.characterAppearances,
+    ...(characterBindings === undefined ? {} : { bindings: characterBindings }),
+    });
+    ensure(fidelity.run.status === 'committed', `Bangumi character fidelity import failed: ${fidelity.run.status}`);
+    runs.bangumiCharacterFidelity = fidelity.run;
     const graph = new CrossMediaGraph(importer.session.store.database);
     graph.remember(plan.edges);
     const delivered = await graph.deliver({
@@ -990,12 +1037,16 @@ export async function seedCrossMedia(
       reason: edge.reason,
     }));
     return {
-      status: plan.gaps.length || unresolved.length ? ('imported-with-gaps' as const) : ('imported' as const),
+      status:
+        plan.gaps.length || unresolved.length || fidelity.gaps.length
+          ? ('imported-with-gaps' as const)
+          : ('imported' as const),
       franchises: plan.franchises,
       members: plan.members,
       runs,
       readings,
       gaps: plan.gaps,
+      characterDiagnostics: fidelity.gaps,
       unresolved,
     };
   } finally {
@@ -1014,14 +1065,22 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     '--account-key',
     '--account',
     '--client',
+    '--bangumi-character-bindings',
   ];
   if (argv.length === 1 && argv[0] === '--help') {
     process.stdout.write(
-      `Usage: bun scripts/datasets/cross-media-seed.ts ${flags.map((flag) => `${flag} <value>`).join(' ')}\n`,
+      `Usage: bun scripts/datasets/cross-media-seed.ts ${flags
+        .filter((flag) => flag !== '--bangumi-character-bindings')
+        .map((flag) => `${flag} <value>`)
+        .join(' ')} [--bangumi-character-bindings <json>]\n`,
     );
     return;
   }
-  ensure(argv.length === flags.length * 2, 'Expected explicit cross-media seed configuration');
+  const requiredFlags = flags.filter((flag) => flag !== '--bangumi-character-bindings');
+  ensure(
+    argv.length === requiredFlags.length * 2 || argv.length === flags.length * 2,
+    'Expected explicit cross-media seed configuration',
+  );
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i]!,
@@ -1032,6 +1091,7 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
     );
     values.set(flag, value);
   }
+  for (const flag of requiredFlags) ensure(values.has(flag), `Missing seed option: ${flag}`);
   const origin = (flag: string) => {
     const url = new URL(values.get(flag)!);
     ensure(
@@ -1053,20 +1113,41 @@ export async function runCrossMediaSeedCli(argv: readonly string[]): Promise<voi
   });
   const resultPath = resolve(values.get('--result')!);
   const statePath = resolve(values.get('--state')!);
+  const characterBindingsPath = values.has('--bangumi-character-bindings')
+    ? resolve(values.get('--bangumi-character-bindings')!)
+    : undefined;
+  ensure(
+    characterBindingsPath === undefined ||
+      (characterBindingsPath !== resultPath &&
+        characterBindingsPath !== statePath &&
+        ![`${statePath}-wal`, `${statePath}-shm`].includes(characterBindingsPath)),
+    'Bangumi character bindings must not overlap importer state or result',
+  );
+  let characterBindings: SourceVocabularyBindings | undefined;
+  if (characterBindingsPath) {
+    const bytes = await readFile(characterBindingsPath);
+    ensure(bytes.byteLength <= 256 * 1024, 'Bangumi character bindings exceed the configuration limit');
+    characterBindings = JSON.parse(bytes.toString('utf8')) as SourceVocabularyBindings;
+  }
   ensure(
     resultPath !== statePath && ![`${statePath}-wal`, `${statePath}-shm`].includes(resultPath),
     'Result must not overwrite importer state',
   );
   await mkdir(dirname(statePath), { recursive: true });
-  const result = await seedCrossMedia(plan, statePath, createImportTransport({ origin: api, tokenProvider }), {
-    origin: api,
-  });
+  const result = await seedCrossMedia(
+    plan,
+    statePath,
+    createImportTransport({ origin: api, tokenProvider }),
+    { origin: api },
+    undefined,
+    characterBindings,
+  );
   await mkdir(dirname(resultPath), { recursive: true });
   await writeFile(
     resultPath,
     `${JSON.stringify({ ...result, sourceDigests: Object.fromEntries(input.digests) }, null, 2)}\n`,
   );
   process.stdout.write(
-    `Imported ${result.readings.length} records; ${result.gaps.length} source gaps. Result: ${resultPath}\n`,
+    `Imported ${result.readings.length} records; ${result.gaps.length + result.characterDiagnostics.length} review gaps. Result: ${resultPath}\n`,
   );
 }

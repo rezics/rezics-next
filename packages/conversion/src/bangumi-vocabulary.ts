@@ -190,6 +190,10 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         environment.pushGap({ path, ...(code ? { code } : {}), reason: 'unknown_code', property: 'character.role' });
         return;
       }
+      if (!row.character) {
+        environment.pushGap({ path, code, reason: 'missing_identity', property: 'schema:keywords' });
+        return;
+      }
       const resolved = exactConcept(environment, 'bangumi.character.role', code, path, characterScheme);
       if (resolved)
         environment.propose({
@@ -276,6 +280,10 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         return;
       }
       const role = exactConcept(environment, 'bangumi.subject-characters.type', code, path, appearanceScheme);
+      if (!row.subject) {
+        environment.pushGap({ path, code, reason: 'missing_identity', property: 'schema:character' });
+        return;
+      }
       if (!row.character) {
         environment.pushGap({
           path,
@@ -286,6 +294,18 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
         });
         return;
       }
+      const qualifiers: { property: string; content: unknown; identity?: NativeIdentity }[] = role
+        ? [{ property: 'wdt:P3831', content: role.id, identity: conceptIdentity(role) }]
+        : [];
+      if (row.order !== undefined) {
+        if (typeof row.order !== 'number' || !Number.isSafeInteger(row.order) || row.order < 0) {
+          environment.pushGap({ path, code, reason: 'invalid_source_value', property: 'schema:position' });
+        } else if (environment.qualifierAllowed(row.subject, 'schema:character', 'schema:position')) {
+          qualifiers.push({ property: 'schema:position', content: String(row.order + 1) });
+        } else {
+          environment.pushGap({ path, code, reason: 'qualifier_not_admitted', property: 'schema:position' });
+        }
+      }
       if (role)
         environment.propose({
           row,
@@ -294,8 +314,8 @@ function mapRow(environment: MappingEnvironment, row: BangumiVocabularyRow, seen
           content: '',
           target: row.character,
           sourceEndpoint: row.characterCode,
-          qualifiers: [{ property: 'wdt:P3831', content: role.id, identity: conceptIdentity(role) }],
-          mappingRevision: 'appearance-role@1',
+          qualifiers,
+          mappingRevision: 'appearance-role@2',
         });
       return;
     }

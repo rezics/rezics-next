@@ -26,6 +26,7 @@ import {
   type RetainedClassificationHead,
 } from './source-classification.ts';
 import type { RecordRow } from './record-store.ts';
+import type { SourceVocabularyRequest } from '../../../packages/conversion/src/source-vocabulary.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
 import {
   admitStagingCheckpoint,
@@ -51,6 +52,7 @@ export type Run = { source: string; id: string; lease: string };
 export type SourceProjection = {
   sourceKind: SourceId;
   normalizedRecord: unknown;
+  sourceVocabulary?: SourceVocabularyRequest;
   /** Reviewed descriptor snapshot, separate from semantic revisions and envelopes. */
   sourceRecordMetadata?: ImportSourceRecord;
   sourceClassification?: SourceClassificationProjection;
@@ -1161,7 +1163,11 @@ export class RunStore<Projection = BatchStatement[]> {
     let projection: string;
     if (this.projectionMode === 'source-record') {
       const sourceProjection: unknown = record.projection;
-      exact(sourceProjection, ['sourceKind', 'normalizedRecord'], ['sourceRecordMetadata', 'sourceClassification']);
+      exact(sourceProjection, ['sourceKind', 'normalizedRecord'], [
+        'sourceRecordMetadata',
+        'sourceClassification',
+        'sourceVocabulary',
+      ]);
       if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
       // Only the caller's sanitized converter input is retained; row metadata stays separate.
       const normalizedRecord = boundedJson(sourceProjection.normalizedRecord, MAX_DUMP_RECORD_BYTES);
@@ -1176,7 +1182,11 @@ export class RunStore<Projection = BatchStatement[]> {
               validateSourceClassificationProjection(sourceProjection.sourceClassification),
               8192,
             )}`;
-      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}}`;
+      const sourceVocabulary =
+        sourceProjection.sourceVocabulary === undefined
+          ? ''
+          : `,"sourceVocabulary":${boundedJson(sourceProjection.sourceVocabulary, MAX_DUMP_RECORD_BYTES)}`;
+      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}${sourceVocabulary}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();
       projection = boundedJson(record.projection);
@@ -1290,6 +1300,7 @@ export class RunStore<Projection = BatchStatement[]> {
         projection.sourceKind,
         projection.normalizedRecord,
         projection.sourceClassification ?? null,
+        projection.sourceVocabulary ?? null,
       ]);
     };
     return semantic(left) === semantic(right);

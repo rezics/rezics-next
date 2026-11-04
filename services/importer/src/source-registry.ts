@@ -22,6 +22,7 @@ import {
   crossMediaEntityKind,
   bangumiRecordUrl,
   vndbRecordUrl,
+  type CrossMediaEntityConversion,
 } from '@rezics/conversion/cross-media-entities';
 import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
 import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
@@ -197,6 +198,7 @@ function addAliases(
             ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
           ],
           sourceVocabularyGaps: vocabulary.gaps,
+          sourceVocabulary: vocabulary.request,
         }),
     normalized: result.normalizedRecord,
     coverAssets: [...coverAssets],
@@ -287,6 +289,7 @@ export function createSourceRegistration(
               ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
             ],
             sourceVocabularyGaps: vocabulary.gaps,
+            sourceVocabulary: vocabulary.request,
           };
         }
       }

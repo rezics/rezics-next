@@ -206,12 +206,12 @@ export type CrossMediaEntityConversion = ConvertedRecord<BatchCommand> & {
   outcome: 'converted' | 'ignored';
   digest: string;
   normalizedRecord: Normalized;
-  coverAssets: readonly [];
-  mediaImportIntents: readonly [];
   sourceMetadata?: {
     recordUrl: string;
     summary?: { language: string; takedownEligible: true };
   };
+  coverAssets: readonly [];
+  mediaImportIntents: readonly [];
 };
 
 const fail = (pointer: string, code = 'invalid_record'): never => {
@@ -370,6 +370,12 @@ function project(
   let type = profile.type;
   const normalized: Normalized = { id: nativeId, name: label };
   if (chinese !== undefined) normalized.name_cn = labels.zh ?? '';
+  if (kind === 'bangumi-character') {
+    const characterKind = own(raw, 'type', '/type');
+    if (characterKind !== undefined) normalized.type = characterKind;
+    const summary = own(raw, 'summary', '/summary');
+    if (summary !== undefined) normalized.summary = text(summary, '/summary', 32_768, true);
+  }
   if (kind === 'bangumi-person') {
     type = personType(raw);
     normalized.type = own(raw, 'type', '/type');
@@ -523,6 +529,12 @@ function convert(
     }
   }
   const proposals: BatchCommand[] = [];
+  const summaryText =
+    descriptionText ??
+    (sourceKind === 'bangumi' && kind === 'bangumi-character' && typeof projected.normalized.summary === 'string'
+      ? projected.normalized.summary
+      : undefined);
+  const summaryPath = descriptionText === undefined ? '/summary' : '/description';
   if (context.subjectId === undefined) {
     proposals.push({
       op: 'create',
@@ -544,12 +556,12 @@ function convert(
         subject: context.subjectId,
         statement,
       });
-    if (descriptionText) {
+    if (summaryText) {
       let document;
       try {
-        document = textDocument(descriptionText);
+        document = textDocument(summaryText);
       } catch {
-        fail('/description', 'invalid_record_summary_document_limit');
+        fail(summaryPath, 'invalid_record_summary_document_limit');
       }
       proposals.push({
         op: 'propose',
@@ -576,9 +588,12 @@ function convert(
     normalizedRecord: projected.normalized,
     coverAssets: [],
     mediaImportIntents: [],
-    ...(descriptionText
-      ? { sourceMetadata: { recordUrl: url, summary: { language: 'und', takedownEligible: true as const } } }
-      : { sourceMetadata: { recordUrl: url } }),
+    sourceMetadata: {
+      recordUrl: url,
+      ...(summaryText
+        ? { summary: { language: 'und', takedownEligible: true as const } }
+        : {}),
+    },
   };
 }
 
