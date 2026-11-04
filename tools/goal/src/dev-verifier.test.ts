@@ -34,6 +34,7 @@ const repositoryPackageManager = (JSON.parse(readFileSync(join(repositoryRoot, '
   packageManager: string;
 }).packageManager;
 const repositoryBunPackage = join(repositoryRoot, 'node_modules/bun');
+const repositoryBunBinary = join(repositoryBunPackage, 'bin/bun.exe');
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
@@ -53,9 +54,19 @@ function repo() {
   mkdirSync(join(root, 'scripts'), { recursive: true });
   writeFileSync(join(root, 'scripts', 'typecheck.ts'), 'process.exit(0);\n');
   writeFileSync(join(root, '.gitignore'), 'node_modules/\n');
+  mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
+  writeFileSync(
+    join(root, 'toolchain/package.json'),
+    JSON.stringify({ name: 'bun', version: repositoryPackageManager.slice('bun@'.length), bin: { bun: 'bin/bun.exe' } }),
+  );
+  writeFileSync(join(root, 'toolchain/bin/bun.exe'), `#!/bin/sh\nexec '${repositoryBunBinary}' "$@"\n`, { mode: 0o755 });
   writeFileSync(
     join(root, 'package.json'),
-    JSON.stringify({ name: 'verifier-fixture', packageManager: repositoryPackageManager }),
+    JSON.stringify({
+      name: 'verifier-fixture',
+      packageManager: repositoryPackageManager,
+      dependencies: { bun: 'file:./toolchain' },
+    }),
   );
   const lock = spawnSync(process.execPath, ['install', '--lockfile-only', '--ignore-scripts'], {
     cwd: root,
@@ -66,8 +77,6 @@ function repo() {
   git(root, 'commit', '-m', 'base');
   git(root, 'branch', 'dev');
   git(root, 'branch', 'dev-verified');
-  mkdirSync(join(root, 'node_modules'), { recursive: true });
-  symlinkSync(repositoryBunPackage, join(root, 'node_modules/bun'), 'dir');
   return root;
 }
 function commit(root: string, path: string, content: string, message: string): string {
@@ -199,7 +208,6 @@ test('reports unavailable candidate Bun instead of falling back to the ambient c
 test.each([false, true])('bootstraps a fresh pinned tree (install fails: %s)', async (fails) => {
   const root = repo(),
     base = git(root, 'rev-parse', 'dev-verified');
-  mkdirSync(join(root, 'toolchain'));
   mkdirSync(join(root, 'toolchain/bin'), { recursive: true });
   writeFileSync(
     join(root, 'toolchain/package.json'),

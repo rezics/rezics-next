@@ -202,7 +202,7 @@ function infraFailure(output: string, timedOut: boolean): boolean {
 function unavailableFailure(output: string): boolean {
   return /(?:command|executable|script|module|package|dependency).{0,50}(?:not found|missing|cannot be found|not configured|unknown)|cannot find (?:module|package)|module not found|ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|no such file or directory|ENOENT|permission denied|not recognized as an internal or external command/i.test(
     output,
-  );
+  ) || /pinned Bun: absent installed (?:package|binary)/i.test(output);
 }
 function truncatedOutput(output: string): boolean {
   return /(?:output|log|result).{0,40}truncated|truncated.{0,40}(?:output|log|result)|\[TRUNCATED\]|<truncated>/i.test(
