@@ -30,6 +30,8 @@ export const countedAxes = [
   'repair backlog',
 ] as const;
 export type CountedAxis = (typeof countedAxes)[number];
+export const countedJourneys = ['current', 'pending', 'stale'] as const;
+export type CountedJourney = (typeof countedJourneys)[number];
 const at = '2026-11-03T00:00:00.000000Z';
 const byteCap = 65_536;
 const stringify = JSON.stringify;
@@ -334,7 +336,7 @@ export async function createCountedGrowthFixture() {
 
     return {
       database: db,
-      async operation(): Promise<CountedValues> {
+      async operation(kind: CountedJourney): Promise<CountedValues> {
         const counters = Object.fromEntries(
           [
             'preparePhases',
@@ -357,22 +359,26 @@ export async function createCountedGrowthFixture() {
           ].map((key) => [key, 0]),
         );
         await measured.run(counters, async () => {
-          // Relevant pending authority is a negative observation, then the identical request retries after cleanup.
-          await db.pool.query(
-            'UPDATE semantic.identity_epoch_control SET pending_job=$2,pending_epoch=published_epoch+1 WHERE partition_no=$1',
-            [controlHome, pendingJob],
-          );
-          try {
-            counters.preparePhases!++;
-            const pending = await phase.run('prepare', () => reader.prepare(request, Date.now() + 120_000));
-            retain(pending);
-            expect(pending).toMatchObject({ status: 'preparing', reason: 'identity-pending', retry: 'same-input' });
-          } finally {
+          if (kind === 'current') return current();
+          if (kind === 'pending') {
+            // Relevant pending authority is a negative observation; its cleanup permits the identical request.
             await db.pool.query(
-              'UPDATE semantic.identity_epoch_control SET pending_job=NULL,pending_epoch=NULL WHERE partition_no=$1',
-              [controlHome],
+              'UPDATE semantic.identity_epoch_control SET pending_job=$2,pending_epoch=published_epoch+1 WHERE partition_no=$1',
+              [controlHome, pendingJob],
             );
-            counters.cleanupStatements!++;
+            try {
+              counters.preparePhases!++;
+              const pending = await phase.run('prepare', () => reader.prepare(request, Date.now() + 120_000));
+              retain(pending);
+              expect(pending).toMatchObject({ status: 'preparing', reason: 'identity-pending', retry: 'same-input' });
+            } finally {
+              await db.pool.query(
+                'UPDATE semantic.identity_epoch_control SET pending_job=NULL,pending_epoch=NULL WHERE partition_no=$1',
+                [controlHome],
+              );
+              counters.cleanupStatements!++;
+            }
+            return;
           }
           // Eventless losing-slot cleanup invalidates a read even though the effective zero stays unchanged.
           const stale = await journey();
@@ -387,7 +393,6 @@ export async function createCountedGrowthFixture() {
               reason: 'vote-changed',
               retry: 'same-input',
             });
-            await current();
           } finally {
             await db.pool.query(
               `INSERT INTO rating.vote(route,voter_id,question_id,target_id,units,revision,counted_revision,counted_target,changed_at,transaction_id)
