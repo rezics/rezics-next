@@ -41,7 +41,7 @@ export const UnknownOutcome = {
   render: () => page('unknown'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     await submit(canvasElement);
-    await waitFor(() => canvasElement.textContent?.includes(m.auth_account_operation_unknown()));
+    await waitFor(() => canvasElement.textContent?.includes(m.auth_organization_creation_unknown()));
   },
 };
 export const ReturnedForConfirmation = { render: () => page('success', true) };

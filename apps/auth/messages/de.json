@@ -161,6 +161,7 @@
   "auth_organization_conflict": "Die Organisation konnte nicht erstellt werden. Der Handle ist möglicherweise bereits vergeben.",
   "auth_organization_create": "Organisation erstellen",
   "auth_organization_created": "Die Organisation @{handle} wurde erstellt.",
+  "auth_organization_creation_unknown": "Das Ergebnis der Erstellung ist weiterhin unbekannt. Die Organisation wurde möglicherweise erstellt. Behalte diesen Handle und wiederhole nur dieselbe Anfrage, wenn die Erstellung verfügbar ist. Abmelden oder eine spätere Ablehnung klärt den früheren Versuch nicht.",
   "auth_organization_delete_accepted": "Die Löschung der Organisation wurde verbindlich ausgeführt. Die Bereinigung bei Datenverantwortlichen sowie geteilter und externer Kopien kann noch ausstehen; die vollständige Löschung ist nicht bestätigt.",
   "auth_organization_delete_changed": "Konto, Organisation oder Anfrage haben sich geändert. Prüfe die aktuelle Organisation und bestätige eine neue Anfrage.",
   "auth_organization_delete_denied": "Die nativen Löschprüfungen haben die Anfrage abgelehnt. Kläre Eigentumspflichten, ausstehende Übertragungen und betriebene Konten, bevor du erneut bestätigst.",

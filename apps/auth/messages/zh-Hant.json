@@ -161,6 +161,7 @@
   "auth_organization_conflict": "無法建立組織。此名稱可能已有人使用。",
   "auth_organization_create": "建立組織",
   "auth_organization_created": "組織 @{handle} 已建立。",
+  "auth_organization_creation_unknown": "建立結果仍然未知，組織可能已經建立。請保留此識別名稱，待建立功能可用時僅重試同一請求。登出或後續請求遭到拒絕，都無法確定先前嘗試的結果。",
   "auth_organization_delete_accepted": "組織刪除已提交生效。各資料負責方、共用副本及外部副本的清理可能仍未完成；尚未確認完全抹除。",
   "auth_organization_delete_changed": "帳號、組織或請求已變更。請檢視目前的組織，並確認新的請求。",
   "auth_organization_delete_denied": "原生刪除檢查拒絕了此請求。請先處理所有權責任、待完成的移轉及營運的帳號，再次確認。",

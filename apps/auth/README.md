@@ -312,7 +312,7 @@ cancelling or replaying native work. Authority changes release an open prompt im
 
 ## Create organization
 
-Decision: protect nonblank handles and unresolved creation in memory with Stay/Leave and a browser unload warning; confirmed departure discards only unsent local review, while caller replacement or permission loss immediately releases the guard.
+Decision: protect nonblank handles and unresolved creation with Stay/Leave and an unload warning; current refusal or loss of session authority retires controls but preserves the earlier unknown attempt and its departure protection. Only a known first mounted refusal releases its continuation; restored hints are conservatively unresolved, regardless of their submitted marker.
 
 `/organizations/new` reads the current session and asks for one handle. An unavailable initial read offers Retry without discarding the saved draft. It applies the same claim rule and
 lowercase normalization as sign-up. Creation uses one operation key for the

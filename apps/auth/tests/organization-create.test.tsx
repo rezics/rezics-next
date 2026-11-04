@@ -27,8 +27,11 @@ test('initial read retries the saved draft; uncertain creation requires the same
   expect(page.calls[2]!.body.operationKey).toBe(saved.operationKey);
   expect(page.calls[2]!.body.operation).toEqual(saved.operation);
   await flush(() => page.calls[2]!.resolve(approval()));
-  await flush(() => page.calls[3]!.resolve(Response.json({ accountId: 'created-organization' })));
+  await flush(() => page.calls[3]!.resolve(Response.json({ accountId: '20000000-0000-7000-8000-000000000002' })));
   expect(page.host.textContent).toContain('@team-alpha');
+  expect(page.host.querySelector('a[href^="/organizations/members?"]')?.getAttribute('href')).toBe(
+    '/organizations/members?organizationId=20000000-0000-7000-8000-000000000002',
+  );
   expect(readPendingOrganizationHandle()).toBe('');
   expect(readPendingAccountOperationStepUp()).toBeNull();
 });

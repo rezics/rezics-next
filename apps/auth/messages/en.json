@@ -161,6 +161,7 @@
   "auth_organization_conflict": "The organization could not be created. The handle may be taken.",
   "auth_organization_create": "Create organization",
   "auth_organization_created": "The organization @{handle} was created.",
+  "auth_organization_creation_unknown": "The creation result is still unknown. The organization may have been created. Keep this handle and retry only the same request when creation is available. Signing out or a later refusal does not settle the earlier attempt.",
   "auth_organization_delete_accepted": "Organization deletion committed. Cleanup across data owners, shared copies and external copies may still be pending; complete erasure is not confirmed.",
   "auth_organization_delete_changed": "The account, organization or request changed. Review the current organization and confirm a new request.",
   "auth_organization_delete_denied": "The native deletion checks refused this request. Resolve ownership obligations, pending transfers and operated accounts before confirming again.",

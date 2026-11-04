@@ -24,6 +24,7 @@ import {
   pendingAccountOperationStepUpState,
   storePendingAccountOperationStepUp,
   accountOperationProfile,
+  type PendingAccountOperationStepUp,
 } from '../account-operation-step-up';
 import {
   forgetOperationKey,
@@ -59,7 +60,7 @@ function OrganizationDeparture({
 }) {
   const blocker = useBlocker({ shouldBlockFn: shouldWarn, enableBeforeUnload: false, withResolver: true });
   useLayoutEffect(() => {
-    // Completion or loss of caller authority must release an already open prompt.
+    // Retired drafts release their prompt; an unresolved send keeps protection.
     if (blocker.status === 'blocked' && !shouldWarn()) blocker.proceed();
   });
   const stay = () => {
@@ -105,6 +106,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const [needsProfile, setNeedsProfile] = useState(false);
   const [returned, setReturned] = useState(false);
   const [unknown, setUnknown] = useState(false);
+  const unresolvedAttempt = useRef<PendingAccountOperationStepUp | null>(null);
+  const [restricted, setRestricted] = useState(false);
   const [handle, setHandle] = useState('');
   const [handleError, setHandleError] = useState('');
   const [pending, setPending] = useState(false);
@@ -124,12 +127,10 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   const review = useRef({ handle, protect: false });
   review.current = {
     handle,
-    protect: loadState === 'ready' && !createdHandle && Boolean(handle.trim() || pending || unknown),
+    // Losing current authority retires the form, but cannot settle an earlier send.
+    protect: unknown || (loadState === 'ready' && !createdHandle && Boolean(handle.trim() || pending)),
   };
-  const shouldWarn = useCallback(
-    () => Boolean(lifetime.current) && !bypassDeparture.current && review.current.protect,
-    [],
-  );
+  const shouldWarn = useCallback(() => !bypassDeparture.current && review.current.protect, []);
   const depart = useCallback(() => {
     // Retire first: an approval or execution response can no longer affect this review.
     lifetime.current = null;
@@ -163,6 +164,15 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     setCreatedHandle('');
     setMessage('');
     setReturned(false);
+    setRestricted(false);
+    const stored = pendingAccountOperationStepUpState();
+    const saved = stored.kind === 'pending' ? stored.value : null;
+    if (!unresolvedAttempt.current && saved?.kind === 'organization') {
+      // Storage is a recovery hint, including submitted:false. It cannot prove
+      // how far a former mounted page got through approval and execution.
+      unresolvedAttempt.current = saved;
+    }
+    setUnknown(Boolean(unresolvedAttempt.current));
     const retire = () => {
       lifetime.current = null;
     };
@@ -181,6 +191,13 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
         const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
         if (
           pendingState.kind === 'invalid' ||
+          (unresolvedAttempt.current &&
+            !pendingAccountOperationMatches(
+              pendingOperation,
+              unresolvedAttempt.current.accountId,
+              unresolvedAttempt.current.operationKey,
+              unresolvedAttempt.current.operation,
+            )) ||
           (pendingOperation &&
             (pendingOperation.kind !== 'organization' ||
               pendingOperation.returnTo !== '/organizations/new' ||
@@ -194,7 +211,6 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
           setHandle(pendingOperation.operation.handle);
           storePendingOrganizationHandle(pendingOperation.operation.handle);
         } else setHandle(readPendingOrganizationHandle());
-        setUnknown(Boolean(pendingOperation));
         authority.current = result;
         setAccountId(result.accountId);
         setReturned(Boolean(pendingOperation));
@@ -228,7 +244,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
   }, [handleError, message]);
 
   async function createOrganization() {
-    if (!lifetime.current || loadState !== 'ready' || submitting.current || pending) return;
+    if (!lifetime.current || loadState !== 'ready' || submitting.current || pending || restricted) return;
     const normalizedHandle = normalizeSignupHandle(handle);
     if (!normalizedHandle) {
       setMessage('');
@@ -244,17 +260,31 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     const operation = { kind: 'organization' as const, handle: normalizedHandle };
     const pendingState = pendingAccountOperationStepUpState();
     const pendingOperation = pendingState.kind === 'pending' ? pendingState.value : null;
-    const operationKey = pendingOperation?.operationKey ?? operationKeyFor(operation, accountId);
+    const operationKey =
+      pendingOperation?.operationKey ??
+      unresolvedAttempt.current?.operationKey ??
+      operationKeyFor(operation, accountId);
     if (
       pendingState.kind === 'invalid' ||
+      (unresolvedAttempt.current &&
+        !pendingAccountOperationMatches(
+          pendingOperation,
+          unresolvedAttempt.current.accountId,
+          unresolvedAttempt.current.operationKey,
+          unresolvedAttempt.current.operation,
+        )) ||
       (pendingOperation && !pendingAccountOperationMatches(pendingOperation, accountId, operationKey, operation))
     ) {
-      setMessage(m.auth_account_operation_failure());
+      // Missing/replaced storage is not a license to allocate a new command key.
+      lifetime.current = null;
+      setLoadState('failure');
+      setLoadMessage(m.auth_account_operation_failure());
       submitting.current = false;
       setPending(false);
       return;
     }
     const current = lifetime.current;
+    const priorUncertainty = Boolean(unresolvedAttempt.current);
     let continuation = JSON.stringify(pendingState);
     const draft = readPendingOrganizationHandle();
     const isCurrent = () => {
@@ -267,6 +297,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       lifetime.current = null;
       setLoadState('failure');
       setLoadMessage(m.auth_account_operation_failure());
+      submitting.current = false;
+      setPending(false);
       return false;
     };
     const before = await loadAccountSession();
@@ -292,6 +324,13 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       return;
     }
     continuation = JSON.stringify(pendingAccountOperationStepUpState());
+    unresolvedAttempt.current = {
+      kind: 'organization',
+      accountId,
+      operationKey,
+      operation,
+      returnTo: '/organizations/new',
+    };
     setUnknown(true);
     let result = await runAccountOperation(operationKey, operation, { isCurrent });
     if (!isCurrent()) return;
@@ -315,6 +354,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       forgetOperationKey(operation, accountId);
       storePendingOrganizationHandle('');
       clearPendingAccountOperationStepUp();
+      unresolvedAttempt.current = null;
+      setUnknown(false);
       setCreatedHandle(normalizedHandle);
       setCreatedAccountId(result.accountId);
       submitting.current = false;
@@ -335,8 +376,14 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     submitting.current = false;
     setPending(false);
     if (result.reason === 'platform-closed' || result.reason === 'denied') {
-      clearPendingAccountOperationStepUp();
-      setUnknown(false);
+      setRestricted(true);
+      // A refusal on this first mounted invocation proves no earlier invocation
+      // is unresolved. A later approval refusal says nothing about an older send.
+      if (!priorUncertainty) {
+        clearPendingAccountOperationStepUp();
+        unresolvedAttempt.current = null;
+        setUnknown(false);
+      }
     }
     if (result.reason === 'platform-closed') {
       setMessage(m.auth_organization_not_open());
@@ -345,7 +392,6 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     } else if (result.reason === 'unknown') {
       storePendingAccountOperationStepUp({ kind: 'organization', accountId, operationKey, operation });
       setUnknown(true);
-      setMessage(m.auth_account_operation_unknown());
       setShowRetry(true);
     } else if (result.reason === 'unavailable') {
       setMessage(m.auth_account_operation_unavailable());
@@ -361,10 +407,18 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     void createOrganization();
   }
 
+  const unresolved =
+    unknown && !pending ? (
+      <Alert role="status">
+        <AlertDescription>{m.auth_organization_creation_unknown()}</AlertDescription>
+      </Alert>
+    ) : null;
+
   if (loadState === 'signed-out')
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}
+        {unresolved}
         <div className="auth-login-form">
           <p>{m.auth_account_operation_sign_in_required()}</p>
           <a href="/login">{m.auth_security_sign_in()}</a>
@@ -376,6 +430,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}
+        {unresolved}
         <ErrorAlert>{loadMessage}</ErrorAlert>
         <Button type="button" onClick={() => setReload((value) => value + 1)}>
           {m.auth_account_delete_retry()}
@@ -387,6 +442,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
     return (
       <AuthPage returnToSecurity heading={m.auth_organization_heading()}>
         {departure}
+        {unresolved}
         <p role="status">{m.auth_inventory_loading()}</p>
       </AuthPage>
     );
@@ -414,6 +470,7 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
       {departure}
       <form className="auth-login-form" method="post" action="/account-operations/approve" noValidate onSubmit={submit}>
         <p>{m.auth_organization_explanation()}</p>
+        {unresolved}
         {returned ? (
           <Alert role="status">
             <AlertDescription>{m.auth_account_operation_reconfirm()}</AlertDescription>
@@ -454,8 +511,8 @@ export function NewOrganizationPage({ initial }: { initial?: AccountSessionResul
             ) : null}
           </ErrorAlert>
         ) : null}
-        <Button type="submit" disabled={pending} aria-busy={pending} className="w-full">
-          {m.auth_organization_create()}
+        <Button type="submit" disabled={pending || restricted} aria-busy={pending} className="w-full">
+          {unknown ? m.auth_account_delete_retry() : m.auth_organization_create()}
         </Button>
       </form>
     </AuthPage>

@@ -161,6 +161,7 @@
   "auth_organization_conflict": "L’organisation n’a pas pu être créée. Cet identifiant est peut-être déjà utilisé.",
   "auth_organization_create": "Créer une organisation",
   "auth_organization_created": "L’organisation @{handle} a été créée.",
+  "auth_organization_creation_unknown": "Le résultat de la création reste inconnu. L’organisation a peut-être été créée. Conservez cet identifiant et réessayez uniquement la même demande lorsque la création sera disponible. Une déconnexion ou un refus ultérieur ne résout pas la tentative précédente.",
   "auth_organization_delete_accepted": "La suppression de l’organisation est actée. Le nettoyage chez les responsables des données, ainsi que des copies partagées et externes, peut rester en attente ; l’effacement complet n’est pas confirmé.",
   "auth_organization_delete_changed": "Le compte, l’organisation ou la demande a changé. Vérifiez l’organisation actuelle et confirmez une nouvelle demande.",
   "auth_organization_delete_denied": "Les contrôles natifs de suppression ont refusé cette demande. Réglez les obligations de propriété, les transferts en attente et les comptes exploités avant de confirmer à nouveau.",

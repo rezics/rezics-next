@@ -104,13 +104,16 @@ test('step-up continuation and completed destination bypass departure warnings',
     assign.mockRestore();
   }
 });
-test('caller replacement releases a draft prompt immediately and retires pending callbacks', async () => {
+test('caller replacement preserves unresolved departure protection and retires pending callbacks', async () => {
   const page = await setup();
   await flush(() => fill(page.input, 'team-alpha'));
   await flush(() => send(page.host));
   await page.navigate();
   await page.render(page.view({ kind: 'signed-out' }));
-  expect(page.unload()).toBe(false);
+  expect(page.unload()).toBe(true);
+  expect(page.router.history.location.pathname).toBe('/organizations/new');
+  expect(page.host.textContent).toContain('creation result is still unknown');
+  await page.choose('Leave');
   expect(page.router.history.location.pathname).toBe('/security');
   await flush(() => page.calls[0]!.resolve(approval()));
   expect(page.calls).toHaveLength(1);

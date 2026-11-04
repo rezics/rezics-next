@@ -161,6 +161,7 @@
   "auth_organization_conflict": "조직을 만들 수 없습니다. 핸들이 이미 사용 중일 수 있습니다.",
   "auth_organization_create": "조직 만들기",
   "auth_organization_created": "조직 @{handle}을(를) 만들었습니다.",
+  "auth_organization_creation_unknown": "생성 결과는 아직 알 수 없습니다. 조직이 생성되었을 수 있습니다. 이 핸들을 유지하고 생성이 가능해지면 같은 요청만 다시 시도하세요. 로그아웃하거나 나중에 요청이 거부되어도 이전 시도의 결과가 확정되지는 않습니다.",
   "auth_organization_delete_accepted": "조직 삭제가 확정되었습니다. 각 데이터 관리자의 정리와 공유 및 외부 사본의 삭제는 아직 진행 중일 수 있습니다. 완전한 삭제는 확인되지 않았습니다.",
   "auth_organization_delete_changed": "계정, 조직 또는 요청이 변경되었습니다. 현재 조직을 검토하고 새 요청을 확인하세요.",
   "auth_organization_delete_denied": "기본 삭제 검사에서 이 요청을 거부했습니다. 소유 책임, 대기 중인 이전 및 운영 계정을 정리한 후 다시 확인하세요.",

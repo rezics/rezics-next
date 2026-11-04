@@ -161,6 +161,7 @@
   "auth_organization_conflict": "无法创建组织。该名称可能已被使用。",
   "auth_organization_create": "创建组织",
   "auth_organization_created": "组织 @{handle} 已创建。",
+  "auth_organization_creation_unknown": "创建结果仍然未知，组织可能已经创建。请保留此标识名，待创建功能可用时仅重试同一请求。退出登录或后续请求被拒绝，都不能确定先前尝试的结果。",
   "auth_organization_delete_accepted": "组织删除已提交生效。各数据负责方、共享副本和外部副本的清理可能仍未完成；尚未确认完全擦除。",
   "auth_organization_delete_changed": "账号、组织或请求已变更。请查看当前的组织，并确认新的请求。",
   "auth_organization_delete_denied": "原生删除检查拒绝了此请求。请先处理所有权责任、待完成的转移及运营的账号，再次确认。",

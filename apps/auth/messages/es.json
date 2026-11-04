@@ -161,6 +161,7 @@
   "auth_organization_conflict": "No se pudo crear la organización. Es posible que el identificador ya esté en uso.",
   "auth_organization_create": "Crear organización",
   "auth_organization_created": "Se ha creado la organización @{handle}.",
+  "auth_organization_creation_unknown": "El resultado de la creación sigue siendo desconocido. Es posible que la organización se haya creado. Conserva este identificador y reintenta solo la misma solicitud cuando la creación esté disponible. Cerrar sesión o recibir un rechazo posterior no resuelve el intento anterior.",
   "auth_organization_delete_accepted": "La eliminación de la organización se ha confirmado. La limpieza por parte de los responsables de datos y de las copias compartidas y externas puede seguir pendiente; el borrado completo no está confirmado.",
   "auth_organization_delete_changed": "La cuenta, la organización o la solicitud ha cambiado. Revisa la organización actual y confirma una nueva solicitud.",
   "auth_organization_delete_denied": "Las comprobaciones nativas de eliminación rechazaron esta solicitud. Resuelve las obligaciones de propiedad, las transferencias pendientes y las cuentas operadas antes de volver a confirmar.",
