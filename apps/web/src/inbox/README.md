@@ -20,7 +20,10 @@ Reading the page or opening a destination does not acknowledge notices. A chosen
 keyboard-reachable action which acknowledges only that notice. The existing bulk action still acknowledges through
 the owner-supplied displayed boundary when the page admits it. Each command uses its original account, identity and
 idempotency key for an explicit retry; an uncertain result does not change unread rows or subtract from the badge. The badge preserves the native basis,
-capped state and disclosure witness, and lower bounds are labelled as lower bounds.
+capped state and disclosure witness, and lower bounds are labelled as lower bounds. The Inbox page shows the same
+viewer-scoped native summary and a deliberate retry when that read fails. A valid Retry-After is stored once as an
+absolute wait on the current viewer; expiry enables that retry and does not fetch. Count, page and acknowledgement
+waits stay independent. A failed or zero summary does not hide the loaded page or invent mark-seen authority.
 
 Inbox links to `/settings#notifications` for supported preferences. The thread watch toggle remains on its existing
 thread page; board subscription management remains in the existing Settings Watches section.
@@ -30,6 +33,9 @@ owner-admitted displayed boundary may mark notices read. Unread continuation doe
 
 **Decision:** Native All/Unread selection is the Inbox page identity. Duplicate notice IDs on one page keep native order
 and the latest details; a successful page replaces the retained window rather than accumulating earlier rows.
+
+**Decision:** Count Retry-After is observed once as an absolute deadline on the current Inbox viewer; expiry enables
+the page retry control and does not schedule a fetch. The shell badge stays a compact unknown-or-count indicator.
 
 **Cost:** Each Inbox page dispatches one private list request for at most 20 items and zero actor/target requests. A
 successful continuation replaces the prior page, so the view retains at most 20 notices; during a pending or failed

@@ -625,10 +625,14 @@ export async function loadUnreadCount(
       witness: { kind: count.witness.kind, at: count.witness.at },
     };
   } catch (error) {
+    const failure =
+      error instanceof InboxReadError
+        ? error.failure
+        : nativeFailure(error, isPlatformClosedError(error) ? error.status : undefined);
     return {
       signedIn: true,
       state: 'unavailable',
-      failure: error instanceof InboxReadError ? error.failure : nativeFailure(error),
+      failure: inboxSeenFailure(new InboxSeenError(failure)).failure,
     };
   }
 }

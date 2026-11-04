@@ -62,7 +62,7 @@ const buttonModule = await import('@rezics/ui/shadcn/button');
 const OriginalButton = buttonModule.Button;
 spyOn(buttonModule, 'Button').mockImplementation((props) => createElement(OriginalButton, props));
 const reads = await import('../src/inbox/inbox-read');
-spyOn(reads, 'readUnreadCount').mockImplementation(async () => ({
+const countSpy = spyOn(reads, 'readUnreadCount').mockImplementation(async () => ({
   signedIn: true,
   state: 'ready',
   count: 2,
@@ -76,6 +76,9 @@ spyOn(reads, 'markInboxSeen').mockImplementation(async ({ data }) => {
   return { signedIn: true } satisfies InboxSeenResult;
 });
 const { InboxPageView } = await import('../src/inbox/inbox-page');
+const { UnreadBadge } = await import('../src/inbox/unread-badge');
+const { fetchInboxUnreadCount, unreadCountQueryFor } = await import('../src/inbox/inbox-query');
+const { currentInboxViewer } = await import('../src/inbox/inbox-viewer');
 const { sessionQuery } = await import('../src/session/query');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
@@ -108,7 +111,7 @@ const tick = () =>
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
-async function mount(loadPage: (query: InboxPageQuery) => Promise<InboxPage>) {
+async function mount(loadPage: (query: InboxPageQuery) => Promise<InboxPage>, badge = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, {
     state: 'signed-in',
@@ -122,28 +125,35 @@ async function mount(loadPage: (query: InboxPageQuery) => Promise<InboxPage>) {
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);
-  await act(async () => {
-    root.render(
+  const tree = () =>
+    createElement(
+      QueryClientProvider,
+      { client },
       createElement(
-        QueryClientProvider,
-        { client },
+        RouterContextProvider,
+        { router },
         createElement(
-          RouterContextProvider,
-          { router },
-          createElement(Fragment, null, createElement(InboxPageView, { loadPage })),
+          Fragment,
+          null,
+          badge ? createElement(UnreadBadge) : null,
+          createElement(InboxPageView, { loadPage }),
         ),
       ),
     );
+  await act(async () => {
+    root.render(tree());
   });
   await tick();
   return {
     host,
+    client,
     click: (label: string) =>
       act(async () => {
         const node = [...host.querySelectorAll('button')].find((button) => button.textContent === label);
         expect(node, label).toBeDefined();
         node!.click();
       }),
+    rerender: () => act(async () => root.render(tree())),
     unmount: () =>
       act(async () => {
         root.unmount();
@@ -203,5 +213,102 @@ test('bulk acknowledgement uses the owner-supplied through and retries that orig
     expect(seenCommands[1]).toEqual(original);
   } finally {
     await view.unmount();
+  }
+});
+
+const nativeCount = (count: number, extras: { capped?: boolean; basis?: 'current-visible-unread' | 'current-visible-lower-bound' } = {}) => ({
+  signedIn: true as const,
+  state: 'ready' as const,
+  count,
+  capped: extras.capped ?? false,
+  basis: extras.basis ?? 'current-visible-unread',
+  witness: { kind: 'current-disclosure' as const, at: '2026-11-04T00:00:00.000Z' },
+});
+
+test('a failed unread summary stays unavailable on a usable page, and Retry-After blocks count IO until a deliberate eligible retry', async () => {
+  const clock = Date.now;
+  let now = Date.parse('2026-11-05T00:00:00.000Z');
+  Date.now = () => now;
+  let countReads = 0;
+  countSpy.mockImplementation(async () => {
+    countReads += 1;
+    return countReads === 1
+      ? { signedIn: true, state: 'unavailable', failure: { status: 503, retryAfter: '5' } }
+      : nativeCount(4);
+  });
+  let pageReads = 0;
+  const view = await mount(async () => {
+    pageReads += 1;
+    return readyInboxPage([notice('displayed')], null, 'alice');
+  }, true);
+  try {
+    expect(countReads).toBe(1);
+    expect(pageReads).toBe(1);
+    expect(view.host.textContent).toContain(m.inbox_unread_unavailable());
+    expect(view.host.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe(m.inbox_unread_unavailable());
+    expect(view.host.textContent).toContain('Private reply displayed');
+    expect(view.host.textContent).toContain(m.inbox_triage_mark());
+    const viewer = currentInboxViewer(view.client)!;
+    const key = unreadCountQueryFor(viewer).queryKey;
+    const captured = () => view.client.refetchQueries({ queryKey: key });
+    await act(async () => {
+      await view.client.refetchQueries({ queryKey: key });
+    });
+    await act(async () => {
+      await captured();
+    });
+    await act(async () => {
+      await view.client.invalidateQueries({ queryKey: key, exact: true });
+    });
+    expect(countReads).toBe(1);
+    now += 5_000;
+    expect(countReads).toBe(1);
+    await view.rerender();
+    await view.click(m.inbox_unread_retry());
+    await tick();
+    expect(countReads).toBe(2);
+    expect(pageReads).toBe(1);
+    expect(view.host.textContent).toContain(m.inbox_unread_count({ count: '4' }));
+    expect(
+      [...view.host.querySelectorAll('[aria-label]')].some(
+        (node) => node.getAttribute('aria-label') === m.inbox_unread_count({ count: '4' }),
+      ),
+    ).toBe(true);
+    expect(seenCommands).toHaveLength(0);
+    view.client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'bob', csrfToken: 'original-token' });
+    await expect(fetchInboxUnreadCount(viewer)).rejects.toThrow('Inbox viewer changed');
+  } finally {
+    Date.now = clock;
+    await view.unmount();
+  }
+});
+
+test('ready zero and lower-bound summaries stay distinct from the selected page, and signed-out is not a zero count', async () => {
+  countSpy.mockImplementation(async () => nativeCount(0));
+  const empty = await mount(async () => readyInboxPage([notice('visible')], null, 'alice'));
+  try {
+    expect(empty.host.textContent).toContain(m.inbox_unread_none());
+    expect(empty.host.textContent).toContain(m.inbox_unread_none_not_empty());
+    expect(empty.host.textContent).not.toContain(m.inbox_empty());
+    expect(empty.host.textContent).toContain('Private reply visible');
+  } finally {
+    await empty.unmount();
+  }
+  countSpy.mockImplementation(async () => nativeCount(100, { capped: true, basis: 'current-visible-lower-bound' }));
+  const capped = await mount(async () => readyInboxPage([notice('visible')], null, 'alice'));
+  try {
+    expect(capped.host.textContent).toContain(m.inbox_unread_lower_bound({ count: '100' }));
+    expect(capped.host.textContent).not.toContain(m.inbox_unread_none());
+  } finally {
+    await capped.unmount();
+  }
+  countSpy.mockImplementation(async () => ({ signedIn: false }));
+  const signedOut = await mount(async () => readyInboxPage([notice('visible')], null, 'alice'));
+  try {
+    expect(signedOut.host.textContent).toContain(m.inbox_unread_signed_out());
+    expect(signedOut.host.textContent).not.toContain(m.inbox_unread_none());
+    expect(signedOut.host.textContent).toContain('Private reply visible');
+  } finally {
+    await signedOut.unmount();
   }
 });

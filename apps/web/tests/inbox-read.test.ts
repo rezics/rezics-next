@@ -9,10 +9,13 @@ mock.module('@tanstack/react-start/server', () => ({
 import {
   decodeInboxPage,
   inboxPageActions,
+  loadUnreadCount,
   nativeInboxEnvelope,
   readyInboxPage,
   type InboxNotice,
 } from '../src/inbox/inbox-read';
+import type { SessionEnv } from '../src/session/client';
+import { preferenceRetryDeadline } from '../src/settings/preference-failure-retry';
 
 function notice(id: string, unread = true, accountId = 'alice'): InboxNotice {
   return {
@@ -145,4 +148,102 @@ test('readyInboxPage is the consumer envelope for a retained current page', () =
     next: 'next',
     actions: { markSeen: null },
   });
+});
+
+function countSession(signedIn = true) {
+  const credential = async () =>
+    signedIn
+      ? { status: 'active' as const, subject: 'alice', accessToken: 'alice-token', csrfToken: 'A'.repeat(22) }
+      : { status: 'absent' as const };
+  const env = {
+    SITE_ORIGINS: 'https://site.test',
+    AUTH_ISSUER: 'https://auth.test',
+    API_RESOURCE: 'https://kernel.test',
+    WEBSITE_SCOPES: 'openid',
+    WEBSITE_CLIENT_ID: 'inbox-read',
+    WEBSITE_CLIENT_KEY: 'unused',
+    SESSIONS: { idFromName: (id: string) => id, get: () => ({ credential, credentialIfFresh: credential }) },
+  } as Partial<SessionEnv>;
+  const request = () =>
+    new Request('https://site.test/en/inbox', {
+      headers: signedIn ? { cookie: `__Host-rezics_session=${'a'.repeat(43)}` } : {},
+    });
+  return { env, request };
+}
+
+function countClient(handler: (request: Request) => Response) {
+  return createKernelClient('http://kernel.local', {
+    fetch: (async (input, init) => handler(new Request(input, init))) as typeof fetch,
+  });
+}
+
+const currentDisclosure = { kind: 'current-disclosure' as const, at: '2026-11-04T00:00:00.000Z' };
+
+test('unread count keeps native zero, lower-bound, bounded Retry-After and signed-out without inventing delay or a zero', async () => {
+  const owner = countSession();
+  const ready = {
+    count: 0,
+    capped: false,
+    basis: 'current-visible-unread' as const,
+    witness: currentDisclosure,
+  };
+  expect(await loadUnreadCount(countClient(() => Response.json(ready)), owner.request(), owner.env)).toEqual({
+    signedIn: true,
+    state: 'ready',
+    ...ready,
+  });
+  const capped = {
+    count: 100,
+    capped: true,
+    basis: 'current-visible-lower-bound' as const,
+    witness: currentDisclosure,
+  };
+  expect(await loadUnreadCount(countClient(() => Response.json(capped)), owner.request(), owner.env)).toEqual({
+    signedIn: true,
+    state: 'ready',
+    ...capped,
+  });
+  const now = Date.parse('2026-10-31T00:00:00.000Z');
+  for (const retryAfter of ['30', 'Sat, 31 Oct 2026 00:01:00 GMT', 'invalid', undefined, `${'9'.repeat(200)}`] as const) {
+    const result = await loadUnreadCount(
+      countClient(
+        () =>
+          Response.json(
+            { status: 503, code: 'deadline_exceeded', retryable: true, request_id: 'count-wait' },
+            { status: 503, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } },
+          ),
+      ),
+      owner.request(),
+      owner.env,
+    );
+    const kept = typeof retryAfter === 'string' && retryAfter.length <= 128 ? retryAfter : undefined;
+    expect(result).toEqual({
+      signedIn: true,
+      state: 'unavailable',
+      failure: {
+        status: 503,
+        code: 'deadline_exceeded',
+        retryable: true,
+        requestId: 'count-wait',
+        ...(kept && (retryAfter === '30' || retryAfter?.endsWith('GMT') || retryAfter === 'invalid')
+          ? { retryAfter: kept }
+          : {}),
+      },
+    });
+    expect(preferenceRetryDeadline(result.signedIn && result.state === 'unavailable' ? result.failure.retryAfter : undefined, now)).toBe(
+      retryAfter === '30' ? now + 30_000 : retryAfter?.endsWith('GMT') ? now + 60_000 : 0,
+    );
+  }
+  let nativeReads = 0;
+  expect(
+    await loadUnreadCount(
+      countClient(() => {
+        nativeReads += 1;
+        return Response.json(ready);
+      }),
+      countSession(false).request(),
+      countSession(false).env,
+    ),
+  ).toEqual({ signedIn: false });
+  expect(nativeReads).toBe(0);
 });
