@@ -63,8 +63,8 @@ export function createAccountDeletionPageAccess(deps: {
           const snapshot = async (client: Parameters<typeof readAccount>[0]) => {
             const home = await readPartition(client, partitionOf(route));
             if (!home) throw new CommandUnavailableError('contention', partitionOf(route));
-            if (home.writeState !== 'active')
-              throw new CommandUnavailableError(home.writeState, partitionOf(route), home.movedTo);
+            const homeStamp = JSON.stringify([home.node, home.epoch, home.writeState, home.movedTo]);
+            if (home.writeState !== 'active') return { admitted: false, home, homeStamp, stamp: '' };
             const account = await readAccount(client, route, human.account_id);
             const admitted =
               !!account &&
@@ -77,6 +77,8 @@ export function createAccountDeletionPageAccess(deps: {
               BigInt(actor.authnEpoch) >= account.minimumAuthnEpoch;
             return {
               admitted,
+              home,
+              homeStamp,
               // Include the entire exact row: lifecycle, floor and target operands
               // must survive the released preparation, as must the home identity.
               stamp: JSON.stringify([home.node, home.epoch, account], (_, value) =>
@@ -85,6 +87,8 @@ export function createAccountDeletionPageAccess(deps: {
             };
           };
           const before = await withReadTransaction(deps.pool, snapshot, deadline);
+          if (before.home.writeState !== 'active')
+            throw new CommandUnavailableError(before.home.writeState, partitionOf(route), before.home.movedTo);
           if (!before.admitted) throw new AuthBindingDeniedError();
           if (!deps.access.prepare) return { kind: 'unavailable' };
           const access = deriveAccess(deps.access, {
@@ -98,7 +102,8 @@ export function createAccountDeletionPageAccess(deps: {
           const descriptor = managedAuthWorkflowDescriptor('delete', human.account_id);
           const reviewAfterFailure = async (error: unknown): Promise<AccountDeletionAdvice> => {
             const after = await withReadTransaction(deps.pool, snapshot, deadline);
-            if (after.admitted && before.stamp !== after.stamp) return { kind: 'changed' };
+            if (before.homeStamp !== after.homeStamp || (after.admitted && before.stamp !== after.stamp))
+              return { kind: 'changed' };
             throw error;
           };
           // No source connection is held across foreign preparation. This is
@@ -126,7 +131,8 @@ export function createAccountDeletionPageAccess(deps: {
             deps.pool,
             async (client): Promise<AccountDeletionAdvice> => {
               const after = await snapshot(client);
-              if (!after.admitted || before.stamp !== after.stamp) return { kind: 'changed' };
+              if (!after.admitted || before.homeStamp !== after.homeStamp || before.stamp !== after.stamp)
+                return { kind: 'changed' };
               const allowed = await check(client, time);
               // The native formula owns permission operands/currentness at the
               // same authoritative read instant. No approval reference escapes.

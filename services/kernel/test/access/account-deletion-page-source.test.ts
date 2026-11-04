@@ -127,7 +127,7 @@ test('exact-human source rejects ordinary, operated and substituted actors', asy
   }
 }, 60000);
 
-test.each(['floor', 'home', 'session', 'dependency'] as const)(
+test.each(['floor', 'session', 'dependency', 'home'] as const)(
   'released preparation rechecks %s before disclosure',
   async (change) => {
     const human = await person();
@@ -142,7 +142,7 @@ test.each(['floor', 'home', 'session', 'dependency'] as const)(
             human.accountId,
           ]);
         if (change === 'home')
-          await pool.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [
+          await pool.query("UPDATE core.partition SET write_state='fenced' WHERE partition_no=$1", [
             partitionOf(routeOf(human.accountId)!),
           ]);
         if (change === 'session') await f.request('/signout', {}, human.exact);
