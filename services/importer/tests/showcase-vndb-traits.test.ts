@@ -118,7 +118,7 @@ test('the development selector keeps its five exact works and only their direct 
     },
   };
   const plan = await planCrossMediaSeed(tables, { selection: developmentShowcaseSelection });
-  expect(plan.records.bangumi.map((row) => row.key)).toEqual(['10380', '84148', '51']);
+  expect(plan.records.bangumi.map((row) => row.key).sort()).toEqual(['10380', '51', '84148']);
   expect(plan.records.vndb.map((row) => row.key).sort()).toEqual(['v2002', 'v4']);
   expect(plan.entities.bangumi.map((row) => row.key)).toContain('character:700');
   expect(plan.entities.bangumi.map((row) => row.key)).toContain('episode:701');

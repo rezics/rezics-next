@@ -25,6 +25,8 @@ export async function runDevelopmentSeed(
     env?: NodeJS.ProcessEnv;
     fetchDumps?: typeof fetchCrossMediaDumps;
     runSeed?: typeof runCrossMediaSeedCli;
+    createTokenProvider?: typeof createAccountTokenProvider;
+    seedCatalogue?: typeof seedReviewedCatalogue;
     root?: string;
   } = {},
 ): Promise<void> {
@@ -41,14 +43,14 @@ export async function runDevelopmentSeed(
   const showcase = join(root, '.temp', 'cross-media-seed', 'showcase.sqlite');
   const result = join(root, '.temp', 'cross-media-seed', 'result.json');
   await mkdir(dirname(state), { recursive: true });
-  const tokenProvider = await createAccountTokenProvider({
+  const tokenProvider = await (options.createTokenProvider ?? createAccountTokenProvider)({
     accountKeyPath: accountKey,
     account,
     client,
     authOrigin: auth,
     scopes: [...IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt'],
   });
-  const reviewedCatalogue = await seedReviewedCatalogue({
+  const reviewedCatalogue = await (options.seedCatalogue ?? seedReviewedCatalogue)({
     path: state,
     port: createImportTransport({ origin: api, tokenProvider }),
   });

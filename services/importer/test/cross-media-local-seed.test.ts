@@ -68,6 +68,8 @@ test('development seed fetches the shared cache once and passes the local person
         vndbArchive: '/shared/dumps/vndb.tar.zst',
       };
     },
+    createTokenProvider: async () => async () => 'test-token',
+    seedCatalogue: async () => ({ subjects: {}, facts: [] }),
     runSeed: async (argv, seedOptions) => {
       args.push(...argv);
       passedOptions = seedOptions;
