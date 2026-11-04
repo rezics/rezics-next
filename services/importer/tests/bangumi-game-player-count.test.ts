@@ -118,9 +118,15 @@ test('ordinary and selected-family Game callers propose a stated range, withhold
       expect.arrayContaining([
         { pointer: '/infobox/游玩人数', code: 'unsupported_player_count' },
         { pointer: '/infobox/中文名', code: 'unsupported_infobox_mapping' },
-        { pointer: '/infobox/website', code: 'unsupported_infobox_mapping' },
       ]),
     );
+    expect(mode.diagnostics).not.toContainEqual({
+      pointer: '/infobox/website',
+      code: 'unsupported_infobox_mapping',
+    });
+    expect(
+      mode.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:url'),
+    ).toBe(true);
     expect(JSON.stringify(mode.diagnostics)).not.toContain('在线');
     expect(
       mode.proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:name'),

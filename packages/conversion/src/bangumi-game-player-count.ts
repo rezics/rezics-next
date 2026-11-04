@@ -161,6 +161,7 @@ export function bangumiGamePlayerCount(record: {
       counts.push(field);
       continue;
     }
+    if (field.key === 'website' || field.key === '链接') continue;
     omit(field.pointer, 'unsupported_infobox_mapping');
   }
 
