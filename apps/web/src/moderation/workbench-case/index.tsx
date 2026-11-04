@@ -144,13 +144,17 @@ export function WorkbenchCasePage(props: WorkbenchCasePageProps) {
       report={result.report}
       target={result.target}
       revision={result.revision}
-      reportedRevisionState={current.page.inspection?.reportedRevisionState}
-      actionAdvice={current.page.inspection ? {
-        dismiss: current.page.inspection.canDismiss,
-        takeDown: current.page.inspection.canTakeDown,
-      } : undefined}
-      currentState={current.page.inspection?.currentState}
-      destination={current.page.inspection?.destination ?? null}
+      {...(current.page.inspection
+        ? {
+            reportedRevisionState: current.page.inspection.reportedRevisionState,
+            actionAdvice: {
+              dismiss: current.page.inspection.canDismiss,
+              takeDown: current.page.inspection.canTakeDown,
+            },
+            currentState: current.page.inspection.currentState,
+            destination: current.page.inspection.destination,
+          }
+        : {})}
       queueHref={queueHref}
       isCurrent={currentPage.isCurrent}
       register={currentPage.register}
@@ -236,12 +240,12 @@ export function WorkbenchCaseDetail({
           report={report}
           target={target}
           revision={revision}
-          reportedRevisionState={reportedRevisionState}
           takenDown={takenDown}
           onTakenDown={() => setTakenDown(true)}
           onAction={onAction}
           intentOwner={controller}
           bulkBlocked={controller.individualBlocked(report.id)}
+          {...(reportedRevisionState !== undefined ? { reportedRevisionState } : {})}
           {...(actionAdvice ? { actionAdvice } : {})}
           {...(onRefresh ? { onRefresh } : {})}
         />

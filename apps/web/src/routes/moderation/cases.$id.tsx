@@ -26,7 +26,7 @@ export const Route = createFileRoute('/moderation/cases/$id')({
   pendingMinMs: 0,
   staleTime: 0,
   gcTime: 0,
-  loaderDeps: () => null,
+  loaderDeps: ({ search }) => search,
   loader: async ({ params, deps, context, abortController, location }) => {
     if (!params.id || params.id.length > 128) throw notFound();
     const input = workbenchCaseInput(deps, params.id);

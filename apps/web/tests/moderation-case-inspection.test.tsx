@@ -88,7 +88,7 @@ test('the exact report reader shares 404 for concealed and unknown IDs without s
       },
     }),
   } as unknown as KernelClient;
-  const input: ReportReadInput = { reportId };
+  const input: ReportReadInput = { reportId, boardId: 'captured-return-board' };
   const page = await readModerationReportPage(nativeClient, input, 'Bearer moderator', 'viewer-1');
   expect(calls).toEqual([reportId]);
   expect(page.state).toBe('unavailable');
@@ -115,7 +115,12 @@ test('current concealment withholds its body and advice while preserving the dis
       }),
     }),
   } as unknown as KernelClient;
-  const page = await readModerationReportPage(nativeClient, { reportId }, 'Bearer current-moderator', 'viewer-1');
+  const page = await readModerationReportPage(
+    nativeClient,
+    { reportId, boardId: 'captured-return-board' },
+    'Bearer current-moderator',
+    'viewer-1',
+  );
 
   expect(page.state).toBe('ready');
   expect(page.targets[0]?.value).toBeNull();

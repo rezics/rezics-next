@@ -35,7 +35,7 @@ export function reportSelection(input: Record<string, unknown>): ReportSelection
   };
 }
 export type ReportReadInput = Partial<ReportSelection> & {
-  boardId?: string;
+  boardId: string;
   threadId?: string;
   postId?: string;
   cursor?: string;
@@ -61,7 +61,7 @@ export function reportReadKey(input: ReportReadInput): string {
   if (input.reportId) return JSON.stringify(['report-inspection', input.reportId]);
   const selection = reportSelection(input);
   return JSON.stringify([
-    input.boardId ?? '',
+    input.boardId,
     input.threadId ?? '',
     input.postId ?? '',
     input.cursor ?? '',
@@ -70,7 +70,7 @@ export function reportReadKey(input: ReportReadInput): string {
     selection.order,
   ]);
 }
-export type ReportReadState = 'ready' | 'loading' | 'denied' | 'error' | 'stale';
+export type ReportReadState = 'ready' | 'loading' | 'denied' | 'error' | 'stale' | 'unavailable';
 class ReportReadFailure extends Error {
   constructor(readonly state: 'denied' | 'error' | 'stale') {
     super(state);
@@ -204,7 +204,7 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
     const reportId = typeof value.reportId === 'string' && value.reportId.length > 0 && value.reportId.length <= 128
       ? value.reportId
       : undefined;
-    if (!reportId && (typeof value.boardId !== 'string' || value.boardId.length > 128)) throw notFound();
+    if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
     if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
       throw notFound();
     if (value.postId !== undefined && (typeof value.postId !== 'string' || value.postId.length > 128)) throw notFound();
@@ -215,7 +215,7 @@ export const loadModerationReports = createServerFn({ method: 'GET' })
       if (value[key] !== undefined && value[key] !== selection[key]) throw notFound();
     return {
       ...selection,
-      ...(typeof value.boardId === 'string' ? { boardId: value.boardId } : {}),
+      boardId: value.boardId,
       ...(reportId ? { reportId } : {}),
       ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
       ...(typeof value.postId === 'string' ? { postId: value.postId } : {}),
