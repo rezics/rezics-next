@@ -151,7 +151,7 @@ test('sparse continuation uses its native frontier, failure retries that page an
     [...element.querySelectorAll('button')].find((b) => b.textContent === m.moderation_directory_restart())!.click(),
   );
   expect(selected).toEqual([workbenchSearch({})]);
-  client.clear();
+  await act(() => client.clear());
 });
 
 test('successful equal replacement and batched A/B/A synchronously retire mounted selections', async () => {
