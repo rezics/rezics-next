@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { withConnection } from '../database/pool.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { WorkContext } from '../work/registry.ts';
 import {
@@ -2032,57 +2033,77 @@ export function createIdentityScopedObservations(pool: Pool): S.IdentityScopedOb
   };
 }
 
+/** Scheduling cursors have no domain effect or outbox event. Their transaction
+ * must not mint a domain command position or an eventless command receipt. */
+async function repairCursor<T>(pool: Pool, body: (client: PoolClient) => Promise<T>): Promise<T> {
+  return withConnection(pool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      const value = await body(client);
+      await client.query('COMMIT');
+      return value;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
+}
+
+export async function nextIdentityScopeRepairHomes(pool: Pool): Promise<number[]> {
+  return repairCursor(pool, async (tx) => {
+    const row = (
+      await tx.query<{ next_home: number }>(
+        'SELECT next_home FROM semantic.identity_scope_repair_cursor WHERE partition_no=0 FOR UPDATE',
+      )
+    ).rows[0];
+    if (!row) throw unavailable();
+    const homes = Array.from({ length: 16 }, (_, i) => (row.next_home + i) % 4096);
+    await tx.query('UPDATE semantic.identity_scope_repair_cursor SET next_home=$1 WHERE partition_no=0', [
+      (row.next_home + 16) % 4096,
+    ]);
+    return homes;
+  });
+}
+
+export async function nextIdentityScopeRepairTarget(pool: Pool, partition: number): Promise<S.IdentityScopeKey | null> {
+  return repairCursor(pool, async (tx) => {
+    const cursor = (
+      await tx.query<{ source_key: string; scope_id: string }>(
+        'SELECT source_key,scope_id FROM semantic.identity_scope_repair_cursor WHERE partition_no=$1 FOR UPDATE',
+        [partition],
+      )
+    ).rows[0];
+    if (!cursor) throw unavailable();
+    const select = `SELECT source_key,scope_id,source FROM semantic.identity_scope_summary
+      WHERE partition_no=$1 AND state IN ('capturing','enrolling','repair','retiring')`;
+    let pending = await tx.query<{ source_key: string; scope_id: string; source: S.IdentityScopeSource }>(
+      `${select} AND (source_key,scope_id)>($2,$3) ORDER BY source_key,scope_id LIMIT 1`,
+      [partition, cursor.source_key, cursor.scope_id],
+    );
+    if (!pending.rows.length) pending = await tx.query(`${select} ORDER BY source_key,scope_id LIMIT 1`, [partition]);
+    const row = pending.rows[0];
+    if (!row) return null;
+    await tx.query('UPDATE semantic.identity_scope_repair_cursor SET source_key=$2,scope_id=$3 WHERE partition_no=$1', [
+      partition,
+      row.source_key,
+      row.scope_id,
+    ]);
+    return { source: row.source, scopeId: row.scope_id };
+  });
+}
+
 /** Retained fair repair shares the native maintenance queue; workflow arguments contain only a home. */
-export async function registerIdentityScopedObservationWork({ pool, client, clock }: WorkContext): Promise<void> {
-  const homePage = DBOS.registerStep(
-    async () =>
-      (
-        await runCommand(pool, { partition: 0, clock }, async (tx) => {
-          const row = (
-            await tx.query<{ next_home: number }>(`SELECT next_home FROM semantic.identity_scope_repair_cursor
-      WHERE partition_no=0 FOR UPDATE`)
-          ).rows[0];
-          if (!row) throw unavailable();
-          const homes = Array.from({ length: 16 }, (_, i) => (row.next_home + i) % 4096);
-          await tx.query(`UPDATE semantic.identity_scope_repair_cursor SET next_home=$1 WHERE partition_no=0`, [
-            (row.next_home + 16) % 4096,
-          ]);
-          return { value: homes, events: [] };
-        })
-      ).value,
-    { name: 'semantic.identityScopes.homes' },
-  );
+export async function registerIdentityScopedObservationWork({ pool, client }: WorkContext): Promise<void> {
+  const homePage = DBOS.registerStep(() => nextIdentityScopeRepairHomes(pool), {
+    name: 'semantic.identityScopes.homes',
+  });
   const step = DBOS.registerStep(
     async (partition: number) => {
-      const selected = await runCommand<S.IdentityScopeKey | null>(pool, { partition, clock }, async (tx) => {
-        const cursor = (
-          await tx.query<{ source_key: string; scope_id: string }>(
-            `SELECT source_key,scope_id
-        FROM semantic.identity_scope_repair_cursor WHERE partition_no=$1 FOR UPDATE`,
-            [partition],
-          )
-        ).rows[0];
-        if (!cursor) throw unavailable();
-        const select = `SELECT source_key,scope_id,source FROM semantic.identity_scope_summary
-        WHERE partition_no=$1 AND state IN ('capturing','enrolling','repair','retiring')`;
-        let pending = await tx.query<{ source_key: string; scope_id: string; source: S.IdentityScopeSource }>(
-          `${select} AND (source_key,scope_id)>($2,$3) ORDER BY source_key,scope_id LIMIT 1`,
-          [partition, cursor.source_key, cursor.scope_id],
-        );
-        if (!pending.rows.length)
-          pending = await tx.query(`${select} ORDER BY source_key,scope_id LIMIT 1`, [partition]);
-        const row = pending.rows[0];
-        if (!row) return { value: null, events: [] };
-        await tx.query(
-          `UPDATE semantic.identity_scope_repair_cursor SET source_key=$2,scope_id=$3 WHERE partition_no=$1`,
-          [partition, row.source_key, row.scope_id],
-        );
-        return { value: { source: row.source, scopeId: row.scope_id }, events: [] };
-      });
-      // Release the cursor command before native capture/enrollment opens any other home.
-      if (selected.value)
+      const selected = await nextIdentityScopeRepairTarget(pool, partition);
+      // Release the cursor transaction before native capture/enrollment opens any other home.
+      if (selected)
         await createIdentityScopedObservations(pool).repair({
-          key: selected.value,
+          key: selected,
           limit: 1,
           deadline: Date.now() + 5000,
         });

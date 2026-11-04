@@ -290,6 +290,8 @@ homes, retain their actual source export, receiving custody, source ACK and nati
 Initially empty legacy homes fuse local SQL statements while preserving three separate native commits and
 the same retained page, receiving custody/basis and source closure. Interrupted stages recover through the
 ordinary retained-page protocol. New dirty homes join the ordered repair cursor before it wraps to earlier work.
+Fair home/target cursor rotation uses a short native transaction; it does not emit a domain event or advance
+the partition log. The selected repair still runs its existing authorized native source operations.
 `readIdentityEpochCutover(client)` observes valid native absence closure or retained full topology custody;
 point mappings do not wait for a legacy sweep.
 The shared relay refills completed worker slots from the current fixed-topology scan. Its normal concurrency and
