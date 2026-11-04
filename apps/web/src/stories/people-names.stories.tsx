@@ -34,6 +34,7 @@ function Example({
       read.subject.labels = {};
       read.subject.aliases = {};
     }
+    if (state === 'fallback') read.subject.labels = { ar: 'المسافر — 旅人' };
     const names =
       state === 'malformed' || state === 'oversized' ? ({ state } as const) : peopleNames(read.subject, locale);
     return { names, href: subjectHref({ id: read.subject.id, label: '旅の人' }, locale).href };
