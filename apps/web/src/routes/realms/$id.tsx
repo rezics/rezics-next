@@ -1,3 +1,4 @@
+import { realmReadingSearch } from '../../community/realm-reading-return';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
@@ -27,6 +28,8 @@ type RealmLoaderData = { page: SpacePageData; admission: SpacePageAdmission };
 
 export const Route = createFileRoute('/realms/$id')({
   staticData: { publicCache: true },
+  validateSearch: realmReadingSearch,
+  loaderDeps: ({ search }) => realmReadingSearch(search),
   loader: async ({ params, context, abortController }) => {
     const locale = getLocale();
     const target: SpacePageTarget = { kind: 'realm', id: params.id };

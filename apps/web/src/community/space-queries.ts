@@ -33,6 +33,7 @@ type FailedShelfRead = ShelfRead & { kind: 'denied' | 'unavailable' | 'stale' };
 
 export type ShelfContinuationResult = {
   intent: object | undefined;
+  cursor?: string | null;
   firstId: string | null;
   count: number;
   current: () => boolean;
@@ -49,7 +50,11 @@ export function useShelfList<T extends { id: string }>(
   requireReaderOrigin = false,
 ) {
   const queryClient = useQueryClient();
-  const [page, setPage] = useState({ ...initial, continuation: null as ShelfContinuationResult | null });
+  const [page, setPage] = useState({
+    ...initial,
+    cursors: new Map(initial.items.map((item) => [item.id, null as string | null])),
+    continuation: null as ShelfContinuationResult | null,
+  });
   const [failedRead, setFailedRead] = useState<FailedShelfRead | null>(null);
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
@@ -70,7 +75,11 @@ export function useShelfList<T extends { id: string }>(
     visit.current = lifetime;
     generation.current++;
     active.current = null;
-    setPage({ ...initial, continuation: null });
+    setPage({
+      ...initial,
+      cursors: new Map(initial.items.map((item) => [item.id, null as string | null])),
+      continuation: null,
+    });
     setFailedRead(null);
     setBusy(false);
   }, [lifetime]);
@@ -104,7 +113,7 @@ export function useShelfList<T extends { id: string }>(
     const fail = (kind: FailedShelfRead['kind']) => {
       setFailedRead((previous) => (owns() ? { kind, restart, cursor } : previous));
       setPage((previous) =>
-        owns() ? { ...previous, continuation: { intent, firstId: null, count: 0, current } } : previous,
+        owns() ? { ...previous, continuation: { intent, cursor, firstId: null, count: 0, current } } : previous,
       );
     };
     if (!owns()) {
@@ -141,6 +150,7 @@ export function useShelfList<T extends { id: string }>(
       setPage((previous) => {
         if (!owns()) return previous;
         const items = new Map((restart ? [] : previous.items).map((item) => [item.id, item]));
+        const cursors = new Map(restart ? [] : previous.cursors);
         let firstId: string | null = null;
         let count = 0;
         // Inspect only this accepted native page; existing entries do not count as additions.
@@ -150,13 +160,15 @@ export function useShelfList<T extends { id: string }>(
             count++;
           }
           items.set(item.id, item);
+          cursors.set(item.id, cursor);
         }
         return {
           ...previous,
           items: [...items.values()],
+          cursors,
           next: result.next,
           unavailable: (restart ? 0 : previous.unavailable) + result.unavailable,
-          continuation: { intent, firstId, count, current },
+          continuation: { intent, cursor, firstId, count, current },
         };
       });
     } catch {
@@ -172,6 +184,10 @@ export function useShelfList<T extends { id: string }>(
     if (!restart && !page.next) return Promise.resolve();
     return requestPage({ restart, cursor: restart ? null : page.next }, intent);
   }
+  // Return reads replace one selected window, without refilling or walking preceding pages.
+  function restore(cursor: string, intent?: object) {
+    return requestPage({ restart: true, cursor }, intent);
+  }
   function retry(intent?: object) {
     if (!failedRead) return Promise.resolve();
     return requestPage(failedRead, intent);
@@ -184,10 +200,10 @@ export function useShelfList<T extends { id: string }>(
     setPage((previous) => {
       if (!mounted.current) return previous;
       if (lifetime && (ticket === undefined || !lifetime.owns(ticket))) return previous;
-      return { ...change(previous), continuation: null };
+      return { ...change(previous), cursors: previous.cursors, continuation: null };
     });
   }
-  return { ...page, failure: failedRead?.kind ?? null, busy, load, retry, update };
+  return { ...page, failure: failedRead?.kind ?? null, busy, load, restore, retry, update };
 }
 
 export const spaceQuery = (

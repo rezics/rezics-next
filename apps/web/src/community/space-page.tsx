@@ -1,6 +1,6 @@
 import type { PublicationPrepare } from './realm-publication-preparation';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
-import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ListRow } from '@rezics/ui/list-row';
 import { placeholderColors, sharedRatio, type CoverSubject } from '@rezics/ui/cover';
@@ -51,6 +51,8 @@ import { Button } from '@rezics/ui/shadcn/button';
 import { CommunityManagementContext, type CommunityManagementOperation } from './community-management';
 import { AuthoringDepartureBoundary } from '../threads/authoring-departure';
 import { nativeRealmHomeShelves, type NativeRealmHomeOperations } from './realm-home-native';
+import { realmReadingReturn, realmReadingSelection, realmShelfReturn } from './realm-reading-return';
+import { withSubjectVisitReturn } from '../features/pages/subject-visit-navigation';
 import { requestLanguages } from '../kernel/languages';
 
 function subjectTitle(subject: PublishedSubject, locale: string): string {
@@ -73,7 +75,11 @@ function Boards({
   continuation,
   complete,
   focus,
+  returnFor,
+  current,
 }: {
+  returnFor: (id: string) => string | undefined;
+  current: () => boolean;
   boards: RealmBoard[];
   unavailable: number;
   continuation: React.ReactNode;
@@ -90,6 +96,7 @@ function Boards({
           {boards.map((board) => (
             <ListRow
               key={board.id}
+              id={`realm-board-${board.id}`}
               ref={board.id === focus.firstId ? focus.itemRef : null}
               tabIndex={-1}
               aria-label={board.id === focus.firstId ? focus.regionLabel : undefined}
@@ -98,6 +105,16 @@ function Boards({
               <Link
                 to="/boards/$id"
                 params={{ id: board.id }}
+                search={returnFor(board.id) ? { returnTo: returnFor(board.id)! } : {}}
+                onClick={(event) => {
+                  if (!current()) event.preventDefault();
+                }}
+                onAuxClick={(event) => {
+                  if (!current()) event.preventDefault();
+                }}
+                onContextMenu={(event) => {
+                  if (!current()) event.preventDefault();
+                }}
                 className="absolute inset-1 z-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 data-slot="list-row-link"
               >
@@ -139,7 +156,11 @@ function Published({
   refresh,
   search,
   focus,
+  returnFor,
+  current,
 }: {
+  returnFor: (id: string) => string | undefined;
+  current: () => boolean;
   realm: RealmHome;
   control: ReturnType<typeof usePublicationControls>;
   editable: boolean;
@@ -168,6 +189,22 @@ function Published({
           {titled.map(({ subject, cover }) => (
             <div
               key={subject.id}
+              id={`realm-publication-${subject.id}`}
+              onClickCapture={(event) => {
+                if (!current()) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+              onAuxClickCapture={(event) => {
+                if (!current()) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              }}
+              onContextMenu={(event) => {
+                if (!current()) event.preventDefault();
+              }}
               ref={subject.id === focus.firstId ? focus.itemRef : undefined}
               role="group"
               tabIndex={-1}
@@ -175,7 +212,11 @@ function Published({
               className="h-full focus-visible:outline-2 focus-visible:outline-ring"
             >
               <CoverCard
-                href={`${subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}?realm=${encodeURIComponent(realm.id)}`}
+                href={withSubjectVisitReturn(
+                  `${subjectHref({ id: subject.id, label: subjectTitle(subject, locale) }, locale).href}?realm=${encodeURIComponent(realm.id)}`,
+                  returnFor(subject.id) ?? '',
+                  locale,
+                )}
                 cover={{ subject: cover, cover: subject.cover, src: coverSrc }}
                 title={cover.title}
                 secondary={subject.typeName}
@@ -232,7 +273,11 @@ export function RealmShelf({
   transport,
   frozen = false,
   search,
+  returnTo,
+  onReadingChange,
 }: {
+  returnTo?: string;
+  onReadingChange?: (href: string) => void;
   realm: RealmHome;
   transport?: RealmShelfTransport;
   frozen?: boolean;
@@ -240,6 +285,22 @@ export function RealmShelf({
 }) {
   const { state, csrfToken, subject: reader } = useSession();
   const lifetime = useSpacePageLifetime();
+  const locale = getLocale();
+  const selection = realmReadingSelection(returnTo);
+  const lease = useMemo(
+    () => ({ active: true, connected: false }),
+    [realm, transport, returnTo, lifetime, state, csrfToken, reader, locale, frozen],
+  );
+  const latestLease = useRef(lease);
+  if (latestLease.current !== lease) latestLease.current.active = false;
+  latestLease.current = lease;
+  useEffect(() => {
+    lease.connected = true;
+    return () => {
+      lease.connected = false;
+    };
+  }, [lease]);
+  const current = () => lease.active && lease.connected && (!lifetime || lifetime.current());
   const boards = useShelfList(
     {
       items: realm.boards,
@@ -264,6 +325,82 @@ export function RealmShelf({
   );
   const boardFocus = useShelfContinuationFocus(boards, m.realm_boards_heading());
   const publicationFocus = useShelfContinuationFocus(publications, m.realm_published_heading());
+  const returnFor = (node: 'boards' | 'publications', id?: string) =>
+    realmShelfReturn({
+      href: returnTo ?? `/${locale}/realms/${encodeURIComponent(realm.id)}`,
+      locale,
+      node,
+      cursor: id ? (node === 'boards' ? boards.cursors : publications.cursors).get(id) : undefined,
+      ...(id ? { id } : {}),
+    });
+  const restore = useRef<{ lease: typeof lease; started: boolean; focused: boolean }>({
+    lease,
+    started: false,
+    focused: false,
+  });
+  if (restore.current.lease !== lease) restore.current = { lease, started: false, focused: false };
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (!current() || frozen || restore.current.started) return;
+      restore.current.started = true;
+      if (selection.cursor) void (selection.node === 'boards' ? boards : publications).restore(selection.cursor);
+    });
+  }, [lease]);
+  useEffect(() => {
+    if (!selection.node) return;
+    const cancel = () => {
+      restore.current.focused = true;
+    };
+    document.addEventListener('pointerdown', cancel);
+    document.addEventListener('focusin', cancel);
+    return () => {
+      document.removeEventListener('pointerdown', cancel);
+      document.removeEventListener('focusin', cancel);
+    };
+  }, [lease]);
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (!selection.node || frozen || !current() || restore.current.focused) return;
+      const shelf = selection.node === 'boards' ? boards : publications;
+      if (shelf.busy || (selection.cursor && !shelf.continuation)) return;
+      if (shelf.continuation && !shelf.continuation.current()) return;
+      restore.current.focused = true;
+      // A returning reader must not take focus back from an intervening user action.
+      if (document.activeElement !== document.body) return;
+      const focus = selection.node === 'boards' ? boardFocus : publicationFocus;
+      const selected = selection.focus ? document.getElementById(selection.focus) : null;
+      (shelf.failure ? focus.recoveryRef.current : (selected ?? focus.boundaryRef.current))?.focus();
+    });
+  }, [lease, boards.busy, boards.continuation, publications.busy, publications.continuation]);
+  useEffect(() => {
+    const receipt = boards.continuation;
+    if (frozen || !current() || boards.failure || !receipt?.current()) return;
+    const href = realmShelfReturn({
+      href: returnTo ?? `/${locale}/realms/${realm.id}`,
+      locale,
+      node: 'boards',
+      cursor: receipt.cursor,
+    });
+    if (href) onReadingChange?.(href);
+  }, [boards.continuation]);
+  useEffect(() => {
+    const receipt = publications.continuation;
+    if (frozen || !current() || publications.failure || !receipt?.current()) return;
+    const href = realmShelfReturn({
+      href: returnTo ?? `/${locale}/realms/${realm.id}`,
+      locale,
+      node: 'publications',
+      cursor: receipt.cursor,
+    });
+    if (href) onReadingChange?.(href);
+  }, [publications.continuation]);
+  const boardRestoring =
+    !frozen && selection.node === 'boards' && Boolean(selection.cursor) && (!boards.continuation || boards.busy);
+  const publicationRestoring =
+    !frozen &&
+    selection.node === 'publications' &&
+    Boolean(selection.cursor) &&
+    (!publications.continuation || publications.busy);
   const sendPublication = useCallback<PublicationSend>(
     (input) =>
       transport?.change
@@ -297,13 +434,16 @@ export function RealmShelf({
   return (
     <>
       <Boards
+        returnFor={(id) => returnFor('boards', id)}
+        current={current}
         focus={boardFocus}
-        boards={boards.items}
+        boards={boardRestoring ? [] : boards.items}
         unavailable={boards.unavailable}
-        complete={!boards.next && !boards.failure}
+        complete={!boardRestoring && !boards.next && !boards.failure}
         continuation={
           <ShelfContinuation
             {...boards}
+            busy={boards.busy || boardRestoring}
             label={m.realm_boards_more()}
             onContinue={boardFocus.activate}
             recoveryRef={boardFocus.recoveryRef}
@@ -311,21 +451,24 @@ export function RealmShelf({
         }
       />
       <Published
+        returnFor={(id) => returnFor('publications', id)}
+        current={current}
         focus={publicationFocus}
         realm={{
           ...realm,
-          published: publications.items,
+          published: publicationRestoring ? [] : publications.items,
           publicationNext: publications.next,
           unavailablePublished: publications.unavailable,
         }}
         control={control}
-        editable={!frozen && state === 'signed-in' && Boolean(csrfToken)}
-        complete={!publications.next && !publications.failure}
+        editable={!frozen && !publicationRestoring && state === 'signed-in' && Boolean(csrfToken)}
+        complete={!publicationRestoring && !publications.next && !publications.failure}
         refresh={() => publications.load(true)}
         search={search}
         continuation={
           <ShelfContinuation
             {...publications}
+            busy={publications.busy || publicationRestoring}
             label={m.realm_publications_more()}
             onContinue={publicationFocus.activate}
             recoveryRef={publicationFocus.recoveryRef}
@@ -397,7 +540,7 @@ export function SpacePage(props: {
   return (
     <AuthoringDepartureBoundary>
       <SpaceHome
-        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}:${native ? source.current.revision : ''}`}
+        key={`${props.page.space.id}:${props.page.realm?.id ?? ''}:${viewer ?? state}:${lifetime?.scopeKey ?? 'standalone'}:${source.current.revision}`}
         {...props}
         viewer={viewer}
         signedOut={state === 'signed-out'}
@@ -417,6 +560,13 @@ function SpaceHome({
   signedOut,
 }: Parameters<typeof SpacePage>[0] & { viewer: string | null; signedOut: boolean }) {
   const location = useLocation();
+  const localizedHref = /^\/(en|zh-Hant|zh-Hans|ja|ko|fr|de|es)\//.test(location.publicHref)
+    ? location.publicHref
+    : `/${getLocale()}${location.publicHref}`;
+  const initialReturn =
+    realmReadingReturn(localizedHref, getLocale()) ??
+    (page.realm ? `/${getLocale()}/realms/${page.realm.id}` : localizedHref.split(/[?#]/, 1)[0]!);
+  const [readingReturn, setReadingReturn] = useState(initialReturn);
   const catalogueRevision = useRef(0);
   const catalogueVersion = catalogueRevision.current;
   const [spaceRestriction, restrictSpace] = useState<{ id: string; state: 'removed' | 'orphaned' } | null>(null);
@@ -459,6 +609,7 @@ function SpaceHome({
     (state: 'removed' | 'orphaned') => {
       catalogueRevision.current++;
       if (!realmId) return;
+      setReadingReturn(`/${getLocale()}/realms/${realmId}`);
       restrictRealm((previous) =>
         previous?.id === realmId && previous.state === state ? previous : { id: realmId, state },
       );
@@ -512,10 +663,9 @@ function SpaceHome({
     <section aria-label={m.space_follow_label()} className="flex flex-wrap items-start gap-3">
       {signedOut ? (
         <Button
+          nativeButton={false}
           variant="outline"
-          render={
-            <a href={`/auth/sign-in?return_to=${encodeURIComponent(location.publicHref.split(/[?#]/, 1)[0]!)}`} />
-          }
+          render={<a href={`/auth/sign-in?return_to=${encodeURIComponent(readingReturn)}`} />}
         >
           {m.library_follow()}
         </Button>
@@ -526,7 +676,7 @@ function SpaceHome({
         <RealmMembership
           realm={page.realm}
           spaceId={page.space.id}
-          returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+          returnTo={readingReturn}
           {...(nativeObservation ? { nativeObservation } : {})}
         />
       ) : null}
@@ -598,6 +748,8 @@ function SpaceHome({
           key={page.realm.id}
           realm={page.realm}
           frozen={frozen}
+          returnTo={initialReturn}
+          onReadingChange={setReadingReturn}
           {...(nativeShelfTransport ? { transport: nativeShelfTransport } : {})}
         />
       ) : null}
@@ -605,7 +757,7 @@ function SpaceHome({
         <RealmClaimPanel
           realmId={page.realm.id}
           initial={page.realm.continuity ?? null}
-          returnTo={location.publicHref.split(/[?#]/, 1)[0]!}
+          returnTo={readingReturn}
           onRead={onClaimRead}
           {...(realmClaimAdapter ? { adapter: realmClaimAdapter } : {})}
         />
@@ -659,6 +811,7 @@ function SpaceHome({
             {...(lifecycleAdapter ? { adapter: lifecycleAdapter } : {})}
             onRestriction={(state) => {
               catalogueRevision.current++;
+              setReadingReturn(localizedHref.split(/[?#]/, 1)[0]!);
               restrictSpace((previous) =>
                 previous?.id === page.space.id && previous.state === state ? previous : { id: page.space.id, state },
               );

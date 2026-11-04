@@ -105,3 +105,29 @@ uses the same source comparison and retires old pages permanently; a fresh respo
 controllers. Credential, locale, route and operation replacement also require a fresh response. Existing route
 admission remains required for session-cache generations, pending continuation tickets, lifecycle retirement and
 hydration; this local boundary supplies neither native viewer currentness nor private first-paint proof.
+
+## Selected shelf return
+
+Decision: Realm and carrying Space routes consume only `node=boards|publications` and that shelf's opaque `cursor`; a row fragment restores eligible focus, while the other shelf retains its own reader and focus owner.
+
+The selected return window is read once through the existing shelf reader, replacing that shelf window without
+refill or a scan of earlier pages. Row links quote the cursor that actually supplied their row, rather than the
+next frontier. Publications use the existing Subject `via` return; Board entry and thread creation use the
+existing `returnTo` validator. The existing Board reading history state carries that admitted return through a
+thread and back. Neither address supplies command authority. Original Subject-region Realm/node/cursor returns
+continue to use their existing consumer.
+
+Only supported public route locators are forwarded by outer follow, membership and claim call sites. Auth's
+existing server login return consumes these addresses; its short-lived recovery cookie remains query-free.
+A recovered consumed login callback can therefore restart at the carrying page instead of restoring a cursor.
+No browser storage, private command operands or automatic participation are added.
+
+A fresh page object remounts the outer visit even when values compare equal. Changed shelf source, account,
+credential, route or frozen state retires its pending return effects before replacement render. A late read may
+not navigate or move focus after retirement. Missing, denied and stale windows keep the native shelf's explicit
+retry/restart controls; focus restoration never takes focus from an intervening user action.
+
+The remaining acknowledged in-page participation return needs an outer source-bound completion seam from the
+existing command owners. Their current invalidation replaces the page and restarts its ephemeral selection.
+This implementation does not retain that selection across an unqualified replacement or intercept a command.
+The continuation also adopts Content's approved community mount once its public render slot is available.

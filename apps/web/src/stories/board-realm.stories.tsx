@@ -27,6 +27,7 @@ const realm = boardRealmRealmRecording.realm.title;
 const board = boardRealmRecording.board.title;
 const thread = boardRealmThreadRecording.thread.title;
 const boardPath = `/boards/${boardRealmRecording.board.id}`;
+const selectedRealmReturn = `/en/realms/${boardRealmRealmRecording.realm.realmId}?node=boards#realm-board-${boardRealmRecording.board.id}`;
 const threadPath = threadHref(boardRealmThreadRecording.thread);
 
 export const ThreadSignedIn: Story = {
@@ -46,6 +47,12 @@ export const BoardSignedIn: Story = {
 };
 export const BoardSignedOut: Story = {
   name: 'Board Signed Out',
-  play: crumbReady(board, [realm]),
-  render: () => <PageStory visitor="Signed Out" path={boardPath} />,
+  play: async (context) => {
+    await crumbReady(board, [realm])(context);
+    const link = within(context.canvasElement).getByRole('link', { name: m.realm_reading_return() });
+    expect(link).toHaveAttribute('href', selectedRealmReturn);
+  },
+  render: () => (
+    <PageStory visitor="Signed Out" path={`${boardPath}?${new URLSearchParams({ returnTo: selectedRealmReturn })}`} />
+  ),
 };
