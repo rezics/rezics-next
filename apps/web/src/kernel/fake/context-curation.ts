@@ -1,6 +1,6 @@
 import { createKernelClient, type SubjectRead } from '@rezics/client';
 import type { Release } from '@rezics/definitions';
-import { candidateFixture } from './subject-candidates';
+import { candidateFixture, fixtureCandidateViewerActions } from './subject-candidates';
 import definitions from '../recorded/definitions-release.json';
 import type { CandidateCommand, CandidatePage, ReviewContext } from '../../subject/candidates';
 import { readContextCuration, confirmContextCuration } from '../../features/catalogue/context-curation';
@@ -161,8 +161,8 @@ export function contextFixture(scenario: ContextScenario = 'inherited', locale =
   const address = { id: base.id, context: context.id, property: base.property };
   const transport: CandidateTransport = {
     reader: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e10',
-    read: (property, cursor, session) =>
-      readContextCuration(
+    read: async (property, cursor, session) => {
+      const result = await readContextCuration(
         client,
         'Bearer fixture',
         {
@@ -174,7 +174,9 @@ export function contextFixture(scenario: ContextScenario = 'inherited', locale =
         },
         release,
         locale,
-      ),
+      );
+      return result.ok ? { ...result, actions: fixtureCandidateViewerActions() } : result;
+    },
     confirm: (command: CandidateCommand) =>
       confirmContextCuration(client, 'Bearer fixture', { ...command, context: context.id }, release, locale),
   };

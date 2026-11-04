@@ -23,7 +23,12 @@ export type ContextComparison = {
   inherited: SubjectRead['subject']['statements'][string];
   adoption: CandidatePage['adoption'];
 };
-export type CandidateFailure = { ok: false; reason: 'denied' | 'stale' | 'unavailable' | 'invalid' };
+export type CandidateFailure = {
+  ok: false;
+  reason: 'denied' | 'stale' | 'unavailable' | 'invalid';
+  /** The reader confirmed concealment, so private drafts and session continuity must be retired. */
+  clearPrivate?: boolean;
+};
 export type ViewerActionEntry = { action: string; operations: string[] };
 export type ViewerActionComponent =
   | { state: 'not-requested' }
@@ -90,6 +95,7 @@ export type CandidateActions = { state: 'available'; context: string; operations
 export type CandidateAuthority = {
   actions: CandidateActions;
   disclosure: 'available' | 'unreadable' | 'unavailable';
+  components?: { context: ViewerActionComponent; subjects: Record<string, ViewerActionComponent> };
 };
 
 /** One native projection for the mounted operations and at most three exact participants.
@@ -101,11 +107,17 @@ export async function readCandidateAuthority(
   context: string,
   subjects: readonly string[] = [],
 ): Promise<CandidateAuthority> {
-  const unavailable: CandidateAuthority = { actions: { state: 'unavailable' }, disclosure: 'unavailable' };
+  const unavailableComponent = (): ViewerActionComponent => ({ state: 'unavailable', reason: 'unavailable' });
+  const unavailable: CandidateAuthority = {
+    actions: { state: 'unavailable' },
+    disclosure: 'unavailable',
+    components: { context: unavailableComponent(), subjects: {} },
+  };
   if (subjects.length > 3) return unavailable;
+  const subjectIds = [...new Set(subjects)];
   const references = [
     { type: 'semantic.context', id: context },
-    ...[...new Set(subjects)].map((id) => ({ type: 'semantic.subject', id })),
+    ...subjectIds.map((id) => ({ type: 'semantic.subject', id })),
   ];
   try {
     const result = await client.viewerActions.post(
@@ -116,12 +128,46 @@ export async function readCandidateAuthority(
     const resources = references.map(({ type, id }) =>
       result.data!.resources.filter((resource) => resource.type === type && resource.id === id),
     );
-    if (resources.some((matches) => matches.length !== 1)) return unavailable;
-    const contextResource = resources[0]![0]!;
-    if (!('viewerActions' in contextResource)) return unavailable;
-    const entries = contextResource.viewerActions;
-    if (entries.length > 64 || entries.reduce((count, entry) => count + entry.operations.length, 0) > 256)
-      return unavailable;
+    const component = (matches: (typeof result.data.resources)[number][]): ViewerActionComponent => {
+      if (matches.length !== 1) return unavailableComponent();
+      const resource = matches[0]!;
+      if (!('viewerActions' in resource))
+        return {
+          state: 'unavailable',
+          reason: Reflect.get(resource, 'error') === 'not_found' ? 'not-found' : 'unavailable',
+        };
+      const entries = resource.viewerActions;
+      if (
+        entries.length > 64 ||
+        entries.reduce((count, entry) => count + entry.operations.length, 0) > 256 ||
+        entries.some(
+          (entry) =>
+            typeof entry.action !== 'string' ||
+            !Array.isArray(entry.operations) ||
+            entry.operations.some((operation) => typeof operation !== 'string'),
+        )
+      )
+        return unavailableComponent();
+      return { state: 'available', actions: entries };
+    };
+    const contextComponent = component(resources[0]!);
+    const subjectComponents = Object.fromEntries(
+      subjectIds.map((id, index) => [id, component(resources[index + 1]!)]),
+    );
+    const disclosure = Object.values(subjectComponents).some(
+      (entry) => entry.state === 'unavailable' && entry.reason === 'not-found',
+    )
+      ? 'unreadable'
+      : Object.values(subjectComponents).some((entry) => entry.state !== 'available')
+        ? 'unavailable'
+        : 'available';
+    if (contextComponent.state !== 'available')
+      return {
+        ...unavailable,
+        components: { context: contextComponent, subjects: subjectComponents },
+        disclosure,
+      };
+    const entries = contextComponent.actions;
     const bindings: Record<string, string> = {
       'subject.propose': 'statement:propose',
       'subject.accept_candidate': 'context:accept',
@@ -138,13 +184,19 @@ export async function readCandidateAuthority(
           ),
         ],
       },
-      disclosure: resources.slice(1).some(([resource]) => !resource || !('viewerActions' in resource))
-        ? 'unreadable'
-        : 'available',
+      disclosure,
+      components: { context: contextComponent, subjects: subjectComponents },
     };
   } catch {
     return unavailable;
   }
+}
+
+export function candidateViewerActionsFor(authority: CandidateAuthority, subject: string): CandidateViewerActions {
+  return {
+    context: authority.components?.context ?? { state: 'unavailable', reason: 'unavailable' },
+    subject: authority.components?.subjects[subject] ?? { state: 'not-requested' },
+  };
 }
 
 /** Optional producer metadata follows the existing subject Sources region's runtime compatibility read. */
@@ -290,6 +342,56 @@ export function sameCandidateSelection(left: CandidateSelection[], right: Candid
   );
 }
 
+function acknowledgedCommand(
+  value: unknown,
+  input: CandidateCommand,
+  context: string,
+  mode: NonNullable<CandidateCommand['mode']>,
+  selection: CandidateSelection[],
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (!Number.isSafeInteger(record.revision) || (record.revision as number) < 0) return false;
+  if (input.operation !== 'adopt') {
+    const acceptance = record.acceptance;
+    if (!acceptance || typeof acceptance !== 'object' || Array.isArray(acceptance)) return false;
+    const decision = acceptance as Record<string, unknown>;
+    return (
+      decision.context === context &&
+      decision.candidate === input.candidate &&
+      decision.decision === input.operation &&
+      Number.isSafeInteger(decision.head) &&
+      (decision.head as number) >= 0
+    );
+  }
+  const adoption = record.adoption;
+  if (!adoption || typeof adoption !== 'object' || Array.isArray(adoption)) return false;
+  const result = adoption as Record<string, unknown>;
+  if (
+    result.context !== context ||
+    result.property !== input.property ||
+    result.mode !== mode ||
+    !Number.isSafeInteger(result.head) ||
+    (result.head as number) < 0 ||
+    !Array.isArray(result.selection) ||
+    result.selection.length !== selection.length
+  )
+    return false;
+  const remaining = new Map(selection.map((entry) => [entry.candidate, entry.rank]));
+  for (const entry of result.selection) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+    const acknowledged = entry as Record<string, unknown>;
+    if (
+      typeof acknowledged.candidate !== 'string' ||
+      (acknowledged.rank !== 'normal' && acknowledged.rank !== 'preferred') ||
+      remaining.get(acknowledged.candidate) !== acknowledged.rank
+    )
+      return false;
+    remaining.delete(acknowledged.candidate);
+  }
+  return remaining.size === 0;
+}
+
 /** One confirmed native command, followed by one ordinary public read; never substitute proposal JSON. */
 export async function selectCandidate(
   client: KernelClient,
@@ -335,6 +437,7 @@ export async function selectCandidate(
               options,
             );
     if (result.status !== 200 || !result.data) return candidateFailure(result.status);
+    if (!acknowledgedCommand(result.data, input, context, mode, selection)) return candidateFailure(503);
     const session = new Headers(result.headers).get('rezics-session-token') ?? input.session;
     let current: SubjectRead | null = null;
     try {

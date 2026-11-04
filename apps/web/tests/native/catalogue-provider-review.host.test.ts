@@ -1,5 +1,7 @@
 import { expect } from 'bun:test';
 import type { Page } from 'playwright';
+import { m } from '../../src/paraglide/messages.js';
+import { candidateContext } from '../../src/subject/candidates';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './lifecycle.ts';
 import {
   createCatalogueProviderReviewFixture,
@@ -53,6 +55,11 @@ async function chooseNamedContext(page: Page): Promise<void> {
     }
   }
   throw new Error('Named Context choice did not resolve through the served directory');
+}
+
+async function chooseGlobalContext(page: Page): Promise<void> {
+  await page.getByRole('button', { name: m.prq_global(), exact: true }).click();
+  await page.getByText(m.provider_scope_selected({ label: m.prq_global() }), { exact: true }).waitFor();
 }
 
 async function loadScope(page: Page): Promise<void> {
@@ -211,6 +218,128 @@ nativeTest(
     await page.getByRole('button', { name: 'Refresh from start' }).click();
     await page.getByText('Suggestions are unavailable. Retry, or prepare the provider index explicitly.').waitFor();
     expect(await page.getByText('No suggestions match this scope.').count()).toBe(0);
+  },
+);
+
+nativeTest(
+  'Global acceptance leaves the public selection unchanged and an accept-only editor cannot adopt',
+  360_000,
+  async () => {
+    const current = fixture!;
+    const book = current.books[0]!;
+    const alice = await current.auth.signIn('alice');
+    const page = pageFor(alice);
+    page.setDefaultTimeout(30_000);
+    await openReview(page);
+    await chooseGlobalContext(page);
+    await loadScope(page);
+    await waitForSuggestions(page);
+
+    await page.getByRole('checkbox', { name: new RegExp(book.title) }).click();
+    await confirmDecision(page, 'accept');
+    await page.getByRole('button', { name: 'Finish reviewing results' }).click();
+    await page.getByLabel(m.prq_status()).selectOption('accepted_unselected');
+    await page.getByRole('button', { name: m.prq_load(), exact: true }).click();
+    await waitForSuggestions(page);
+    await page.getByRole('link', { name: m.prq_open_candidate(), exact: true }).first().click();
+    await page.waitForURL(/\/edit\?/);
+
+    const address = new URL(page.url());
+    expect(address.searchParams.get('reviewProperty')).toBe('schema:inLanguage');
+    expect(address.searchParams.get('candidate')).toBe(book.candidate);
+    expect(address.searchParams.get('context')).toBe(candidateContext);
+    expect(address.searchParams.get('returnTo')).toBe('queue');
+    const review = page.getByRole('region', { name: m.candidate_title(), exact: true });
+    await review.getByText(m.candidate_no_current(), { exact: true }).waitFor();
+    expect(await review.getByRole('button', { name: m.candidate_adopt(), exact: true }).isDisabled()).toBe(true);
+    expect(await review.locator('#context-mode').count()).toBe(0);
+
+    const candidates = await current.stack.kernel(
+      `/v1/subjects/${book.id}/candidates?${new URLSearchParams({
+        property: 'schema:inLanguage',
+        context: candidateContext,
+        limit: '20',
+      })}`,
+      {},
+      'alice',
+    );
+    expect(candidates.status).toBe(200);
+    const listing = (await candidates.json()) as {
+      candidates: {
+        id: string;
+        decision: string | null;
+        statement: { references: { parts: { value: { content: string } }[] }[] };
+      }[];
+      adoption: unknown;
+    };
+    expect(listing.adoption).toBeNull();
+    expect(listing.candidates.find((candidate) => candidate.id === book.candidate)?.decision).toBe('accepted');
+    expect(
+      listing.candidates.find((candidate) => candidate.id === book.candidate)?.statement.references[0]?.parts[0]
+        ?.value.content,
+    ).toBe(`https://openlibrary.org/works/${book.externalId}`);
+
+    const publicRead = await current.stack.kernel(`/v1/subjects/${book.id}`, {}, 'anonymous');
+    expect(publicRead.status).toBe(200);
+    const publicSubject = (await publicRead.json()) as {
+      subject: { statements: Record<string, { id: string }[]> };
+    };
+    expect(publicSubject.subject.statements['schema:inLanguage'] ?? []).toEqual([]);
+  },
+);
+
+nativeTest(
+  'Global selection execution rechecks native adoption authority after the comparison page was read',
+  360_000,
+  async () => {
+    const current = fixture!;
+    const book = current.books[1]!;
+    const alice = await current.auth.signIn('alice');
+    const reviewerPage = pageFor(alice);
+    reviewerPage.setDefaultTimeout(30_000);
+    await openReview(reviewerPage);
+    await chooseGlobalContext(reviewerPage);
+    await loadScope(reviewerPage);
+    await waitForSuggestions(reviewerPage);
+    await reviewerPage.getByRole('checkbox', { name: new RegExp(book.title) }).click();
+    await confirmDecision(reviewerPage, 'accept');
+    await reviewerPage.getByRole('button', { name: 'Finish reviewing results' }).click();
+    await reviewerPage.getByLabel(m.prq_status()).selectOption('accepted_unselected');
+    await reviewerPage.getByRole('button', { name: m.prq_load(), exact: true }).click();
+    await waitForSuggestions(reviewerPage);
+
+    const editorIdentity = await current.stack.authPersona('editor');
+    const editor = await current.auth.signIn('editor');
+    const page = pageFor(editor);
+    page.setDefaultTimeout(30_000);
+    await page.goto(`${current.stack.web}/en/imports/review`, { waitUntil: 'domcontentloaded' });
+    await hydrate(page);
+    await chooseGlobalContext(page);
+    await page.getByLabel(m.prq_source()).fill(providerReviewSource);
+    await page.getByLabel(m.prq_status()).selectOption('accepted_unselected');
+    await page.getByRole('button', { name: m.prq_load(), exact: true }).click();
+    await page.getByRole('link', { name: m.prq_open_candidate(), exact: true }).waitFor({ state: 'visible' });
+    await page.getByRole('link', { name: m.prq_open_candidate(), exact: true }).click();
+    await page.waitForURL(/\/edit\?/);
+
+    const review = page.getByRole('region', { name: m.candidate_title(), exact: true });
+    expect(await review.getByRole('button', { name: m.candidate_adopt(), exact: true }).isDisabled()).toBe(false);
+    await review.locator(`#include-${book.candidate}`).click();
+    await review.getByRole('button', { name: m.candidate_adopt(), exact: true }).click();
+    await review.getByText(m.candidate_confirm_head({ head: '—' }), { exact: true }).waitFor();
+
+    await current.revokeGlobalAdoption(editorIdentity.accountId);
+    await review.getByRole('button', { name: m.candidate_adopt(), exact: true }).last().click();
+    await review.getByRole('alert').getByText(m.candidate_denied(), { exact: true }).waitFor();
+
+    const publicRead = await current.stack.kernel(`/v1/subjects/${book.id}`, {}, 'anonymous');
+    expect(publicRead.status).toBe(200);
+    const publicSubject = (await publicRead.json()) as {
+      subject: { statements: Record<string, { id: string }[]> };
+    };
+    expect(publicSubject.subject.statements['schema:inLanguage'] ?? []).toEqual([]);
+    await page.close();
+    await reviewerPage.close();
   },
 );
 

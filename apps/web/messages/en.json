@@ -699,6 +699,8 @@
   "candidate_selection_invalid": "Some choices need a fresh comparison or exceed this field’s limit.",
   "candidate_confirm_reject": "Reject this suggestion without deleting the assertion. Your permission is checked when you confirm.",
   "candidate_confirm_replace": "Replace the entire field selection with the values and ranks shown here. Unchecked values will no longer be selected. Your permission is checked when you confirm.",
+  "candidate_confirm_head": "Current selection head: {head}.",
+  "candidate_statement_identity": "Selected statement: {id}",
   "candidate_selection_confirmed": "The public reader confirms this selection and its ranks.",
   "candidate_draft_stale": "The comparison changed. Your selection draft is preserved. Reload, compare again, then explicitly confirm a new request.",
   "candidate_compare_hint": "Compare the disclosed suggestions. Acceptance, rejection and public selection are separate decisions.",

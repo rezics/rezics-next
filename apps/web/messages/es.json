@@ -689,6 +689,8 @@
   "candidate_selection_invalid": "Algunas opciones requieren una nueva revisión o superan el límite del campo.",
   "candidate_confirm_reject": "Rechaza esta sugerencia sin borrar la afirmación. Tus permisos se comprobarán al confirmar.",
   "candidate_confirm_replace": "Sustituye toda la selección del campo por los valores y rangos mostrados. Los valores sin marcar dejarán de estar seleccionados. Tus permisos se comprobarán al confirmar.",
+  "candidate_confirm_head": "Versión actual de la selección: {head}.",
+  "candidate_statement_identity": "Enunciado seleccionado: {id}",
   "candidate_selection_confirmed": "La lectura pública confirma la selección y sus rangos.",
   "candidate_draft_stale": "La comparación ha cambiado. Se conserva tu borrador. Recarga, vuelve a comparar y confirma expresamente una nueva solicitud.",
   "candidate_compare_hint": "Compara las sugerencias divulgadas. Aceptar, rechazar y seleccionar valores públicos son decisiones distintas.",
