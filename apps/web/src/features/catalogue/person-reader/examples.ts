@@ -54,7 +54,14 @@ export function personReaderExample(state: 'admitted' | 'empty' | 'withheld' | '
     const work = statement('wdt:P106', occupation, 'wikibase-item');
     work.qualifiers.push({
       property: { id: 'schema:startDate', data_type: 'time' },
-      value: { type: 'value', content: { time: '+2020-00-00T00:00:00Z', precision: 9 } },
+      value: {
+        type: 'value',
+        content: {
+          time: '+2020-00-00T00:00:00Z',
+          precision: 9,
+          calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+        },
+      },
     });
     read.subject.statements['wdt:P106'] = [work];
     read.subject.statements['schema:knowsLanguage'] = [statement('schema:knowsLanguage', language, 'wikibase-item')];

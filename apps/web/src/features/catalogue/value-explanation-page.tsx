@@ -24,8 +24,22 @@ function Part({ snak, page, locale }: { snak: Snak; page: ValuePage; locale: str
       <p lang={label?.lang} className="text-sm text-muted-foreground">
         {label?.text || m.subject_value_unlabelled({}, { locale: locale as never })}
       </p>
-      <CandidateValue snak={snak} related={page.related} locale={locale} />
+      <ExplanationValue snak={snak} page={page} locale={locale} />
     </div>
+  );
+}
+
+/** An item ID in a disclosed assertion is not disclosure of the target's destination. */
+function ExplanationValue({ snak, page, locale }: { snak: Snak & { id?: string }; page: ValuePage; locale: string }) {
+  if (snak.property.data_type === 'wikibase-item' && snak.value.type === 'value') {
+    const target = snak.value.content;
+    const summary =
+      typeof target === 'string' && Object.hasOwn(page.related, target) ? page.related[target] : undefined;
+    if (!summary || !('labels' in summary))
+      return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+  }
+  return (
+    <CandidateValue snak={snak} related={page.related} subject={page.id} documents={page.documents} locale={locale} />
   );
 }
 
@@ -236,13 +250,7 @@ export function ValueExplanationPage({
                     {page.propertyLabel.text || m.subject_value_unlabelled({}, o)}
                   </ContentItemHeading>
                   <div data-content-item-slot="preview" className="min-w-0 text-lg leading-relaxed">
-                    <CandidateValue
-                      snak={statement}
-                      related={page.related}
-                      subject={page.id}
-                      documents={page.documents}
-                      locale={locale}
-                    />
+                    <ExplanationValue snak={statement} page={page} locale={locale} />
                   </div>
                   {!!statement.qualifiers.length && (
                     <dl className="space-y-3">
