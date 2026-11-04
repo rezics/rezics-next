@@ -8,6 +8,37 @@ export type AccountViewerActions =
   | { state: 'ready'; actions: { action: string; operations: string[] }[]; securityHref: string | null }
   | { state: 'unavailable' };
 
+export type AccountPageContext =
+  | {
+      state: 'ready';
+      profile: AccountProfile;
+      viewerState: 'signed-in' | 'signed-out';
+      actions: { action: string; operations: string[] }[];
+      securityHref: string | null;
+    }
+  | { state: 'unavailable' };
+
+/** Compose only the public allowlist and the native viewer-action answer for this displayed account. */
+export function accountPageContextFromReads(
+  id: string,
+  publicBody: unknown,
+  viewer: AccountViewerActions | undefined,
+): AccountPageContext {
+  const profile = accountOf(publicBody);
+  if (!profile || profile.id !== id || viewer?.state === 'unavailable') return { state: 'unavailable' };
+  return {
+    state: 'ready',
+    profile: {
+      ...profile,
+      ...(profile.operated || profile.operatorId !== null ? { operated: true } : {}),
+      operatorId: null,
+    },
+    viewerState: viewer ? 'signed-in' : 'signed-out',
+    actions: viewer?.state === 'ready' ? viewer.actions : [],
+    securityHref: viewer?.state === 'ready' ? viewer.securityHref : null,
+  };
+}
+
 /** Personal BFF read: the browser supplies only the displayed Account key. */
 export const readAccountViewerActions = createServerFn({ method: 'GET' })
   .validator((value: unknown) => {
@@ -18,7 +49,7 @@ export const readAccountViewerActions = createServerFn({ method: 'GET' })
       throw new Error('Invalid account');
     return value;
   })
-  .handler(async ({ data }): Promise<AccountViewerActions> => {
+  .handler(async ({ data }): Promise<AccountPageContext> => {
     setResponseHeader('cache-control', 'private, no-store');
     const { env } = await import('cloudflare:workers');
     const sessionEnv = env as Partial<SessionEnv>;
@@ -28,28 +59,29 @@ export const readAccountViewerActions = createServerFn({ method: 'GET' })
     try {
       const request = getRequest();
       await prepareSession(request, sessionEnv);
+      const publicResult = await kernelClient().accounts.get({ query: { ids: data } });
+      if (publicResult.error || publicResult.status !== 200 || !publicResult.data) return { state: 'unavailable' };
       const authorization = viewerCredential(request);
-      if (!authorization) return { state: 'ready', actions: [], securityHref: null };
+      if (!authorization) return accountPageContextFromReads(data, publicResult.data, undefined);
       const result = await kernelClient().viewerActions.post(
         { resources: [{ type: 'access.account', id: data }] },
         { headers: { authorization } },
       );
       if (result.error || result.status !== 200) return { state: 'unavailable' };
       const resource = result.data?.resources.find((item) => item.type === 'access.account' && item.id === data);
-      return resource && 'viewerActions' in resource
-        ? {
-            state: 'ready',
-            actions: resource.viewerActions,
-            securityHref: securityHrefFromIssuer(sessionEnv.AUTH_ISSUER),
-          }
-        : { state: 'ready', actions: [], securityHref: null };
+      if (!resource || !('viewerActions' in resource)) return { state: 'unavailable' };
+      return accountPageContextFromReads(data, publicResult.data, {
+        state: 'ready',
+        actions: resource.viewerActions,
+        securityHref: securityHrefFromIssuer(sessionEnv.AUTH_ISSUER),
+      });
     } catch {
       return { state: 'unavailable' };
     }
   });
 
 export function accountOperationAllowed(
-  value: AccountViewerActions | undefined,
+  value: AccountViewerActions | AccountPageContext | undefined,
   action: string,
   operation: string,
 ): boolean {
@@ -72,6 +104,7 @@ export type AccountProfile = {
   subject: { id: string; label: string; type: string } | null;
   verified: boolean;
   automated: boolean;
+  operated?: boolean;
   operatorId: string | null;
   publicViews: { posts: boolean; reviews: boolean; collections: boolean; realms: boolean };
 };
@@ -113,6 +146,7 @@ export function accountOf(body: unknown): AccountProfile | undefined {
       !!account.subject.label &&
       typeof account.subject.type === 'string',
     automated: account.automated === true,
+    ...(account.operated === true || typeof account.operatorId === 'string' ? { operated: true } : {}),
     operatorId: typeof account.operatorId === 'string' ? account.operatorId : null,
     publicViews: {
       posts: views.posts !== false,

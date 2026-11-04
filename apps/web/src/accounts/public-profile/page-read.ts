@@ -1,5 +1,6 @@
 import type { KernelClient } from '@rezics/client';
 import type { View } from '@rezics/composition';
+import type { SubjectPageData } from '../../features/pages/subject';
 import {
   AgentReadError,
   agentPath,
@@ -9,6 +10,7 @@ import {
   loadAgentPage,
   pageProfile,
 } from '../../features/pages/agent';
+import { isRecord } from '../../features/pages/shared';
 import { viewIsPublic } from '../../features/pages/account-read';
 import { subjectTabs } from '../../features/pages/views';
 import { readPageAuthors } from '../../identity/read';
@@ -36,6 +38,25 @@ function overviewFallback(locale: string, handle: string, search = ''): string {
 }
 
 export { pageProfile };
+
+/** Keep the relationship's existence without returning its raw operator identifier. */
+function hideUnavailableOperatorIds(page: SubjectPageData, accountId: string): SubjectPageData {
+  let changed = false;
+  const reads = Object.fromEntries(
+    Object.entries(page.reads).map(([key, read]) => {
+      if (!isRecord(read.body) || !Array.isArray(read.body.accounts)) return [key, read];
+      let changedRead = false;
+      const accounts = read.body.accounts.map((account) => {
+        if (!isRecord(account) || account.id !== accountId || typeof account.operatorId !== 'string') return account;
+        changed = true;
+        changedRead = true;
+        return { ...account, operatorId: null, operated: true };
+      });
+      return [key, changedRead ? { ...read, body: { ...read.body, accounts } } : read];
+    }),
+  );
+  return changed ? { ...page, reads } : page;
+}
 
 /** Public reads always use anonymous authority, including continuations and optional operator hydration. */
 export async function loadPublicAccountJourney(
@@ -107,13 +128,12 @@ export async function loadPublicAccountJourney(
         ).catch(() => null)
       : null;
     const identity = profile?.operatorId ? identities?.[profile.operatorId] : undefined;
+    const handle = typeof identity?.handle === 'string' && identity.handle ? identity.handle : null;
+    const displayName =
+      typeof identity?.displayName === 'string' && identity.displayName ? identity.displayName : null;
     const operator =
-      identity && identity.state !== 'deleted'
-        ? {
-            id: identity.id,
-            handle: typeof identity.handle === 'string' && identity.handle ? identity.handle : null,
-            displayName: typeof identity.displayName === 'string' && identity.displayName ? identity.displayName : null,
-          }
+      identity && identity.state !== 'deleted' && (handle || displayName)
+        ? { id: identity.id, handle, displayName }
         : undefined;
     const page =
       compositionView && cursor
@@ -124,8 +144,8 @@ export async function loadPublicAccountJourney(
       kind: 'page' as const,
       view: (view ?? 'overview') as AccountView,
       handle,
-      page,
-      overview: shown.page,
+      page: hideUnavailableOperatorIds(page, shown.page.account.id),
+      overview: hideUnavailableOperatorIds(shown.page, shown.page.account.id),
       ...(operator ? { operator } : {}),
       ...(cursor ? { cursor } : {}),
       ...(view === 'realms' && profile ? { realms: await readPublicRealms(client, profile, cursor, signal) } : {}),
