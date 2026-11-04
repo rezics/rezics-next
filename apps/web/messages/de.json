@@ -4937,6 +4937,7 @@
   "library_progress_measure_clear": "Diese Einheit leeren",
   "library_progress_measure_save": "Unabhängigen Fortschritt speichern",
   "library_progress_measures_review": "Unabhängigen Fortschritt prüfen",
+  "library_progress_measures_correction": "Die aktuellen Erfassungsregeln für diese Einheit haben sich geändert. Korrigieren Sie den markierten Wert, bevor Sie ihn prüfen.",
   "library_progress_measures_review_amount": "{unit}: {amount}",
   "library_progress_measures_review_clear": "{unit}: erfassten Wert leeren",
   "library_progress_measures_review_unchanged": "{unit}: unverändert",

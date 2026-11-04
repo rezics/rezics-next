@@ -78,7 +78,10 @@ export function IndependentMeasuresEditor({
   measures,
   drafts,
   submitted,
+  correctionUnits,
   busy,
+  refreshing,
+  onRefresh,
   onDraft,
   onClear,
   onReview,
@@ -86,7 +89,10 @@ export function IndependentMeasuresEditor({
   measures: IndependentMeasure[];
   drafts: MeasureDraft[];
   submitted: boolean;
+  correctionUnits: string[];
   busy: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
   onDraft: (unit: string, text: string) => void;
   onClear: (unit: string) => void;
   onReview: () => void;
@@ -98,6 +104,7 @@ export function IndependentMeasuresEditor({
         {m.library_progress_measures_heading()}
       </h3>
       <p className="text-sm text-muted-foreground">{m.library_progress_measures_intro()}</p>
+      {correctionUnits.length ? <p role="alert">{m.library_progress_measures_correction()}</p> : null}
       <div className="grid gap-4 md:grid-cols-2">
         {measures.map((measure) => {
           const draft = drafts.find((item) => item.unit === measure.unit) ?? {
@@ -107,7 +114,7 @@ export function IndependentMeasuresEditor({
           };
           const writable = measure.recording === 'supported';
           const issue =
-            submitted && writable && !draft.clear
+            (submitted || correctionUnits.includes(measure.unit)) && writable && !draft.clear
               ? progressDecimalIssue(draft.text, measure.inputRules ?? {}, true)
               : null;
           const fieldId = `${headingId}-${measure.unit}`;
@@ -154,11 +161,16 @@ export function IndependentMeasuresEditor({
           );
         })}
       </div>
-      <Exposure operation="progress_session.record">
-        <button type="button" className={independentPrimaryActionClass} disabled={busy} onClick={onReview}>
-          {m.library_progress_measure_save()}
+      <div className="flex flex-wrap gap-3">
+        <Exposure operation="progress_session.record">
+          <button type="button" className={independentPrimaryActionClass} disabled={busy} onClick={onReview}>
+            {m.library_progress_measure_save()}
+          </button>
+        </Exposure>
+        <button type="button" className={independentActionClass} disabled={busy || refreshing} onClick={onRefresh}>
+          {m.library_progress_measures_refresh()}
         </button>
-      </Exposure>
+      </div>
     </section>
   );
 }

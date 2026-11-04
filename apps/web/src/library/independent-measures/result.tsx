@@ -11,7 +11,12 @@ export function IndependentMeasuresResult({
   onRetry?: () => void;
   onRefresh?: () => void;
 }) {
-  if (!outcome) return null;
+  if (!outcome)
+    return onRetry ? (
+      <button type="button" className={independentActionClass} onClick={onRetry}>
+        {m.library_progress_measures_retry()}
+      </button>
+    ) : null;
   if (outcome.state === 'acknowledged') {
     return (
       <p role="status" className="text-sm">
@@ -36,6 +41,11 @@ export function IndependentMeasuresResult({
     return (
       <div className="space-y-3">
         <p role="alert">{m.library_progress_conflict()}</p>
+        {onRetry ? (
+          <button type="button" className={independentActionClass} onClick={onRetry}>
+            {m.library_progress_measures_retry()}
+          </button>
+        ) : null}
         {onRefresh ? (
           <button type="button" className={independentActionClass} onClick={onRefresh}>
             {m.library_progress_measures_refresh()}

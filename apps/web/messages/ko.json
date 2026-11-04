@@ -4937,6 +4937,7 @@
   "library_progress_measure_clear": "이 단위 지우기",
   "library_progress_measure_save": "독립 진행도 저장",
   "library_progress_measures_review": "독립 진행도 검토",
+  "library_progress_measures_correction": "현재 단위의 기록 규칙이 변경되었습니다. 검토하기 전에 표시된 값을 수정하세요.",
   "library_progress_measures_review_amount": "{unit}: {amount}",
   "library_progress_measures_review_clear": "{unit}: 기록된 값 지우기",
   "library_progress_measures_review_unchanged": "{unit}: 변경 없음",

@@ -4937,6 +4937,7 @@
   "library_progress_measure_clear": "清除此單位",
   "library_progress_measure_save": "儲存獨立進度",
   "library_progress_measures_review": "核對獨立進度",
+  "library_progress_measures_correction": "此單位目前的記錄規則已變更。請先修正標示的數值，再進行核對。",
   "library_progress_measures_review_amount": "{unit}：{amount}",
   "library_progress_measures_review_clear": "{unit}：清除已記錄數值",
   "library_progress_measures_review_unchanged": "{unit}：未變更",
