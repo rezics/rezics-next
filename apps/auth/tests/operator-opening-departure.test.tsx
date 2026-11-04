@@ -201,12 +201,15 @@ test('blocked continuation storage keeps current-session Retry read-only', async
   await flush(() => p.calls[0]!.resolve(approval()));
   const saved = readPendingManagementOperationStepUp();
   await flush(() => p.calls[1]!.resolve(new Response(null, { status: 503 })));
-  const blocked = spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+  const blocked = spyOn(Object.getPrototypeOf(window.sessionStorage), 'setItem').mockImplementation(() => {
     throw new Error('storage blocked');
   });
   try {
     await p.click('Sign in again for a new opening');
-    expect(p.host.querySelector('[role="alert"]')).not.toBeNull();
+    expect(p.host.querySelector('[role="alert"]')?.textContent).toContain(
+      'Current authorized account details are unavailable',
+    );
+    expect(blocked).toHaveBeenCalledTimes(1);
     expect(p.calls).toHaveLength(2);
     expect(readPendingManagementOperationStepUp()).toEqual(saved);
     await p.click('Check current session');
