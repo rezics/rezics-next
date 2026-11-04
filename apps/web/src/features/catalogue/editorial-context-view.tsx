@@ -234,7 +234,7 @@ function EditorialContextWorkspaceLive({
           latest = { kind: 'unavailable' };
         }
         if (!lifetime.active() || !mounted.current) return;
-        session.current = latest.session ?? session.current;
+        session.current = ('session' in latest ? latest.session : undefined) ?? session.current;
         setInventory(latest);
         if (latest.kind !== 'ready') {
           setFailure({ ok: false, reason: latest.kind === 'denied' ? 'denied' : 'unavailable' });
