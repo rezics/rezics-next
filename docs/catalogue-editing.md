@@ -1153,6 +1153,7 @@ refusal and unavailable observation stay distinct from session availability; adm
 when creation is unavailable. Fresh creation still re-reads current eligibility, and the native create command
 remains final. Decision: independently identified publication creation eligibility is the current Global Context
 `subject.create` viewer-action observation; a disclosed work cannot grant it, and guest is session-derived.
+Decision: a dirty independent publication visit uses the same window beforeunload protection as recipe composition; in-app leave still uses the router blocker.
 
 The contributor enters multiple language rows with labels, descriptions and aliases using native initial-term
 semantics. Duplicate languages and invalid language or term input are explained before sealing. Rows keep a

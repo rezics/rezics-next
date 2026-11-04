@@ -28,8 +28,17 @@ export function useCatalogueEditorNavigation(needsDecision: () => boolean) {
   const blocker = useBlocker({
     shouldBlockFn,
     withResolver: true,
-    enableBeforeUnload: shouldProtect,
+    enableBeforeUnload: false,
   });
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!shouldProtect()) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => window.removeEventListener('beforeunload', beforeUnload);
+  }, [shouldProtect]);
   useEffect(() => {
     if (blocker.status !== 'blocked') return;
     return () => blocker.proceed?.();
