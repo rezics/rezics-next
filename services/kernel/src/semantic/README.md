@@ -192,6 +192,8 @@ Semantic writes use the route action and authority below. When the authority and
 | Community Context restoration      | `context:restore`      | Current community Context owner and Access |
 | Community Context creation         | `context:create`       | Global Context parent, with creation proof |
 
+`POST /v1/subjects` keeps that Global Context command anchor and advertises the same parent to `viewerActions` through `x-authority-resource-types: semantic.context` and `x-authority-resource-id` of the seeded Global Context. Created subject and revision resource types remain the command products. A type label or subject read does not grant creation.
+
 ## Identity references
 
 `readSubjectReference(pool: Pool, id: string, authorize: (client: PoolClient) => Promise<boolean>): Promise<{ id: string; component: SubjectComponent } | null>`

@@ -1,10 +1,17 @@
+import type { KernelClient } from '@rezics/client';
 import type { SessionEnv } from '../../session/client';
-import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '../../kernel/platform-closed';
 import { problemResponse } from '../../media/kernel';
 import { readSubjectSuggestions, type SuggestQuery } from '../../search/suggestions';
 import type { DescriptorRead } from './type-directory-client';
 import {
+  allowedCreateAuthority,
+  CATALOGUE_CREATE_ACTION,
+  CATALOGUE_CREATE_OPERATION,
+  CATALOGUE_CREATE_PARENT_ID,
+  CATALOGUE_CREATE_PARENT_TYPE,
   parseIdentityIntakeRequest,
+  type CreateAuthority,
   type IdentityHit,
   type IdentityIntakeBinding,
   type IdentityIntakePage,
@@ -25,6 +32,12 @@ export type IdentityIntakeRuntime = {
     signal: AbortSignal,
     locale: string,
   ): Promise<NativeSuggestionPage>;
+  readCreateEligibility(
+    credential: string | null,
+    viewer: ViewerState,
+    signal: AbortSignal,
+    locale: string,
+  ): Promise<CreateAuthority>;
 };
 
 async function defaultRuntime(): Promise<IdentityIntakeRuntime> {
@@ -43,6 +56,8 @@ async function defaultRuntime(): Promise<IdentityIntakeRuntime> {
       directory.readDirectoryDescriptor(kernel.kernelClient(locale), typeId, locale),
     readSuggestions: (query, credential, signal, locale) =>
       search.readSubjectSuggestions(kernel.kernelClient(locale), query, credential, signal),
+    readCreateEligibility: (credential, viewer, signal, locale) =>
+      observeCreateEligibility(kernel.kernelClient(locale), credential, viewer, signal),
   };
 }
 
@@ -76,6 +91,71 @@ function preferredLabels(
 }
 
 const languageTag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u;
+const unknownEligibility: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+
+function problemCode(value: unknown): string | undefined {
+  return value && typeof value === 'object' && 'code' in value && typeof value.code === 'string'
+    ? value.code
+    : undefined;
+}
+
+function eligibilityFromViewerActions(result: {
+  status: number;
+  data?: {
+    resources: {
+      type: string;
+      id: string;
+      viewerActions?: { action: string; operations: string[] }[];
+      error?: string;
+    }[];
+  };
+  error?: { value?: unknown };
+}): CreateAuthority {
+  const body = result.error?.value;
+  const code = problemCode(body);
+  if (isPlatformClosedProblem(result.status, body) || code === 'platform_closed')
+    return { state: 'refused', reason: 'gate' };
+  if (result.status === 403 && code === 'account_suspended') return { state: 'refused', reason: 'suspended' };
+  if (result.status === 503 || code === 'dependency_unavailable') return { state: 'unknown', reason: 'dependency' };
+  if (result.status !== 200 || !result.data) return unknownEligibility;
+  const resource = result.data.resources.find(
+    (entry) => entry.type === CATALOGUE_CREATE_PARENT_TYPE && entry.id === CATALOGUE_CREATE_PARENT_ID,
+  );
+  if (!resource || 'error' in resource || !('viewerActions' in resource) || !Array.isArray(resource.viewerActions))
+    return unknownEligibility;
+  return resource.viewerActions.some(
+    (entry) => entry.action === CATALOGUE_CREATE_ACTION && entry.operations.includes(CATALOGUE_CREATE_OPERATION),
+  )
+    ? allowedCreateAuthority
+    : { state: 'refused', reason: 'permission' };
+}
+
+/** Current parent subject.create observation. Session presence is decided before this call. */
+export async function observeCreateEligibility(
+  client: KernelClient,
+  credential: string | null,
+  viewer: ViewerState,
+  signal?: AbortSignal,
+): Promise<CreateAuthority> {
+  if (viewer === 'signed-out') return { state: 'guest' };
+  if (viewer !== 'signed-in' || !credential) return unknownEligibility;
+  try {
+    const result = await client.viewerActions.post(
+      { resources: [{ type: CATALOGUE_CREATE_PARENT_TYPE, id: CATALOGUE_CREATE_PARENT_ID }] },
+      {
+        headers: { authorization: credential },
+        fetch: { cache: 'no-store', ...(signal ? { signal } : {}) },
+      },
+    );
+    return eligibilityFromViewerActions(result);
+  } catch (error) {
+    if (isPlatformClosedError(error)) return { state: 'refused', reason: 'gate' };
+    const code = problemCode(error) ?? problemCode((error as { problem?: unknown }).problem);
+    if (code === 'account_suspended') return { state: 'refused', reason: 'suspended' };
+    if (code === 'dependency_unavailable') return { state: 'unknown', reason: 'dependency' };
+    return unknownEligibility;
+  }
+}
 
 function projectResults(
   page: NativeSuggestionPage,
@@ -115,6 +195,7 @@ function createPage(
   status: IdentityIntakeStatus,
   viewer: ViewerState,
   results: IdentityHit[] = [],
+  createAuthority: CreateAuthority = unknownEligibility,
 ): IdentityIntakePage {
   const continueWithResults = status === 'ready' || status === 'partial' || status === 'empty';
   const continueUnverified = status === 'unavailable' || status === 'denied' || status === 'signed-out';
@@ -127,11 +208,22 @@ function createPage(
       continueWithResults,
       continueUnverified,
       retry: status === 'unavailable' || status === 'denied' || status === 'signed-out' || status === 'stale',
-      // No current parent-scoped subject:create action read is mounted for the direct generic creator.
-      createAuthority: 'unknown',
+      createAuthority,
     },
     results,
   };
+}
+
+async function settledEligibility(
+  task: Promise<CreateAuthority> | undefined,
+  fallback: CreateAuthority,
+): Promise<CreateAuthority> {
+  if (!task) return fallback;
+  try {
+    return await task;
+  } catch {
+    return unknownEligibility;
+  }
 }
 
 function failureStatus(error: unknown): IdentityIntakeStatus {
@@ -176,16 +268,31 @@ export async function identityIntakeResponse(
     return privateJson(createPage(binding, 'unavailable', 'unavailable'));
   }
 
+  const eligibilityTask = Promise.resolve()
+    .then(() => dependencies.readCreateEligibility(credential, viewer, request.signal, binding.locale))
+    .catch(() => unknownEligibility);
+  const guestFallback: CreateAuthority = viewer === 'signed-out' ? { state: 'guest' } : unknownEligibility;
+
   let descriptor: DescriptorRead;
   try {
     descriptor = await dependencies.readTypeDescriptor(binding.typeId, binding.locale);
   } catch {
-    return privateJson(createPage(binding, 'unavailable', viewer));
+    return privateJson(
+      createPage(binding, 'unavailable', viewer, [], await settledEligibility(eligibilityTask, guestFallback)),
+    );
   }
-  if (!descriptor.ok && descriptor.reason === 'missing') return privateJson(createPage(binding, 'stale', viewer));
-  if (!descriptor.ok) return privateJson(createPage(binding, 'unavailable', viewer));
+  if (!descriptor.ok && descriptor.reason === 'missing')
+    return privateJson(
+      createPage(binding, 'stale', viewer, [], await settledEligibility(eligibilityTask, guestFallback)),
+    );
+  if (!descriptor.ok)
+    return privateJson(
+      createPage(binding, 'unavailable', viewer, [], await settledEligibility(eligibilityTask, guestFallback)),
+    );
   if (descriptor.descriptor.typeId !== binding.typeId || descriptor.descriptor.releaseDigest !== binding.releaseDigest)
-    return privateJson(createPage(binding, 'stale', viewer));
+    return privateJson(
+      createPage(binding, 'stale', viewer, [], await settledEligibility(eligibilityTask, guestFallback)),
+    );
 
   try {
     const suggestions = await dependencies.readSuggestions(
@@ -202,11 +309,20 @@ export async function identityIntakeResponse(
     const results = projectResults(suggestions, descriptor.descriptor, binding.locale, binding.language);
     const partial = results.some((hit) => !hit.summary || !hit.typeLabel || hit.labels.length === 0);
     return privateJson(
-      createPage(binding, results.length === 0 ? 'empty' : partial ? 'partial' : 'ready', viewer, results),
+      createPage(
+        binding,
+        results.length === 0 ? 'empty' : partial ? 'partial' : 'ready',
+        viewer,
+        results,
+        await settledEligibility(eligibilityTask, guestFallback),
+      ),
     );
   } catch (error) {
     const status = failureStatus(error);
     const nextViewer = status === 'signed-out' ? 'signed-out' : viewer;
-    return privateJson(createPage(binding, status, nextViewer));
+    const nextFallback: CreateAuthority = nextViewer === 'signed-out' ? { state: 'guest' } : unknownEligibility;
+    return privateJson(
+      createPage(binding, status, nextViewer, [], await settledEligibility(eligibilityTask, nextFallback)),
+    );
   }
 }

@@ -7,6 +7,7 @@ import {
   normalizeIdentityQuery,
   readIdentityIntake,
   validIdentityLanguage,
+  type CreateAuthority,
   type IdentityIntakeInput,
   type IdentityIntakePage,
 } from './identity-intake';
@@ -17,6 +18,66 @@ type PanelState =
   | { intentKey: string | null; phase: 'page'; page: IdentityIntakePage }
   | { intentKey: string | null; phase: 'failure' };
 type IntakeReader = typeof readIdentityIntake;
+
+export function CreateAuthorityStatus({
+  locale,
+  authority,
+  pending,
+  href,
+  onRetry,
+}: {
+  locale: string;
+  authority: CreateAuthority | null | undefined;
+  pending?: boolean;
+  href: string;
+  onRetry?: () => void;
+}) {
+  const options = { locale: locale as never };
+  const signIn = (
+    <a className="underline" href={`/auth/sign-in?return_to=${encodeURIComponent(href)}`}>
+      {m.account_sign_in({}, options)}
+    </a>
+  );
+  const retry =
+    onRetry && (pending || authority?.state === 'unknown' || authority?.state === 'refused') ? (
+      <Button type="button" size="lg" variant="outline" onClick={onRetry}>
+        {m.identity_intake_authority_retry({}, options)}
+      </Button>
+    ) : null;
+  if (pending && !authority)
+    return (
+      <div className="space-y-2">
+        <p role="status">{m.identity_intake_authority_reading({}, options)}</p>
+        {retry}
+      </div>
+    );
+  if (!authority) return null;
+  if (authority.state === 'allowed')
+    return <p role="status">{m.identity_intake_authority_allowed({}, options)}</p>;
+  if (authority.state === 'guest')
+    return (
+      <p role="status">
+        {m.identity_intake_authority_guest({}, options)} {signIn}
+      </p>
+    );
+  const text =
+    authority.state === 'refused'
+      ? authority.reason === 'gate'
+        ? m.identity_intake_authority_refused_gate({}, options)
+        : authority.reason === 'suspended'
+          ? m.identity_intake_authority_refused_suspended({}, options)
+          : m.identity_intake_authority_refused_permission({}, options)
+      : authority.reason === 'dependency'
+        ? m.identity_intake_authority_dependency({}, options)
+        : m.identity_intake_authority_unknown({}, options);
+  return (
+    <div className="space-y-2">
+      <p role="alert">{text}</p>
+      {authority.state === 'guest' ? signIn : null}
+      {retry}
+    </div>
+  );
+}
 
 export function IdentityIntakePanel({
   locale,
@@ -35,6 +96,11 @@ export function IdentityIntakePanel({
   onRefreshType,
   inputId,
   read = readIdentityIntake,
+  authority,
+  onAuthority,
+  onRefreshAuthority,
+  authorityPending,
+  createHref,
 }: {
   locale: string;
   intent: IdentityIntakeInput | null;
@@ -52,9 +118,16 @@ export function IdentityIntakePanel({
   onRefreshType: () => void;
   inputId: string;
   read?: IntakeReader;
+  authority?: CreateAuthority | null;
+  onAuthority?: (authority: CreateAuthority) => void;
+  onRefreshAuthority?: () => void;
+  authorityPending?: boolean;
+  createHref?: string;
 }) {
   const options = { locale: locale as never };
   const headingId = useId();
+  const onAuthorityRef = useRef(onAuthority);
+  onAuthorityRef.current = onAuthority;
   const intentKey = identityIntentKey(intent, version, viewerKey);
   const currentKey = useRef(intentKey);
   currentKey.current = intentKey;
@@ -97,8 +170,10 @@ export function IdentityIntakePanel({
         !requestController.signal.aborted &&
         generation.current === requestGeneration &&
         currentKey.current === intentKey
-      )
+      ) {
         setState({ intentKey, phase: 'page', page });
+        onAuthorityRef.current?.(page.actions.createAuthority);
+      }
     } catch {
       if (
         !requestController.signal.aborted &&
@@ -281,9 +356,13 @@ export function IdentityIntakePanel({
         </div>
       ) : null}
 
-      {page?.actions.createAuthority === 'unknown' ? (
-        <p className="text-sm text-muted-foreground">{m.identity_intake_authority_unknown({}, options)}</p>
-      ) : null}
+      <CreateAuthorityStatus
+        locale={locale}
+        authority={authority ?? page?.actions.createAuthority}
+        pending={authorityPending}
+        href={createHref ?? `/${locale}/catalogue/new`}
+        {...(onRefreshAuthority ? { onRetry: onRefreshAuthority } : {})}
+      />
       <div className="flex flex-wrap gap-2">
         {continueWithResults && intentKey ? (
           <Button type="button" size="lg" disabled={disabled || confirmed} onClick={() => onContinue(intentKey, false)}>

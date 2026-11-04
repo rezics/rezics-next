@@ -704,6 +704,8 @@ function subjectRoutes(
           'x-exposure': 'public',
           'x-action': 'subject:create',
           'x-resource-types': ['semantic.subject', 'semantic.revision'],
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
