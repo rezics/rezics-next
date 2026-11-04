@@ -14,12 +14,12 @@ const { useIsMobile } = await import('@rezics/ui/hooks/use-mobile');
 test('selection review hydrates to a phone sheet, crosses to Base UI dialog and restores its current opener', async () => {
   const browser = new Window({ url: 'https://site.test/en/library', width: 390, height: 844 });
   let width = 390;
-  let mediaQuery: MediaQueryList | undefined;
+  const mediaQueries: MediaQueryList[] = [];
   Object.defineProperty(browser, 'innerWidth', { configurable: true, get: () => width });
   const nativeMatchMedia = browser.matchMedia.bind(browser);
   browser.matchMedia = (query) => {
     const current = nativeMatchMedia(query);
-    mediaQuery = current;
+    mediaQueries.push(current);
     return current;
   };
 
@@ -99,7 +99,7 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
 
     await act(async () => {
       width = 1024;
-      mediaQuery?.dispatchEvent(new browser.Event('change'));
+      for (const mediaQuery of mediaQueries) mediaQuery.dispatchEvent(new browser.Event('change'));
     });
     expect(host.querySelector('output')?.getAttribute('data-mobile')).toBe('false');
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).not.toBeNull();
@@ -112,7 +112,7 @@ test('selection review hydrates to a phone sheet, crosses to Base UI dialog and 
 
     await act(async () => {
       width = 390;
-      mediaQuery?.dispatchEvent(new browser.Event('change'));
+      for (const mediaQuery of mediaQueries) mediaQuery.dispatchEvent(new browser.Event('change'));
     });
     expect(browser.document.querySelector('[data-slot="dialog-content"]')).toBeNull();
     expect(browser.document.querySelector('[data-slot="drawer-popup"]')).not.toBeNull();
