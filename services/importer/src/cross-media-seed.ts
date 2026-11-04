@@ -1258,12 +1258,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     const link = parsePositiveLink(row.link);
     if (link === undefined) {
       invalidWorkOwners.add(owner);
-      gap(
-        'vndb',
-        'vn_extlinks',
-        { id: owner, link: null },
-        'Invalid selected VNDB work external-link identifier',
-      );
+      gap('vndb', 'vn_extlinks', { id: owner, link: null }, 'Invalid selected VNDB work external-link identifier');
       continue;
     }
     const joins = workJoins.get(owner) ?? [];
@@ -1276,12 +1271,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     if (joins.length >= vndbLimits.maxLinks) {
       invalidWorkOwners.add(owner);
       workJoins.delete(owner);
-      gap(
-        'vndb',
-        'vn_extlinks',
-        { id: owner, link },
-        'Selected VNDB work external links exceed the converter limit',
-      );
+      gap('vndb', 'vn_extlinks', { id: owner, link }, 'Selected VNDB work external links exceed the converter limit');
       continue;
     }
     joins.push({ join: { id: owner, link }, raw: { id: row.id, link: row.link } });
@@ -1500,15 +1490,19 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   plan.records.vndb = workProjection.records;
   plan.workLinks = workProjection.links;
   plan.edges.push(...workProjection.edges);
-  for (const missing of workProjection.gaps)
-    gap('vndb', 'vn_extlinks', missing.record, missing.reason);
+  for (const missing of workProjection.gaps) gap('vndb', 'vn_extlinks', missing.record, missing.reason);
   for (const entity of plan.entities.vndb) {
     const entry = entityJoins.get(entity.key);
     if (!entry) continue;
     const missing = entry.joins.filter((join) => !dictionary.has(join.link));
     if (missing.length) {
       for (const join of missing)
-        gap('vndb', entry.table, { id: join.id, link: join.link }, 'Missing selected VNDB external-link dictionary row');
+        gap(
+          'vndb',
+          entry.table,
+          { id: join.id, link: join.link },
+          'Missing selected VNDB external-link dictionary row',
+        );
       continue;
     }
     const extlinks = entry.joins.map((join) => {
@@ -1576,10 +1570,8 @@ export class CrossMediaDumpFiles implements CrossMediaTables {
     const columns = header ? header.toString('utf8').trimEnd().split('\t') : null;
     if (columns) {
       ensure(columns.length > 0 && new Set(columns).size === columns.length, 'Invalid VNDB header');
-      if (table === 'vn_extlinks')
-        ensure(columns.join('\t') === 'id\tlink', 'Invalid VNDB vn_extlinks header');
-      if (table === 'extlinks')
-        ensure(columns.join('\t') === 'id\tsite\tvalue', 'Invalid VNDB extlinks header');
+      if (table === 'vn_extlinks') ensure(columns.join('\t') === 'id\tlink', 'Invalid VNDB vn_extlinks header');
+      if (table === 'extlinks') ensure(columns.join('\t') === 'id\tsite\tvalue', 'Invalid VNDB extlinks header');
       if (table === 'producers_relations')
         ensure(columns.join('\t') === 'id\tpid\trelation', 'Invalid VNDB producers_relations header');
       if (table === 'tags' || table === 'tags_parents' || table === 'tags_vn')
@@ -1851,12 +1843,7 @@ export async function seedCrossMedia(
         };
       },
     });
-    const selected = [
-      ...plan.records.bangumi,
-      ...plan.entities.bangumi,
-      ...plan.records.vndb,
-      ...plan.entities.vndb,
-    ];
+    const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
     const lookupKeys = new Map<string, { provider: Provider; externalId: string; selected: boolean }>();
     for (const record of selected) {
       const provider: Provider = record.source === 'vndb' ? 'vndb' : 'bangumi';

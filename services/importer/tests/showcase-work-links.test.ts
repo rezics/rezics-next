@@ -58,7 +58,9 @@ async function copiedDumps(root: string) {
       { id: 100, type: 2, name: 'STEINS;GATE' },
       { id: 101, type: 2, name: 'CLANNAD' },
       { id: 102, type: 2, name: 'Fate/stay night' },
-    ].map((row) => JSON.stringify(row)).join('\n') + '\n',
+    ]
+      .map((row) => JSON.stringify(row))
+      .join('\n') + '\n',
   );
   for (const name of [
     'subject-relations',
@@ -111,7 +113,11 @@ test('default selected-family COPY planning joins only selected VN links and kee
     const selected = plan.records.vndb.find((record) => record.key === 'v411')!;
     const missing = plan.records.vndb.find((record) => record.key === 'v410')!;
     expect(selected.payload).toMatchObject({
-      vn_extlinks: [{ id: 'v411', link: 1 }, { id: 'v411', link: 2 }, { id: 'v411', link: 4 }],
+      vn_extlinks: [
+        { id: 'v411', link: 1 },
+        { id: 'v411', link: 2 },
+        { id: 'v411', link: 4 },
+      ],
       extlinks: [
         { id: 1, site: 'website', value: 'https://bgm.tv/subject/100' },
         { id: 2, site: 'website', value: 'https://example.org/v411' },

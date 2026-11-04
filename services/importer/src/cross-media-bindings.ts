@@ -197,7 +197,10 @@ export class CrossMediaGraph {
         mark.run('unresolved', null, graphEdgeKey(draft));
         continue;
       }
-      if (draft.fenceFacts && (await input.fence({ source: draft.alias, externalId: draft.holder, fieldGroup: 'facts' })).fenced) {
+      if (
+        draft.fenceFacts &&
+        (await input.fence({ source: draft.alias, externalId: draft.holder, fieldGroup: 'facts' })).fenced
+      ) {
         unresolved.push({ ...draft, reason: 'fenced_source_facts' });
         mark.run('unresolved', null, graphEdgeKey(draft));
         continue;

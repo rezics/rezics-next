@@ -4,7 +4,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand } from '@rezics/definitions/bulk';
-import { crossMediaAliases, planCrossMediaSeed, seedCrossMedia, type CrossMediaTables } from '../../../importer/src/cross-media-seed.ts';
+import {
+  crossMediaAliases,
+  planCrossMediaSeed,
+  seedCrossMedia,
+  type CrossMediaTables,
+} from '../../../importer/src/cross-media-seed.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
 import { openApiObserver } from './api-observer.ts';
@@ -16,12 +21,10 @@ const linkedUrl = 'https://bgm.tv/subject/100';
 function tables(value = linkedUrl): CrossMediaTables {
   return {
     async *rows(provider, table) {
-      if (provider === 'bangumi' && table === 'subject')
-        yield { id: 100, type: 2, name: 'STEINS;GATE' };
+      if (provider === 'bangumi' && table === 'subject') yield { id: 100, type: 2, name: 'STEINS;GATE' };
       if (provider !== 'vndb') return;
       if (table === 'vn') yield { id: 'v410', olang: 'ja', alias: null };
-      if (table === 'vn_titles')
-        yield { id: 'v410', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
+      if (table === 'vn_titles') yield { id: 'v410', lang: 'ja', official: 't', title: 'STEINS;GATE', latin: null };
       if (table === 'entry_meta') yield { id: 'v410', revision: '7', lastmod: '2026-10-25' };
       if (table === 'vn_extlinks') yield { id: 'v410', link: 1 };
       if (table === 'extlinks') yield { id: 1, site: 'website', value };
@@ -92,7 +95,9 @@ test('default seed publishes the cited VN work link on its own identity and refr
       const seen = new Set<string>();
       for (;;) {
         const listing = await candidates(subject, property);
-        const next = listing.candidates.find((candidate) => candidate.source && !candidate.retracted && !seen.has(candidate.id));
+        const next = listing.candidates.find(
+          (candidate) => candidate.source && !candidate.retracted && !seen.has(candidate.id),
+        );
         if (!next) {
           const live = listing.candidates.filter((candidate) => !candidate.retracted);
           if (!live.length) return;
@@ -176,11 +181,13 @@ test('default seed publishes the cited VN work link on its own identity and refr
     ).toBe(true);
     const urlCandidates = await candidates(vnId, 'schema:url');
     const urlCandidate = urlCandidates.candidates.find((candidate) => candidate.statement.value.content === linkedUrl)!;
-    expect(urlCandidate.statement.references?.some((reference) =>
-      reference.parts.some(
-        (part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/v410.7',
+    expect(
+      urlCandidate.statement.references?.some((reference) =>
+        reference.parts.some(
+          (part) => part.property.id === 'schema:url' && part.value.content === 'https://vndb.org/v410.7',
+        ),
       ),
-    )).toBe(true);
+    ).toBe(true);
     await acceptAdopt(vnId, 'wdt:P5732');
     await acceptAdopt(vnId, 'wdt:P3180');
     await acceptAdopt(vnId, 'schema:url');
@@ -209,7 +216,9 @@ test('default seed publishes the cited VN work link on its own identity and refr
       mediaDeadlineMs: 0,
     });
     expect(commands.slice(commandOffset).filter((command) => command.op === 'create')).toEqual([]);
-    const refreshedVnId = subjectId(refreshed.readings.find((row) => row.source === 'vndb' && row.externalId === 'v410')!);
+    const refreshedVnId = subjectId(
+      refreshed.readings.find((row) => row.source === 'vndb' && row.externalId === 'v410')!,
+    );
     expect(refreshedVnId).toBe(vnId);
     expect(refreshed.unresolved).toContainEqual(
       expect.objectContaining({ holder: 'v410', property: 'wdt:P5732', reason: 'fenced_source_facts' }),
