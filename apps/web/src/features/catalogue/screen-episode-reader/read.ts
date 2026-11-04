@@ -3,58 +3,104 @@ import type { Release } from '@rezics/definitions';
 import { pickText } from '@rezics/composition';
 import { episodeMembershipProperty } from '../screen-episode-membership';
 import { readScreenProfile, type ScreenRead } from '../screen-profile';
-import { WORK_PARTS_PAGE_CAP, partStreams, type PartRow } from '../work-parts';
+import { WORK_PARTS_PAGE_CAP, partStreams } from '../work-parts';
 
 type Endpoint = ReturnType<KernelClient['subjects']>;
 type LinkPage = NonNullable<Awaited<ReturnType<Endpoint['links']['get']>>['data']>;
-type Part = Pick<PartRow, 'summary' | 'statementId'> & { statement?: PartRow['statement'] };
+type LinkRow = LinkPage['links'][number];
+type MembershipStatement = NonNullable<LinkRow['assertion']>;
+
+/** The native links route has no aggregate wire-byte ceiling; bound retained adapter data to 1 MiB. */
+export const SCREEN_EPISODE_PAGE_MAX_BYTES = 1_048_576;
 
 export type ScreenEpisodeEntry = {
   membershipId: string;
+  holderId: string;
+  parentId: string;
+  context: string;
   id: string;
   type: 'schema:Episode' | 'schema:TVSeason';
   label?: string;
   language?: string;
   typeLabel: { text: string; lang: string | null };
   position?: string;
+  statement?: MembershipStatement;
+  related?: SubjectRead['related'];
 };
 
 export type ScreenEpisodeRead =
-  | { ok: false; reason: 'concealed' | 'invalid' | 'stale' | 'unavailable' }
+  | { ok: false; reason: 'concealed' | 'invalid' | 'stale' | 'unavailable' | 'unsupported' }
   | { ok: true; state: 'empty' | 'ready' | 'withheld'; entries: ScreenEpisodeEntry[]; next: string | null };
 
 export type ScreenProfileReaderLoad = { profile: ScreenRead; episodes?: ScreenEpisodeRead };
 
-type PageCount = { value: number; exact?: boolean } | undefined;
+type PageCount = LinkPage['count'];
+
+function pageWithinBudget(page: LinkPage): boolean {
+  try {
+    const encoded = new TextEncoder().encode(JSON.stringify(page));
+    return encoded.byteLength <= SCREEN_EPISODE_PAGE_MAX_BYTES;
+  } catch {
+    return false;
+  }
+}
 
 function rowEntries(
-  rows: readonly Part[],
+  rows: readonly LinkRow[],
+  parentId: string,
   parentType: string,
+  context: string,
   release: Release,
   locale: string,
-  positionAllowed: boolean,
 ) {
   return rows.flatMap((row): ScreenEpisodeEntry[] => {
     const summary = row.summary;
-    if (!summary || !summary.id) return [];
+    const holderId = row.subject;
+    if (!summary?.id || summary.id !== holderId || row.property !== episodeMembershipProperty) return [];
     const type = summary.type;
     if (type !== 'schema:Episode' && (parentType !== 'schema:TVSeries' || type !== 'schema:TVSeason')) return [];
-    const nativePosition = positionAllowed
-      ? row.statement?.qualifiers.find((part) => part.property.id === 'schema:position')
-      : undefined;
+
+    const statement = row.assertion;
+    if (
+      statement &&
+      (statement.id !== row.statement ||
+        statement.property.id !== row.property ||
+        statement.value.type !== 'value' ||
+        statement.value.content !== parentId)
+    )
+      return [];
+
+    const nativePosition = statement?.qualifiers.find((part) => part.property.id === 'schema:position');
+    const positionAllowed =
+      release.properties[episodeMembershipProperty]?.qualifiers.includes('schema:position') === true &&
+      release.properties['schema:position']?.datatype === 'string';
     const position =
-      nativePosition?.value.type === 'value' && typeof nativePosition.value.content === 'string'
+      positionAllowed && nativePosition?.value.type === 'value' && typeof nativePosition.value.content === 'string'
         ? nativePosition.value.content
         : undefined;
+    const related = row.related
+      ? Object.fromEntries(
+          Object.entries(row.related).map(([id, value]) => [
+            id,
+            { type: value.type, labels: value.label ? { [value.label.language]: value.label.value } : {} },
+          ]),
+        )
+      : undefined;
+
     return [
       {
-        membershipId: row.statementId,
+        membershipId: row.statement,
+        holderId,
+        parentId,
+        context,
         id: summary.id,
         type,
         ...(summary.label?.value ? { label: summary.label.value } : {}),
         ...(summary.label?.language ? { language: summary.label.language } : {}),
         typeLabel: pickText(release.types[type]?.labels ?? {}, locale),
         ...(position === undefined ? {} : { position }),
+        ...(statement ? { statement } : {}),
+        ...(related ? { related } : {}),
       },
     ];
   });
@@ -67,13 +113,15 @@ function pageState(
   next: string | null,
   cursor: string | undefined,
 ): ScreenEpisodeRead {
-  if (!count || !Number.isSafeInteger(count.value) || count.value < 0) return { ok: false, reason: 'unavailable' };
-  if (!cursor && !entries.length && !rowCount && !next && count.exact === true && count.value === 0)
+  if (count && (!Number.isSafeInteger(count.value) || count.value < 0)) return { ok: false, reason: 'unavailable' };
+  if (next !== null && (!next.length || next.length > 8192)) return { ok: false, reason: 'unavailable' };
+  if (!cursor && !entries.length && !rowCount && !next && count?.exact === true && count.value === 0)
     return { ok: true, state: 'empty', entries, next };
   const withheld =
-    (!entries.length && (rowCount > 0 || next !== null || cursor !== undefined)) ||
+    entries.some((entry) => !entry.statement) ||
     entries.length < rowCount ||
-    (!cursor && next === null && count.value > rowCount);
+    (!cursor && next === null && count !== undefined && count.value > rowCount) ||
+    (!count && entries.length === 0 && next === null);
   return { ok: true, state: withheld ? 'withheld' : 'ready', entries, next };
 }
 
@@ -83,7 +131,7 @@ function failed(status: number): ScreenEpisodeRead {
   return { ok: false, reason: 'unavailable' };
 }
 
-/** Read one current work-parts page. Membership and member labels come only from the installed Semantic response. */
+/** Read one current inverse-membership window and retain only the exact returned membership evidence. */
 export async function readScreenEpisodePage(
   client: KernelClient,
   release: Release,
@@ -94,16 +142,12 @@ export async function readScreenEpisodePage(
 ): Promise<ScreenEpisodeRead> {
   const parentType = parent.subject.type;
   if (parentType !== 'schema:TVSeries' && parentType !== 'schema:TVSeason') return { ok: false, reason: 'invalid' };
-  const streams = partStreams(release, parentType, locale);
-  const stream =
-    streams.find(
-      (candidate) => candidate.direction === 'inverse' && candidate.property === episodeMembershipProperty,
-    ) ?? streams[0];
-  if (!stream) return { ok: false, reason: 'unavailable' };
+  const stream = partStreams(release, parentType, locale).find(
+    (candidate) => candidate.direction === 'inverse' && candidate.property === episodeMembershipProperty,
+  );
+  if (!stream) return { ok: false, reason: 'unsupported' };
   const definition = release.properties[stream.property];
-  if (!definition?.relation) return { ok: false, reason: 'unavailable' };
-  const positionAllowed =
-    definition.qualifiers.includes('schema:position') && release.properties['schema:position']?.datatype === 'string';
+  if (!definition?.relation) return { ok: false, reason: 'unsupported' };
   const query = {
     property: stream.property,
     language: locale,
@@ -111,34 +155,17 @@ export async function readScreenEpisodePage(
     ...(context ? { context } : {}),
     ...(cursor ? { cursor } : {}),
   };
-  const fetch = { cache: 'no-store' as const, redirect: 'manual' as const };
   try {
-    if (stream.direction === 'inverse') {
-      const result = await client.subjects({ id: parent.subject.id }).links.get({ query, fetch });
-      if (result.status !== 200 || !result.data) return failed(result.status);
-      const rows: Part[] = result.data.links.map((row) => ({
-        statementId: row.statement,
-        summary: row.summary,
-        ...(row.assertion ? { statement: row.assertion } : {}),
-      }));
-      return pageState(
-        rowEntries(rows, parentType, release, locale, positionAllowed),
-        rows.length,
-        result.data.count,
-        result.data.next,
-        cursor,
-      );
-    }
-    const result = await client.subjects({ id: parent.subject.id }).relations.get({ query, fetch });
+    const result = await client.subjects({ id: parent.subject.id }).links.get({
+      query,
+      fetch: { cache: 'no-store', redirect: 'manual' },
+    });
     if (result.status !== 200 || !result.data) return failed(result.status);
-    const rows: Part[] = result.data.relations.map((row) => ({
-      statementId: row.statement.id,
-      summary: row.summary,
-      statement: row.statement,
-    }));
+    if (result.data.links.length > WORK_PARTS_PAGE_CAP || !pageWithinBudget(result.data))
+      return { ok: false, reason: 'unavailable' };
     return pageState(
-      rowEntries(rows, parentType, release, locale, positionAllowed),
-      rows.length,
+      rowEntries(result.data.links, parent.subject.id, parentType, parent.subject.context, release, locale),
+      result.data.links.length,
       result.data.count,
       result.data.next,
       cursor,

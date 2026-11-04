@@ -961,6 +961,7 @@ export function SubjectPage({
                 link={ContextLink}
                 {...(page.context?.id ? { context: page.context.id } : {})}
                 viewerKey={page.requestedReader ?? null}
+                readerSpoilerLevel={reader?.spoilerLevel ?? 0}
               />
             ) : null}
             {overview && read && !page.account && read.subject.type === 'schema:Organization' ? (

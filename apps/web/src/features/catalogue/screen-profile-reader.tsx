@@ -14,7 +14,6 @@ import type { ScreenGroup } from './screen-profile';
 import { loadScreenProfileForReader } from './screen-episode-reader/actions';
 import {
   screenEpisodeCursor,
-  screenEpisodeReturnHref,
   type ScreenEpisodeOrigin,
 } from './screen-episode-reader/navigation';
 import { ScreenEpisodeList } from './screen-episode-reader/view';
@@ -57,7 +56,8 @@ export function ScreenProfileReader({
   episodeLoading = false,
   onEpisodeRetry,
   episodeOrigin,
-  returnHref,
+  readerSpoilerLevel = 0,
+  episodeVisitKey,
 }: {
   locale: string;
   release?: Release;
@@ -71,7 +71,8 @@ export function ScreenProfileReader({
   episodeLoading?: boolean;
   onEpisodeRetry?: () => void;
   episodeOrigin?: ScreenEpisodeOrigin;
-  returnHref?: string;
+  readerSpoilerLevel?: number;
+  episodeVisitKey?: string;
 }) {
   const Link = link;
   const visit: ScreenReaderVisit = screenReaderVisit({
@@ -95,22 +96,18 @@ export function ScreenProfileReader({
         {visit.type === 'schema:Movie' ? (
           <p className="text-sm text-muted-foreground">{m.screen_reader_episodes_unpublished({}, o)}</p>
         ) : null}
-        {visit.type === 'schema:Episode' && returnHref ? (
-          <div className="flex min-w-0 flex-wrap gap-3">
-            <Link href={returnHref} className={`${actionClass} text-primary underline underline-offset-4`}>
-              {m.screen_episode_reader_return({}, o)}
-            </Link>
-          </div>
-        ) : null}
         <ProfileLibraryNote library={visit.library} locale={locale} kind="screen" />
       </header>
       {publicRead && !visit.unpublished.episodes ? (
         <ScreenEpisodeList
           locale={locale}
+          {...(release ? { release } : {})}
           {...(episodeRead ? { read: episodeRead } : {})}
           loading={episodeLoading}
           {...(onEpisodeRetry ? { retry: onEpisodeRetry } : {})}
           origin={episodeOrigin ?? { pathname: '', searchStr: '' }}
+          readerSpoilerLevel={readerSpoilerLevel}
+          {...(episodeVisitKey ? { visitKey: episodeVisitKey } : {})}
           link={link}
         />
       ) : null}
@@ -151,6 +148,7 @@ export function ScreenProfileOverview({
   link = PlainLink,
   context,
   viewerKey,
+  readerSpoilerLevel = 0,
 }: {
   locale: string;
   public: SubjectRead;
@@ -158,6 +156,7 @@ export function ScreenProfileOverview({
   link?: PageLink;
   context?: string;
   viewerKey?: string | null;
+  readerSpoilerLevel?: number;
 }) {
   const location = useLocation();
   const instance = useId();
@@ -179,6 +178,7 @@ export function ScreenProfileOverview({
       viewerKey ?? '',
       locale,
       episodeCursor ?? '',
+      readerSpoilerLevel,
       observationGeneration.current,
     ],
     queryFn: () =>
@@ -201,8 +201,18 @@ export function ScreenProfileOverview({
   const release = profile?.ok ? profile.release : undefined;
   const reason = profile && !profile.ok ? profile.reason : query.isError ? 'unavailable' : undefined;
   const episodeRead = query.data?.episodes;
-  const returnHref =
-    publicRead.subject.type === 'schema:Episode' ? screenEpisodeReturnHref(locale, location.searchStr) : undefined;
+  const episodeVisitKey = [
+    publicRead.subject.id,
+    publicRead.subject.type,
+    publicRead.subject.context,
+    context ?? '',
+    viewerKey ?? '',
+    locale,
+    readerSpoilerLevel,
+    episodeCursor ?? '',
+    query.dataUpdatedAt,
+    observationGeneration.current,
+  ].join(':');
   return (
     <ScreenProfileReader
       locale={locale}
@@ -213,10 +223,11 @@ export function ScreenProfileOverview({
       {...(query.isPending ? { loading: true } : {})}
       onRetry={() => void query.refetch()}
       {...(episodeRead ? { episodeRead } : {})}
-      {...(query.isPending ? { episodeLoading: true } : {})}
+      {...(query.isPending || query.isFetching ? { episodeLoading: true } : {})}
       onEpisodeRetry={() => void query.refetch()}
-      episodeOrigin={{ pathname: location.pathname, searchStr: location.searchStr }}
-      {...(returnHref ? { returnHref } : {})}
+      episodeOrigin={{ pathname: location.pathname, searchStr: location.searchStr, hash: location.hash }}
+      readerSpoilerLevel={readerSpoilerLevel}
+      episodeVisitKey={episodeVisitKey}
       link={link}
     />
   );
