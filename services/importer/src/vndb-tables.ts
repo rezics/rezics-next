@@ -149,6 +149,9 @@ function interrupted(error: unknown, signal?: AbortSignal): boolean {
 /** COPY columns for the character-trait/appearance operator; grouped VN staging does not ingest them. */
 export const VNDB_CHARACTER_TRAIT_COLUMNS = ['id', 'tid', 'spoil', 'lie'] as const;
 export const VNDB_CHARACTER_APPEARANCE_COLUMNS = ['id', 'vid', 'rid', 'role', 'spoil'] as const;
+/** Fields read from the live archive's traits dictionary and parent relation. */
+export const VNDB_CHARACTER_TRAIT_DICTIONARY_COLUMNS = ['id', 'name'] as const;
+export const VNDB_CHARACTER_TRAIT_PARENT_COLUMNS = ['id', 'parent', 'main'] as const;
 
 const COLUMNS: Record<Table, readonly string[]> = {
   vn: [
