@@ -1,7 +1,16 @@
 import { expect, test } from 'bun:test';
 import { act } from 'react';
 import { dirname } from 'node:path';
-import { admittedCatalogueWorkId, admittedFeedWorkId, homeWorkLibraryRow, planHomeWorkLibraryPages, reconcileHomeWorkLibraryAcknowledgement, sameHomeWorkLibraryScope, type HomeWorkLibraryProjection, type HomeWorkLibraryScope } from '../src/features/feed/home-work-library/contract';
+import {
+  admittedCatalogueWorkId,
+  admittedFeedWorkId,
+  homeWorkLibraryRow,
+  planHomeWorkLibraryPages,
+  reconcileHomeWorkLibraryAcknowledgement,
+  sameHomeWorkLibraryScope,
+  type HomeWorkLibraryProjection,
+  type HomeWorkLibraryScope,
+} from '../src/features/feed/home-work-library/contract';
 import { HomeWorkLibraryAction, HomeWorkLibraryProvider } from '../src/features/feed/home-work-library/view';
 import { homeFeedStoryPage } from '../src/kernel/fake/home-feed-stories';
 import { setLocale } from '../src/paraglide/runtime.js';
@@ -72,9 +81,14 @@ test('only current acknowledged facts reconcile one shared work row; uncertainty
   expect(homeWorkLibraryRow(after, 'work-1')?.entry).toEqual({ state: 'absent' });
   expect(homeWorkLibraryRow(after, 'missing')).toBeUndefined();
   const retired = projection(() => false);
-  expect(reconcileHomeWorkLibraryAcknowledgement(retired, {
-    state: 'acknowledged', commandId: 'original-command', subjectId: 'work-1', entry: { state: 'absent' },
-  })).toBe(retired);
+  expect(
+    reconcileHomeWorkLibraryAcknowledgement(retired, {
+      state: 'acknowledged',
+      commandId: 'original-command',
+      subjectId: 'work-1',
+      entry: { state: 'absent' },
+    }),
+  ).toBe(retired);
   expect(sameHomeWorkLibraryScope(scope, { ...scope, credentialEpoch: 'credential-2' })).toBe(false);
   expect(sameHomeWorkLibraryScope(scope, { ...scope, source: 'following' })).toBe(false);
   expect(sameHomeWorkLibraryScope(scope, { ...scope, observation: 'page-2' })).toBe(false);
@@ -83,7 +97,9 @@ test('only current acknowledged facts reconcile one shared work row; uncertainty
 });
 
 test('the mounted action keeps its destination while stale or missing private rows become unavailable', async () => {
-  const { Window } = await import(Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir))));
+  const { Window } = await import(
+    Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+  );
   const window = new Window({ url: 'https://rezics.example/en' });
   const globals = {
     window,

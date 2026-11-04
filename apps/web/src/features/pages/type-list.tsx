@@ -43,11 +43,7 @@ export function TypeList(props: Record<string, unknown>) {
       ...(workId
         ? {
             supportSlot: (
-              <HomeWorkLibraryAction
-                subjectId={workId}
-                href={`${href}?slot=collections`}
-                locale={value.locale}
-              />
+              <HomeWorkLibraryAction subjectId={workId} href={`${href}?slot=collections`} locale={value.locale} />
             ),
           }
         : {}),

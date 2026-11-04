@@ -25,7 +25,11 @@ function preparedProjection(locale: string): HomeWorkLibraryProjection {
           value: { subjectId: '00000000-0000-7000-8000-000000000101', state: 'reading', revision: 1 },
         },
         score: { state: 'present' as const, value: { reader: scope.reader, kind: 'ready' as const, units: 16 } },
-        entryControl: () => <span className="text-sm">{m.library_entry_state_label({ title: 'Prepared work', state: m.library_other() })}</span>,
+        entryControl: () => (
+          <span className="text-sm">
+            {m.library_entry_state_label({ title: 'Prepared work', state: m.library_other() })}
+          </span>
+        ),
         scoreControl: () => <span className="text-sm">8 / 10</span>,
       },
       {
@@ -55,7 +59,8 @@ function PreparedHomeWorkLibrary() {
   return (
     <main className="mx-auto max-w-3xl space-y-4 p-4">
       <p role="note" className="text-sm text-muted-foreground">
-        Prepared projection states only. These labels do not issue Library or rating commands and do not prove native delivery.
+        Prepared projection states only. These labels do not issue Library or rating commands and do not prove native
+        delivery.
       </p>
       <HomeWorkLibraryProvider expectedScope={{ ...scope, locale }} signedIn enabled projection={projection}>
         <section aria-label="Repeated reference to a saved work" className="space-y-2 rounded-lg border p-4">

@@ -28,18 +28,18 @@ export function HomeWorkLibraryProvider({
   enabled: boolean;
   children: ReactNode;
 }) {
-  const hydrated = useSyncExternalStore(subscribeNothing, () => true, () => false);
+  const hydrated = useSyncExternalStore(
+    subscribeNothing,
+    () => true,
+    () => false,
+  );
   const lease = projection?.lease;
   const subscribe = useMemo(
     () => (lease ? (listener: () => void) => lease.subscribe(listener) : subscribeNothing),
     [lease],
   );
   const snapshot = useMemo(() => (lease ? () => lease.snapshot() : snapshotNothing), [lease]);
-  const revision = useSyncExternalStore(
-    subscribe,
-    snapshot,
-    snapshotNothing,
-  );
+  const revision = useSyncExternalStore(subscribe, snapshot, snapshotNothing);
   const current =
     hydrated &&
     projection &&

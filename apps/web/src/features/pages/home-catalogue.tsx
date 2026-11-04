@@ -55,8 +55,11 @@ export function homeCatalogueObservation(result?: RoutePageLoad): string {
       ? [node.props.id]
       : [],
   );
-  return JSON.stringify(
-    [result.page.route, result.page.profile, result.page.template, lists.map((id) => {
+  return JSON.stringify([
+    result.page.route,
+    result.page.profile,
+    result.page.template,
+    lists.map((id) => {
       const read = result.page.reads[id];
       const body = read?.body;
       const subjects = isRecord(body) && Array.isArray(body.subjects) ? body.subjects : [];
@@ -65,10 +68,14 @@ export function homeCatalogueObservation(result?: RoutePageLoad): string {
         read?.status ?? null,
         subjects.map((subject) =>
           isRecord(subject)
-            ? [subject.id ?? null, subject.type ?? null, isRecord(subject.summary) ? subject.summary.creativeWork : null]
+            ? [
+                subject.id ?? null,
+                subject.type ?? null,
+                isRecord(subject.summary) ? subject.summary.creativeWork : null,
+              ]
             : null,
         ),
       ];
-    })],
-  );
+    }),
+  ]);
 }
