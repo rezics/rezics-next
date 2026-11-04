@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { act } from 'react';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -6,7 +7,7 @@ import {
   createRouter,
   RouterContextProvider,
 } from '@tanstack/react-router';
-import { creationFixture, approval, button, dom, fill, flush, open } from './creation-page-fixture';
+import { creationFixture, button, dom, fill, open } from './creation-page-fixture';
 import { OperatorTransferPage } from '../src/routes/operators.transfer';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
@@ -15,6 +16,13 @@ import {
   type TransferAttempt,
 } from '../src/operator-transfer';
 creationFixture();
+const { m } = await import('../src/paraglide/messages.js');
+async function flush(action: () => void) {
+  await act(async () => {
+    action();
+    for (let turn = 0; turn < 12; turn++) await Promise.resolve();
+  });
+}
 const initial = {
   kind: 'ready',
   accountId: 'human',
@@ -50,6 +58,41 @@ async function setup(saved?: TransferAttempt) {
     </RouterContextProvider>
   );
   const page = await open(view(), session);
+  const queuedFetch = globalThis.fetch;
+  await flush(() => {});
+  await flush(() =>
+    page.calls[0]!.resolve(Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } })),
+  );
+  if (saved?.phase === 'approve') {
+    await flush(() =>
+      page.calls[1]!.resolve(
+        saved.side === 'source'
+          ? Response.json({
+              viewer: { kind: 'ready' },
+              review: {
+                kind: 'source',
+                relation: { previous: saved.request.previous, expectedVersion: saved.request.expectedVersion },
+                action: 'allowed',
+              },
+            })
+          : Response.json({
+              viewer: { kind: 'ready' },
+              review: { kind: 'destination', destinationAccountId: saved.request.operatorAccountId, action: 'allowed' },
+            }),
+      ),
+    );
+  }
+  page.calls.splice(0);
+  globalThis.fetch = ((input, init) => {
+    const path = String(input);
+    if (path === '/session') return Promise.resolve(Response.json(session));
+    if (path === '/account-management/operators/transfer-review') {
+      const body = JSON.parse(String(init?.body));
+      if (body.kind === 'readiness')
+        return Promise.resolve(Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } }));
+    }
+    return queuedFetch(input, init);
+  }) as typeof fetch;
   const choose = (label: string) => flush(() => button(page.host, label)!.click());
   const navigate = () =>
     flush(() => {
@@ -121,7 +164,12 @@ test('imported request and exact reviewed transfer survive Stay; Leave discards 
   expect(page.input('request-input').value).toBe(text);
   await page.submit('request-input');
   await flush(() =>
-    page.calls[0]!.resolve(Response.json({ previous: source.request.previous, expectedVersion: '12' })),
+    page.calls[0]!.resolve(
+      Response.json({
+        viewer: { kind: 'ready' },
+        review: { kind: 'destination', destinationAccountId: source.request.operatorAccountId, action: 'allowed' },
+      }),
+    ),
   );
   const attempt = restoreTransferAttempt();
   await flush(() => page.input('confirm').click());
@@ -137,34 +185,58 @@ for (const stage of ['relation', 'approval'])
   test(`acceptance and unresolved ${stage} survive Stay; Leave preserves recovery and retires later stages`, async () => {
     const page = await setup(source);
     await page.importText('acceptance', 'opaque-acceptance');
+    if (stage === 'approval') {
+      await page.choose(m.auth_transfer_review_same_person());
+      await flush(() =>
+        page.calls[0]!.resolve(
+          Response.json({
+            viewer: { kind: 'ready' },
+            review: {
+              kind: 'source',
+              relation: { previous: source.request.previous, expectedVersion: '12' },
+              action: 'allowed',
+            },
+          }),
+        ),
+      );
+      await flush(() => page.input('confirm').click());
+      await page.submit('confirm');
+      await flush(() =>
+        page.calls[1]!.resolve(
+          Response.json({
+            viewer: { kind: 'ready' },
+            review: {
+              kind: 'source',
+              relation: { previous: source.request.previous, expectedVersion: '12' },
+              action: 'allowed',
+            },
+          }),
+        ),
+      );
+    } else {
+      await page.choose(m.auth_transfer_review_same_person());
+    }
     await page.navigate();
     await page.choose('Stay');
     expect(page.input('acceptance').value).toBe('opaque-acceptance');
-    await flush(() => page.input('confirm').click());
-    await page.submit('confirm');
-    if (stage === 'approval')
-      await flush(() =>
-        page.calls[0]!.resolve(Response.json({ previous: source.request.previous, expectedVersion: '12' })),
-      );
     const original = restoreTransferAttempt();
     await page.navigate();
     await page.choose('Stay');
     expect(restoreTransferAttempt()).toEqual(original);
     await page.navigate();
     await page.choose('Leave');
-    await page.render(page.view());
-    await flush(() =>
-      page.calls
-        .at(-1)!
-        .resolve(
-          stage === 'approval'
-            ? approval()
-            : Response.json({ previous: source.request.previous, expectedVersion: '12' }),
-        ),
-    );
     expect(restoreTransferAttempt()).toEqual(original);
-    expect(page.calls).toHaveLength(stage === 'approval' ? 2 : 1);
-    expect(page.input('confirm').checked).toBe(false);
+    expect(page.calls.some(({ path }) => path.endsWith('/execute'))).toBe(false);
+    if (stage === 'approval') {
+      expect(original).toMatchObject({
+        request: { sourceOperationKey: source.request.sourceOperationKey },
+        acceptance: 'opaque-acceptance',
+      });
+      expect(page.calls.some(({ path }) => path.endsWith('/account-operations/approve'))).toBe(true);
+    } else {
+      expect(original).toEqual(source);
+      expect(page.calls.some(({ path }) => path.includes('/account-operations/'))).toBe(false);
+    }
   });
 test('reconciled results leave normally and permission loss revokes a draft without prompting', async () => {
   const page = await setup({ ...source, phase: 'readback', reference: 'approval', acceptance: 'acceptance' });
@@ -173,8 +245,15 @@ test('reconciled results leave normally and permission loss revokes a draft with
   await flush(() =>
     page.calls[0]!.resolve(
       Response.json({
-        previous: { ...source.request.previous, operatorAccountId: 'new', reservationId: 'next' },
-        expectedVersion: '13',
+        viewer: { kind: 'ready' },
+        review: {
+          kind: 'source',
+          action: 'allowed',
+          relation: {
+            previous: { ...source.request.previous, operatorAccountId: 'new', reservationId: 'next' },
+            expectedVersion: '13',
+          },
+        },
       }),
     ),
   );
@@ -184,7 +263,15 @@ test('reconciled results leave normally and permission loss revokes a draft with
   window.sessionStorage.clear();
   await page.render(page.view());
   await page.edit('subject', 'subject');
-  globalThis.fetch = (() => Promise.resolve(Response.json({ ...session, scope: [] }))) as typeof fetch;
+  globalThis.fetch = ((input, init) => {
+    if (String(input) === '/session') return Promise.resolve(Response.json({ ...session, scope: [] }));
+    if (String(input) === '/account-management/operators/transfer-review') {
+      const body = JSON.parse(String(init?.body));
+      if (body.kind === 'readiness')
+        return Promise.resolve(Response.json({ viewer: { kind: 'refused' }, review: { kind: 'readiness' } }));
+    }
+    throw new Error(`Unexpected permission-loss read: ${input}`);
+  }) as typeof fetch;
   await page.navigate();
   expect(page.host.querySelector('dialog')).toBeNull();
   expect(page.unload()).toBe(false);

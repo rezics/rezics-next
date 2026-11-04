@@ -43,6 +43,7 @@ import {
 import { reconcileRestoredAuthPage } from './restore-live.ts';
 import { createKindConsentParticipant } from './kind-consent.ts';
 import { createInternalConsentHandler, type InternalConsentAccessConfiguration } from './internal-consent.ts';
+import { operatorTransferPageTransport, type OperatorTransferPageAccess } from './operator-transfer-page.ts';
 
 /** Deployment lifecycle for an isolated restored database. It exposes no
  * handler, signer, SDK or maintenance writer. Durable native cursors, not this
@@ -260,6 +261,7 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       throw new AuthHostConfigurationError('private-consent');
     }
   }
+  const transferPageAccess = options.trustedAccess as typeof options.trustedAccess & Partial<OperatorTransferPageAccess>;
   // Point-read only. registerClient takes the client advisory lock on its own
   // connection, so holding that lock here would deadlock. An existing login
   // client is left unchanged, including one registered with scopes.
@@ -294,8 +296,10 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
     /** Serve only on the separately configured private Tunnel/Access listener.
      * The handler is gated by this host's start/stop lifecycle. */
     privateConsentHandler,
-    handler: accountOperationTransport(
+    handler: operatorTransferPageTransport(
       service,
+      accountOperationTransport(
+        service,
       workflows,
       operatorSessionTransport(
         service,
@@ -357,7 +361,11 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
         ),
         options.accountOperations,
       ),
-      options.accountOperations,
+        options.accountOperations,
+      ),
+      transferPageAccess.readOperatorTransferPage
+        ? { readOperatorTransferPage: transferPageAccess.readOperatorTransferPage.bind(transferPageAccess) }
+        : undefined,
     ),
     workflows,
     config,

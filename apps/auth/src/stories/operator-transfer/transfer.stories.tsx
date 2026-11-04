@@ -1,16 +1,33 @@
-import { useLayoutEffect, type ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { OperatorTransferPage } from '../../routes/operators.transfer';
 import { AuthShell } from '../../frame';
 import {
   OPERATOR_MANAGEMENT_PROFILE,
-  OPERATOR_RELATION_PATH,
   storeTransferAttempt,
   type TransferAttempt,
 } from '../../operator-transfer';
+import { OPERATOR_TRANSFER_PAGE_PATH } from '../../operator-transfer-page';
 import { authLocale, reviewParameters, button, waitFor } from '../accounts-operations/story';
 import { m } from '../../paraglide/messages.js';
 
-export default { title: 'Pages/Account/Operator transfer', parameters: reviewParameters, decorators: [authLocale] };
+export default {
+  title: 'Pages/Account/Operator transfer',
+  parameters: {
+    ...reviewParameters,
+    viewport: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1440: { name: 'Desktop 1440', styles: { width: '1440px', height: '1000px' } },
+      },
+    },
+    rezicsReview: {
+      pageIdentity: '/operators/transfer',
+      fixtureProvenance: 'Story-only fetch and sessionStorage fixture; no native authorization claim.',
+      source: 'Current Storybook build of the worktree source.',
+    },
+  },
+  decorators: [authLocale],
+};
 const session = {
   kind: 'ready' as const,
   accountId: 'story-human',
@@ -38,11 +55,14 @@ function Fixture({
   children,
   attempt,
   mode = 'unavailable',
+  tone = 'light',
 }: {
   children: ReactNode;
   attempt?: TransferAttempt;
   mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain';
+  tone?: 'light' | 'dark';
 }) {
+  const [fixtureReady, setFixtureReady] = useState(false);
   useLayoutEffect(() => {
     const saved = sessionStorage.getItem('rezics.operator-transfer.attempt');
     const original = globalThis.fetch;
@@ -53,21 +73,33 @@ function Fixture({
       const path = String(input);
       if (path === '/session')
         return Response.json({ account_id: session.accountId, client_id: session.clientId, scope: session.scopes });
-      if (path === OPERATOR_RELATION_PATH)
-        return mode === 'unavailable'
-          ? new Response(null, { status: 404 })
-          : Response.json(
-              transferred
-                ? {
-                    previous: {
-                      ...source.request.previous,
-                      operatorAccountId: source.request.operatorAccountId,
-                      reservationId: 'new-reservation',
-                    },
-                    expectedVersion: '13',
-                  }
-                : { previous: source.request.previous, expectedVersion: source.request.expectedVersion },
-            );
+      if (path === OPERATOR_TRANSFER_PAGE_PATH) {
+        const input = JSON.parse(String(init?.body));
+        if (input.kind === 'readiness')
+          return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'readiness' } });
+        if (mode === 'unavailable') return new Response(null, { status: 503 });
+        if (input.kind === 'source') {
+          if (mode === 'denied') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'refused' } });
+          if (mode === 'conflict') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'changed' } });
+          const relation = transferred
+            ? {
+                previous: {
+                  ...source.request.previous,
+                  operatorAccountId: source.request.operatorAccountId,
+                  reservationId: 'new-reservation',
+                },
+                expectedVersion: '13',
+              }
+            : { previous: source.request.previous, expectedVersion: source.request.expectedVersion };
+          return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'source', relation, action: 'allowed' } });
+        }
+        if (input.kind === 'destination') {
+          if (mode === 'denied')
+            return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'destination', destinationAccountId: input.request.operatorAccountId, action: 'denied' } });
+          if (mode === 'conflict') return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'changed' } });
+          return Response.json({ viewer: { kind: 'ready' }, review: { kind: 'destination', destinationAccountId: input.request.operatorAccountId, action: 'allowed' } });
+        }
+      }
       if (path === '/account-operations/approve')
         return mode === 'uncertain' || mode === 'ready'
           ? Response.json({
@@ -87,13 +119,18 @@ function Fixture({
       }
       return original(input, init);
     }) as typeof fetch;
+    setFixtureReady(true);
     return () => {
       globalThis.fetch = original;
       if (saved === null) sessionStorage.removeItem('rezics.operator-transfer.attempt');
       else sessionStorage.setItem('rezics.operator-transfer.attempt', saved);
     };
   }, [attempt, mode]);
-  return <AuthShell>{children}</AuthShell>;
+  return (
+    <div className={tone === 'dark' ? 'dark' : ''} data-fixture-tone={tone}>
+      {fixtureReady ? <AuthShell>{children}</AuthShell> : null}
+    </div>
+  );
 }
 const page = (attempt?: TransferAttempt, mode?: 'ready' | 'unavailable' | 'denied' | 'conflict' | 'uncertain') => (
   <Fixture {...(attempt ? { attempt } : {})} {...(mode ? { mode } : {})}>
@@ -153,6 +190,21 @@ export const DestinationReview = {
   render: () => page({ ...source, side: 'destination' }, 'ready'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => hierarchy(canvasElement, '#transfer-confirm'),
 };
+export const DarkDestinationReview = {
+  render: () => (
+    <Fixture attempt={{ ...source, side: 'destination' }} mode="ready" tone="dark">
+      <OperatorTransferPage initial={session} />
+    </Fixture>
+  ),
+};
+export const LongTraditionalChinese = {
+  globals: { locale: 'zh-Hant' },
+  render: () => page({ ...source, side: 'destination' }, 'ready'),
+};
+export const LongJapanese = {
+  globals: { locale: 'ja' },
+  render: () => page({ ...source, side: 'destination' }, 'ready'),
+};
 export const UncertainRestore = {
   render: () =>
     page({ ...source, phase: 'execute', acceptance: 'opaque-acceptance', reference: 'original-approval' }, 'ready'),
@@ -195,21 +247,18 @@ export const SameAccountReconfirmation = {
 export const DependencyUnavailable = {
   render: () => page({ ...source, acceptance: 'opaque-acceptance' }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await submit(canvasElement);
     await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_unavailable()));
   },
 };
 export const Refused = {
   render: () => page({ ...source, acceptance: 'opaque-acceptance' }, 'denied'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await submit(canvasElement);
     await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_denied()));
   },
 };
 export const NativeConflict = {
   render: () => page({ ...source, acceptance: 'opaque-acceptance' }, 'conflict'),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await submit(canvasElement);
     await waitFor(() => canvasElement.textContent?.includes(m.auth_transfer_conflict()));
   },
 };
