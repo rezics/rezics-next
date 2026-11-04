@@ -170,6 +170,7 @@ test('default cross-media seed binds the exact editor tag and resumes unchanged 
       { providers: ['bangumi'], bangumiGenrePort: reviewedPort },
     );
     const first = await seed();
+    console.log(JSON.stringify(first.bangumiGenrePublication));
     const firstKeyword = first.bangumiGenrePublication!.acknowledgements.find(
       (entry) => entry.command.op === 'propose' && entry.command.statement.property.id === 'schema:keywords',
     )!;
