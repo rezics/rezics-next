@@ -282,10 +282,7 @@ function NativeMembership({
     joinCandidate &&
     source.actions.participate === 'admitted' &&
     visibility !== 'protected' &&
-    (joinAdvice.isFetching ||
-      joinAdvice.isPending ||
-      joinAdvice.isError ||
-      joinAdvice.data?.state === 'unavailable');
+    (joinAdvice.isFetching || joinAdvice.isPending || joinAdvice.isError || joinAdvice.data?.state === 'unavailable');
   const adviceRetryDisabled = joinAdvice.isFetching || !caller.isReady() || !current();
 
   if (!message && !action && !signIn && !attempt && !adviceRetry) return null;
@@ -303,7 +300,7 @@ function NativeMembership({
               ? joinAdvice.data.allowed
                 ? 'admitted'
                 : 'denied'
-              : joinAdvice.data?.state ?? source.actions.participate
+              : (joinAdvice.data?.state ?? source.actions.participate)
       }
     >
       {message ? (
@@ -341,11 +338,7 @@ function NativeMembership({
         </Button>
       ) : null}
       {adviceRetry ? (
-        <Button
-          variant="outline"
-          disabled={adviceRetryDisabled}
-          onClick={() => void joinAdvice.refetch()}
-        >
+        <Button variant="outline" disabled={adviceRetryDisabled} onClick={() => void joinAdvice.refetch()}>
           {joinAdvice.isFetching ? m.realm_membership_loading() : m.realm_membership_retry()}
         </Button>
       ) : null}
