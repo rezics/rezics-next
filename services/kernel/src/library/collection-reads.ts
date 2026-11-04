@@ -667,6 +667,7 @@ export function createCollectionReads(
     viewer: Actor,
     result: T,
     deadline: number = deadlineFor(WORK_STEP_DEADLINE_MS),
+    revalidate?: () => Promise<void>,
   ) {
     if (viewer.kind !== 'account' || result.members.length === 0) return result;
     const rows = result.members.map((member, index) => ({
@@ -674,6 +675,7 @@ export function createCollectionReads(
       subjectId: member.subjectId,
     }));
     const facts = await readViewerFactsPage({ pool, access }, viewer, rows, STANDARD_QUESTION_ID, deadline);
+    await revalidate?.();
     return { ...result, viewerFacts: facts };
   }
 

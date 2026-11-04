@@ -18,6 +18,7 @@ test('FULL native fixed Collection page bounds all helpers, fences, failures and
     const sparse = await f.create('schema:Book');
     const imported = await f.imported('schema:wordCount', { amount: '+99', unit: '1' });
     const collection = await f.collection([book, related, hidden, sparse, imported.id, book]);
+    await f.checked('PUT', `/v1/libraryEntries/${book}`, { state: 'planned' }, 'editor');
     await f.hide(author);
     await f.hide(hidden);
     await f.checked('POST', '/v1/sourceFences:takedown', {
@@ -56,6 +57,14 @@ test('FULL native fixed Collection page bounds all helpers, fences, failures and
         expect(result.members[0].facts).toEqual({ 'schema:wordCount': [{ kind: 'quantity', amount: 123, unit: '1' }] });
         for (const index of [1, 2, 3]) expect(result.members[index].facts).toEqual({});
         expect(JSON.stringify(result)).not.toContain('Hidden growth author');
+        const admitted = await f.get(collection.id, 'FULL');
+        expect(admitted.status).toBe(200);
+        const admittedPage = await admitted.json();
+        expect(admittedPage.members).toHaveLength(5);
+        expect(admittedPage.viewerFacts.rows).toHaveLength(5);
+        expect(admittedPage.viewerFacts.rows.map((row: { rowKey: string }) => row.rowKey)).toEqual(
+          admittedPage.members.map((member: { id: string }) => member.id),
+        );
         expect((await f.get(redirected.id, 'FULL', null)).status).toBe(503);
         // Private Library changes cannot alter public Type facts. Their native work is included in this capture.
         const privateEntry = await f.call('GET', `/v1/libraryEntries/${book}`);

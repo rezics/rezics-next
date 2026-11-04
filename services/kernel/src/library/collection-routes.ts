@@ -33,6 +33,7 @@ import { collectionBulkRoutes } from './collection-bulk-routes.ts';
 import { listSitemapCollections } from './sitemap.ts';
 
 import { basicQuery, curatorFields, embedded, fullMembers, fullView, subjectFields, viewQuery } from './views.ts';
+import { assertMemberPageCurrent } from './member-viewer-currentness.ts';
 
 type Dependencies = {
   pool: Pool;
@@ -878,6 +879,11 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       },
       async ({ params, query, actor, admission, job, set, request }) => {
         set.headers['cache-control'] = 'private, no-store';
+        const sourceOptions = query.filter !== undefined || query.sort !== undefined ? query : basicQuery(query);
+        const listFactsAttached =
+          query.filter === undefined && query.sort === undefined && query.view === 'FULL';
+        const sourcePage = () =>
+          admission.run('normal', job, () => read().readMembers(actor, params.collectionId, sourceOptions, job.deadline));
         let result = await admission.run('normal', job, () =>
           query.filter !== undefined || query.sort !== undefined
             ? read().readMembers(actor, params.collectionId, query, job.deadline)
@@ -891,7 +897,12 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
                 )
               : read().readMembers(actor, params.collectionId, basicQuery(query), job.deadline),
         );
-        if ('members' in result) result = await read().withViewerFacts(actor, result, job.deadline);
+        if ('members' in result) {
+          const admitted = result;
+          result = await read().withViewerFacts(actor, result, job.deadline, async () => {
+            assertMemberPageCurrent(admitted, await sourcePage(), { listFactsAttached });
+          });
+        }
         if ('preparing' in result) {
           set.status = 202;
           set.headers['retry-after'] = '1';
