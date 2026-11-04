@@ -101,7 +101,7 @@ export function InboxRows({
   onRetrySeen?: () => void;
   pendingNoticeId?: string | null;
   uncertainNoticeId?: string | null;
-  noticeFailure?: NativeInboxFailure;
+  noticeFailure?: NativeInboxFailure | undefined;
   noticeWaiting?: boolean;
   noticeRetryBlocked?: boolean;
   acknowledgementBlocked?: boolean;
@@ -121,9 +121,9 @@ export function InboxRows({
           const hiddenLegacyItem = item.unavailable && !hasComposedDisclosure;
           const href = hiddenLegacyItem ? undefined : item.href || undefined;
           const actor = inboxNoticeActorPresentation({
-            actor: item.actor,
+            ...(item.actor ? { actor: item.actor } : {}),
             actorId: item.actorId,
-            actorName: item.actorName,
+            ...(item.actorName !== undefined ? { actorName: item.actorName } : {}),
             kind: item.kind,
             reportId: item.reportId,
             hideLegacy: hiddenLegacyItem,
