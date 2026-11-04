@@ -95,7 +95,7 @@ export type CandidateActions = { state: 'available'; context: string; operations
 export type CandidateAuthority = {
   actions: CandidateActions;
   disclosure: 'available' | 'unreadable' | 'unavailable';
-  components: { context: ViewerActionComponent; subjects: Record<string, ViewerActionComponent> };
+  components?: { context: ViewerActionComponent; subjects: Record<string, ViewerActionComponent> };
 };
 
 /** One native projection for the mounted operations and at most three exact participants.
@@ -194,8 +194,8 @@ export async function readCandidateAuthority(
 
 export function candidateViewerActionsFor(authority: CandidateAuthority, subject: string): CandidateViewerActions {
   return {
-    context: authority.components.context,
-    subject: authority.components.subjects[subject] ?? { state: 'not-requested' },
+    context: authority.components?.context ?? { state: 'unavailable', reason: 'unavailable' },
+    subject: authority.components?.subjects[subject] ?? { state: 'not-requested' },
   };
 }
 
