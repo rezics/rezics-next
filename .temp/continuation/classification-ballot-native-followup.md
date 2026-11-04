@@ -34,9 +34,9 @@ estimate:
 inseparable: true
 acceptance:
   tests:
-    - "Finish the signed-account journey through the production default worker across restart, including erasure, exact receipt recovery and replay after current authorization changes."
-    - "Use the actual admitted declaration publisher output in the existing Subject receiver and confirm populated, suppressed, own pending, withheld and failed/retry states."
-    - "Measure independent selected-history and unrelated growth at 256/1024/4096 with fixed homes, keys, cardinality and byte caps, including all native phases and strict physical prefixes."
+    - 'Finish the signed-account journey through the production default worker across restart, including erasure, exact receipt recovery and replay after current authorization changes.'
+    - 'Use the actual admitted declaration publisher output in the existing Subject receiver and confirm populated, suppressed, own pending, withheld and failed/retry states.'
+    - 'Measure independent selected-history and unrelated growth at 256/1024/4096 with fixed homes, keys, cardinality and byte caps, including all native phases and strict physical prefixes.'
 ---
 
 # Complete native classification delivery
