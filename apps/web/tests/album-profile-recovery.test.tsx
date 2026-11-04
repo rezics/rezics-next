@@ -232,7 +232,12 @@ test('Album recovery retires every current surface and retains private drafts an
         await click(m.correction_retry());
         await settle();
       } else await settle(() => finishInitial(recovered));
-      expect(window.document.activeElement).toBe(within(host).getByRole('heading', { level: 1 }));
+      expect(window.document.activeElement).toBe(
+        within(host).getByRole('heading', {
+          level: 1,
+          name: scenario === 'profile' ? m.album_edit() : m.album_title(),
+        }),
+      );
       expect(host.querySelector('form')).not.toBeNull();
       const completedLoads = loads;
       await settle(staleRetry);
@@ -574,7 +579,7 @@ test('Album create uses current parent eligibility, keeps drafts when observatio
   const { allowedCreateAuthority } = await import('../src/features/catalogue/identity-intake');
   const { m } = await import('../src/paraglide/messages.js');
   const testing = createRequire(require.resolve('storybook/test'));
-  const { within } = await import(testing.resolve('@testing-library/dom'));
+  const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
   const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
   const user = userEvent.setup({ document: window.document });
   const fixture = albumFixture('uncertain');
@@ -629,8 +634,7 @@ test('Album create uses current parent eligibility, keeps drafts when observatio
     expect(submitted).toHaveLength(0);
 
     await show();
-    await settle();
-    expect(host.textContent).toContain(m.identity_intake_authority_refused_permission());
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_refused_permission()));
     await act(async () => user.type(within(host).getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept'));
     expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
       'Kept',
@@ -642,37 +646,32 @@ test('Album create uses current parent eligibility, keeps drafts when observatio
 
     observation = { state: 'unknown', reason: 'unavailable' };
     await click(m.identity_intake_authority_retry());
-    await settle();
-    expect(host.textContent).toContain(m.identity_intake_authority_unknown());
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_unknown()));
     expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
       'Kept',
     );
 
     observation = allowedCreateAuthority;
     await click(m.identity_intake_authority_retry());
-    await settle();
-    expect(host.textContent).toContain(m.identity_intake_authority_allowed());
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
     await click(m.album_create_review());
     observation = { state: 'refused', reason: 'permission' };
     await click(m.album_create());
-    await settle();
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_refused_permission()));
     expect(submitted).toHaveLength(0);
-    expect(host.textContent).toContain(m.identity_intake_authority_refused_permission());
 
     observation = allowedCreateAuthority;
     await click(m.identity_intake_authority_retry());
-    await settle();
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
     await click(m.album_create());
-    await settle();
-    expect(submitted).toHaveLength(1);
+    await waitFor(() => expect(submitted).toHaveLength(1));
     const exact = structuredClone(submitted[0]);
     observation = { state: 'refused', reason: 'permission' };
     await click(m.catalogue_create_retry());
-    await settle();
-    expect(submitted).toHaveLength(2);
+    await waitFor(() => expect(submitted).toHaveLength(2));
     expect(submitted[1]).toEqual(exact);
     expect(submitted[1]!.key).toBe(exact!.key);
-    expect(host.textContent).toContain(m.catalogue_create_created());
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_created()));
   } finally {
     await act(async () => root.unmount());
     client.clear();
