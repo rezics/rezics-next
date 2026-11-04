@@ -38,6 +38,8 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
   const [origin, setOrigin] = useState<CreatorEditionOriginResolution | null>(null);
   const [returnedEdition, setReturnedEdition] = useState<'checking' | 'present' | 'missing' | undefined>();
   const preserveOriginOnLeave = useRef(false);
+  const priorCredential = useRef<string | null>(null);
+  const sawCredential = useRef(false);
   useEffect(
     () => () => {
       if (!preserveOriginOnLeave.current) retireCreatorEditionOrigin(originToken);
@@ -61,6 +63,22 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
     setOrigin(resolution);
     setReturnedEdition(resolution.kind === 'current' && page.kind === 'loading' ? 'checking' : undefined);
   }, [cursor, originToken, page.kind, session.state, session.subject]);
+
+  useEffect(() => {
+    if (!sawCredential.current) {
+      if (session.csrfToken) {
+        priorCredential.current = session.csrfToken;
+        sawCredential.current = true;
+      }
+      return;
+    }
+    if (priorCredential.current !== session.csrfToken) {
+      priorCredential.current = session.csrfToken;
+      retireCreatorEditionOrigin(originToken);
+      if (originToken) setOrigin({ kind: 'lost', reason: 'account' });
+      setReturnedEdition(undefined);
+    }
+  }, [originToken, session.csrfToken]);
 
   useEffect(() => {
     if (origin?.kind !== 'current') {
@@ -106,9 +124,15 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
       return;
     }
     if (originToken && origin?.kind === 'current') {
+      const current = readCreatorEditionOrigin(originToken, session.subject);
+      if (current.kind !== 'current' || current.receipt.cursor !== (cursor ?? null)) {
+        retireCreatorEditionOrigin(originToken);
+        setOrigin({ kind: 'lost', reason: current.kind === 'current' ? 'replaced' : current.reason });
+        return;
+      }
       const sameAddress = path.endsWith('/editions') && destination.searchParams.get('cursor') === (cursor ?? null);
       if (anchor.hasAttribute('data-creator-origin-restart')) {
-        const receipt = restartCreatorEditionOrigin(originToken);
+        const receipt = restartCreatorEditionOrigin(current.receipt.token);
         if (receipt) {
           preserveOriginOnLeave.current = true;
           event.preventDefault();
@@ -133,7 +157,11 @@ export function CreatorEditionsOriginView({ page, cursor }: { page: CreatorEditi
       void router.navigate({ href: creatorEditionsContinuationHref() });
       return;
     }
-    const receipt = restartCreatorEditionOrigin(originToken);
+    const current = readCreatorEditionOrigin(originToken, session.subject);
+    const receipt =
+      current.kind === 'current' && current.receipt.cursor === (cursor ?? null)
+        ? restartCreatorEditionOrigin(originToken)
+        : null;
     if (!receipt) {
       void router.navigate({ href: creatorEditionsContinuationHref() });
       return;

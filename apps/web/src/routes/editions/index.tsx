@@ -18,10 +18,15 @@ export const Route = createFileRoute('/editions/')({
   shouldReload: true,
   head: ({ match }) =>
     pageHead({ title: m.creator_editions_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
-  pendingComponent: () => <CreatorEditionsOriginView page={{ kind: 'loading' }} />,
+  pendingComponent: CreatorEditionsPendingRoute,
   errorComponent: CreatorEditionsErrorRoute,
   component: CreatorEditionsRoute,
 });
+
+function CreatorEditionsPendingRoute() {
+  const { cursor } = Route.useSearch();
+  return <CreatorEditionsOriginView page={{ kind: 'loading' }} {...(cursor ? { cursor } : {})} />;
+}
 
 function CreatorEditionsErrorRoute() {
   const { cursor } = Route.useSearch();
