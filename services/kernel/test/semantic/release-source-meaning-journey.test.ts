@@ -38,7 +38,16 @@ const unknownDate = (property: string): AdoptedStatement => ({
   property: { id: property },
   value: { type: 'somevalue' },
   rank: 'preferred',
-  references: discoveryStatement('schema:url', 'https://example.org/released-discovery/v1/tba').references,
+  references: [
+    {
+      parts: [
+        {
+          property: { id: 'schema:url' },
+          value: { type: 'value', content: 'https://example.org/released-discovery/v1/tba' },
+        },
+      ],
+    },
+  ],
 });
 
 async function adopted(holder: CreatedSubject, input: AdoptedStatement) {
@@ -122,6 +131,16 @@ test('sourced release status, directed release targets and episode kinds keep th
       calendarmodel: calendar,
     }),
   );
+  const monthOnly = await fixture.createSubject('wd:Q20631656', 'Month-precision release');
+  await adopted(
+    monthOnly,
+    discoveryStatement('schema:datePublished', {
+      time: '+2004-10-00T00:00:00Z',
+      precision: 10,
+      calendarmodel: calendar,
+    }),
+  );
+  const undated = await fixture.createSubject('wd:Q20631656', 'Undated release');
   const episode = await fixture.createSubject('schema:Episode', 'Contained episode');
   await adopted(episode, discoveryStatement('schema:keywords', mainStory.id));
   await adopted(episode, discoveryStatement('schema:keywords', special.id));
@@ -144,6 +163,10 @@ test('sourced release status, directed release targets and episode kinds keep th
   expect(facts(subject(await fixture.read(yearOnly)), 'schema:datePublished')[0]!.value.content).toMatchObject({
     precision: 9,
   });
+  expect(facts(subject(await fixture.read(monthOnly)), 'schema:datePublished')[0]!.value.content).toMatchObject({
+    precision: 10,
+  });
+  expect(facts(subject(await fixture.read(undated)), 'schema:datePublished')).toEqual([]);
   expect(
     facts(subject(await fixture.read(episode)), 'schema:keywords')
       .map((row) => row.value.content)
