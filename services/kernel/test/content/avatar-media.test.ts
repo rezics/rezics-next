@@ -7,7 +7,13 @@ import { downloadMedia } from '../../src/content/media-download.ts';
 import { createImageJob } from '../../src/content/image-job.ts';
 import type { MediaStorage } from '../../src/content/media-storage.ts';
 import { eraseStandaloneMedia } from '../../src/content/moderation.ts';
-import { completeMedia, readReservation, reserveMedia, type MediaReservationInput } from '../../src/content/media.ts';
+import {
+  completeMedia,
+  readAvatarUploadAdvice,
+  readReservation,
+  reserveMedia,
+  type MediaReservationInput,
+} from '../../src/content/media.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
@@ -378,3 +384,108 @@ for (const name of ['avatar summaries', 'avatar check'] as const)
     },
     60000,
   );
+
+const expectedAdvice = (actions: ['upload'] | []) => ({
+  viewerState: 'signed_in',
+  viewer: { accountId },
+  target: { containerId: accountId, purpose: 'avatar' },
+  constraints: {
+    mediaTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'],
+    maxByteCount: 20_971_520,
+  },
+  allowedActions: actions,
+});
+
+async function nativeEffects() {
+  return (
+    await db.admin.query(
+      `SELECT
+         (SELECT count(*)::integer FROM content.media WHERE container_id=$1) AS media,
+         (SELECT count(*)::integer FROM core.receipt WHERE principal_id=$1 AND command_kind='content.media.reserve') AS receipts,
+         (SELECT count(*)::integer FROM core.outbox WHERE type='com.rezics.content.media.reserved.v1') AS events`,
+      [accountId],
+    )
+  ).rows[0];
+}
+
+test('avatar upload advice is the current self media:create observation and reservation replay adds no effect', async () => {
+  expect(await readAvatarUploadAdvice(dependencies(), owner, Date.now() + 30000)).toEqual(expectedAdvice(['upload']));
+  const request = context();
+  const first = await reserveMedia(
+    dependencies(),
+    owner,
+    { containerId: accountId, purpose: 'avatar', mediaType: 'image/png', byteCount: 256 },
+    request,
+  );
+  const before = await nativeEffects();
+  const replay = await reserveMedia(
+    dependencies(),
+    owner,
+    { containerId: accountId, purpose: 'avatar', mediaType: 'image/png', byteCount: 256 },
+    request,
+  );
+  expect(replay.replayed).toBe(true);
+  expect(replay.value).toEqual(first.value);
+  expect(await nativeEffects()).toEqual(before);
+  expect(await readReservation(dependencies(), first.value.mediaId, { actor: owner, deadline: Date.now() + 30000 })).toMatchObject({
+    id: first.value.mediaId,
+    reservationRequestId: request.idempotencyKey,
+    state: 'reserved',
+  });
+
+  await db.admin.query(
+    "DELETE FROM access.resource_grant WHERE resource_id=$1 AND subject_id=$1 AND action='media:create'",
+    [accountId],
+  );
+  expect(await readAvatarUploadAdvice(dependencies(), owner, Date.now() + 30000)).toEqual(expectedAdvice([]));
+  await expect(
+    reserveMedia(
+      dependencies(),
+      owner,
+      { containerId: accountId, purpose: 'avatar', mediaType: 'image/png', byteCount: 256 },
+      context(),
+    ),
+  ).rejects.toThrow();
+  expect(await nativeEffects()).toEqual(before);
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+     VALUES ($1,$2,$2,'media:create','(,)',$2)`,
+    [routeOf(accountId), accountId],
+  );
+
+  await db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [accountId]);
+  expect(await readAvatarUploadAdvice(dependencies(), owner, Date.now() + 30000)).toEqual(expectedAdvice([]));
+  await db.admin.query("UPDATE access.account SET state='active' WHERE account_id=$1", [accountId]);
+  await db.admin.query('UPDATE access.account SET authn_fenced=true WHERE account_id=$1', [accountId]);
+  await expect(readAvatarUploadAdvice(dependencies(), owner, Date.now() + 30000)).rejects.toThrow();
+  await db.admin.query('UPDATE access.account SET authn_fenced=false WHERE account_id=$1', [accountId]);
+});
+
+test(
+  'avatar upload advice',
+  async () => {
+    const targetRoute = 0x4910;
+    const report = await checkGrowth(db, {
+      name: 'avatar upload advice',
+      scales: [64, 512, 4096],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(_database, scale, previous) {
+        const added = scale - Math.max(64, previous);
+        if (added > 0)
+          await seedMedia(
+            targetRoute,
+            Array.from({ length: added }, () => newId(targetRoute)),
+            false,
+          );
+      },
+      async operation() {
+        expect(await readAvatarUploadAdvice(dependencies(), owner, Date.now() + 30000)).toEqual(
+          expectedAdvice(['upload']),
+        );
+      },
+    });
+    expect(report.samples.map((sample) => sample.scale)).toEqual([64, 512, 4096]);
+    for (const sample of report.samples) expect(sample.cost.statements).toBeGreaterThan(0);
+  },
+  60000,
+);

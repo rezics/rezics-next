@@ -39,6 +39,13 @@ type FutureThread = { boardId: string; idempotencyKey: string };
 type PostReserveTarget = string | { containerId: string } | { newThread: FutureThread };
 type ReserveTarget = PostReserveTarget | { realmId: string };
 type ImagePurpose = 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+export type UploadStage = 'reservation' | 'transfer' | 'processing';
+export type MediaReservationIntent = Readonly<{
+  key: string;
+  body: Readonly<ReturnType<typeof reserveBody>>;
+  file: File;
+  viewer: string;
+}>;
 
 // A 409 names no thread, and the site has no route key to derive one. Keep the id the reservation already returned.
 const futureThreadIds = new Map<string, string>();
@@ -210,17 +217,34 @@ function reserveBody(target: ReserveTarget, file: File, purpose: ImagePurpose) {
   return { newThread: target.newThread, ...image };
 }
 
+export function createMediaReservationIntent(
+  target: ReserveTarget,
+  file: File,
+  purpose: ImagePurpose,
+  viewer: string,
+): MediaReservationIntent {
+  return Object.freeze({
+    key: crypto.randomUUID(),
+    body: Object.freeze(reserveBody(target, file, purpose)),
+    file,
+    viewer,
+  });
+}
+
 async function reserve(
   target: ReserveTarget,
   file: File,
   signal: AbortSignal,
   purpose: ImagePurpose,
+  intent?: MediaReservationIntent,
 ): Promise<ReservedMedia> {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (intent) headers['idempotency-key'] = JSON.stringify(intent.key);
   const response = await siteFetch('/media', {
     method: 'POST',
     signal,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(reserveBody(target, file, purpose)),
+    headers,
+    body: JSON.stringify(intent?.body ?? reserveBody(target, file, purpose)),
   });
   if (response.status === 409 && typeof target !== 'string' && 'newThread' in target) {
     const key = target.newThread.idempotencyKey;
@@ -300,6 +324,8 @@ async function uploadImage(
   file: File,
   signal: AbortSignal,
   purpose: ImagePurpose,
+  intent?: MediaReservationIntent,
+  onStage?: (stage: UploadStage) => void,
 ): Promise<UploadedImage> {
   let mediaId: string | undefined;
   try {
@@ -307,10 +333,20 @@ async function uploadImage(
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
-    const reserved = await reserve(target, file, signal, purpose);
+    if (
+      intent &&
+      (intent.file !== file ||
+        intent.body.purpose !== purpose ||
+        ('containerId' in intent.body && intent.body.containerId !== intent.viewer))
+    )
+      throw new UploadRefusal('unavailable');
+    onStage?.('reservation');
+    const reserved = await reserve(target, file, signal, purpose, intent);
     mediaId = reserved.id;
     throwIfAborted(signal);
+    onStage?.('transfer');
     await putBytes(reserved, file, signal);
+    onStage?.('processing');
     return await readUploadedImage(mediaId, file, signal);
   } catch (error) {
     throwIfAborted(signal);
@@ -346,8 +382,21 @@ export async function resumeReplyImageUpload(mediaId: string, file: File, signal
   }
 }
 
-export function uploadAvatar(accountId: string, file: File, signal: AbortSignal): Promise<UploadedImage> {
-  return uploadImage({ containerId: accountId }, file, signal, 'avatar');
+export function uploadAvatar(
+  accountId: string,
+  file: File,
+  signal: AbortSignal,
+  intent?: MediaReservationIntent,
+  onStage?: (stage: UploadStage) => void,
+): Promise<UploadedImage> {
+  if (intent && intent.viewer !== accountId) return Promise.reject(new UploadRefusal('unavailable'));
+  return uploadImage({ containerId: accountId }, file, signal, 'avatar', intent, onStage);
+}
+
+export async function readSiteAvatarUploadAdvice(signal: AbortSignal): Promise<unknown> {
+  const response = await siteFetch('/media/avatar-upload-advice', { method: 'GET', signal });
+  if (!response.ok) throw await refusalFrom(response);
+  return response.json();
 }
 
 /** Realm uploads reuse the uploader-bound byte/digest/completion pipeline; previews need a native derivative summary. */

@@ -1,5 +1,14 @@
-import { viewerCredential } from '../session/request.ts';
-import { mediaClient, problem, readReservation, reserveMedia, type Media, type ReservationInput } from './kernel.ts';
+import { sessionSubject, viewerCredential } from '../session/request.ts';
+import {
+  mediaClient,
+  parseAvatarUploadAdvice,
+  problem,
+  readAvatarUploadAdvice,
+  readReservation,
+  reserveMedia,
+  type Media,
+  type ReservationInput,
+} from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 import { reserveRealmMedia, type RealmMediaReservation } from '../community/realm-presentation-native';
 
@@ -45,6 +54,17 @@ function futureThread(value: unknown): { boardId: string; idempotencyKey: string
 }
 
 type SiteReservation = ReservationInput | (RealmMediaReservation & { realmId: string });
+
+function reservationKey(header: string | null): string | undefined {
+  if (header === null || header === '') return undefined;
+  try {
+    const value = JSON.parse(header) as unknown;
+    if (typeof value === 'string' && value.length >= 1 && value.length <= 255) return value;
+  } catch {
+    /* invalid structured key */
+  }
+  throw invalidRequest();
+}
 
 async function reservationInput(request: Request): Promise<SiteReservation> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json')
@@ -108,6 +128,7 @@ function publicMedia({ id, state, mediaType, byteCount, sha256, containerId }: M
 
 export async function reserve(request: Request, env: MediaEnv): Promise<Response> {
   const input = await reservationInput(request);
+  const key = reservationKey(request.headers.get('idempotency-key'));
   const client = mediaClient(env.KERNEL_ORIGIN);
   const credential = viewerCredential(request);
   const media =
@@ -118,11 +139,22 @@ export async function reserve(request: Request, env: MediaEnv): Promise<Response
           byteCount: input.byteCount,
           ...('sha256' in input ? { sha256: input.sha256 } : {}),
         })
-      : await reserveMedia(client, credential, input);
+      : await reserveMedia(client, credential, input, key);
   return Response.json(publicMedia(media), {
     status: 201,
     headers: { location: `/media/${encodeURIComponent(media.id)}`, 'cache-control': 'private, no-store' },
   });
+}
+
+export async function avatarUploadAdvice(request: Request, env: MediaEnv): Promise<Response> {
+  if ([...new URL(request.url).searchParams.keys()].length) throw invalidRequest();
+  const credential = viewerCredential(request);
+  const viewerId = sessionSubject(request);
+  if (!credential || !viewerId) throw problem(401, 'authentication_required', 'Authentication Required');
+  const advice = await readAvatarUploadAdvice(mediaClient(env.KERNEL_ORIGIN), credential, viewerId);
+  const parsed = parseAvatarUploadAdvice(advice, viewerId);
+  if (!parsed) throw problem(502, 'dependency_unavailable', 'Dependency Unavailable');
+  return Response.json(parsed, { headers: { 'cache-control': 'private, no-store' } });
 }
 
 export async function read(request: Request, id: string, env: MediaEnv): Promise<Response> {

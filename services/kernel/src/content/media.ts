@@ -6,6 +6,7 @@ import { Value } from 'typebox/value';
 import {
   authoritativeTimeValue,
   currentCommand,
+  mintReadTime,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
@@ -15,8 +16,18 @@ import {
 } from '../command/command.ts';
 import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
 import { commandAccessContext } from '../access/command-admission.ts';
+import { readAccount as readAccountHome } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
+import { withConnection, discardConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
+import {
+  accessCheck,
+  accessCommandAuthorization,
+  AuthenticationError,
+  type AccessCheck,
+} from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
@@ -172,6 +183,15 @@ export class MediaUnavailableError extends Error {
   }
 }
 const imageTypes = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+export const AVATAR_UPLOAD_MEDIA_TYPES = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as const;
+export const AVATAR_UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
+export type AvatarUploadAdvice = Readonly<{
+  viewerState: 'signed_in';
+  viewer: Readonly<{ accountId: string }>;
+  target: Readonly<{ containerId: string; purpose: 'avatar' }>;
+  constraints: Readonly<{ mediaTypes: typeof AVATAR_UPLOAD_MEDIA_TYPES; maxByteCount: typeof AVATAR_UPLOAD_MAX_BYTES }>;
+  allowedActions: readonly ['upload'] | readonly [];
+}>;
 const digestPattern = /^[0-9a-f]{64}(?![\s\S])/;
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new GrantDeniedError();
@@ -460,6 +480,72 @@ export async function reserveMedia(
     },
   );
 }
+
+/** Observe current self-avatar upload admission. This is not a creation grant or receipt. */
+export async function readAvatarUploadAdvice(
+  dependencies: MediaDependencies,
+  actor: Actor,
+  deadline: number,
+): Promise<AvatarUploadAdvice> {
+  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  const r = routeOf(actor.accountId);
+  if (r === null) throw new ProblemError('not_found');
+  const parent = { route: r, id: actor.accountId };
+  let check: AccessCheck;
+  try {
+    // Prepare Access account/client/scope/epoch/requested-by evidence before the owner checkout.
+    check = await accessCheck(dependencies.access, actor, 'media:create', parent, {
+      pool: dependencies.pool,
+      deadline,
+    });
+  } catch (error) {
+    if (error instanceof AccessUnavailableError) throw new ProblemError('dependency_unavailable');
+    throw error;
+  }
+  const observation = {
+    viewerState: 'signed_in' as const,
+    viewer: { accountId: actor.accountId },
+    target: { containerId: actor.accountId, purpose: 'avatar' as const },
+    constraints: { mediaTypes: AVATAR_UPLOAD_MEDIA_TYPES, maxByteCount: AVATAR_UPLOAD_MAX_BYTES },
+  };
+  try {
+    return await within(deadline, () =>
+      withConnection(dependencies.pool, async (client) => {
+        const bounded = deadlineClient(client, deadline);
+        try {
+          await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          const home = await readPartition(bounded, partitionOf(r));
+          if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+          const time = await mintReadTime(bounded, dependencies.clock);
+          const current = await readAccountHome(bounded, r, actor.accountId);
+          if (
+            !current ||
+            current.fenced ||
+            !Number.isSafeInteger(actor.authnEpoch) ||
+            actor.authnEpoch < 1 ||
+            BigInt(actor.authnEpoch) < current.minimumAuthnEpoch
+          )
+            throw new ProblemError('not_found');
+          const allowed =
+            actor.clientId === 'rezics-website' && current.state === 'active' && (await check(bounded, time));
+          await bounded.query('COMMIT');
+          return { ...observation, allowedActions: allowed ? (['upload'] as const) : ([] as const) };
+        } catch (error) {
+          try {
+            await bounded.query('ROLLBACK');
+          } catch (rollbackError) {
+            discardConnection(client, rollbackError as Error);
+          }
+          throw error;
+        }
+      }),
+    );
+  } catch (error) {
+    if (error instanceof AccessUnavailableError) throw new ProblemError('dependency_unavailable');
+    throw error;
+  }
+}
+
 export async function completeMedia(
   dependencies: MediaDependencies,
   actor: Actor,

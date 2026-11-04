@@ -1,7 +1,7 @@
 import { download, validVariant } from './download.ts';
 import { dependencyUnavailable, notFound, problem, problemResponse } from './kernel.ts';
 import { upload } from './upload.ts';
-import { reserve, read } from './reservation.ts';
+import { avatarUploadAdvice, reserve, read } from './reservation.ts';
 
 export type MediaEnv = { KERNEL_ORIGIN: string; MEDIA: R2Bucket };
 
@@ -9,6 +9,11 @@ export async function mediaRequest(request: Request, env: Partial<MediaEnv> = {}
   try {
     if (!env.MEDIA || !env.KERNEL_ORIGIN) throw dependencyUnavailable(503);
     const pathname = new URL(request.url).pathname;
+    if (pathname === '/media/avatar-upload-advice') {
+      if (request.method !== 'GET')
+        return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'GET' });
+      return await avatarUploadAdvice(request, env as MediaEnv);
+    }
     if (pathname === '/media') {
       if (request.method !== 'POST')
         return problemResponse(problem(405, 'invalid_request', 'Invalid Request'), { allow: 'POST' });

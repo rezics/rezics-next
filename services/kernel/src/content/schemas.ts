@@ -1548,6 +1548,30 @@ export const MediaDownloadResponseSchema = t.Object(
   },
   closed,
 );
+export const AvatarUploadAdviceQuerySchema = t.Object({}, closed);
+export const AvatarUploadAdviceResponseSchema = t.Object(
+  {
+    viewerState: t.Literal('signed_in'),
+    viewer: t.Object({ accountId: ContentIdSchema }, closed),
+    target: t.Object({ containerId: ContentIdSchema, purpose: t.Literal('avatar') }, closed),
+    constraints: t.Object(
+      {
+        mediaTypes: t.Tuple([
+          t.Literal('image/avif'),
+          t.Literal('image/gif'),
+          t.Literal('image/jpeg'),
+          t.Literal('image/png'),
+          t.Literal('image/webp'),
+        ]),
+        maxByteCount: t.Literal(20_971_520),
+      },
+      closed,
+    ),
+    allowedActions: t.Union([t.Tuple([t.Literal('upload')]), t.Tuple([])]),
+  },
+  closed,
+);
+export type AvatarUploadAdvice = Static<typeof AvatarUploadAdviceResponseSchema>;
 
 const ownMediaVariant = t.String({
   pattern: '^(original|(avif|webp)-([1-9]|[1-9][0-9]|[12][0-9]{2}|3[01][0-9]|320|640|960|1280|1920|2560))$',
