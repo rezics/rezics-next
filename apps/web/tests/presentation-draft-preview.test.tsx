@@ -99,6 +99,14 @@ test('detached complete input binds the reader, digest and companion while prese
   }
   expect(captureDraftPreview({ ...captured, target: { route: '/', view: 'details' } })).toBeNull();
   expect(captureDraftPreview({ ...captured, profile: { ...profile, format: 'invalid' } })).toBeNull();
+  const corrected = { ...native(captured), subject: '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e11' };
+  const current = await loadDraftPreview(
+    { pages: { $previewDraft: { post: async () => ({ status: 200, data: corrected }) } } },
+    captured,
+    { reader, authorization: 'Bearer curator' },
+  );
+  expect(current.ok && current.page.subject).toBe(corrected.subject);
+  expect(current.ok && current.target).toEqual(captured.target);
   const wrong = native(captured);
   wrong.draft.digest = 'wrong';
   expect(

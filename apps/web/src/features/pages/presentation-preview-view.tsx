@@ -58,6 +58,7 @@ export function PublishedPresentationPage({
             <PageData
               locale={locale}
               subject={page.subject}
+              {...(page.account ? { account: page.account } : {})}
               context={page.context}
               document={page.document}
               reads={page.reads}
