@@ -9,6 +9,7 @@ mock.module('../src/threads/authoring-departure', () => ({
   AuthoringDepartureBoundary: ({ children }: { children: ReactNode }) => <>{children}</>,
   useAuthoringDeparture: () => ({ release() {} }),
 }));
+mock.module('../src/session/query', () => ({ useSession: () => session }));
 const sent: ResolutionCommand[] = [];
 mock.module('../src/moderation/actions', () => ({
   actionOnReport: async () => ({ ok: true }),
