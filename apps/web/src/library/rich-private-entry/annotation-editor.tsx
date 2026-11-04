@@ -146,8 +146,11 @@ export function AnnotationEditor({
         <button
           type="button"
           className="min-h-11 rounded-md border px-3 disabled:opacity-50"
-          disabled={disabled || !canDiscard}
-          onClick={(event) => onDiscard(event.currentTarget)}
+          disabled={disabled}
+          aria-disabled={!canDiscard}
+          onClick={(event) => {
+            if (canDiscard) onDiscard(event.currentTarget);
+          }}
         >
           {m.library_annotation_discard()}
         </button>

@@ -204,10 +204,14 @@ function PrivateEntryReview({
   const priorityEditor = useRef<HTMLInputElement>(null);
   const reviewTrigger = useRef<HTMLButtonElement>(null);
   const editorRefs = { note: noteEditor, priority: priorityEditor, review: reviewTrigger };
-  const [editorFocus, setEditorFocus] = useState<AnnotationField | 'review' | null>(null);
+  const [editorFocus, setEditorFocus] = useState<AnnotationField | 'review' | 'discard' | null>(null);
   useEffect(() => {
     if (!editorFocus || confirmation) return;
-    if (editorFocus === 'review') reviewTrigger.current?.focus();
+    if (editorFocus === 'discard') {
+      if (departureTrigger.current?.isConnected) departureTrigger.current.focus();
+      else if (reviewTrigger.current && !reviewTrigger.current.disabled) reviewTrigger.current.focus();
+      else noteEditor.current?.focus();
+    } else if (editorFocus === 'review') reviewTrigger.current?.focus();
     else focusAnnotationEditor(editorRefs, editorFocus);
     setEditorFocus(null);
   }, [editorFocus, confirmation]);
@@ -597,7 +601,7 @@ function PrivateEntryReview({
       retired.current = true;
       generation.current++;
     } else {
-      setEditorFocus('review');
+      setEditorFocus('discard');
     }
   }
 

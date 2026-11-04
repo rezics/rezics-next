@@ -241,7 +241,7 @@ test('edit and review: exact values, native bounds, clear versus unchanged, corr
     await r.click(m.library_annotation_confirm_discard());
     expect(r.note().value).toBe(entry.note!);
     expect(r.rank().value).toBe('7');
-    expect(r.window.document.activeElement).toBe(r.button(m.library_annotation_review()));
+    expect(r.window.document.activeElement).toBe(r.button(m.library_annotation_discard()));
     expect(r.host.textContent).toContain(m.library_annotation_discarded());
     await r.click(m.library_rich_entry_clear_note());
     await r.click(m.library_annotation_review());
