@@ -439,16 +439,27 @@ test('inventory finishes current target disclosure after later rows hydrate', as
   );
 
   const targetGate = interceptThreadSnapshot(f.db.pool, later.id, 'pause');
+  const targetPartition = partitionOf(routeOf(later.id)!);
+  const previousPartition = await f.db.admin.query<{ write_state: string; moved_to: string | null }>(
+    'SELECT write_state,moved_to FROM core.partition WHERE partition_no=$1',
+    [targetPartition],
+  );
+  expect(previousPartition.rows).toHaveLength(1);
   try {
     const pending = f.call(reader, 'GET', management(reader, 'thread', 20));
     await targetGate.reached;
     await f.db.admin.query(
-      'UPDATE content.thread SET board_id=$2,security_revision=security_revision+1 WHERE thread_id=$1',
-      [realmThread.id, f.boardId],
+      "UPDATE core.partition SET write_state='moved',moved_to='watch-target-move' WHERE partition_no=$1",
+      [targetPartition],
     );
     targetGate.release();
     expect((await pending).status).toBe(503);
   } finally {
+    await f.db.admin.query('UPDATE core.partition SET write_state=$2,moved_to=$3 WHERE partition_no=$1', [
+      targetPartition,
+      previousPartition.rows[0]!.write_state,
+      previousPartition.rows[0]!.moved_to,
+    ]);
     targetGate.restore();
   }
   expect((await f.call(reader, 'GET', management(reader, 'thread', 20))).value.items).toContainEqual(
