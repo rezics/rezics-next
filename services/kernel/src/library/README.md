@@ -3124,7 +3124,8 @@ bounded before/after states. It does not return a Subject ID or a write operand.
 `withheld`; curators can still distinguish repeated occurrences by their separate member IDs. The current
 Collection read establishes current curator/account authority before and after each bounded journal read. The route
 uses the existing `collection:update` action and account lifetime in both cursors and addresses. Responses are
-`private, no-store`.
+`private, no-store`. Decision: operationIds are `collection.structure_history_list` and
+`collection.structure_history_compare`, matching metadata history's `<resource>.<verb>` pair.
 
 Pages return at most 50 deltas plus one lookahead, and comparisons read at most two selected rows. Each Collection's
 head serializes its native change number; opaque cursors and addresses bind the Collection, curator account lifetime,
