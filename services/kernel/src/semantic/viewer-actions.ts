@@ -105,7 +105,7 @@ export type SubjectCorrectionActions =
   | { state: 'available'; actions: { action: string; operations: string[] }[] }
   | { state: 'concealed' | 'stale' | 'unavailable' };
 
-/** Read the mounted proposal operation against its actual Global parent and recheck its target. */
+/** Read mounted current correction operations against their Global parent and recheck the Subject. */
 export async function readSubjectCorrectionActions(input: {
   pool: Pool;
   access: Access;
@@ -125,14 +125,15 @@ export async function readSubjectCorrectionActions(input: {
     input.revision >= Number.MAX_SAFE_INTEGER
   )
     return { state: 'unavailable' };
-  const mounted = (input.bindings.get('semantic.revision') ?? []).filter(
-    (binding) => binding.action === 'statement:propose' && binding.operationId === 'subject.propose',
+  const correctionOperations = new Set(['subject.propose', 'subject.terms']);
+  const mounted = (input.bindings.get('semantic.context') ?? []).filter(
+    (binding) => binding.action === 'statement:propose' && correctionOperations.has(binding.operationId),
   );
   if (
     !mounted.length ||
     mounted.some(
       (binding) =>
-        binding.authority !== 'resource' || binding.fixedResourceId !== undefined || binding.accountAuthority,
+        binding.authority !== 'resource' || binding.fixedResourceId !== GLOBAL_CONTEXT || binding.accountAuthority,
     )
   )
     return { state: 'unavailable' };
@@ -178,8 +179,8 @@ export async function readSubjectCorrectionActions(input: {
     [
       'semantic.context',
       mounted.map(
-        ({ action, operationId, exposure }) =>
-          ({ action, operationId, exposure, authority: 'resource' }) satisfies ViewerActionBinding,
+        ({ action, operationId, exposure, fixedResourceId }) =>
+          ({ action, operationId, exposure, fixedResourceId, authority: 'resource' }) satisfies ViewerActionBinding,
       ),
     ],
   ]);
@@ -196,9 +197,11 @@ export async function readSubjectCorrectionActions(input: {
     if (!selected || 'error' in selected || witness.state !== 'ready') return { state: 'unavailable' };
     return {
       state: 'available',
-      actions: selected.viewerActions.filter(
-        (entry) => entry.action === 'statement:propose' && entry.operations.includes('subject.propose'),
-      ),
+      actions: selected.viewerActions.flatMap((entry) => {
+        if (entry.action !== 'statement:propose') return [];
+        const operations = [...new Set(entry.operations.filter((operation) => correctionOperations.has(operation)))];
+        return operations.length ? [{ action: entry.action, operations }] : [];
+      }),
     };
   } catch {
     return witness.state === 'concealed' || witness.state === 'stale'

@@ -1,4 +1,5 @@
 import { candidateContext } from '../../src/subject/candidates.ts';
+import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import { startAuthStack, type NativeAuthStack } from './auth-stack.ts';
 import { startNativeWebStack, type NativeWebStack } from './stack.ts';
@@ -28,6 +29,7 @@ export type CatalogueChangesFixture = {
   multiAdoption?: number;
   multiCandidates?: [string, string];
   selected: CatalogueChangeStatement;
+  setProposalAuthority(allowed: boolean): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -98,6 +100,27 @@ export async function startCatalogueChangesFixture(
   let auth: NativeAuthStack | undefined;
   try {
     auth = await startAuthStack(stack);
+    const alice = await stack.authPersona('alice');
+    const setProposalAuthority = async (allowed: boolean) => {
+      const response = await stack.kernel(
+        allowed ? '/v1/grants' : '/v1/grants:revoke',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+          body: JSON.stringify({
+            resource: { route: 0, id: GLOBAL_CONTEXT },
+            subject: { kind: 'account', id: alice.accountId },
+            actions: ['statement:propose'],
+            valid: '(,)',
+          }),
+        },
+        'governor',
+      );
+      const accepted = allowed ? [201, 409].includes(response.status) : response.status === 200;
+      if (!accepted)
+        throw new Error(`Setting Alice proposal authority returned ${response.status}: ${await response.text()}`);
+    };
+    await setProposalAuthority(true);
     const label = `Native catalogue changes ${crypto.randomUUID().slice(0, 8)}`;
     const created = await command(
       stack,
@@ -161,6 +184,17 @@ export async function startCatalogueChangesFixture(
       selection: [{ candidate: secondProposed.candidate, rank: 'preferred' }],
       expected_head: (firstAdopted.adoption as { head: number }).head,
     });
+    for (let index = 0; index < 14; index++) {
+      const frontierUrl = `https://example.test/changes/frontier/${index}-${crypto.randomUUID().slice(0, 8)}`;
+      await command(
+        stack,
+        'POST',
+        `/v1/subjects/${id}/candidates`,
+        { statement: cited(urlProperty, frontierUrl) },
+        {},
+        201,
+      );
+    }
     let multiAdoption: number | undefined;
     let multiCandidates: [string, string] | undefined;
     if (options.multipleSelection) {
@@ -207,6 +241,7 @@ export async function startCatalogueChangesFixture(
       secondAdoption: secondAdopted.revision as number,
       ...(multiAdoption !== undefined && multiCandidates ? { multiAdoption, multiCandidates } : {}),
       selected: selectedUrl(reading.subject as Json, secondUrl),
+      setProposalAuthority,
       async close() {
         await auth?.stop();
         await stack.stop();

@@ -3,8 +3,8 @@ import { useCatalogueLifetime } from '../../subject/candidate-lifetime';
 import { candidateSession, useCandidateWork } from '../../subject/candidate-lifetime';
 import { readSubjectCandidates, confirmSubjectCandidate } from '../../features/pages/curate-actions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useSyncExternalStore } from 'react';
-import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
+import { useMemo, useSyncExternalStore, type ReactElement } from 'react';
+import { createFileRoute, Link, notFound, redirect } from '@tanstack/react-router';
 import { createServerFn } from '@tanstack/react-start';
 import { setResponseHeader } from '@tanstack/react-start/server';
 import { StatementEditor, EditorFailure } from '../../features/catalogue/statement-editor-view';
@@ -26,7 +26,10 @@ import { readSubjectContext, confirmSubjectContext } from '../../features/catalo
 import { candidateContext } from '../../subject/candidates';
 import { providerQueueReturnForReview } from '../../features/import-review/provider-queue';
 import { providerSessionSource } from '../../features/import-review/provider-visit';
-import { subjectChangesReturnForReview } from '../../features/catalogue/subject-changes-navigation';
+import {
+  subjectChangesReturnForCorrection,
+  subjectChangesReturnForReview,
+} from '../../features/catalogue/subject-changes-navigation';
 import { captureCandidateSession } from '../../subject/candidate-lifetime';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -107,7 +110,7 @@ export const Route = createFileRoute('/subjects/$id_/$slug_/edit')({
   component: candidateSession(CorrectionRoute),
 });
 
-function CorrectionRoute() {
+function CorrectionRoute(): ReactElement {
   const queryClient = useQueryClient();
   const { id } = Route.useLoaderData();
   const { slug } = Route.useParams();
@@ -138,8 +141,35 @@ function CorrectionRoute() {
           candidateLease.reader,
         )
       : undefined;
-  const returnHref = providerReturn ? '/imports/review' : changesReturn?.href;
-  const returnUnavailable = (returnTo === 'queue' && !providerReturn) || (returnTo === 'changes' && !changesReturn);
+  const correctionReturn =
+    returnTo === 'changes' && !reviewProperty && candidateLease
+      ? subjectChangesReturnForCorrection(
+          property
+            ? { kind: 'property', subject: id, property, context: candidateContext }
+            : { kind: 'subject', subject: id },
+          candidateLease.reader,
+        )
+      : undefined;
+  const returnHref = providerReturn ? '/imports/review' : (changesReturn?.href ?? correctionReturn?.href);
+  const returnUnavailable =
+    (returnTo === 'queue' && !providerReturn) || (returnTo === 'changes' && !changesReturn && !correctionReturn);
+  const correctionReturnLink =
+    returnTo === 'changes' && !reviewProperty ? (
+      returnHref ? (
+        <p className="px-6 pt-4">
+          <Link
+            className="inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            to={returnHref as never}
+          >
+            {m.changes_return_to_changes()}
+          </Link>
+        </p>
+      ) : (
+        <p role="status" className="px-6 pt-4">
+          {m.changes_return_unavailable()}
+        </p>
+      )
+    ) : null;
   const read = async () => {
     const result = await readCorrection({
       data: editorRequest({ id, property, statement }, editorWork),
@@ -186,69 +216,73 @@ function CorrectionRoute() {
     );
   if (!property)
     return (
-      <SubjectFacts
-        key={`${id}:${locale}`}
-        initial={query.data}
-        locale={locale}
-        transport={{
-          read,
-          propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
-        }}
-        initialReview={
-          reviewProperty && candidate && context
-            ? {
-                property: reviewProperty,
-                candidate,
-                context,
-                ...(returnHref ? { returnHref } : {}),
-                ...(returnHref
-                  ? { returnLabel: returnTo === 'queue' ? m.prq_return_to_queue() : m.changes_return_to_changes() }
-                  : {}),
-                ...(returnTo ? { returnUnavailable } : {}),
-              }
-            : undefined
-        }
-        review={(_property, initialSession, reviewContext) => {
-          const exactContext = reviewContext ?? candidateContext;
-          return {
-            read: async (field, cursor, session = initialSession, work) => {
-              if (!work?.live()) return { ok: false, reason: 'denied' };
-              const result =
-                exactContext === candidateContext
-                  ? await readSubjectCandidates({
-                      data: { expectedReader: work.reader, id, property: field, cursor, session },
-                      headers: csrfHeaders(),
-                    })
-                  : await readSubjectContext({
-                      data: {
-                        expectedReader: work.reader,
-                        id,
-                        context: exactContext,
-                        property: field,
-                        cursor,
-                        session,
-                      },
-                      headers: csrfHeaders(),
-                    });
-              return result;
-            },
-            confirm: async (command, work) => {
-              if (!work?.live()) return { ok: false, reason: 'denied' };
-              const result =
-                exactContext === candidateContext
-                  ? await confirmSubjectCandidate({ data: command, headers: csrfHeaders() })
-                  : await confirmSubjectContext({
-                      data: { ...command, context: exactContext },
-                      headers: csrfHeaders(),
-                    });
-              return result;
-            },
-          };
-        }}
-      />
+      <>
+        {correctionReturnLink}
+        <SubjectFacts
+          key={`${id}:${locale}`}
+          initial={query.data}
+          locale={locale}
+          transport={{
+            read,
+            propose: (data) => submitFactCorrection({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
+          }}
+          initialReview={
+            reviewProperty && candidate && context
+              ? {
+                  property: reviewProperty,
+                  candidate,
+                  context,
+                  ...(returnHref ? { returnHref } : {}),
+                  ...(returnHref
+                    ? { returnLabel: returnTo === 'queue' ? m.prq_return_to_queue() : m.changes_return_to_changes() }
+                    : {}),
+                  ...(returnTo ? { returnUnavailable } : {}),
+                }
+              : undefined
+          }
+          review={(_property, initialSession, reviewContext) => {
+            const exactContext = reviewContext ?? candidateContext;
+            return {
+              read: async (field, cursor, session = initialSession, work) => {
+                if (!work?.live()) return { ok: false, reason: 'denied' };
+                const result =
+                  exactContext === candidateContext
+                    ? await readSubjectCandidates({
+                        data: { expectedReader: work.reader, id, property: field, cursor, session },
+                        headers: csrfHeaders(),
+                      })
+                    : await readSubjectContext({
+                        data: {
+                          expectedReader: work.reader,
+                          id,
+                          context: exactContext,
+                          property: field,
+                          cursor,
+                          session,
+                        },
+                        headers: csrfHeaders(),
+                      });
+                return result;
+              },
+              confirm: async (command, work) => {
+                if (!work?.live()) return { ok: false, reason: 'denied' };
+                const result =
+                  exactContext === candidateContext
+                    ? await confirmSubjectCandidate({ data: command, headers: csrfHeaders() })
+                    : await confirmSubjectContext({
+                        data: { ...command, context: exactContext },
+                        headers: csrfHeaders(),
+                      });
+                return result;
+              },
+            };
+          }}
+        />
+      </>
     );
   return (
     <div className="space-y-4">
+      {correctionReturnLink}
       {returnTo === 'sources' && (
         <a
           className="inline-flex min-h-11 items-center underline"

@@ -1,9 +1,13 @@
 import { expect, test } from 'bun:test';
 import { catalogueChangesFixture, changesCursor, changesLastCursor } from '../src/kernel/fake/catalogue-changes';
-import { changesState, readSubjectChange, type ChangesState } from '../src/features/catalogue/subject-changes';
+import {
+  changesState,
+  readSubjectChange,
+  type ChangesState,
+  type CurrentOperationsRead,
+} from '../src/features/catalogue/subject-changes';
 
-// Consumer outcomes through the generated list client and normalized detail port.
-// A port example is not evidence that the unpublished producer endpoint is served.
+// Consumer outcomes through the generated list client and a deliberately bounded detail adapter.
 test('a reader follows paginated native subject revisions to a safe change explanation and current reading without inventing historical payload or leaking concealed details', async () => {
   const fixture = catalogueChangesFixture();
   const first = await fixture.transport.list();
@@ -19,7 +23,7 @@ test('a reader follows paginated native subject revisions to a safe change expla
     fixture.client,
     fixture.id,
     selected,
-    { session: last.session },
+    { authorization: 'Bearer story', session: last.session },
     async (_client, input) => ({
       kind: 'ready',
       detail: {
@@ -29,7 +33,11 @@ test('a reader follows paginated native subject revisions to a safe change expla
       },
     }),
   );
-  expect(detail).toEqual({ kind: 'ready', detail: { id: fixture.id, revision: 2, summary: { kind: 'limited' } } });
+  expect(detail).toMatchObject({
+    kind: 'ready',
+    detail: { id: fixture.id, revision: 2, summary: { kind: 'limited' } },
+    currentOperations: { state: 'available', operations: ['subject.propose', 'subject.terms'] },
+  });
   expect(first.page.href).toContain(`/subjects/${fixture.id}/`);
   expect(first.page.revisions[0]).toEqual({ revision: 5, kind: 'propose' });
   expect(JSON.stringify(first.page)).not.toContain('record_revision');
@@ -38,10 +46,125 @@ test('a reader follows paginated native subject revisions to a safe change expla
   expect(listings.map((call) => call.cursor)).toEqual([null, changesCursor, changesLastCursor]);
   expect(listings[1]).toMatchObject({ authorization: 'Bearer story', session: 'changes-session' });
   expect(
-    fixture.calls.filter((call) => !call.path.endsWith('/revisions')).every((call) => call.authorization === null),
+    fixture.calls
+      .filter((call) => call.path === `/v1/subjects/${fixture.id}`)
+      .every((call) => call.authorization === null),
   ).toBe(true);
-  // Until the generated producer DTO is integrated, runtime detail is honestly unavailable.
-  expect(await fixture.transport.detail(2)).toEqual({ kind: 'unavailable' });
+  const actionReads = fixture.calls.filter((call) => call.includeViewerActions);
+  expect(actionReads).toHaveLength(4);
+  expect(actionReads.every((call) => call.path === '/v1/viewerActions' && call.authorization === 'Bearer story')).toBe(
+    true,
+  );
+  expect(actionReads[0]?.resources).toEqual([
+    { type: 'semantic.context', id: '00000000-0000-8000-8000-000000000000' },
+    { type: fixture.read.subject.type, id: fixture.id },
+  ]);
+  expect(await fixture.transport.detail(2)).toMatchObject({ kind: 'unavailable' });
+});
+
+test('current operation reads distinguish confirmed denial, unavailable hydration and preparing state without losing public history', async () => {
+  const fixture = catalogueChangesFixture();
+  const allowed = await fixture.transport.list();
+  expect(allowed.kind === 'ready' && allowed.page.currentOperations).toEqual({
+    state: 'available',
+    operations: ['subject.propose', 'subject.terms'],
+  });
+
+  fixture.setActionOperations([]);
+  const denied = await fixture.transport.list();
+  expect(denied.kind === 'ready' && denied.page.currentOperations).toEqual({ state: 'available', operations: [] });
+
+  fixture.setActionOutcome('unavailable');
+  const unavailable = await fixture.transport.list();
+  expect(unavailable.kind === 'ready' && unavailable.page.currentOperations).toEqual({ state: 'unavailable' });
+
+  fixture.setActionOutcome('component-unavailable');
+  const missingComponent = await fixture.transport.list();
+  expect(missingComponent.kind === 'ready' && missingComponent.page.currentOperations).toEqual({ state: 'unavailable' });
+
+  fixture.setActionOutcome('preparing');
+  const preparing = await fixture.transport.list();
+  expect(preparing.kind === 'ready' && preparing.page.currentOperations).toEqual({ state: 'preparing' });
+  expect(preparing.kind === 'ready' && preparing.page.revisions).toHaveLength(2);
+});
+
+test('current correction handoffs use only the exact Subject and safe current field address', async () => {
+  const { ChangeExplanation } = await import('../src/features/catalogue/subject-changes-page');
+  const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
+  const fixture = catalogueChangesFixture();
+  const listing = await fixture.transport.list();
+  if (listing.kind !== 'ready') throw new Error('Expected public history');
+  const base = listing.page.href;
+  const currentOperations: CurrentOperationsRead = {
+    state: 'available',
+    operations: ['subject.propose', 'subject.terms'],
+  };
+  const renderExplanation = async (props: Parameters<typeof ChangeExplanation>[0]) => {
+    const root = createRootRoute();
+    const view = createRoute({
+      getParentRoute: () => root,
+      path: '/$locale/subjects/$id/$slug/$view',
+      component: () => createElement(ChangeExplanation, props),
+    });
+    const router = createRouter({
+      routeTree: root.addChildren([view]),
+      history: createMemoryHistory({ initialEntries: [`${base}/changes`] }),
+    });
+    await router.load();
+    return renderToStaticMarkup(createElement(RouterProvider, { router }));
+  };
+  const terms = await renderExplanation({
+      detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [{ field: 'labels', languages: ['en'] }] } },
+      revision: 2,
+      locale: 'en',
+      pageHref: base,
+      currentOperations,
+      onCorrectCurrent: () => true,
+    });
+  expect(terms).toContain(m.changes_correct_terms());
+  expect(terms).toContain(`${base}/terms?returnTo=changes`);
+  expect(terms).not.toContain('revision=2');
+
+  const fact = await renderExplanation({
+      detail: {
+        id: fixture.id,
+        revision: 5,
+        summary: {
+          kind: 'candidate',
+          candidate: crypto.randomUUID(),
+          property: 'schema:url',
+          context: fixture.read.subject.context,
+        },
+      },
+      revision: 5,
+      locale: 'en',
+      pageHref: base,
+      currentOperations,
+      onCorrectCurrent: () => true,
+    });
+  expect(fact).toContain(m.changes_correct_current());
+  expect(fact).toContain(`${base}/edit?property=schema%3Aurl&amp;returnTo=changes`);
+  expect(fact).not.toContain('candidate=');
+  expect(fact).not.toContain('revision=5');
+
+  const actionStates: [CurrentOperationsRead, string][] = [
+    [{ state: 'available', operations: [] }, m.changes_correction_denied()],
+    [{ state: 'unavailable' }, m.changes_correction_unavailable()],
+    [{ state: 'preparing' }, m.changes_correction_preparing()],
+  ];
+  for (const [operations, expected] of actionStates) {
+    const html = await renderExplanation({
+        detail: { id: fixture.id, revision: 2, summary: { kind: 'terms', fields: [] } },
+        revision: 2,
+        locale: 'en',
+        pageHref: base,
+        currentOperations: operations,
+        onCorrectCurrent: () => true,
+      });
+    expect(html).toContain(expected);
+    expect(html).not.toContain(m.changes_correct_terms());
+  }
 });
 
 test('an empty continuation with another opaque next keeps the earlier revisions and selection', async () => {
@@ -83,13 +206,18 @@ test('failed detail reads keep list and selection but discard prior detail; curr
       throw new Error('Detail transport unavailable');
     }),
   ).toEqual({ kind: 'missing', scope: 'subject' });
-  expect(changesState(initial, { type: 'detail', result: detail })).toEqual({ failure: detail });
+  expect(changesState(initial, { type: 'detail', result: detail })).toEqual({
+    failure: detail,
+    currentOperations: { state: 'unavailable' },
+  });
 });
 
 // Delivered native DTOs go through the generated endpoint and the production adapter.
 import { mock } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import type { NativeRevisionDetail } from '../src/features/catalogue/subject-changes';
 import { readValueExplanation } from '../src/features/catalogue/value-explanation';
 import release from '../src/kernel/recorded/definitions-release.json';
@@ -97,6 +225,11 @@ import { m } from '../src/paraglide/messages.js';
 import { languageName } from '../src/subject/language';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const staticQueryClient = new QueryClient();
+function renderStatic(node: ReactNode) {
+  return renderToStaticMarkup(createElement(QueryClientProvider, { client: staticQueryClient }, node));
+}
 
 function nativeDetailFixture() {
   let body: unknown;
@@ -161,7 +294,7 @@ test('actual native safe revision detail is rendered through the existing browse
     }),
     { type: 'detail', result: detail },
   );
-  const browser = renderToStaticMarkup(createElement(SubjectChangesPage, { state, locale: 'en' }));
+  const browser = renderStatic(createElement(SubjectChangesPage, { state, locale: 'en' }));
   expect(browser).toContain(m.changes_proposal_detail());
   expect(browser).toContain(m.context_selected());
   expect(browser).toContain(m.candidate_rank_preferred());
@@ -181,7 +314,7 @@ test('actual native safe revision detail is rendered through the existing browse
 
   const value = await fixture.value();
   expect(value.kind === 'ready' && value.page.change).toMatchObject({ kind: 'ready' });
-  const view = renderToStaticMarkup(createElement(ValueExplanationPage, { result: value, locale: 'en' }));
+  const view = renderStatic(createElement(ValueExplanationPage, { result: value, locale: 'en' }));
   expect(view).toContain('9780156012195');
   expect(view).toContain(m.changes_proposal_detail());
   expect(view).toContain(m.context_selected());
@@ -195,12 +328,12 @@ test('actual native safe revision detail is rendered through the existing browse
   });
   expect(failed.page).toBe(state.page);
   expect(failed.selected).toBe(5);
-  const hidden = renderToStaticMarkup(createElement(SubjectChangesPage, { state: failed, locale: 'en' }));
+  const hidden = renderStatic(createElement(SubjectChangesPage, { state: failed, locale: 'en' }));
   expect(hidden).toContain(m.changes_missing());
   expect(hidden).not.toContain(m.changes_proposal_detail());
   expect(hidden).not.toContain('CONCEALED DETAIL');
   const hiddenValue = await fixture.value();
-  const hiddenView = renderToStaticMarkup(createElement(ValueExplanationPage, { result: hiddenValue, locale: 'en' }));
+  const hiddenView = renderStatic(createElement(ValueExplanationPage, { result: hiddenValue, locale: 'en' }));
   expect(hiddenView).toContain('9780156012195');
   expect(hiddenView).toContain(m.value_change_unavailable());
   expect(hiddenView).not.toContain(m.context_selected());
@@ -339,7 +472,7 @@ test('The actual native terms revision explains each field and its own languages
       }),
       { type: 'detail', result },
     );
-    expect(renderToStaticMarkup(createElement(SubjectChangesPage, { state, locale: 'en' }))).toContain(html);
+    expect(renderStatic(createElement(SubjectChangesPage, { state, locale: 'en' }))).toContain(html);
     expect(html).not.toContain(m.changes_current());
     for (const privateText of [
       fixture.dto.revision.release,
