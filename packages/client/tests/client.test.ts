@@ -210,10 +210,7 @@ test('the derived subjects group keeps native counts and routes contributed by o
 });
 
 test('the generated account client reads the Inbox and unread summary', async () => {
-  const { sent, fetch } = kernel([
-    () => json(200, { items: [], next: null }),
-    () => json(200, { unread: 0 }),
-  ]);
+  const { sent, fetch } = kernel([() => json(200, { items: [], next: null }), () => json(200, { unread: 0 })]);
   const client = createKernelClient(ORIGIN, { fetch });
   const inbox = await client.accounts({ accountId: ID }).notifications.get();
   const unread = await client.accounts({ accountId: ID }).notifications.count.get();
