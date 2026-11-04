@@ -204,7 +204,10 @@ export function CreatorSalesComparisonSelection({
   const openButton = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
   useLayoutEffect(() => {
-    if (wasOpen.current && !reading.comparisonOpen) openButton.current?.focus();
+    if (wasOpen.current && !reading.comparisonOpen && reading.sourceIsCurrent()) {
+      if (openButton.current && !openButton.current.disabled) openButton.current.focus();
+      else document.getElementById('creator-sales-selection-heading')?.focus();
+    }
     wasOpen.current = reading.comparisonOpen;
   }, [reading.comparisonOpen]);
   const hidden = reading.comparisonIds.filter((id) => !visibleIds.has(id)).length;
@@ -213,7 +216,7 @@ export function CreatorSalesComparisonSelection({
       aria-labelledby="creator-sales-selection-heading"
       className="min-w-0 space-y-3 rounded-xl border p-4 sm:p-5"
     >
-      <h2 id="creator-sales-selection-heading" className="font-semibold">
+      <h2 id="creator-sales-selection-heading" tabIndex={-1} className="font-semibold">
         {m.creator_review_selection_heading()}
       </h2>
       <p id="creator-sales-comparison-bound" className="text-sm text-muted-foreground">

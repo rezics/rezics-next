@@ -9470,5 +9470,6 @@
   "creator_review_page_more": "이전 페이지를 명시적으로 요청할 수 있음",
   "creator_review_page_no_cursor": "후속 페이지 커서가 제공되지 않음",
   "creator_review_page_cursor_hint": "기본 커서는 불투명합니다. 페이지 필터는 커서를 바꾸거나 재시작 시 숨겨진 조건을 전달하지 않습니다. 커서가 없다고 재무 내역이 완전한 것은 아닙니다.",
-  "creator_review_refresh_reselection": "제목이나 판매 참조가 같아도 새로고침으로 페이지가 바뀔 수 있습니다. 상세 보기와 비교에는 다시 선택해야 합니다."
+  "creator_review_refresh_reselection": "제목이나 판매 참조가 같아도 새로고침으로 페이지가 바뀔 수 있습니다. 상세 보기와 비교에는 다시 선택해야 합니다.",
+  "creator_review_reveal_inspected": "받은 행에서 확인 중인 판매 표시"
 }

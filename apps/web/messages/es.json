@@ -9470,5 +9470,6 @@
   "creator_review_page_more": "Se puede solicitar explícitamente una página anterior",
   "creator_review_page_no_cursor": "No se recibió cursor de continuación",
   "creator_review_page_cursor_hint": "El cursor nativo es opaco. Los filtros locales no lo cambian ni llevan condiciones ocultas al reinicio. Su ausencia no certifica un historial financiero completo.",
-  "creator_review_refresh_reselection": "Actualizar puede sustituir esta página aunque los títulos o referencias parezcan iguales. La inspección y la comparación requieren volver a seleccionar explícitamente."
+  "creator_review_refresh_reselection": "Actualizar puede sustituir esta página aunque los títulos o referencias parezcan iguales. La inspección y la comparación requieren volver a seleccionar explícitamente.",
+  "creator_review_reveal_inspected": "Mostrar la venta inspeccionada en las filas recibidas"
 }

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
 import type { CreatorSale } from '../creator-sales';
 import type { CreatorSaleReading } from '../creator-sale-reading';
@@ -19,6 +20,14 @@ export function CreatorSalesReview({ sales, locale, reading }: Props) {
   const [criteria, setCriteria] = useState(initialReviewCriteria);
   const visible = useMemo(() => reviewReceivedSales(review, criteria), [review, criteria]);
   const visibleIds = useMemo(() => new Set(visible.map((sale) => sale.orderId)), [visible]);
+  const reveal = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const id = reveal.current;
+    if (!id) return;
+    reveal.current = null;
+    if (reading.isCurrent() && reading.selectedId === id && visibleIds.has(id))
+      document.getElementById(`inspect-sale-${id}`)?.focus();
+  }, [visibleIds, reading]);
   return (
     <div className="min-w-0 space-y-5">
       <CreatorSalesReviewControls
@@ -44,7 +53,20 @@ export function CreatorSalesReview({ sales, locale, reading }: Props) {
         <CreatorSalesReviewRows sales={visible} locale={locale} reading={reading} />
       )}
       {reading.selectedId && !visibleIds.has(reading.selectedId) && (
-        <p className="text-sm text-muted-foreground">{m.creator_review_hidden_inspection()}</p>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">{m.creator_review_hidden_inspection()}</p>
+          <Button
+            variant="outline"
+            className="min-h-11 whitespace-normal"
+            onClick={() => {
+              if (!reading.isCurrent() || !reading.selectedId) return;
+              reveal.current = reading.selectedId;
+              setCriteria(initialReviewCriteria);
+            }}
+          >
+            {m.creator_review_reveal_inspected()}
+          </Button>
+        </div>
       )}
       <CreatorSalesPageObservations review={review} />
     </div>

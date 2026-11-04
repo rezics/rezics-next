@@ -145,11 +145,16 @@ export function CreatorSalesPage({
               </div>
             )
           ) : (
-            <CreatorSalesReview key={reading.sourceVersion} sales={page.sales} locale={locale} reading={reading} />
+            <CreatorSalesReview
+              key={`review-${reading.sourceVersion}`}
+              sales={page.sales}
+              locale={locale}
+              reading={reading}
+            />
           )}
           {reading.sale && (
             <CreatorSaleInspection
-              key={reading.selectionVersion}
+              key={`inspection-${reading.selectionVersion}`}
               sale={reading.sale}
               locale={locale}
               close={reading.close}

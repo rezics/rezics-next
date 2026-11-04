@@ -9470,5 +9470,6 @@
   "creator_review_page_more": "Eine ältere Seite kann ausdrücklich angefordert werden",
   "creator_review_page_no_cursor": "Kein Fortsetzungscursor übermittelt",
   "creator_review_page_cursor_hint": "Der native Cursor ist undurchsichtig. Lokale Filter ändern ihn nicht und nehmen keine versteckten Bedingungen in einen Neustart mit. Ein fehlender Cursor belegt keine vollständige Finanzhistorie.",
-  "creator_review_refresh_reselection": "Aktualisieren kann die Seite ersetzen, selbst wenn Titel oder Verkaufsreferenzen gleich aussehen. Detailansicht und Vergleich erfordern eine bewusste Neuauswahl."
+  "creator_review_refresh_reselection": "Aktualisieren kann die Seite ersetzen, selbst wenn Titel oder Verkaufsreferenzen gleich aussehen. Detailansicht und Vergleich erfordern eine bewusste Neuauswahl.",
+  "creator_review_reveal_inspected": "Betrachteten Verkauf in den empfangenen Zeilen zeigen"
 }
