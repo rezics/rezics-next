@@ -43,6 +43,7 @@ for (const [key, value] of Object.entries(globals))
 const { createRoot } = await import('react-dom/client');
 const { QueryClient, QueryClientProvider, useQueryClient } = await import('@tanstack/react-query');
 const { useSession } = await import('../src/session/query');
+const { personalRead } = await import('../src/kernel/query');
 const { useSubjectPersonalReader } = await import('../src/features/pages/subject-personal-reader');
 const { applyOptimisticRatingChange, SubjectRatingControl } = await import('../src/features/pages/rating-control');
 const { subjectOwnRatingQuery, subjectReaderQuery } = await import('../src/features/pages/subject-queries');
@@ -362,6 +363,9 @@ async function startCurrentRefetch(harness: Harness) {
 }
 
 test('subject preferences and own rating retire across the complete mounted reader/control journey', async () => {
+  // Other server-rendered files may have imported query defaults before this browser harness mounted.
+  const previousEnabled = personalRead.enabled;
+  Object.assign(personalRead, { enabled: true });
   const readerA = { state: 'signed-in', subject: 'reader-a', csrfToken: null } as const;
   const readerB = { state: 'signed-in', subject: 'reader-b', csrfToken: 'csrf-b' } as const;
   const signedOut = { state: 'signed-out', subject: null, csrfToken: null } as const;
@@ -800,6 +804,7 @@ test('subject preferences and own rating retire across the complete mounted read
   } finally {
     await main.unmount();
     main.client.clear();
+    Object.assign(personalRead, { enabled: previousEnabled });
     await window.happyDOM.close();
     for (const [key, descriptor] of previousGlobals) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
