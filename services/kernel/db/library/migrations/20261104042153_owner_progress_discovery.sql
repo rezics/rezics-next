@@ -1,3 +1,4 @@
+-- migrate:up
 CREATE TABLE library.progress_discovery_generation (
   route integer NOT NULL,
   account_id uuid NOT NULL,
@@ -95,3 +96,6 @@ CREATE TRIGGER progress_discovery_generation_filter_update
 AFTER UPDATE ON library.progress_session
 REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
 FOR EACH STATEMENT EXECUTE FUNCTION library.advance_progress_discovery_generation_update();
+
+-- migrate:down
+-- Forward only: dropping this index would remove currentness for retained native progress sessions.
