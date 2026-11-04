@@ -1,9 +1,6 @@
 import { useContext, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
-import {
-  browserObservation,
-  type BrowserObservationSnapshot,
-} from '../../session/observation';
+import { browserObservation, type BrowserObservationSnapshot } from '../../session/observation';
 import { observeReactionSession } from '../../threads/thread-reactions';
 import type { FeedInput, FeedStream, HomeFeedResult } from '../pages/home-feed-read';
 
@@ -52,8 +49,7 @@ export function useHomeReactionCurrentness(
     signedIn,
     page?.sources,
   ]);
-  const awaitingBrowserObservation =
-    !!client && (browser.state === 'unknown' || browser.state === 'inactive');
+  const awaitingBrowserObservation = !!client && (browser.state === 'unknown' || browser.state === 'inactive');
   const invalidSession =
     signedIn &&
     !!client &&
