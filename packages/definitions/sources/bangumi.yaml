@@ -738,7 +738,7 @@ files:
         mapping:
           status: proposed
           term: wdt:P518
-          'on': schema:TVSeries
+          'on': schema:CreativeWork
           wikidata: wd:P518
           meaning: The episodes to which a credit applies; preserve episode ranges and resolve only unambiguous references.
           sources:
@@ -6797,7 +6797,7 @@ enumerations:
         mapping:
           status: existing
           term: rezics:crossMediaCounterpart
-          'on': schema:CreativeWork
+          'on': schema:TVSeries
           meaning: The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
             holder.
           sources:
