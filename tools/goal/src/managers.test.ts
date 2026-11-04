@@ -286,9 +286,7 @@ test("A manager whose wall-clock renewal fails is reported to the supermanager a
     ]);
     const pending = s.inbox.pending('supervisor');
     expect(pending.map((entry) => entry.event.kind)).toEqual(['blocker']);
-    expect(pending[0]?.event.summary).toBe(
-      'Manager manager renewal failed: Missing termspaces session: rezics-agents',
-    );
+    expect(pending[0]?.event.summary).toBe('Manager manager renewal failed: Missing termspaces session: rezics-agents');
   } finally {
     await s.close();
   }

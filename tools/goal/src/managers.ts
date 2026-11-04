@@ -738,12 +738,7 @@ export class ManagerSessions {
     await this.stopInternal(id);
     const stopped = this.get(id);
     assertManagedManager(stopped);
-    const {
-      history: _history,
-      renewalAttempts: _attempts,
-      nextRenewalRetryAt: _retry,
-      ...snapshot
-    } = stopped;
+    const { history: _history, renewalAttempts: _attempts, nextRenewalRetryAt: _retry, ...snapshot } = stopped;
     const history = retryingFailed ? (stopped.history ?? []) : [...(stopped.history ?? []), snapshot];
     return this.startSession(spec, history, stopped.pendingRenewal);
   }
