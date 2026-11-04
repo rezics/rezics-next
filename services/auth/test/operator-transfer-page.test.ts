@@ -90,7 +90,7 @@ test('the page transport keeps readiness safe and exposes only the selected clos
   expect(admitted.calls[0]).toEqual(['server-native-token', { kind: 'source', subjectAccountId: subject }, expect.anything()]);
   expect(admitted.tokenCalls).toBe(2);
 
-  const destinationPage = fixture({ kind: 'destination', destinationAccountId: destination, action: 'allowed' });
+  const destinationPage = fixture(profile(), { kind: 'destination', destinationAccountId: destination, action: 'allowed' });
   const response = await destinationPage.handler(request({ kind: 'destination', request: handoff }));
   expect(await response.json()).toEqual({
     viewer: { kind: 'ready' },

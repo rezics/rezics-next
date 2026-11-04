@@ -335,7 +335,9 @@ export async function createAuthHost<Context = WorkflowContext>(options: AuthHos
       ),
         options.accountOperations,
       ),
-      transferPageAccess.readOperatorTransferPage ? transferPageAccess : undefined,
+      transferPageAccess.readOperatorTransferPage
+        ? { readOperatorTransferPage: transferPageAccess.readOperatorTransferPage.bind(transferPageAccess) }
+        : undefined,
     ),
     workflows,
     config,

@@ -9,7 +9,6 @@ import { cookies, issuer, nativeFixture, password } from './native-account-bindi
 const pool = createPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
 const key = () => `transfer-page-${randomUUID()}`;
-const context = () => ({ pool, deadline: Date.now() + 10000 });
 let f: Awaited<ReturnType<typeof nativeFixture>>;
 type Person = Awaited<ReturnType<typeof f.person>>;
 let source: Person;
