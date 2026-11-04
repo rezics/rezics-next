@@ -94,8 +94,7 @@ test('matching acknowledgement survives synchronous retirement, failed return re
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_acknowledged());
   expect(page.host.textContent).not.toContain(m.auth_transfer_recovery_source_unknown());
   await page.choose(m.auth_transfer_recovery_retry());
-  await page.resolve(4, reply({ kind: 'readiness' }));
-  await page.resolve(5, matching());
+  await page.resolve(4, matching());
   expect(page.host.textContent).toContain(m.auth_transfer_recovery_observed());
   expect(restoreTransferAttempt()).toEqual(saved);
   expect(page.calls.every(({ path }) => path === '/account-management/operators/transfer-review')).toBe(true);

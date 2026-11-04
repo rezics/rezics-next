@@ -422,7 +422,7 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
 
   async function loadPageSession(supplied?: AccountSessionResult, recover = false): Promise<TransferFailure | void> {
     const started = view.current;
-    const value = supplied ?? (await loadAccountSession());
+    const value = await (supplied ?? loadAccountSession());
     if (started !== view.current) return;
     setSession(value);
     setNativeReady(false);
@@ -714,8 +714,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       restoreTransferAttempt() !== null
     )
       return;
-    const started = view.current;
     readPage(async () => {
+      const started = view.current;
       const value = await prepareTransfer(subject.trim(), destination.trim(), session.accountId);
       if (started !== view.current) return;
       if ('kind' in value) return value;
@@ -758,8 +758,8 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       unresolvedSource.current
     )
       return;
-    const started = view.current;
     readPage(async () => {
+      const started = view.current;
       const failure = await reviewDestinationTransfer(request, session.accountId);
       if (started !== view.current) return;
       if (failure) return failure;
@@ -772,7 +772,9 @@ export function OperatorTransferPage({ initial }: { initial?: AccountSessionResu
       return;
     const selected = attempt;
     readPage(async () => {
+      const started = view.current;
       const failure = await refreshTransferAdvice(selected);
+      if (started !== view.current) return;
       if (!failure) setNativeAdvice(selected.side);
       return failure ?? undefined;
     });
