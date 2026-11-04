@@ -6,6 +6,14 @@ import { createImportTransport } from '../../services/importer/src/import-client
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { fetchCrossMediaDumps } from './fetch-dumps.ts';
 
+/** Exact dump identities: Steins;Gate VN/anime/book and CLANNAD VN/anime. */
+export const developmentShowcaseSelection = {
+  bangumi: [10380, 84148, 51],
+  vndb: ['v2002', 'v4'],
+  includeReleases: false,
+  peoplePerProvider: 64,
+} as const;
+
 function requiredEnvironment(name: string, env: NodeJS.ProcessEnv): string {
   const value = env[name]?.trim();
   if (!value) throw new Error(`Missing ${name}; configure the local development persona and origins first`);
@@ -67,7 +75,7 @@ export async function runDevelopmentSeed(
       '--client',
       client,
     ],
-    { episodeCatalogueSubjects: reviewedCatalogue.subjects },
+    { episodeCatalogueSubjects: reviewedCatalogue.subjects, selection: developmentShowcaseSelection },
   );
 }
 

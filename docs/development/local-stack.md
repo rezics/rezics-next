@@ -92,7 +92,10 @@ container and volume names can be isolated with `KERNEL_DATABASE_CONTAINER`, `KE
 ## Cross-media dump cache
 
 `seed:dev` fetches the pinned Bangumi Archive release and a VNDB dump, verifies them, extracts source tables and seeds
-Kernel over loopback HTTP. Later runs reuse the dump cache; state and the import report stay under
+Kernel over loopback HTTP. Its finite roots are VNDB v2002 and v4, and Bangumi 10380, 84148 and 51:
+Steins;Gate VN/anime/book plus CLANNAD VN/anime. Their direct native people, characters and episodes
+remain selected, with at most 64 people/organizations per provider and explicit omissions; physical release inventories and unrelated person relationships stay outside this finite run; relation traversal does not expand the development run into entire franchises. The ordinary
+cross-media CLI retains its broader proposal-only family selection. Later runs reuse the dump cache; state and the import report stay under
 `.temp/cross-media-seed/`. The cache defaults to `/home/edge/projects/rezics/rezics-datasets/dumps/`;
 set `REZICS_DATASETS_DUMP_CACHE` to choose another location. Bangumi is pinned by URL and SHA-256.
 

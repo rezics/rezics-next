@@ -2277,6 +2277,10 @@ with null object prototypes retain the same provenance; prototype identity is ne
 
 Decision: the built-in `task seed:dev` path explicitly publishes a sealed finite intent of current source and candidate digests; ordinary imports remain proposal-only.
 
+`task seed:dev` selects the exact Steins;Gate VN/anime/book and CLANNAD VN/anime roots documented in
+[the local-stack runbook](../../docs/development/local-stack.md), with their attached entities and no recursive
+work-family expansion. Every requested root must be present. The ordinary CLI retains its broad family selection.
+
 `task seed:dev` reuses the Accounts `dev:persona` setup and its private `.temp/local-stack/seed.env`. The local invocation gives the cross-media CLI a separate durable showcase journal. The ordinary CLI stays proposal-only unless that local publication state is explicitly supplied. The journal records exact create and proposal command bodies before send, then stores native UUIDs only after an acknowledged response. Publication derives its intent from the selected dump family, its current source reads, and those exact candidate identities. It reads only selected subject/property candidate pages, accepts each selected candidate through the review API, and adopts only those IDs while preserving any prior adoption selections. Refused steps keep their known acknowledgements; an unknown send reuses its sealed body and idempotency key on restart.
 
 The result carries provider and native type bindings, source keys, source and converter digests, selected candidate IDs, and ordinary reader routes. Each selected subject and vocabulary dependency is checked through current reads, and the final facts are checked with a tokenless Global-context reader. Source ConceptScheme and Concept records are eligible only when their source create commands are acknowledged and their current source URI and scheme association are present. No canonical equivalence is inferred. Prose stays private without admitted rights, and images are not published by this path.

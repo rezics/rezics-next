@@ -379,7 +379,17 @@ function parentReaches(from: string, to: string, edges: Map<string, Set<string>>
  * Ported selection/incident-edge shape: legacy-final:scripts/datasets/{bangumi,vndb}.ts.
  * Title matching locates records only; identities bind only through cited provider URLs.
  */
-export async function planCrossMediaSeed(input: CrossMediaTables): Promise<CrossMediaPlan> {
+export type CrossMediaSelection = {
+  bangumi: readonly number[];
+  vndb: readonly string[];
+  includeReleases?: boolean;
+  peoplePerProvider?: number;
+};
+
+export async function planCrossMediaSeed(
+  input: CrossMediaTables,
+  selection?: CrossMediaSelection,
+): Promise<CrossMediaPlan> {
   const plan = emptyCrossMediaPlan();
   plan.characterAppearances ??= [];
   const gap = (
@@ -401,6 +411,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const titled = new Map<number, Franchise>();
   for await (const row of input.rows('bangumi', 'subject')) {
     const id = number(row, 'id');
+    if (selection && !selection.bangumi.includes(id)) continue;
     ensure(!types.has(id), 'Duplicate selected Bangumi subject');
     types.set(id, row.type as number);
     const family = crossMediaFranchise(row.name, row.name_cn);
@@ -408,7 +419,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   }
   const familyIds = new Map<number, Franchise>(titled);
   const referencedWorks = new Map<number, Franchise>();
-  let grew = true;
+  let grew = selection === undefined;
   while (grew) {
     grew = false;
     for await (const row of input.rows('bangumi', 'subject-relations')) {
@@ -647,6 +658,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     persons.add(number(row, 'person_id'));
   }
   for await (const row of input.rows('bangumi', 'person-characters')) {
+    if (selection && !familyWorks.has(number(row, 'subject_id'))) continue;
     if (!familyWorks.has(number(row, 'subject_id')) && !characters.has(number(row, 'character_id'))) continue;
     persons.add(number(row, 'person_id'));
     characters.add(number(row, 'character_id'));
@@ -723,6 +735,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     });
   }
   for await (const row of input.rows('bangumi', 'person-characters')) {
+    if (selection && !familyWorks.has(number(row, 'subject_id'))) continue;
     if (!familyWorks.has(number(row, 'subject_id')) && !characters.has(number(row, 'character_id'))) continue;
     const work = String(number(row, 'subject_id'));
     const personId = number(row, 'person_id');
@@ -765,6 +778,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const corePersons = new Set(persons),
     coreCharacters = new Set(characters);
   for await (const row of input.rows('bangumi', 'person-relations')) {
+    if (selection) continue;
     ensure(row.person_type === 'prsn' || row.person_type === 'crt', 'Unknown Bangumi person_type');
     const core = row.person_type === 'prsn' ? corePersons : coreCharacters;
     if (!core.has(row.person_id as number) && !core.has(row.related_person_id as number)) continue;
@@ -801,6 +815,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
   const vnIds = new Set<string>();
   const vnFamily = new Map<string, Franchise>();
   for await (const row of input.rows('vndb', 'vn_titles')) {
+    if (selection && !selection.vndb.includes(text(row, 'id'))) continue;
     const family = crossMediaFranchise(row.title, row.latin);
     if (!family) continue;
     const id = text(row, 'id');
@@ -813,7 +828,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     vnFamily.set(id, family);
     if (!plan.franchises[family].vndb.includes(id)) plan.franchises[family].vndb.push(id);
   }
-  let vnGrew = true;
+  let vnGrew = selection === undefined;
   while (vnGrew) {
     vnGrew = false;
     for await (const row of input.rows('vndb', 'vn_relations')) {
@@ -917,7 +932,7 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     chars = new Set<string>(),
     aliases = new Set<string>();
   for await (const row of input.rows('vndb', 'releases_vn'))
-    if (vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
+    if (selection?.includeReleases !== false && vnIds.has(text(row, 'vid'))) releases.add(text(row, 'id'));
   for await (const row of input.rows('vndb', 'releases_vn')) {
     if (!releases.has(text(row, 'id'))) continue;
     edge({
@@ -1528,8 +1543,43 @@ export async function planCrossMediaSeed(input: CrossMediaTables): Promise<Cross
     entity.payload = { ...(entity.payload as object), [entry.table]: joins, extlinks };
   }
 
-  for (const family of Object.keys(patterns) as Franchise[])
-    ensure(anime.has(family) && plan.franchises[family].vndb.length, `Missing anime/VN pair for ${family}`);
+  if (selection?.peoplePerProvider !== undefined) {
+    const limit = selection.peoplePerProvider;
+    ensure(Number.isSafeInteger(limit) && limit > 0 && limit <= FAMILY_CAP, 'Invalid selected people limit');
+    for (const provider of ['bangumi', 'vndb'] as const) {
+      let people = 0;
+      const omitted = new Set<string>();
+      plan.entities[provider] = [...plan.entities[provider]]
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .filter((row) => {
+          if (!(provider === 'bangumi' ? row.key.startsWith('person:') : /^[sp][1-9]/.test(row.key))) return true;
+          if (people++ < limit) return true;
+          omitted.add(row.key);
+          gap(provider, 'people', { id: row.key }, 'Development showcase people limit exceeded');
+          return false;
+        });
+      plan.members = plan.members.filter((row) => row.source !== provider || !omitted.has(row.key));
+      plan.edges = plan.edges.filter(
+        (row) => row.source !== provider || (!omitted.has(row.holder) && !omitted.has(row.target)),
+      );
+      if (provider === 'bangumi') plan.credits = plan.credits.filter((row) => !omitted.has(row.person));
+    }
+  }
+  if (selection) {
+    for (const id of selection.bangumi)
+      ensure(
+        [...plan.records.bangumi, ...plan.entities.bangumi].some((row) => row.key === String(id)),
+        `Missing selected Bangumi work: ${id}`,
+      );
+    for (const id of selection.vndb)
+      ensure(
+        plan.records.vndb.some((row) => row.key === id),
+        `Missing selected VNDB work: ${id}`,
+      );
+  } else {
+    for (const family of Object.keys(patterns) as Franchise[])
+      ensure(anime.has(family) && plan.franchises[family].vndb.length, `Missing anime/VN pair for ${family}`);
+  }
   for (const provider of ['bangumi', 'vndb'] as const) {
     const registration = createSourceRegistration(provider, {
       source: crossMediaAliases[provider],
@@ -1961,6 +2011,7 @@ export async function seedCrossMedia(
 
 export type CrossMediaSeedCliOptions = {
   episodeCatalogueSubjects?: Readonly<Record<string, string>>;
+  selection?: CrossMediaSelection;
 };
 
 export async function runCrossMediaSeedCli(
@@ -2013,7 +2064,7 @@ export async function runCrossMediaSeedCli(
   const api = normalizeCrossMediaSeedOrigin(values.get('--api')!),
     auth = normalizeCrossMediaSeedOrigin(values.get('--auth')!);
   const input = new CrossMediaDumpFiles(values.get('--bangumi')!, values.get('--vndb')!);
-  const plan = await planCrossMediaSeed(input);
+  const plan = await planCrossMediaSeed(input, options.selection);
   const showcasePath = values.has('--showcase-state') ? resolve(values.get('--showcase-state')!) : undefined;
   const { seedShowcaseVndbReleases } = await import('./showcase-vndb-releases.ts');
   const tokenProvider = await createAccountTokenProvider({

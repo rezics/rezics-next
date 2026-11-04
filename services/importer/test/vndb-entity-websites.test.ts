@@ -121,6 +121,15 @@ test('production seed joins selected staff, producer and release websites withou
   ).toBe(false);
 });
 
+test('an explicit development selection keeps only its works and refuses a missing required root', async () => {
+  const plan = await planCrossMediaSeed(familyTables(), { bangumi: [1, 2], vndb: ['v1', 'v2'] });
+  expect(plan.records.bangumi.map((row) => row.key)).toEqual(['1', '2']);
+  expect(plan.records.vndb.map((row) => row.key)).toEqual(['v1', 'v2']);
+  await expect(planCrossMediaSeed(familyTables(), { bangumi: [99], vndb: ['v1'] })).rejects.toThrow(
+    'Missing selected Bangumi work: 99',
+  );
+});
+
 test('invalid optional website citations do not discard valid links or stop the selected family', async () => {
   const plan = await planCrossMediaSeed(
     familyTables({
