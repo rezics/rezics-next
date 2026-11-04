@@ -38,7 +38,7 @@ export function producerRecoveryExample(scenario: RecoveryExample = 'later', loc
       disclosure: 'available',
       actions: { state: 'available', context: candidateContext, operations: ['subject.propose'] },
     },
-    session: first.session,
+    ...(first.session ? { session: first.session } : {}),
   };
   const relation: RelationTransport = {
     read: async () => relationRead,
