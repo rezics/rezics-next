@@ -336,6 +336,7 @@ test('native card watch can acknowledge, refresh current advice, and deliberatel
   const refresh = action(m.thread_watch_refresh_advice());
   expect(refresh).toBeDefined();
   await act(async () => {
+    refresh!.focus();
     refresh!.click();
     await tick();
   });
@@ -349,7 +350,7 @@ test('native card watch can acknowledge, refresh current advice, and deliberatel
   await act(async () => root.render(watchView(native, true, source, refreshAdvice)));
   const stop = action(m.thread_watch_stop());
   expect(stop).toBeDefined();
-  expect(window.document.activeElement).toBe(stop);
+  expect(window.document.activeElement === stop).toBe(true);
   await act(async () => {
     stop!.click();
     await tick();
