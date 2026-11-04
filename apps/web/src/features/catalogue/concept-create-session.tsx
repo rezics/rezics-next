@@ -116,20 +116,25 @@ function ConceptCreateSessionLive({
     }
     returning.current = false;
     const current = readClassificationCreateHandoff(token);
-    if (!current || current.phase !== 'creating' || current.reader !== work.reader || !work.live()) {
+    if (!current || (current.phase !== 'creating' && current.phase !== 'ready')) {
       discardClassificationCreateHandoff(token);
       setHandoff(undefined);
       return;
     }
     setHandoff(current);
-    return () => {
-      if (!returning.current) discardClassificationCreateHandoff(token);
-    };
-  }, [token, work]);
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || !handoff || !work.reader) return;
+    if (handoff.reader === work.reader) return;
+    discardClassificationCreateHandoff(token);
+    setHandoff(undefined);
+  }, [token, work.reader, handoff]);
 
   function recordCreated(result: Created) {
-    const current = handoff;
-    if (!current || !work.live()) return;
+    const current = (token ? readClassificationCreateHandoff(token) : undefined) ?? handoff;
+    if (!current) return;
+    if (work.reader && current.reader !== work.reader) return;
     const next = recordCreatedClassificationIdentity(
       current.token,
       current.sourceId,
@@ -375,7 +380,7 @@ function ConceptCreateSessionLive({
           read: transport.read,
         }}
         onCreated={(result) => {
-          if (handoff) recordCreated(result);
+          recordCreated(result);
         }}
         onNavigate={handoff ? () => {} : (href) => window.location.assign(href)}
         identityIntake={identityIntake}

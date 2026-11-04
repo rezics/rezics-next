@@ -1,10 +1,16 @@
 import { expect, mock, test } from 'bun:test';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { catalogueEntries } from '../src/features/catalogue/catalogue-entry';
-import { createKernelClient } from '@rezics/client';
-import definitions from '../src/kernel/recorded/definitions-release.json';
-import type { SessionEnv } from '../src/session/client';
-import {
+import { genericCreateSpecializedPath } from '../src/features/catalogue/generic-create-facts';
+import { conceptTypeAdmitted } from '../src/features/catalogue/source-concept-explorer';
+import type { ConceptCreateFact } from '../src/features/catalogue/concept-create';
+import type { CreatedReader } from '../src/features/catalogue/create-subject';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+const { createKernelClient } = await import('@rezics/client');
+const definitions = (await import('../src/kernel/recorded/definitions-release.json')).default;
+const {
   applyConceptCreateReuse,
   canAddConceptFact,
   captureConceptCreateReuse,
@@ -17,13 +23,7 @@ import {
   conceptGrain,
   conceptTargetAdmitted,
   createConceptSubject,
-  type ConceptCreateFact,
-} from '../src/features/catalogue/concept-create';
-import { genericCreateSpecializedPath } from '../src/features/catalogue/generic-create-facts';
-import { conceptTypeAdmitted } from '../src/features/catalogue/source-concept-explorer';
-import type { CreatedReader } from '../src/features/catalogue/create-subject';
-
-mock.module('cloudflare:workers', () => ({ env: {} }));
+} = await import('../src/features/catalogue/concept-create');
 
 const concept = 'skos:Concept';
 const scheme = 'skos:ConceptScheme';
@@ -158,36 +158,37 @@ test('unknown Concept create retries the same key and later reads only the retur
   const client = createKernelClient('https://kernel.invalid', {
     fetch: (async (input, init) => {
       const request = input instanceof Request ? input : new Request(String(input), init);
-      const path = new URL(request.url).pathname;
+      const path = decodeURIComponent(new URL(request.url).pathname);
       calls.push({ method: request.method, path, key: request.headers.get('idempotency-key') });
       const json = (body: unknown, status = 200) =>
         new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
       if (request.method === 'GET' && path === '/v1/definitions/active') return json({ digest: definitions.digest });
       if (request.method === 'GET' && path === `/v1/definitions/releases/${definitions.digest}`)
         return json({ digest: definitions.digest, release: definitions.release });
+      const subject = {
+        id: createdId,
+        type: item.type,
+        revision: 1,
+        release: definitions.digest,
+        context: '00000000-0000-8000-8000-000000000000',
+        labels: item.labels,
+        descriptions: item.descriptions ?? {},
+        aliases: {},
+        resolution: {},
+        relationCounts: {},
+        statements: {},
+        sourceRecords: [],
+      };
       if (request.method === 'POST' && path === '/v1/subjects') {
         if (!lost) {
           lost = true;
           throw new TypeError('Response lost');
         }
-        return json({ subject: { id: createdId, type: item.type, labels: item.labels } }, 201);
+        return json({ subject }, 201);
       }
       if (request.method === 'GET' && path === `/v1/subjects/${createdId}`)
         return json({
-          subject: {
-            id: createdId,
-            type: item.type,
-            labels: item.labels,
-            descriptions: item.descriptions,
-            aliases: {},
-            statements: {},
-            revision: 1,
-            release: definitions.digest,
-            context: '00000000-0000-8000-8000-000000000000',
-            resolution: {},
-            relationCounts: {},
-            sourceRecords: [],
-          },
+          subject,
           account: null,
           summary: null,
           related: {},
@@ -203,7 +204,7 @@ test('unknown Concept create retries the same key and later reads only the retur
       'X-CSRF-Token': 'A'.repeat(22),
     },
   });
-  const env = { AUTH_ISSUER: 'https://auth.invalid' } as Partial<SessionEnv>;
+  const env = { AUTH_ISSUER: 'https://auth.invalid' };
   const key = crypto.randomUUID();
   const first = await createConceptSubject(client, request, env, { key, item }, 'en', 'Bearer token');
   expect(first).toMatchObject({ ok: false, reason: 'unavailable' });
