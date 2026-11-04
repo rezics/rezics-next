@@ -16,6 +16,7 @@ import {
   type GrowthDatabase,
   type Population,
 } from '../support/growth.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -34,6 +35,7 @@ const actor: AccountActor = {
 
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
+  configureTestReceiptKeys(db.pool);
   source = subjectSource(db.pool);
   expect(await bootstrapRelease(db.pool, bundledRelease)).toBe(bundledDigest);
 });
@@ -81,7 +83,9 @@ function expectCurrentHeadPlan(plans: readonly unknown[]): void {
   const selected = nodes(plans).filter((node) => node['Relation Name'] === 'search_selected');
   expect(selected.length).toBeGreaterThan(0);
   for (const scan of selected) {
-    expect(['Index Scan', 'Index Only Scan', 'Bitmap Index Scan']).toContain(String(scan['Node Type']));
+    expect(['Index Scan', 'Index Only Scan', 'Bitmap Index Scan', 'Bitmap Heap Scan']).toContain(
+      String(scan['Node Type']),
+    );
     if (scan['Index Name']) expect(String(scan['Index Name'])).toContain('search_selected');
     expect(Number(scan['Rows Removed by Filter'] ?? 0)).toBe(0);
   }
