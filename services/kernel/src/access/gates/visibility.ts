@@ -37,13 +37,15 @@ export function classifyExposureRoutes(routes: readonly MountedRoute[]): readonl
     const exposure = parseExposure(detail);
     const operationId = detail?.operationId;
     if (typeof operationId !== 'string') throw new Error(`${route.method} ${route.path}: routes declare operationId`);
-    operations.push(Object.freeze({
-      method: route.method.toUpperCase(),
-      path: route.path,
-      operationId,
-      action: actionLabelOfMountedRoute(route),
-      exposure,
-    }));
+    operations.push(
+      Object.freeze({
+        method: route.method.toUpperCase(),
+        path: route.path,
+        operationId,
+        action: actionLabelOfMountedRoute(route),
+        exposure,
+      }),
+    );
   }
   return Object.freeze(operations);
 }

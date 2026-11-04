@@ -38,8 +38,7 @@ test('exposure combines public, current opening, client scope and native gate au
       clientScope: false,
       gateAuthority: false,
     }),
-  )
-    .toMatchObject({ allowed: true, reason: 'public' });
+  ).toMatchObject({ allowed: true, reason: 'public' });
   expect(decide({ actor: 'anonymous' })).toMatchObject({ allowed: false, reason: 'anonymous' });
   expect(decide({ clientScope: false, gateAuthority: true })).toMatchObject({ allowed: false, reason: 'scope' });
   expect(decide()).toMatchObject({ allowed: false, reason: 'gate' });

@@ -1,9 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  compileExposureCatalogue,
-  isExposureGroup,
-  isRouteExposureGroup,
-} from '@rezics/access';
+import { compileExposureCatalogue, isExposureGroup, isRouteExposureGroup } from '@rezics/access';
 
 await import('reylo/register');
 const { classifyExposureRoutes, mountedExposureCatalogue } = await import('../../src/access/gates/visibility.ts');
@@ -42,5 +38,7 @@ test('mounted metadata adapts to the canonical catalogue without widening route 
   expect(parseExposure({ 'x-exposure': 'gate:feature_group' })).toEqual({ kind: 'gate', group: 'feature_group' });
   expect(isRouteExposureGroup('feature-name')).toBe(false);
   expect(isExposureGroup('feature-name')).toBe(true);
-  expect(() => parseExposure({ operationId: 'feature.read', 'x-exposure': 'gate:feature-name' })).toThrow('feature.read');
+  expect(() => parseExposure({ operationId: 'feature.read', 'x-exposure': 'gate:feature-name' })).toThrow(
+    'feature.read',
+  );
 });

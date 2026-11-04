@@ -26,10 +26,10 @@ admitted sets.
 The core adds no I/O, request cache, per-row permission check or history scan. Kernel retains these fixed deployment
 bounds:
 
-| Call | Existing full-call ceiling |
-| --- | --- |
-| Admission | One temporal opening point read; on a closed group, exact `gate:<group>` / `gate:any` checks on Global Context using the mounted action scope; `K <= 1,000`. |
-| Discovery | One open-groups read and at most one gate authorization per in-scope closed group; linear in mounted `M`, with `G` and `M` fixed by deployment. |
+| Call       | Existing full-call ceiling                                                                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admission  | One temporal opening point read; on a closed group, exact `gate:<group>` / `gate:any` checks on Global Context using the mounted action scope; `K <= 1,000`.                                      |
+| Discovery  | One open-groups read and at most one gate authorization per in-scope closed group; linear in mounted `M`, with `G` and `M` fixed by deployment.                                                   |
 | Management | One captured immutable deployment catalogue; keyset pages contain at most 100 groups and read each selected current opening once, with fixed native authority checks before and after disclosure. |
 
 Opening satisfies exposure only. Route resource permission, native authority, temporal currentness and audit custody
