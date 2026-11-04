@@ -1,6 +1,7 @@
 import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
 import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
@@ -11,6 +12,7 @@ import { Textarea } from '@rezics/ui/shadcn/textarea';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { albumCreateCorrections, type AlbumCorrection, type AlbumRow } from './album-create-guidance';
+import { AlbumCreateReview, albumCreateFingerprint } from './album-create-review';
 import { coverSrc } from '../../media/cover-src';
 import { m } from '../../paraglide/messages.js';
 import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
@@ -24,6 +26,12 @@ import {
   type AlbumTransport,
 } from './album-profile';
 import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
+import {
+  isAllowedCreateAuthority,
+  observedCreateAuthority,
+  type CreateAuthority,
+} from './identity-intake';
+import { CreateAuthorityStatus } from './identity-intake-view';
 import { QualifierInput } from './relation-editor';
 import type { StatementInput } from './statement-editor';
 import { ScalarControl } from './statement-editor-view';
@@ -66,6 +74,7 @@ function AlbumProfileCreateLive({
   locale,
   transport,
   search,
+  session = 'signed-in',
   enabled,
 }: {
   release: Release;
@@ -74,10 +83,53 @@ function AlbumProfileCreateLive({
   locale: string;
   transport: AlbumTransport;
   search: EntityPickerSearch;
+  session?: string;
   enabled: boolean;
 }) {
   const lifetime = useEditorLifetime();
+  const client = useQueryClient();
   const o = { locale: locale as never };
+  const eligibilityKey = ['catalogue-album', 'eligibility', locale, String(lifetime.generation), session];
+  const eligibilityQuery = useQuery({
+    queryKey: eligibilityKey,
+    queryFn: async () => {
+      if (session === 'signed-out') return { state: 'guest' } satisfies CreateAuthority;
+      if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' } satisfies CreateAuthority;
+      return observedCreateAuthority(await transport.eligibility());
+    },
+    enabled: !!transport.eligibility && session !== 'unknown',
+    retry: false,
+    staleTime: 0,
+  });
+  const observedAuthority: CreateAuthority | null = !transport.eligibility
+    ? null
+    : session === 'signed-out'
+      ? { state: 'guest' }
+      : session === 'unknown'
+        ? null
+        : eligibilityQuery.data
+          ? observedCreateAuthority(eligibilityQuery.data)
+          : eligibilityQuery.isError
+            ? { state: 'unknown', reason: 'unavailable' }
+            : null;
+  async function refreshCreateEligibility(): Promise<CreateAuthority> {
+    if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' };
+    if (session === 'signed-out') return { state: 'guest' };
+    try {
+      return observedCreateAuthority(
+        await client.fetchQuery({
+          queryKey: eligibilityKey,
+          queryFn: () => transport.eligibility!(),
+          staleTime: 0,
+          retry: false,
+        }),
+      );
+    } catch {
+      const next: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+      client.setQueryData(eligibilityKey, next);
+      return next;
+    }
+  }
   const metadataReady = metadataCurrent(release);
   const termsId = useId();
   const nextTermId = useRef(1);
@@ -101,6 +153,19 @@ function AlbumProfileCreateLive({
   const [busy, setBusy] = useState(false);
   const pending = useRef<AlbumCommand | null>(null);
   const running = useRef(false);
+  const [review, setReview] = useState<{ status: 'closed' | 'current' | 'stale'; fingerprint?: string }>({
+    status: 'closed',
+  });
+  const fingerprint = albumCreateFingerprint(
+    release,
+    terms,
+    rows.map((row) => row.statement),
+  );
+  if (review.status === 'current' && review.fingerprint !== fingerprint)
+    setReview(review.fingerprint ? { status: 'stale', fingerprint: review.fingerprint } : { status: 'stale' });
+  const eligibilityBlocksNewCreate =
+    !!transport.eligibility && !pending.current && !isAllowedCreateAuthority(observedAuthority);
+  const reviewReady = review.status === 'current' && review.fingerprint === fingerprint;
   const fields = albumFields(release);
   const choices = metadataReady ? [...fields.scalar, ...fields.relations, ...fields.classifications] : [];
   const locked = busy || !!pending.current || !enabled || !metadataReady;
@@ -157,6 +222,7 @@ function AlbumProfileCreateLive({
       replaceRows([]);
       setFailure(undefined);
       setCorrections([]);
+      setReview({ status: 'closed' });
       setDeparted(true);
     },
     undefined,
@@ -167,23 +233,8 @@ function AlbumProfileCreateLive({
     },
   );
 
-  async function submit() {
-    if (!lifetime.active()) return;
-    if (running.current || created || !enabled || (pending.current && definiteFailure)) return;
-    if (!pending.current) {
-      if (!metadataCurrent(release)) return;
-      const draft = albumDraft(
-        release,
-        terms,
-        rows.map((row) => row.statement),
-      );
-      if (draft.errors.length) {
-        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
-        setCorrections(albumCreateCorrections(draft.errors, terms, rows, release, locale, termsId));
-        return;
-      }
-      pending.current = { item: draft.item, key: crypto.randomUUID() };
-    }
+  async function send() {
+    if (!pending.current) return;
     running.current = true;
     setBusy(true);
     setFailure(undefined);
@@ -207,6 +258,50 @@ function AlbumProfileCreateLive({
       running.current = false;
       setBusy(false);
     }
+  }
+
+  async function submit() {
+    if (!lifetime.active()) return;
+    if (running.current || created || !enabled || (pending.current && definiteFailure)) return;
+    if (pending.current) {
+      await send();
+      return;
+    }
+    if (!metadataCurrent(release) || eligibilityBlocksNewCreate) return;
+    const draft = albumDraft(
+      release,
+      terms,
+      rows.map((row) => row.statement),
+    );
+    if (draft.errors.length) {
+      setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+      setCorrections(albumCreateCorrections(draft.errors, terms, rows, release, locale, termsId));
+      setReview({ status: 'closed' });
+      return;
+    }
+    if (!reviewReady) {
+      setFailure(undefined);
+      setCorrections([]);
+      setReview({ status: 'current', fingerprint });
+      return;
+    }
+    if (transport.eligibility) {
+      const current = await refreshCreateEligibility();
+      if (!lifetime.active()) return;
+      if (!isAllowedCreateAuthority(current)) return;
+    }
+    if (
+      !metadataCurrent(release) ||
+      albumCreateFingerprint(
+        release,
+        terms,
+        rows.map((row) => row.statement),
+      ) !== fingerprint
+    )
+      return;
+    pending.current = { item: draft.item, key: crypto.randomUUID() };
+    setReview({ status: 'closed' });
+    await send();
   }
 
   if (departed) return null;
@@ -272,6 +367,17 @@ function AlbumProfileCreateLive({
         void submit();
       }}
     >
+      {transport.eligibility ? (
+        <CreateAuthorityStatus
+          locale={locale}
+          authority={observedAuthority}
+          href={`/${locale}/catalogue/album`}
+          {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { pending: true } : {})}
+          onRetry={() => {
+            void refreshCreateEligibility();
+          }}
+        />
+      ) : null}
       <a
         className={buttonVariants({ variant: 'outline', className: actionClassName })}
         href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
@@ -519,16 +625,49 @@ function AlbumProfileCreateLive({
           )}
         </div>
       )}
+      {review.status !== 'closed' && (
+        <AlbumCreateReview
+          item={albumDraft(
+            release,
+            terms,
+            rows.map((row) => row.statement),
+          ).item}
+          rows={rows}
+          release={release}
+          locale={locale}
+          stale={review.status === 'stale' || review.fingerprint !== fingerprint}
+          onJumpTerm={(language) => {
+            const term = terms.find((row) => row.language.trim() === language);
+            if (!term || !lifetime.active()) return;
+            document.getElementById(`${termsId}-language-${term.id}`)?.focus();
+          }}
+          onJumpFact={(id) => {
+            if (!lifetime.active()) return;
+            document.getElementById(`album-row-${id}`)?.focus();
+          }}
+          onBack={() => {
+            if (lifetime.active() && !pending.current) setReview({ status: 'closed' });
+          }}
+        />
+      )}
       <Button
         className={actionClassName}
         type="submit"
-        disabled={busy || !enabled || (!pending.current && !metadataReady) || (!!pending.current && !!definiteFailure)}
+        disabled={
+          busy ||
+          !enabled ||
+          (!pending.current && !metadataReady) ||
+          (!!pending.current && !!definiteFailure) ||
+          eligibilityBlocksNewCreate
+        }
       >
         {busy
           ? m.catalogue_create_saving({}, o)
           : pending.current
             ? m.catalogue_create_retry({}, o)
-            : m.album_create({}, o)}
+            : reviewReady
+              ? m.album_create({}, o)
+              : m.album_create_review({}, o)}
       </Button>
     </form>
   );

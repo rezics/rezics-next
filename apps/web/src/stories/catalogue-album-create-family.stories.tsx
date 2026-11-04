@@ -148,6 +148,19 @@ async function add(element: HTMLElement, id: string) {
   await userEvent.click(canvas.getByRole('button', { name: m.correction_add() }));
   return within([...element.querySelectorAll<HTMLElement>('fieldset[id^="album-row-"]')].at(-1)!);
 }
+async function confirmAlbum(canvas: ReturnType<typeof within>) {
+  if (canvas.queryByRole('button', { name: m.catalogue_create_retry() })) {
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    return;
+  }
+  if (canvas.queryByRole('button', { name: m.album_create() })) {
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    return;
+  }
+  await userEvent.click(canvas.getByRole('button', { name: m.album_create_review() }));
+  if (canvas.queryByRole('button', { name: m.album_create() }))
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+}
 async function fill(element: HTMLElement, complete = false) {
   const canvas = within(element);
   const fixture = fixtureFor(element);
@@ -294,7 +307,7 @@ const failureStory = (scenario: AlbumScenario, message: () => string): Story => 
   args: { scenario },
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(message())).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
     await expect(canvas.getByRole('button', { name: m.catalogue_create_review_new() })).toBeEnabled();
@@ -307,7 +320,7 @@ export const StaleMetadata: Story = {
   ...failureStory('stale-metadata', () => m.catalogue_create_invalid()),
   play: async ({ canvasElement }) => {
     const filled = await fill(canvasElement);
-    await userEvent.click(filled.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(filled);
     await expect(await filled.findByText(m.catalogue_create_invalid())).toBeVisible();
     const canvas = within(canvasElement);
     await expect(canvas.getByText(m.correction_stale())).toBeVisible();
@@ -326,7 +339,7 @@ export const MetadataFailure: Story = {
   args: { scenario: 'invalid', metadataFailure: true },
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(m.album_missing())).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_review_new() }));
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toBeDisabled();
@@ -339,7 +352,7 @@ export const UncertainExactReplay: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement, true);
     const fixture = fixtureFor(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(m.catalogue_create_uncertain())).toBeVisible();
     const retained = structuredClone(writes(fixture)[0]);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
@@ -358,7 +371,7 @@ export const CreatedReaderRecovery: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     const fixture = fixtureFor(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(m.catalogue_create_reader_unavailable())).toBeVisible();
     await expect(canvas.queryByRole('link', { name: m.catalogue_create_open() })).toBeNull();
     await expect(canvas.getByText(albumId, { selector: 'code' })).toBeVisible();
@@ -415,7 +428,7 @@ export const InvalidTermsAnchors: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole('textbox', { name: m.catalogue_create_label() });
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(m.catalogue_create_invalid())).toBeVisible();
     const links = canvasElement.querySelectorAll<HTMLAnchorElement>('a[href="#album-terms"]');
     await expect(links.length).toBeGreaterThan(0);
@@ -429,14 +442,14 @@ export const ReviewNewAttempt: Story = {
   play: async ({ canvasElement }) => {
     const canvas = await fill(canvasElement);
     const fixture = fixtureFor(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(m.catalogue_create_denied())).toBeVisible();
     const first = structuredClone(writes(fixture)[0]!);
     await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_review_new() }));
     await expect(canvas.getByRole('textbox', { name: m.catalogue_create_label() })).toHaveValue(longName);
     await expect(writes(fixture)).toHaveLength(1);
     fixture.setScenario('ready');
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
     await expect(writes(fixture)[1]!.key).not.toBe(first.key);
   },

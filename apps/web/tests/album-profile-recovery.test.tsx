@@ -415,6 +415,7 @@ test('Album recovery retires every current surface and retains private drafts an
       ),
     );
     metadata = new Error('metadata offline');
+    await click(m.album_create_review());
     await click(m.album_create());
     const originalCommand = submitted[0]!;
     const exactFirstCommand = structuredClone(originalCommand);
@@ -450,7 +451,9 @@ test('Album recovery retires every current surface and retains private drafts an
     expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
     expect(host.querySelector('[role="alert"], [role="status"]')?.textContent).toBe(feedbackText);
     await click(m.catalogue_create_review_new());
-    expect((within(host).getByRole('button', { name: m.album_create() }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(host).getByRole('button', { name: m.album_create_review() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
     await act(async () => termEdit({ target: { value: 'Still unavailable edit' } }));
     expect(text(m.catalogue_create_label(), secondTerms).value).toBe('Album privé');
     for (const refusal of [
@@ -476,9 +479,10 @@ test('Album recovery retires every current surface and retains private drafts an
     expect(host.textContent).toContain('https://private.test/citation');
     await type(text(m.catalogue_create_label(), secondTerms), 'Album français');
     expect(text(m.catalogue_create_label()).value).toBe('Private Album');
-    await click(m.album_create()); // Fresh validation rejects the retained retired fact.
+    await click(m.album_create_review()); // Fresh validation rejects the retained retired fact.
     expect(submitted).toHaveLength(1);
     await click(m.recipe_remove_field(), host.querySelector<HTMLElement>(`#${scalar.id}`)!);
+    await click(m.album_create_review());
     await click(m.album_create());
     expect(submitted).toHaveLength(2);
     const exact = structuredClone(submitted[1]);
@@ -515,6 +519,7 @@ test('Album recovery retires every current surface and retains private drafts an
     await settle();
     expect(text(m.catalogue_create_label()).value).toBe('');
     await type(text(m.catalogue_create_label()), 'Retired private Album');
+    await click(m.album_create_review());
     await click(m.album_create());
     await showCreation('fourth-csrf-session');
     await settle(() =>
@@ -522,6 +527,151 @@ test('Album recovery retires every current surface and retains private drafts an
     );
     expect(text(m.catalogue_create_label()).value).toBe('');
     expect(host.innerHTML).not.toContain('late-created-reader');
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    await window.happyDOM.close();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
+
+test('Album create uses current parent eligibility, keeps drafts when observation fails, and retries an exact uncertain command', async () => {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.test/en/catalogue/album' });
+  const globals = {
+    window,
+    ...Object.fromEntries(
+      [
+        'document',
+        'navigator',
+        'HTMLElement',
+        'HTMLInputElement',
+        'HTMLSelectElement',
+        'Element',
+        'Node',
+        'MutationObserver',
+        'ResizeObserver',
+        'Document',
+        'DocumentFragment',
+      ].map((key) => [key, Reflect.get(window, key)]),
+    ),
+    getComputedStyle: window.getComputedStyle.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { AlbumProfile } = await import('../src/features/catalogue/album-profile-view');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { albumFixture } = await import('../src/kernel/fake/catalogue-album-profile');
+  const { allowedCreateAuthority, type CreateAuthority } = await import('../src/features/catalogue/identity-intake');
+  const { m } = await import('../src/paraglide/messages.js');
+  const testing = createRequire(require.resolve('storybook/test'));
+  const { within } = await import(testing.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document });
+  const fixture = albumFixture('uncertain');
+  const admitted = { ok: true as const, release: fixture.release, public: null };
+  const submitted: AlbumCommand[] = [];
+  let observation: CreateAuthority = { state: 'refused', reason: 'permission' };
+  let eligibilityReads = 0;
+  const transport = {
+    load: async () => admitted,
+    create: async (command: AlbumCommand) => {
+      submitted.push(command);
+      return fixture.transport.create(command);
+    },
+    read: async (id: string) => fixture.transport.read(id),
+    eligibility: async () => {
+      eligibilityReads++;
+      return observation;
+    },
+  };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  const settle = (action: () => void = () => {}) =>
+    act(async () => {
+      action();
+      await new Promise((resolve) => setTimeout(resolve, 15));
+    });
+  const click = (name: string) => act(async () => user.click(within(host).getByRole('button', { name })));
+  const show = (session: 'signed-in' | 'signed-out' = 'signed-in') =>
+    act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <CandidateReaderBoundary
+            observed={{ state: session, subject: 'viewer', csrfToken: session }}
+            address="album-create"
+          >
+            <AlbumProfile locale="en" session={session} transport={transport} search={async () => []} />
+          </CandidateReaderBoundary>
+        </QueryClientProvider>,
+      ),
+    );
+  try {
+    await show('signed-out');
+    await settle();
+    expect(host.textContent).toContain(m.album_grain());
+    expect(host.textContent).toContain(m.identity_intake_authority_guest());
+    expect((within(host).getByRole('button', { name: m.album_create_review() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(eligibilityReads).toBe(0);
+    expect(submitted).toHaveLength(0);
+
+    await show();
+    await settle();
+    expect(host.textContent).toContain(m.identity_intake_authority_refused_permission());
+    await act(async () => user.type(within(host).getByRole('textbox', { name: m.catalogue_create_label() }), 'Kept'));
+    expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
+      'Kept',
+    );
+    expect((within(host).getByRole('button', { name: m.album_create_review() }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(submitted).toHaveLength(0);
+
+    observation = { state: 'unknown', reason: 'unavailable' };
+    await click(m.identity_intake_authority_retry());
+    await settle();
+    expect(host.textContent).toContain(m.identity_intake_authority_unknown());
+    expect((within(host).getByRole('textbox', { name: m.catalogue_create_label() }) as HTMLInputElement).value).toBe(
+      'Kept',
+    );
+
+    observation = allowedCreateAuthority;
+    await click(m.identity_intake_authority_retry());
+    await settle();
+    expect(host.textContent).toContain(m.identity_intake_authority_allowed());
+    await click(m.album_create_review());
+    observation = { state: 'refused', reason: 'permission' };
+    await click(m.album_create());
+    await settle();
+    expect(submitted).toHaveLength(0);
+    expect(host.textContent).toContain(m.identity_intake_authority_refused_permission());
+
+    observation = allowedCreateAuthority;
+    await click(m.identity_intake_authority_retry());
+    await settle();
+    await click(m.album_create());
+    await settle();
+    expect(submitted).toHaveLength(1);
+    const exact = structuredClone(submitted[0]);
+    observation = { state: 'refused', reason: 'permission' };
+    await click(m.catalogue_create_retry());
+    await settle();
+    expect(submitted).toHaveLength(2);
+    expect(submitted[1]).toEqual(exact);
+    expect(submitted[1]!.key).toBe(exact!.key);
+    expect(host.textContent).toContain(m.catalogue_create_created());
   } finally {
     await act(async () => root.unmount());
     client.clear();

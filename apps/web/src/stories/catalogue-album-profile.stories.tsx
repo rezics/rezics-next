@@ -141,9 +141,22 @@ async function fill(canvasElement: HTMLElement) {
   await userEvent.type(date.getByRole('textbox', { name: m.relation_citation() }), 'https://artist.example/harbour');
   return canvas;
 }
+async function confirmAlbum(canvas: ReturnType<typeof within>) {
+  if (canvas.queryByRole('button', { name: m.catalogue_create_retry() })) {
+    await userEvent.click(canvas.getByRole('button', { name: m.catalogue_create_retry() }));
+    return;
+  }
+  if (canvas.queryByRole('button', { name: m.album_create() })) {
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    return;
+  }
+  await userEvent.click(canvas.getByRole('button', { name: m.album_create_review() }));
+  if (canvas.queryByRole('button', { name: m.album_create() }))
+    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+}
 async function create(canvasElement: HTMLElement) {
   const canvas = await fill(canvasElement);
-  await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+  await confirmAlbum(canvas);
   return canvas;
 }
 const failure = (scenario: AlbumScenario, text: () => string): Story => ({
@@ -230,8 +243,15 @@ export const LanguageRowRecovery: Story = {
     await expect(artist.queryByRole('textbox', { name: fieldName('wdt:P1932') })).toBeNull();
     await expect(artist.queryByRole('combobox', { name: fieldName('wdt:P3831') })).toBeNull();
     const observed = args.onCreate as ReturnType<typeof createObserver>;
-    const terms = await recoverLanguageRow(canvasElement, m.album_create(), observed, 'Harbour sessions', '港の演奏');
+    const terms = await recoverLanguageRow(
+      canvasElement,
+      m.album_create_review(),
+      observed,
+      'Harbour sessions',
+      '港の演奏',
+    );
     await phoneControls(form);
+    await confirmAlbum(within(canvasElement));
     await retryLanguageRecovery(canvasElement, m.album_create(), m.catalogue_create_retry(), observed, {
       type: 'schema:MusicAlbum',
       ...terms,
@@ -315,7 +335,7 @@ export const Created: Story = {
       artist.getByRole('textbox', { name: m.relation_citation() }),
       'https://artist.example/harbour',
     );
-    await userEvent.click(canvas.getByRole('button', { name: m.album_create() }));
+    await confirmAlbum(canvas);
     await expect(await canvas.findByText(m.catalogue_create_created())).toBeVisible();
     await expect(canvas.getByRole('link', { name: m.catalogue_create_open() })).toHaveAttribute(
       'href',

@@ -135,6 +135,7 @@ test('Album departure retains mounted nested drafts and native retries, then fen
     expect(blocked()).toBe(false);
     expect(host.textContent).not.toContain('Private credit');
     await type(m.catalogue_create_label(), 'Private Album');
+    await click(m.album_create_review());
     await click(m.album_create());
     const exact = structuredClone(commands[0]);
     await go();
@@ -153,6 +154,7 @@ test('Album departure retains mounted nested drafts and native retries, then fen
     await go();
     await go('/catalogue/album');
     await type(m.catalogue_create_label(), 'Sent before Leave');
+    await click(m.album_create_review());
     await click(m.album_create());
     const lateLeave = finish;
     await go();
@@ -162,6 +164,7 @@ test('Album departure retains mounted nested drafts and native retries, then fen
     expect(blocked()).toBe(false);
     expect(host.textContent).not.toContain(albumId);
     await type(m.catalogue_create_label(), 'Old caller');
+    await click(m.album_create_review());
     await click(m.album_create());
     const lateCaller = finish;
     await paint('replacement');

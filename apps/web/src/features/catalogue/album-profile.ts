@@ -6,6 +6,7 @@ import type { SessionEnv } from '../../session/client';
 import { candidateFailure } from '../../subject/candidates';
 import { relationFields } from '../../subject/relation-candidates';
 import { initialTerms, type CreateResult, type InitialSubject, type TermDraft } from './create-subject';
+import type { CreateAuthority } from './identity-intake';
 import { createSubjectRecord } from './create-subject-request';
 import { correctionProperty, type StatementInput } from './statement-editor';
 
@@ -20,6 +21,8 @@ export type AlbumTransport = {
   load: () => Promise<AlbumRead>;
   create: (command: AlbumCommand) => Promise<CreateResult>;
   read: (id: string) => Promise<import('./create-subject').CreatedReader>;
+  /** Current Global Context subject.create observation. Independent of edition reading. */
+  eligibility?: () => Promise<CreateAuthority>;
 };
 
 /** Presentation only: the effective immutable release decides which controls exist. */

@@ -230,12 +230,14 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     metadata = true;
     await paint();
     await click(row, remove('wdt:P3831'));
+    await click(host, m.album_create_review());
     await click(host, m.album_create());
     const correction = host.querySelector<HTMLAnchorElement>(`a[href="#${roleTarget}"]`)!;
     expect(correction).not.toBeNull();
     await click(row, remove('wdt:P3831')); // Sealed invalid command.
     await act(async () => user.click(correction));
     expect(row.contains(window.document.activeElement)).toBe(true);
+    await click(host, m.album_create_review());
     await click(host, m.album_create());
     const exact = structuredClone(commands[1]);
     await act(async () => currentArtist([selected]));
@@ -251,6 +253,7 @@ test('Album qualifier cancellation, stable correction targets, selective removal
     await click(host, m.catalogue_create_review_new());
     await click(row, remove('wdt:P3831'));
     expect(window.document.activeElement).toBe(within(row).getByRole('combobox', { name: m.relation_qualifier() }));
+    await click(host, m.album_create_review());
     await click(host, m.album_create());
     const facts = commands.at(-1)!.item.statements;
     await act(async () => oldRole([{ ...selected, id: roleId }]));
