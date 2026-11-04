@@ -185,7 +185,7 @@ test('actual mounted Board, duplicate row, reply, sign-in and canonical routes c
       `board-thread-${card.thread.id}--ordinary-0`,
       `board-thread-${card.thread.id}--ordinary-1`,
     ]);
-    const selected = rows[1]!.querySelector<HTMLAnchorElement>('[data-slot="board-feed-card"]')!;
+    const selected = rows[1]!.querySelector<HTMLAnchorElement>('a[href]')!;
     const destination = new URL(selected.href);
     const original = `${boardHref}#${rows[1]!.id}`;
     expect(destination.searchParams.get('boardReturn')).toBe(original);
