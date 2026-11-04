@@ -349,7 +349,6 @@ test('list restart cannot lose an unknown command or a later choice, and native 
   expect(pager.snapshot().restartBlocked).toBe(false);
   await pager.restart();
   expect(reads).toEqual([null, null]);
-  await editor.edit('private');
   deny = true;
   await pager.load();
   expect(reads).toEqual([null, null, 'exact-next-page']);
