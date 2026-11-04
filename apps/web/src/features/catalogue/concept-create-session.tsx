@@ -149,7 +149,7 @@ function ConceptCreateSessionLive({
     setDisclosure(undefined);
     setReturnReadFailure(undefined);
     if (!work.reader) {
-      setRestoration({ token, reader: '', id: undefined });
+      setRestoration({ token, reader: '' });
       return;
     }
     const current = readClassificationCreateHandoff(token);
@@ -419,7 +419,7 @@ function ConceptCreateSessionLive({
       onCreated={(result) => recordCreated(result, visitKey)}
       onNavigate={currentHandoff ? () => {} : (href) => window.location.assign(href)}
       identityIntake={identityIntake}
-      profile={profile}
+      {...(profile ? { profile } : {})}
       {...(restoredAcknowledgementId ? { restoredAcknowledgementId } : {})}
       recoveryOnly={!profile && !!restoredAcknowledgementId}
       {...(currentHandoff
@@ -538,8 +538,9 @@ function ConceptCreateSessionLive({
         </section>
       )}
       {currentHandoff &&
+        disclosedIdentity &&
         currentHandoff.phase === 'ready' &&
-        currentHandoff.createdId === disclosedIdentity?.id &&
+        currentHandoff.createdId === disclosedIdentity.id &&
         currentHandoff.identity?.id === disclosedIdentity.id && (
           <div className="mx-auto max-w-3xl px-4">
             <Button type="button" variant="outline" disabled={returnPending} onClick={() => void returnWithIdentity()}>
