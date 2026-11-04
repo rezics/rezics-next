@@ -475,17 +475,14 @@ export function searchRoutes<App>(
             asOf: page.as_of,
             actions,
             failureStatus: (error) =>
-              error instanceof ProblemError &&
-              (error.code === 'index_not_ready' || error.code === 'semantic_not_ready')
+              error instanceof ProblemError && (error.code === 'index_not_ready' || error.code === 'semantic_not_ready')
                 ? 'preparing'
                 : 'unavailable',
             async read(prefix, limit) {
               // Realm populations do not have an installed suggestion adapter; never suggest from Global.
               if (body.population !== undefined || !search)
                 throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
-              let completed:
-                | { asOf: string; candidates: EmptyRecoveryCandidate[] }
-                | undefined;
+              let completed: { asOf: string; candidates: EmptyRecoveryCandidate[] } | undefined;
               await search.suggest(prefix, limit, body.languages, {
                 deadline: job.deadline,
                 ...(body.filter === undefined ? {} : { filter: body.filter }),

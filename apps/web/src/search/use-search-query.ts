@@ -33,36 +33,30 @@ export function useSearchQuery(locale: string, params: SearchLoaderDeps, reader?
   const query = useQuery(searchQueryOptions(locale, params, reader));
   const lifetime = searchSessionLifetime(locale, { ...params, cursor: undefined }, reader);
   const previous = useRef<{ lifetime: string; data: SearchPageData } | undefined>(undefined);
-  if (
-    query.data?.recovery?.status === 'ready' &&
-    (query.data.discovery?.status === 'ready' || query.data.result)
-  )
+  if (query.data?.recovery?.status === 'ready' && (query.data.discovery?.status === 'ready' || query.data.result))
     previous.current = { lifetime, data: withoutRecovery(query.data) };
-  const data = useMemo(
-    () => {
-      const prior = previous.current?.lifetime === lifetime ? previous.current.data : undefined;
-      const state = query.data?.recovery;
-      if (params.cursor && prior && (query.isFetching || (state && keepsEarlierResults(state.status)))) {
-        const matchingCut =
-          state?.status !== 'sparse' && state?.status !== 'exhausted' ||
-          state.asOf === undefined ||
-          state.asOf === pageAsOf(prior);
-        if (matchingCut) {
-          return {
-            ...withoutRecovery(prior),
-            queryState: params,
-            recovery: state ?? { status: 'loading' as const },
-          };
-        }
+  const data = useMemo(() => {
+    const prior = previous.current?.lifetime === lifetime ? previous.current.data : undefined;
+    const state = query.data?.recovery;
+    if (params.cursor && prior && (query.isFetching || (state && keepsEarlierResults(state.status)))) {
+      const matchingCut =
+        (state?.status !== 'sparse' && state?.status !== 'exhausted') ||
+        state.asOf === undefined ||
+        state.asOf === pageAsOf(prior);
+      if (matchingCut) {
+        return {
+          ...withoutRecovery(prior),
+          queryState: params,
+          recovery: state ?? { status: 'loading' as const },
+        };
       }
-      return query.data
-        ? query.isFetching
-          ? searchPageForRecovery(query.data, { status: 'loading' })
-          : query.data
-        : searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' });
-    },
-    [lifetime, params, query.data, query.isFetching],
-  );
+    }
+    return query.data
+      ? query.isFetching
+        ? searchPageForRecovery(query.data, { status: 'loading' })
+        : query.data
+      : searchPageForRecovery(searchUnavailablePage(params), { status: 'loading' });
+  }, [lifetime, params, query.data, query.isFetching]);
   return {
     data,
     retry: () => {

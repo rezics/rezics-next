@@ -34,9 +34,7 @@ export function emptyRecoveryActionLinks(
 ): ActionLink[] {
   const options = messageOptions(locale);
   const firstPage = { ...state, cursor: undefined };
-  const typeLabel = state.type
-    ? localizedLabel(labels.typeLabels ?? {}, locale).text || state.type
-    : '';
+  const typeLabel = state.type ? localizedLabel(labels.typeLabels ?? {}, locale).text || state.type : '';
   const propertyLabel = (property: string) =>
     localizedLabel(labels.groups.find((group) => group.property === property)?.labels ?? {}, locale).text || property;
   const result: ActionLink[] = [];
@@ -92,10 +90,7 @@ export function emptyRecoveryActionLinks(
       result.push({
         key: JSON.stringify(action),
         label: m.search_empty_remove_range({ property: propertyLabel(action.property) }, options),
-        href: focused(
-          discoverySearchHref(locale, nextPage),
-          'search-filter-entry',
-        ),
+        href: focused(discoverySearchHref(locale, nextPage), 'search-filter-entry'),
       });
     }
   }
@@ -128,9 +123,7 @@ export function EmptySearchRecovery({
   }));
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    window.location.assign(
-      discoverySearchHref(locale, { ...state, query, cursor: undefined }),
-    );
+    window.location.assign(discoverySearchHref(locale, { ...state, query, cursor: undefined }));
   }
 
   return (
@@ -154,18 +147,22 @@ export function EmptySearchRecovery({
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
-            <Button type="submit" size="sm">{m.search_empty_search({}, options)}</Button>
+            <Button type="submit" size="sm">
+              {m.search_empty_search({}, options)}
+            </Button>
           </form>
         ) : null}
         {actions.some((action) => action.key !== 'edit-query') ? (
           <ul aria-label={m.search_empty_remove_actions({}, options)} className="flex w-full flex-wrap gap-2">
-            {actions.filter((action) => action.key !== 'edit-query').map((action) => (
-              <li key={action.key}>
-                <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={action.href}>
-                  {action.label}
-                </a>
-              </li>
-            ))}
+            {actions
+              .filter((action) => action.key !== 'edit-query')
+              .map((action) => (
+                <li key={action.key}>
+                  <a className={buttonVariants({ variant: 'outline', size: 'sm' })} href={action.href}>
+                    {action.label}
+                  </a>
+                </li>
+              ))}
           </ul>
         ) : null}
         {recovery.status !== 'ready' ? (

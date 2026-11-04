@@ -540,7 +540,10 @@ function validKinds(value: DiscoveryKinds): boolean {
 export function parseLegacySearchPage(value: unknown): LegacySearchPage | undefined {
   const parsed = v.safeParse(legacyPage, value);
   if (!parsed.success) return;
-  if (parsed.output.emptyRecovery && new TextEncoder().encode(JSON.stringify(parsed.output.emptyRecovery)).byteLength > 16_384)
+  if (
+    parsed.output.emptyRecovery &&
+    new TextEncoder().encode(JSON.stringify(parsed.output.emptyRecovery)).byteLength > 16_384
+  )
     return;
 
   const identities = new Set<string>();

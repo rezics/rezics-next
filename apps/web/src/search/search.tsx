@@ -1382,12 +1382,12 @@ function renderResults(
   const subjectHrefFor = currentSearchHref
     ? (subject: { id: string; label: string }) => realmCatalogueSubjectHref(subject, locale, currentSearchHref)
     : undefined;
-  const next = continuationAllowed
-    && (!data?.recovery || data.recovery.status === 'ready')
-    ? data?.discovery?.status === 'ready'
-      ? data.discovery.page.next
-      : result?.next
-    : undefined;
+  const next =
+    continuationAllowed && (!data?.recovery || data.recovery.status === 'ready')
+      ? data?.discovery?.status === 'ready'
+        ? data.discovery.page.next
+        : result?.next
+      : undefined;
   return (
     <>
       <div className="space-y-2">
@@ -1465,11 +1465,14 @@ function renderResults(
         aria-label={m.search_results({}, options)}
         data-search-results
       >
-        {data?.recovery && data.recovery.status !== 'ready' && data.queryState &&
+        {data?.recovery &&
+        data.recovery.status !== 'ready' &&
+        data.queryState &&
         !(
           ['loading', 'sparse', 'exhausted', 'index-not-ready', 'source-not-ready', 'unavailable'].includes(
             data.recovery.status,
-          ) && (data.discovery || result)
+          ) &&
+          (data.discovery || result)
         ) ? (
           <SearchRecovery
             state={data.recovery}
@@ -1502,9 +1505,12 @@ function renderResults(
                 data.queryState ? discoverySearchHref(locale, { ...data.queryState, cursor: undefined }) : undefined
               }
             />
-            {data.recovery?.status === 'ready' && data.queryState && data.discovery.status === 'ready' &&
+            {data.recovery?.status === 'ready' &&
+            data.queryState &&
+            data.discovery.status === 'ready' &&
             data.discovery.page.hits.length === 0 &&
-            data.discovery.page.next === null && data.queryState.cursor === undefined &&
+            data.discovery.page.next === null &&
+            data.queryState.cursor === undefined &&
             data.discovery.page.emptyRecovery ? (
               <EmptySearchRecovery
                 recovery={data.discovery.page.emptyRecovery}
@@ -1527,7 +1533,10 @@ function renderResults(
                 <EmptyTitle className="text-base font-normal">{m.search_no_results({}, options)}</EmptyTitle>
               </EmptyHeader>
             </Empty>
-            {data?.queryState && data.queryState.cursor === undefined && result.next === null && result.emptyRecovery ? (
+            {data?.queryState &&
+            data.queryState.cursor === undefined &&
+            result.next === null &&
+            result.emptyRecovery ? (
               <EmptySearchRecovery
                 recovery={result.emptyRecovery}
                 state={data.queryState}

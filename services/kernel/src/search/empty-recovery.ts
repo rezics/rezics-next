@@ -23,7 +23,12 @@ export const EMPTY_RECOVERY_LIMITS = {
 } as const;
 
 const wideText = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
-const fold = (value: string) => value.normalize('NFC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const fold = (value: string) =>
+  value
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
 const points = (value: string) => [...value];
 
 /** At most two short prefixes, matching the existing spelling-tolerant Search recovery behaviour. */
@@ -31,7 +36,9 @@ export function emptyRecoveryPrefixes(query: string): string[] {
   const normalized = fold(query);
   if (!normalized) return [];
   if (wideText.test(normalized)) return [points(normalized)[0]!];
-  const longest = normalized.split(' ').reduce((best, word) => (points(word).length > points(best).length ? word : best), '');
+  const longest = normalized
+    .split(' ')
+    .reduce((best, word) => (points(word).length > points(best).length ? word : best), '');
   const letters = points(longest);
   if (letters.length < 3) return [];
   return [...new Set([letters.slice(0, 3).join(''), letters.slice(0, 2).join('')])];
@@ -70,7 +77,16 @@ function closeness(query: string, label: string): number {
   for (const start of starts)
     for (const span of [letters.length - 1, letters.length, letters.length + 1])
       if (span > 0 && start + span <= titlePoints.length + 1)
-        best = Math.min(best, editDistance(typed, titlePoints.slice(start, start + span).join('').trim()));
+        best = Math.min(
+          best,
+          editDistance(
+            typed,
+            titlePoints
+              .slice(start, start + span)
+              .join('')
+              .trim(),
+          ),
+        );
   return best;
 }
 
