@@ -36,7 +36,7 @@ for (const key of [
   });
 for (const key of ['getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame', 'matchMedia'] as const)
   Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: window[key].bind(window) });
-Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true, scrollTo: () => {} });
 
 type HistoryRequestData = {
   postId: string;
@@ -191,7 +191,6 @@ async function mount(initialUrl: string) {
     router,
     async dispose() {
       await act(async () => root.unmount());
-      router.dispose();
       client.clear();
       host.remove();
     },

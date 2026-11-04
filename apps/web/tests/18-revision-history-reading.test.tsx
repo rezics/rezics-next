@@ -106,7 +106,9 @@ function mount() {
   };
 }
 function button(host: ParentNode, label: string) {
-  const result = [...host.querySelectorAll<HTMLButtonElement>('button')].find((item) => item.textContent === label);
+  const result = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent === label || item.getAttribute('aria-label') === label,
+  );
   expect(result).toBeDefined();
   return result!;
 }
@@ -218,7 +220,9 @@ test('same-tab exact action keeps the selected occurrence association beside dup
     );
     await click(button(view.host, m.revision_history_inspect({ number: '2' })));
     expect(view.host.querySelector('[data-history-inspector]')?.textContent).toContain('Prepared author');
-    const exact = view.host.querySelector<HTMLAnchorElement>('[data-history-inspector] h4 a')!;
+    const exact = [...view.host.querySelectorAll<HTMLAnchorElement>('[data-history-summary] h4 a')].find(
+      (link) => link.getAttribute('href') === `/en/posts/${selected.id}/revisions/${selectedRevisionId}`,
+    )!;
     expect(exact.getAttribute('href')).toBe(`/en/posts/${selected.id}/revisions/${selectedRevisionId}`);
     expect(exact.target).toBe('_blank');
     expect(exact.rel).toBe('noopener noreferrer');
