@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "保存が完了した可能性があります。同じ保存を再試行するか、再読み込みして確認してください。選択内容は保持されています。",
   "settings_shelf_use_current": "未保存の選択を破棄",
   "settings_shelf_choices_unavailable_title": "ライブラリの表示設定を読み込めません",
-  "settings_shelf_choices_unavailable_text": "現在のライブラリ表示設定を読み込めませんでした。再読み込みしてもう一度お試しください。このブラウザの見た目は変わりません。",
+  "settings_shelf_choices_unavailable_text": "現在のライブラリ表示設定を確認できませんでした。再読み込みする前に、下に表示される応答理由と待機時間を確認してください。このブラウザの見た目は変わりません。",
   "settings_shelf_read_only_title": "ライブラリの表示設定は変更できません",
   "settings_shelf_read_only_text": "確定済みの設定は表示できます。このサインインでは変更できません。",
   "settings_shelf_saved": "アカウントに保存済み: {value}",

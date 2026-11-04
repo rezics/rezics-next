@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "Das Speichern könnte abgeschlossen sein. Wiederhole den ursprünglichen Speicherversuch oder lade neu; deine Auswahl bleibt erhalten.",
   "settings_shelf_use_current": "Ungespeicherte Auswahl verwerfen",
   "settings_shelf_choices_unavailable_title": "Bibliotheks-Standardoptionen nicht verfügbar",
-  "settings_shelf_choices_unavailable_text": "Die aktuellen Bibliotheks-Standardoptionen konnten nicht gelesen werden. Neu laden, um es erneut zu versuchen. Die Darstellung in diesem Browser bleibt unverändert.",
+  "settings_shelf_choices_unavailable_text": "Die aktuellen Bibliotheks-Standardoptionen konnten nicht bestätigt werden. Prüfen Sie vor dem erneuten Laden den Antwortgrund und eine mögliche Wartezeit unten. Die Darstellung in diesem Browser bleibt unverändert.",
   "settings_shelf_read_only_title": "Bibliotheksstandards können nicht geändert werden",
   "settings_shelf_read_only_text": "Sie sehen die bestätigten Standards. Änderungen sind für diese Anmeldung nicht erlaubt.",
   "settings_shelf_saved": "Gespeicherter Kontostandard: {value}",

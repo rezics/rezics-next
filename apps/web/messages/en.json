@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "The save may have completed. Retry the original save or reload to check; your choices are still here.",
   "settings_shelf_use_current": "Discard my unsaved choices",
   "settings_shelf_choices_unavailable_title": "Library default choices unavailable",
-  "settings_shelf_choices_unavailable_text": "The current Library default options could not be read. Reload to try again. Appearance in this browser is unchanged.",
+  "settings_shelf_choices_unavailable_text": "The current Library default options could not be confirmed. Check the response reason and any wait below before reloading. Appearance in this browser is unchanged.",
   "settings_shelf_read_only_title": "Library defaults cannot be changed",
   "settings_shelf_read_only_text": "You can see the confirmed defaults. Changing them is not allowed for this sign-in.",
   "settings_shelf_saved": "Saved account default: {value}",

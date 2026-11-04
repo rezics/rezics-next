@@ -106,7 +106,7 @@
   "settings_shelf_uncertain": "儲存可能已完成。請重試原始儲存或重新載入確認；你的選擇仍保留在此。",
   "settings_shelf_use_current": "捨棄我的未儲存選擇",
   "settings_shelf_choices_unavailable_title": "無法讀取書庫檢視預設選項",
-  "settings_shelf_choices_unavailable_text": "目前的書庫檢視預設選項無法讀取。請重新載入後再試。此瀏覽器的外觀不變。",
+  "settings_shelf_choices_unavailable_text": "無法確認目前的書庫檢視預設選項。重新載入前，請查看下方的回應原因和等待時間。此瀏覽器的外觀不變。",
   "settings_shelf_read_only_title": "無法變更書庫預設檢視",
   "settings_shelf_read_only_text": "你可以查看已確認的預設值。此次登入不允許變更。",
   "settings_shelf_saved": "已儲存的帳戶預設值：{value}",

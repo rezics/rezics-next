@@ -34,6 +34,7 @@ import { useSettingsCurrent, useSettingsReadCurrent, useSettingsSessionOwner } f
 import { ShelfTypeDefaults } from './shelf-type-defaults/editor';
 import type { ShelfTypesCurrentRead } from '../library/shelf-types-read';
 import { useSettingsNavigationDraft } from './reading-navigation';
+import { preferenceRetryDeadline, usePreferenceRetry } from './preference-failure-retry';
 
 const personalColumn = {
   cover: 'cover',
@@ -68,15 +69,37 @@ type Pending = {
   dirty: Set<string>;
   reset: boolean;
 };
+type ShelfIssue =
+  | 'read:closed'
+  | 'read:preparing'
+  | 'read:forbidden'
+  | 'read:unavailable'
+  | 'read:malformed_advice'
+  | 'read:inconsistent'
+  | 'write:closed'
+  | 'write:preparing'
+  | 'write:forbidden'
+  | 'write:unavailable'
+  | 'write:invalid'
+  | 'write:unknown_outcome'
+  | 'stale_version';
+type ShelfPageRead = {
+  preferences: ReadingPreferences | undefined;
+  issue?: ShelfIssue;
+  failure?: NativePreferenceFailure;
+};
 type ShelfState = {
   known: { shelf: ShelfPreferences; version: number };
   advice: ReadingAdvice | undefined;
+  current: boolean;
   draft: ShelfDraft;
   dirty: Set<string>;
   pending: Pending | null;
+  comparison: Pending | null;
   phase: 'idle' | 'saving' | 'saved' | 'uncertain' | 'conflict' | 'reloading' | 'review' | 'failed';
-  reason: string | undefined;
+  reason: ShelfIssue | undefined;
   failure: NativePreferenceFailure | undefined;
+  retryAt: number;
 };
 type ShelfOwner = {
   canRead: () => boolean;
@@ -191,8 +214,118 @@ function patchFor(shelf: ShelfPreferences, draft: ShelfDraft, dirty: Set<string>
   return patch;
 }
 
-function pagePreferences(page: Awaited<ReturnType<ReadingIO['read']>>) {
-  return page.signedIn && 'preferences' in page ? page.preferences : undefined;
+function currentPage(page: Awaited<ReturnType<ReadingIO['read']>>): ShelfPageRead {
+  if (!page.signedIn) return { preferences: undefined, issue: 'read:forbidden' as const };
+  if (!('preferences' in page)) {
+    const issue =
+      page.state === 'closed' || page.failure.code === 'platform_closed'
+        ? 'read:closed'
+        : page.state === 'preparing' || page.failure.code === 'platform_preparing'
+          ? 'read:preparing'
+          : page.failure.status === 401 || page.failure.status === 403
+            ? 'read:forbidden'
+            : 'read:unavailable';
+    return { preferences: undefined, issue: issue as ShelfIssue, failure: page.failure };
+  }
+  if (page.preferences.advice?.allowedActions.read.allowed === false)
+    return { preferences: undefined, issue: 'read:forbidden' as const };
+  return {
+    preferences: page.preferences,
+    ...(!page.preferences.advice?.shelfAdvice ? { issue: 'read:malformed_advice' as const } : {}),
+  };
+}
+
+function deniedShelfUpdate(advice: ReadingAdvice | undefined): ReadingAdvice | undefined {
+  return advice
+    ? {
+        ...advice,
+        allowedActions: { ...advice.allowedActions, update: { allowed: false, reason: 'not_authorized' } },
+      }
+    : undefined;
+}
+
+function frozenShelfPatch(shelf: ShelfPreferencePatch | null): ShelfPreferencePatch | null {
+  if (shelf === null) return null;
+  const layouts = shelf.layouts && shelf.layouts !== null ? Object.freeze({ ...shelf.layouts }) : shelf.layouts;
+  const sorts =
+    shelf.sorts && shelf.sorts !== null
+      ? Object.freeze(
+          Object.fromEntries(
+            Object.entries(shelf.sorts).map(([tab, sort]) => [tab, sort && Object.freeze({ ...sort })]),
+          ),
+        )
+      : shelf.sorts;
+  const tableColumns = Array.isArray(shelf.tableColumns) ? Object.freeze([...shelf.tableColumns]) : shelf.tableColumns;
+  return Object.freeze({
+    ...shelf,
+    ...(layouts !== undefined ? { layouts } : {}),
+    ...(sorts !== undefined ? { sorts } : {}),
+    ...(tableColumns !== undefined ? { tableColumns } : {}),
+  });
+}
+
+function requestedShelfMatches(requested: ShelfPreferencePatch | null | undefined, actual: ShelfPreferences): boolean {
+  if (requested === null) return !Object.keys(actual).length;
+  if (!requested) return true;
+  return (
+    (!requested.layouts ||
+      Object.entries(requested.layouts).every(([scope, layout]) =>
+        layout === null ? actual.layouts?.[scope] === undefined : actual.layouts?.[scope] === layout,
+      )) &&
+    (!requested.sorts ||
+      Object.entries(requested.sorts).every(([tab, sort]) =>
+        sort === null
+          ? actual.sorts?.[tab as ShelfPreferenceTab] === undefined
+          : same(actual.sorts?.[tab as ShelfPreferenceTab], sort),
+      )) &&
+    (requested.gridSize === undefined || actual.gridSize === requested.gridSize) &&
+    (requested.tableColumns === undefined || same(actual.tableColumns, requested.tableColumns))
+  );
+}
+
+function shelfReadSummary(shelf: ShelfPreferences) {
+  return (
+    <dl className="space-y-2 text-sm">
+      <div>
+        <dt className="font-medium">{m.settings_shelf_layout()}</dt>
+        <dd>{shelf.layouts?.all ? layoutName(shelf.layouts.all) : m.settings_shelf_inherited()}</dd>
+      </div>
+      <div>
+        <dt className="font-medium">{m.settings_shelf_size()}</dt>
+        <dd>
+          {shelf.gridSize
+            ? shelf.gridSize === 'small'
+              ? m.library_size_small()
+              : shelf.gridSize === 'large'
+                ? m.library_size_large()
+                : m.library_size_medium()
+            : m.settings_shelf_inherited()}
+        </dd>
+      </div>
+      <div>
+        <dt className="font-medium">{m.settings_shelf_columns()}</dt>
+        <dd>{shelf.tableColumns?.join(', ') ?? m.settings_shelf_inherited()}</dd>
+      </div>
+      {tabs.map((tab) => (
+        <div key={tab}>
+          <dt className="font-medium">{m.settings_shelf_order({ tab: tabLabel(tab) })}</dt>
+          <dd>
+            {shelf.sorts?.[tab]
+              ? sortLabel(shelf.sorts[tab].field, shelf.sorts[tab].direction)
+              : m.settings_shelf_inherited()}
+          </dd>
+        </div>
+      ))}
+      {Object.entries(shelf.layouts ?? {})
+        .filter(([scope]) => scope !== 'all')
+        .map(([scope, layout]) => (
+          <div key={scope}>
+            <dt className="font-medium"><code>{scope}</code></dt>
+            <dd>{layoutName(layout)}</dd>
+          </div>
+        ))}
+    </dl>
+  );
 }
 
 function executableSorts(supported: ShelfAdvice['supported'] | undefined) {
@@ -230,12 +363,15 @@ export class ShelfPreferenceDraftRecovery {
     this.state = {
       known: { shelf, version: initial.version },
       advice: initial.advice,
+      current: true,
       draft: draftFrom(shelf),
       dirty: new Set(),
       pending: null,
+      comparison: null,
       phase: 'idle',
       reason: undefined,
       failure: undefined,
+      retryAt: 0,
     };
   }
 
@@ -244,8 +380,15 @@ export class ShelfPreferenceDraftRecovery {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
+  canRetryOriginal = () =>
+    this.owner.canWrite() &&
+    this.state.phase === 'uncertain' &&
+    this.state.pending !== null &&
+    this.state.advice?.allowedActions.update.allowed !== false;
+  canSubmit = () => this.writable() && !this.state.pending && this.state.phase !== 'reloading';
   needsNavigationDecision = () =>
     this.state.pending !== null ||
+    this.state.comparison !== null ||
     Object.keys(patchFor(this.state.known.shelf, this.state.draft, this.state.dirty)).length > 0;
 
   private update(patch: Partial<ShelfState>) {
@@ -253,12 +396,20 @@ export class ShelfPreferenceDraftRecovery {
     this.listeners.forEach((listener) => listener());
   }
 
-  private writable() {
+  private editable() {
     return this.owner.canWrite() && ownerMayChangeShelf(this.state.advice);
   }
 
+  private writable() {
+    return this.state.current && this.editable();
+  }
+
+  private waiting() {
+    return this.state.retryAt > Date.now();
+  }
+
   edit(next: Partial<ShelfDraft>, dirtyKey: string) {
-    if (!this.writable()) return;
+    if (!this.editable()) return;
     this.update({
       draft: { ...this.state.draft, ...next },
       dirty: new Set([...this.state.dirty, dirtyKey]),
@@ -267,7 +418,7 @@ export class ShelfPreferenceDraftRecovery {
   }
 
   editSort(tab: ShelfPreferenceTab, choice: string) {
-    if (!this.writable()) return;
+    if (!this.editable()) return;
     this.update({
       draft: { ...this.state.draft, sorts: { ...this.state.draft.sorts, [tab]: choice } },
       dirty: new Set([...this.state.dirty, `sort:${tab}`]),
@@ -278,7 +429,7 @@ export class ShelfPreferenceDraftRecovery {
   editTypeLayout(scope: string, layout: ShelfDraft['layout'] | undefined) {
     const limits = this.state.advice?.shelfAdvice?.limits;
     if (
-      !this.writable() ||
+      !this.editable() ||
       !limits ||
       scope === 'all' ||
       scope.length > limits.scopeMaxLength ||
@@ -293,8 +444,8 @@ export class ShelfPreferenceDraftRecovery {
 
   private async send(recovering: boolean) {
     const pending = this.state.pending;
-    if (!pending || !this.writable()) return;
-    this.update({ phase: 'saving', reason: undefined, failure: undefined });
+    if (!pending || !this.owner.canWrite() || this.waiting()) return;
+    this.update({ phase: 'saving', reason: undefined, failure: undefined, retryAt: 0 });
     let result;
     try {
       result = await this.io.save(pending.input);
@@ -307,56 +458,95 @@ export class ShelfPreferenceDraftRecovery {
         result.reason === 'unavailable' ||
         result.reason === 'preparing' ||
         (recovering && result.reason !== 'conflict');
+      const reason =
+        result.reason === 'conflict'
+          ? 'stale_version'
+          : (`write:${result.reason}` as ShelfIssue);
       this.update({
         pending: uncertain ? pending : null,
+        comparison: uncertain ? this.state.comparison : pending,
         phase: uncertain ? 'uncertain' : result.reason === 'conflict' ? 'conflict' : 'failed',
-        reason: result.reason,
-        ...(result.failure ? { failure: result.failure } : {}),
+        reason,
+        failure: result.failure,
+        retryAt: preferenceRetryDeadline(result.failure?.retryAfter),
+        current: uncertain || result.reason === 'conflict' ? false : this.state.current,
+        advice:
+          result.reason === 'forbidden'
+            ? deniedShelfUpdate(this.state.advice)
+            : result.reason === 'conflict'
+              ? undefined
+              : this.state.advice,
       });
       return;
     }
     const receipt = result.preferences;
     const requested = pending.input.shelf;
     const written = receipt.shelf ?? {};
-    const matches =
-      requested === null
-        ? !Object.keys(written).length
-        : (!requested?.layouts ||
-            Object.entries(requested.layouts).every(([scope, layout]) =>
-              layout === null ? written.layouts?.[scope] === undefined : written.layouts?.[scope] === layout,
-            )) &&
-          (!requested?.sorts ||
-            Object.entries(requested.sorts).every(([tab, sort]) =>
-              sort === null
-                ? written.sorts?.[tab as ShelfPreferenceTab] === undefined
-                : same(written.sorts?.[tab as ShelfPreferenceTab], sort),
-            )) &&
-          (requested?.gridSize === undefined || written.gridSize === requested.gridSize) &&
-          (requested?.tableColumns === undefined || same(written.tableColumns, requested.tableColumns));
-    if (!matches || receipt.version < pending.input.expectedVersion) {
-      this.update({ phase: 'uncertain', reason: 'unavailable', pending });
+    if (!requestedShelfMatches(requested, written) || receipt.version < pending.input.expectedVersion) {
+      this.update({ phase: 'uncertain', reason: 'write:unknown_outcome', pending, current: false, retryAt: 0 });
       return;
     }
     let current = receipt;
+    let readIssue: ShelfIssue | undefined;
+    let reacquired = false;
     if (recovering || this.owner.version() > receipt.version) {
-      if (!this.owner.canRead()) return;
+      if (!this.owner.canRead() || this.waiting()) return;
+      reacquired = true;
       try {
-        const refreshed = pagePreferences(await this.io.read());
+        const read = currentPage(await this.io.read());
         if (
           !this.owner.canRead() ||
-          !refreshed ||
-          refreshed.version < Math.max(receipt.version, this.owner.version())
+          !read.preferences
         ) {
-          this.update({ phase: 'uncertain', reason: 'unavailable', pending });
+          this.update({
+            phase: 'uncertain',
+            reason: read.issue ?? 'read:unavailable',
+            failure: read.failure,
+            retryAt: preferenceRetryDeadline(read.failure?.retryAfter),
+            current: false,
+            advice: undefined,
+            pending,
+          });
+          return;
+        }
+        const refreshed = read.preferences;
+        if (refreshed.version < Math.max(receipt.version, this.owner.version())) {
+          this.update({
+            phase: 'uncertain',
+            reason: 'stale_version',
+            failure: undefined,
+            retryAt: 0,
+            current: false,
+            advice: undefined,
+            pending,
+          });
           return;
         }
         if (refreshed.version === receipt.version && !same(refreshed.shelf ?? {}, receipt.shelf ?? {})) {
-          this.update({ phase: 'uncertain', reason: 'unavailable', pending });
+          this.update({
+            phase: 'uncertain',
+            reason: 'read:inconsistent',
+            failure: undefined,
+            retryAt: 0,
+            current: false,
+            advice: undefined,
+            pending,
+          });
           return;
         }
         current = refreshed;
+        readIssue = read.issue;
       } catch {
-        if (this.owner.canRead()) this.update({ phase: 'uncertain', reason: 'unavailable', pending });
+        if (this.owner.canRead())
+          this.update({
+            phase: 'uncertain',
+            reason: 'read:unavailable',
+            failure: undefined,
+            retryAt: 0,
+            current: false,
+            advice: undefined,
+            pending,
+          });
         return;
       }
     }
@@ -381,28 +571,44 @@ export class ShelfPreferenceDraftRecovery {
       }),
     );
     const changedWhileSaving = remainingDirty.size > 0;
+    const changedAfterReceipt =
+      current.version > receipt.version && !requestedShelfMatches(requested, current.shelf ?? {});
+    if (changedAfterReceipt) for (const key of pending.dirty) remainingDirty.add(key);
     const resetDraft = rebaseDraft(shelf, this.state.draft, remainingDirty);
     const needsReview =
+      reacquired ||
       changedWhileSaving ||
       (pending.reset && pending.dirty.size > 0) ||
+      changedAfterReceipt ||
+      !!readIssue ||
       (remainingDirty.size > 0 && !choiceAdmitted(resetDraft, current.advice));
     this.update({
       known: { shelf, version: current.version },
       advice: current.advice,
+      current: true,
       draft: resetDraft,
       dirty: remainingDirty,
       pending: null,
+      comparison: needsReview ? pending : null,
       phase: needsReview ? 'review' : 'saved',
-      reason: undefined,
+      reason: readIssue,
       failure: undefined,
+      retryAt: 0,
     });
     this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
   }
 
   async submit(reset = false) {
-    if (!this.writable() || this.state.pending || this.state.phase === 'reloading') return;
+    if (!this.writable() || this.waiting() || this.state.pending || this.state.phase === 'reloading') return;
     if (this.owner.version() > this.state.known.version) {
-      this.update({ phase: 'conflict', reason: 'conflict', failure: undefined });
+      this.update({
+        phase: 'conflict',
+        reason: 'stale_version',
+        failure: undefined,
+        retryAt: 0,
+        current: false,
+        advice: undefined,
+      });
       return;
     }
     const shelf = reset ? null : patchFor(this.state.known.shelf, this.state.draft, this.state.dirty);
@@ -422,28 +628,64 @@ export class ShelfPreferenceDraftRecovery {
       return;
     }
     const pending: Pending = {
-      input: { expectedVersion: this.state.known.version, shelf, idempotencyKey: uuid() },
+      input: Object.freeze({
+        expectedVersion: this.state.known.version,
+        shelf: frozenShelfPatch(shelf),
+        idempotencyKey: uuid(),
+      }),
       draft: this.state.draft,
       dirty: new Set(this.state.dirty),
       reset,
     };
-    this.update({ pending, phase: 'saving', reason: undefined, failure: undefined });
+    this.update({
+      pending,
+      comparison: null,
+      phase: 'saving',
+      reason: undefined,
+      failure: undefined,
+      retryAt: 0,
+    });
     await this.send(false);
   }
 
   async retry() {
-    if (this.state.phase !== 'uncertain' || !this.state.pending || !this.writable()) return;
+    if (!this.canRetryOriginal() || this.waiting()) return;
     await this.send(true);
   }
 
   async reload() {
-    if (!this.owner.canRead() || this.state.phase === 'saving' || this.state.phase === 'reloading') return;
-    this.update({ phase: 'reloading', reason: undefined, failure: undefined });
+    if (
+      !this.owner.canRead() ||
+      this.waiting() ||
+      this.state.phase === 'saving' ||
+      this.state.phase === 'reloading'
+    )
+      return;
+    this.update({ phase: 'reloading', reason: undefined, failure: undefined, retryAt: 0 });
     try {
-      const current = pagePreferences(await this.io.read());
+      const read = currentPage(await this.io.read());
       if (!this.owner.canRead()) return;
-      if (!current || current.version < Math.max(this.state.known.version, this.owner.version())) {
-        this.update({ phase: this.state.pending ? 'uncertain' : 'failed', reason: 'unavailable' });
+      if (!read.preferences) {
+        this.update({
+          phase: this.state.pending ? 'uncertain' : 'failed',
+          reason: read.issue ?? 'read:unavailable',
+          failure: read.failure,
+          retryAt: preferenceRetryDeadline(read.failure?.retryAfter),
+          current: false,
+          advice: undefined,
+        });
+        return;
+      }
+      const current = read.preferences;
+      if (current.version < Math.max(this.state.known.version, this.owner.version())) {
+        this.update({
+          phase: this.state.pending ? 'uncertain' : 'conflict',
+          reason: 'stale_version',
+          failure: undefined,
+          retryAt: 0,
+          current: false,
+          advice: undefined,
+        });
         return;
       }
       const shelf = current.shelf ?? {};
@@ -451,28 +693,43 @@ export class ShelfPreferenceDraftRecovery {
       this.update({
         known: { shelf, version: current.version },
         advice: current.advice,
+        current: true,
         draft,
-        phase: this.state.pending
-          ? 'uncertain'
-          : this.state.dirty.size > 0 || !choiceAdmitted(draft, current.advice)
-            ? 'review'
-            : 'idle',
+        phase: this.state.pending ? 'uncertain' : read.issue ? 'failed' : 'review',
+        reason: read.issue,
+        failure: undefined,
+        retryAt: 0,
       });
       this.owner.onVersionChange(Math.max(this.owner.version(), current.version));
     } catch {
       if (this.owner.canRead())
-        this.update({ phase: this.state.pending ? 'uncertain' : 'failed', reason: 'unavailable' });
+        this.update({
+          phase: this.state.pending ? 'uncertain' : 'failed',
+          reason: 'read:unavailable',
+          failure: undefined,
+          retryAt: 0,
+          current: false,
+          advice: undefined,
+        });
     }
   }
 
   useCurrent() {
-    if (!this.owner.canRead() || this.state.pending || this.state.phase !== 'review') return;
+    if (
+      !this.owner.canRead() ||
+      !this.state.current ||
+      this.state.pending ||
+      (this.state.phase !== 'review' && !this.state.comparison)
+    )
+      return;
     this.update({
       draft: draftFrom(this.state.known.shelf),
       dirty: new Set(),
+      comparison: null,
       phase: 'idle',
       reason: undefined,
       failure: undefined,
+      retryAt: 0,
     });
   }
 }
@@ -567,13 +824,18 @@ export function ShelfPreferencesCard({
   const advice = state.advice;
   const shelfAdvice = advice?.shelfAdvice;
   const ownerMayChange = ownerMayChangeShelf(advice);
-  const canWrite = writeCurrent() && ownerMayChange;
-  const disabled = !canWrite || state.phase === 'saving' || state.phase === 'reloading';
+  const canEdit = writeCurrent() && ownerMayChange;
+  const canWrite = writeCurrent() && controller.canSubmit();
+  const retryWaiting = usePreferenceRetry(state.failure, state.retryAt);
+  const retrySeconds = Math.max(1, Math.ceil((state.retryAt - Date.now()) / 1000));
+  const disabled = !canEdit || state.phase === 'saving' || state.phase === 'reloading';
   const unavailableColumns = unsupportedShelfColumns(state.known.shelf);
   const unavailableSorts = unsupportedShelfSorts(state.known.shelf);
   const inputId = 'shelf-default-columns';
   const showFailure = ['failed', 'conflict', 'uncertain', 'review'].includes(state.phase);
   const waiting = state.phase === 'saving' || state.phase === 'reloading';
+  const showRecovery = !shelfAdvice || showFailure;
+  const original = state.pending ?? state.comparison;
   const offeredLayouts = shelfAdvice?.supported.layouts ?? [];
   const offeredSizes = shelfAdvice?.supported.gridSizes ?? [];
   const offeredSorts = executableSorts(shelfAdvice?.supported);
@@ -590,32 +852,20 @@ export function ShelfPreferencesCard({
         <CardDescription>{m.settings_shelf_text()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {unavailableColumns.length ? (
+        {state.current && unavailableColumns.length ? (
           <p className="text-sm text-muted-foreground">
             {m.settings_shelf_columns_unavailable({ columns: unavailableColumns.join(', ') })}
           </p>
         ) : null}
-        {unavailableSorts.map(({ tab, field }) => (
+        {state.current
+          ? unavailableSorts.map(({ tab, field }) => (
           <p key={tab} className="text-sm text-muted-foreground">
             {m.settings_shelf_order_unavailable({ tab: tabLabel(tab), field })}
           </p>
-        ))}
+            ))
+          : null}
         {!shelfAdvice ? (
-          <Alert>
-            <AlertTitle>{m.settings_shelf_choices_unavailable_title()}</AlertTitle>
-            <AlertDescription className="space-y-3">
-              <p>{m.settings_shelf_choices_unavailable_text()}</p>
-              <Button
-                type="button"
-                variant="outline"
-                className="min-h-11"
-                disabled={!canRead || waiting}
-                onClick={() => void controller.reload()}
-              >
-                {m.settings_shelf_reload()}
-              </Button>
-            </AlertDescription>
-          </Alert>
+          state.current ? shelfReadSummary(state.known.shelf) : null
         ) : (
           <>
             {ownerMayChange ? null : (
@@ -628,9 +878,11 @@ export function ShelfPreferencesCard({
               <label className="grid gap-1 text-sm">
                 {m.settings_shelf_layout()}
                 <span className="text-muted-foreground">
-                  {state.known.shelf.layouts?.all
-                    ? m.settings_shelf_saved({ value: layoutName(state.known.shelf.layouts.all) })
-                    : m.settings_shelf_inherited()}
+                  {state.current
+                    ? state.known.shelf.layouts?.all
+                      ? m.settings_shelf_saved({ value: layoutName(state.known.shelf.layouts.all) })
+                      : m.settings_shelf_inherited()
+                    : m.settings_shelf_choices_unavailable_text()}
                 </span>
                 <select
                   className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
@@ -652,16 +904,18 @@ export function ShelfPreferencesCard({
               <label className="grid gap-1 text-sm">
                 {m.settings_shelf_size()}
                 <span className="text-muted-foreground">
-                  {state.known.shelf.gridSize
-                    ? m.settings_shelf_saved({
+                  {state.current
+                    ? state.known.shelf.gridSize
+                      ? m.settings_shelf_saved({
                         value:
                           state.known.shelf.gridSize === 'small'
                             ? m.library_size_small()
                             : state.known.shelf.gridSize === 'large'
                               ? m.library_size_large()
                               : m.library_size_medium(),
-                      })
-                    : m.settings_shelf_inherited()}
+                        })
+                      : m.settings_shelf_inherited()
+                    : m.settings_shelf_choices_unavailable_text()}
                 </span>
                 <select
                   className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
@@ -687,7 +941,11 @@ export function ShelfPreferencesCard({
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">{m.settings_shelf_columns()}</legend>
                 <p className="text-sm text-muted-foreground">
-                  {state.known.shelf.tableColumns ? m.settings_shelf_saved_choice() : m.settings_shelf_inherited()}
+                  {state.current
+                    ? state.known.shelf.tableColumns
+                      ? m.settings_shelf_saved_choice()
+                      : m.settings_shelf_inherited()
+                    : m.settings_shelf_choices_unavailable_text()}
                 </p>
                 {appColumns.map((column) => (
                   <Field key={column} orientation="horizontal" className="min-h-11">
@@ -720,7 +978,11 @@ export function ShelfPreferencesCard({
                   <label key={tab} className="grid gap-1 text-sm">
                     {m.settings_shelf_order({ tab: tabLabel(tab) })}
                     <span className="text-muted-foreground">
-                      {state.known.shelf.sorts?.[tab] ? m.settings_shelf_saved_choice() : m.settings_shelf_inherited()}
+                      {state.current
+                        ? state.known.shelf.sorts?.[tab]
+                          ? m.settings_shelf_saved_choice()
+                          : m.settings_shelf_inherited()
+                        : m.settings_shelf_choices_unavailable_text()}
                     </span>
                     <select
                       className="min-h-11 max-w-full rounded-md border bg-background px-3 py-2"
@@ -770,17 +1032,52 @@ export function ShelfPreferencesCard({
             />
           </>
         )}
-        {showFailure ? (
+        {showRecovery ? (
           <Alert variant={state.phase === 'failed' ? 'destructive' : 'default'}>
-            <AlertTitle>{failureText(state.phase)}</AlertTitle>
+            <AlertTitle>
+              {shelfAdvice ? failureText(state.phase) : m.settings_shelf_choices_unavailable_title()}
+            </AlertTitle>
             <AlertDescription className="space-y-2">
+              {!shelfAdvice ? <p>{m.settings_shelf_choices_unavailable_text()}</p> : null}
+              {state.phase === 'uncertain' && state.pending ? <p>{m.settings_shelf_uncertain()}</p> : null}
+              {state.reason ? (
+                <p className="font-mono text-xs" data-recovery-reason={state.reason}>
+                  {state.reason.replace(':', ' · ').replaceAll('_', ' ')}
+                </p>
+              ) : null}
+              {state.failure?.status !== undefined ? (
+                <p className="font-mono text-xs">HTTP {state.failure.status ?? 'unknown'}</p>
+              ) : null}
+              {state.failure?.code ? <p className="font-mono text-xs">{state.failure.code}</p> : null}
               {state.failure?.requestId ? <p>{state.failure.requestId}</p> : null}
+              {state.failure?.retryAfter ? (
+                <p className="font-mono text-xs" data-retry-after={state.failure.retryAfter}>
+                  Retry-After: {state.failure.retryAfter}
+                </p>
+              ) : null}
+              {retryWaiting ? (
+                <p role="status" data-retry-after={state.failure?.retryAfter}>
+                  {m.route_retry_after({ seconds: retrySeconds })}
+                </p>
+              ) : null}
+              {original ? (
+                <pre
+                  className="overflow-auto rounded bg-muted p-2 text-xs"
+                  data-original-shelf-change="true"
+                >
+                  {JSON.stringify(
+                    { expectedVersion: original.input.expectedVersion, shelf: original.input.shelf },
+                    null,
+                    2,
+                  )}
+                </pre>
+              ) : null}
               {state.phase === 'uncertain' && state.pending ? (
                 <Button
                   type="button"
                   variant="outline"
                   className="min-h-11"
-                  disabled={!canWrite}
+                  disabled={!controller.canRetryOriginal() || !writeCurrent() || retryWaiting || waiting}
                   onClick={() => void controller.retry()}
                 >
                   {m.settings_shelf_retry()}
@@ -790,12 +1087,12 @@ export function ShelfPreferencesCard({
                 type="button"
                 variant="outline"
                 className="min-h-11"
-                disabled={!canRead || waiting}
+                disabled={!canRead || waiting || retryWaiting}
                 onClick={() => void controller.reload()}
               >
                 {m.settings_shelf_reload()}
               </Button>
-              {state.phase === 'review' ? (
+              {state.current && !state.pending && (state.phase === 'review' || state.comparison) ? (
                 <Button type="button" variant="ghost" className="min-h-11" onClick={() => controller.useCurrent()}>
                   {m.settings_shelf_use_current()}
                 </Button>
@@ -809,7 +1106,7 @@ export function ShelfPreferencesCard({
             <Button
               type="button"
               className="min-h-11 max-w-full whitespace-normal"
-              disabled={disabled || !!state.pending || !state.dirty.size}
+              disabled={disabled || retryWaiting || !!state.pending || !state.dirty.size || !canWrite}
               onClick={() => void controller.submit()}
             >
               {m.settings_shelf_save()}
@@ -818,7 +1115,7 @@ export function ShelfPreferencesCard({
               type="button"
               variant="outline"
               className="min-h-11 max-w-full whitespace-normal"
-              disabled={disabled || !!state.pending}
+              disabled={disabled || retryWaiting || !!state.pending || !canWrite}
               onClick={() => void controller.submit(true)}
             >
               {m.settings_shelf_reset()}
