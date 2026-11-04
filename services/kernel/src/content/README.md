@@ -3547,24 +3547,30 @@ Decision: opening fanout uses 20 recipients per durable page, matching the nativ
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Web board control    | `readBoardWatchState`; `GET /v1/boards/{id}/watch`                                                                        | `{watching,revision}`, with current board disclosure                                          |
 | Web board control    | `setBoardWatch`; `PUT /v1/boards/{id}/watch`, `{watching,expectedRevision}`, `Idempotency-Key`                            | Confirmed state/revision; 409 for stale revision; exact retry reauthorizes before its receipt |
-| Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread\|board&limit=&cursor=`                                   | `{items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range          |
+| Performance Settings | `listWatches`; `GET /v1/accounts/{accountId}/watches?kind=thread\|board&limit=&cursor=`                                   | `{viewer,actions,items,next}`, limit 1–20/default 20, oldest first in one selected actor-home range |
 | Performance Settings | `removeWatch`; `DELETE /v1/accounts/{accountId}/watches/{id}?kind=thread\|board`, `{expectedRevision}`, `Idempotency-Key` | `{removed:true}`, including an already absent own identity, without resource read access      |
 | Performance Inbox    | Existing `notifications.list` with `board_activity`                                                                       | Existing post/thread target identifiers and current native post disclosure                    |
 
-Web board controls and Performance Settings watch management remain unavailable consumer adapters; these methods
-are their Content interfaces. Thread watch GET/PUT/DELETE and reply delivery keep their existing shapes and storage.
-A thread management row has revision 1 for its unique edge. Board state retains a CAS tombstone; rewatch rotates its
-identity and creation cutoff. Neither kind uses common Following. Listing/removal sends no notice.
+Performance Settings consumes this management page; thread watch GET/PUT/DELETE and reply delivery keep their
+existing shapes and storage. A thread management row has revision 1 for its unique edge. Board state retains a CAS
+tombstone; rewatch rotates its identity and creation cutoff. Neither kind uses common Following. Listing/removal
+sends no notice.
+
+Decision: each management page names the current owner as `viewer`, supplies page-level `actions.remove` from one
+account:update observation taken at admission and again before the final owner fence, and repeats the command
+identity needed for removal on every row. Concealed rows omit target identity, title and destination. Advice is not
+command authorization; `removeWatch` still reauthorizes. Changed advice during the read is an unavailable dependency.
 
 The native reader is
 `listWatches(deps: WatchDependencies, actor: Actor, accountId: string, input: {kind: WatchManagementKind; limit?: number; cursor?: string}, deadline: number): Promise<WatchManagementPage>`;
-`WatchManagementItem` is the closed available/unavailable union and `WatchManagementPage` is `{items,next}`.
+`WatchManagementItem` is the closed available/unavailable union with `command`, and `WatchManagementPage` is
+`{viewer,actions,items,next}`.
 Web imports `createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`;
 options are `{fetch?, headers?, session?, onSession?}`. The generated inventory contract uses
 `client.accounts({accountId}).watches.get({query: {kind, limit?, cursor?}})`;
 removal is `client.accounts({accountId}).watches({watchId}).delete({expectedRevision}, {query: {kind}, headers: {'idempotency-key': key}})`.
-The package exports `WatchManagementKind`, `WatchManagementItem` and `WatchManagementPage` for these consumers.
-Until the KernelClient generator can emit the mounted route declarations, `packages/client/src/index.ts` carries this documented type seam.
+The package exports `WatchManagementKind`, `WatchManagementItem` and `WatchManagementPage` from the generated
+mounted schema declarations. Default client authorization headers remain the inventory credential.
 
 The Web transport factory is
 `createKernelClient(origin: string, options?: KernelClientOptions): KernelClient` from `@rezics/client`.
@@ -3579,19 +3585,20 @@ Use `client.accounts({accountId}).watches.get({query:{kind,limit,cursor}})` to l
 `client.accounts({accountId}).watches({watchId}).delete({expectedRevision},{query:{kind},headers:{'idempotency-key':key}})`
 to remove the personal row. Board state uses `client.boards({id}).watch.get()` and
 `.put({watching,expectedRevision},{headers:{'idempotency-key':key}})`. Encode the idempotency key as a JSON string
-containing the UUID, as required by the native header codec. Responses use Eden's `{data,error}` result; unavailable
-rows have no resource identifier, so removal uses their personal `id`. Retry an unavailable list request with the
-same cursor and selection; advance only after a successful response. These transport shapes do not substitute for
-native disclosure or history-growth verification.
+containing the UUID, as required by the native header codec. Responses use Eden's `{data,error}` result and retain
+native problem `code`, `retryable`, `request_id` and `Retry-After`. Unavailable rows have no resource identifier, so
+removal uses `command.watchId`. Retry a transient list failure with the same kind and cursor; an invalid or expired
+cursor is a deliberate cursor-free restart. Advance only after a successful response. These transport shapes do not
+substitute for native disclosure or history-growth verification.
 Client declaration generation must succeed before Web compiles these methods; publishing OpenAPI alone does not
 install the typed client.
 
-Available rows contain `{id,kind,revision,createdAt,state:'available',resourceId,title}`. Denied and absent resources
-both return `{id,kind,revision,createdAt,state:'unavailable'}`. They contain no title, author, place, owner, destination
-or denial reason; the opaque personal `id` permits self-removal after a ban. Concurrent removal skips the row and
-advances its raw key. Sparse or empty pages can continue; there is no request refill. Encrypted cursors bind viewer,
-selection, page size, client, operator, authentication epoch and actor-home partition generation, retaining database
-microsecond keys. Native self-account authority precedes cursor parsing and new receipt lookups.
+Available rows contain `{id,kind,revision,createdAt,state:'available',resourceId,title,command}`. Denied and absent
+resources both return `{id,kind,revision,createdAt,state:'unavailable',command}`. They contain no title, author, place,
+owner, destination or denial reason; `command` is the owned subscription identity after a ban. Concurrent removal
+skips the row and advances its raw key. Sparse or empty pages can continue; there is no request refill. Encrypted
+cursors bind viewer, selection, page size, client, operator, authentication epoch and actor-home partition generation,
+retaining database microsecond keys. Native self-account authority precedes cursor parsing and new receipt lookups.
 
 `registerContent` mounts `content_board_watch_notice` through `contentNoticeEffects` with the default worker's native
 Access. It checks the exact original publication partition/epoch/position/event identity in the outbox and current
@@ -3624,13 +3631,13 @@ existing mandatory path.
 
 ### Cost: selected management page
 
-- Touches: current shared `account:read` and home epoch at entry, one actor-home indexed range, an ordinary native
-  `readThread` or `readBoard` plus an exact current source-row read for each examined key, then a second ordinary
-  native disclosure and exact source-row read for each retained key after all first-pass hydration, followed by the
-  same account and home checks. Each source-row read returns at most one active episode and preserves its resource,
-  creation time and revision; the page stores compact native context witnesses, not first-post bodies or copied Realm
-  authority.
-- Bound: `Q_self + Q_home + Q_range(R) + R*(Q_native_initial + Q_episode) + P*(Q_native_final + Q_episode) + Q_self_final + Q_home_final`, where R≤100 raw keys are examined and P≤20 are retained. The range is one statement/at most 100 physical subscription rows; each `Q_episode` is one statement/at most one physical source row. Native calls include their actual preparations, evaluations, board/Realm disclosure, transaction controls and thread's selected first-post read. They release all checkouts between calls; Access uses its configured pools, and no cross-home atomic snapshot is implied. The inventory retains only compact target witnesses and the returned title, not native first-post bodies or copied authority. A failed request returns no partial page or cursor; a same-cursor retry repeats the dispatched read work. GET has no registered runner phase; removals remain on the existing `runCommand` receipt/history phases below. Memory is O(R+P+D), with D bounded by the existing native reader limits; output contains at most 20 closed DTOs and a cursor of at most 4096 characters. There is no refill or all-partition query.
+- Touches: current shared `account:read` and home epoch at entry, two `account:update` advice observations, one
+  actor-home indexed range, an ordinary native `readThread` or `readBoard` plus an exact current source-row read for
+  each examined key, then a second ordinary native disclosure and exact source-row read for each retained key after
+  all first-pass hydration, followed by the same account, session and home checks. Each source-row read returns at
+  most one active episode and preserves its resource, creation time and revision; the page stores compact native
+  context witnesses, not first-post bodies or copied Realm authority.
+- Bound: `Q_self + Q_home + 2*Q_update + Q_range(R) + R*(Q_native_initial + Q_episode) + P*(Q_native_final + Q_episode) + Q_self_final + Q_home_final`, where R≤100 raw keys are examined and P≤20 are retained. The range is one statement/at most 100 physical subscription rows; each `Q_episode` is one statement/at most one physical source row. Each `Q_update` is one account:update preparation/evaluation for the whole page. Native calls include their actual preparations, evaluations, board/Realm disclosure, transaction controls and thread's selected first-post read. They release all checkouts between calls; Access uses its configured pools, and no cross-home atomic snapshot is implied. The inventory retains only compact target witnesses and the returned title, not native first-post bodies or copied authority. A failed request returns no partial page or cursor; a same-cursor retry repeats the dispatched read work. GET has no registered runner phase; removals remain on the existing `runCommand` receipt/history phases below. Memory is O(R+P+D), with D bounded by the existing native reader limits; output contains at most 20 closed DTOs, current viewer/action advice and a cursor of at most 4096 characters. There is no refill or all-partition query.
 - Growth check: `board-watch-growth.test.ts` executes both mounted selections at 256/1024/4096 with fixed selected
   identities, homes and page limits while separately seeding unrelated identities, selected identity rows, selected
   post revision history and expired selected/unrelated Access grants. Captures retain actual SQL, transaction

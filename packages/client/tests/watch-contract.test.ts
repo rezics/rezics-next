@@ -7,17 +7,27 @@ const schema = inventory.responses['200'].content['application/json'].schema;
 
 test('published watch pages close both disclosure variants and retain only personal removal metadata when unavailable', () => {
   expect(schema.additionalProperties).toBe(false);
-  expect(schema.required).toEqual(['items', 'next']);
+  expect(schema.required.slice().sort()).toEqual(['actions', 'items', 'next', 'viewer']);
   expect(schema.properties.items.maxItems).toBe(20);
   expect(schema.properties.next.maxLength).toBe(4096);
+  expect(schema.properties.viewer.required.slice().sort()).toEqual(['accountId', 'state']);
+  expect(schema.properties.actions.required).toEqual(['remove']);
   const variants = schema.properties.items.items.anyOf;
   expect(variants.map((row: any) => row.properties.state.const)).toEqual(['available', 'unavailable']);
   for (const row of variants) expect(row.additionalProperties).toBe(false);
-  expect(Object.keys(variants[1].properties).sort()).toEqual(['createdAt', 'id', 'kind', 'revision', 'state']);
-  expect(variants[1].required.slice().sort()).toEqual(['createdAt', 'id', 'kind', 'revision', 'state']);
+  expect(Object.keys(variants[1].properties).sort()).toEqual([
+    'command',
+    'createdAt',
+    'id',
+    'kind',
+    'revision',
+    'state',
+  ]);
+  expect(variants[1].required.slice().sort()).toEqual(['command', 'createdAt', 'id', 'kind', 'revision', 'state']);
   expect(variants[0].properties.kind.enum).toEqual(['thread', 'board']);
   expect(variants[0].required).toContain('resourceId');
   expect(variants[0].required).toContain('title');
+  expect(variants[0].required).toContain('command');
 });
 
 test('published watch selection, removal and board CAS inputs remain explicit', () => {

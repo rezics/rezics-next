@@ -184,7 +184,14 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
   );
   const first = await f.call(reader, 'GET', management(reader, 'thread', 1));
   expect(first.status).toBe(200);
+  expect(first.value.viewer).toEqual({ state: 'current', accountId: reader });
+  expect(first.value.actions).toEqual({ remove: 'available' });
   expect(first.value.items).toHaveLength(1);
+  expect(first.value.items[0].command).toEqual({
+    watchId: first.value.items[0].id,
+    kind: 'thread',
+    expectedRevision: first.value.items[0].revision,
+  });
   expect(first.value.next).toBeString();
   expect(
     (await f.call(f.accounts.actor, 'GET', `${management(f.accounts.actor, 'thread', 1)}&cursor=${first.value.next}`))
@@ -203,7 +210,9 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
     revision: 1,
     createdAt: expect.any(String),
     state: 'unavailable',
+    command: { watchId: expect.any(String), kind: 'thread', expectedRevision: 1 },
   });
+  expect(row.command.watchId).toBe(row.id);
   const removePath = `/v1/accounts/${reader}/watches/${row.id}?kind=thread`;
   const key = crypto.randomUUID();
   expect((await f.call(reader, 'DELETE', removePath, { expectedRevision: row.revision }, key)).status).toBe(200);
@@ -218,7 +227,14 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
     [routeOf(f.boardId), f.boardId, reader, newId(routeOf(f.boardId)!)],
   );
   expect((await f.call(reader, 'GET', management(reader))).value.items).toEqual([
-    { id: board.id, kind: 'board', revision: board.revision, createdAt: board.createdAt, state: 'unavailable' },
+    {
+      id: board.id,
+      kind: 'board',
+      revision: board.revision,
+      createdAt: board.createdAt,
+      state: 'unavailable',
+      command: { watchId: board.id, kind: 'board', expectedRevision: board.revision },
+    },
   ]);
   expect(
     (
@@ -238,7 +254,12 @@ test('one private reader pages explicit kinds, conceals unavailable targets and 
   expect((await f.call(reader, 'PUT', path(), { watching: true, expectedRevision: 0 }, initialWatchKey)).status).toBe(
     404,
   );
-  expect((await f.call(reader, 'GET', management(reader))).value).toEqual({ items: [], next: null });
+  expect((await f.call(reader, 'GET', management(reader))).value).toEqual({
+    viewer: { state: 'current', accountId: reader },
+    actions: { remove: 'available' },
+    items: [],
+    next: null,
+  });
 });
 
 test('board stop and restart rotate the private episode identity and reject stale CAS revisions', async () => {
@@ -497,6 +518,7 @@ test('inventory finishes current target disclosure after later rows hydrate', as
       revision: 1,
       createdAt: '2026-10-31T00:00:00.000Z',
       state: 'unavailable',
+      command: { watchId: revokedWatch, kind: 'thread', expectedRevision: 1 },
     });
   } finally {
     realmGate.restore();
@@ -529,6 +551,7 @@ test('inventory finishes current target disclosure after later rows hydrate', as
       revision: 1,
       createdAt: '2026-11-01T00:00:00.000Z',
       state: 'unavailable',
+      command: { watchId: removalWatch, kind: 'thread', expectedRevision: 1 },
     });
   } finally {
     removalGate.restore();
@@ -544,6 +567,44 @@ test('inventory finishes current target disclosure after later rows hydrate', as
     'DELETE FROM content.thread_watch WHERE route=$1 AND watcher_account_id=$2 AND thread_id=ANY($3::uuid[])',
     [accountRoute, reader, [realmThread.id, later.id, revokedThread.id, removalThread.id]],
   );
+});
+
+test('concealed owned rows keep command identity and denied update advice without a partial page', async () => {
+  const reader = f.accounts.principal;
+  const denied = await f.thread();
+  expect((await f.call(reader, 'PUT', `/v1/threads/${denied.id}/watch`)).status).toBe(204);
+  await f.db.admin.query(
+    `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+    VALUES($1,$2,$3,'thread:read','resource','(,)',$4)`,
+    [routeOf(denied.id), denied.id, reader, newId(routeOf(denied.id)!)],
+  );
+  const listed = await f.call(reader, 'GET', management(reader, 'thread'));
+  expect(listed.status).toBe(200);
+  expect(listed.value.viewer).toEqual({ state: 'current', accountId: reader });
+  expect(listed.value.actions.remove).toBe('available');
+  const concealed = listed.value.items.find((item: { state: string }) => item.state === 'unavailable');
+  expect(concealed).toBeDefined();
+  if (!concealed) throw new Error('expected a concealed watch');
+  expect(concealed).toMatchObject({
+    state: 'unavailable',
+    command: { watchId: concealed.id, kind: 'thread', expectedRevision: concealed.revision },
+  });
+  expect(concealed).not.toHaveProperty('resourceId');
+  expect(concealed).not.toHaveProperty('title');
+  const updateDenial = newId(routeOf(reader)!);
+  await f.db.admin.query(
+    `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+    VALUES($1,$2,$3,'account:update','resource','(,)',$4)`,
+    [routeOf(reader), reader, reader, updateDenial],
+  );
+  try {
+    const advised = await f.call(reader, 'GET', management(reader, 'thread'));
+    expect(advised.status).toBe(200);
+    expect(advised.value.actions).toEqual({ remove: 'denied' });
+    expect(advised.value.items.some((item: { id: string }) => item.id === concealed.id)).toBe(true);
+  } finally {
+    await f.db.admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [updateDenial]);
+  }
 });
 
 test('unwatch, erasure and late replay cannot recreate subscriptions or old notice presentation', async () => {
