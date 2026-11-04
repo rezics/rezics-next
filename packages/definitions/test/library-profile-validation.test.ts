@@ -20,7 +20,7 @@ test('only explicit Copy condition admission survives compilation and release ro
   expect(kinds[1]).not.toHaveProperty('condition');
   const historical = await compileCatalogue(fixture());
   expect(validateRelease(historical)).toEqual([]);
-  expect(historical.libraryProfiles!['fixture.reading']).toEqual(compiledProfile(libraryProfile()));
+  expect(compiledProfile(libraryProfile())).toEqual(historical.libraryProfiles!['fixture.reading']);
   for (const profile of Object.values(historical.libraryProfiles!))
     for (const kind of profile.copies?.kinds ?? []) expect(kind).not.toHaveProperty('condition');
 });
@@ -34,7 +34,8 @@ test('unknown and null Copy condition descriptors fail source, compiler and rele
     expect(pointers).toContain('/copies/kinds/0/condition');
     await expect(compileCatalogue(fixture(source))).rejects.toBeInstanceOf(CatalogueError);
     expect(validateRelease(releaseWith(compiledProfile(source)))).toContainEqual({
-      pointer: '/libraryProfiles/fixture.reading/copies/kinds/0/condition', code: 'invalid',
+      pointer: '/libraryProfiles/fixture.reading/copies/kinds/0/condition',
+      code: 'invalid',
     });
   }
 });
