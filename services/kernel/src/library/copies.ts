@@ -592,7 +592,7 @@ export function createCopyCommands(config: Dependencies) {
     );
   }
 
-  async function listCopies(actor: Actor, options: PageOptions = {}) {
+  async function listCopiesWithObservation(actor: Actor, options: PageOptions = {}) {
     const owner = requireActor(actor, 'copy:list');
     const filterSubjectId = options.subjectId === undefined ? null : subjectId(options.subjectId);
     return readOnly(owner, async (client) => {
@@ -654,9 +654,24 @@ export function createCopyCommands(config: Dependencies) {
           more && last && partition
             ? encodeCursor(tokens, binding, { epoch: partition.epoch, after: [last.createdAt, last.id] })
             : null,
+        accountEpoch: partition?.epoch ?? null,
       };
     });
   }
 
-  return { createCopy, updateCopy, deleteCopy, restoreCopy, readCopy, readPresentedCopy, listCopies };
+  async function listCopies(actor: Actor, options: PageOptions = {}) {
+    const { copies, next } = await listCopiesWithObservation(actor, options);
+    return { copies, next };
+  }
+
+  return {
+    createCopy,
+    updateCopy,
+    deleteCopy,
+    restoreCopy,
+    readCopy,
+    readPresentedCopy,
+    listCopies,
+    listCopiesWithObservation,
+  };
 }

@@ -2299,6 +2299,37 @@ store or additional participant. Local compiler validation is separate from all 
 - Bound: `R` `O(s+1)`, or `O(s+2)` with the probe. `B` `O(L(N)+s)`. `S` is 1 or 2, plus the admit and the partition read.
 - Growth check: `test/library/copies.test.ts`: `statement counts stay equal at three scales of unrelated copies` lists with limit 1 and classifies statements and rows as constant and blocks as logarithmic. `test/library/entry-store.test.ts`: `entry write, entry page and copy page touch the same rows and statements at three scales` pages copies at limit 1 at scales 1, 4 and 16 with 500 x scale seeded rows per relation (500, 2,000 and 8,000), with no planner setting: one statement, constant rows, logarithmic blocks and no sequential scan.
 
+### FULL copy list context
+
+`GET /v1/copies?view=FULL` retains one native copy row per copy ID, including repeated Subject IDs, and adds the
+existing FULL `subject` summary plus a per-row `context`. BASIC and the default view retain their response shape.
+`copy-list-context.ts` rejects more than 100 raw rows before Semantic IO, counts duplicates toward that bound, reads
+identity mappings and summaries in batches, and calls the current native list-presentation facts reader once for the
+mapped raw page. The existing reader admits at most four Type-selected properties and three actual values per
+property. Context preserves those Facts, including language maps and year/month/day precision, but removes
+`schema:exampleOfWork`: today's reader cannot distinguish a complete disclosed association from withheld relation
+targets. The row therefore reports `unsupported` until Semantic delivers that smallest completeness-aware shape;
+it never chooses the first relation or turns `copy.subjectId`, acquired date or a release digest into a Work/edition.
+
+Context states are `available`, `scope`, `withheld`, `missing`, `unsupported` and `unavailable`. Hidden contexts
+contain no Subject or Work IDs. The repeated serialized context array is capped by the explicit 65,536 UTF-8 byte
+response limit installed for this projection; overflow changes rich contexts to `unavailable` as a whole, never a
+truncated identity list. The account home is released before Semantic work. The active Semantic release head and
+digest are observed around composition. After the final Semantic observation, the same account page, ordered copy
+rows/revisions, lookahead and account partition epoch from the page transaction are reread and compared before
+return. Semantic
+failure leaves private copy rows usable with unavailable context; a moved native page or account epoch refuses the
+response. Context adds no command, mutation, status action, deletion right or loan authority; detail presentation
+continues to use its exact retained vocabulary pins and current source admission.
+
+- Bound: at most 100 raw copies, 100 original mappings, 200 summary keys (the existing summary reader accepts 256),
+  one list-facts batch of at most 100 raw mapped rows, and 65,536 UTF-8 context bytes. Include both native page reads,
+  both page-transaction partition observations, active-release head observations, before/after identity mappings, all
+  list-presentation negative facts, related-item authorization and labels, summary/covers, JSON serialization,
+  repeated rows and request deadline in the caller's cost.
+- Growth check: `test/library/copy-context-growth.test.ts` authors all-pool 64/512/4096 unrelated Semantic and copy
+  populations for the whole FULL route; the controller runs it after integration.
+
 ### Copy list by subject
 
 - Touches: A snapshot, an admit, a partition-epoch read, and one range of `copy_account_subject_created` for `(route, account_id, subject_id)`. The page fetches at most `limit + 1` rows. At the maximum limit, it uses the same one-row probe as the unfiltered page when the first fetch has no extra row. The stored subject id is matched directly, and the cursor is bound to it.
