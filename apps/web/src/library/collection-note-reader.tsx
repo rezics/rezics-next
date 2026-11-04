@@ -9,15 +9,24 @@ export function CollectionNoteReader({
   occurrence,
   className = '',
   previewLines = 2,
+  expanded: controlledExpanded,
+  onExpandedChange,
 }: {
   note: string | null | undefined;
   occurrence: string;
   className?: string;
   previewLines?: 2 | 4;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }) {
   const textId = useId();
   const textRef = useRef<HTMLParagraphElement>(null);
-  const [expanded, setExpanded] = useState(false);
+  const [localExpanded, setLocalExpanded] = useState(false);
+  const expanded = controlledExpanded ?? localExpanded;
+  const changeExpanded = (next: boolean) => {
+    onExpandedChange?.(next);
+    if (controlledExpanded === undefined) setLocalExpanded(next);
+  };
   // Keep full access available before layout, including server-rendered previews.
   const [truncated, setTruncated] = useState(true);
 
@@ -48,7 +57,7 @@ export function CollectionNoteReader({
           aria-controls={textId}
           aria-label={`${action}: ${occurrence}`}
           className="h-auto min-h-11 max-w-full justify-start whitespace-normal rounded-sm px-0 py-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => changeExpanded(!expanded)}
         >
           {action}
         </Button>

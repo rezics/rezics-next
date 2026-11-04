@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type ReturnVisit = {
   address: string;
@@ -9,15 +9,34 @@ type ReturnVisit = {
   departure: HTMLAnchorElement | undefined;
 };
 
-/** One admitted visit can restore only an occurrence in this native page, never fetch another page. */
+export type CollectionComparisonReturnState = 'none' | 'waiting' | 'present' | 'missing';
+
+export function collectionComparisonReturnState(
+  hash: string | undefined,
+  members: readonly { id?: string }[],
+  pageReady: boolean,
+  admitted: boolean,
+): CollectionComparisonReturnState {
+  const match = hash?.match(/^#collection-member-([0-9a-f-]{36})$/i);
+  if (!admitted || !match) return 'none';
+  if (!pageReady) return 'waiting';
+  return members.some((member) => member.id === match[1]) ? 'present' : 'missing';
+}
+
+type MissingOccurrence = { address: string; source: object | undefined; id: string };
+
+/** One admitted visit restores only its exact loaded occurrence and reports when that occurrence is absent. */
 export function useCollectionComparisonReturn(
   members: readonly { id?: string }[],
   currentHref: string | undefined,
   source?: object,
   admitInitialReturn = true,
+  pageReady = true,
 ) {
   const visit = useRef<ReturnVisit | undefined>(undefined);
+  const [missing, setMissing] = useState<MissingOccurrence | undefined>(undefined);
   const address = currentHref?.split('#')[0];
+  const missingOccurrence = Boolean(missing && missing.address === address && missing.source === source);
   useEffect(() => {
     const previous = visit.current;
     if (!address) return;
@@ -38,6 +57,7 @@ export function useCollectionComparisonReturn(
       departure: undefined,
     };
     visit.current = current;
+    setMissing(undefined);
     function matchesAddress() {
       return (
         expected.origin === window.location.origin &&
@@ -52,23 +72,32 @@ export function useCollectionComparisonReturn(
     function restore() {
       if (!current.active || !current.hash) return;
       if (!matchesAddress() || current.hash !== window.location.hash) return retire();
-      const member = members.find((member) => member.id && current.hash === `#collection-member-${member.id}`);
-      if (!member?.id) {
-        if (members.length) retire();
+      const state = collectionComparisonReturnState(current.hash, members, pageReady, current.active);
+      if (state === 'none' || state === 'waiting') return;
+      const occurrence = /^#collection-member-([0-9a-f-]{36})$/i.exec(current.hash)?.[1];
+      if (state === 'missing' && occurrence) {
+        setMissing({ address, source, id: occurrence });
+        retire();
         return;
       }
+      const member = members.find((member) => member.id === occurrence);
+      if (!member?.id) return retire();
       const element = document.getElementById(`collection-member-${member.id}`);
-      if (!element) return retire();
+      if (!element) return;
       const focused = document.activeElement;
       const mayFocus = focused === document.body || focused === element || focused === current.departure;
       // Consume the visit before focusing so focus events cannot rearm it.
       retire();
+      setMissing(undefined);
       if (!mayFocus) return;
       element.focus({ preventScroll: true });
       element.scrollIntoView?.({ block: 'nearest' });
     }
     function navigate() {
-      if (current.hash !== window.location.hash) current.departure = undefined;
+      if (current.hash !== window.location.hash) {
+        current.departure = undefined;
+        setMissing(undefined);
+      }
       current.hash = window.location.hash;
       restore();
     }
@@ -85,14 +114,18 @@ export function useCollectionComparisonReturn(
       window.removeEventListener('pageshow', restore);
       document.removeEventListener('focusin', keepFocus);
     };
-  }, [members, address, source, admitInitialReturn]);
+  }, [members, address, source, admitInitialReturn, pageReady]);
 
-  return (anchor: HTMLAnchorElement) => {
-    const current = visit.current;
-    if (!current?.active) return;
-    const occurrence = anchor.closest<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
-    if (!occurrence || !current.members.some((member) => member.id === occurrence)) return;
-    current.hash = `#collection-member-${occurrence}`;
-    current.departure = anchor;
+  return {
+    missingOccurrence,
+    admitReferenceReturn: (anchor: HTMLAnchorElement) => {
+      const current = visit.current;
+      if (!current?.active) return;
+      const occurrence = anchor.closest<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
+      if (!occurrence || !current.members.some((member) => member.id === occurrence)) return;
+      current.hash = `#collection-member-${occurrence}`;
+      current.departure = anchor;
+      setMissing(undefined);
+    },
   };
 }

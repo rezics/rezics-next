@@ -13,8 +13,16 @@ import { CollectionMoveChooser, type CollectionMoveChoice } from './collection-m
 import { readCollectionDestination } from './collection-read';
 import { readCollectionMovePlacements } from './collection-move-read';
 import { CollectionAddMembers } from './collection-add-members';
-import { CollectionMemberDetails, CollectionMemberViewerDetails } from './collection-member-row';
-import { CollectionNoteReader } from './collection-note-reader';
+import {
+  CollectionMemberOccurrenceDetails,
+  collectionPositionScopeMessage,
+  type CollectionReadMember,
+} from './collection-member-details';
+import {
+  collectionPageIsFiltered,
+  collectionPositionScope,
+  collectionReadingPageKey,
+} from './collection-public-reading/position';
 import { CollectionDescriptionReader } from './collection-description-reader';
 import { ResourceAccessLink } from '../accounts/resource-access/link';
 import { Cover } from '@rezics/ui/cover';
@@ -39,7 +47,7 @@ import { MetaLine } from '@rezics/ui/meta-line';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { useLocation, useRouter } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { m } from '../paraglide/messages.js';
 import { getLocale } from '../paraglide/runtime.js';
 import { useSession } from '../session/query';
@@ -1479,6 +1487,18 @@ function CollectionPageLifetime({
       (writing || draftFrozen || (boundary !== null && ['pending', 'unknown', 'confirmed'].includes(boundary.phase))),
     isCurrent: () => owner && isCurrent(),
   });
+  const readPageReady = (page.memberState ?? 'ready') === 'ready';
+  const readMembers = readPageReady ? (page.filteredMembers ?? page.members) : [];
+  const readPositionScope = collectionPositionScope(
+    { firstPage: page.firstPage, cursor: cursor ?? page.cursor },
+    collectionPageIsFiltered(page, search),
+  );
+  const readPageKey = collectionReadingPageKey(
+    currentHref,
+    collectionViewAddress(page.id, layout, cursor, search),
+    page.revision,
+    readMembers,
+  );
   return (
     <div className="w-full min-w-0 text-foreground">
       {draftNavigation}
@@ -2217,15 +2237,18 @@ function CollectionPageLifetime({
             onRetry={() => void reloadFromControl()}
           />
           {!editing ? (
-            <CollectionReadMembers<ReadMember>
-              members={(page.memberState ?? 'ready') !== 'ready' ? [] : (page.filteredMembers ?? page.members)}
+            <CollectionReadMembers<CollectionReadMember>
+              members={readMembers}
               layout={layout}
+              pageReady={readPageReady}
+              pageKey={readPageKey}
+              positionScope={readPositionScope}
               currentHref={currentHref}
               returnSource={page}
               admitInitialReturn={admitInitialComparisonReturn}
               onReferenceNavigate={() => setSelectedIds(new Set())}
               viewerProjection={viewerProjection}
-              viewerActionHref={(member: ReadMember) => {
+              viewerActionHref={(member: CollectionReadMember) => {
                 const row = collectionViewerFactForMember(viewerProjection, member);
                 if (
                   viewerProjection.state !== 'current' ||
@@ -2420,19 +2443,13 @@ export function CollectionReadActions({
   );
 }
 
-type ReadMember = {
-  id?: string;
-  subjectId?: string;
-  viewerRowKey?: string;
-  subject: CollectionMember['subject'];
-  facts?: CollectionMember['facts'];
-  note?: string | null;
-};
-
-/** Read presentation is separate from the existing occurrence editor; it performs no enrichment reads. */
-export function CollectionReadMembers<Member extends ReadMember>({
+/** Read presentation is separate from the occurrence editor and performs no enrichment reads. */
+export function CollectionReadMembers<Member extends CollectionReadMember>({
   members,
   layout = 'list',
+  pageReady = true,
+  pageKey: suppliedPageKey,
+  positionScope: suppliedPositionScope,
   presentationKind,
   typeRatios,
   listPresentations,
@@ -2447,6 +2464,9 @@ export function CollectionReadMembers<Member extends ReadMember>({
 }: {
   members: readonly Member[];
   layout?: 'grid' | 'list';
+  pageReady?: boolean;
+  pageKey?: string;
+  positionScope?: CollectionPositionScope;
   presentationKind?: string | null | undefined;
   typeRatios?: Readonly<Record<string, string>> | undefined;
   listPresentations?: CollectionListPresentations | undefined;
@@ -2460,70 +2480,72 @@ export function CollectionReadMembers<Member extends ReadMember>({
   onCopy: (member: Member) => void | Promise<void>;
 }) {
   const locale = getLocale();
-  const admitReferenceReturn = useCollectionComparisonReturn(members, currentHref, returnSource, admitInitialReturn);
+  const pageKey =
+    suppliedPageKey ?? collectionReadingPageKey(currentHref, currentHref ?? '/', 0, members);
+  const positionScope = suppliedPositionScope ?? 'first';
+  const { admitReferenceReturn, missingOccurrence } = useCollectionComparisonReturn(
+    members,
+    currentHref,
+    returnSource,
+    admitInitialReturn,
+    pageReady,
+  );
+  const [noteExpansion, setNoteExpansion] = useState<{ pageKey: string; values: Readonly<Record<string, boolean>> }>({
+    pageKey,
+    values: {},
+  });
+  const expandedNotes = noteExpansion.pageKey === pageKey ? noteExpansion.values : {};
+  useEffect(() => {
+    setNoteExpansion((previous) => (previous.pageKey === pageKey ? previous : { pageKey, values: {} }));
+  }, [pageKey]);
+  function updateNoteExpansion(noteKey: string, expanded: boolean) {
+    setNoteExpansion((previous) => ({
+      pageKey,
+      values: { ...(previous.pageKey === pageKey ? previous.values : {}), [noteKey]: expanded },
+    }));
+  }
+
   const items = members.map((member, index) => {
     const subject = member.subject;
-    const key = member.id ?? `${subject?.id ?? 'unavailable'}:${index}`;
+    // Render-only keys keep unidentified rows separate without creating an occurrence identity for actions.
+    const key = member.id ? `occurrence:${member.id}` : `display-only:${index}`;
+    const noteKey = member.id ? `occurrence:${member.id}` : `display-only:${index}`;
+    const titleValue = subject ? pageText(libraryTitleValue(subject.label), locale) : undefined;
+    const title = titleValue?.text || (subject ? m.subject_value_unlabelled() : m.library_subject_unavailable());
+    const actionHref = viewerActionHref?.(member);
+    const details = (
+      <CollectionMemberOccurrenceDetails
+        member={member}
+        position={index + 1}
+        scope={positionScope}
+        pageKey={pageKey}
+        noteStateKey={noteKey}
+        noteExpanded={expandedNotes[noteKey] ?? false}
+        onNoteExpandedChange={(expanded) => updateNoteExpansion(noteKey, expanded)}
+        currentHref={currentHref}
+        listPresentations={listPresentations}
+        comparisonDefinitions={comparisonDefinitions}
+        onReferenceNavigate={(anchor) => {
+          admitReferenceReturn(anchor);
+          onReferenceNavigate?.();
+        }}
+        {...(viewerProjection ? { viewerProjection } : {})}
+        {...(actionHref ? { actionHref } : {})}
+      />
+    );
+
     if (!subject) {
       return layout === 'grid' ? (
-        <div
-          key={key}
-          role="listitem"
-          id={member.id ? `collection-member-${member.id}` : undefined}
-          tabIndex={-1}
-          data-collection-member-id={member.id}
-          className="py-4 text-sm text-muted-foreground"
-        >
-          {m.library_subject_unavailable()}
+        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0 py-4 text-sm">
+          {details}
         </div>
       ) : (
-        <ListRow
-          key={key}
-          id={member.id ? `collection-member-${member.id}` : undefined}
-          tabIndex={-1}
-          data-collection-member-id={member.id}
-          className="py-4 text-muted-foreground"
-        >
-          {m.library_subject_unavailable()}
+        <ListRow key={key} className="py-4 text-muted-foreground">
+          {details}
         </ListRow>
       );
     }
-    const title = pageText(libraryTitleValue(subject.label), locale);
-    const actionHref = viewerActionHref?.(member);
-    const rowDetails = (
-      <div
-        id={member.id ? `collection-member-${member.id}` : undefined}
-        tabIndex={-1}
-        data-collection-member-id={member.id}
-        className="space-y-1"
-      >
-        <CollectionMemberDetails
-          member={member}
-          listPresentations={listPresentations}
-          comparisonDefinitions={comparisonDefinitions}
-          currentHref={currentHref}
-          onReferenceNavigate={(anchor) => {
-            admitReferenceReturn(anchor);
-            onReferenceNavigate?.();
-          }}
-        />
-        {member.note ? (
-          <CollectionNoteReader
-            key={member.id ?? member.note}
-            note={member.note}
-            previewLines={4}
-            occurrence={m.library_member_occurrence({ title: title.text, position: index + 1 })}
-          />
-        ) : null}
-        {viewerProjection ? (
-          <CollectionMemberViewerDetails
-            member={member}
-            projection={viewerProjection}
-            {...(actionHref ? { actionHref } : {})}
-          />
-        ) : null}
-      </div>
-    );
+
     const presentation = listPresentations?.[subject.type];
     const menu = (
       <Menu
@@ -2534,7 +2556,7 @@ export function CollectionReadMembers<Member extends ReadMember>({
             type="button"
             variant="ghost"
             size="icon-lg"
-            aria-label={`${m.library_collection_actions()}: ${title.text}`}
+            aria-label={`${m.library_collection_actions()}: ${title}`}
           >
             <EllipsisIcon aria-hidden="true" />
           </Button>
@@ -2542,94 +2564,95 @@ export function CollectionReadMembers<Member extends ReadMember>({
         entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => void onCopy(member) }]}
       />
     );
+
     if (layout === 'grid')
       return (
-        <div
-          key={key}
-          role="listitem"
-          data-collection-member-id={member.id}
-          data-slot="collection-member-card"
-          className="min-w-0"
-        >
+        <div key={key} role="listitem" data-slot="collection-member-card" className="min-w-0">
           <CoverCard
-            href={collectionComparisonHref(subject.id, title.text, locale, currentHref, member.id)}
-            title={title.text}
-            {...(title.lang ? { titleLang: title.lang } : {})}
+            href={collectionComparisonHref(subject.id, title, locale, currentHref, member.id)}
+            title={title}
+            {...(titleValue?.lang ? { titleLang: titleValue.lang } : {})}
             cover={{
-              subject: { id: subject.id, title: title.text, types: [subject.type] },
+              subject: { id: subject.id, title, types: [subject.type] },
               cover: subject.cover,
               src: coverSrc,
               ratio: collectionMemberRatio(subject, typeRatios, listPresentations),
               ...(presentation ? { listPresentation: presentation } : {}),
             }}
-            state={rowDetails}
+            state={details}
             menuTrigger={menu}
           />
         </div>
       );
+
     return (
       <MemberListRow
         key={key}
-        href={collectionComparisonHref(subject.id, title.text, locale, currentHref, member.id)}
-        subject={{ id: subject.id, title: title.text, types: [subject.type] }}
+        href={collectionComparisonHref(subject.id, title, locale, currentHref, member.id)}
+        subject={{ id: subject.id, title, types: [subject.type] }}
         cover={subject.cover}
         src={coverSrc}
-        title={title.text}
-        {...(title.lang ? { titleLang: title.lang } : {})}
+        title={title}
+        {...(titleValue?.lang ? { titleLang: titleValue.lang } : {})}
         ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
         {...(presentation ? { listPresentation: presentation } : {})}
         trailing={menu}
       >
-        {rowDetails}
+        {details}
       </MemberListRow>
     );
   });
-  return layout === 'grid' ? (
-    <div
-      role="list"
-      className="min-w-0"
-      data-collection-members
-      data-collection-layout={layout}
-      onClickCapture={(event) => {
-        const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
-        if (anchor && new URL(anchor.href).searchParams.has('via')) {
-          // The UI row owns its stretched link; its disclosed details own the occurrence anchor.
-          const row = anchor.closest('[data-slot="list-row"], [data-slot="collection-member-card"]');
-          const occurrence = row?.querySelector<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
-          if (occurrence && row instanceof HTMLElement) row.dataset.collectionMemberId = occurrence;
-          admitReferenceReturn(anchor);
-          onReferenceNavigate?.();
-        }
-      }}
-    >
-      <CoverGrid
-        ratio={collectionMemberRatio(
-          presentationKind ? { type: presentationKind } : null,
-          typeRatios,
-          listPresentations,
-        )}
-      >
-        {items}
-      </CoverGrid>
-    </div>
-  ) : (
-    <ul
-      className="min-w-0 space-y-3"
-      data-collection-members
-      data-collection-layout={layout}
-      onClickCapture={(event) => {
-        const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
-        if (anchor && new URL(anchor.href).searchParams.has('via')) {
-          // The UI row owns its stretched link; its disclosed details own the occurrence anchor.
-          const row = anchor.closest('[data-slot="list-row"], [data-slot="collection-member-card"]');
-          const occurrence = row?.querySelector<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
-          if (occurrence && row instanceof HTMLElement) row.dataset.collectionMemberId = occurrence;
-          admitReferenceReturn(anchor);
-          onReferenceNavigate?.();
-        }
-      }}
-    >
-      {items}
-    </ul>
+
+  const onReadNavigate = (event: MouseEvent<HTMLElement>) => {
+    const anchor = (event.target as Element).closest<HTMLAnchorElement>('a[href]');
+    if (anchor && new URL(anchor.href).searchParams.has('via')) {
+      // The UI row owns its stretched link; its disclosed details own the occurrence anchor.
+      const row = anchor.closest('[data-slot="list-row"], [data-slot="collection-member-card"]');
+      const occurrence = row?.querySelector<HTMLElement>('[data-collection-member-id]')?.dataset.collectionMemberId;
+      if (occurrence && row instanceof HTMLElement) row.dataset.collectionMemberId = occurrence;
+      admitReferenceReturn(anchor);
+      onReferenceNavigate?.();
+    }
+  };
+
+  return (
+    <section aria-label={m.library_collection_members()} data-slot="collection-reading-region" className="space-y-3">
+      {missingOccurrence ? (
+        <p role="status" data-collection-return="missing-occurrence" className="text-sm text-muted-foreground">
+          {m.library_collection_return_missing_occurrence()}
+        </p>
+      ) : null}
+      <p data-slot="collection-reading-position-scope" className="text-sm text-muted-foreground">
+        {collectionPositionScopeMessage(positionScope)}
+      </p>
+      {layout === 'grid' ? (
+        <div
+          role="list"
+          className="min-w-0"
+          data-collection-members
+          data-collection-layout={layout}
+          onClickCapture={onReadNavigate}
+        >
+          <CoverGrid
+            ratio={collectionMemberRatio(
+              presentationKind ? { type: presentationKind } : null,
+              typeRatios,
+              listPresentations,
+            )}
+          >
+            {items}
+          </CoverGrid>
+        </div>
+      ) : (
+        <ul
+          className="min-w-0 space-y-3"
+          data-collection-members
+          data-collection-layout={layout}
+          onClickCapture={onReadNavigate}
+        >
+          {items}
+        </ul>
+      )}
+    </section>
   );
 }
