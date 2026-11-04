@@ -131,13 +131,11 @@ async function withReader(run: (fixture: ReaderFixture) => Promise<void>) {
     const snapshot = useRouterState({
       select: (state) => ({
         location: state.location,
-        supported: state.matches.some((match) => match.routeId !== '__root__'),
       }),
     });
-    const readCurrentLocation = () =>
-      visit(router.state.location, router.state.matches.some((match) => match.routeId !== '__root__'));
+    const readCurrentLocation = () => visit(router.state.location, true);
     const value: LocaleNavigationContextValue = {
-      location: visit(snapshot.location, snapshot.supported),
+      location: visit(snapshot.location, true),
       readCurrentLocation,
       navigate: async (href) => {
         await router.navigate({ href });
@@ -246,6 +244,7 @@ test('keyboard switching keeps the reader query and fragment; staying in a dirty
     await act(async () => user.keyboard('{Enter}'));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/ja/subjects/reader-01'));
+    expect(body.getByRole('heading', { name: 'Subject reader route' })).toBeDefined();
     expect(router.state.location.searchStr).toBe('?view=latest&return_to=%2Fsearch%3Fq%3D%E6%9C%88');
     expect(router.state.location.hash).toBe('#chapter-4');
     expect(window.document.cookie).toContain('rezics_locale=ja');

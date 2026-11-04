@@ -93,13 +93,10 @@ function ReaderSurface({ journey }: { journey: Journey }) {
 function ReaderShell({ journey, children }: { journey: Journey; children?: ReactNode }) {
   const router = useRouter();
   const snapshot = useRouterState({
-    select: (state) => ({
-      location: state.location,
-      supported: state.matches.some((match) => match.routeId !== '__root__'),
-    }),
+    select: (state) => state.location,
   });
-  const readCurrentLocation = () => visit(router.state.location, router.state.matches.some((match) => match.routeId !== '__root__'));
-  const location = visit(snapshot.location, snapshot.supported);
+  const readCurrentLocation = () => visit(router.state.location, true);
+  const location = visit(snapshot, true);
   const value: LocaleNavigationContextValue = {
     location,
     readCurrentLocation,
