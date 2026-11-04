@@ -15,7 +15,14 @@ async function copiedDumps(root: string) {
   const vndb = join(root, 'vndb', 'db');
   await mkdir(bangumi, { recursive: true });
   await mkdir(vndb, { recursive: true });
-  await writeFile(join(bangumi, 'subject.jsonlines'), `${JSON.stringify({ id: 100, type: 2, name: 'STEINS;GATE' })}\n`);
+  await writeFile(
+    join(bangumi, 'subject.jsonlines'),
+    [
+      { id: 100, type: 2, name: 'STEINS;GATE' },
+      { id: 101, type: 2, name: 'CLANNAD' },
+      { id: 102, type: 2, name: 'Fate/stay night' },
+    ].map((row) => JSON.stringify(row)).join('\n') + '\n',
+  );
   for (const name of [
     'subject-relations',
     'subject-characters',
@@ -39,11 +46,11 @@ async function copiedDumps(root: string) {
     tags_parents: VNDB_PUBLIC_TAG_COLUMNS.tags_parents,
   };
   const bodies: Record<string, string> = {
-    vn: 'v410\tja\t\\N\nv411\tja\t\\N\nv999\tja\t\\N',
+    vn: 'v410\tja\t\\N\nv411\tja\t\\N\nv412\tja\t\\N\nv413\tja\t\\N\nv999\tja\t\\N',
     vn_titles:
-      'v410\tja\tt\tSTEINS;GATE\t\\N\nv411\tja\tt\tSTEINS;GATE 0\t\\N\nv999\tja\tt\tUnselected work\t\\N',
+      'v410\tja\tt\tSTEINS;GATE\t\\N\nv411\tja\tt\tSTEINS;GATE 0\t\\N\nv412\tja\tt\tCLANNAD\t\\N\nv413\tja\tt\tFate/stay night\t\\N\nv999\tja\tt\tUnselected work\t\\N',
     entry_meta:
-      'v410\t7\t2026-10-25 00:00:00+00\nv411\t8\t2026-10-25 00:00:00+00\nv999\t9\t2026-10-25 00:00:00+00',
+      'v410\t7\t2026-10-25 00:00:00+00\nv411\t8\t2026-10-25 00:00:00+00\nv412\t9\t2026-10-25 00:00:00+00\nv413\t10\t2026-10-25 00:00:00+00\nv999\t11\t2026-10-25 00:00:00+00',
     vn_extlinks: 'v410\t99\nv411\t4\nv411\t2\nv411\t1\nv999\t3',
     extlinks:
       '1\twebsite\thttps://bgm.tv/subject/100\n2\twebsite\thttps://example.org/v411\n3\twebsite\thttps://bgm.tv/subject/100\n4\twikidata\thttps://bgm.tv/subject/101',
