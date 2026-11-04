@@ -46,8 +46,10 @@ export const releasedStateConceptUri = (code: string) => `${releasedStateSchemeU
 
 type Row = Record<string, unknown>;
 const RELEASE_CAP = 64;
-const WORK_ID = /^v[1-9][0-9]*$/;
-const RELEASE_ID = /^r[1-9][0-9]*$/;
+export const vndbWorkIdentity = /^v[1-9][0-9]*$/;
+export const vndbReleaseIdentity = /^r[1-9][0-9]*$/;
+const WORK_ID = vndbWorkIdentity;
+const RELEASE_ID = vndbReleaseIdentity;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 function compareText(left: string, right: string): number {
