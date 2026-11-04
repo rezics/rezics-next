@@ -1,7 +1,9 @@
 -- A body above the caller's admitted ceiling is never returned to the application.
+WITH input AS (SELECT :maximum_bytes::integer AS maximum_bytes)
 SELECT id, subject, anchor, candidate, revision::double precision AS revision, author_account_id,
-       CASE WHEN body IS NULL OR octet_length(body) <= :maximum_bytes::integer THEN body ELSE NULL END AS body,
-       (body IS NOT NULL AND octet_length(body) > :maximum_bytes::integer) AS "bodyTooLarge",
+       CASE WHEN body IS NULL OR octet_length(body) <= input.maximum_bytes THEN body ELSE NULL END AS body,
+       (body IS NOT NULL AND octet_length(body) > input.maximum_bytes) AS "bodyTooLarge",
        encode(body_sha256, 'hex') AS digest, licence, language, availability
 FROM content.authored_field
+CROSS JOIN input
 WHERE route = :route::integer AND id = ANY (ARRAY[:id::uuid]);
