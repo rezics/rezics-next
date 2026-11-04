@@ -8368,5 +8368,18 @@
   "own_media_recovery_heading": "Suppression du média d’origine",
   "own_media_recovery_browsing": "Consulter une autre ligne n’annule pas cette suppression. Réessayer envoie la demande d’origine.",
   "own_media_recovery_withheld": "La reprise est indisponible car le média d’origine ou l’autorisation ne sont plus disponibles.",
-  "own_media_recovery_return": "Revenir au média d’origine"
+  "own_media_recovery_return": "Revenir au média d’origine",
+  "draft_preview_title": "Aperçu du brouillon capturé",
+  "draft_preview_help": "Capturez tout le profil actuel et la cible exacte. Cet aperçu privé et anonyme ne publie ni n’active le profil.",
+  "draft_preview_capture": "Capturer le brouillon et afficher",
+  "draft_preview_retry": "Réessayer le brouillon capturé",
+  "draft_preview_interrupt": "Interrompre l’aperçu",
+  "draft_preview_interrupted": "Aperçu interrompu. Réessayez le brouillon capturé quand vous le souhaitez.",
+  "draft_preview_digest": "Révision capturée : {digest}",
+  "draft_preview_changed": "Le brouillon a été modifié depuis. Capturez-le à nouveau pour voir ces modifications.",
+  "draft_preview_success": "Brouillon capturé affiché de façon anonyme.",
+  "draft_preview_account": "Identifiant du compte",
+  "draft_preview_view": "Vue",
+  "draft_preview_correct": "Utiliser le compte actuel @{handle}",
+  "draft_preview_address": "ID du sujet, identifiant du compte ou route"
 }

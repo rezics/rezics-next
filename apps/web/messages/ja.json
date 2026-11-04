@@ -8368,5 +8368,18 @@
   "own_media_recovery_heading": "元のメディアの削除",
   "own_media_recovery_browsing": "別の行を確認しても、この削除はキャンセルされません。再試行すると元のリクエストを送信します。",
   "own_media_recovery_withheld": "元のメディアまたは権限が利用できないため、再試行できません。",
-  "own_media_recovery_return": "元のメディアに戻る"
+  "own_media_recovery_return": "元のメディアに戻る",
+  "draft_preview_title": "キャプチャした下書きのプレビュー",
+  "draft_preview_help": "現在のプロフィール全体と正確な対象をキャプチャします。この非公開の匿名プレビューでは公開や有効化は行いません。",
+  "draft_preview_capture": "下書きをキャプチャして表示",
+  "draft_preview_retry": "キャプチャした下書きを再試行",
+  "draft_preview_interrupt": "プレビューを中断",
+  "draft_preview_interrupted": "プレビューを中断しました。準備ができたらキャプチャした下書きを再試行できます。",
+  "draft_preview_digest": "キャプチャしたリビジョン: {digest}",
+  "draft_preview_changed": "キャプチャ後に下書きが編集されています。再キャプチャすると変更を確認できます。",
+  "draft_preview_success": "キャプチャした下書きを匿名で表示しました。",
+  "draft_preview_account": "アカウント名",
+  "draft_preview_view": "ビュー",
+  "draft_preview_correct": "現在のアカウント @{handle} を使用",
+  "draft_preview_address": "主題ID、アカウント名、またはルート"
 }

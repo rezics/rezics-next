@@ -8368,5 +8368,18 @@
   "own_media_recovery_heading": "Ursprüngliche Medienentfernung",
   "own_media_recovery_browsing": "Das Öffnen einer anderen Zeile bricht diese Entfernung nicht ab. Erneutes Versuchen sendet die ursprüngliche Anfrage.",
   "own_media_recovery_withheld": "Die Wiederaufnahme ist nicht verfügbar, da die ursprünglichen Medien oder die Berechtigung nicht mehr verfügbar sind.",
-  "own_media_recovery_return": "Zu den ursprünglichen Medien"
+  "own_media_recovery_return": "Zu den ursprünglichen Medien",
+  "draft_preview_title": "Vorschau des erfassten Entwurfs",
+  "draft_preview_help": "Erfasse das gesamte aktuelle Profil und das genaue Ziel. Diese private anonyme Vorschau veröffentlicht oder aktiviert nichts.",
+  "draft_preview_capture": "Entwurf erfassen und ansehen",
+  "draft_preview_retry": "Erfassten Entwurf erneut versuchen",
+  "draft_preview_interrupt": "Vorschau unterbrechen",
+  "draft_preview_interrupted": "Vorschau unterbrochen. Versuche den erfassten Entwurf erneut, wenn du bereit bist.",
+  "draft_preview_digest": "Erfasste Version: {digest}",
+  "draft_preview_changed": "Der Entwurf wurde weiter bearbeitet. Erfasse ihn erneut für eine aktuelle Vorschau.",
+  "draft_preview_success": "Erfasster Entwurf anonym dargestellt.",
+  "draft_preview_account": "Kontoname",
+  "draft_preview_view": "Ansicht",
+  "draft_preview_correct": "Aktuelles Konto @{handle} verwenden",
+  "draft_preview_address": "Objekt-ID, Kontoname oder Route"
 }

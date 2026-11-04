@@ -95,8 +95,16 @@ Algolia, Discourse, OpenSearch and HTTP/accessibility/JSON-LD sources, with prov
   slots or SEO scripts. Its query client sees anonymous session state and is separate from the curator's
   cache, and anonymous registry controls preserve the curator's imperative CSRF token. All inspection
   transport strips credentials and session tokens and uses `no-store`; editor
-  state and publish/activate behavior are independent. There is no safe unpublished-draft preview API on
-  this path, so the region explicitly says **ACTIVE published preview**. Additional personal host regions
+  state and publish/activate behavior are independent. The published region keeps its **ACTIVE published preview** label. A separate deliberate capture in the
+  admitted editor sends the entire detached candidate, exact subject/account/route and view, and locale to
+  native `pages:previewDraft` through a prepared reader-bound BFF. Its digest identifies the captured
+  revision; subsequent edits stay local and mark that revision out of date. The existing isolated anonymous
+  renderer retains native leaf failures and their supported siblings. Reader/admission, credential, target,
+  locale and transport replacement retire pending work and output permanently, including a returning
+  reader. Publication advice and recovery keep their own lifetimes.
+  Decision: retry re-executes the captured revision; the capture action explicitly adopts later draft edits.
+  The additive mounted schemas and local typed BFF seam are inputs to Content’s complete-input publisher;
+  generated client declarations and OpenAPI remain publisher-owned. Additional personal host regions
   and supplementary rating/community reads are not synthesized by this inspection.
   Connected examples are `patterns-curation-presentation-resolution--current-resolution`,
   `--route-resolution`, `--denied`, `--unavailable` and `--draft-distinction`, using shared viewport,

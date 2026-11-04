@@ -8480,5 +8480,18 @@
   "own_media_recovery_heading": "Original media removal",
   "own_media_recovery_browsing": "Inspecting another row does not cancel this removal. Retry sends the original request.",
   "own_media_recovery_withheld": "Recovery is withheld because the original media or authority is no longer available.",
-  "own_media_recovery_return": "Return to original media"
+  "own_media_recovery_return": "Return to original media",
+  "draft_preview_title": "Captured draft preview",
+  "draft_preview_help": "Capture the whole current profile and exact target. This private anonymous preview does not publish or activate it.",
+  "draft_preview_capture": "Capture draft and preview",
+  "draft_preview_retry": "Retry captured draft",
+  "draft_preview_interrupt": "Interrupt preview",
+  "draft_preview_interrupted": "Preview interrupted. Retry the captured draft when ready.",
+  "draft_preview_digest": "Captured revision: {digest}",
+  "draft_preview_changed": "The draft has later edits. Capture again to preview them.",
+  "draft_preview_success": "Captured draft rendered anonymously.",
+  "draft_preview_account": "Account handle",
+  "draft_preview_view": "View",
+  "draft_preview_correct": "Use current account @{handle}",
+  "draft_preview_address": "Subject ID, account handle or route"
 }

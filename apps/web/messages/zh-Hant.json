@@ -8368,5 +8368,18 @@
   "own_media_recovery_heading": "原媒體刪除操作",
   "own_media_recovery_browsing": "查看其他列不會取消此刪除操作。重試會送出原始請求。",
   "own_media_recovery_withheld": "原媒體或權限已無法使用，暫時無法恢復此操作。",
-  "own_media_recovery_return": "返回原媒體"
+  "own_media_recovery_return": "返回原媒體",
+  "draft_preview_title": "已擷取草稿預覽",
+  "draft_preview_help": "擷取目前完整設定與精確目標。此私密匿名預覽不會發布或啟用設定。",
+  "draft_preview_capture": "擷取草稿並預覽",
+  "draft_preview_retry": "重試已擷取草稿",
+  "draft_preview_interrupt": "中斷預覽",
+  "draft_preview_interrupted": "預覽已中斷。準備好後可重試已擷取草稿。",
+  "draft_preview_digest": "已擷取修訂：{digest}",
+  "draft_preview_changed": "擷取後草稿有新修改。再次擷取以預覽這些修改。",
+  "draft_preview_success": "已匿名呈現擷取的草稿。",
+  "draft_preview_account": "帳戶名稱",
+  "draft_preview_view": "檢視",
+  "draft_preview_correct": "使用目前帳戶 @{handle}",
+  "draft_preview_address": "主題 ID、帳戶名稱或路由"
 }

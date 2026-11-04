@@ -21,6 +21,12 @@ import { admitCurationOpening, type CurationAdvice } from './curation-advice';
 import { pickText } from '@rezics/composition';
 import { readRelease } from '../../subject/definitions';
 import {
+  captureDraftPreview,
+  loadDraftPreview,
+  type DraftPreviewClient,
+  type DraftPreviewResult,
+} from './draft-preview';
+import {
   loadPresentationPreview,
   presentationPreviewClient,
   previewInput,
@@ -220,6 +226,15 @@ export const activateCuration = createServerFn({ method: 'POST' })
       key: intent.keys.activate,
     };
     return activatePublishedProfile(kernelClient(), { ...input, authorization });
+  });
+
+/** Prepared reader binding precedes native admission; native execution strips curator authority from sources. */
+export const readDraftPreview = createServerFn({ method: 'POST', strict: false })
+  .validator(captureDraftPreview)
+  .handler(async ({ data }): Promise<DraftPreviewResult> => {
+    const admission = await curationAdmission();
+    if (!data) return { ok: false, reason: 'invalid' };
+    return loadDraftPreview(kernelClient() as unknown as DraftPreviewClient, data, admission);
   });
 
 /** Inspection uses the current session only at the BFF; every native read is explicitly anonymous. */
