@@ -566,15 +566,11 @@ test(
       }).format(new Date(sessions[0]!.created_at));
       expect(await rows.nth(1).innerText()).toContain(formattedDate);
 
-      let confirmations = 0;
-      page.on('dialog', async (dialog) => {
-        confirmations++;
-        expect(dialog.type()).toBe('confirm');
-        await dialog.accept();
-      });
       await rows.nth(1).getByRole('button', { name: 'Sign out Firefox on Linux', exact: true }).click();
+      await page.getByRole('heading', { name: 'Review session sign-out', exact: true }).waitFor();
+      expect(await page.getByText('Revoking this session signs that device out.', { exact: true }).count()).toBe(1);
+      await page.getByRole('button', { name: 'Confirm session sign-out', exact: true }).click();
       await rows.nth(1).waitFor({ state: 'detached' });
-      expect(confirmations).toBe(1);
       expect(postBody('/sessions/revoke')).toEqual({ session_id: 'older-session' });
       await rows.nth(1).waitFor({ state: 'detached' });
       expect(await rows.count()).toBe(1);
@@ -598,10 +594,11 @@ test(
       const current = page.getByRole('listitem').filter({ hasText: 'This device' });
       await current.waitFor({ state: 'visible' });
       expect(await current.count()).toBe(1);
-      page.once('dialog', (dialog) => dialog.accept());
+      await current.getByRole('button', { name: 'Sign out Unknown device', exact: true }).click();
+      await page.getByRole('heading', { name: 'Review session sign-out', exact: true }).waitFor();
       await Promise.all([
         page.waitForURL(`${origin}/login`),
-        current.getByRole('button', { name: 'Sign out Unknown device', exact: true }).click(),
+        page.getByRole('button', { name: 'Confirm session sign-out', exact: true }).click(),
       ]);
       expect(postBody('/sessions/revoke')).toEqual({ session_id: 'current-session' });
       expect(await page.context().cookies(origin)).not.toContainEqual(
