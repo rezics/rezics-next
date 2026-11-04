@@ -130,7 +130,12 @@ export function musicReleaseDate(statement: Statement, digest: string, locale: s
   const value = statement.value;
   if (value.type === 'value') {
     const time = value.content as { time?: unknown; precision?: unknown } | null;
-    if (!time || typeof time.time !== 'string' || ![9, 10, 11].includes(Number(time.precision)))
+    if (
+      !time ||
+      typeof time.time !== 'string' ||
+      typeof time.precision !== 'number' ||
+      ![9, 10, 11].includes(time.precision)
+    )
       return { kind: 'unknown' as const };
   }
   const reading = dateReading([statement], statement.property.id, digest, locale);

@@ -82,7 +82,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
               : { type: 'value', content: { time: '+2024-05-00T00:00:00Z', precision: 10 } },
           ),
         ],
-        'wdt:P437': [statement(3, 'wdt:P437', { type: 'value', content: 'CD' })],
+        'wdt:P437': [statement(3, 'wdt:P437', { type: 'value', content: '00000000-0000-4000-8000-00000000b306' })],
         'schema:contentLocation': [
           statement(4, 'schema:contentLocation', { type: 'value', content: '00000000-0000-4000-8000-00000000b305' }),
         ],
@@ -94,6 +94,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
     account: null,
     summary: null,
     related: {
+      '00000000-0000-4000-8000-00000000b306': { type: 'skos:Concept', labels: { en: 'CD' } },
       [albumId]: { type: 'schema:MusicAlbum', labels: { en: 'Harbour sessions' } },
       '00000000-0000-4000-8000-00000000b305': { type: 'schema:Place', labels: { en: 'Japan' } },
     },
@@ -106,7 +107,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
     creativeWork: true,
     cover: null,
   });
-  const assertion = (n: number, property: string, target: string, position: string) => ({
+  const assertion = (n: number, property: string, target: string, position: string): Statement => ({
     ...statement(n, property, { type: 'value', content: target }),
     qualifiers: [
       {
@@ -134,7 +135,7 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
       },
     ],
   });
-  const freshness = { consistency: 'eventual' as const, target_seconds: 10, caught_up: true };
+  const freshness = { consistency: 'eventual' as const, target_seconds: 10 as const, caught_up: true };
   const first: Forward = {
     relations:
       scenario === 'empty'
@@ -142,16 +143,22 @@ export function musicReleaseExample(scenario: MusicReleaseExample = 'admitted', 
         : [
             {
               statement: assertion(5, 'bf:hasPart', mediumId, '2'),
+              target: mediumId,
+              external: null,
               summary: summary(mediumId, 'rezics:MusicMedium', 'Disc two'),
               related: {},
             },
             {
               statement: assertion(6, 'bf:hasPart', recordingId, '1'),
+              target: recordingId,
+              external: null,
               summary: summary(recordingId, 'schema:MusicRecording', 'Harbour'),
               related: {},
             },
             {
               statement: assertion(7, 'bf:hasPart', recordingId, '3'),
+              target: recordingId,
+              external: null,
               summary: summary(recordingId, 'schema:MusicRecording', 'Harbour'),
               related: {},
             },

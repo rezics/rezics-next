@@ -22,7 +22,9 @@ test('a concrete music edition retains album, medium and recording identities, d
   expect(page.admitted).toBe(true);
   expect(page.identity.id).toBe(releaseId);
   expect(page.facts.find((fact) => fact.kind === 'album')?.statements[0]?.value.content).toBe(albumId);
-  expect(page.facts.find((fact) => fact.property === 'wdt:P437')?.statements[0]?.value.content).toBe('CD');
+  expect(page.facts.find((fact) => fact.property === 'wdt:P437')?.statements[0]?.value.content).toBe(
+    '00000000-0000-4000-8000-00000000b306',
+  );
   expect(page.rows.map((row) => row.summary?.id)).toEqual([mediumId, recordingId, recordingId]);
   expect(page.rows.map((row) => row.statement?.qualifiers[0]?.value.content)).toEqual(['2', '1', '3']);
   expect(page.rows.map((row) => row.statement)).toEqual(fixture.first.relations.map((row) => row.statement));
