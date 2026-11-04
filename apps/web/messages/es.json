@@ -8261,5 +8261,6 @@
   "thread_review_cursor_expired": "Esta página ha caducado. Reinicia desde la primera página.",
   "thread_review_restart": "Empezar de nuevo",
   "thread_review_select_board": "Seleccionar este Board",
-  "thread_review_destination_changed": "El Subject o el Board ha cambiado. Actualiza los destinos antes de continuar."
+  "thread_review_destination_changed": "El Subject o el Board ha cambiado. Actualiza los destinos antes de continuar.",
+  "search_review_historical_question_unavailable": "La pregunta y la escala históricas no están disponibles. Esta es la cita registrada, no la valoración actual."
 }

@@ -8353,5 +8353,6 @@
   "thread_review_cursor_expired": "This page expired. Restart from the first page.",
   "thread_review_restart": "Start over",
   "thread_review_select_board": "Select this Board",
-  "thread_review_destination_changed": "The Subject or Board changed. Refresh destinations before continuing."
+  "thread_review_destination_changed": "The Subject or Board changed. Refresh destinations before continuing.",
+  "search_review_historical_question_unavailable": "The historical question label and scale are unavailable. This is the recorded citation, not a current rating."
 }

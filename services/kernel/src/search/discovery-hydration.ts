@@ -93,7 +93,13 @@ function validOwnerSummary(
   }
   if (kind === 'review') {
     return (
-      Object.keys(value).length === 7 &&
+      Object.keys(value).length === (Object.hasOwn(value, 'source') ? 8 : 7) &&
+      (!Object.hasOwn(value, 'source') ||
+        (object(value.source) &&
+          Object.keys(value.source).length === 2 &&
+          typeof value.source.openingRevisionId === 'string' &&
+          routeOf(value.source.openingRevisionId) !== null &&
+          value.source.sourceVersion === value.sourceVersion)) &&
       ['id', 'title', 'summary', 'sourceVersion', 'sourcePosition', 'authorId', 'subjectId'].every((key) =>
         Object.hasOwn(value, key),
       ) &&
@@ -248,6 +254,7 @@ export async function hydrateOwnerDiscoveryHits(
               id: review.id,
               kind: 'review',
               title: review.title,
+              ...(review.source ? { source: { ...review.source } } : {}),
               ...(author ? { author: { displayName: author.displayName, handle: author.handle } } : {}),
               ...(review.summary === null ? {} : { excerpt: review.summary }),
               ...(subject ? { subject: { id: subject.id, title: subject.label?.value ?? null } } : {}),

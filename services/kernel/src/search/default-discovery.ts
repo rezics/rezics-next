@@ -1,3 +1,4 @@
+import { prepareSearchReviewContexts } from './review-context.ts';
 import { boundWorkContexts } from './work-context.ts';
 import { readFollowDiscovery } from '../library/follow-discovery.ts';
 import { readSpaceDiscoveryEntryBatch, type SpaceEntryActionRuntime } from '../community/space-discovery-entry.ts';
@@ -797,6 +798,7 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
       const read = await open(principal, request, context);
       return readAdmittedDiscoveryPage(read, async (page) => {
         try {
+          const reviews = await prepareSearchReviewContexts({ ...config, tokens: config.keys }, page, context);
           const enriched = await enrichDiscoveryPage(config, principal, page, {
             ...context,
             descriptions: request.descriptions === true,
@@ -828,14 +830,6 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
             ? await readDiscoveryFigures(config, enriched.figureIds, context.deadline)
             : enriched.figures;
           if (!isDeepStrictEqual(enriched.figures, finalFigures)) throw new ProblemError('search_restart_required');
-          const viewerCurrent =
-            !enriched.viewer ||
-            (await viewerFactsCurrent(
-              { pool: config.pool, access: config.access },
-              enriched.viewer.actor,
-              enriched.viewer.prepared,
-              context.deadline,
-            ));
           const targets = enriched.page.hits.flatMap((hit) => {
             if (hit.summary.kind !== 'collection') return [];
             const card = hit.summary.value.card;
@@ -855,7 +849,16 @@ export function createDefaultDiscoverySearch(config: DefaultDiscoverySearchConfi
           });
           const collectionFollows = await readFollowDiscovery(config, context.actor, targets, context.deadline);
           if (!(await spaces.finish())) throw new ProblemError('search_restart_required');
-          return { page: { ...spaces.page, collectionFollows }, viewerCurrent };
+          const reviewedPage = await reviews.finish({ ...spaces.page, collectionFollows });
+          const viewerCurrent =
+            !enriched.viewer ||
+            (await viewerFactsCurrent(
+              { pool: config.pool, access: config.access },
+              enriched.viewer.actor,
+              enriched.viewer.prepared,
+              context.deadline,
+            ));
+          return { page: reviewedPage, viewerCurrent };
         } catch (error) {
           if (error instanceof ProblemError || error instanceof CollectionDiscoveryReadinessError) throw error;
           throw new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });

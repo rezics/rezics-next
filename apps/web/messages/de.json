@@ -8261,5 +8261,6 @@
   "thread_review_cursor_expired": "Diese Seite ist abgelaufen. Beginne erneut auf der ersten Seite.",
   "thread_review_restart": "Neu beginnen",
   "thread_review_select_board": "Dieses Board auswählen",
-  "thread_review_destination_changed": "Das Subject oder Board wurde geändert. Aktualisiere die Ziele, bevor du fortfährst."
+  "thread_review_destination_changed": "Das Subject oder Board wurde geändert. Aktualisiere die Ziele, bevor du fortfährst.",
+  "search_review_historical_question_unavailable": "Die damalige Frage und Skala sind nicht verfügbar. Dies ist das gespeicherte Zitat, keine aktuelle Bewertung."
 }

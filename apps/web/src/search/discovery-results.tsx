@@ -259,6 +259,7 @@ export function DiscoveryResults({
                     ? state.page.spaceEntries.rows.find((row) => row.id === hit.key.id)
                     : undefined
                 }
+                targetTypes={kinds}
                 kind={kind}
                 locale={locale}
                 subjectHrefFor={subjectHrefFor}

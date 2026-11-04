@@ -494,6 +494,7 @@ export function createReviewDiscoveryAdapter(source?: ContentReviewDiscoverySour
               sourcePosition: current.position.toString(),
               authorId: row.authorId,
               subjectId: row.subjectId,
+              source: { openingRevisionId: row.openingRevisionId, sourceVersion: row.sourceVersion },
             });
           }
         }

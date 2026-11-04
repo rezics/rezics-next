@@ -8261,5 +8261,6 @@
   "thread_review_cursor_expired": "페이지가 만료되었습니다. 첫 페이지부터 다시 시작하세요.",
   "thread_review_restart": "처음부터 다시 시작",
   "thread_review_select_board": "이 Board 선택",
-  "thread_review_destination_changed": "Subject 또는 Board가 변경되었습니다. 계속하기 전에 대상을 새로 고치세요."
+  "thread_review_destination_changed": "Subject 또는 Board가 변경되었습니다. 계속하기 전에 대상을 새로 고치세요.",
+  "search_review_historical_question_unavailable": "당시 질문 이름과 척도를 확인할 수 없습니다. 현재 평점이 아니라 기록된 인용입니다."
 }
