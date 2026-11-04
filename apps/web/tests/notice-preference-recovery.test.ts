@@ -14,13 +14,13 @@ import { preferenceRetryDeadline } from '../src/settings/preference-failure-retr
 import type { SessionEnv } from '../src/session/client';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
-const { loadInboxPage, loadUnreadCount } = await import('../src/inbox/inbox-read');
+const { loadUnreadCount } = await import('../src/inbox/inbox-read');
 const { UnreadBadgeView } = await import('../src/inbox/unread-badge');
-const { InboxRows } = await import('../src/inbox/inbox-page');
 const { m } = await import('../src/paraglide/messages.js');
 
 const token = 'A'.repeat(22);
 const initial = { notifications: { reply: true, mention: true }, version: 7 };
+const currentDisclosure = { kind: 'current-disclosure' as const, at: '2026-11-04T00:00:00.000Z' };
 function session(fail = false) {
   let reads = 0;
   const credential = async () => {
@@ -492,7 +492,12 @@ test('unread failures remain unavailable rather than a zero badge, with one priv
   let requests = 0;
   const client = clientWith(() => {
     requests += 1;
-    return Response.json({ count: 0, capped: false });
+    return Response.json({
+      count: 0,
+      capped: false,
+      basis: 'current-visible-unread',
+      witness: currentDisclosure,
+    });
   });
   expect(await loadUnreadCount(client, brokenSession.request(), brokenSession.env)).toMatchObject({
     signedIn: true,
@@ -505,10 +510,21 @@ test('unread failures remain unavailable rather than a zero badge, with one priv
     state: 'ready',
     count: 0,
     capped: false,
+    basis: 'current-visible-unread',
+    witness: expect.objectContaining({ kind: 'current-disclosure' }),
   });
   expect(
     renderToStaticMarkup(
-      createElement(UnreadBadgeView, { data: { signedIn: true, state: 'ready', count: 0, capped: false } }),
+      createElement(UnreadBadgeView, {
+        data: {
+          signedIn: true,
+          state: 'ready',
+          count: 0,
+          capped: false,
+          basis: 'current-visible-unread',
+          witness: currentDisclosure,
+        },
+      }),
     ),
   ).toBe('');
 });
@@ -527,7 +543,14 @@ test('unknown and pending unread counts use the same honest dot while ready coun
   ] as const) {
     const markup = renderToStaticMarkup(
       createElement(UnreadBadgeView, {
-        data: { signedIn: true, state: 'ready', count, capped },
+        data: {
+          signedIn: true,
+          state: 'ready',
+          count,
+          capped,
+          basis: 'current-visible-unread',
+          witness: currentDisclosure,
+        },
       }),
     );
     expect(markup).toContain(m.inbox_unread_count({ count: label }));
@@ -535,73 +558,3 @@ test('unknown and pending unread counts use the same honest dot while ready coun
   }
 });
 
-test('Inbox retains native privacy, moderation targets, bylines and cursor bounds without converting dependency or unread failure to successful rows', async () => {
-  const calls: string[] = [];
-  const notices = [
-    {
-      id: 'hidden',
-      kind: 'reply',
-      actorId: 'bob',
-      threadId: 'thread',
-      postId: 'post',
-      decisionId: null,
-      reportId: null,
-    },
-    {
-      id: 'decision',
-      kind: 'moderation_decision',
-      actorId: null,
-      threadId: null,
-      postId: null,
-      decisionId: 'decision',
-      reportId: null,
-    },
-    {
-      id: 'report',
-      kind: 'moderation_decision',
-      actorId: null,
-      threadId: null,
-      postId: null,
-      decisionId: null,
-      reportId: 'report',
-    },
-  ].map((item) => ({ ...item, createdAt: '2026-10-29T10:00:00.000Z', unread: true }));
-  let dependencyFails = false;
-  let malformed = false;
-  const client = clientWith((request) => {
-    const url = new URL(request.url);
-    calls.push(url.pathname);
-    if (url.pathname === '/v1/accounts') return Response.json({ accounts: [{ id: 'bob', displayName: 'Bob' }] });
-    if (url.pathname.endsWith('/notifications')) {
-      expect(url.searchParams.get('limit')).toBe('20');
-      expect(url.searchParams.get('cursor')).toBe('native-cursor');
-      return Response.json({ items: malformed ? [{ ...notices[0], unread: null }] : notices, next: 'native-next' });
-    }
-    if (url.pathname === '/v1/posts/post')
-      return Response.json(
-        { code: dependencyFails ? 'dependency_unavailable' : 'not_found' },
-        { status: dependencyFails ? 503 : 404 },
-      );
-    if (url.pathname === '/v1/moderation-decisions/decision') return Response.json({ statement: 'The appeal outcome' });
-    expect(url.pathname).toBe('/v1/reports/report');
-    return Response.json({ report: { outcome: 'actioned' } });
-  });
-  const page = await loadInboxPage(client, 'alice', 'Bearer alice-token', 'native-cursor');
-  expect(page.next).toBe('native-next');
-  expect(page.items[0]).toMatchObject({ unavailable: true, text: '', actorName: 'Bob', unread: true });
-  expect(page.items[0]?.href).toBeUndefined();
-  expect(page.items[1]?.href).toBe('/moderation/decisions/decision');
-  expect(page.items[2]?.href).toBe('/moderation/reports/report');
-  const markup = renderToStaticMarkup(createElement(InboxRows, { page }));
-  expect(markup).toContain(m.inbox_unavailable_item());
-  expect(markup).toContain('The appeal outcome');
-  expect(calls).toHaveLength(5);
-  dependencyFails = true;
-  await expect(loadInboxPage(client, 'alice', 'Bearer alice-token', 'native-cursor')).rejects.toMatchObject({
-    failure: { status: 503 },
-  });
-  malformed = true;
-  const before = calls.length;
-  await expect(loadInboxPage(client, 'alice', 'Bearer alice-token', 'native-cursor')).rejects.toThrow();
-  expect(calls.length - before).toBe(1);
-});

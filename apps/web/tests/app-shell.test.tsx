@@ -31,7 +31,14 @@ test('the top bar keeps search and logo, offers Create and counted notifications
             pathname="/inbox"
             returnTo="/en/inbox?q=a"
             account={<button>Account controls</button>}
-            unread={{ signedIn: true, state: 'ready', count: 123, capped: false }}
+            unread={{
+              signedIn: true,
+              state: 'ready',
+              count: 123,
+              capped: false,
+              basis: 'current-visible-unread',
+              witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+            }}
           />
         }
       />,
@@ -85,7 +92,14 @@ test('the top bar keeps search and logo, offers Create and counted notifications
         pathname="/"
         returnTo="/en"
         account={null}
-        unread={{ signedIn: true, state: 'ready', count: 0, capped: false }}
+        unread={{
+          signedIn: true,
+          state: 'ready',
+          count: 0,
+          capped: false,
+          basis: 'current-visible-unread',
+          witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+        }}
       />,
     ),
   ).not.toContain('unread notifications');

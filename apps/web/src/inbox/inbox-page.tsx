@@ -5,7 +5,13 @@ import { ContentItem, type ContentItemProps } from '@rezics/ui/content-item';
 import { RelativeTime } from '@rezics/ui/relative-time';
 import { Avatar, AvatarFallback } from '@rezics/ui/shadcn/avatar';
 import { Bell, Flag, Gavel, MessageCircleReply } from 'lucide-react';
-import { inboxPageQuery, inboxViewerQueryKey, markInboxViewerSeen, type InboxPageLoader } from './inbox-query';
+import {
+  inboxPageQuery,
+  inboxViewerQueryKey,
+  markInboxViewerNoticeSeen,
+  markInboxViewerSeen,
+  type InboxPageLoader,
+} from './inbox-query';
 import { inboxViewerCsrfToken, useInboxViewer, type InboxViewer } from './inbox-viewer';
 import { InboxEntryState, retryInboxSession } from './inbox-entry-state';
 import { m } from '../paraglide/messages.js';
@@ -14,6 +20,7 @@ import { initials } from '../threads/initials';
 import { usePreferenceRetry } from '../settings/preference-failure-retry';
 import {
   confirmLoadedInboxSeen,
+  confirmInboxNoticeSeen,
   emptyInboxPagination,
   nextInboxPage,
   readableInboxPage,
@@ -21,7 +28,9 @@ import {
   restartInboxPage,
 } from './inbox-pagination';
 import {
+  inboxTargetContext,
   inboxSeenFailure,
+  type InboxNoticeSeenAttempt,
   type InboxPage,
   type InboxSeenAttempt,
   type NativeInboxFailure,
@@ -29,8 +38,8 @@ import {
 } from './inbox-read';
 
 function kindLabel(item: ResolvedInboxPage['items'][number]) {
-  if (item.watch === 'thread') return m.inbox_kind_thread_activity();
-  if (item.watch === 'board') return m.inbox_kind_board_activity();
+  if (item.kind === 'thread_watch' || item.watch === 'thread') return m.inbox_kind_thread_activity();
+  if (item.kind === 'board_activity' || item.watch === 'board') return m.inbox_kind_board_activity();
   if (item.reportId || item.kind === 'moderation_decision') return m.inbox_kind_moderation();
   if (item.kind === 'mention') return m.inbox_kind_mention();
   if (item.kind === 'reply') return m.inbox_kind_reply();
@@ -50,10 +59,22 @@ export function InboxRows({
   page,
   onLoadMore,
   loading = false,
+  onMarkSeen,
+  onRetrySeen,
+  pendingNoticeId,
+  uncertainNoticeId,
+  acknowledgementBlocked = false,
+  confirmedNoticeId,
 }: {
   page: ResolvedInboxPage;
   onLoadMore?: () => void;
   loading?: boolean;
+  onMarkSeen?: (noticeId: string) => void;
+  onRetrySeen?: () => void;
+  pendingNoticeId?: string | null;
+  uncertainNoticeId?: string | null;
+  acknowledgementBlocked?: boolean;
+  confirmedNoticeId?: string | null;
 }) {
   const locale = getLocale();
   const exactDate = new Intl.DateTimeFormat(locale, {
@@ -65,27 +86,68 @@ export function InboxRows({
     <>
       <ol aria-label={m.inbox_heading()} className="mt-6 space-y-1">
         {page.items.map((item) => {
-          const href = item.unavailable ? undefined : item.href || undefined;
-          const actorId = item.unavailable ? null : item.actorId;
-          const actor =
-            (!item.unavailable && item.actorName) ||
-            (!item.unavailable && (item.reportId || item.kind === 'moderation_decision')
+          const hasComposedDisclosure = !!item.actor && !!item.target && !!item.actions;
+          const hiddenLegacyItem = item.unavailable && !hasComposedDisclosure;
+          const href = hiddenLegacyItem ? undefined : item.href || undefined;
+          const actorId = item.actor?.state === 'available'
+            ? item.actor.accountId
+            : item.actor || hiddenLegacyItem
+              ? null
+              : item.actorId;
+          const actor = item.actor?.state === 'available'
+            ? item.actor.displayName
+            : item.actor?.state === 'system'
               ? m.inbox_actor_moderation()
-              : m.inbox_actor_unknown());
+              : item.actor?.state === 'withheld'
+                ? m.inbox_actor_unknown()
+                : hiddenLegacyItem
+                  ? m.inbox_actor_unknown()
+                  : item.actorName || (item.reportId || item.kind === 'moderation_decision'
+                    ? m.inbox_actor_moderation()
+                    : m.inbox_actor_unknown());
           const kind = kindLabel(item);
-          const text = item.unavailable ? m.inbox_unavailable_item() : item.text;
+          const text = item.summary ?? (hiddenLegacyItem ? m.inbox_unavailable_item() : item.text) ?? m.inbox_unavailable_item();
           const explanation =
-            item.watch === 'thread'
+            item.kind === 'thread_watch' || item.watch === 'thread'
               ? m.inbox_thread_activity_text()
-              : item.watch === 'board'
+              : item.kind === 'board_activity' || item.watch === 'board'
                 ? m.inbox_board_activity_text()
                 : undefined;
           const readState = item.unread ? m.inbox_notice_unread() : m.inbox_notice_read();
           const date = exactDate.format(new Date(item.createdAt));
+          const context = item.context ?? inboxTargetContext(item.target);
+          const chosenAction = onMarkSeen && (item.unread || uncertainNoticeId === item.id)
+            ? uncertainNoticeId === item.id
+              ? (
+                  <div className="space-y-1">
+                    <p role="status">{m.inbox_notice_seen_unknown()}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
+                      disabled={pendingNoticeId === item.id || loading}
+                      onClick={onRetrySeen}
+                    >
+                      {m.inbox_notice_seen_retry()}
+                    </Button>
+                  </div>
+                )
+              : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-auto min-h-11 max-w-full whitespace-normal px-3 py-2"
+                    disabled={acknowledgementBlocked || loading || pendingNoticeId !== null && pendingNoticeId !== undefined}
+                    onClick={() => onMarkSeen(item.id)}
+                  >
+                    {pendingNoticeId === item.id ? m.inbox_notice_marking_seen() : m.inbox_notice_mark_seen()}
+                  </Button>
+                )
+            : null;
           const destinationProps = href ? { href } : {};
           const primaryLinkLabelProps = href
             ? ({
-                primaryLinkLabel: [text, actor, kind, explanation, readState, date].filter(Boolean).join('. '),
+                primaryLinkLabel: [text, context, actor, kind, explanation, readState, date].filter(Boolean).join('. '),
               } satisfies Pick<ContentItemProps, 'primaryLinkLabel'>)
             : {};
           const visual = actorId ? (
@@ -98,7 +160,7 @@ export function InboxRows({
               aria-hidden="true"
               className="mt-1 shrink-0 text-muted-foreground"
             >
-              {item.watch ? (
+              {item.watch || item.kind === 'thread_watch' || item.kind === 'board_activity' ? (
                 <Bell aria-hidden="true" size={18} />
               ) : item.reportId ? (
                 <Flag aria-hidden="true" size={18} />
@@ -118,6 +180,7 @@ export function InboxRows({
               {...primaryLinkLabelProps}
               headingLevel={2}
               visual={visual}
+              context={context ? <p>{context}</p> : undefined}
               metadata={
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span data-notice-byline="true" aria-hidden={href ? true : undefined}>
@@ -136,7 +199,8 @@ export function InboxRows({
                   ) : null}
                 </div>
               }
-              state={<span aria-hidden={href ? true : undefined}>{readState}</span>}
+              state={<span aria-hidden={href ? true : undefined}>{confirmedNoticeId === item.id ? m.inbox_notice_marked_seen() : readState}</span>}
+              actions={chosenAction}
               data-notice-id={item.id}
               data-unread={item.unread}
               data-kind={item.reportId ? 'report_outcome' : item.kind}
@@ -171,7 +235,15 @@ export function InboxPreferencesLink() {
   );
 }
 
-export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {}) {
+type NoticeSeenStoryTransport = (attempt: InboxNoticeSeenAttempt, csrfToken: string) => Promise<void>;
+
+export function InboxPageView({
+  loadPage,
+  acknowledgeNotice,
+}: {
+  loadPage?: InboxPageLoader;
+  acknowledgeNotice?: NoticeSeenStoryTransport;
+} = {}) {
   const { state, csrfToken, viewer, sessionRead } = useInboxViewer();
   if (viewer)
     return (
@@ -180,6 +252,7 @@ export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {})
         viewer={viewer}
         csrfToken={csrfToken}
         loadPage={loadPage}
+        acknowledgeNotice={acknowledgeNotice}
       />
     );
   return (
@@ -191,15 +264,17 @@ export function InboxPageView({ loadPage }: { loadPage?: InboxPageLoader } = {})
   );
 }
 
-/** Pagination owns its accumulated pages inside this immutable viewer boundary. */
+/** Pagination retains only the current bounded page inside this immutable viewer boundary. */
 export function ViewerInboxPage({
   viewer,
   csrfToken,
   loadPage,
+  acknowledgeNotice,
 }: {
   viewer: InboxViewer;
   csrfToken: string | null;
   loadPage?: InboxPageLoader | undefined;
+  acknowledgeNotice?: NoticeSeenStoryTransport | undefined;
 }) {
   const queryClient = useQueryClient();
   const [pagination, setPagination] = useState(emptyInboxPagination);
@@ -214,6 +289,12 @@ export function ViewerInboxPage({
   const seenAttempt = useRef<InboxSeenAttempt | null>(null);
   const seenLoaded = useRef<ReadonlySet<string> | null>(null);
   const marking = useRef(false);
+  const noticeAttempt = useRef<InboxNoticeSeenAttempt | null>(null);
+  const noticeMarking = useRef(false);
+  const [noticeAttemptView, setNoticeAttemptView] = useState<InboxNoticeSeenAttempt | null>(null);
+  const [noticePendingId, setNoticePendingId] = useState<string | null>(null);
+  const [noticeFailure, setNoticeFailure] = useState<NativeInboxFailure>();
+  const [noticeConfirmedId, setNoticeConfirmedId] = useState<string | null>(null);
   const active = useRef(false);
   const [seenFailure, setSeenFailure] = useState<NativeInboxFailure>();
   const [seenConfirmed, setSeenConfirmed] = useState(false);
@@ -273,7 +354,14 @@ export function ViewerInboxPage({
 
   const sendSeenAttempt = useCallback(
     async (attempt: InboxSeenAttempt) => {
-      if (!active.current || marking.current || seenAttempt.current !== attempt || !viewer.isCurrent()) return;
+      if (
+        !active.current ||
+        marking.current ||
+        noticeAttempt.current !== null ||
+        seenAttempt.current !== attempt ||
+        !viewer.isCurrent()
+      )
+        return;
       const token = inboxViewerCsrfToken(queryClient, viewer);
       if (!token) return;
       marking.current = true;
@@ -312,6 +400,51 @@ export function ViewerInboxPage({
     [queryClient, viewer],
   );
 
+  const sendNoticeSeenAttempt = useCallback(
+    async (attempt: InboxNoticeSeenAttempt) => {
+      if (
+        !active.current ||
+        noticeMarking.current ||
+        noticeAttempt.current !== attempt ||
+        seenAttempt.current !== null ||
+        !viewer.isCurrent()
+      )
+        return;
+      const token = inboxViewerCsrfToken(queryClient, viewer);
+      if (!token) return;
+      noticeMarking.current = true;
+      setNoticePendingId(attempt.noticeId);
+      try {
+        if (acknowledgeNotice) await acknowledgeNotice(attempt, token);
+        else await markInboxViewerNoticeSeen(queryClient, viewer, attempt, token);
+        if (!active.current || !viewer.isCurrent()) return;
+        setPagination((current) => {
+          if (!active.current || !viewer.isCurrent()) return current;
+          const refreshed = queryClient.getQueryState<InboxPage>([
+            ...inboxViewerQueryKey(viewer),
+            current.cursor ?? null,
+          ]);
+          return confirmInboxNoticeSeen(
+            receiveInboxPage(current, refreshed?.data, refreshed?.status === 'error'),
+            attempt.noticeId,
+          );
+        });
+        noticeAttempt.current = null;
+        setNoticeAttemptView(null);
+        setNoticeFailure(undefined);
+        setNoticeConfirmedId(attempt.noticeId);
+      } catch (error: unknown) {
+        if (active.current && viewer.isCurrent()) setNoticeFailure(inboxSeenFailure(error).failure);
+      } finally {
+        if (active.current && viewer.isCurrent()) {
+          noticeMarking.current = false;
+          setNoticePendingId(null);
+        }
+      }
+    },
+    [acknowledgeNotice, queryClient, viewer],
+  );
+
   const markLoadedThroughLatest = () => {
     if (
       !active.current ||
@@ -320,6 +453,7 @@ export function ViewerInboxPage({
       !page ||
       !readable?.items.length ||
       !hasUnreadLoaded ||
+      noticeAttempt.current !== null ||
       seenAttempt.current ||
       seenFailure ||
       marking.current ||
@@ -340,11 +474,56 @@ export function ViewerInboxPage({
     void sendSeenAttempt(attempt);
   };
 
+  const markNoticeSeen = (noticeId: string) => {
+    const item = readable?.items.find((candidate) => candidate.id === noticeId);
+    if (
+      !active.current ||
+      !viewer.isCurrent() ||
+      !inboxViewerCsrfToken(queryClient, viewer) ||
+      !page ||
+      !item?.unread ||
+      noticeAttempt.current !== null ||
+      seenAttempt.current !== null ||
+      marking.current ||
+      pageQuery.isFetching ||
+      waiting ||
+      seenWaiting
+    )
+      return;
+    const attempt = Object.freeze({
+      accountId: viewer.subject,
+      noticeId: item.id,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    noticeAttempt.current = attempt;
+    setNoticeAttemptView(attempt);
+    setNoticeFailure(undefined);
+    setNoticeConfirmedId(null);
+    void sendNoticeSeenAttempt(attempt);
+  };
+
+  const retryNoticeSeen = () => {
+    const attempt = noticeAttempt.current;
+    if (
+      !attempt ||
+      !noticeFailure ||
+      noticeMarking.current ||
+      pageQuery.isFetching ||
+      waiting ||
+      seenWaiting ||
+      !viewer.isCurrent()
+    )
+      return;
+    setNoticeFailure(undefined);
+    void sendNoticeSeenAttempt(attempt);
+  };
+
   const checkAccess = async () => {
     if (
       !active.current ||
       accessPending.current ||
       marking.current ||
+      noticeMarking.current ||
       pageQuery.isFetching ||
       waiting ||
       seenWaiting ||
@@ -375,6 +554,7 @@ export function ViewerInboxPage({
       !active.current ||
       !viewer.isCurrent() ||
       continuation.current ||
+      noticeAttempt.current !== null ||
       pageQuery.isFetching ||
       accessPending.current ||
       !page?.next
@@ -388,7 +568,15 @@ export function ViewerInboxPage({
     else setPagination(next);
   };
   const startAtFirstPage = () => {
-    if (!active.current || pageQuery.isFetching || accessPending.current || waiting || !viewer.isCurrent()) return;
+    if (
+      !active.current ||
+      pageQuery.isFetching ||
+      noticeAttempt.current !== null ||
+      accessPending.current ||
+      waiting ||
+      !viewer.isCurrent()
+    )
+      return;
     const first = restartInboxPage(received);
     if (first === received) return;
     // Retire cached pages and any stale responses before observing the native first-page query.
@@ -508,6 +696,7 @@ export function ViewerInboxPage({
                   disabled={
                     seenWaiting ||
                     waiting ||
+                    noticeAttempt.current !== null ||
                     markingPending ||
                     checkingAccess ||
                     pageQuery.isFetching ||
@@ -600,6 +789,7 @@ export function ViewerInboxPage({
                     className="h-auto min-h-11 max-w-full whitespace-normal py-2"
                     disabled={
                       markingPending ||
+                      noticeAttempt.current !== null ||
                       checkingAccess ||
                       pageQuery.isFetching ||
                       waiting ||
@@ -643,6 +833,22 @@ export function ViewerInboxPage({
                   ...readable,
                   items: visibleItems,
                 }}
+                onMarkSeen={markNoticeSeen}
+                onRetrySeen={retryNoticeSeen}
+                pendingNoticeId={noticePendingId}
+                uncertainNoticeId={noticeFailure ? noticeAttemptView?.noticeId : null}
+                acknowledgementBlocked={
+                  noticeAttemptView !== null ||
+                  seenAttempt.current !== null ||
+                  markingPending ||
+                  checkingAccess ||
+                  pageQuery.isFetching ||
+                  waiting ||
+                  seenWaiting ||
+                  !csrfToken ||
+                  !viewer.isCurrent()
+                }
+                confirmedNoticeId={noticeConfirmedId}
               />
             )
           ) : null}

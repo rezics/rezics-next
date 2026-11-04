@@ -19,7 +19,14 @@ test('restoring and failed account states are distinct and neither discloses acc
           pathname="/"
           returnTo="/en"
           account={<button>Private account</button>}
-          unread={{ signedIn: true, state: 'ready', count: 23, capped: false }}
+          unread={{
+            signedIn: true,
+            state: 'ready',
+            count: 23,
+            capped: false,
+            basis: 'current-visible-unread',
+            witness: { kind: 'current-disclosure', at: '2026-11-04T00:00:00.000Z' },
+          }}
         />
       </QueryClientProvider>,
     );

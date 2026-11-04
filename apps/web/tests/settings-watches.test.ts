@@ -15,9 +15,17 @@ const identity = { state: 'signed-in' as const, subject: 'alice', csrfToken: 'al
 const readable: ManagedWatch = {
   subscriptionId: 'owner-subscription',
   kind: 'thread',
+  revision: 3,
+  createdAt: '2026-11-03T10:00:00.000Z',
   target: { title: 'Readable', href: '/threads/a/readable' },
 };
-const inaccessible: ManagedWatch = { subscriptionId: 'owner-board-subscription', kind: 'board', target: null };
+const inaccessible: ManagedWatch = {
+  subscriptionId: 'owner-private-subscription',
+  kind: 'thread',
+  revision: 4,
+  createdAt: '2026-11-02T10:00:00.000Z',
+  target: null,
+};
 const page = (watches: readonly ManagedWatch[], next: string | null = null): WatchRead => ({
   kind: 'page',
   page: { watches, next },
@@ -114,7 +122,8 @@ test('lost target access still permits removal by owner subscription identity, w
   });
   await controller.first();
   await controller.stop(inaccessible.subscriptionId);
-  expect(commands[0]?.subscriptionId).toBe(inaccessible.subscriptionId);
+  expect(commands[0]?.watchId).toBe(inaccessible.subscriptionId);
+  expect(commands[0]).toMatchObject({ accountId: 'alice', kind: 'thread', expectedRevision: inaccessible.revision });
   expect(Object.isFrozen(commands[0])).toBe(true);
   expect(controller.snapshot()).toMatchObject({ write: 'removed', rows: [readable], command: null });
 });

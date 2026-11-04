@@ -15,6 +15,20 @@ export const emptyInboxPagination: InboxPagination = {
   result: undefined,
 };
 
+/** A confirmed item action changes only that notice in the retained page window. */
+export function confirmInboxNoticeSeen(state: InboxPagination, noticeId: string): InboxPagination {
+  const mark = (page: ResolvedInboxPage | null) => {
+    if (!page || !page.items.some((item) => item.id === noticeId && item.unread)) return page;
+    return {
+      ...page,
+      items: page.items.map((item) => (item.id === noticeId ? { ...item, unread: false } : item)),
+    };
+  };
+  const current = mark(state.current);
+  const earlier = mark(state.earlier);
+  return current === state.current && earlier === state.earlier ? state : { ...state, current, earlier };
+}
+
 export const inboxTransportFailure: InboxPage = {
   signedIn: true,
   state: 'unavailable',
@@ -39,11 +53,8 @@ export function receiveInboxPage(
   const result = transportFailed && (!data || (data.signedIn && data.state === 'ready')) ? inboxTransportFailure : data;
   if (state.result === result) return state;
   if (result?.signedIn && result.state === 'ready') {
-    const refreshed = new Map(result.items.map((item) => [item.id, item]));
-    const earlier = state.earlier
-      ? { ...state.earlier, items: state.earlier.items.map((item) => refreshed.get(item.id) ?? item) }
-      : null;
-    return { ...state, earlier, current: result, result };
+    // The last successful page replaces the prior window so retained rows stay bounded by 20.
+    return { ...state, earlier: null, current: result, result };
   }
   if (result && !transient(result)) return { ...state, earlier: null, current: null, result };
   return { ...state, result };
@@ -51,11 +62,7 @@ export function receiveInboxPage(
 
 /** Keep native order and distinct notices, but let a fresh identical ID replace all cached details. */
 export function readableInboxPage(state: InboxPagination): ResolvedInboxPage | null {
-  if (!state.current) return state.earlier;
-  const items = new Map<string, ResolvedInboxPage['items'][number]>();
-  for (const item of state.earlier?.items ?? []) items.set(item.id, item);
-  for (const item of state.current.items) items.set(item.id, item);
-  return { items: [...items.values()], next: state.current.next };
+  return state.current ?? state.earlier;
 }
 
 /** Confirm only notices held by the deliberate attempt; a fresh current read always wins. */
