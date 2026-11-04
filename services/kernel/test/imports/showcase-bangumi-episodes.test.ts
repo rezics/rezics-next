@@ -95,7 +95,8 @@ test('default seed exposes adopted Episode kind and exact parent, then rechecks 
     expect(created.results.every((item) => item.status === 201)).toBe(true);
     const idAt = (index: number) => {
       const receipt = created.results[index];
-      if (!receipt || !('value' in receipt)) throw new Error('Missing acknowledged reviewed subject identity');
+      if (!receipt || !('value' in receipt) || !('id' in receipt.value))
+        throw new Error('Missing acknowledged reviewed subject identity');
       return receipt.value.id;
     };
     const schemeId = idAt(0);
