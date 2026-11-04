@@ -434,7 +434,7 @@ function setFrontMatterFields(markdown: string, fields: Record<string, unknown |
   }
   for (const [key, value] of Object.entries(fields))
     if (value !== undefined) kept.push(`${key}: ${JSON.stringify(value)}`);
-  return `---\n${kept.join('\n')}\n---${markdown.slice(match[0].length)}`;
+  return `---\n${kept.join('\n')}\n---\n${markdown.slice(match[0].length)}`;
 }
 
 function researchSlug(markdown: string, sourceName: string, input: ResearchFanoutBrief): string {
