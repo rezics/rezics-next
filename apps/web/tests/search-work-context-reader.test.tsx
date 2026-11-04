@@ -142,6 +142,12 @@ test('query A/B/A retires delayed responses and selected callbacks, including eq
   await settle(delayed, 'Delayed third query');
   expect(element.textContent).not.toContain('Delayed third query');
   expect(old()).toBe(false);
+  await settle(reads.length - 1);
+  const selectedBeforeLeaving = display.isCurrent;
+  expect(selectedBeforeLeaving()).toBe(true);
+  await act(async () => root!.unmount());
+  root = undefined;
+  expect(selectedBeforeLeaving()).toBe(false);
 });
 
 test('pagination exact-cursor recovery retries the failed address while old-reader data stays retired after A/B/A', async () => {

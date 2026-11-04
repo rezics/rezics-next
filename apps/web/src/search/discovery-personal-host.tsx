@@ -625,7 +625,11 @@ export function useDiscoveryPersonalResults(input: {
   };
   return {
     isCurrent: () =>
-      publicCurrent && !episode.retired && episodeRef.current === episode && (episode.publicEntry?.isCurrent() ?? true),
+      publicCurrent &&
+      episode.active &&
+      !episode.retired &&
+      episodeRef.current === episode &&
+      (episode.publicEntry?.isCurrent() ?? true),
     state: display,
     renderPersonal: input.enabled ? renderPersonal : undefined,
     regionRef,
